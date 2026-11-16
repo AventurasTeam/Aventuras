@@ -2253,6 +2253,32 @@ export const HoldSurvivesWithoutAJump: Story = {
   },
 }
 
+/** A downward scroll key takes the reader from the anchor hold, as every other gesture does. */
+export const HoldReleasedByADownwardKey: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS.slice(1), hasOlder: true },
+  play: async () => {
+    const scroller = scrollerOf('o14')
+    await settleLanding(scroller)
+    // Off the bottom, where a move down has room and the bottom pin has let go.
+    await scrollTo(scroller, scroller.scrollTop - 600)
+    await frames(15)
+    const beforeGrowth = scroller.scrollTop
+    press('Prepend and grow')
+    await nextFrame()
+    // The anchor rule's write, which starts the hold.
+    expect(scroller.scrollTop).toBeGreaterThan(beforeGrowth)
+    // A dispatched key scrolls nothing, so the play makes the move the key would.
+    scroller.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }))
+    const beforeKey = scroller.scrollTop
+    scroller.scrollTop += 200
+    const scrollTop = scroller.scrollTop
+    expect(scrollTop - beforeKey).toBe(200)
+    await outlastLanding()
+    expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
 /**
  * An empty near-top load flips `hasOlder` alone, so the skeleton's unmount starts a hold with no
  * `rows` commit to go with it. The growth is a style, as a `rows` commit would hide the gap.

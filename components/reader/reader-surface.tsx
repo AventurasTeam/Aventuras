@@ -974,9 +974,13 @@ export function ReaderSurface({
       )
         return
       if (!(target === doc.body ? pressedInside : el.contains(target))) return
-      // Down leaves autoscroll engaged, but a landing sits mid-document, where down still moves it.
+      // Down leaves autoscroll engaged, but mid-document it still moves the view, which a landing
+      // or the anchor hold would pull back.
       if (upward) interruptByGesture()
-      else stopLanding()
+      else {
+        stopLanding()
+        anchorHoldActiveRef.current = false
+      }
     }
     doc.addEventListener('pointerdown', onPointerDown, true)
     doc.addEventListener('keydown', onKeyDown)
