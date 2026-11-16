@@ -11,6 +11,7 @@ import { t } from '@/lib/i18n'
 import { entriesStore, resetAllStores } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
+import type { JumpClass } from './reader-slice'
 import { useEntryJump, useJumpVeilUp } from './use-entry-jump'
 
 vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), warning: vi.fn() } }))
@@ -50,6 +51,13 @@ function row(position: number): StoryEntry {
 
 const span = (from: number, through: number): StoryEntry[] =>
   Array.from({ length: through - from + 1 }, (_, i) => row(from + i))
+
+// The host's classification as the window alone gives it: a row in the window lands at once, and
+// one outside it is read. The slice's own classes have their tests below.
+const byWindow =
+  (branchId: string) =>
+  (entryId: string): JumpClass =>
+    entriesStore.getById(entryId)?.branchId === branchId ? 'slice' : 'read'
 
 const loadedPositions = () =>
   [...entriesStore.getEntries().values()].map((r) => r.position).sort((a, b) => a - b)
@@ -97,12 +105,13 @@ function holdNextPosition(failWith?: Error) {
 }
 
 describe('useEntryJump', () => {
+  const inWindow = byWindow(BRANCH)
   let ctx: DbCtx
   const land = vi.fn<(entryId: string) => void>()
   const topLoaded = vi.fn<() => void>()
 
   const jump = () =>
-    renderHook(() => useEntryJump(BRANCH, ctx, land, topLoaded)).result.current.jump
+    renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, topLoaded)).result.current.jump
 
   beforeEach(async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -419,6 +428,7 @@ describe('useEntryJump', () => {
 
 describe('useEntryJump: jumping', () => {
   const BRANCH = 'br_jumping'
+  const inWindow = byWindow(BRANCH)
   const BROKEN_CTX = { db: {}, runInTransaction: async () => {} } as unknown as DbCtx
   const land = vi.fn<(entryId: string) => void>()
 
@@ -464,7 +474,7 @@ describe('useEntryJump: jumping', () => {
 
   it('stays up past the read until the landing signal names the target', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     expect(result.current.veil.isWaiting()).toBe(false)
 
     await act(() => result.current.jump('entry_10'))
@@ -481,7 +491,7 @@ describe('useEntryJump: jumping', () => {
     let renders = 0
     const { result } = renderHook(() => {
       renders += 1
-      return useEntryJump(BRANCH, ctx, land, () => {})
+      return useEntryJump(BRANCH, ctx, inWindow, land, () => {})
     })
     const before = renders
 
@@ -495,7 +505,7 @@ describe('useEntryJump: jumping', () => {
   it('re-renders a veil subscriber as the veil shows and lifts', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     const { result: up } = renderHook(() => useJumpVeilUp(result.current.veil))
     expect(up.current).toBe(false)
 
@@ -511,7 +521,7 @@ describe('useEntryJump: jumping', () => {
   // A reload's hydrate can trim the window before the document mounts the row.
   it('comes down when its target leaves the store after the landing call', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     expect(result.current.veil.isWaiting()).toBe(true)
 
@@ -524,7 +534,7 @@ describe('useEntryJump: jumping', () => {
 
   it('stays up while store changes leave its target in place', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
 
     entriesStore.insertMany(BRANCH, [row(121)])
@@ -535,7 +545,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down 30 s after the landing call when no signal arrives', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
 
     vi.advanceTimersByTime(29_999)
@@ -548,7 +558,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
 
     vi.advanceTimersByTime(29_999)
@@ -574,7 +584,7 @@ describe('useEntryJump: jumping', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       hold()
-      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
       act(() => {
         void result.current.jump('entry_10')
       })
@@ -600,7 +610,7 @@ describe('useEntryJump: jumping', () => {
       const insertMany = vi.spyOn(entriesStore, 'insertMany')
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       const open = hold()
-      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
       let pending!: Promise<void>
       act(() => {
         pending = result.current.jump('entry_10')
@@ -628,7 +638,7 @@ describe('useEntryJump: jumping', () => {
       const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
       const open = hold(new Error('disk gone'))
-      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+      const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
       let pending!: Promise<void>
       act(() => {
         pending = result.current.jump('entry_10')
@@ -654,7 +664,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     vi.advanceTimersByTime(15_000)
     await act(() => result.current.jump('entry_5'))
@@ -672,7 +682,7 @@ describe('useEntryJump: jumping', () => {
   it('warns when its target leaves the window after the landing call', async () => {
     const ctx = await seedBranch()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     entriesStore.insertMany(BRANCH, [row(121)])
     expect(warn).not.toHaveBeenCalled()
@@ -692,7 +702,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down without a warn when another branch loads under the wait', async () => {
     const ctx = await seedBranch()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
 
     entriesStore.hydrate('br_other', [])
@@ -703,7 +713,7 @@ describe('useEntryJump: jumping', () => {
   it('warns nothing when its row leaves the window after it landed', async () => {
     const ctx = await seedBranch()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     act(() => result.current.landed('entry_10'))
 
@@ -717,7 +727,7 @@ describe('useEntryJump: jumping', () => {
   it("keeps a replaced target's bound off the newer jump's veil", async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     vi.advanceTimersByTime(15_000)
 
@@ -743,7 +753,9 @@ describe('useEntryJump: jumping', () => {
   it('leaves no bound running once it unmounts after the landing call', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result, unmount } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result, unmount } = renderHook(() =>
+      useEntryJump(BRANCH, ctx, inWindow, land, () => {}),
+    )
     await act(() => result.current.jump('entry_10'))
     // The veil's show and the landing's bound.
     expect(vi.getTimerCount()).toBe(2)
@@ -756,7 +768,9 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const open = holdNextBetween()
-    const { result, unmount } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result, unmount } = renderHook(() =>
+      useEntryJump(BRANCH, ctx, inWindow, land, () => {}),
+    )
     let pending!: Promise<void>
     act(() => {
       pending = result.current.jump('entry_10')
@@ -774,7 +788,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     const open = holdNextBetween()
     const { result, rerender } = renderHook(
-      ({ branchId }) => useEntryJump(branchId, ctx, land, () => {}),
+      ({ branchId }) => useEntryJump(branchId, ctx, inWindow, land, () => {}),
       {
         initialProps: { branchId: BRANCH },
       },
@@ -799,7 +813,7 @@ describe('useEntryJump: jumping', () => {
   it('never shows the veil for a jump that lands within 200 ms', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
 
     vi.advanceTimersByTime(199)
@@ -813,7 +827,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const open = holdNextBetween()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     let pending!: Promise<void>
     act(() => {
       pending = result.current.jump('entry_10')
@@ -838,7 +852,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const openFirst = holdNextBetween()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     let first!: Promise<void>
     act(() => {
       first = result.current.jump('entry_10')
@@ -867,7 +881,7 @@ describe('useEntryJump: jumping', () => {
   it('never shows the veil for a jump dropped before 200 ms', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     vi.advanceTimersByTime(100)
 
@@ -882,7 +896,7 @@ describe('useEntryJump: jumping', () => {
   it('counts the veil from the first press when an in-window jump joins the wait', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     vi.advanceTimersByTime(100)
 
@@ -899,7 +913,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { result, rerender } = renderHook(
-      ({ branchId }) => useEntryJump(branchId, ctx, land, () => {}),
+      ({ branchId }) => useEntryJump(branchId, ctx, inWindow, land, () => {}),
       { initialProps: { branchId: BRANCH } },
     )
     await act(() => result.current.jump('entry_10'))
@@ -912,15 +926,53 @@ describe('useEntryJump: jumping', () => {
 
   it('never goes up for a row already in the window', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_100'))
     expect(land).toHaveBeenCalledWith('entry_100')
     expect(result.current.veil.isWaiting()).toBe(false)
   })
 
+  it('waits the veil and lands without a read for a window row the slice must move to', async () => {
+    const ctx = await seedBranch()
+    const classify = (): JumpClass => 'window'
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, classify, land, () => {}))
+    await act(() => result.current.jump('entry_80'))
+    expect(land).toHaveBeenCalledExactlyOnceWith('entry_80')
+    expect(readEntryPosition).not.toHaveBeenCalled()
+    expect(readEntriesBetween).not.toHaveBeenCalled()
+    expect(result.current.veil.isWaiting()).toBe(true)
+    act(() => result.current.landed('entry_80'))
+    expect(result.current.veil.isWaiting()).toBe(false)
+  })
+
+  it('drops a window jump whose row leaves the window before it lands', async () => {
+    const ctx = await seedBranch()
+    const warn = vi.spyOn(logger, 'warn')
+    const classify = (): JumpClass => 'window'
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, classify, land, () => {}))
+    await act(() => result.current.jump('entry_80'))
+    act(() => entriesStore.patch(BRANCH, { op: 'delete', id: 'entry_80' }))
+    expect(result.current.veil.isWaiting()).toBe(false)
+    expect(warn).toHaveBeenCalledWith('reader.entry_jump_dropped', {
+      branchId: BRANCH,
+      entryId: 'entry_80',
+      cause: 'left_window',
+    })
+  })
+
+  // The landing opens under the break that hangs off the row above, so that row must be loaded.
+  it('reads the row above a target that is the window’s oldest row', async () => {
+    const ctx = await seedBranch()
+    const classify = (): JumpClass => 'read'
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, classify, land, () => {}))
+    await act(() => result.current.jump('entry_71'))
+    expect(entriesStore.getById('entry_70')).toBeDefined()
+    expect(land).toHaveBeenCalledExactlyOnceWith('entry_71')
+  })
+
   it('comes down on the toast for an id not on the branch', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_missing'))
     expect(land).not.toHaveBeenCalled()
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -929,7 +981,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down on the toast for a target gone after the rows read', async () => {
     const ctx = await seedBranch()
     vi.mocked(readEntriesBetween).mockResolvedValueOnce([])
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     expect(land).not.toHaveBeenCalled()
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -938,7 +990,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down when the read fails', async () => {
     vi.spyOn(logger, 'error').mockImplementation(() => {})
     await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, BROKEN_CTX, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, BROKEN_CTX, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     expect(land).not.toHaveBeenCalled()
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -947,7 +999,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down when the branch leaves under the read', async () => {
     const ctx = await seedBranch()
     entriesStore.hydrate('br_other', [])
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     expect(land).not.toHaveBeenCalled()
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -956,7 +1008,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down on an empty window, which has no row to read up to', async () => {
     const ctx = await seedBranch()
     entriesStore.hydrate(BRANCH, [])
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     expect(land).not.toHaveBeenCalled()
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -965,7 +1017,7 @@ describe('useEntryJump: jumping', () => {
   it('comes down when the branch changes after the landing call', async () => {
     const ctx = await seedBranch()
     const { result, rerender } = renderHook(
-      ({ branchId }) => useEntryJump(branchId, ctx, land, () => {}),
+      ({ branchId }) => useEntryJump(branchId, ctx, inWindow, land, () => {}),
       {
         initialProps: { branchId: BRANCH },
       },
@@ -979,7 +1031,7 @@ describe('useEntryJump: jumping', () => {
 
   it("ignores a replaced target's signal and waits for the newer one", async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     await act(() => result.current.jump('entry_5'))
 
@@ -994,7 +1046,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     const error = vi.spyOn(logger, 'error')
     const open = holdNextBetween()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
 
     let first!: Promise<void>
     act(() => {
@@ -1029,7 +1081,7 @@ describe('useEntryJump: jumping', () => {
       await gate
       return actual(...args)
     })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
 
     let first!: Promise<void>
     act(() => {
@@ -1053,7 +1105,7 @@ describe('useEntryJump: jumping', () => {
       await gate
       throw new Error('disk gone')
     })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
 
     let first!: Promise<void>
     act(() => {
@@ -1074,7 +1126,7 @@ describe('useEntryJump: jumping', () => {
   // On native the host's store runs ahead of the document, which may not have the row yet.
   it('keeps the wait for an in-window jump made while it runs, until that row lands', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     await act(() => result.current.jump('entry_100'))
     expect(land.mock.calls).toEqual([['entry_10'], ['entry_100']])
@@ -1089,7 +1141,7 @@ describe('useEntryJump: jumping', () => {
   // The web surface reports the landing it replaces from inside the newer landing call.
   it('keeps a joined wait when the landing call signals the replaced target', async () => {
     const ctx = await seedBranch()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     land.mockImplementation((id) => {
       if (id === 'entry_100') result.current.landed('entry_10')
@@ -1102,7 +1154,7 @@ describe('useEntryJump: jumping', () => {
   it('keeps the wait when a replaced read finishes under an in-window jump', async () => {
     const ctx = await seedBranch()
     const open = holdNextBetween()
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     let first!: Promise<void>
     act(() => {
       first = result.current.jump('entry_10')
@@ -1124,7 +1176,7 @@ describe('useEntryJump: jumping', () => {
     const ctx = await seedBranch()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     await act(() => result.current.jump('entry_10'))
     vi.advanceTimersByTime(15_000)
     await act(() => result.current.jump('entry_100'))
@@ -1143,7 +1195,7 @@ describe('useEntryJump: jumping', () => {
   it('reads nothing and arms nothing for an in-window jump with no wait running', async () => {
     const ctx = await seedBranch()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, land, () => {}))
+    const { result } = renderHook(() => useEntryJump(BRANCH, ctx, inWindow, land, () => {}))
     const heard = vi.fn()
     const unsubscribe = result.current.veil.subscribe(heard)
 

@@ -17,7 +17,7 @@ export type SceneEditing = {
   entityNames: ResolvedEntity[]
   sceneOptions: SceneOptions
   /** The only entry whose scene fields are editable; null when the branch is empty or
-   *  the loaded window stops short of the live edge. */
+   *  `holdsLiveEdge` is false. */
   tailEntryId: string | null
   /** The entry whose host Sheet is open, with the scene it was opened on. */
   sceneEdit: {
@@ -52,11 +52,11 @@ export function useSceneEditing(
   const entityNames = useMemo(() => entities.map((e) => ({ id: e.id, name: e.name })), [entities])
 
   // Resolved here, not in the card: only this entry gets edit handlers, so every other
-  // card renders no control at all rather than a disabled one. Gated on the window
-  // reaching the live edge because the action layer resolves the same head turn off the
-  // DB tail: a window that stopped short would offer scene editing, Save & regenerate
-  // and the self-heals notice on a mid-window row whose edit the action layer treats as
-  // frozen, which is silent drift under reassuring copy.
+  // card renders no control at all rather than a disabled one. Read off rows that reach
+  // the live edge because the action layer resolves the same head turn off the DB tail:
+  // the reader's slice can stop short of it, and then holds no row with this id, rather
+  // than offering scene editing, Save & regenerate and the self-heals notice on a row
+  // whose edit the action layer treats as frozen, which is silent drift under reassuring copy.
   const tailEntryId = useMemo(
     () => (holdsLiveEdge ? (resolveHeadTurn(entries)?.tail.id ?? null) : null),
     [entries, holdsLiveEdge],

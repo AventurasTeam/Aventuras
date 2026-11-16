@@ -7,7 +7,7 @@ import {
   extendDown,
   extendUp,
   placeJump,
-  proveTop,
+  markWindowTop,
   reloadSlice,
   resetToTail,
   trimSlice,
@@ -238,9 +238,9 @@ describe('jumps', () => {
 
   it('bumps the key when the top is proven, so the landing waits for the skeleton to drop', () => {
     const state = slice(1, 50)
-    const next = proveTop(state)
+    const next = markWindowTop(state, false)
     expect(next).toMatchObject({ windowHasOlder: false, key: 8 })
-    expect(proveTop(next!)).toBeNull()
+    expect(markWindowTop(next!, false)).toBeNull()
   })
 })
 

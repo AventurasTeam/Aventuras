@@ -144,11 +144,12 @@ export function reloadSlice(
 }
 
 /**
- * The branch's first row is in the window. A new key, so a landing named after it waits for the
- * commit that drops the top skeleton rather than landing beside it and shifting when it goes.
+ * What a read proved about rows above the window, on its own key: a landing named after a proven
+ * top waits for the commit that drops the top skeleton, rather than landing beside it and
+ * shifting when it goes.
  */
-export function proveTop(state: SliceState): SliceState | null {
-  return commit(state, { windowHasOlder: false })
+export function markWindowTop(state: SliceState, windowHasOlder: boolean): SliceState | null {
+  return commit(state, { windowHasOlder })
 }
 
 /**

@@ -2,21 +2,31 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 
 import type { DbCtx } from '@/lib/db'
 
+import type { JumpClass } from './reader-slice'
 import { useEntryJump, type EntryJump } from './use-entry-jump'
 
-type Landing = { readonly entryId: string; readonly sent: boolean }
+type Landing = { readonly entryId: string; readonly sliceKey: number; readonly sent: boolean }
+
+/** The reader slice's side of a jump: where the target sits, and the slice it lands on. */
+export type JumpSlice = {
+  classifyJump: (entryId: string) => JumpClass
+  /** Moves the slice to the target when it doesn't land at once; returns the key to name. */
+  placeLanding: (entryId: string) => number
+  topLoaded: () => void
+}
 
 /**
- * `useEntryJump` bound to the reader's mount. `send` reaches the surface or the document; `ready`
- * says a call would arrive (native: the document has painted since it last booted). A landing made
- * while not ready waits for ready; a reload loses a landing already sent, so its veil lifts.
+ * `useEntryJump` bound to the reader's mount. `send` reaches the surface or the document with the
+ * slice key the landing waits for; `ready` says a call would arrive (native: the document has
+ * painted since it last booted). A landing made while not ready waits for ready; a reload loses a
+ * landing already sent, so its veil lifts. `slice`'s functions must be stable.
  */
 export function useReaderEntryJump(
   branchId: string,
   ctx: DbCtx,
   ready: boolean,
-  send: (entryId: string) => void,
-  topLoaded: () => void,
+  send: (entryId: string, sliceKey: number) => void,
+  slice: JumpSlice,
 ): EntryJump {
   const readyRef = useRef(ready)
   const landingRef = useRef<Landing | null>(null)
@@ -24,20 +34,22 @@ export function useReaderEntryJump(
     readyRef.current = ready
   }, [ready])
 
+  const { classifyJump, placeLanding, topLoaded } = slice
   const land = useCallback(
     (entryId: string) => {
+      const sliceKey = placeLanding(entryId)
       const sent = readyRef.current
-      landingRef.current = { entryId, sent }
-      if (sent) send(entryId)
+      landingRef.current = { entryId, sliceKey, sent }
+      if (sent) send(entryId, sliceKey)
     },
-    [send],
+    [placeLanding, send],
   )
   const {
     jump: jumpEntry,
     veil,
     landed: landedEntry,
     lost,
-  } = useEntryJump(branchId, ctx, land, topLoaded)
+  } = useEntryJump(branchId, ctx, classifyJump, land, topLoaded)
   // Only a landing already sent can land: a late signal from an earlier landing of the same row
   // would otherwise lift a newer jump's veil while its read is still out.
   const landed = useCallback(
@@ -79,8 +91,8 @@ export function useReaderEntryJump(
       return
     }
     if (landing.sent) return
-    landingRef.current = { entryId: landing.entryId, sent: true }
-    send(landing.entryId)
+    landingRef.current = { ...landing, sent: true }
+    send(landing.entryId, landing.sliceKey)
   }, [lost, ready, send])
 
   return { jump, veil, landed }

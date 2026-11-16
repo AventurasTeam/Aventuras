@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { useCallback, useLayoutEffect, useState } from 'react'
+import { useLayoutEffect, useMemo } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, stories, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
@@ -8,7 +8,9 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { entriesStore } from '@/lib/stores'
 
-import { useReaderEntryJump } from './use-reader-entry-jump'
+import type { JumpClass } from './reader-slice'
+import { useReaderEntryJump, type JumpSlice } from './use-reader-entry-jump'
+import { useReaderSlice } from './use-reader-slice'
 
 vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), warning: vi.fn() } }))
 
@@ -39,14 +41,26 @@ async function seedBranch(): Promise<DbCtx> {
   return { db, runInTransaction }
 }
 
+// The slice key every landing names in these tests; the slice's own rules have their tests.
+const KEY = 7
+
+// A slice that is the window: a row in it lands at once, one outside it is read.
+const WINDOW_SLICE: JumpSlice = {
+  classifyJump: (entryId): JumpClass =>
+    entriesStore.getById(entryId)?.branchId === BRANCH ? 'slice' : 'read',
+  placeLanding: () => KEY,
+  topLoaded: () => {},
+}
+
 describe('useReaderEntryJump', () => {
-  const send = vi.fn<(entryId: string) => void>()
+  const send = vi.fn<(entryId: string, sliceKey: number) => void>()
   let ctx: DbCtx
 
   const mount = (ready: boolean) =>
-    renderHook(({ branchId, ready }) => useReaderEntryJump(branchId, ctx, ready, send, () => {}), {
-      initialProps: { branchId: BRANCH, ready },
-    })
+    renderHook(
+      ({ branchId, ready }) => useReaderEntryJump(branchId, ctx, ready, send, WINDOW_SLICE),
+      { initialProps: { branchId: BRANCH, ready } },
+    )
 
   beforeEach(async () => {
     send.mockReset()
@@ -62,7 +76,7 @@ describe('useReaderEntryJump', () => {
   it('sends a landing straight to a ready reader', async () => {
     const { result } = mount(true)
     await act(() => result.current.jump('entry_10'))
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', KEY)
   })
 
   // A document reloaded during the read would lose the call.
@@ -73,7 +87,7 @@ describe('useReaderEntryJump', () => {
     expect(result.current.veil.isWaiting()).toBe(true)
 
     rerender({ branchId: BRANCH, ready: true })
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', KEY)
     expect(result.current.veil.isWaiting()).toBe(true)
 
     act(() => result.current.landed('entry_10'))
@@ -95,7 +109,7 @@ describe('useReaderEntryJump', () => {
     expect(send).not.toHaveBeenCalled()
 
     rerender({ branchId: BRANCH, ready: true })
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', KEY)
   })
 
   it('holds a landing for a row already in the window too', async () => {
@@ -104,7 +118,7 @@ describe('useReaderEntryJump', () => {
     expect(send).not.toHaveBeenCalled()
 
     rerender({ branchId: BRANCH, ready: true })
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100', KEY)
   })
 
   it('drops a held landing when a newer jump starts its read', async () => {
@@ -117,13 +131,13 @@ describe('useReaderEntryJump', () => {
     })
     rerender({ branchId: BRANCH, ready: true })
     await act(() => newer)
-    expect(send.mock.calls).toEqual([['entry_10']])
+    expect(send.mock.calls).toEqual([['entry_10', KEY]])
   })
 
   it('keeps the wait when a reload loses an older landing of the same row', async () => {
     const { result, rerender } = mount(true)
     await act(() => result.current.jump('entry_100'))
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100', KEY)
     entriesStore.hydrate(
       BRANCH,
       Array.from({ length: 20 }, (_, i) => row(101 + i)),
@@ -156,7 +170,10 @@ describe('useReaderEntryJump', () => {
     expect(result.current.veil.isWaiting()).toBe(true)
 
     await act(() => again)
-    expect(send.mock.calls).toEqual([['entry_10'], ['entry_10']])
+    expect(send.mock.calls).toEqual([
+      ['entry_10', KEY],
+      ['entry_10', KEY],
+    ])
     expect(result.current.veil.isWaiting()).toBe(true)
     act(() => result.current.landed('entry_10'))
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -191,7 +208,7 @@ describe('useReaderEntryJump', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const { result, rerender } = mount(true)
     await act(() => result.current.jump('entry_100'))
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_100', KEY)
 
     rerender({ branchId: BRANCH, ready: false })
     expect(warn).not.toHaveBeenCalled()
@@ -212,7 +229,10 @@ describe('useReaderEntryJump', () => {
     const { result, rerender } = mount(true)
     await act(() => result.current.jump('entry_10'))
     await act(() => result.current.jump('entry_100'))
-    expect(send.mock.calls).toEqual([['entry_10'], ['entry_100']])
+    expect(send.mock.calls).toEqual([
+      ['entry_10', KEY],
+      ['entry_100', KEY],
+    ])
 
     rerender({ branchId: BRANCH, ready: false })
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -227,7 +247,7 @@ describe('useReaderEntryJump', () => {
     const { result, rerender } = mount(false)
     await act(() => result.current.jump('entry_10'))
     rerender({ branchId: BRANCH, ready: true })
-    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10')
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', KEY)
 
     rerender({ branchId: BRANCH, ready: false })
     expect(result.current.veil.isWaiting()).toBe(false)
@@ -255,30 +275,55 @@ describe('useReaderEntryJump', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
-  // As the route holds them: on native each route commit re-sends the whole window, and a shimmer
-  // dropped a commit late, under a reader landed on the first row, shifts it.
+  // As the route holds them: on native each route commit re-sends the slice, and a shimmer dropped
+  // a commit late, under a reader landed on the first row, shifts it.
   it('drops the shimmer in the commit that brings the branch top', async () => {
     const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    const commits: { top: boolean; hasOlder: boolean }[] = []
+    const commits: { top: boolean; hasOlder: boolean; sliceKey: number }[] = []
     const { result } = renderHook(() => {
       const rows = entriesStore.useEntries((m) => m)
-      const [hasOlder, setHasOlder] = useState(true)
-      const markTopLoaded = useCallback(() => setHasOlder(false), [])
-      const entryJump = useReaderEntryJump(BRANCH, ctx, true, send, markTopLoaded)
+      const entries = useMemo(
+        () =>
+          [...rows.values()]
+            .filter((row) => row.branchId === BRANCH)
+            .sort((a, b) => a.position - b.position),
+        [rows],
+      )
+      const slice = useReaderSlice(BRANCH, entries, ctx.db)
+      const entryJump = useReaderEntryJump(BRANCH, ctx, true, send, slice)
       useLayoutEffect(() => {
-        commits.push({ top: rows.has('entry_1'), hasOlder })
+        commits.push({
+          top: slice.rows.some((row) => row.id === 'entry_1'),
+          hasOlder: slice.hasOlder,
+          sliceKey: slice.sliceKey,
+        })
       })
       return entryJump
     })
-    // Outside act, so the store's update and the state's are scheduled as the app's are.
+    // Outside act, so the store's update and the slice's are scheduled as the app's are.
     env.IS_REACT_ACT_ENVIRONMENT = false
     try {
       await result.current.jump('entry_1')
-      await vi.waitFor(() => expect(commits.at(-1)).toEqual({ top: true, hasOlder: false }))
+      await vi.waitFor(() => expect(commits.at(-1)).toMatchObject({ top: true, hasOlder: false }))
     } finally {
       env.IS_REACT_ACT_ENVIRONMENT = true
     }
-    expect(commits.filter((commit) => commit.top)).toEqual([{ top: true, hasOlder: false }])
+    const landedOn = commits.filter((commit) => commit.top)
+    expect(landedOn).toEqual([{ top: true, hasOlder: false, sliceKey: landedOn[0].sliceKey }])
+    // The landing names that commit's key, so the document lands on the slice without the shimmer.
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_1', landedOn[0].sliceKey)
+  })
+
+  it('names the key the slice moved to, and resends that key once ready', async () => {
+    let next = 3
+    const slice: JumpSlice = { ...WINDOW_SLICE, placeLanding: () => next++ }
+    const { result, rerender } = renderHook(
+      ({ ready }) => useReaderEntryJump(BRANCH, ctx, ready, send, slice),
+      { initialProps: { ready: false } },
+    )
+    await act(() => result.current.jump('entry_10'))
+    rerender({ ready: true })
+    expect(send).toHaveBeenCalledExactlyOnceWith('entry_10', 3)
   })
 
   it('raises and lifts the veil without re-rendering its consumer', async () => {
@@ -286,7 +331,7 @@ describe('useReaderEntryJump', () => {
     const { result, rerender } = renderHook(
       ({ ready }) => {
         renders += 1
-        return useReaderEntryJump(BRANCH, ctx, ready, send, () => {})
+        return useReaderEntryJump(BRANCH, ctx, ready, send, WINDOW_SLICE)
       },
       { initialProps: { ready: false } },
     )
@@ -295,7 +340,7 @@ describe('useReaderEntryJump', () => {
     const before = renders
 
     act(() => result.current.landed('entry_10'))
-    expect(send).toHaveBeenCalledWith('entry_10')
+    expect(send).toHaveBeenCalledWith('entry_10', KEY)
     expect(renders).toBe(before)
   })
 })
