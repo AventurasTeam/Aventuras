@@ -140,9 +140,11 @@ function toReferenceConstraints(
   const sides = [constraints?.route, constraints?.provider].filter((side) => !!side)
   if (!sides.length) return undefined
 
-  const formatLists = sides.flatMap((side) => (side.formats?.length ? [side.formats] : []))
-  const formats = formatLists.reduce<string[] | undefined>(
-    (common, list) => (common ? common.filter((f) => list.includes(f)) : list),
+  const mimeLists = sides.flatMap((side) =>
+    side.formats?.length ? [[...new Set(side.formats.map(referenceMime))]] : [],
+  )
+  const mimeTypes = mimeLists.reduce<string[] | undefined>(
+    (common, list) => (common ? common.filter((m) => list.includes(m)) : list),
     undefined,
   )
 
@@ -159,7 +161,7 @@ function toReferenceConstraints(
       sides.flatMap((side) => [side.max_width, side.max_height]),
       Math.min,
     ),
-    mimeTypes: formats?.length ? formats.map(referenceMime) : undefined,
+    mimeTypes: mimeTypes?.length ? mimeTypes : undefined,
   }
   return Object.values(result).some((v) => v !== undefined) ? result : undefined
 }

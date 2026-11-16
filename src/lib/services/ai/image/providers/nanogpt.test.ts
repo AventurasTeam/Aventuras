@@ -382,6 +382,31 @@ describe('NanoGPT model catalogue', () => {
     })
   })
 
+  it('matches the route and provider formats whichever way each spells JPEG', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: {
+          input_image_constraints: {
+            route: { formats: ['jpg', 'png'] },
+            provider: { formats: ['JPEG', 'png'] },
+          },
+        },
+      }),
+    )
+    expect(model?.referenceConstraints?.mimeTypes).toEqual(['image/jpeg', 'image/png'])
+  })
+
+  it('lists JPEG once when a side spells it both ways', async () => {
+    const model = await capabilitiesOf(
+      listed('m', {
+        supported_parameters: {
+          input_image_constraints: { route: { formats: ['jpg', 'jpeg'] } },
+        },
+      }),
+    )
+    expect(model?.referenceConstraints?.mimeTypes).toEqual(['image/jpeg'])
+  })
+
   it('does not let a side that lists nothing restrict', async () => {
     const model = await capabilitiesOf(
       listed('m', {
