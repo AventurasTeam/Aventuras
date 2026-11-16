@@ -692,6 +692,7 @@ export function getDefaultImageGenerationSettings(): ImageGenerationServiceSetti
     backgroundProfileId: null,
     backgroundSize: { orientation: 'landscape', size: 'small' },
     backgroundBlur: 2, // Default blur for atmosphere
+    outputFormats: [],
   }
 }
 
@@ -1840,7 +1841,7 @@ class SettingsStore {
                 ...loaded.worldStateInjection,
               }),
             ),
-            imageGeneration: migrateImageGeneration({
+            imageGeneration: migrateImageGeneration<ImageGenerationServiceSettings>({
               ...defaults.imageGeneration,
               ...loaded.imageGeneration,
             }),
@@ -3023,9 +3024,16 @@ class SettingsStore {
   }
 
   async resetImageGenerationSettings() {
-    this.systemServicesSettings.imageGeneration = getDefaultImageGenerationSettingsForProvider(
-      this.providerPreset,
-    )
+    // The format list has its own reset on the Advanced page.
+    this.systemServicesSettings.imageGeneration = {
+      ...getDefaultImageGenerationSettingsForProvider(this.providerPreset),
+      outputFormats: this.systemServicesSettings.imageGeneration.outputFormats,
+    }
+    await this.saveSystemServicesSettings()
+  }
+
+  async resetImageOutputSettings() {
+    this.systemServicesSettings.imageGeneration.outputFormats = []
     await this.saveSystemServicesSettings()
   }
 

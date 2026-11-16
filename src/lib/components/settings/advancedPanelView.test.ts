@@ -127,4 +127,17 @@ describe('advancedPanelView — header badges', () => {
       muted: true,
     })
   })
+
+  it('lists the preferred image formats in order, and mutes the badge when there are none', () => {
+    const formats = [{ format: 'webp' }, { format: 'jpeg' }]
+    expect(view({ imageGeneration: { outputFormats: formats } }).badges.imageOutput).toEqual({
+      text: 'WEBP › JPEG',
+      muted: false,
+    })
+    expect(view().badges.imageOutput).toEqual({ text: 'Provider default', muted: true })
+    expect(view({ imageGeneration: { outputFormats: [] } }).badges.imageOutput).toEqual({
+      text: 'Provider default',
+      muted: true,
+    })
+  })
 })

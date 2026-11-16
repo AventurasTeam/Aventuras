@@ -7,6 +7,7 @@
 
 import type { ImageModelCapabilities, ImageProviderType } from '#lib/types/index.ts'
 import type { ImageSpec } from '#lib/utils/image.ts'
+import type { ImageOutputPreference } from '#lib/utils/imageOutput.ts'
 import type { Json } from './comfyImage'
 // Provider specific types
 export type ComfySamplerInfo = {
@@ -47,6 +48,8 @@ export interface ImageGenerateOptions {
   /** The selected model's capabilities, from the provider's model list or its table. */
   modelInfo?: ImageModelCapabilities
   referenceImages?: string[] // raw base64 (no data: prefix)
+  /** The output format chosen for this model; absent sends no format field. */
+  output?: ImageOutputPreference
   signal?: AbortSignal
   providerOptions?: Record<string, unknown>
 }

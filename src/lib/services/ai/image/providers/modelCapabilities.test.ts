@@ -41,6 +41,15 @@ describe('pickCapabilities', () => {
     expect(picked.supportedResolutions).toEqual(['1k', '2k'])
     expect(picked.referenceConstraints?.mimeTypes).toEqual(['image/png'])
   })
+
+  it('keeps the output formats without sharing their arrays', () => {
+    const source = info({ outputFormats: ['png', 'jpeg'], compressionFormats: ['jpeg'] })
+    const picked = pickCapabilities(source)
+    source.outputFormats?.push('webp')
+    source.compressionFormats?.push('webp')
+    expect(picked.outputFormats).toEqual(['png', 'jpeg'])
+    expect(picked.compressionFormats).toEqual(['jpeg'])
+  })
 })
 
 describe('applyCapabilityOverride', () => {
@@ -80,6 +89,31 @@ describe('applyCapabilityOverride', () => {
 
   it('applies over a model the provider knows nothing about', () => {
     expect(applyCapabilityOverride(undefined, { minPixels: 100 })).toEqual({ minPixels: 100 })
+  })
+
+  it('replaces the output formats, and a blank list defers to the provider', () => {
+    const published = { ...listed, outputFormats: ['png' as const] }
+    expect(applyCapabilityOverride(published, { outputFormats: ['webp', 'jpeg'] })).toMatchObject({
+      outputFormats: ['webp', 'jpeg'],
+    })
+    expect(applyCapabilityOverride(published, { outputFormats: [] })).toEqual(published)
+  })
+
+  it('takes compression for the lossy formats of the host list, never png', () => {
+    expect(
+      applyCapabilityOverride(undefined, {
+        outputFormats: ['png', 'jpeg', 'webp'],
+        outputCompression: true,
+      }),
+    ).toEqual({
+      outputFormats: ['png', 'jpeg', 'webp'],
+      compressionFormats: ['jpeg', 'webp'],
+    })
+  })
+
+  it('takes no compression unless the override switches it on', () => {
+    const result = applyCapabilityOverride(undefined, { outputFormats: ['jpeg'] })
+    expect(result?.compressionFormats).toBeUndefined()
   })
 })
 

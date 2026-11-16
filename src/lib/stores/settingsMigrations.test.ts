@@ -171,6 +171,7 @@ describe('migrateImageGeneration', () => {
       referenceSize: { orientation: 'square', size: 'small' },
       portraitSize: { orientation: 'square', size: 'tiny' },
       backgroundSize: { orientation: 'landscape', size: 'small' },
+      outputFormats: [],
     })
   })
 
@@ -181,6 +182,24 @@ describe('migrateImageGeneration', () => {
 
   it('preserves the other settings', () => {
     expect(migrateImageGeneration({ ...legacy, backgroundBlur: 2 }).backgroundBlur).toBe(2)
+  })
+
+  it('reads a settings blob without an output-format list as an empty one', () => {
+    expect(migrateImageGeneration(legacy).outputFormats).toEqual([])
+  })
+
+  it('cleans a stored output-format list', () => {
+    const result = migrateImageGeneration({
+      ...legacy,
+      outputFormats: [
+        { format: 'webp', compression: 150 },
+        { format: 'gif' },
+        { format: 'webp' },
+        { format: 'png', compression: 20 },
+      ],
+    })
+    expect(result.outputFormats).toEqual([{ format: 'webp', compression: 100 }, { format: 'png' }])
+    expect(migrateImageGeneration(result).outputFormats).toEqual(result.outputFormats)
   })
 })
 

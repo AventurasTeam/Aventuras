@@ -1,9 +1,16 @@
 import type { ImageCapabilityOverride, ImageModelCapabilities } from '#lib/types/index.ts'
+import { takesCompression } from '#lib/utils/imageOutput.ts'
 import type { ImageModelInfo } from './types'
 
 /** The generation-relevant fields, copied so nothing is shared with the model list cache. */
 export function pickCapabilities(info: ImageModelCapabilities): ImageModelCapabilities {
-  const { referenceConstraints, supportedResolutions, supportedAspectRatios } = info
+  const {
+    referenceConstraints,
+    supportedResolutions,
+    supportedAspectRatios,
+    outputFormats,
+    compressionFormats,
+  } = info
   return {
     supportsImg2Img: info.supportsImg2Img,
     maxReferenceImages: info.maxReferenceImages,
@@ -14,6 +21,8 @@ export function pickCapabilities(info: ImageModelCapabilities): ImageModelCapabi
     },
     supportedResolutions: supportedResolutions?.slice(),
     supportedAspectRatios: supportedAspectRatios?.slice(),
+    outputFormats: outputFormats?.slice(),
+    compressionFormats: compressionFormats?.slice(),
   }
 }
 
@@ -23,10 +32,14 @@ export function applyCapabilityOverride(
   override: ImageCapabilityOverride | undefined,
 ): ImageModelCapabilities | undefined {
   if (!override) return capabilities
-  const { minPixels, sizes, references } = override
+  const { minPixels, sizes, references, outputFormats, outputCompression } = override
   const merged: ImageModelCapabilities = { ...capabilities }
   if (minPixels) merged.minPixels = minPixels
   if (sizes?.length) merged.supportedResolutions = sizes
+  if (outputFormats?.length) merged.outputFormats = outputFormats
+  if (outputCompression) {
+    merged.compressionFormats = merged.outputFormats?.filter(takesCompression)
+  }
   if (references === false) {
     merged.supportsImg2Img = false
     merged.maxReferenceImages = 0

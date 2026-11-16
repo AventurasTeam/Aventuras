@@ -24,6 +24,7 @@
  */
 
 import { parseImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+import { parseImageOutputPreferences, type ImageOutputPreference } from '#lib/utils/imageOutput.ts'
 import { ENTRY_RETRIEVAL_DEFAULTS } from '#lib/services/ai/core/defaults.ts'
 
 /** Default of the removed `maxEntriesPerTier` slider, for telling tuned from untouched. */
@@ -78,6 +79,9 @@ export function migrateEntryRetrieval<T extends { maxTier3Entries: number }>(mer
  *
  * `parseImageSpec` reads both, so this only normalises what is already on disk into the
  * shape the rest of the app expects. Idempotent: a spec parses back to itself.
+ *
+ * The stored output-format list is read through the same boundary, so a hand-edited or
+ * older blob cannot hand the generator a format it does not know.
  */
 export function migrateImageGeneration<
   T extends {
@@ -85,14 +89,16 @@ export function migrateImageGeneration<
     referenceSize: ImageSpec | string
     portraitSize: ImageSpec | string
     backgroundSize: ImageSpec | string
+    outputFormats?: unknown
   },
->(merged: T): T {
+>(merged: T): Omit<T, 'outputFormats'> & { outputFormats: ImageOutputPreference[] } {
   return {
     ...merged,
     size: parseImageSpec(merged.size),
     referenceSize: parseImageSpec(merged.referenceSize),
     portraitSize: parseImageSpec(merged.portraitSize),
     backgroundSize: parseImageSpec(merged.backgroundSize),
+    outputFormats: parseImageOutputPreferences(merged.outputFormats),
   }
 }
 

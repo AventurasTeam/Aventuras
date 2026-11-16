@@ -26,6 +26,13 @@ import {
   pickSize,
   specToAspectRatio,
 } from '#lib/utils/image.ts'
+import {
+  isImageOutputFormat,
+  LOSSY_IMAGE_OUTPUT_FORMATS,
+  outputWireFields,
+  takesCompression,
+  type ImageOutputFormat,
+} from '#lib/utils/imageOutput.ts'
 import { endpoint } from '#lib/utils/url.ts'
 import { resolveBaseUrl } from './baseUrls'
 import { findListedModel } from './modelCapabilities'
@@ -69,6 +76,11 @@ const supportedParameters = z
       .object({ min: optionalNumber, max: optionalNumber })
       .optional()
       .catch(undefined),
+    output_format: stringList,
+    output_compression: z
+      .object({ formats: z.array(z.string()).optional().catch(undefined) })
+      .optional()
+      .catch(undefined),
   })
   .catch({})
 
@@ -101,6 +113,21 @@ type NanoGptModel = z.output<typeof NanoGptModel>
 type ModelFacts = Pick<NanoGptModel, 'architecture' | 'capabilities' | 'supported_parameters'>
 type ImageConstraints = z.output<typeof imageConstraints>
 
+/** The catalogue spells JPEG both ways; `sniffImageMime` says `image/jpeg`. */
+const referenceMime = (format: string): string => {
+  const lower = format.toLowerCase()
+  return `image/${lower === 'jpg' ? 'jpeg' : lower}`
+}
+
+/** An entry listing no formats means every lossy one; one listing only formats without a level means none. */
+function compressionFormatsOf(
+  entry: { formats?: string[] } | undefined,
+): ImageOutputFormat[] | undefined {
+  if (!entry) return undefined
+  if (!entry.formats) return [...LOSSY_IMAGE_OUTPUT_FORMATS]
+  return nonEmpty(entry.formats.filter(isImageOutputFormat).filter(takesCompression))
+}
+
 function boundOf(values: (number | undefined)[], pick: (...n: number[]) => number) {
   const present = values.filter((v): v is number => v !== undefined)
   return present.length ? pick(...present) : undefined
@@ -113,9 +140,11 @@ function toReferenceConstraints(
   const sides = [constraints?.route, constraints?.provider].filter((side) => !!side)
   if (!sides.length) return undefined
 
-  const formatLists = sides.flatMap((side) => (side.formats?.length ? [side.formats] : []))
-  const formats = formatLists.reduce<string[] | undefined>(
-    (common, list) => (common ? common.filter((f) => list.includes(f)) : list),
+  const mimeLists = sides.flatMap((side) =>
+    side.formats?.length ? [[...new Set(side.formats.map(referenceMime))]] : [],
+  )
+  const mimeTypes = mimeLists.reduce<string[] | undefined>(
+    (common, list) => (common ? common.filter((m) => list.includes(m)) : list),
     undefined,
   )
 
@@ -132,7 +161,7 @@ function toReferenceConstraints(
       sides.flatMap((side) => [side.max_width, side.max_height]),
       Math.min,
     ),
-    mimeTypes: formats?.length ? formats.map((f) => `image/${f.toLowerCase()}`) : undefined,
+    mimeTypes: mimeTypes?.length ? mimeTypes : undefined,
   }
   return Object.values(result).some((v) => v !== undefined) ? result : undefined
 }
@@ -164,6 +193,8 @@ function toCapabilities({
     referenceConstraints: toReferenceConstraints(params.input_image_constraints),
     supportedResolutions: nonEmpty(params.resolutions) ?? nonEmpty(params.resolution),
     supportedAspectRatios: nonEmpty(params.aspect_ratio?.filter(isAspectRatio)),
+    outputFormats: nonEmpty(params.output_format?.filter(isImageOutputFormat)),
+    compressionFormats: compressionFormatsOf(params.output_compression),
   }
 }
 
@@ -185,7 +216,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
     name: 'NanoGPT',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, output, signal } = options
 
       const ratios = modelInfo?.supportedAspectRatios
 
@@ -199,6 +230,7 @@ export function createNanoGPTProvider(config: ImageProviderConfig): ImageProvide
             resolution:
               pickSize(spec, modelInfo?.supportedResolutions) ??
               formatImageSize(specToPixels(spec)),
+            ...outputWireFields(output),
           },
         },
         signal,

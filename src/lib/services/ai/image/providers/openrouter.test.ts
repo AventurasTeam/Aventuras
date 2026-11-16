@@ -107,6 +107,27 @@ describe('OpenRouter image provider', () => {
     })
     expect(sentRequest().body.aspect_ratio).toBe('16:9')
   })
+
+  it('sends the chosen output format and compression beside the resolution', async () => {
+    await provider().generate({
+      model: 'm',
+      prompt: 'p',
+      spec: landscapeMedium,
+      modelInfo: { supportedResolutions: ['1K', '2K'] },
+      output: { format: 'webp', compression: 70 },
+    })
+    expect(sentRequest().body).toMatchObject({
+      resolution: '2K',
+      output_format: 'webp',
+      output_compression: 70,
+    })
+  })
+
+  it('sends no output fields without a chosen output', async () => {
+    await provider().generate({ model: 'm', prompt: 'p', spec: landscapeMedium })
+    expect(sentRequest().body).not.toHaveProperty('output_format')
+    expect(sentRequest().body).not.toHaveProperty('output_compression')
+  })
 })
 
 describe('OpenRouter model discovery', () => {
@@ -189,6 +210,41 @@ describe('OpenRouter model discovery', () => {
   it('reads a model that lists no aspect ratios as having none', async () => {
     const model = await modelOf(listed('meta/muse-image', ['text', 'image']))
     expect(model.supportedAspectRatios).toBeUndefined()
+  })
+
+  it('reads the listed output formats, and the compression the model takes for them', async () => {
+    const model = await modelOf(
+      listed('openai/gpt-image-1', ['text', 'image'], {
+        output_format: { type: 'enum', values: ['png', 'jpeg', 'webp'] },
+        output_compression: { type: 'range', min: 0, max: 100 },
+      }),
+    )
+    expect(model).toMatchObject({
+      outputFormats: ['png', 'jpeg', 'webp'],
+      compressionFormats: ['jpeg', 'webp'],
+    })
+  })
+
+  it('leaves out formats the app does not offer', async () => {
+    const model = await modelOf(
+      listed('m', ['text'], {
+        output_format: { type: 'enum', values: ['gif', 'png', 'svg'] },
+      }),
+    )
+    expect(model.outputFormats).toEqual(['png'])
+  })
+
+  it('reads a model that lists only formats the app does not offer as having none', async () => {
+    const model = await modelOf(
+      listed('quiver/arrow', ['text'], { output_format: { type: 'enum', values: ['svg'] } }),
+    )
+    expect(model.outputFormats).toBeUndefined()
+  })
+
+  it('reads a model that lists no output parameters as unknown', async () => {
+    const model = await modelOf(listed('meta/muse-image', ['text', 'image']))
+    expect(model.outputFormats).toBeUndefined()
+    expect(model.compressionFormats).toBeUndefined()
   })
 
   it('marks a model whose references are mandatory', async () => {

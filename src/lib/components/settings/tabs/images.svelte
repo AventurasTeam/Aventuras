@@ -69,8 +69,10 @@
     defaultImageSpec,
     isSizeString,
     normalizeImageDataUrl,
+    sniffImageMime,
     type ImageSpec,
   } from '#lib/utils/image.ts'
+  import { IMAGE_OUTPUT_FORMATS, type ImageOutputFormat } from '#lib/utils/imageOutput.ts'
   import { cn } from '#lib/utils/cn.ts'
   import { describeLoadError } from '#lib/utils/error.ts'
   import { parseHttpUrl } from '#lib/utils/url.ts'
@@ -153,6 +155,8 @@
   let profileMinPixels = $state<number | null>(null)
   let profileSizesText = $state('')
   let profileReferences = $state<'' | 'on' | 'off'>('')
+  let profileOutputFormats = $state<ImageOutputFormat[]>([])
+  let profileOutputCompression = $state(false)
   let capabilitiesOpen = $state(false)
   const markedClass = 'ring-2 ring-amber-500/60'
   const referencesItems = [
@@ -289,6 +293,9 @@
   let testSize = $state<ImageSpec>(defaultImageSpec())
   let isGeneratingTestImage = $state(false)
   let testImageResult = $state<string | null>(null)
+  const testImageMime = $derived(
+    testImageResult ? sniffImageMime(testImageResult.replace(/^data:[^,]*;base64,/, '')) : null,
+  )
   let testError = $state<string | null>(null)
 
   $effect(() => {
@@ -553,6 +560,10 @@
     const sizes = parsedSizes.filter(isSizeString)
     if (sizes.length > 0) override.sizes = sizes
     if (profileReferences) override.references = profileReferences === 'on'
+    if (profileOutputFormats.length > 0) {
+      override.outputFormats = IMAGE_OUTPUT_FORMATS.filter((f) => profileOutputFormats.includes(f))
+      if (profileOutputCompression) override.outputCompression = true
+    }
     return Object.keys(override).length > 0 ? override : undefined
   })
 
@@ -560,7 +571,16 @@
     profileMinPixels = override?.minPixels ?? null
     profileSizesText = override?.sizes?.join('\n') ?? ''
     profileReferences = override?.references === undefined ? '' : override.references ? 'on' : 'off'
+    profileOutputFormats = override?.outputFormats?.slice() ?? []
+    profileOutputCompression = override?.outputCompression === true
     capabilitiesOpen = !!override
+  }
+
+  function toggleOutputFormat(format: ImageOutputFormat, on: boolean) {
+    profileOutputFormats = on
+      ? [...profileOutputFormats, format]
+      : profileOutputFormats.filter((f) => f !== format)
+    if (profileOutputFormats.length === 0) profileOutputCompression = false
   }
 
   // What the provider published for the current model, once the loaded list is for these inputs.
@@ -600,6 +620,8 @@
         profileMinPixels,
         profileSizesText,
         profileReferences,
+        profileOutputFormats,
+        profileOutputCompression,
         profileSampler,
         profileScheduler,
         profileMode,
@@ -1237,6 +1259,9 @@
             {#if testImageResult}
               <div class="mt-4 space-y-2">
                 <Label>Result Image</Label>
+                <p class="text-muted-foreground text-xs">
+                  Format received: {testImageMime ?? 'unknown'}
+                </p>
                 <div class="overflow-hidden rounded-lg border bg-black/5">
                   <img
                     src={normalizeImageDataUrl(testImageResult) ?? ''}
@@ -1451,6 +1476,39 @@
                   {conflict.message}
                 </p>
               {/each}
+            </div>
+            <div class="space-y-2">
+              <Label>Output formats</Label>
+              <div class="flex flex-wrap gap-x-4 gap-y-2">
+                {#each IMAGE_OUTPUT_FORMATS as format, index (index)}
+                  <div class="flex items-center gap-2">
+                    <Checkbox
+                      id="override-format-{format}"
+                      checked={profileOutputFormats.includes(format)}
+                      onCheckedChange={(checked) => toggleOutputFormat(format, checked)}
+                    />
+                    <Label for="override-format-{format}" class="font-normal uppercase">
+                      {format}
+                    </Label>
+                  </div>
+                {/each}
+              </div>
+              <div class="flex items-center gap-2">
+                <Checkbox
+                  id="override-output-compression"
+                  checked={profileOutputCompression}
+                  disabled={profileOutputFormats.length === 0}
+                  onCheckedChange={(checked) => (profileOutputCompression = checked)}
+                />
+                <Label for="override-output-compression" class="font-normal">
+                  Takes a compression level
+                </Label>
+              </div>
+              <p class="text-muted-foreground text-xs">
+                The formats this host returns on request. They are used only for formats in the
+                preference list under Settings → Advanced → Image Output Format; with none ticked,
+                no format is sent.
+              </p>
             </div>
           </Collapsible.Content>
         </Collapsible.Root>
