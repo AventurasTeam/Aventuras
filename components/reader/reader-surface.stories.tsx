@@ -3586,6 +3586,26 @@ function SliceHostHarness({
     'Next chunk': () => setChunks((n) => n + 1),
     // A Jump to bottom named for a slice at the tail, arriving after the slice went short of it.
     'Stale jump to bottom': () => surfaceRef.current?.jumpToBottom(stateRef.current.key),
+    // A change held above the reader adopted with a sent turn's row below it, in one commit.
+    'Extend up with a turn': () => {
+      commit(
+        extendUp(stateRef.current, windowRows, {
+          sliceKey: stateRef.current.key,
+          keepId: anchorKeep(),
+        }),
+      )
+      setWindowRows((rows) => [
+        ...rows,
+        entry({
+          id: `s${rows.length + 1}`,
+          kind: 'user_action',
+          content: Array.from({ length: 4 }, () => 'I ask the gallery for one more room.').join(
+            ' ',
+          ),
+          position: rows.length + 1,
+        }),
+      ])
+    },
     // The user's action of a sent turn, at the tail below a reader at the bottom.
     'Append a turn': () =>
       setWindowRows((rows) => [
@@ -3898,6 +3918,28 @@ export const SliceTurnPast50StreamsEngaged: Story = {
     await waitFor(() => expect(isShown('s121')).toBe(true))
     // Past a rest's worth of quiet, as a model's first token can be.
     await new Promise((resolve) => setTimeout(resolve, 400))
+    press('Next chunk')
+    await screen.findByText(REPLY_TEXT)
+    press('Next chunk')
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1)
+  },
+}
+
+/**
+ * The anchor rule's own write is no scroll of the reader's: rows landing above with a turn's row
+ * below compensate without recording the reader as having left the bottom, so the reply follows.
+ */
+export const SliceCompensationKeepsTheReplyEngaged: Story = {
+  render: (args) => <SliceHostHarness {...args} />,
+  play: async () => {
+    const scroller = scrollerOf('s71')
+    await settleLanding(scroller)
+    press('Extend up with a turn')
+    await waitFor(() => expect(isShown('s121')).toBe(true))
+    await waitFor(() => expect(isShown('s46')).toBe(true))
+    await frames(3)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(80)
     press('Next chunk')
     await screen.findByText(REPLY_TEXT)
     press('Next chunk')

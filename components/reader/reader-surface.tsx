@@ -595,6 +595,9 @@ export function ReaderSurface({
   // memo, so a commit never undoes one: each
   // props change records afresh in its first commit, which changes nothing.
   const anchorMemoRef = useRef<AnchorMemo | null>(null)
+  // Where the anchor rule last wrote scrollTop: that scroll event is the reader's own write, not the
+  // user scrolling (reader-composer.md → Autoscroll), so it moves neither autoscroll nor the memo.
+  const anchorWriteRef = useRef<number | null>(null)
   const anchorHoldRafRef = useRef(0)
   useEffect(() => () => cancelAnimationFrame(anchorHoldRafRef.current), [])
   useLayoutEffect(() => {
@@ -619,6 +622,7 @@ export function ReaderSurface({
       }
       if (anchor != null && anchor.deltaPx !== 0) {
         el.scrollTop = Math.max(0, memo.scrollTop + anchor.deltaPx)
+        anchorWriteRef.current = el.scrollTop
         const anchorEl = anchor.el
         const targetTop = anchorEl.getBoundingClientRect().top
         cancelAnimationFrame(anchorHoldRafRef.current)
@@ -632,6 +636,7 @@ export function ReaderSurface({
           const drift = anchorEl.getBoundingClientRect().top - targetTop
           if (Math.abs(drift) >= 1) {
             el.scrollTop += drift
+            anchorWriteRef.current = el.scrollTop
             stableFrames = 0
           } else {
             stableFrames += 1
@@ -889,17 +894,20 @@ export function ReaderSurface({
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {
       const metrics = computeScrollMetrics(event.currentTarget)
-      lastDistanceRef.current = metrics.distanceFromBottomPx
+      const anchorWrite = anchorWriteRef.current
+      anchorWriteRef.current = null
       lastScrollAtRef.current = performance.now()
-      anchorMemoRef.current = null
       armRest()
+      setShowJumpToBottom(metrics.distanceFromBottomPx > NEAR_BOTTOM_THRESHOLD_PX)
+      if (anchorWrite != null && Math.abs(event.currentTarget.scrollTop - anchorWrite) < 1) return
+      lastDistanceRef.current = metrics.distanceFromBottomPx
+      anchorMemoRef.current = null
       // A scroll during a running landing disengages autoscroll. A stream starting mid-landing can
       // still engage it for one write, which that write's own scroll event takes back.
       const landing = landingRef.current
       if (landing != null && landing.running) autoscrollRef.current.userInterrupted()
       else
         autoscrollRef.current.userScrolled({ distanceFromBottomPx: metrics.distanceFromBottomPx })
-      setShowJumpToBottom(metrics.distanceFromBottomPx > NEAR_BOTTOM_THRESHOLD_PX)
     },
     [armRest],
   )
