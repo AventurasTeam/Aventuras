@@ -1,5 +1,7 @@
 export { createAutoscrollMachine } from './autoscroll'
 export type { AutoscrollMachine, AutoscrollState } from './autoscroll'
+export { createLandingMachine, WHEEL_CHAIN_GAP_MS } from './landing'
+export type { LandingFrame, LandingMachine, LandingSettle, LandingStep } from './landing'
 export { isDownwardScrollKey, isScrollbarPress, isUpwardScrollKey } from './scroll-gestures'
 export { computeScrollMetrics } from './scroll-metrics'
 export type { ScrollMetrics, ScrollReading } from './scroll-metrics'

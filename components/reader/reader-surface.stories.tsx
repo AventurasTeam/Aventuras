@@ -5,10 +5,11 @@ import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { CutOffMark, StoryEntry, SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { WHEEL_CHAIN_GAP_MS } from '@/lib/reader-scroll'
 
 import type { ChapterBreaks } from './chapter-breaks'
 import type { ReaderSurfaceHandle } from './reader-document-types'
-import { ReaderSurface, WHEEL_CHAIN_GAP_MS } from './reader-surface'
+import { ReaderSurface } from './reader-surface'
 import {
   describePassFailure,
   describeTurnFailure,

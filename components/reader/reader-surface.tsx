@@ -32,9 +32,11 @@ import { t } from '@/lib/i18n'
 import {
   computeScrollMetrics,
   createAutoscrollMachine,
+  createLandingMachine,
   isDownwardScrollKey,
   isScrollbarPress,
   isUpwardScrollKey,
+  WHEEL_CHAIN_GAP_MS,
 } from '@/lib/reader-scroll'
 
 import type { ChapterBreak } from './chapter-breaks'
@@ -54,12 +56,6 @@ const JUMP_TO_BOTTOM_SETTLE_MS = 500
 const NEAR_TOP_IDLE_MS = 150
 const JUMP_LANDING_GAP_PX = 12
 const LANDED_HIGHLIGHT_MS = 1_500
-const LANDING_SETTLED_FRAMES = 10
-const LANDING_MAX_FRAMES = 600
-// A trackpad's momentum arrives as wheel events about a frame apart; a longer gap is a new gesture.
-export const WHEEL_CHAIN_GAP_MS = 100
-// Trackpad momentum runs 1-3 s; a chain held longer is the user's own scrolling through the press.
-const WHEEL_HOLD_MAX_MS = 3_000
 // Custom properties inherit; the card's animation can't read the wrapper's animation-duration.
 const LANDED_ROW_STYLE = { '--reader-landed-ms': `${LANDED_HIGHLIGHT_MS}ms` } as CSSProperties
 
@@ -585,82 +581,50 @@ export function ReaderSurface({
     anchorHoldActiveRef.current = false
     autoscrollRef.current.userInterrupted()
     pendingJumpAtRef.current = 0
-    let highlighted = false
-    let stableFrames = 0
-    let totalFrames = 0
-    let lastHeight = -1
-    let lastScrollTop: number | null = null
-    let movingFrames = 0
-    let halting = false
-    let halted = false
-    let wheelHoldStartedAt: number | null = null
+    const machine = createLandingMachine()
     const assertLanding = () => {
       if (landingRef.current !== landing) return
       // A passive listener can't cancel trackpad momentum, but a hidden scroller takes no wheel:
       // overflow stays hidden for the chain. A halt hides it one frame to drop a fling; the fling's
       // in-flight last delta lands a frame later, so the frame that restores it only observes.
       const now = performance.now()
-      const wheelChainLive = now - lastWheelHandledAtRef.current < WHEEL_CHAIN_GAP_MS
-      if (wheelChainLive) wheelHoldStartedAt ??= now
-      // The row has long since landed; staying on, the wheel hold would freeze the user's scroll.
-      if (wheelChainLive && now - (wheelHoldStartedAt ?? now) >= WHEEL_HOLD_MAX_MS) {
+      const step = machine.plan({
+        now,
+        wheelChainLive: now - lastWheelHandledAtRef.current < WHEEL_CHAIN_GAP_MS,
+        rowConnected: rowEl.isConnected,
+        laidOut: el.getClientRects().length > 0,
+        fingerDown: gestureActiveRef.current,
+        scrollTop: el.scrollTop,
+      })
+      if (step.kind === 'stop') {
         stopLanding()
         return
       }
-      const overflowY = wheelChainLive ? 'hidden' : ''
-      if (el.style.overflowY !== overflowY) el.style.overflowY = overflowY
-      // A reload can drop the row, and a detached row's rect would read as a huge delta.
-      if (!rowEl.isConnected) {
-        stopLanding()
-        return
-      }
-      // Nothing lands in a reader not laid out (under another screen), under a finger, or into a
-      // fling, which a write doesn't stop: the position must rest a frame or the fling be halted.
-      // None of these frames counts as settled, or the loop would end without having landed.
-      const writable = el.getClientRects().length > 0 && !gestureActiveRef.current
-      const atRest = lastScrollTop != null && Math.abs(el.scrollTop - lastScrollTop) < 1
-      // The reader's own writes move the scroll on one frame; a fling moves it on every frame.
-      movingFrames = lastScrollTop != null && !atRest ? movingFrames + 1 : 0
-      const canLand = writable && atRest && !halting
-      const before = el.scrollTop
-      if (canLand) {
+      if (el.style.overflowY !== step.overflowY) el.style.overflowY = step.overflowY
+      if (step.land) {
         const targetTop = landingElement(rowEl).getBoundingClientRect().top
         const deltaPx = targetTop - el.getBoundingClientRect().top - JUMP_LANDING_GAP_PX
         if (Math.abs(deltaPx) >= 1) el.scrollTop += deltaPx
-        // The fade's clock starts here, so a delayed landing can't spend it on a row off screen.
-        if (!highlighted) {
-          highlighted = true
-          setLanded({ entryId: landing.entryId })
-          // A row still tinted keeps its attribute, so CSS alone wouldn't replay its fade.
-          for (const animation of rowEl.querySelector('.reader-entry-card')?.getAnimations() ?? [])
-            if (isLandedFade(animation)) animation.currentTime = 0
-          // Once painted; a newer jump in between has already reported this one as dropped.
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              if (unreportedLandingRef.current === landing) reportLanded()
-            }),
-          )
-        }
+      }
+      // The fade's clock starts here, so a delayed landing can't spend it on a row off screen.
+      if (step.highlight) {
+        setLanded({ entryId: landing.entryId })
+        // A row still tinted keeps its attribute, so CSS alone wouldn't replay its fade.
+        for (const animation of rowEl.querySelector('.reader-entry-card')?.getAnimations() ?? [])
+          if (isLandedFade(animation)) animation.currentTime = 0
+        // Once painted; a newer jump in between has already reported this one as dropped.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            if (unreportedLandingRef.current === landing) reportLanded()
+          }),
+        )
       }
       // Read back: the browser clamps the write at either end, and a clamped write moved nothing.
       const after = el.scrollTop
-      lastScrollTop = writable ? after : null
       syncJumpButton()
-      // One halt: should a fling outlive it, the loop waits for rest rather than fight it.
-      halting = writable && !halted && movingFrames >= 2
-      if (halting) {
-        halted = true
-        el.style.overflowY = 'hidden'
-      }
-      const height = el.scrollHeight
-      // A frame the loop had to correct hasn't settled: a fling's sub-pixel tail reads as rest. Nor
-      // has one inside a chain, whose next wheel would scroll the reader once the loop let go.
-      const settled =
-        canLand && !wheelChainLive && Math.abs(after - before) < 1 && height === lastHeight
-      stableFrames = settled ? stableFrames + 1 : 0
-      lastHeight = height
-      totalFrames += 1
-      if (stableFrames >= LANDING_SETTLED_FRAMES || totalFrames >= LANDING_MAX_FRAMES) {
+      const settle = machine.settle({ after, scrollHeight: el.scrollHeight })
+      if (settle.haltOverflow) el.style.overflowY = 'hidden'
+      if (settle.done) {
         stopLanding()
         return
       }
