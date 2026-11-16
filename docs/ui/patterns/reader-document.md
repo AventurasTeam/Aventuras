@@ -44,7 +44,7 @@ architecture: exploration record `2026-07-19-single-document-reader`
 ## Entry list: fully rendered flow layout
 
 The list is plain document flow — no JS virtualizer, and no engine
-culling: every row in the loaded window is fully laid out. Real
+culling: every row in the slice is fully laid out. Real
 heights are what keep open-at-bottom, prepend compensation, and
 scrolling exact — validation retired `content-visibility` culling
 because its placeholder estimates settle to real sizes as rows
@@ -65,42 +65,45 @@ and lands at once. A finger on the glass still wins, and every
 write the user didn't ask for still waits for scroll rest.
 
 DOM residency is bounded by the
-[loaded-set window](../screens/reader-composer/reader-composer.md#loaded-set-model),
-not the viewport: ~50 entries at open, growing by boundary
-auto-load — fired **only at scroll rest** — or by a jump above the
-window, which prepends up to its target in one write
+[loaded-set window's slice](../screens/reader-composer/reader-composer.md#loaded-set-model),
+not the viewport: at most 50 entries, extended 25 at a time by
+boundary auto-load in either direction — fired **only at scroll
+rest** — and trimmed back at the far end, or replaced by a jump
 ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+Windowing happens at the data layer, never in the scroll layer: the
+host hands the document only the slice.
 The boundary signal latches during the gesture and fires once scroll
 events quiesce with no finger down, so the prepend and its
 compensating scroll write never fight compositor-owned scrolling.
-While older entries may exist (`hasOlder`), a **boundary skeleton**
-permanently occupies the slot above the oldest loaded row — an
-indicator that mounted mid-scroll would itself shift content — and
-unmounts once, compensated, when a short load proves the branch top,
-or in the jump's own write when its target is the branch's first
-row. If a long
-backwards-reading session makes window growth measurable (React
-commit time or document memory), the designed lever is a **far-end
-trim cap** on the loaded set — windowing at the data layer, never
-in the scroll layer.
+While older entries may exist above the slice (`hasOlder`), a
+**boundary skeleton** permanently occupies the slot above its topmost
+row — an indicator that mounted mid-scroll would itself shift
+content — and unmounts, compensated, whenever nothing is left above the
+slice, or in the jump's own write when its target is the branch's first
+row. While the slice stops short of the tail (`hasNewer`), a
+second permanently occupies the slot below its bottommost row.
 
 **Anchor preservation is deterministic, not engine-delegated.**
 Chrome's scroll anchoring does not fire for this tree (measured;
 synthetic DOM anchors fine), so the scroller opts out via
 `overflow-anchor: none` and one rule is the sole authority: each
-commit the surface memoizes the leading row's content offset, and
-the next commit applies that same row's offset delta to the scroll
-position — covering a prepended block, the boundary skeleton
-mounting or unmounting, or both in one commit. A short frame-loop
+commit, and again at scroll rest, the surface memoizes the content
+offset of the topmost row in the viewport, and the next commit applies
+that same row's offset delta to the scroll position — covering a
+prepended block, a trimmed one, the boundary skeleton mounting or
+unmounting, and a height change above the viewport (reasoning
+expansion, footer re-wrap above the fold), alone or in one commit. The
+rest record is for trims: the reader can scroll past many rows with no
+commit, and a row memoized at the last commit may be one a trim
+removes. A short frame-loop
 hold absorbs late layout; split per-cause compensations are
 forbidden (they fought each other — a hold target captured before
-a sibling compensation re-asserted the stale position). Height
-changes _between_ the leading row and the viewport (reasoning
-expansion, footer re-wrap above the fold) are deliberately
-uncompensated — [validated acceptable](#validation-record) as
-felt on device; the rule extends naturally (anchor to the topmost
-in-viewport row instead) if they ever measure. A width reflow did
-measure, so it takes that extension
+a sibling compensation re-asserted the stale position). A commit that
+adds or removes rows above the viewport waits for scroll rest, and the
+document keeps rendering the slice it has until then: on native its
+rows arrive a bridge round trip after the request, by when a new fling
+may have started. A jump's slice doesn't wait, since a jump halts
+momentum. A width reflow takes the same anchor
 ([`reader-composer.md → Anchor preservation under shifts`](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)).
 While a jump's landing runs it wins over the anchor rule
 ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)),
@@ -152,12 +155,15 @@ inset: 0` root) — expo-dom's mount root is a flex container in
 
 Serializable props in (native → document):
 
-- `rows` — the loaded entry window (entries with metadata),
-  unchanged. Alongside it, `worldTimeDecorations` carries the
+- `rows` — the loaded window's slice (entries with metadata,
+  unchanged): at most 50 rows, more only while a trim waits for scroll
+  rest
+  ([`reader-composer.md → Loaded-set model`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+  Alongside it, `worldTimeDecorations` carries the
   host-formatted world-time labels, raw seconds, and the
   monotonicity-break marker (the preceding entry's label), keyed by
-  entry id (calendar rendering and the monotonicity walk stay
-  native). It is a side table rather than
+  entry id, for the slice's rows (calendar rendering and the
+  monotonicity walk stay native). It is a side table rather than
   fields merged into `rows` so that re-walking the window doesn't
   hand the document fresh row objects and defeat per-row
   memoization, on web. On native every prop crosses as a fresh JSON
@@ -173,18 +179,30 @@ Serializable props in (native → document):
   the number of the chapter that follows and the host-formatted time
   at close. A host-computed side table, for the same reason as
   `worldTimeDecorations`, holding only closed chapters whose end row
-  is in the window.
+  is in the slice.
 - `streaming` — the live stream row (`content`, `reasoning`,
-  `phase`) or null. The stream buffer withholds partial tags but sets
-  no time throttle, so on native each chunk is one prop emission,
-  carrying the whole window with it. A device showed the cost
-  ([Slice 5.3's measure](../../implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)),
-  and the fix is [a followup](../../followups.md#ux), "Native reader
-  rows rerender per emission".
-- `hasOlder` — older entries may exist above the loaded window.
-  Host-derived from window-size math (a full first window means
-  maybe-more; any short load proves the branch top is in the
-  window). Drives the boundary skeleton and gates `onNearTop`.
+  `phase`) or null, and null while the slice stops short of the tail.
+  The stream buffer withholds partial tags but sets no time throttle,
+  so on native each chunk is one prop emission, carrying the slice
+  with it: what an open costs, where the whole window carried 14.2 MB
+  at 60 chapters
+  ([Slice 5.3's measure](../../implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)).
+  The slice isn't built yet ([followup](../../followups.md#ux), "The
+  sliding reader window isn't built").
+- `hasOlder` — rows may exist above the slice: in the window, or above
+  it by window-size math (a full first window means maybe-more; any
+  short load proves the branch top is in the window). Drives the top
+  boundary skeleton and gates `onNearTop`.
+- `hasNewer` — the slice stops short of the branch tail. Drives the
+  bottom boundary skeleton, gates `onNearBottom`, keeps the
+  jump-to-bottom button up, and turns off the bottom-anchored behaviors
+  ([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
+- `sliceKey` — a counter that rises whenever the slice's bounds
+  change. The imperative jumps name the one they expect (below).
+- `editingRow` — the open editor's row (id and stored text) while it is
+  in the window but not the slice, else absent, so the editor's dirty
+  check and Save survive its row leaving the slice
+  ([Edit mode](#edit-mode)).
 - `branchKey` — branch identity. A change resets in-document edit
   state and re-lands the scroll at the bottom.
 - `editGate`, `jumpButtonEnabled`,
@@ -210,8 +228,15 @@ Async function props out (document → native):
   The document requests; native confirms (modals) and executes
   (action layer); results flow back as `rows` updates, with the
   decorations recomputed from them.
-- `onNearTop` — boundary auto-load request (older entries). Fired
+- `onNearTop` — extend the slice upward. The host takes the rows from
+  the window, reading a page into it first above its oldest row. Fired
   only at scroll rest and only while `hasOlder` holds.
+- `onNearBottom` — extend the slice downward, from the window. Fired
+  only at scroll rest and only while `hasNewer` holds.
+- `onTrim(end)` — the slice holds more than 50 rows: trim the named
+  end, the one farther from the viewport. Fired at scroll rest once no
+  landing, bottom pin or stream-end settle runs, so the trim's
+  compensating write never runs beside theirs.
 - `onReady` — the readiness handshake (below).
 - `onFirstPaint` — once per boot, after the first non-empty rows
   paint (double-rAF); the host drops the loading veil on it.
@@ -221,9 +246,14 @@ Async function props out (document → native):
 
 Imperative native → document: `jumpToBottom` (End key, actions-menu
 entry) and `jumpToEntry` (an `entry` link, a chapter popover row).
-Carried via the DOM imperative handle, not a prop. `rows` and a jump
-cross apart, so the document holds a jump's target until a commit
-brings its row. A wheel, touch drag, scrollbar press or scroll key
+Carried via the DOM imperative handle, not a prop. Each names the
+`sliceKey` it expects. `rows` and a jump cross apart, so the document
+holds a jump until it has committed a slice at that key or past it
+that holds the target
+([`reader-composer.md → Where a jump lands`](../screens/reader-composer/reader-composer.md#loaded-set-model)).
+At or past rather than equal, because a new turn or a trim can move
+the slice again before the document commits the jump's. A wheel, touch drag,
+scrollbar press or scroll key
 drops it, and so does a `branchKey` change. A wheel that continues a
 chain already running at the jump (a trackpad's momentum) doesn't:
 the landing halts the chain, for up to about 3 s, past which the
@@ -256,7 +286,11 @@ synchronously.
 
 Inline, inside the document — exact web parity, one code path. The
 draft lives in document state; commit/cancel cross the bridge with
-the final text only.
+the final text only. It lives at the surface's level, not in its row,
+so it survives the row leaving the slice: `editingRow` carries the
+row's stored text meanwhile, and the row shows its editor again when it
+returns
+([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session)).
 
 **Android IME inside a WebView is this pattern's top validation
 item.** The designed fallback, if focus/keyboard handling fails on
@@ -303,8 +337,9 @@ recovery path is singular and must be boring:
 1. expo-dom auto-reloads the WebView on render-process termination
    (upstream behavior).
 2. The reloaded document re-runs and calls `onReady`.
-3. The host bumps `syncNonce`; the document re-renders from current
-   props and lands at bottom.
+3. The host resets the slice to the tail and bumps `syncNonce`; the
+   document re-renders from current props and lands at the branch's
+   bottom, not a slice's that stops short of it.
 
 Cost: scroll position within the window is lost on recovery
 (reload-to-bottom). Accepted for v1; revisit only if renderer kills

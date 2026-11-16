@@ -30,5 +30,5 @@ that fails does nothing at all.
   grown window was then measured on a device
   ([Slice 5.3's measure](../milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)),
   and the fix is a followup:
-  [`followups.md → UX`](../../followups.md#ux), "Native reader rows
-  rerender per emission".
+  [`followups.md → UX`](../../followups.md#ux), "The sliding reader
+  window isn't built".

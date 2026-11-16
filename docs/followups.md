@@ -57,115 +57,80 @@ for the placement rule.
   by Slice 5.1, moved here 2026-11-02 by its closing review, which added
   the tap and CJK numbers.
 
-- **Native reader rows rerender per emission.** On native, every
-  emission re-sends the whole loaded window to the document as a fresh
-  JSON copy
-  ([lesson](./implementation/lessons-learned/expo-dom-bridge-identity-and-rejections.md)),
-  and Slice 5.3's jump grows that window up to the target, so a streamed
-  reply on a grown window stalls. The Android measure
-  ([Slice 5.3 → Android measure](./implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure),
-  Galaxy Z Fold, release build) missed its bar: at 20 chapters the
-  longest gap between paints was 1,561 ms against 500 ms. A commit took
-  510 ms per update at 20 chapters and 2,019 ms at 60, against about
-  12 ms at 50 rows, because every row re-renders on each emission, which
-  carried 4.8 and 14.2 MB against about 90 KB. Updates merge before they
-  commit, so a reply commits 6 and 4 times against 173, and its final
-  paint came 0.4 s and 18.8 s after the host finished. The landing at 60
-  chapters took 10,704 ms, with the renderer at 1,993 MB. Two more costs
-  ride on the same re-send. Leaving the reader for World re-sends the
-  window twice, and a History link back double-commits: its second jump
-  took 2,357 ms at 20 chapters. A chapter close committed while the
-  reader holds a grown window re-sends it for each update, about 72 s at
-  20 chapters if no update merged, counting commit and stringify only.
-  That is arithmetic, not measured, and the reply's lag is the closer
-  proxy. The sliding-window slice below takes a close's stamp burst on
-  a grown window as an acceptance case, since
+- **The sliding reader window isn't built.** The reader's document
+  renders a capped slice of the loaded window
+  ([`reader-composer.md → Loaded-set model`](./ui/screens/reader-composer/reader-composer.md#loaded-set-model),
+  [`reader-document.md → Bridge contract`](./ui/patterns/reader-document.md#bridge-contract)),
+  and the code still hands the document the whole window, so on native
+  every emission re-sends it as a fresh JSON copy
+  ([lesson](./implementation/lessons-learned/expo-dom-bridge-identity-and-rejections.md)).
+  [Slice 5.3's Android measure](./implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)
+  (Galaxy Z Fold, release build) missed its bar on it: at 20 chapters a
+  streamed reply's longest gap between paints was 1,561 ms against
+  500 ms, and at 60 a jump to entry 1 took 10,704 ms with the renderer
+  at 1,993 MB. Until it lands, a far jump on a long story can outlast
+  the jump veil's 30 s bound (`JUMP_VEIL_TIMEOUT_MS` in
+  `components/reader/use-entry-jump.ts`) and be dropped. A landing
+  already sent to the document isn't withdrawn, so the reader may still
+  move to the target once the document commits, with no veil; that is
+  read from the code, not seen on a device. The code stays as built
+  until then (developer decision R2, 2026-11-03). To be planned
+  as a slice in M5. Raised 2026-11-02 by Slice 5.3's Android measure
+  (developer decision Q13); designed 2026-11-16, with the cap of 50 a
+  developer decision, since no mid-tier phone is at hand to set it on.
+
+  Build notes:
+  - The host owns the slice's bounds and derives `rows` from the
+    store's sorted window; `entriesStore` and its consumers stay as
+    they are. The side tables cover the slice's rows, and
+    `ReaderSurface` on web takes the same props.
+  - New bridge props `hasNewer`, `sliceKey` (monotonic) and
+    `editingRow`, and callbacks `onNearBottom` and `onTrim(end)`;
+    `jumpToEntry` and `jumpToBottom` carry the key.
+  - `useEntryJump`'s in-window check becomes "the target and its row
+    above are in the slice", and a jump to the window's oldest row
+    reads the row above. That closes a gap 5.3's final review raised: a
+    jump to the window's oldest row landed without its chapter break,
+    and at the branch's top shifted by `JUMP_LANDING_GAP_PX` when the
+    shimmer dropped. Reading the row above alone didn't hold on native,
+    since expo-dom injects the landing call before the route's props
+    emission; the `sliceKey` hold answers that.
+  - The anchor rule's memo moves from the window's first row to the
+    topmost in-viewport row, recorded at scroll rest too, and a commit
+    that adds or removes rows above the viewport waits for rest.
+  - #751's prune in `reader-surface.tsx` (`editingRowLoaded`) resolves
+    the stored text from `editingRow` as well as `rows`.
+  - On a document reload the host resets the slice to the tail before
+    it bumps `syncNonce`.
+  - The landing loop's pure decision function (below) comes first: the
+    slice's landing hold is the next behaviour change to the loop. Its
+    extensions and trims wait for scroll rest on today's signal, which
+    the followup on scrollbar drags and flings (below) widens; a slice
+    built first inherits that gap.
+  - Code comments that state the old model change with it:
+    `reader-surface.tsx`'s far-end trim as the growth lever, the
+    route's "nothing trims the far end yet", and
+    `scene-editing.ts`'s case for a loaded window short of the live
+    edge, which is now the slice's.
+  - E2E specs and stories that expect earlier rows to stay in the DOM
+    after a load will see trims.
+
+  Acceptance, on the Fold's release build with `pnpm db:seed:long`, at
+  20 and 60 chapters, timed in the document as 5.3 did: a jump to entry
+  1 lands within 3 s; a reply streamed after it, re-attached by Jump to
+  bottom and with the slice short of the tail, has no gap between paints
+  over 500 ms; renderer memory after the jump stays near a fresh open's;
+  no renderer kill; a close's stamp burst on a grown window, which
   [Slice 5.2](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes)
-  measured the burst on a 50-row reader only (developer decision,
-  2026-11-05).
-
-  On a long story a jump to an early chapter can outlast the jump veil's
-  30 s bound (`JUMP_VEIL_TIMEOUT_MS` in
-  `components/reader/use-entry-jump.ts`). The bound starts at the press
-  and restarts when the read's rows reach the store, so the read and the
-  landing each get 30 s. A jump that runs out is dropped: the veil lifts,
-  `reader.entry_jump_dropped` logs cause `bound`
-  ([`observability.md → Subsystem emission inventory`](./observability.md#subsystem-emission-inventory)),
-  and no toast shows. A read still out then neither writes nor lands. A
-  landing already sent to the document isn't withdrawn, so the reader
-  may still move to the target once the document commits, with no veil;
-  that is read from the code, not seen on a device. In 5.3's device
-  session on the Fold (release build, the 60-chapter fixture), a jump to
-  chapter 1, pressed during a jump to chapter 5, held the veil about 22 s
-  in all, and jumps to chapter 5 alone about 17 to 21 s. In the Android
-  measure the read was about 0.4 s of the 10.7 s a jump to entry 1 took
-  at 60 chapters, so nearly all of the wait runs under the landing's
-  30 s. The bound will drop these jumps on longer stories or slower
-  phones until the sliding window below lands. The code stays as built
-  (developer decision R2, 2026-11-03).
-
-  Slice 5.3 ships as built, and the fix is to be planned as a slice in
-  M5. The measure reopened the far-end trim that
-  [`reader-composer.md → Loaded-set model`](./ui/screens/reader-composer/reader-composer.md#loaded-set-model)
-  names as the designed lever, which 5.3's Scope: out said only a bad
-  measure would. Direction, for that slice's design pass to decide: a
-  sliding reader window, which is that lever applied to the document
-  only. The document renders a capped slice, while `entriesStore` stays
-  contiguous to the branch tail. The turn's working set
-  (`lib/pipeline/definitions/working-set.ts`) reads the store's whole
-  window, as do, among others, `suggestion-refresh.ts` beside it and
-  these hooks: `useBranchTailId`, which `useChapterProgress`,
-  `useEntryIndex` and `useChapterTimeRanges` read the tail through,
-  `useBranchWorldTime`, `useStoryPlace` and `useRowSignals`.
-  `holdsLiveEdge` stays true while the store holds the tail, and the
-  document's head-turn checks (`resolveSaveAndRegenTurn`,
-  `headTurnIdsOf`, the reader's `isTail`) already leave a slice short of
-  the tail without tail actions. While the slice is short of it, the
-  streaming entry isn't sent to the document. When it reaches it again,
-  the document renders from the host's accumulated text and keeps
-  streaming. An open inline editor's row can leave the slice too. Its
-  draft lives in the document, so the slice must not drop it silently
-  ([`reader-composer.md → Inline edit session`](./ui/screens/reader-composer/reader-composer.md#inline-edit-session)).
-  The cap also bounds the document's share of
-  the landing time and the renderer's memory, though the host read still
-  grows with rows, 372 ms at 60 chapters. Its size should be set on a
-  mid-tier Android phone, since the Fold is a flagship.
-
-  The developer's direction is that this makes chunks that don't re-send
-  rows optional, a change to
-  [`reader-document.md → Bridge contract`](./ui/patterns/reader-document.md#bridge-contract).
-  The levers from when this was parked don't reach the bar alone: a throttle on
-  `setStreaming` can't get under 500 ms at about 510 ms per commit, and
-  reusing row objects at a seam in `reader-document.tsx` cuts the commit
-  but not the payload or the parse. Markdown stays cached, since
-  `content` is a primitive. The window would overturn three rules of
-  canon: [`No window swap`](./ui/screens/reader-composer/reader-composer.md#loaded-set-model),
-  which has a jump grow the one window;
-  [Jump to bottom](./ui/screens/reader-composer/reader-composer.md#jump-buttons)
-  being a same-window scroll; and the Loaded-set model's definition of
-  the window as the contiguous range in memory and DOM, which the store
-  and the document would no longer share. Raised 2026-11-02 by Slice
-  5.3's Android measure (developer decision Q13).
-
-  **A jump to the window's oldest row lands without its break, and at
-  the branch's top can shift.** A target already in the window lands at
-  once and reads nothing (`components/reader/use-entry-jump.ts`), so
-  when it is the window's oldest loaded row, the previous chapter's end
-  row isn't loaded and its break doesn't exist when it lands; a later
-  boundary load mounts the break just above the screen. On a branch
-  whose first row is the window's oldest with `hasOlder` still true (a
-  50-row branch, or a last boundary load of exactly 50), entry 1 shifts
-  up about 12 px when the shimmer drops. Reading the row above first
-  doesn't hold on native: expo-dom injects the landing call before the
-  route's props emission, so the document lands on the old layout. A fix
-  has to order the landing after the document commits the host's write,
-  a bridge-contract change; the sliding window above reworks this
-  path. Raised 2026-11-03 by 5.3's final review. Checked 2026-11-04:
-  the shift is exactly `JUMP_LANDING_GAP_PX`, and the bridge change is
-  probably avoidable, since the loop re-measures the break every frame
-  and a landing the host sends from its own post-commit effect is
-  injected after expo's props emission. Not run. Routed from triage
-  2026-11-04.
+  measured on a 50-row reader only (developer decision, 2026-11-05);
+  and leaving for World and a History link back, which re-sent the grown
+  window twice (the link's second jump took 2,357 ms at 20 chapters).
+  Recorded with no bar: the app's memory and one store change's host
+  cost at 60 chapters, which the slice leaves growing with the window
+  (the route, `useBranchWorldTime`, `useStoryPlace` and `useRowSignals`
+  each copy and sort the whole store on every change). The device
+  session also checks that TalkBack's linear navigation extends the
+  slice at the bottom shimmer.
 
 - **The jump landing loop wants a pure decision function.**
   `startLanding` in `components/reader/reader-surface.tsx` now holds
@@ -186,7 +151,7 @@ for the placement rule.
     landing frame reads the chain as ended and writes no hold, and
     momentum queued behind the commit scrolls the reader for a frame
     before the landing corrects it. Trigger: on desktop, a popover jump
-    above the window during trackpad momentum, with a row commit over
+    outside the slice during trackpad momentum, with a row commit over
     100 ms. Extracting the loop alone won't fix it, since the caller
     would still compute "chain live" the same way: judge it by the
     wheel events' own times, as `handleWheel` already does for whether

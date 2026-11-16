@@ -89,7 +89,9 @@ The two patterns above are not exclusive. Log-shaped surfaces that
 grow past the threshold compose them: load-older governs **fetching**
 (which entries are in memory), virtualization governs **rendering**
 (which loaded entries hit the DOM). The reader / composer's narrative
-is the v1 surface that lands here — its loaded-set behavior plus the
+is the v1 surface that lands here, with a capped slice of its loaded
+window, chosen at the data layer, in place of a virtualizer — its
+loaded-set behavior plus the
 auto-load-on-boundary deviation from the explicit-click rule are
 documented in
 [`reader-composer.md → Scroll behavior`](../screens/reader-composer/reader-composer.md#scroll-behavior).

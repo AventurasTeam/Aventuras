@@ -819,9 +819,12 @@ primitive. Add a `testID` only for these four cases:
 
 `testID`s are added **per flow, as E2E reaches them** — there is no
 repo-wide retrofit. Virtualization is narrow: `@tanstack/react-virtual`
-/ `FlatList` appear only in `searchable-overlay-list.tsx`; the story
-list and the single-document reader are fully in the DOM, so text and
-role selectors are safe there.
+/ `FlatList` appear only in `searchable-overlay-list.tsx`. The story
+list is fully in the DOM, and the single-document reader holds its
+whole slice there
+([`reader-composer.md → Loaded-set model`](./ui/screens/reader-composer/reader-composer.md#loaded-set-model)),
+so text and role selectors are safe on both; a spec that reaches a row
+outside the reader's slice jumps to it first.
 
 ## CI
 

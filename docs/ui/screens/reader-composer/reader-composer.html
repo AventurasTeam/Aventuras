@@ -418,7 +418,7 @@
   .entries-wrap { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
   .entries { flex: 1; overflow: auto; padding: 20px 28px; max-width: 860px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 
-  /* boundary shimmer — auto-load loading indicator at the loaded-set top/bottom edge */
+  /* boundary shimmer — permanent edge skeleton above / below the document's slice */
   .boundary-shimmer { display: none; padding: 8px 0 14px; text-align: center; font-size: 11px; color: var(--ink-faint); font-style: italic; letter-spacing: 0.04em; }
   .boundary-shimmer.visible { display: block; }
   .boundary-shimmer .dot { display: inline-block; animation: reasoning-pulse 1.6s infinite; }
@@ -813,9 +813,9 @@
   </div>
 
   <div class="rb-group">
-    <span class="gl">window:</span>
-    <button class="rb-btn active" data-window="recent">recent</button>
-    <button class="rb-btn" data-window="top">top (post-jump)</button>
+    <span class="gl">slice:</span>
+    <button class="rb-btn active" data-window="recent">at tail</button>
+    <button class="rb-btn" data-window="top">short of tail (post-jump)</button>
   </div>
 
   <div class="rb-group">
@@ -826,10 +826,9 @@
   </div>
 
   <div class="rb-group">
-    <span class="gl">boundary:</span>
-    <button class="rb-btn active" data-boundary="idle">idle</button>
-    <button class="rb-btn" data-boundary="top">loading top</button>
-    <button class="rb-btn" data-boundary="bottom">loading bottom</button>
+    <span class="gl">older above:</span>
+    <button class="rb-btn active" data-boundary="idle">no (branch top)</button>
+    <button class="rb-btn" data-boundary="top">yes</button>
   </div>
 
   <span class="rb-note">also: click a Browse row · <kbd>Esc</kbd> or a click outside closes peek · <kbd>Ctrl</kbd>+<kbd>\</kbd> toggles rail</span>
@@ -939,8 +938,8 @@
     <div class="entries-wrap">
     <div class="entries" id="entries">
 
-      <!-- top boundary shimmer — visible while auto-fetching the next older chunk on scroll-near-top.
-           Hidden when at branch start (no older to load) or when not actively fetching. -->
+      <!-- top boundary shimmer — permanent while older entries may exist above the document's
+           slice (reader-composer.md → Loaded-set model). Hidden at branch start. -->
       <div class="boundary-shimmer" id="boundary-top"><span class="dot">&middot;&middot;&middot;</span> loading older entries</div>
 
       <div class="chapter-break"><span class="bk-title">Chapter 3<span class="bk-time">&#9201; Day 3, dusk</span></span></div>
@@ -1166,16 +1165,16 @@
         </div>
       </div>
 
-      <!-- bottom boundary shimmer — visible while auto-fetching the next forward chunk
-           on scroll-near-bottom (only meaningful when current window is the top window;
-           recent window's bottom is the live edge — no forward to fetch). -->
+      <!-- bottom boundary shimmer — permanent while the document's slice stops short of the
+           branch tail (after a jump, or a long read back); a slice at the tail has the live
+           edge below it, nothing to extend to. -->
       <div class="boundary-shimmer" id="boundary-bottom"><span class="dot">&middot;&middot;&middot;</span> loading more entries</div>
 
     </div>
 
     <!-- Floating jump button — see Scroll behavior in reader-composer.md.
-         Visibility: jump-to-bottom shows when not near-bottom (tighter than the
-         auto-load tolerance). No jump-to-top: chapter-popover jumps subsume it.
+         Visibility: jump-to-bottom shows whenever the slice stops short of the tail, and
+         otherwise when not near-bottom (tighter than the auto-load tolerance). No jump-to-top: chapter-popover jumps subsume it.
          Engaged class: jump-to-bottom flashes briefly when autoscroll re-engages on stream-active landing. -->
     <div class="scroll-chrome">
       <button class="scroll-jump" id="jump-bottom" title="Jump to live edge (End)" aria-label="Jump to bottom">&darr;</button>
@@ -2643,9 +2642,11 @@
   const boundaryBottom = document.getElementById('boundary-bottom');
 
   function setWindow(state) {
-    // Wireframe: both window states keep jump-to-bottom visible for review.
-    // Real visibility (at-bottom-of-recent vs in-top-window) is component-side.
+    // Wireframe: both slice states keep jump-to-bottom visible for review; a slice short
+    // of the tail shows the bottom shimmer. Real visibility (near the bottom of a slice at
+    // the tail, or not) is component-side.
     jumpBottomBtn.classList.add('visible');
+    boundaryBottom.classList.toggle('visible', state === 'top');
     document.querySelectorAll('[data-window]').forEach(b => b.classList.toggle('active', b.dataset.window === state));
   }
   document.querySelectorAll('[data-window]').forEach(b => {
@@ -2662,7 +2663,6 @@
 
   function setBoundary(state) {
     boundaryTop.classList.toggle('visible', state === 'top');
-    boundaryBottom.classList.toggle('visible', state === 'bottom');
     document.querySelectorAll('[data-boundary]').forEach(b => b.classList.toggle('active', b.dataset.boundary === state));
   }
   document.querySelectorAll('[data-boundary]').forEach(b => {

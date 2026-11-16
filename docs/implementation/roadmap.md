@@ -1572,10 +1572,7 @@ isn't a per-feature concern.
   chapter's `close_report`: M5 names the column in the export manifest
   and exports nothing.
 - M9.5 — Cross-platform parity smoke (Linux desktop + Android),
-  performance budget audit (including a re-measure of the reader's
-  per-emission rerender on a mid-tier Android phone, since
-  [Slice 5.3's measure](./milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)
-  ran on a flagship Fold),
+  performance budget audit,
   accessibility audit
   ([`accessibility skill`](./conventions.md) checks).
 - M9.6 — v1 ship: changelog, release notes, distribution
@@ -2135,11 +2132,13 @@ own.
   2026-10-09 (developer): compensate, and canon now names width reflow as
   its fourth, compensated scenario. Any width change does it: resize, a
   Fold unfold, orientation. The jump grows with the text above the
-  viewport. The shipped anchor rule can't catch it: its effect is keyed on
-  the row window, so a resize never runs it, and a reflow leaves the
-  window's leading row where it was. Needs the topmost in-viewport row's
-  offset held across the change, through the rail's width animation, with
-  a resize observer as the trigger. Routed from triage 2026-10-09.
+  viewport. The anchor rule can't catch it: its effect is keyed on the
+  row window, so a resize never runs it. The sliding reader window moves
+  the rule's anchor to the topmost in-viewport row
+  ([`followups.md → UX`](../followups.md#ux), "The sliding reader window
+  isn't built"); this holds that anchor across the change, through the
+  rail's width animation, with a resize observer as the trigger. Routed
+  from triage 2026-10-09.
 - **M9.5 — Bottom Sheets on web move no focus in and return none on close.**
   [`layout.md → Sheet`](../ui/foundations/mobile/layout.md#sheet) says sheets
   trap Tab focus; the primitive neither focuses into the Sheet nor restores

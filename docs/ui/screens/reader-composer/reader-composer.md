@@ -24,8 +24,8 @@ Cross-cutting principles that govern this screen are in
   the active kind has no rows; "No results" line when search /
   filter narrows to zero)
 - [Composing virtualization with load-older](../../patterns/lists.md#composing-virtualization-with-load-older)
-  (entry list at scale: virtualization layered on a loaded window
-  per [Scroll behavior](#scroll-behavior) below)
+  (entry list at scale: the reader renders a capped slice of a loaded
+  window instead, per [Scroll behavior](#scroll-behavior) below)
 - [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
   (Reader contributes `Undo` and `Redo`, each naming its target per
   [Undo and redo](#undo-and-redo), and `Jump to bottom` to the
@@ -468,14 +468,18 @@ Inside the textarea, Ctrl/Cmd-Z is the textarea's own undo.
   with it
   ([EntryCard → Divergence notices](../../patterns/entry-card.md#divergence-notices));
 - the suggestion chips;
-- jumps, which grow the window and keep the editor's row;
+- jumps and Jump to bottom, which can move the
+  [slice](#loaded-set-model) off the editor's row: the editor stays
+  open with its draft, the other rows' actions still wait, and the row
+  shows its editor again when it comes back into the slice;
 - the peek drawer;
 - the world-time and scene editors;
 - `Flip era…` and `Set lead character…`;
 - a system entry's `Dismiss` and copy.
 
-**A row leaving the loaded set** by any other path closes its editor and
-drops the draft. A redo that restores the row shows the row, not the old
+**A row leaving the loaded set** (the window; leaving only the slice
+keeps the draft) by any other path closes its editor and drops the
+draft. A redo that restores the row shows the row, not the old
 editor. On Android, a crash of the reader's document loses an open
 draft.
 
@@ -1262,8 +1266,9 @@ not a deletion.
 
 The entry list is log-shaped and unbounded; entries accumulate
 within a branch, and the read pattern is recent-most-first. Three
-mechanics compose: a single contiguous loaded window with auto-load
-on scroll boundaries, autoscroll that follows AI streaming, and
+mechanics compose: a single contiguous loaded window, of which the
+document renders a capped slice, with auto-load on scroll boundaries,
+autoscroll that follows AI streaming, and
 jump buttons for terminal-endpoint navigation. The composed
 fetching + virtualization pattern is documented at
 [`patterns/lists.md → Composing virtualization with load-older`](../../patterns/lists.md#composing-virtualization-with-load-older);
@@ -1276,24 +1281,41 @@ rendered plain flow, and scroll policy lives inside the document.
 ### Loaded-set model
 
 At any moment the reader holds a **single contiguous window** of
-entries — never two disconnected windows.
+entries in memory — never two disconnected windows — and its document
+renders a **slice** of that window.
 
-**Window.** The contiguous range in memory + DOM. On branch open:
-~50 most recent entries. Every window row exists in the document
-**fully laid out** (see
+**Window.** The contiguous range in memory: the entries store's rows
+for the branch, from the oldest loaded row down to the branch tail. On
+branch open: ~50 most recent entries. It grows by boundary loads and
+jumps and isn't trimmed while the user reads, since the turn's working
+set and the reader's other readers rely on it reaching the tail; only a
+reload or a branch switch replaces it.
+
+**Slice.** The contiguous run of the window that the document renders:
+**50 rows**, more only while a trim waits for scroll rest. Every slice row exists in the document **fully
+laid out** (see
 [`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
 — real heights are what keep landing and prepend compensation
-exact). If long backwards-reading sessions make window growth
-measurable, the designed lever is a far-end trim cap on the loaded
-set — the window stays contiguous, bounded at the edge opposite
-the load.
+exact). The slice is the far-end trim this model held in reserve, and
+[Slice 5.3's Android measure](../../../implementation/milestones/05-chapters-chapter-close/slices/03-reader-chapters.md#android-measure)
+called for it: with the whole window in the document, a grown window
+stalled a streamed reply and a jump's landing. Bounded, a far jump or
+a long read back costs the document what an open does. On open the
+slice is the whole window. It either ends at the tail or stops short of
+it, which only a trim or a jump does, and whether it reaches the tail
+never changes what the user's actions do: Send, a stream and
+regenerate behave the same either way, and a reply streaming below a
+slice short of the tail is reached by scrolling down or by
+[Jump to bottom](#jump-buttons), as one below the fold is.
 
 **Auto-load on scroll boundary.** As the user scrolls within the
-window:
+slice, it extends by **25 rows** at the edge the user nears, and in the
+same write trims back to 50 at the far edge:
 
-- Approaching the top of the loaded range (within ~one
-  viewport-height of the topmost loaded entry) → auto-fetch the
-  next older chunk (~50 entries). The fetch fires **at scroll
+- Approaching the top of the slice (within ~one viewport-height of
+  its topmost row) → extend upward. The rows come from the window;
+  above the window's oldest row, the next older chunk (~50 entries) is
+  read into the window first. The extension fires **at scroll
   rest** — the boundary signal latches during the gesture and
   fires once scrolling quiesces, so the prepend never lands
   mid-fling (a mid-gesture insert plus its compensating scroll
@@ -1301,18 +1323,31 @@ window:
   scroll position must stay anchored (see
   [Anchor preservation under shifts](#anchor-preservation-under-shifts)
   for the cross-platform implementation requirement).
-- Approaching the bottom of the loaded range (within ~one
-  viewport-height of the bottommost loaded entry, when that isn't
-  the live edge) → auto-fetch the next forward chunk. Content
-  appends.
+- Approaching the bottom of the slice while it stops short of the tail
+  (within ~one viewport-height of its bottommost row) → extend
+  downward, at scroll rest, from the window, which always holds the
+  rows below. Content appends, and the rows trimmed from the top are
+  compensated the same way.
 
-A boundary skeleton occupies the edge above the oldest loaded row
-whenever older entries may exist — permanent rather than
-fetch-scoped, so it never mounts mid-scroll (an appearing
+The step is half the cap so that a trim reaches only rows far from the
+viewport; a trim never removes a row within a viewport-height of it,
+and trims fewer rather than reach one. New turns grow a slice at the
+tail past 50, and it trims its far end at the next scroll rest. When
+the far end is the bottom, the trim leaves the slice short of the tail,
+as scrolling up past it would.
+
+A boundary skeleton occupies the edge above the slice's topmost row
+whenever older entries may exist, in the window or not yet read, and a
+second occupies the edge below its bottommost row whenever the slice
+stops short of the tail — permanent rather than
+fetch-scoped, so neither mounts mid-scroll (an appearing
 indicator would itself shift content). A fast fling can rest at
-the edge for a beat before rows replace the skeleton in place;
-when a short load proves the branch top, the skeleton unmounts
-once, compensated. This is the reader's deviation from
+the edge for a beat before rows replace the skeleton in place.
+The top skeleton unmounts, compensated, whenever nothing is left above
+the slice — a short load proves the branch top, or an extension reaches
+a top already proven — and a trim at the top brings it back in the same
+compensated commit. The bottom one unmounts below the viewport when the
+slice reaches the tail. This is the reader's deviation from
 [`lists.md → Load-older`](../../patterns/lists.md#load-older--log-shaped-unbounded-lists)'s
 explicit-click rule. The existing rule applies to History-tab-shaped
 surfaces where auto-loading older content while glancing at recent
@@ -1320,19 +1355,25 @@ state would be a surprise; the reader's auto-load fires only on
 **boundary approach** — the user explicitly asking for more in
 that direction.
 
-**No window swap.** The reader holds exactly one window at a time.
-There's no jump-to-top (see [Jump buttons](#jump-buttons)), and a
-jump to an entry above the window, from the chapter popover or an
-`entry` link, doesn't open a second one: it reads from the row above
-that entry (for a chapter jump, the row that carries its break) up to
-the window's oldest row and prepends them in one write, so the window
-grows to reach it.
+**No window swap; the slice moves.** The reader holds exactly one
+window at a time. There's no jump-to-top (see [Jump buttons](#jump-buttons)), and a
+jump to an entry above the window or to its oldest row, from the
+chapter popover or an `entry` link, doesn't open a second one: it
+reads from the row above that entry (for a chapter jump, the row that
+carries its break) up to the window's oldest row and prepends them in
+one write, so the window grows to reach it. The slice then moves to the
+entry. A jump whose entry and the row above it are both in the slice
+lands at once; any other replaces the slice with the 50 rows from the
+row above the entry down, or with the tail's last 50 when those would
+reach the tail. The entry sits near the slice's top because reading
+after a jump runs forward, and what's above it is one extension away.
 When that entry is the branch's first row, the boundary shimmer drops
 in the same commit, so nothing moves above a row landed at the top;
-otherwise it stays until a boundary load finds the top. [Jump-to-bottom](#jump-buttons) is always a
-same-window smooth scroll; auto-load-on-boundary always
-prepends/appends into the window already in memory. No unload, no
-scroll-position bookkeeping across windows.
+otherwise it stays until a boundary load finds the top.
+[Jump to bottom](#jump-buttons) swaps the slice to the tail's last 50
+when it stops short of the tail. Every extension and jump reads into
+the window already in memory: no second window, no scroll-position
+bookkeeping across windows.
 
 **Where a jump lands.** The row's top sits just under the viewport's
 top. With a chapter break directly above the row the break lands
@@ -1345,15 +1386,18 @@ it lays over the card's own background at a per-theme share of
 `--selection-bg`, `--landed-tint-share`: the smallest share at which the
 fainter card kind stands out as far as in the default light theme
 ([`tokens.md → Color slots`](../../foundations/tokens.md#color-slots)).
-A jump disengages autoscroll. A jump to a row outside the window that
-hasn't signalled its landing after a short delay covers the reader with its
+A jump disengages autoscroll. A jump that moves the slice lands only
+once the document has rendered the slice it moved to, or a later one
+holding the row, so it never lands on the slice it is leaving, where the
+row above could be missing. One that hasn't signalled its landing after
+a short delay covers the reader with its
 own veil, `Loading entries…`, which lifts when the landed row has
 painted or the jump drops; the host also lifts it if the row leaves the
 window or no landing comes within a fixed bound. A jump whose landing
 signals before the delay never shows it. Until the veil shows, a gesture
 during the read isn't seen and the landing still moves the view; while
 it shows, it takes the touches. With the veil down and the row in the
-window, a user gesture drops the jump. A jump made while the reader is
+slice, a user gesture drops the jump. A jump made while the reader is
 still moving from a touch fling or a trackpad's momentum halts it and
 lands at once; a wheel after a pause or in the other direction is a
 new gesture and drops the jump
@@ -1368,14 +1412,35 @@ Cross-branch navigation is the
 [Branch navigator](./branch-navigator/branch-navigator.md)'s
 domain.
 
+**When the window changes under the slice.** The slice keeps its
+bounds by entry position. Rows the window loses (a delete, a rollback,
+an undone turn) leave the slice, and a rollback from a row in it leaves
+the slice at the new tail. A slice that loses every row, as a chapter
+deleted from the Timeline can make it, falls back to the tail's last
+50, and so does the slice when the window reloads (after a failed
+turn, for one), which replaces the window with its recent ~50. A
+reload of the reader's document resets the slice to the tail too,
+leaving the window as it is
+([`reader-document.md → Failure and recovery`](../../patterns/reader-document.md#failure-and-recovery)).
+
 **Branch switch.** Resets the window to the recent ~50 entries of
-the new branch, scrolled to bottom. An open inline edit with a dirty
-draft is guarded first, per [Inline edit session](#inline-edit-session).
+the new branch, and the slice with it, scrolled to bottom. An open
+inline edit with a dirty draft is guarded first, per
+[Inline edit session](#inline-edit-session).
 
 ### Autoscroll
 
 Per-stream state machine: **engaged** ↔ **disengaged**, with
 auto-re-engagement on return to bottom.
+
+**At the tail only.** Autoscroll and the bottom re-pins below mean the
+branch's bottom, so they act only while the
+[slice](#loaded-set-model) ends at the tail. A stream that begins while
+the slice stops short of the tail starts disengaged, and its streaming
+card isn't in the document until the slice reaches the tail again, by an
+extension or [Jump to bottom](#jump-buttons); it then renders the text
+so far and keeps streaming. Short of the tail, the document's bottom is
+the boundary skeleton, which nothing pins to.
 
 **Engage condition (per stream).** When an AI reply begins streaming,
 autoscroll evaluates whether the viewport is at-bottom (within ~80px
@@ -1463,9 +1528,8 @@ re-pins it, as the viewport shrink above does; the distance is read
 against the previous commit's height, since the new commit already
 holds the break. It waits for scroll rest as the viewport shrink
 does, and skips a reader with a jump pending or landing, and one that
-isn't laid out. Further up, the
-break's height is uncompensated, as any change between the leading row
-and the viewport is
+isn't laid out. Further up, the anchor rule compensates the break's
+height, as it does any change above the viewport
 ([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
 
 **A system entry's opened block.** Opening a system entry's
@@ -1492,19 +1556,24 @@ ships per-chapter jumps, which subsume branch-top navigation with
 finer granularity — a branch-top button would duplicate "jump to
 chapter 1".
 
-**Visibility — conditional.** Jump-to-bottom is visible when the
-user is not near-bottom of the window (~20px tolerance — the
+**Visibility — conditional.** Jump-to-bottom is visible whenever the
+[slice](#loaded-set-model) stops short of the tail, and otherwise when
+the user is not near its bottom (~20px tolerance — the
 button appears as soon as the user leaves the live edge;
 deliberately decoupled from the auto-load boundary's
 ~viewport-height tolerance). Slides in / out on threshold cross.
-Hidden near-bottom. `app_settings.appearance.showJumpToBottom`
+Hidden near the bottom of a slice at the tail.
+`app_settings.appearance.showJumpToBottom`
 (default true) hides the button entirely; DB-only until the M7.1
 appearance tab exposes the toggle.
 
-**Click behavior.** Smooth scroll (~150ms) to bottom — always a
-same-window scroll (see [No window swap](#loaded-set-model); the
-reader never holds a disconnected region to swap from). Re-engages
-autoscroll if a stream is in flight and the user lands at-bottom.
+**Click behavior.** Smooth scroll (~150ms) to bottom while the slice
+ends at the tail. Short of the tail, it swaps the slice to the tail's
+last 50 and lands at the bottom without animation, since nothing
+between is rendered (see [Loaded-set model](#loaded-set-model)); the
+window already holds the tail, so nothing is read. Either way it
+re-engages autoscroll if a stream is in flight and the user lands
+at-bottom.
 
 **Keyboard shortcut:** `End` — jump-to-bottom.
 
@@ -1518,14 +1587,13 @@ branch); chapter-anchored navigation lives with chapter chrome.
 
 ### Anchor preservation under shifts
 
-Four content-shift scenarios can push above-the-fold content
-without the user asking for it; in all four, the user's apparent
+Five content-shift scenarios can push above-the-fold content
+without the user asking for it; in all five, the user's apparent
 scroll position must stay anchored — content above the fold can
 shift, but what's in front of the user must not jump.
 
-- **Prepend on auto-load older.** A `~50`-entry block prepends
-  above the viewport when the user nears the top of the loaded
-  range.
+- **Prepend on auto-load older.** A 25-entry block prepends
+  above the viewport when the user nears the top of the slice.
 - **Reasoning body expansion above the fold.** An entry above the
   current scroll has its reasoning region toggled open (whether by
   the user or via remount).
@@ -1536,27 +1604,34 @@ shift, but what's in front of the user must not jump.
   or unfolding a Fold changes the narrative's width, so every row
   above the viewport rewraps. Rows cap at 860 px, so on desktop it
   bites between the rail's auto-collapse width and about 1170 px.
+- **Trim at the slice's top.** An extension downward, or new turns at
+  the tail, trims rows above the viewport (see
+  [Loaded-set model](#loaded-set-model)).
 
 The mechanism is the reader document's **deterministic anchor
 rule**
 ([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)):
 browser scroll anchoring measurably does not fire for this tree,
 so the scroller opts out (`overflow-anchor: none`) and the surface
-itself applies the leading row's content-offset delta to the
-scroll position each commit. This replaces the earlier
+itself applies the topmost in-viewport row's content-offset delta to
+the scroll position each commit. The anchor is that row rather than
+the slice's first, which a trim removes, and it serves every scenario,
+since per-cause compensations fight. This replaces the earlier
 per-platform machinery (FlatList `maintainVisibleContentPosition`
 on native; a measured padding-and-scroll dance under the web
-virtualizer). Coverage: scenario 1 is device-verified
-(prepend + boundary-skeleton swap, leading row pixel-stable);
-scenarios 2 and 3 change heights _below_ the leading row and stay
-deliberately uncompensated — validated acceptable as felt (see the
-[reader-document validation record](../../patterns/reader-document.md#validation-record)).
-Scenario 4 is compensated by the designed extension: across a width
-change the surface anchors on the topmost in-viewport row instead of
-the window's first, whose delta a reflow leaves at zero. It measured:
+virtualizer). Coverage: scenario 1 is device-verified with the
+window's first row as the anchor (prepend + boundary-skeleton swap,
+leading row pixel-stable). Scenarios 2 and 3 change heights between
+that row and the viewport, so they were left uncompensated, validated
+acceptable as felt (see the
+[reader-document validation record](../../patterns/reader-document.md#validation-record));
+the topmost in-viewport row compensates them too. Scenario 4 runs no
+commit, so the same anchor needs holding across a width change from a
+resize trigger. It measured:
 a rail toggle at a 1050 px window moved the reading line 72 px
-(2026-10-07). Not yet built; owned by
+(2026-10-07). The trigger isn't built; owned by
 [roadmap M9.5](../../../implementation/roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
+Scenario 5 comes with the slice.
 
 ## Browse rail — collapse / expand
 
