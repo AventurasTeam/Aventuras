@@ -5,11 +5,13 @@ import {
   usePreventRemove,
   useRoute,
 } from '@react-navigation/native'
-import { createElement, useCallback, useEffect, useState, type JSX } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState, type JSX } from 'react'
 
 import { StoryLeaveDialog } from '@/components/compounds/story-leave-dialog'
 import { logger } from '@/lib/diagnostics'
 import { cancelStoryRuns, generationStore, isStoryBusy, type TxState } from '@/lib/stores'
+
+import { isUnsavedPopArmed, registerStoryLeavePop } from './leave-guard-chain'
 
 // Root-stack route names of the in-story surfaces (app/<name>.tsx).
 const IN_STORY_ROUTES: ReadonlySet<string> = new Set([
@@ -56,8 +58,30 @@ export function useStoryLeaveGuard(
   const [leaving, setLeaving] = useState(false)
 
   usePreventRemove(isFocused && inFlight && popLeaves, ({ data }) => {
+    // The route's unsaved guard asks first and runs the pop check below once it proceeds.
+    if (isUnsavedPopArmed(routeKey)) return
     setPending({ proceed: () => navigation.dispatch(data.action) })
   })
+
+  // Read when the unsaved guard releases a pop, a gesture after the render that set them.
+  const popGateRef = useRef({ isFocused, popLeaves })
+  useEffect(() => {
+    popGateRef.current = { isFocused, popLeaves }
+  })
+  const popCheckRef = useRef((proceed: () => void) => proceed())
+  useEffect(() => {
+    popCheckRef.current = (proceed) => {
+      const gate = popGateRef.current
+      if (
+        gate.isFocused &&
+        gate.popLeaves &&
+        storyBusy(generationStore.getTxState(), storyId, branchId)
+      )
+        setPending({ proceed })
+      else proceed()
+    }
+  }, [storyId, branchId])
+  useEffect(() => registerStoryLeavePop(routeKey, popCheckRef), [routeKey])
 
   const guardLeave = useCallback(
     (proceed: () => void) => {
