@@ -81,6 +81,9 @@ export const reader = {
   row: (page: Page, entryId: string): Locator => page.locator(`[data-entry-row="${entryId}"]`),
   // The rows' scroll container, the parent every `data-entry-row` shares.
   scroller: (page: Page): Locator => page.locator('[data-entry-row]').first().locator('..'),
+  // The reader's floating button, inside the document; the Actions menu's entry shows only open.
+  jumpToBottom: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:jumpToBottom'), exact: true }),
   // A History row is a button only once its anchor resolved (history-tab-view.tsx): the role is
   // the wait: earlier clicks do nothing. Its name ends in the anchor's entry label (`position`).
   historyEntryLink: (
