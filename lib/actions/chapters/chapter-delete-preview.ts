@@ -40,11 +40,7 @@ export async function getChapterDeletePreview(
     const chapterTokens = await ownEntryTokens(branchId, resolved.chapter.id, ctx)
     return {
       chapterNumber: resolved.chapter.sequenceNumber,
-      ...changesOf(
-        resolved.set,
-        await createdLoreOf(branchId, resolved.groups, ctx),
-        await restoringUpdates(resolved.set, ctx),
-      ),
+      ...(await reversalImpactOf(branchId, resolved.set, resolved.groups, ctx)),
       turnsSince: series.filter((row) => row.kind === 'ai_reply').length,
       after: closeAfterDelete({
         tokensAfter: regionTokens + chapterTokens,
@@ -73,6 +69,24 @@ async function ownEntryTokens(
       ),
     )
   return row?.tokens ?? 0
+}
+
+/**
+ * The delete confirm's impact lines over any reversal set: the lore its close groups created that
+ * it removes, edits included, and every other change it reverses. The reader's undo of a close, a
+ * re-run or kept close work counts its own set with it (reader-composer.md → Undo and redo).
+ */
+export async function reversalImpactOf(
+  branchId: string,
+  set: ReversalSet,
+  groups: readonly Delta[],
+  ctx: DbCtx,
+): Promise<Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'>> {
+  return changesOf(
+    set,
+    await createdLoreOf(branchId, groups, ctx),
+    await restoringUpdates(set, ctx),
+  )
 }
 
 type CreatedLore = { ids: ReadonlySet<string>; live: ReadonlySet<string> }

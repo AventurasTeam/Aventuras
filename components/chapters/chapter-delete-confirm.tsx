@@ -15,6 +15,8 @@ import type { ChapterDeleteMode, ChapterDeletePreview } from '@/lib/actions'
 import type { ChapterDeleteAfter } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 
+import { chapterImpactLines } from './chapter-impact-lines'
+
 const AFTER_COPY = {
   'closes-next-send': 'chapters:deleteConfirm.after.closesNextSend',
   waits: 'chapters:deleteConfirm.after.waits',
@@ -38,18 +40,10 @@ export type ChapterDeleteConfirmProps = {
   onDelete: (mode: ChapterDeleteMode) => void
 }
 
-// A count line at zero is left out: a close can land with no agent writes.
-function countLines({ createdLore, otherChanges, turnsSince }: ChapterDeletePreview): string[] {
-  const lines: string[] = []
-  if (createdLore.count > 0)
-    lines.push(
-      createdLore.userEdited
-        ? t('chapters:deleteConfirm.loreEdited', { count: createdLore.count })
-        : t('chapters:deleteConfirm.lore', { count: createdLore.count }),
-    )
-  if (otherChanges > 0)
-    lines.push(t('chapters:deleteConfirm.otherChanges', { count: otherChanges }))
-  if (turnsSince > 0) lines.push(t('chapters:deleteConfirm.turnsSince', { count: turnsSince }))
+function countLines(preview: ChapterDeletePreview): string[] {
+  const lines = chapterImpactLines(preview)
+  if (preview.turnsSince > 0)
+    lines.push(t('chapters:deleteConfirm.turnsSince', { count: preview.turnsSince }))
   return lines
 }
 

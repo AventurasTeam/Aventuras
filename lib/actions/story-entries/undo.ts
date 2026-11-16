@@ -72,7 +72,7 @@ async function refusingIntegrity(
 // CTRL-Z reads one group, not the log: the newest row a user would undo (a pass's rows sit above
 // its turn with their own action id), then that action's rows, newest first as selectUndoTarget
 // requires. A long branch's whole log runs to tens of MB.
-async function headGroupRows(
+export async function headGroupRows(
   branchId: string,
   ctx: DbCtx,
   skipActionId?: string,

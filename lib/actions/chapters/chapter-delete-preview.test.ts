@@ -25,8 +25,7 @@ import { CHAPTER_DELETE_REFUSAL, resolveChapterDeleteSet } from './chapter-delet
 import { removeChapter } from './remove-chapter'
 import { applyDeltaAction, applyDeltaActionGroupWithOutcomes } from '../delta/apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
-import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
-import type { DeltaSource, PipelineAction } from '../types'
+import { readUndoImpact } from '../story-entries/undo-target'
 import {
   installChapterDeleteHooks,
   END_REPLY,
@@ -56,6 +55,8 @@ import {
   seedPlaces,
   placeUnder,
 } from './__tests__/chapter-delete-fixture'
+import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
+import type { DeltaSource, PipelineAction } from '../types'
 
 const { generateStructuredMock } = vi.hoisted(() => ({
   generateStructuredMock: vi.fn<typeof generateStructured>(),
@@ -702,5 +703,42 @@ describe('getChapterDeletePreview', () => {
     expect(
       await getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx), fx.ctx),
     ).toMatchObject({ chapterNumber: 1, turnsSince: 3 })
+  })
+})
+
+// reader-composer.md → Undo and redo: undoing a close, its re-run or its kept work confirms with
+// the delete confirm's lines, counted over the set the undo itself reverses.
+describe('readUndoImpact', () => {
+  it("counts a close's undo as its whole delete does", async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    const story = { branchId: c.fx.branchId, settings: STORY_SETTINGS_DEFAULTS }
+
+    const impact = await readUndoImpact(c.fx.branchId, c.actionId, c.fx.ctx)
+
+    expect(impact?.createdLore).toEqual({ count: 1, userEdited: false })
+    const preview = await getChapterDeletePreview(c.fx.branchId, c.chapter.id, story, c.fx.ctx)
+    expect(impact).toEqual({
+      createdLore: (preview as { createdLore: unknown }).createdLore,
+      otherChanges: (preview as { otherChanges: unknown }).otherChanges,
+    })
+  })
+
+  it("counts the kept work a divider-only removal left, which the delete preview can't", async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+
+    const impact = await readUndoImpact(c.fx.branchId, c.actionId, c.fx.ctx)
+
+    expect(impact?.createdLore).toEqual({ count: 1, userEdited: false })
+    expect(impact?.otherChanges).toBeGreaterThan(0)
+  })
+
+  it('reads nothing for an action with no rows left', async () => {
+    const c = await openClosed()
+    expect(await readUndoImpact(c.fx.branchId, 'act_gone', c.fx.ctx)).toBeNull()
   })
 })
