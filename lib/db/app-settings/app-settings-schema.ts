@@ -39,7 +39,7 @@ export const providerCapabilitiesSchema = z.object({
   contextWindow: z.number().int().positive().optional(),
   /**
    * Native tool calling, which a chapter close needs (chapter-close.md → Tool calling). Detected where
-   * a catalog publishes it: a fresh value replaces it, a fetch that publishes none keeps it. Unknown runs.
+   * a catalog publishes it: a fresh value replaces it, a fetch that publishes none keeps it. An absent flag lets a close run.
    */
   toolCalling: z.boolean().optional(),
 })

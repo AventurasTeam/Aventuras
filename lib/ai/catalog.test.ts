@@ -107,6 +107,12 @@ describe('readToolCalling', () => {
     expect(readToolCalling(OPENROUTER_CATALOG.data[1])).toBe(false)
   })
 
+  // Live OpenRouter rows list `tools` without `tool_choice` (amazon/nova-*), and the reverse is possible.
+  it('reads `tools` alone as true and `tool_choice` alone as false', () => {
+    expect(readToolCalling({ supported_parameters: ['max_tokens', 'tools'] })).toBe(true)
+    expect(readToolCalling({ supported_parameters: ['tool_choice'] })).toBe(false)
+  })
+
   it('reads an empty supported_parameters as no tool support', () => {
     expect(readToolCalling({ supported_parameters: [] })).toBe(false)
   })

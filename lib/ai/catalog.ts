@@ -39,7 +39,7 @@ export function readContextWindow(raw: Record<string, unknown>): number | undefi
   return asWindow(raw.max_model_len) ?? asWindow(nCtxOf(raw.meta))
 }
 
-// OpenRouter lists the request parameters each model accepts; `tools` among them is tool calling.
+// OpenRouter lists the request parameters each model accepts.
 function supportedParameters(raw: Record<string, unknown>): readonly string[] | undefined {
   const value = raw.supported_parameters
   return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined
@@ -53,7 +53,10 @@ function functionCallingOf(capabilities: unknown): unknown {
     : undefined
 }
 
-/** A catalog's published tool support (architecture.md → Detection); undefined where it publishes none. */
+/**
+ * A catalog's published tool support (architecture.md → Detection); undefined where it publishes
+ * none. OpenRouter's `tools` parameter is tool calling; `tool_choice` alone is not.
+ */
 export function readToolCalling(raw: Record<string, unknown>): boolean | undefined {
   const parameters = supportedParameters(raw)
   if (parameters !== undefined) return parameters.includes('tools')
