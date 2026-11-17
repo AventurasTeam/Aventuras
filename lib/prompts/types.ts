@@ -1,5 +1,3 @@
-import type { PromptSectionId } from '@/lib/db'
-
 // Context groups drive include-compatibility (a template in group G may include
 // only G-tagged or `staticContent` macros) and editor variable awareness.
 export const CONTEXT_GROUPS = [
@@ -31,6 +29,26 @@ export type Pack = {
 
 /** Both halves as rendered, untrimmed. `system` may be blank; `user` never is. */
 export type RenderedPrompt = { readonly system: string; readonly user: string }
+
+/**
+ * The ids a template's `section` tag may name (architecture.md → Prompt sections), in the order the
+ * reader lists them. Text no section holds is `other`.
+ */
+export const PROMPT_SECTION_IDS = [
+  'instructions',
+  'setup',
+  'roster',
+  'scene',
+  'places',
+  'entities',
+  'lore',
+  'happenings',
+  'threads',
+  'chapters',
+  'history',
+  'output',
+] as const
+export type PromptSectionId = (typeof PROMPT_SECTION_IDS)[number]
 
 /**
  * One half split by section (architecture.md → Prompt sections): each named section's own text, the

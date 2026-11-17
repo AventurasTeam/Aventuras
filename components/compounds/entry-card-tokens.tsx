@@ -1,8 +1,9 @@
 import { Platform, Pressable, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
-import { PROMPT_SECTION_IDS, type EntryMetadata, type PromptSections } from '@/lib/db'
+import type { EntryMetadata, PromptSections } from '@/lib/db'
 import { t } from '@/lib/i18n'
+import { PROMPT_SECTION_IDS } from '@/lib/prompts'
 import { cn } from '@/lib/utils'
 
 /** What the meta line and the token panel read off an entry. */

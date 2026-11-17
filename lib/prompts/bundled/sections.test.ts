@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Entity, PromptSectionId } from '@/lib/db'
+import type { Entity } from '@/lib/db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import { buildEntityViews, emptyEntityView } from '@/lib/world'
 
 import { createEngine, renderWith, templateGlobals } from '../engine'
 import { TEMPLATE_IDS } from '../ids'
 import { bundledPack } from './index'
-import type { HalfSections, Pack } from '../types'
+import type { HalfSections, Pack, PromptSectionId } from '../types'
 
 // architecture.md → Prompt sections: the tags add no bytes and hide nothing from static analysis,
 // so the pack with every section tag deleted must render and read exactly as the tagged one.

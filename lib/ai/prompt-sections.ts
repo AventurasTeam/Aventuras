@@ -1,6 +1,6 @@
-import { PROMPT_SECTION_IDS, type PromptSectionId, type PromptSections } from '@/lib/db'
+import type { PromptSections } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { HalfSections } from '@/lib/prompts'
+import { PROMPT_SECTION_IDS, type HalfSections, type PromptSectionId } from '@/lib/prompts'
 
 import { countPromptText, countWithStoredProse } from './context-window'
 

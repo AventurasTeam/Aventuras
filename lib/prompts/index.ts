@@ -6,7 +6,7 @@ import type { RenderedPrompt, SectionedPrompt } from './types'
 
 export { BUNDLED_PACK_ID, TEMPLATE_IDS, MACRO_IDS } from './ids'
 export type { TemplateId, MacroId } from './ids'
-export { CONTEXT_GROUPS } from './types'
+export { CONTEXT_GROUPS, PROMPT_SECTION_IDS } from './types'
 export type {
   ContextGroup,
   Pack,
@@ -15,6 +15,7 @@ export type {
   TemplateSources,
   RenderedPrompt,
   HalfSections,
+  PromptSectionId,
   SectionedPrompt,
   IncludeViolation,
 } from './types'
