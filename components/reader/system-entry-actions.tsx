@@ -206,7 +206,12 @@ export function describeTurnFailure(error: PipelineError | undefined): {
     }
   }
   if (error?.kind === 'config-resolver') {
-    return { content: t(TURN_RESOLVER_COPY[error.failure]), detail: error.detail }
+    // Only a close's pre-flight raises 'tool-calling-off', so a turn's entry never words it.
+    const key =
+      error.failure === 'tool-calling-off'
+        ? 'reader:systemEntry.failureMessage'
+        : TURN_RESOLVER_COPY[error.failure]
+    return { content: t(key), detail: error.detail }
   }
   if (error?.kind === 'embedder') {
     // One string for every embedder failure: `reason` is lossy — the shared
@@ -288,7 +293,11 @@ function describeWorkerFailure(
     }
   }
   if (error.kind === 'config-resolver') {
-    return { content: t(vocabulary.resolver[error.failure]), detail: error.detail }
+    const content =
+      error.failure === 'tool-calling-off'
+        ? t(vocabulary.generic)
+        : t(vocabulary.resolver[error.failure])
+    return { content, detail: error.detail }
   }
   if (error.kind === 'reply-cut-off') {
     return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }

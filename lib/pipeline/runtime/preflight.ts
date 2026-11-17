@@ -1,12 +1,13 @@
-import { resolveModel, type ResolveModelConfig } from '@/lib/ai'
+import { resolveModel, resolveModelCapabilities, type ResolveModelConfig } from '@/lib/ai'
 
 import type { Pipeline, PipelineError, PreflightSnapshot } from '../types'
 
 type ConfigResolverError = Extract<PipelineError, { kind: 'config-resolver' }>
 
 // Validates every declared resolver input against the snapshot, in phase order
-// (and, within a parallel node, declared branch order). Returns the first
-// failure or null.
+// (and, within a parallel node, declared branch order). An input that `requires`
+// a capability also fails when its resolved model is flagged off for it; an
+// unknown flag passes. Returns the first failure or null.
 export function runPreflight(
   pipeline: Pipeline,
   snapshot: PreflightSnapshot,
@@ -34,6 +35,17 @@ export function runPreflight(
             failure: result.kind,
             target: input.target,
             phaseName: branch.name,
+          }
+        }
+        if (input.requires === undefined) continue
+        const capabilities = resolveModelCapabilities(result.providerId, result.modelId, providers)
+        if (capabilities?.[input.requires] === false) {
+          return {
+            kind: 'config-resolver',
+            failure: 'tool-calling-off',
+            target: input.target,
+            phaseName: branch.name,
+            modelId: result.modelId,
           }
         }
       }

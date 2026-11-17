@@ -2395,10 +2395,13 @@ type PipelineError =
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
   | {
       kind: 'config-resolver'
-      failure: ResolveFailureKind // resolver could not produce a usable model config
+      // resolver could not produce a usable model config, or pre-flight found the model flagged off
+      // for a capability its phase requires (Config pre-flight validation)
+      failure: ResolveFailureKind | 'tool-calling-off'
       target: ResolveTarget
       phaseName: string
       detail?: string
+      modelId?: string // the resolved model, set with 'tool-calling-off' so the copy names it
     }
   | {
       kind: 'embedder'

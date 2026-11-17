@@ -12,6 +12,9 @@ import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } from '@/lib/stores'
 
+/** The chain's own failures, and pre-flight's refusal of a model flagged off for tool calling. */
+export type ConfigFailureKind = ResolveFailureKind | 'tool-calling-off'
+
 export type PipelineError =
   | {
       kind: 'provider'
@@ -34,10 +37,12 @@ export type PipelineError =
   | { kind: 'orchestrator'; detail: string }
   | {
       kind: 'config-resolver'
-      failure: ResolveFailureKind
+      failure: ConfigFailureKind
       target: ResolveTarget
       phaseName: string
       detail?: string
+      /** The resolved model, set with 'tool-calling-off' so the copy can name it. */
+      modelId?: string
     }
   // The blocking pre-retrieval sync stage and the query embed beside it
   // (model-management.md → Embed failure is blocking). Distinct from 'provider',
@@ -142,6 +147,8 @@ export type PreflightSnapshot = {
 export type ResolverInput = {
   target: ResolveTarget
   when?: (snapshot: PreflightSnapshot) => boolean
+  /** A capability the resolved model must not be flagged off for; unknown passes. */
+  requires?: 'toolCalling'
 }
 
 export type PhaseNode =

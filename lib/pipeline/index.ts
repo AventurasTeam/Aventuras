@@ -66,6 +66,7 @@ export {
   type RunCtxFor,
 } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
+export { runPreflight } from './runtime/preflight'
 export type {
   BootRecoveryReport,
   RecoveredRun,
@@ -74,6 +75,7 @@ export type {
 } from './runtime/recovery'
 export type {
   ConcurrencyPolicy,
+  ConfigFailureKind,
   PhaseContext,
   PhaseEmittedEvent,
   PhaseFn,
