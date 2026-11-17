@@ -46,6 +46,21 @@ describe('firstLastSentences', () => {
     })
   })
 
+  it('keeps a French closer spaced off its mark, and German low-quote and guillemet closers', () => {
+    expect(firstLastSentences('« Bonjour. » Il partit. « Adieu. »')).toEqual({
+      first: '« Bonjour.',
+      last: '« Adieu. »',
+    })
+    expect(firstLastSentences('„Wir gehen.“ Er nickte.')).toEqual({
+      first: '„Wir gehen.“',
+      last: 'Er nickte.',
+    })
+    expect(firstLastSentences('»Gut.« Er nickte.')).toEqual({
+      first: '»Gut.«',
+      last: 'Er nickte.',
+    })
+  })
+
   it('does not split on a mark with no space after it', () => {
     expect(firstLastSentences('She paid 3.5 crowns at the gate.')).toEqual({
       first: 'She paid 3.5 crowns at the gate.',
@@ -82,6 +97,13 @@ describe('firstLastSentences', () => {
 
     it("cuts a text with no sentence break to its start, at the last space in the cap's second half", () => {
       expect(firstLastSentences('the long road north with no end in sight', 20)).toEqual({
+        first: 'the long road north…',
+        last: null,
+      })
+    })
+
+    it('keeps a word that ends exactly at the cap', () => {
+      expect(firstLastSentences('the long road north with no end in sight', 19)).toEqual({
         first: 'the long road north…',
         last: null,
       })

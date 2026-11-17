@@ -5,14 +5,26 @@ export const SENTENCE_EXCERPT_MAX = 240
 
 // A Latin mark ends a sentence only before a space or the end, so "3.5" holds; a CJK mark needs
 // none. Closing quotes and brackets after the mark stay with the sentence it ends.
-const SENTENCE_END = /[.!?]+["'”’»)\]]*(?=\s|$)|[。！？]+["'”’」』)）]*/gu
+const SENTENCE_END = /(?<![.!?])[.!?]+["'”’»“«)\]]*(?=\s|$)|[。！？]+["'”’」』)）]*/gu
+
+const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
+
+// French spacing puts a space before », so the closer can land alone in a piece; it joins the
+// sentence before it.
+function addPiece(sentences: string[], piece: string): void {
+  if (sentences.length > 0 && !LETTER_OR_DIGIT.test(piece)) {
+    sentences[sentences.length - 1] += ` ${piece}`
+  } else {
+    sentences.push(piece)
+  }
+}
 
 // Array.from splits code points, so the cut never severs a surrogate pair.
 function capped(sentence: string, maxChars: number): string {
   const chars = Array.from(sentence)
   if (chars.length <= maxChars) return sentence
   let cut = maxChars
-  for (let i = maxChars - 1; i >= Math.ceil(maxChars / 2); i--) {
+  for (let i = maxChars; i >= Math.ceil(maxChars / 2); i--) {
     if (chars[i] === ' ') {
       cut = i
       break
@@ -36,11 +48,11 @@ export function firstLastSentences(
   let start = 0
   for (const match of flat.matchAll(SENTENCE_END)) {
     const end = match.index + match[0].length
-    sentences.push(flat.slice(start, end).trim())
+    addPiece(sentences, flat.slice(start, end).trim())
     start = end
   }
   const rest = flat.slice(start).trim()
-  if (rest !== '') sentences.push(rest)
+  if (rest !== '') addPiece(sentences, rest)
   const last = sentences.length > 1 ? sentences[sentences.length - 1] : null
   return {
     first: capped(sentences[0], maxChars),
