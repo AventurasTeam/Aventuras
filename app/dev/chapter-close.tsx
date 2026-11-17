@@ -10,13 +10,18 @@ import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { startManualClose } from '@/lib/actions'
 import { canEndChapter } from '@/lib/chapters'
 import { db, openRegionSeries, runInTransaction } from '@/lib/db'
-import { pipelineErrorDetail, type RejectedStart, type TxResult } from '@/lib/pipeline'
+import {
+  pipelineErrorDetail,
+  type PreflightFailedStart,
+  type RejectedStart,
+  type TxResult,
+} from '@/lib/pipeline'
 import { singleParam } from '@/lib/route-param'
 import { currentStoryStore, generationStore } from '@/lib/stores'
 
 const ctx = { db, runInTransaction }
 
-function describeResult(result: TxResult | RejectedStart): string {
+function describeResult(result: TxResult | RejectedStart | PreflightFailedStart): string {
   switch (result.outcome) {
     case 'completed':
     case 'aborted':
@@ -24,7 +29,8 @@ function describeResult(result: TxResult | RejectedStart): string {
     case 'rejected':
       return `rejected: ${result.blockedBy}`
     case 'failed':
-      return `failed: ${result.error.kind}: ${pipelineErrorDetail(result.error) ?? JSON.stringify(result.error)}`
+    case 'preflight-failed':
+      return `${result.outcome}: ${result.error.kind}: ${pipelineErrorDetail(result.error) ?? JSON.stringify(result.error)}`
   }
 }
 

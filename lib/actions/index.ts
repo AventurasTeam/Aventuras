@@ -157,7 +157,7 @@ export {
   type UndoOptions,
   type UndoResult,
 } from './story-entries/undo'
-export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
+export { clearSystemEntry, raiseSystemEntry, writeSystemEntry } from './story-entries/system-entry'
 export { readUndoImpact, readUndoTarget, type UndoTargetRead } from './story-entries/undo-target'
 export {
   updateEntrySceneFields,

@@ -8,6 +8,7 @@ import {
   __resetBus,
   __resetRegistry,
   type DeltaActionPort,
+  type PreflightFailedStart,
   type RejectedStart,
   type RunCtx,
   type TxResult,
@@ -15,10 +16,12 @@ import {
 import { configureDeltaActionPort } from '@/lib/pipeline/runtime/action-port'
 import { resetAllStores } from '@/lib/stores'
 
-// Narrows runPipeline's union for the single-run tests that never hit a blocked start.
-export function expectRan(result: TxResult | RejectedStart): TxResult {
+// Narrows a start's union for the single-run tests no refusal or failed pre-flight reaches.
+export function expectRan(result: TxResult | RejectedStart | PreflightFailedStart): TxResult {
   if (result.outcome === 'rejected')
     throw new Error(`unexpected rejected start: ${result.blockedBy}`)
+  if (result.outcome === 'preflight-failed')
+    throw new Error(`unexpected pre-flight failure: ${JSON.stringify(result.error)}`)
   return result
 }
 

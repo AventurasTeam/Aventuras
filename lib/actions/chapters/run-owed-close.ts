@@ -32,5 +32,9 @@ export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCl
     return { outcome: 'nothing-owed' }
   }
   const started = await startCloseChain(branchId, ctx)
-  return 'outcome' in started ? started : { outcome: 'ran', end: started }
+  if (!('outcome' in started)) return { outcome: 'ran', end: started }
+  // Given no pre-flight, the start can't report one; the close's own pre-flight speaks as its run.
+  if (started.outcome === 'preflight-failed')
+    throw new Error('runOwedClose: a start given no pre-flight reported a failed one')
+  return started
 }

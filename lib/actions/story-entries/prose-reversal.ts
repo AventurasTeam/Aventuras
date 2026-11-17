@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
+import { canEndChapter } from '@/lib/chapters'
 import { storyEntries, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generationStore, interruptMemoryRuns } from '@/lib/stores'
@@ -14,7 +15,7 @@ const PROSE_REVERSAL_LOCK_ID = 'prose-reversal'
 /**
  * generation-pipeline.md -> Prose reversals and the interrupt. Not re-entrant: a nested `finally`
  * drops the barrier mid-sweep. After the body settles (thrown or not), a close pick whose end entry
- * it removed is dropped.
+ * it removed or closed into a chapter is dropped.
  */
 export async function bracketProseReversal<T>(
   branchId: string,
@@ -46,11 +47,13 @@ async function dropRemovedPick(branchId: string, ctx: Pick<DbCtx, 'db'>): Promis
   if (pick == null) return
   try {
     const [row] = await ctx.db
-      .select({ id: storyEntries.id })
+      .select({ chapterId: storyEntries.chapterId, kind: storyEntries.kind })
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, pick.endEntryId)))
+    // Boundary's own test: a redo that stamps the entry again restores the chapter the user picked.
+    const endable = row != null && row.chapterId == null && canEndChapter(row)
     // Only the pick checked: a different one standing after the await is not this reversal's.
-    if (row == null && generationStore.getTxState().pendingClose.get(branchId) === pick)
+    if (!endable && generationStore.getTxState().pendingClose.get(branchId) === pick)
       generationStore.clearPendingClose(branchId)
   } catch (e) {
     // Kept: boundary refuses a pick off the open region and drops it there.

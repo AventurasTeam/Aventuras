@@ -84,6 +84,7 @@ export type {
   Pipeline,
   PipelineError,
   PipelineEvent,
+  PreflightFailedStart,
   PreflightSnapshot,
   RejectedStart,
   ResolverInput,

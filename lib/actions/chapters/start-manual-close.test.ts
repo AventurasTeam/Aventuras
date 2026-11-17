@@ -14,7 +14,9 @@ import {
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
+  type PipelineError,
   type PipelineEvent,
+  type PreflightFailedStart,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
@@ -27,9 +29,12 @@ import {
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
 import {
+  appSettingsStore,
   currentStoryStore,
   generationStore,
+  hydrateAppSettings,
   interruptMemoryRuns,
+  type OpenStory,
   type PendingClose,
 } from '@/lib/stores'
 
@@ -74,7 +79,7 @@ function closeRuns(): number {
 }
 
 async function expectRefused(
-  result: TxResult | RejectedStart,
+  result: TxResult | RejectedStart | PreflightFailedStart,
   blockedBy: string,
   record?: PendingClose,
 ): Promise<void> {
@@ -120,6 +125,42 @@ const pickOn = (): PendingClose | undefined =>
 async function leaveTheTailUnprocessed(): Promise<void> {
   await setClassifierStatus(f, { state: 'idle', processedThrough: tailPosition() - 1 })
 }
+
+// Caches `modelId` on the fixture's provider with only its tool-calling flag.
+async function flagToolCalling(modelId: string, toolCalling: boolean): Promise<void> {
+  const settings = appSettingsStore.getAppSettings()
+  const next = {
+    ...settings,
+    providers: settings.providers.map((p) => ({
+      ...p,
+      cachedModels: [
+        ...(p.cachedModels ?? []).filter((m) => m.id !== modelId),
+        { id: modelId, capabilities: { toolCalling } },
+      ],
+    })),
+  }
+  expect(await hydrateAppSettings(async () => next)).toEqual({ status: 'ok' })
+}
+
+// The story's own lore-mgmt model, as its Models tab sets one.
+function overrideLoreModel(modelId: string): void {
+  const open = currentStoryStore.getCurrentStory()!
+  currentStoryStore.set({
+    ...open,
+    settings: {
+      ...open.settings,
+      models: { ...open.settings.models, 'lore-mgmt': { providerId: 'prov_close', modelId } },
+    },
+  })
+}
+
+const TOOLS_OFF = (modelId: string): PipelineError => ({
+  kind: 'config-resolver',
+  failure: 'tool-calling-off',
+  target: 'lore-mgmt',
+  phaseName: 'agent',
+  modelId,
+})
 
 describe('startManualClose refusals', () => {
   it('refuses a branch that is not the open story’s', async () => {
@@ -488,6 +529,82 @@ describe('startManualClose starts', () => {
   })
 })
 
+// generation-pipeline.md → Config pre-flight validation: the manual close's click.
+describe('startManualClose pre-flight', () => {
+  it('refuses a lore-mgmt model flagged off for tool calling, starting nothing, a pass included', async () => {
+    await flagToolCalling('lore-model', false)
+    registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const completes = recordCompletes()
+
+    const result = await within(startManualClose(f.branchId, lastReply(), f.ctx), 'the start')
+
+    expect(result).toEqual({ outcome: 'preflight-failed', error: TOOLS_OFF('lore-model') })
+    expect(pickOn()).toBeUndefined()
+    expect(completes).toEqual([])
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(await f.ctx.db.select().from(pipelineRuns)).toEqual([])
+    expect(await f.ctx.db.select().from(chapters)).toEqual([])
+    expect(generateStructured).not.toHaveBeenCalled()
+  })
+
+  it('leaves a pick an earlier close left as it stood', async () => {
+    generationStore.setPendingClose(f.branchId, { endEntryId: f.replyIds[0]! })
+    await flagToolCalling('lore-model', false)
+
+    expect((await startManualClose(f.branchId, lastReply(), f.ctx)).outcome).toBe(
+      'preflight-failed',
+    )
+    expect(pickOn()).toEqual({ endEntryId: f.replyIds[0] })
+  })
+
+  it('refuses any resolver failure the same way, at its first phase', async () => {
+    const settings = appSettingsStore.getAppSettings()
+    const unassigned = { ...settings, assignments: { classifier: 'prof_close_classifier' } }
+    expect(await hydrateAppSettings(async () => unassigned)).toEqual({ status: 'ok' })
+
+    expect(await startManualClose(f.branchId, lastReply(), f.ctx)).toEqual({
+      outcome: 'preflight-failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'no-profile-assigned',
+        target: 'lore-mgmt',
+        phaseName: 'boundary',
+      },
+    })
+    expect(pickOn()).toBeUndefined()
+    expect(closeRuns()).toBe(0)
+  })
+
+  it("reads the story override's model, as the run's own pre-flight does", async () => {
+    await flagToolCalling('override-model', false)
+    overrideLoreModel('override-model')
+
+    expect(await startManualClose(f.branchId, lastReply(), f.ctx)).toEqual({
+      outcome: 'preflight-failed',
+      error: TOOLS_OFF('override-model'),
+    })
+  })
+
+  it("closes on an override whose model isn't flagged off, though the profile's is", async () => {
+    await flagToolCalling('lore-model', false)
+    overrideLoreModel('override-model')
+
+    expect((await startManualClose(f.branchId, lastReply(), f.ctx)).outcome).toBe('completed')
+    expect((await f.ctx.db.select().from(chapters)).map((r) => r.endEntryId)).toEqual([lastReply()])
+  })
+
+  it('refuses an invalid end before its pre-flight', async () => {
+    await flagToolCalling('lore-model', false)
+    const action = f.entries.find((e) => e.kind === 'user_action')!
+
+    await expectRefused(
+      await startManualClose(f.branchId, action.id, f.ctx),
+      MANUAL_CLOSE_REFUSAL.invalidEnd,
+    )
+  })
+})
+
 describe('startCloseChain', () => {
   // The held read saw the pass live; it ends held (its reversal never commits) before the tail.
   it('refuses as busy when a pass ends held while the start reads', async () => {
@@ -531,5 +648,38 @@ describe('startCloseChain', () => {
     expect(await f.ctx.db.select().from(chapters)).toEqual([])
     expect(generateStructured).not.toHaveBeenCalled()
     expect(await running.origin).toMatchObject({ outcome: 'failed' })
+  })
+
+  it('pre-flights the open story after every refusal, starting nothing when it fails', async () => {
+    const seen: OpenStory[] = []
+    let reserved = false
+
+    const result = await startCloseChain(f.branchId, f.ctx, {
+      preflight: (open) => {
+        seen.push(open)
+        return TOOLS_OFF('lore-model')
+      },
+      onReserved: () => {
+        reserved = true
+      },
+    })
+
+    expect(result).toEqual({ outcome: 'preflight-failed', error: TOOLS_OFF('lore-model') })
+    expect(seen.map((open) => [open.storyId, open.branchId])).toEqual([[f.storyId, f.branchId]])
+    expect(reserved).toBe(false)
+    expect(closeRuns()).toBe(0)
+    expect(await f.ctx.db.select().from(pipelineRuns)).toEqual([])
+  })
+
+  it('never pre-flights a start a refusal ends', async () => {
+    ensurePerTurnPipelineRegistered()
+    holdStoryWithTurn()
+    const preflight = vi.fn<(open: OpenStory) => PipelineError | null>(() => null)
+
+    expect(await startCloseChain(f.branchId, f.ctx, { preflight })).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+    })
+    expect(preflight).not.toHaveBeenCalled()
   })
 })
