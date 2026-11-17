@@ -208,6 +208,14 @@ function defaultLanes(): Record<string, Lane> {
     // A refresh that resolves nothing is a run failure, so the default is not
     // the empty list the other lanes use.
     'suggestion-refresh': lane([canned('Three chips', { suggestions: SAMPLE_SUGGESTIONS })]),
+    // Inert like the classifier lanes: turn ids start at t1, so this names no candidate and the
+    // close falls back, as with a model that can't follow the list.
+    'chapter-boundary': lane([
+      canned('Names no candidate', {
+        end_entry_id: 't0',
+        rationale: 'The mock names no candidate.',
+      }),
+    ]),
     // Names no rows by id, so unlike the classifier defaults it can carry content.
     'chapter-metadata': lane([canned('The flooded stair', FLOODED_STAIR)]),
     // A chapter over half the window: one summary a part, then the merge's row.

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 import { classifierExtractionSchema, classifierExtractionWithPlacesSchema } from '@/lib/classifier'
 import {
+  chapterBoundarySchema,
   chapterMetadataSchema,
   chapterPartSummarySchema,
   fallbackClassifierSchema,
@@ -75,6 +76,7 @@ export const STRUCTURED_SHAPES: readonly StructuredShape[] = [
   storyShape('periodic-classifier', classifierExtractionSchema),
   storyShape('periodic-classifier-places', classifierExtractionWithPlacesSchema),
   storyShape('suggestion-refresh', suggestionRefreshSchema),
+  storyShape('chapter-boundary', chapterBoundarySchema, TEMPLATE_IDS.chapterBoundary),
   storyShape('chapter-metadata', chapterMetadataSchema, TEMPLATE_IDS.chapterMetadata),
   storyShape('chapter-metadata-part', chapterPartSummarySchema, TEMPLATE_IDS.chapterMetadataPart),
   storyShape('chapter-metadata-merge', chapterMetadataSchema, TEMPLATE_IDS.chapterMetadataMerge),

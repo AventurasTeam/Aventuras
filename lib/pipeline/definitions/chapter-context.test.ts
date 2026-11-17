@@ -12,6 +12,7 @@ import {
 } from '@/lib/prompts'
 import { renderWith } from '@/lib/prompts/engine'
 import {
+  BOUNDARY_ONLY_CHAPTER_VARIABLES,
   CLOSE_ONLY_CHAPTER_VARIABLES,
   MERGE_ONLY_CHAPTER_VARIABLES,
 } from '@/lib/prompts/templateContextMap'
@@ -65,11 +66,12 @@ const THREADS = [
 
 const SUMMARY = 'Kael left the keep at dawn with the stolen sigil.'
 
-// The close-only variables are a close task's to set and the merge-only ones the merge's; the
-// whole-chapter and part calls read the rest.
+// The close-only variables are a close task's to set, the merge-only ones the merge's and the
+// boundary-only ones boundary selection's; the whole-chapter and part calls read the rest.
 const notMetadata: readonly string[] = [
   ...CLOSE_ONLY_CHAPTER_VARIABLES,
   ...MERGE_ONLY_CHAPTER_VARIABLES,
+  ...BOUNDARY_ONLY_CHAPTER_VARIABLES,
 ]
 const metadataVariables = (): string[] =>
   VARIABLES.chapter.map((v) => v.name).filter((name) => !notMetadata.includes(name))
@@ -96,8 +98,8 @@ describe('buildChapterContext', () => {
     },
   )
 
-  // Only a close task's render sets these; the metadata call's context leaves every one unset.
-  it('sets none of the close-only or merge-only variables', () => {
+  // Only a close task's, the merge's or boundary's render sets these; the metadata call's leaves them.
+  it('sets none of the close-only, merge-only or boundary-only variables', () => {
     const context: Record<string, unknown> = buildChapterContext({
       entries: ENTRIES,
       previousChapterSummary: SUMMARY,
@@ -107,6 +109,9 @@ describe('buildChapterContext', () => {
     expect(CLOSE_ONLY_CHAPTER_VARIABLES).toContain('closeCharacters')
     expect(CLOSE_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual([])
     expect(MERGE_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual([])
+    expect(BOUNDARY_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual(
+      [],
+    )
   })
 
   // A row written before the write-path strip still carries its trailing block, and an entry id

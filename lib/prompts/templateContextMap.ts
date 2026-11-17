@@ -572,8 +572,9 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
   ],
-  // buildChapterContext emits all but CLOSE_ONLY_CHAPTER_VARIABLES (a close task's render sets)
-  // and MERGE_ONLY_CHAPTER_VARIABLES (buildChapterMergeContext); chapter-context.test.ts pins them.
+  // buildChapterContext emits all but CLOSE_ONLY_CHAPTER_VARIABLES (a close task's render sets),
+  // MERGE_ONLY_CHAPTER_VARIABLES (buildChapterMergeContext) and BOUNDARY_ONLY_CHAPTER_VARIABLES
+  // (boundary selection's render); chapter-context.test.ts pins them.
   chapter: [
     {
       name: 'entries',
@@ -735,6 +736,38 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         "The first and last turn ids of the chapter being closed (t1 and its last), so a task that shows no prose can name the turns it may read and cite. Only a close task's render sets it.",
       required: false,
     },
+    {
+      name: 'boundaryCandidates',
+      type: '{ turn: string; position: number; opening: string; closing: string | null }[]',
+      category: 'Story',
+      description:
+        "Boundary selection's candidates, oldest first: the open region's replies where the chapter would hold from half a threshold to one and a half, never the newest. `turn` is its turn id (t1, t2…), numbering the candidates alone, per call; `position` is its entry's; `opening` and `closing` are its first and last sentences on one line each, cut to a cap, `closing` null for a reply of one sentence. Only boundary selection's render sets it.",
+      required: false,
+    },
+    {
+      name: 'boundaryRegionTokens',
+      type: 'number',
+      category: 'Story',
+      description:
+        "The open region's token total: every entry no chapter closed yet, summed, as the chapter progress strip counts it. Only boundary selection's render sets it.",
+      required: false,
+    },
+    {
+      name: 'boundaryThreshold',
+      type: 'number',
+      category: 'Story Config',
+      description:
+        "The story's chapter token threshold, the length an automatic close aims at. Only boundary selection's render sets it.",
+      required: false,
+    },
+    {
+      name: 'boundaryActiveThreads',
+      type: '{ title: string }[]',
+      category: 'Plot',
+      description:
+        "The branch's active threads, each by title on one line; pending ones are left out. No ids. Only boundary selection's render sets it.",
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -761,6 +794,14 @@ export const CLOSE_ONLY_CHAPTER_VARIABLES = [
 /** The `chapter` variable only the merge of a chapter closed in parts sets. */
 export const MERGE_ONLY_CHAPTER_VARIABLES = ['partSummaries'] as const
 
+/** The `chapter` variables only boundary selection's render sets (chapter-close.md → Phase 1). */
+export const BOUNDARY_ONLY_CHAPTER_VARIABLES = [
+  'boundaryCandidates',
+  'boundaryRegionTokens',
+  'boundaryThreshold',
+  'boundaryActiveThreads',
+] as const
+
 // Intersection keeps the string index (validateRegistry probes arbitrary ids)
 // while requiring every TemplateId to be mapped — a missing one fails to compile.
 export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
@@ -768,6 +809,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.piggybackFallbackClassifier]: 'generationContext',
   [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
+  [TEMPLATE_IDS.chapterBoundary]: 'chapter',
   [TEMPLATE_IDS.chapterMetadata]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataPart]: 'chapter',
   [TEMPLATE_IDS.chapterMetadataMerge]: 'chapter',
@@ -806,6 +848,8 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'closeWritesSoFar',
     'closeChapterSummary',
     'closeChapterTurns',
+    'boundaryCandidates',
+    'boundaryRegionTokens',
   ],
   Entities: [
     'entities',
@@ -838,6 +882,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'closeThreads',
     'closeUpkeepHappenings',
     'closeAwarenessRows',
+    'boundaryActiveThreads',
   ],
   Retrieval: [
     'retrievedEntities',
@@ -869,6 +914,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'mentionedPlaces',
     'closeSoftCaps',
     'closeLoreLimits',
+    'boundaryThreshold',
   ],
   'Generation Results': [
     'intermediates',

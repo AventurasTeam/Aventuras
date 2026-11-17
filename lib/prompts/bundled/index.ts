@@ -1,6 +1,7 @@
 import { MACRO_IDS, TEMPLATE_IDS, type TemplateId } from '../ids'
 import { TEMPLATE_GROUPS } from '../templateContextMap'
 import type { Pack, TemplateEntry, TemplateSources } from '../types'
+import { CHAPTER_BOUNDARY } from './chapter-boundary'
 import { CHAPTER_METADATA } from './chapter-metadata'
 import { CHAPTER_METADATA_MERGE } from './chapter-metadata-merge'
 import { CHAPTER_METADATA_PART } from './chapter-metadata-part'
@@ -71,6 +72,7 @@ export const bundledPack: Pack = {
       PERIODIC_CLASSIFIER,
     ),
     [TEMPLATE_IDS.suggestionRefresh]: template(TEMPLATE_IDS.suggestionRefresh, SUGGESTION_REFRESH),
+    [TEMPLATE_IDS.chapterBoundary]: template(TEMPLATE_IDS.chapterBoundary, CHAPTER_BOUNDARY),
     [TEMPLATE_IDS.chapterMetadata]: template(TEMPLATE_IDS.chapterMetadata, CHAPTER_METADATA),
     [TEMPLATE_IDS.chapterMetadataPart]: template(
       TEMPLATE_IDS.chapterMetadataPart,

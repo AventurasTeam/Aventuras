@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { refineBoundaryReply } from '@/lib/pipeline'
+
 import { NARRATIVE_LANE } from './routing'
 import { STRUCTURED_SHAPES } from './shapes'
 import {
@@ -140,6 +142,17 @@ describe('shipped defaults', () => {
     expect(lane?.responses.length).toBeGreaterThan(0)
     for (const response of lane?.responses ?? []) {
       expect((response.value as { suggestions: unknown[] }).suggestions.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('ships a chapter-boundary reply no call accepts, so `pnpm mock` takes the fallback', () => {
+    const lane = defaultState().lanes['chapter-boundary']
+    expect(lane?.responses.length).toBeGreaterThan(0)
+    for (const response of lane?.responses ?? []) {
+      expect(response.value).toMatchObject({ end_entry_id: 't0' })
+      expect(
+        refineBoundaryReply(new Set(['t1', 't2', 't3'])).safeParse(response.value).success,
+      ).toBe(false)
     }
   })
 })

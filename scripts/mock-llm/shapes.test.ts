@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
+import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
+import { refineBoundaryReply } from '@/lib/pipeline'
 import { bundledPack, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 
 import { findShapeByName, STRUCTURED_SHAPES } from './shapes'
@@ -57,6 +60,26 @@ describe('E2E harness examples', () => {
       knownAwareness: [],
       newPlaces: [],
     })
+  })
+
+  // Turn ids number a call's candidates from t1, so no call's refined parse accepts the default.
+  it('keeps the chapter-boundary default inert, naming no candidate', () => {
+    expect(EXAMPLES['chapter-boundary']).toEqual({
+      end_entry_id: 't0',
+      rationale: 'The mock names no candidate.',
+    })
+    const handles = new Set(['t1', 't2', 't3'])
+    expect(refineBoundaryReply(handles).safeParse(EXAMPLES['chapter-boundary']).success).toBe(false)
+  })
+
+  // AC3: the app sends the refined schema; the registry holds the plain one. Their blocks must agree.
+  it("matches the chapter-boundary block the app renders for a call's refined schema", () => {
+    const shape = findShapeByName('chapter-boundary')
+    expect(shape?.block).toBe(
+      schemaToTypeScriptBlock(
+        z.toJSONSchema(refineBoundaryReply(new Set(['t1', 't2']))) as JsonSchema,
+      ),
+    )
   })
 })
 

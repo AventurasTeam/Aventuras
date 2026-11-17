@@ -37,6 +37,7 @@ describe('bundled pack', () => {
     piggybackFallbackClassifier: 'generationContext',
     periodicClassifier: 'classifierContext',
     suggestionRefresh: 'generationContext',
+    chapterBoundary: 'chapter',
     chapterMetadata: 'chapter',
     chapterMetadataPart: 'chapter',
     chapterMetadataMerge: 'chapter',
