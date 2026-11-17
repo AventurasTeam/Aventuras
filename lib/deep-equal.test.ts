@@ -8,4 +8,10 @@ describe('deepEqual', () => {
     expect(deepEqual(['x'], { 0: 'x' })).toBe(false)
     expect(deepEqual({ a: [1, { b: [] }] }, { a: [1, { b: [] }] })).toBe(true)
   })
+
+  it('tells apart objects holding as many keys but different ones', () => {
+    expect(deepEqual({ a: undefined }, { b: undefined })).toBe(false)
+    expect(deepEqual(JSON.parse('{"__proto__":{}}'), { other: {} })).toBe(false)
+    expect(deepEqual(JSON.parse('{"__proto__":{}}'), JSON.parse('{"__proto__":{}}'))).toBe(true)
+  })
 })
