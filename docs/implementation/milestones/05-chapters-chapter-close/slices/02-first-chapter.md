@@ -673,10 +673,10 @@ that ran)
   `StructuredCallOptions` don't change. This answers
   [Slice 5.4](./04-tool-step.md#implementation-notes)'s "Max output for
   boundary and metadata" for metadata; boundary's stays
-  [Slice 5.10](./10-two-starts.md)'s. The gap a story override leaves is
-  filed under
-  [`followups.md → UX`](../../../../followups.md#ux), "Story overrides'
-  settings aren't built".
+  [Slice 5.10](./10-two-starts.md)'s. The gap a story override left
+  closed when an override gained its own settings, copied from the slot's
+  profile
+  ([`story-settings.md → An override row`](../../../../ui/screens/story-settings/story-settings.md#an-override-row)).
   One of fifteen dataset closes on the dev model (force-on aside) failed
   `reply-cut-off`
   with 39,689 output tokens and no max output set, and wrote nothing;

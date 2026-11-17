@@ -66,18 +66,18 @@ export type {
 } from './probe-capture-types'
 export type { ClassifierLifecycleState, ClassifierStatus } from './world-json-types'
 export type {
+  ModelOverride,
   StoryDefinition,
   StoryMode,
-  StoryModelRef,
   StorySettings,
   SuggestionCategory,
   TierTuple,
 } from './stories/story-config-schema'
 export {
   isStoryMode,
+  modelOverrideSchema,
   STORY_MODES,
   storyDefinitionSchema,
-  storyModelRefSchema,
   storySettingsPartialSchema,
   storySettingsSchema,
   SUGGESTION_COUNT_MAX,
@@ -124,6 +124,7 @@ export type {
   ProviderCapabilities,
   ProviderInstance,
 } from './app-settings/app-settings-schema'
+export { modelSettingsSchema, type ModelSettings } from './app-settings/model-settings-schema'
 export {
   AGENT_IDS,
   STORY_AGENT_IDS,

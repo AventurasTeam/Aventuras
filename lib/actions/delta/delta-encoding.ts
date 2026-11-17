@@ -1,5 +1,6 @@
 import type { ZodType } from 'zod'
 
+import { deepEqual } from '@/lib/deep-equal'
 import { isJsonObject } from '@/lib/json-object'
 
 // Generic delta encoder. Walks a Zod schema in parallel with values to encode
@@ -35,19 +36,6 @@ function classify(schema: ZodType): Node {
     return { kind: 'record', isOptional, isNullable, valueType: def.valueType }
   if (def?.type === 'array') return { kind: 'array', isOptional, isNullable }
   return { kind: 'leaf', isOptional, isNullable }
-}
-
-export function deepEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
-  // By keys alone, [] and {} (or ['x'] and { 0: 'x' }) would read as one value.
-  if (Array.isArray(a) !== Array.isArray(b)) return false
-  const ak = Object.keys(a as object)
-  const bk = Object.keys(b as object)
-  if (ak.length !== bk.length) return false
-  return ak.every((k) =>
-    deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
-  )
 }
 
 const ABSENT = Symbol('absent')

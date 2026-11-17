@@ -421,6 +421,7 @@ export default function ReaderComposerRoute() {
     stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
     storyId,
     guardLeave,
+    openForBranch?.settings.models.suggestion != null,
   )
 
   // The failure belongs to the entry it was fired on; a turn, a rollback or a
@@ -1267,6 +1268,7 @@ export default function ReaderComposerRoute() {
     },
     storyId,
     guardLeave,
+    openForBranch?.settings.models,
   )
 
   const openRollback = useCallback(
@@ -1645,8 +1647,14 @@ export default function ReaderComposerRoute() {
     async () => guardEdit(() => fixAction?.onPress()),
     [fixAction, guardEdit],
   )
-  // One stable action for every row's notice: useProfileFixAction keeps its identity.
-  const cutOffFix = useProfileFixAction(true, guardLeave)
+  // One stable action for every row's notice: useProfileFixAction keeps its identity. A notice is
+  // always the narrative's, so it follows the narrative override as the story stands now.
+  const cutOffFix = useProfileFixAction(
+    true,
+    openForBranch?.settings.models.narrative != null,
+    storyId,
+    guardLeave,
+  )
   const handleFixCutOff = useCallback(
     async () => guardEdit(() => cutOffFix?.onPress()),
     [cutOffFix, guardEdit],

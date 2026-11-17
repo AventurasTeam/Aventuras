@@ -41,6 +41,7 @@ describe('resolveModel', () => {
       providerType: 'openai-compatible',
       modelId: 'm-narr',
       params: { temperature: 0.8 },
+      fromOverride: false,
       profileId: 'prof-narr',
     })
   })
@@ -52,6 +53,7 @@ describe('resolveModel', () => {
       providerType: 'openai-compatible',
       modelId: 'm-agent',
       params: { structuredOutput: 'auto' },
+      fromOverride: false,
       profileId: 'prof-agent',
     })
   })
@@ -99,7 +101,31 @@ describe('resolveModel', () => {
       providerType: 'anthropic',
       modelId: 'override-model',
       params: {},
+      fromOverride: true,
     })
+  })
+
+  // data-model.md → Story settings shape: an override pins its own settings, not the profile's.
+  it("returns an override's own settings, leaving out the ones it doesn't set", () => {
+    const cfg: ResolveModelConfig = {
+      ...base,
+      storyModels: {
+        narrative: {
+          providerId: 'prov-1',
+          modelId: 'override-model',
+          maxOutput: 2048,
+          timeout: 30,
+          customJson: { top_k: 40 },
+        },
+      },
+    }
+    const resolved = resolveModel('narrative', cfg)
+    expect(resolved.ok && resolved.params).toStrictEqual({
+      maxOutput: 2048,
+      timeout: 30,
+      customJson: { top_k: 40 },
+    })
+    expect(resolved.ok && resolved.fromOverride).toBe(true)
   })
 
   it('keeps the story and global agent registries disjoint (compile-time)', () => {
@@ -122,6 +148,7 @@ describe('resolveModel', () => {
       providerType: 'openai-compatible',
       modelId: 'm-agent',
       params: { structuredOutput: 'auto' },
+      fromOverride: false,
       profileId: 'prof-agent',
     })
   })

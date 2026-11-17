@@ -11,7 +11,7 @@ import { z } from 'zod'
 import { boundedSignal } from '@/lib/abort'
 import { logger } from '@/lib/diagnostics'
 
-import type { ProviderInstance } from '../db'
+import type { ModelSettings, ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
 import {
@@ -35,12 +35,7 @@ import {
   replyCutOff,
   type ReplyCutOffFailure,
 } from './reply-cut-off'
-import {
-  resolveModel,
-  type ResolveFailureKind,
-  type ResolveModelConfig,
-  type ResolvedParams,
-} from './resolve-model'
+import { resolveModel, type ResolveFailureKind, type ResolveModelConfig } from './resolve-model'
 import { callWithRetry, type CallRetryError } from './transport/call-with-retry'
 import {
   capabilityHintOf,
@@ -63,16 +58,16 @@ export type CallSettings = {
 // setTimeout's largest delay; a longer one fires at once.
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 
-/** A profile `timeout` (seconds) in ms; `undefined` when unset, non-finite or ≤ 0. */
+/** A settings `timeout` (seconds) in ms; `undefined` when unset, non-finite or ≤ 0. */
 export function profileTimeoutMs(seconds: number | undefined): number | undefined {
   if (seconds === undefined || !Number.isFinite(seconds) || seconds <= 0) return undefined
   return Math.min(seconds * 1000, MAX_TIMER_DELAY_MS)
 }
 
-// Sole ResolvedParams → call-settings mapping. Thinking is anthropic-only: other providers reject
+// Sole ModelSettings → call-settings mapping. Thinking is anthropic-only: other providers reject
 // the providerOptions key. No `timeout`: the SDK builds AbortSignal.timeout, which RN lacks.
 export function buildCallSettings(
-  params: ResolvedParams,
+  params: ModelSettings,
   providerType: ProviderInstance['type'] | undefined,
 ): CallSettings {
   return {
@@ -98,11 +93,13 @@ export type PreparedGeneration =
       ok: true
       model: LanguageModel
       callSettings: CallSettings
-      /** Profile `timeout` in ms, enforced on the call's own signal, not the SDK's `timeout`. */
+      /** The settings' `timeout` in ms, enforced on the call's own signal, not the SDK's `timeout`. */
       timeoutMs: number | undefined
       providerId: string
       modelId: string
-      params: ResolvedParams
+      params: ModelSettings
+      /** The settings are the story override's (ResolveModelResult.fromOverride). */
+      fromOverride: boolean
       providerType: ProviderInstance['type']
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
@@ -123,6 +120,7 @@ export function prepareGeneration(
     providerId: resolved.providerId,
     modelId: resolved.modelId,
     params: resolved.params,
+    fromOverride: resolved.fromOverride,
     providerType: resolved.providerType,
   }
 }
@@ -228,12 +226,14 @@ export type StreamTextResult =
       stream: ReturnType<typeof streamProviderCall>
       modelId: string
       providerId: string
-      /** The profile's `timeout` ended the stream, which then closes as if cancelled. */
+      /** The settings' `timeout` ended the stream, which then closes as if cancelled. */
       timedOut: () => boolean
-      /** The bound `timedOut` reports on, in ms; `undefined` when the profile sets none. */
+      /** The bound `timedOut` reports on, in ms; `undefined` when the settings set none. */
       timeoutMs: number | undefined
-      /** The profile's max output (ResolvedParams.maxOutput); undefined when unset. */
+      /** The settings' max output; undefined when unset. */
       maxOutput: number | undefined
+      /** The settings are the story override's, so a failure's copy names it, not the profile. */
+      fromOverride: boolean
       /** The model's window as resolved for this call. */
       window: GenerationWindow
       /** The request's token estimate; null until the SDK built the request. */
@@ -290,6 +290,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     timedOut: () => bounded?.expired() ?? false,
     timeoutMs: resolved.timeoutMs,
     maxOutput: resolved.params.maxOutput,
+    fromOverride: resolved.fromOverride,
     window: check.window,
     promptEstimate: check.estimate,
     contextWindowFailureOf: (error) => (error instanceof ContextWindowError ? error.failure : null),
@@ -499,6 +500,7 @@ export async function generateStructured<T>(
       promptEstimate: check.estimate(),
       providerId,
       modelId,
+      fromOverride: resolved.fromOverride,
     })
     let value: T
     try {
@@ -543,7 +545,13 @@ export async function generateStructured<T>(
       }
     },
     parse,
-    { maxProviderAttempts: 2, maxParseAttempts: 2, signal, carried: sent.carried },
+    {
+      maxProviderAttempts: 2,
+      maxParseAttempts: 2,
+      signal,
+      carried: sent.carried,
+      fromOverride: resolved.fromOverride,
+    },
   )
 
   const { recoverable } = result

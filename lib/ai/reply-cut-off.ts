@@ -11,12 +11,14 @@ export type ReplyCutOffFailure = {
   outputTokens: number | null
   /** The part of `outputTokens` spent thinking; unreported is null, or 0 on OpenAI-compatible. */
   reasoningTokens: number | null
-  /** The max output the call sent; null when it sent none, as under a story model override. */
+  /** The max output the call sent; null when it sent none. */
   maxOutput: number | null
   /** The model's known window; null when unknown. */
   window: number | null
   providerId: string
   modelId: string
+  /** The call's settings were the story override's, not a profile's: the copy names whose. */
+  fromOverride: boolean
 }
 
 /** On a structured call only `'length'` is a cut-off; generateStructured treats a filter apart. */
@@ -48,6 +50,7 @@ export type ReplyCutOffInput = {
   promptEstimate: number | null
   providerId: string
   modelId: string
+  fromOverride: boolean
 }
 
 /** generation-pipeline.md → Cut-off replies: the cause comes from what the call knows. */
@@ -75,6 +78,7 @@ export function replyCutOff(input: ReplyCutOffInput): ReplyCutOffFailure {
     window,
     providerId: input.providerId,
     modelId: input.modelId,
+    fromOverride: input.fromOverride,
   }
 }
 

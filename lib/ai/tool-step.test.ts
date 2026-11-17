@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 import { logger, type Logger } from '@/lib/diagnostics'
 
-import type { ModelProfile } from '../db'
+import type { ModelProfile, ModelSettings } from '../db'
 import type { PromptHalves } from './generate'
 import { getModel } from './model'
 import type { ResolveModelConfig } from './resolve-model'
@@ -160,7 +160,7 @@ const LORE_PROFILE: ModelProfile = {
 
 function useProvider(
   type: ProviderType,
-  opts: { profile?: Partial<ModelProfile>; window?: number; override?: boolean } = {},
+  opts: { profile?: Partial<ModelProfile>; window?: number; override?: true | ModelSettings } = {},
 ): ResolveModelConfig {
   vi.mocked(getModel).mockReturnValue(MODELS[type]())
   return {
@@ -180,8 +180,16 @@ function useProvider(
       { ...LORE_PROFILE, id: 'prof-cls', name: 'Classifier', timeout: 5 },
     ],
     assignments: { 'lore-mgmt': 'prof-lore', classifier: 'prof-cls' },
-    ...(opts.override === true
-      ? { storyModels: { 'lore-mgmt': { providerId: 'prov', modelId: 'm' } } }
+    ...(opts.override !== undefined
+      ? {
+          storyModels: {
+            'lore-mgmt': {
+              providerId: 'prov',
+              modelId: 'm',
+              ...(opts.override === true ? {} : opts.override),
+            },
+          },
+        }
       : {}),
   }
 }
@@ -520,7 +528,12 @@ describe('generateToolStep: the output limit', () => {
   it.each([
     ['no profile max output', {}, 8000],
     ["the profile's max output", { profile: { maxOutput: 2048 } }, 2048],
-    ['a story override', { override: true, profile: { maxOutput: 2048 } }, 8000],
+    ['a story override that sets none', { override: true, profile: { maxOutput: 2048 } }, 8000],
+    [
+      "a story override's own max output",
+      { override: { maxOutput: 1024 }, profile: { maxOutput: 2048 } },
+      1024,
+    ],
   ] as const)('sends max_tokens for %s', async (_label, opts, sent) => {
     answers = [openaiReply({ content: 'Done.' })]
 
@@ -567,7 +580,22 @@ describe('generateToolStep: the bound', () => {
     })
   })
 
-  it('is ten minutes under a story override, which sets no timeout', async () => {
+  it("takes a story override's own timeout, not the profile's", async () => {
+    vi.useFakeTimers()
+    answers = [hang]
+
+    const pending = step(
+      useProvider('openai-compatible', { override: { timeout: 20 }, profile: { timeout: 45 } }),
+    )
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(await pending).toMatchObject({
+      status: 'failed',
+      error: { detail: 'lore-mgmt: timeout after 20000ms' },
+    })
+  })
+
+  it('is ten minutes under a story override that sets no timeout', async () => {
     vi.useFakeTimers()
     answers = [hang]
 
@@ -730,6 +758,7 @@ const CUT_AT_DEFAULT = {
   window: null,
   providerId: 'prov',
   modelId: 'm',
+  fromOverride: false,
 } as const
 
 const cutLogs = () => warnings('provider.reply_cut_off')
@@ -764,6 +793,19 @@ describe('generateToolStep: a reply cut off', () => {
       recoverable: [{ tier: 'reply-cut-off', ...CUT_AT_DEFAULT }],
     })
     expect(JSON.stringify(result)).not.toContain('call_cut')
+  })
+
+  it("names a cut under a story override as the override's", async () => {
+    answers = [cutReply(), cutReply()]
+
+    const result = await step(useProvider('openai-compatible', { override: true }))
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'cut-off',
+      failure: { cause: 'max-output', fromOverride: true },
+      recoverable: [{ tier: 'reply-cut-off', fromOverride: true }],
+    })
   })
 
   it("reports the profile's max output on a cut at it", async () => {

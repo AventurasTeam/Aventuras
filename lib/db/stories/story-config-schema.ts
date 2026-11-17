@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { STORY_AGENT_IDS, type StoryAgentId } from '../app-settings/agents'
+import { modelSettingsSchema } from '../app-settings/model-settings-schema'
 
 const tierTupleSchema = z.record(z.string(), z.number())
 
@@ -102,20 +103,22 @@ const translationSchema = z.object({
 
 // Both halves are required to name something: `resolveModel` returns `ok` for an
 // empty modelId, which pre-flight passes and the provider call then fires blank.
-export const storyModelRefSchema = z.object({
+// The settings carry no `.default()`, so a stored model-only override parses unchanged.
+export const modelOverrideSchema = z.object({
   providerId: z.string().trim().min(1),
   modelId: z.string().trim().min(1),
+  ...modelSettingsSchema.shape,
 })
-export type StoryModelRef = z.infer<typeof storyModelRefSchema>
+export type ModelOverride = z.infer<typeof modelOverrideSchema>
 
 const storyAgentModelShape = Object.fromEntries(
-  STORY_AGENT_IDS.map((id) => [id, storyModelRefSchema.optional()]),
-) as Record<StoryAgentId, z.ZodOptional<typeof storyModelRefSchema>>
+  STORY_AGENT_IDS.map((id) => [id, modelOverrideSchema.optional()]),
+) as Record<StoryAgentId, z.ZodOptional<typeof modelOverrideSchema>>
 
 // Override-at-render: an absent key resolves through App Settings' profile chain.
 // Provider-qualified because a bare id cannot say which provider serves it.
 const modelsSchema = z.object({
-  narrative: storyModelRefSchema.optional(),
+  narrative: modelOverrideSchema.optional(),
   ...storyAgentModelShape,
 })
 

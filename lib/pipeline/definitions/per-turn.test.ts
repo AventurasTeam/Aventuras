@@ -122,6 +122,7 @@ function streamCall(
     timedOut: () => false,
     timeoutMs: undefined,
     maxOutput: undefined,
+    fromOverride: false,
     window: { tokens: null, source: 'unknown' },
     promptEstimate: () => null,
     contextWindowFailureOf: () => null,
@@ -2986,6 +2987,7 @@ describe('narrative — how the reply ended', () => {
     window: null,
     providerId: 'prov-1',
     modelId: 'model-1',
+    fromOverride: false,
     target: 'narrative',
     entryId: expect.any(String),
     ...fields,
@@ -3000,6 +3002,7 @@ describe('narrative — how the reply ended', () => {
     window?: GenerationWindow
     promptEstimate?: number
     piggyback?: boolean
+    fromOverride?: boolean
     log?: ReturnType<typeof spyLogger>
   }) {
     currentStoryStore.set({
@@ -3036,6 +3039,7 @@ describe('narrative — how the reply ended', () => {
     streamTextMock.mockReturnValue(
       streamCall({
         maxOutput: opts.maxOutput,
+        fromOverride: opts.fromOverride ?? false,
         ...(opts.window !== undefined ? { window: opts.window } : {}),
         promptEstimate: () => estimate,
         stream: {
@@ -3116,6 +3120,48 @@ describe('narrative — how the reply ended', () => {
       'provider.reply_cut_off',
       cutWarning({ ...warned, entryId: entry?.id, outcome: 'marked' }),
     )
+  })
+
+  // data-model.md → Cut-off mark: the mark keeps whose max output it was, since the story's
+  // override can come or go after the reply.
+  it.each([
+    [
+      'at its max output',
+      { maxOutput: 512, usage: { outputTokens: 512 } },
+      { cause: 'max-output', outputTokens: 512, limit: 512, fromOverride: true },
+    ],
+    [
+      'short of its max output',
+      { maxOutput: 512, usage: { outputTokens: 300 } },
+      { cause: 'unknown', outputTokens: 300, maxOutput: 512, fromOverride: true },
+    ],
+  ])(
+    "marks a cut under the story's narrative override as the override's (%s)",
+    async (_label, call, mark) => {
+      const { entry } = await runReply({
+        text: PROSE,
+        finishReason: 'length',
+        fromOverride: true,
+        ...call,
+      })
+
+      expect(entry?.metadata?.cutOff).toStrictEqual(mark)
+    },
+  )
+
+  it("fails a cut with no prose under the override as the override's", async () => {
+    const { result } = await runReply({
+      text: '',
+      finishReason: 'length',
+      maxOutput: 512,
+      usage: { outputTokens: 512 },
+      fromOverride: true,
+    })
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { kind: 'reply-cut-off', cause: 'max-output', fromOverride: true },
+    })
   })
 
   // The estimate is read after the stream: an earlier read gets null and the cause `unknown`.
@@ -3230,6 +3276,7 @@ describe('narrative — how the reply ended', () => {
         window: null,
         providerId: 'prov-1',
         modelId: 'model-1',
+        fromOverride: false,
       },
     })
     expect(events.filter((e) => e.type === 'delta_emitted')).toEqual([])
@@ -3292,14 +3339,22 @@ describe('narrative — how the reply ended', () => {
         rawFinishReason,
         maxOutput: 512,
         usage: { outputTokens: 512 },
+        fromOverride: true,
       })
 
       expect(result).toEqual({ status: 'completed' })
       expect(entry?.content).toBe(PROSE)
-      expect(entry?.metadata?.cutOff).toEqual({ cause, outputTokens: 512 })
+      // No setting caused the stop, so the mark names no one's, even under an override.
+      expect(entry?.metadata?.cutOff).toStrictEqual({ cause, outputTokens: 512 })
       expect(log.warn).toHaveBeenCalledWith(
         'provider.reply_cut_off',
-        cutWarning({ cause, outputTokens: 512, maxOutput: 512, outcome: 'marked' }),
+        cutWarning({
+          cause,
+          outputTokens: 512,
+          maxOutput: 512,
+          fromOverride: true,
+          outcome: 'marked',
+        }),
       )
     })
 
@@ -3431,6 +3486,7 @@ describe('narrative — how the reply ended', () => {
       window: null,
       providerId: 'prov-1',
       modelId: 'model-1',
+      fromOverride: false,
     })
     const { entry } = await runReply({ text: PROSE, finishReason: 'length' })
 
@@ -3447,6 +3503,7 @@ describe('narrative — how the reply ended', () => {
       window: null,
       providerId: 'prov-1',
       modelId: 'model-1',
+      fromOverride: false,
     })
     const { entry } = await runReply({ text: PROSE, finishReason: 'length' })
 
@@ -3496,6 +3553,7 @@ describe('narrative — a stream error', () => {
     error: unknown,
     windowFailure: ContextWindowFailure | null = null,
     hint?: CapabilityHint,
+    fromOverride = false,
   ) {
     currentStoryStore.set({
       storyId: 's1',
@@ -3515,6 +3573,7 @@ describe('narrative — a stream error', () => {
       streamCall({
         contextWindowFailureOf,
         capabilityHintOf,
+        fromOverride,
         stream: {
           fullStream: (async function* () {
             yield { type: 'text-delta', text: 'The lantern gutt' }
@@ -3585,6 +3644,7 @@ describe('narrative — a stream error', () => {
         reason: 'unknown',
         detail: 'APICallError: thinking is not supported for this model',
         possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' },
+        fromOverride: false,
       },
     })
     expect(log.error).toHaveBeenCalledWith(
@@ -3592,6 +3652,18 @@ describe('narrative — a stream error', () => {
       expect.objectContaining({ statusCode: 400 }),
     )
     expect(log.warn).not.toHaveBeenCalledWith('provider.context_window', expect.anything())
+  })
+
+  it("names the override beside the hint when the call ran on the story's", async () => {
+    const error = rejection(400, 'thinking is not supported for this model')
+    const hint: CapabilityHint = { capability: 'reasoning', matched: 'thinking' }
+
+    const { result } = await runStreamError(error, null, hint, true)
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { kind: 'provider', possibleCapabilityMismatch: hint, fromOverride: true },
+    })
   })
 
   // toStrictEqual: a `possibleCapabilityMismatch: undefined` key fails it.

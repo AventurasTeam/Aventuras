@@ -1222,6 +1222,7 @@ describe('periodicClassifierPhase', () => {
       window: null,
       providerId: 'prov-1',
       modelId: 'm',
+      fromOverride: false,
     } as const
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'failed',

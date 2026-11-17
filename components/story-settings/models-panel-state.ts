@@ -4,30 +4,38 @@ import type {
   ProviderSource,
 } from '@/components/compounds/provider-model-picker'
 import {
+  overrideSettingsOf,
   resolveModel,
   STORY_OVERRIDE_TARGETS,
   type ResolveFailureKind,
   type ResolveModelConfig,
+  type ResolveModelResult,
   type StoryOverrideTarget,
 } from '@/lib/ai'
 import {
   STORY_AGENT_IDS,
+  type ModelOverride,
   type ProviderInstance,
   type StoryAgentId,
-  type StoryModelRef,
   type StorySettings,
 } from '@/lib/db'
+import { deepEqual } from '@/lib/deep-equal'
 
 export type ChainDescription =
   | { kind: 'resolved'; modelId: string; profileName: string | null }
   | { kind: 'broken'; failure: ResolveFailureKind }
+
+// The App Settings chain beneath any override: what the sentinel shows, and what an override copies.
+function resolveChain(target: StoryOverrideTarget, config: ResolveModelConfig): ResolveModelResult {
+  return resolveModel(target, { ...config, storyModels: undefined })
+}
 
 /** The App Settings chain beneath any override — what the sentinel shows. */
 export function describeChain(
   target: StoryOverrideTarget,
   config: ResolveModelConfig,
 ): ChainDescription {
-  const result = resolveModel(target, { ...config, storyModels: undefined })
+  const result = resolveChain(target, config)
   if (!result.ok) return { kind: 'broken', failure: result.kind }
   const profile =
     result.profileId == null ? undefined : config.profiles.find((p) => p.id === result.profileId)
@@ -83,7 +91,7 @@ export function providerListsModel(provider: ProviderInstance, modelId: string):
 }
 
 export function overrideProviderMissing(
-  ref: StoryModelRef,
+  ref: ModelOverride,
   providers: readonly ProviderInstance[],
 ): boolean {
   return !providers.some((provider) => provider.id === ref.providerId)
@@ -111,16 +119,29 @@ export function appendedCustomModelIds(
   return current.includes(modelId) ? [...current] : [...current, modelId]
 }
 
-function sameRef(a: StoryModelRef | undefined, b: StoryModelRef | undefined): boolean {
-  if (a == null || b == null) return a == null && b == null
-  return a.providerId === b.providerId && a.modelId === b.modelId
+/**
+ * The override a model pick leaves on `target` (story-settings.md → An override row). An existing
+ * one keeps its settings, a broken-provider one too. A new one copies what the chain resolves to,
+ * limited to the slot's fields; a broken chain copies nothing.
+ */
+export function pickedOverride(
+  target: StoryOverrideTarget,
+  ref: ModelRef,
+  current: ModelOverride | undefined,
+  config: ResolveModelConfig,
+): ModelOverride {
+  const model = { providerId: ref.providerId, modelId: ref.modelId }
+  if (current != null) return { ...current, ...model }
+  const chain = resolveChain(target, config)
+  return chain.ok ? { ...model, ...overrideSettingsOf(target, chain.params) } : model
 }
 
+// A settings change marks the slot as a new model does.
 export function modelsDirtyTargets(
   draft: StorySettings['models'],
   stored: StorySettings['models'],
 ): StoryOverrideTarget[] {
-  return STORY_OVERRIDE_TARGETS.filter((target) => !sameRef(draft[target], stored[target]))
+  return STORY_OVERRIDE_TARGETS.filter((target) => !deepEqual(draft[target], stored[target]))
 }
 
 /** Agents the `Add override` picker still offers: no override and no pending row. */

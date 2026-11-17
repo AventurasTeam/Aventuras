@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
 import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
+import { deepEqual } from '@/lib/deep-equal'
 import { isJsonObject } from '@/lib/json-object'
 
 import { MACHINE_PIN_KEY, type DbCtx, type PrecedenceTable } from '../types'
-import { deepEqual } from './delta-encoding'
 
 export { USER_EDITED_SINCE_PROSE } from '../types'
 

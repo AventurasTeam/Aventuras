@@ -223,6 +223,7 @@ const CUT: ReplyCutOffFailure = {
   window: null,
   providerId: 'prov-1',
   modelId: 'model-1',
+  fromOverride: false,
 }
 
 function cutOff(): never {
@@ -433,6 +434,24 @@ describe('callWithRetry and the capability hint', () => {
     expect(res).toMatchObject({
       status: 'failed',
       error: { possibleCapabilityMismatch: { capability: 'reasoning', matched: 'thinking' } },
+    })
+  })
+
+  it("stamps the caller's fromOverride beside the hint", async () => {
+    const res = await callWithRetry(
+      async (): Promise<string> => {
+        throw rejected()
+      },
+      (raw) => JSON.parse(raw),
+      {
+        ...opts(new AbortController().signal),
+        carried: () => ({ reasoning: true, structuredOutput: false, toolCalling: false }),
+        fromOverride: true,
+      },
+    )
+    expect(res).toMatchObject({
+      status: 'failed',
+      error: { possibleCapabilityMismatch: { capability: 'reasoning' }, fromOverride: true },
     })
   })
 

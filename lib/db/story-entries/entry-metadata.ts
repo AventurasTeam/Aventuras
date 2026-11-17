@@ -39,17 +39,20 @@ export const entryMetadataSchema = z.object({
   reasoning: z.string().optional(),
   // The story text ended early; authored, never inherited (data-model.md → Entry metadata shape).
   // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is what the call sent.
+  // `fromOverride`: the call's settings were the story's narrative override's; absent = the profile's.
   cutOff: z
     .discriminatedUnion('cause', [
       z.strictObject({
         cause: z.enum(['max-output', 'window']),
         outputTokens: z.number().optional(),
         limit: z.number(),
+        fromOverride: z.literal(true).optional(),
       }),
       z.strictObject({
         cause: z.literal('unknown'),
         outputTokens: z.number().optional(),
         maxOutput: z.number().optional(),
+        fromOverride: z.literal(true).optional(),
       }),
       z.strictObject({
         cause: z.enum(['interrupted', 'content-filter']),
@@ -162,6 +165,9 @@ export const entryMetadataSchema = z.object({
       kind: z.string(),
       failure: z.string().optional(),
       detail: z.string().optional(),
+      // The agent target the error named (config-resolver, cut-off, window): the slot a fix follows.
+      // Open, as `kind` is; absent on errors that name none and on entries written before it.
+      target: z.string().optional(),
       submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
       // A close-failure entry, as `pass`; a close has no held state.
       close: z.enum(['failed', 'resolved']).optional(),

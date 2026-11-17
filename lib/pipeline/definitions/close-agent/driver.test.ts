@@ -134,6 +134,7 @@ const CUT: ReplyCutOffFailure = {
   window: null,
   providerId: 'prov_close',
   modelId: 'lore-model',
+  fromOverride: false,
 }
 
 let f: CloseFixture

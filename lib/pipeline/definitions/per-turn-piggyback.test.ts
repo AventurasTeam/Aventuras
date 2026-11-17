@@ -469,6 +469,7 @@ describe('per-turn-piggyback', () => {
           window: null,
           providerId: 'prov-1',
           modelId: 'model-1',
+          fromOverride: false,
         },
       })
       const log = spyLogger()

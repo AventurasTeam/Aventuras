@@ -2,14 +2,16 @@ import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
 
 import { MANUAL_CLOSE_REFUSAL, type OwedCloseRun } from '@/lib/actions'
-import type {
-  CapabilityHint,
-  ContextWindowFailure,
-  ReplyCutOffFailure,
-  ResolveFailureKind,
+import {
+  STORY_OVERRIDE_TARGETS,
+  type CapabilityHint,
+  type ContextWindowFailure,
+  type ReplyCutOffFailure,
+  type ResolveFailureKind,
+  type StoryOverrideTarget,
 } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import type { SystemFailureMeta } from '@/lib/db'
+import type { StorySettings, SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -112,14 +114,22 @@ const CLOSE_RESOLVER_COPY = {
   'override-provider-missing': 'reader:systemEntry.failure.closeOverrideProviderMissing',
 } as const satisfies Record<ResolveFailureKind, string>
 
+const FIX_PROFILE = 'reader:systemEntry.fixProfile'
+
 const FIX_LABEL = {
   'no-profile-assigned': 'reader:systemEntry.assignProfile',
-  'profile-missing': 'reader:systemEntry.fixProfile',
+  'profile-missing': FIX_PROFILE,
   'provider-missing': 'reader:systemEntry.fixDefault',
   'override-provider-missing': 'reader:systemEntry.fixOverride',
 } as const satisfies Record<ResolveFailureKind, string>
 
 const PROVIDER_SETTINGS_ROUTE = '/settings?tab=providers'
+
+// The story's Models tab, where an override and its settings live. It's inside the story, so it
+// takes no story-leave guard.
+function storyOverrideRoute(storyId: string): `/story-settings/${string}?tab=models` {
+  return `/story-settings/${storyId}?tab=models`
+}
 
 function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
   return Object.hasOwn(FIX_LABEL, failure)
@@ -149,16 +159,29 @@ function failureTagOf(error: PipelineError | undefined): string | undefined {
   return undefined
 }
 
+// The agent an error names, kept so a fix follows that slot rather than one guessed from the entry.
+function failureTargetOf(error: PipelineError | undefined): string | undefined {
+  if (
+    error?.kind === 'config-resolver' ||
+    error?.kind === 'reply-cut-off' ||
+    error?.kind === 'context-window'
+  )
+    return error.target
+  return undefined
+}
+
 function failureMetaOf(
   error: PipelineError | undefined,
   detail: string | undefined,
   submission: SystemFailureMeta['submission'],
 ): SystemFailureMeta {
   const failure = failureTagOf(error)
+  const target = failureTargetOf(error)
   return {
     kind: error?.kind ?? 'orchestrator',
     ...(failure != null ? { failure } : {}),
     ...(detail != null ? { detail } : {}),
+    ...(target != null ? { target } : {}),
     ...(submission != null ? { submission } : {}),
   }
 }
@@ -174,7 +197,7 @@ export function describeTurnFailure(error: PipelineError | undefined): {
     return {
       content:
         hint !== undefined
-          ? capabilityHintContent(hint, 'turn')
+          ? capabilityHintContent(hint, 'turn', error.fromOverride)
           : t('reader:systemEntry.failure.llmCall'),
       detail: providerDetail(error),
     }
@@ -255,7 +278,9 @@ function describeWorkerFailure(
     const hint = error.possibleCapabilityMismatch
     return {
       content:
-        hint !== undefined ? capabilityHintContent(hint, vocabulary.hint) : t(vocabulary.generic),
+        hint !== undefined
+          ? capabilityHintContent(hint, vocabulary.hint, error.fromOverride)
+          : t(vocabulary.generic),
       detail: providerDetail(error),
     }
   }
@@ -442,18 +467,28 @@ export function useConfigFixAction(
   storyId: string | null,
   /** App Settings is outside the story, so the push waits on the host's story-leave guard. */
   leaveStory: LeaveStory,
+  /** The story overrides the failure's slot now: a `Fix profile` follows it to the Models tab. */
+  overridden = false,
 ): SystemEntryFixAction {
   const router = useRouter()
   if (failure === undefined) return undefined
+  const toOverride = (id: string): SystemEntryFixAction => ({
+    label: t(FIX_LABEL['override-provider-missing']),
+    onPress: () => router.navigate(storyOverrideRoute(id)),
+  })
   // The override carries its own provider, so App Settings shows a healthy chain
   // and nothing to repair; the row with the `×` is on this story's Models tab.
-  if (failure === 'override-provider-missing') {
-    if (storyId === null) return undefined
-    return {
-      label: t(FIX_LABEL['override-provider-missing']),
-      onPress: () => router.navigate(`/story-settings/${storyId}?tab=models`),
-    }
-  }
+  if (failure === 'override-provider-missing')
+    return storyId === null ? undefined : toOverride(storyId)
+  // Every `Fix profile` follows the slot's settings to the story's override when there is one now
+  // (generation-pipeline.md → Cut-off replies → Whose setting it was).
+  if (
+    overridden &&
+    storyId !== null &&
+    isResolveFailureKind(failure) &&
+    FIX_LABEL[failure] === FIX_PROFILE
+  )
+    return toOverride(storyId)
   return {
     label: t(isResolveFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
     onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
@@ -475,25 +510,49 @@ export function useEmbedderFixAction(storyId: string | null): SystemEntryFixActi
   }
 }
 
+const STORY_SLOTS: ReadonlySet<string> = new Set(STORY_OVERRIDE_TARGETS)
+
+function isStorySlot(target: string | undefined): target is StoryOverrideTarget {
+  return target !== undefined && STORY_SLOTS.has(target)
+}
+
 /**
- * `Fix profile` via the story-leave guard. Memoized: the reader hands it to every row, so a fresh
- * identity would re-render each per chunk.
+ * The slot whose settings a failure entry's fix points at: the target its error named, else, for an
+ * entry written without one or an error that names none (a capability hint), a pass's classifier,
+ * a close's lore-mgmt and any other entry's narrative.
+ */
+export function profileFixSlot(failure: SystemFailureMeta | undefined): StoryOverrideTarget {
+  if (isStorySlot(failure?.target)) return failure.target
+  if (failure?.close !== undefined) return 'lore-mgmt'
+  if (failure?.pass !== undefined) return 'classifier'
+  return 'narrative'
+}
+
+/**
+ * `Fix profile` via the story-leave guard, or `Fix story override` to the Models tab when the story
+ * overrides the slot now, whoever's setting the failure named (generation-pipeline.md → Cut-off
+ * replies → Whose setting it was). Memoized: the reader hands it to every row, so a fresh identity
+ * would re-render each per chunk.
  */
 export function useProfileFixAction(
   enabled: boolean,
+  overridden: boolean,
+  storyId: string | null,
   leaveStory: LeaveStory,
 ): SystemEntryFixAction {
   const router = useRouter()
-  return useMemo(
-    () =>
-      enabled
-        ? {
-            label: t('reader:systemEntry.fixProfile'),
-            onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
-          }
-        : undefined,
-    [enabled, leaveStory, router],
-  )
+  return useMemo(() => {
+    if (!enabled) return undefined
+    if (overridden && storyId !== null)
+      return {
+        label: t('reader:systemEntry.fixOverride'),
+        onPress: () => router.navigate(storyOverrideRoute(storyId)),
+      }
+    return {
+      label: t('reader:systemEntry.fixProfile'),
+      onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
+    }
+  }, [enabled, overridden, storyId, leaveStory, router])
 }
 
 export function useSystemEntryActions(
@@ -501,17 +560,23 @@ export function useSystemEntryActions(
   onRetry: () => void,
   storyId: string | null,
   leaveStory: LeaveStory,
+  /** The open story's overrides as they stand now, which a profile fix follows. */
+  storyModels: StorySettings['models'] | undefined,
 ): { onRetry: (() => void) | undefined; fixAction: SystemEntryFixAction } {
+  const overridden = storyModels?.[profileFixSlot(failure)] != null
   const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,
     storyId,
     leaveStory,
+    overridden,
   )
   const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
   // None for context-window: `Set window` needs App Settings' window editor and a model target.
   const profileFix = useProfileFixAction(
     (failure?.kind === 'reply-cut-off' && offersProfileFix(failure.failure)) ||
       (failure?.kind === 'provider' && isCapabilityHintTag(failure.failure)),
+    overridden,
+    storyId,
     leaveStory,
   )
   // A held branch can't run a pass, and a resolved entry has nothing left to retry, so either

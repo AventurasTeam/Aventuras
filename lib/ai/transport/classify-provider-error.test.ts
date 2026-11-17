@@ -202,6 +202,23 @@ describe('classifyProviderError', () => {
     })
   })
 
+  // generation-pipeline.md → Fatal error categories: fromOverride is set with the hint, not alone.
+  it("sets fromOverride beside a hint, and on nothing that isn't one", () => {
+    const hinted = rejection(400, errorBody('thinking is not supported'))
+    expect(classifyProviderError(hinted, CARRIED_ALL, true).error).toMatchObject({
+      possibleCapabilityMismatch: { capability: 'reasoning' },
+      fromOverride: true,
+    })
+    expect(classifyProviderError(hinted, CARRIED_ALL, false).error).toMatchObject({
+      fromOverride: false,
+    })
+    const unhinted = rejection(400, errorBody('the prompt was malformed'))
+    expect(classifyProviderError(unhinted, CARRIED_ALL, true).error).not.toHaveProperty(
+      'fromOverride',
+    )
+    expect(classifyProviderError(hinted, CARRIED_ALL).error).not.toHaveProperty('fromOverride')
+  })
+
   it('attaches no hint to a 5xx or to a body recognized as an overflow', () => {
     const server = classifyProviderError(
       rejection(500, errorBody('thinking failed upstream')),

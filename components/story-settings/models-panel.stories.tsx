@@ -136,6 +136,7 @@ const COPY = {
   pickerDialog: t('modelPicker.placeholder'),
   favoriteAdd: t('modelPicker.favoriteAdd'),
   writeFailed: t('storySettings:models.providerWriteFailed'),
+  discard: t('saveBar.discard'),
 }
 
 const SENTINEL = t('storySettings:models.appDefault', {
@@ -151,8 +152,9 @@ const clearLabel = (target: string) => t('storySettings:models.clearOverride', {
 const removeLabel = (target: string) => t('storySettings:models.removeRow', { target })
 const selectedModel = (modelId: string) => t('modelPicker.selectedModel', { modelId })
 
-async function openPicker(row: HTMLElement): Promise<HTMLElement> {
-  await userEvent.click(within(row).getByRole('button', { name: COPY.pickModel }))
+// `trigger`: the picker button's name, the pinned model's once the row holds one.
+async function openPicker(row: HTMLElement, trigger = COPY.pickModel): Promise<HTMLElement> {
+  await userEvent.click(within(row).getByRole('button', { name: trigger }))
   return screen.findByRole('dialog', { name: COPY.pickerDialog })
 }
 
@@ -161,8 +163,8 @@ async function closePicker() {
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 }
 
-async function pickModel(row: HTMLElement, modelId: string) {
-  const dialog = await openPicker(row)
+async function pickModel(row: HTMLElement, modelId: string, trigger?: string) {
+  const dialog = await openPicker(row, trigger)
   await userEvent.click(within(dialog).getByRole('option', { name: new RegExp(modelId) }))
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 }
@@ -226,6 +228,125 @@ export const PinNarrativeOverride: Story = {
       }),
     )
     expect(args.onCommit).toHaveBeenCalledTimes(1)
+  },
+}
+
+// story-settings.md → An override row: the settings arrive with the model, unseen until M7.1's form.
+const TUNED_NARRATIVE: ModelProfile = {
+  ...NARRATIVE,
+  temperature: 0.9,
+  maxOutput: 4096,
+  // A narrative override holds no structured output, so a stored one stays behind.
+  structuredOutput: 'force-on',
+}
+const TUNED_FAST: ModelProfile = { ...FAST, maxOutput: 1024, structuredOutput: 'force-off' }
+const seedTunedProfiles = () => seedAppSettings({ profiles: [TUNED_NARRATIVE, TUNED_FAST] })
+const PINNED = { providerId: 'prov-1', modelId: 'seed/fast', maxOutput: 512 }
+
+export const PinCopiesTheNarrativeProfile: Story = {
+  beforeEach: seedTunedProfiles,
+  play: async ({ args }) => {
+    await pickModel(await screen.findByTestId('model-row-narrative'), 'seed/fast')
+    await save()
+    await waitFor(() =>
+      expect(args.onCommit).toHaveBeenCalledWith({
+        settings: {
+          models: {
+            narrative: {
+              providerId: 'prov-1',
+              modelId: 'seed/fast',
+              temperature: 0.9,
+              maxOutput: 4096,
+            },
+          },
+        },
+      }),
+    )
+  },
+}
+
+export const AddOverrideCopiesTheAssignedProfile: Story = {
+  beforeEach: seedTunedProfiles,
+  play: async ({ args }) => {
+    await screen.findByTestId('model-row-narrative')
+    await addOverrideRow(COPY.classifier)
+    await pickModel(await screen.findByTestId('model-row-classifier'), 'seed/narrative')
+    await save()
+    await waitFor(() =>
+      expect(args.onCommit).toHaveBeenCalledWith({
+        settings: {
+          models: {
+            classifier: {
+              providerId: 'prov-1',
+              modelId: 'seed/narrative',
+              maxOutput: 1024,
+              structuredOutput: 'force-off',
+            },
+          },
+        },
+      }),
+    )
+  },
+}
+
+export const RepickKeepsTheSettings: Story = {
+  beforeEach: seedTunedProfiles,
+  args: { settings: settings({ narrative: PINNED }) },
+  play: async ({ args }) => {
+    await pickModel(
+      await screen.findByTestId('model-row-narrative'),
+      'seed/narrative',
+      selectedModel('seed/fast'),
+    )
+    await save()
+    await waitFor(() =>
+      expect(args.onCommit).toHaveBeenCalledWith({
+        settings: { models: { narrative: { ...PINNED, modelId: 'seed/narrative' } } },
+      }),
+    )
+  },
+}
+
+// The same model, re-made: only the copied settings differ from what's stored, and they still save.
+export const ClearThenPickTheSameModelSavesAFreshCopy: Story = {
+  beforeEach: seedTunedProfiles,
+  args: { settings: settings({ narrative: PINNED }) },
+  play: async ({ args }) => {
+    const row = await screen.findByTestId('model-row-narrative')
+    await userEvent.click(within(row).getByRole('button', { name: clearLabel(COPY.narrative) }))
+    await pickModel(row, 'seed/fast')
+    expect(await screen.findByTestId('save-bar')).toHaveTextContent(COPY.narrativeField)
+    await save()
+    await waitFor(() =>
+      expect(args.onCommit).toHaveBeenCalledWith({
+        settings: {
+          models: {
+            narrative: {
+              providerId: 'prov-1',
+              modelId: 'seed/fast',
+              temperature: 0.9,
+              maxOutput: 4096,
+            },
+          },
+        },
+      }),
+    )
+  },
+}
+
+// Discard brings the stored override back with its settings: re-picking its model then changes nothing.
+export const DiscardRestoresTheRowWhole: Story = {
+  beforeEach: seedTunedProfiles,
+  args: { settings: settings({ narrative: PINNED }) },
+  play: async () => {
+    const row = await screen.findByTestId('model-row-narrative')
+    await userEvent.click(within(row).getByRole('button', { name: clearLabel(COPY.narrative) }))
+    await pickModel(row, 'seed/fast')
+    const bar = await screen.findByTestId('save-bar')
+    await userEvent.click(within(bar).getByRole('button', { name: COPY.discard }))
+    await waitFor(() => expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument())
+    await pickModel(row, 'seed/fast', selectedModel('seed/fast'))
+    expect(screen.queryByTestId('save-bar')).not.toBeInTheDocument()
   },
 }
 

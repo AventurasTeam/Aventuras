@@ -42,6 +42,8 @@ type CallWithRetryOpts = {
   signal: AbortSignal
   /** What the failed request carried, read after each provider failure; omitted, no hint. */
   carried?: () => CarriedCapabilities
+  /** The call ran on the story's override; set beside a hint (classifyProviderError). */
+  fromOverride?: boolean
 }
 
 // Two-tier retry: provider (network/5xx/timeout) and parse/data-shape. Retried failures
@@ -68,7 +70,7 @@ export async function callWithRetry<T, R = string>(
       if (e instanceof ContextWindowError) {
         return { status: 'failed', error: { tier: 'context-window', ...e.failure }, recoverable }
       }
-      const classified = classifyProviderError(e, opts.carried?.())
+      const classified = classifyProviderError(e, opts.carried?.(), opts.fromOverride)
       providerAttempt += 1
       if (!classified.retryable || providerAttempt >= opts.maxProviderAttempts) {
         return { status: 'failed', error: classified.error, recoverable }

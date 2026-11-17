@@ -456,6 +456,67 @@ describe('models overrides are provider-qualified', () => {
   })
 })
 
+// data-model.md → App settings storage: an override carries a profile's call settings.
+describe('models overrides carry their own settings', () => {
+  const parseModels = (models: unknown) =>
+    storySettingsSchema.safeParse({ ...VALID_SETTINGS, models })
+
+  it('parses a stored model-only override with every setting unset', () => {
+    const parsed = parseModels({ narrative: { providerId: 'prov-1', modelId: 'm-narr' } })
+    expect(parsed.success && parsed.data.models.narrative).toStrictEqual({
+      providerId: 'prov-1',
+      modelId: 'm-narr',
+    })
+  })
+
+  it('keeps each setting it is given', () => {
+    const override = {
+      providerId: 'prov-1',
+      modelId: 'm-class',
+      temperature: 1.4,
+      maxOutput: 4096,
+      thinking: 0,
+      timeout: 90,
+      structuredOutput: 'force-on',
+      customJson: { top_k: 40, nested: { seed: 7 } },
+    }
+    const parsed = parseModels({ classifier: override })
+    expect(parsed.success && parsed.data.models.classifier).toStrictEqual(override)
+  })
+
+  it.each([
+    { temperature: 2.1 },
+    { temperature: -0.1 },
+    { maxOutput: 0 },
+    { maxOutput: 1.5 },
+    { thinking: -1 },
+    { thinking: 0.5 },
+    { structuredOutput: 'always' },
+    { customJson: 'not an object' },
+  ])('refuses %o as a profile does', (setting) => {
+    expect(parseModels({ narrative: { providerId: 'p', modelId: 'm', ...setting } }).success).toBe(
+      false,
+    )
+  })
+
+  // The close switches join ModelSettings for both owners at once (M7.1), so until then a
+  // stored one is dropped rather than kept on an override alone.
+  it('strips a key ModelSettings does not hold yet', () => {
+    const parsed = parseModels({
+      'lore-mgmt': { providerId: 'p', modelId: 'm', closeConversation: 'single' },
+    })
+    expect(parsed.success && parsed.data.models['lore-mgmt']).toStrictEqual({
+      providerId: 'p',
+      modelId: 'm',
+    })
+  })
+
+  it('stays partial in the partial parse', () => {
+    const models = { narrative: { providerId: 'p', modelId: 'm', maxOutput: 2048 } }
+    expect(storySettingsPartialSchema.parse({ models })).toStrictEqual({ models })
+  })
+})
+
 describe('storySettingsSchema — knob bounds', () => {
   // The Memory tab holds both of these to a whole number of at least 1, and no
   // surface writes them any other way, so a stored 0 or fraction is unreachable

@@ -155,6 +155,7 @@ const CUT_OFF_ERROR: CallRetryError = {
   window: null,
   providerId: 'prov_story',
   modelId: MODEL_ID,
+  fromOverride: false,
 }
 
 type DescriptionValue = { description: string }
