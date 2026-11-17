@@ -3022,6 +3022,7 @@ describe('narrative — how the reply ended', () => {
     fromOverride?: boolean
     log?: ReturnType<typeof spyLogger>
     call?: Partial<Omit<StreamCall, 'ok' | 'stream'>>
+    reasoningText?: string
   }) {
     currentStoryStore.set({
       storyId: 's1',
@@ -3069,6 +3070,7 @@ describe('narrative — how the reply ended', () => {
           finishReason: opts.finishReason,
           rawFinishReason: opts.rawFinishReason,
           usage: opts.usage,
+          reasoningText: opts.reasoningText,
         },
       }),
     )
@@ -3557,6 +3559,37 @@ describe('narrative — how the reply ended', () => {
       cacheRead: 4800,
       cacheWrite: 200,
     })
+  })
+
+  const THOUGHT = 'The keeper lied about the tide, so the lantern is a signal, not a welcome.'
+
+  it('estimates the reasoning a provider streamed but sent no count for', async () => {
+    const { entry } = await runReply({
+      text: 'The lantern held.',
+      usage: { ...anthropicUsage, raw: { prompt_tokens: 5100, completion_tokens: 640 } },
+      call: { tokensOf: (usage) => tokenFiguresOf(usage, 'openai-compatible') },
+      reasoningText: THOUGHT,
+    })
+
+    expect(entry?.metadata?.reasoningEstimate).toBe(countTokens(THOUGHT))
+    expect(entry?.metadata?.tokens).not.toHaveProperty('reasoning')
+  })
+
+  it("keeps the provider's reasoning count over an estimate, and estimates no reasoning it never streamed", async () => {
+    const counted = await runReply({
+      text: 'The lantern held.',
+      usage: {
+        ...anthropicUsage,
+        raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 30 } },
+      },
+      call: { tokensOf: (usage) => tokenFiguresOf(usage, 'openai-compatible') },
+      reasoningText: THOUGHT,
+    })
+    const unthought = await runReply({ text: 'The lantern held.', usage: anthropicUsage })
+
+    expect(counted.entry?.metadata?.tokens?.reasoning).toBe(30)
+    expect(counted.entry?.metadata).not.toHaveProperty('reasoningEstimate')
+    expect(unthought.entry?.metadata).not.toHaveProperty('reasoningEstimate')
   })
 
   it('stores no reasoning or cache figure an OpenAI-compatible server never sent', async () => {

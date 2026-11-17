@@ -81,6 +81,9 @@ export const entryMetadataSchema = z.object({
   model: z.string().optional(),
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
+  // o200k count of `reasoning`, written only when the provider reported no reasoning figure;
+  // authored, never inherited (data-model.md → Entry metadata shape).
+  reasoningEstimate: z.number().optional(),
   // The story text ended early; authored, never inherited (data-model.md → Entry metadata shape).
   // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is what the call sent.
   // `fromOverride`: the call's settings were the story's narrative override's; absent = the profile's.

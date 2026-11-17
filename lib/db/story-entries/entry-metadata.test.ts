@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { applyUndoPayload, computeUndoPayload } from '@/lib/actions/delta/delta-encoding'
 import { MAX_RETRIEVAL_QUERIES } from '@/lib/piggyback'
 
-import { entryMetadataSchema } from './entry-metadata'
+import { entryMetadataSchema, type EntryMetadata } from './entry-metadata'
 import { inheritedEntryMetadata } from './inherited-metadata'
 
 describe('entryMetadataSchema', () => {
@@ -453,6 +453,7 @@ describe('the token breakdown fields', () => {
   })
 
   it('carry no counts into the next entry', () => {
-    expect(inheritedEntryMetadata({ ...scene, ...breakdown })).toEqual(scene)
+    const authored: EntryMetadata = { ...scene, ...breakdown, reasoningEstimate: 300 }
+    expect(inheritedEntryMetadata(authored)).toEqual(scene)
   })
 })

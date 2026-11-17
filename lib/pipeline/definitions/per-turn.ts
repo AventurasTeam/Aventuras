@@ -32,6 +32,7 @@ import {
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 
 import { classifierEmbedder } from './description-embedder'
 import { readStoryPlace } from './entry-reads'
@@ -512,9 +513,13 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   const tokens = call.tokensOf(usage)
   const promptSections = call.promptSections()
+  // A provider that streams reasoning but sends no count for it keeps an estimate instead.
+  const reasoningEstimate =
+    tokens?.reasoning === undefined && reasoningText ? countTokens(reasoningText) : undefined
   const metadata: EntryMetadata = {
     ...(tokens !== undefined ? { tokens } : {}),
     ...(promptSections !== null ? { promptSections } : {}),
+    ...(reasoningEstimate !== undefined ? { reasoningEstimate } : {}),
     model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
