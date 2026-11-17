@@ -794,6 +794,7 @@ describe('generateStructured', () => {
         status: 'ok',
         value: { description: 'A tale.' },
         recoverable: [],
+        tokens: { prompt: 0, completion: 256 },
       })
     })
 
@@ -822,6 +823,7 @@ describe('generateStructured', () => {
           status: 'ok',
           value: { description: 'A tale.' },
           recoverable: [],
+          tokens: { prompt: 0, completion: 256 },
         })
         expect(cutOffLogs()).toEqual([])
       },

@@ -14,6 +14,7 @@ import {
   type GenerationWindow,
   type streamText,
   type StreamTextResult,
+  tokenFiguresOf,
 } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
@@ -111,7 +112,10 @@ function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
 
 type StreamCall = Extract<StreamTextResult, { ok: true }>
 
-/** streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure, no hint. */
+/**
+ * streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure, no
+ * hint, no sections, and usage read as the fixture's anthropic provider reports it.
+ */
 function streamCall(
   fake: Partial<Omit<StreamCall, 'ok' | 'stream'>> & { stream: object },
 ): Omit<StreamCall, 'stream'> & { stream: object } {
@@ -127,6 +131,8 @@ function streamCall(
     promptEstimate: () => null,
     contextWindowFailureOf: () => null,
     capabilityHintOf: () => undefined,
+    promptSections: () => null,
+    tokensOf: (usage) => tokenFiguresOf(usage, 'anthropic'),
     ...fake,
   }
 }

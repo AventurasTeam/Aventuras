@@ -389,6 +389,7 @@ describe('generateStructured: after the reply', () => {
       estimate: SENT,
       providerId: 'prov',
       modelId: 'm',
+      providerType: 'openai-compatible',
       actionId: 'act_1',
     }
     expect(vi.mocked(checkInputTokens).mock.calls).toEqual([[checked], [checked]])
@@ -621,6 +622,7 @@ describe('streamText: the truncation cross-check', () => {
       estimate: BARE,
       providerId: 'prov',
       modelId: 'm',
+      providerType: 'openai-compatible',
       actionId: 'act_7',
     })
     expect(sink).toHaveBeenCalledExactlyOnceWith({

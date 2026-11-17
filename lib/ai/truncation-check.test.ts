@@ -35,6 +35,15 @@ function usage(inputTokens: number | undefined): LanguageModelUsage {
 
 const CALL = { providerId: 'prov-1', modelId: 'model-1' }
 
+// The provider's type selects how its raw usage is read; the ratio's own fields don't carry it.
+function checkCall(
+  input: Omit<Parameters<typeof checkInputTokens>[0], 'providerType'> & {
+    providerType?: Parameters<typeof checkInputTokens>[0]['providerType']
+  },
+): void {
+  checkInputTokens({ providerType: 'openai-compatible', ...input })
+}
+
 let debug: MockInstance<Logger['debug']>
 let warn: MockInstance<Logger['warn']>
 let sink: Mock<(notice: TruncationNotice) => void>
@@ -64,15 +73,15 @@ describe('checkInputTokens', () => {
     ['an infinite input count', usage(Infinity), 100],
   ])('skips a call with %s', (_label, callUsage, estimate) => {
     configureTruncationNotice(sink)
-    checkInputTokens({ ...CALL, usage: callUsage, estimate })
+    checkCall({ ...CALL, usage: callUsage, estimate })
     expect(debug).not.toHaveBeenCalled()
     expect(warn).not.toHaveBeenCalled()
     expect(sink).not.toHaveBeenCalled()
   })
 
   it('logs the ratio at debug on every call it reads', () => {
-    checkInputTokens({ ...CALL, usage: usage(120), estimate: 100 })
-    checkInputTokens({ ...CALL, usage: usage(95), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(120), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(95), estimate: 100 })
     expect(debug.mock.calls).toEqual([
       ['provider.input_ratio', { ...CALL, estimate: 100, reported: 120, ratio: 1.2 }, undefined],
       ['provider.input_ratio', { ...CALL, estimate: 100, reported: 95, ratio: 0.95 }, undefined],
@@ -81,7 +90,7 @@ describe('checkInputTokens', () => {
 
   it('warns and notifies below the threshold', () => {
     configureTruncationNotice(sink)
-    checkInputTokens({ ...CALL, usage: usage(49), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(49), estimate: 100 })
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       'provider.prompt_truncation_suspected',
       { ...CALL, estimate: 100, reported: 49, ratio: 0.49 },
@@ -95,24 +104,24 @@ describe('checkInputTokens', () => {
     ['above it', 120],
   ])('neither warns nor notifies %s', (_label, reported) => {
     configureTruncationNotice(sink)
-    checkInputTokens({ ...CALL, usage: usage(reported), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(reported), estimate: 100 })
     expect(warn).not.toHaveBeenCalled()
     expect(sink).not.toHaveBeenCalled()
   })
 
   it('warns on every detection but notifies once per model', () => {
     configureTruncationNotice(sink)
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
-    checkInputTokens({ ...CALL, usage: usage(20), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(20), estimate: 100 })
     expect(warn).toHaveBeenCalledTimes(2)
     expect(sink).toHaveBeenCalledOnce()
   })
 
   it('notifies again for another model, on the same provider or another', () => {
     configureTruncationNotice(sink)
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
-    checkInputTokens({ ...CALL, modelId: 'model-2', usage: usage(10), estimate: 100 })
-    checkInputTokens({ ...CALL, providerId: 'prov-2', usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, modelId: 'model-2', usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, providerId: 'prov-2', usage: usage(10), estimate: 100 })
     expect(sink.mock.calls.map(([notice]) => [notice.providerId, notice.modelId])).toEqual([
       ['prov-1', 'model-1'],
       ['prov-1', 'model-2'],
@@ -121,9 +130,9 @@ describe('checkInputTokens', () => {
   })
 
   it('spends the once on a detection with no notice configured', () => {
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
     configureTruncationNotice(sink)
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
     expect(warn).toHaveBeenCalledTimes(2)
     expect(sink).not.toHaveBeenCalled()
   })
@@ -131,7 +140,7 @@ describe('checkInputTokens', () => {
   it('stops notifying once the notice is cleared', () => {
     configureTruncationNotice(sink)
     configureTruncationNotice(null)
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
     expect(sink).not.toHaveBeenCalled()
   })
 
@@ -139,7 +148,7 @@ describe('checkInputTokens', () => {
     configureTruncationNotice(() => {
       throw new Error('toast host gone')
     })
-    expect(() => checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })).not.toThrow()
+    expect(() => checkCall({ ...CALL, usage: usage(10), estimate: 100 })).not.toThrow()
     expect(warn).toHaveBeenCalledWith(
       'provider.truncation_notice_failed',
       { ...CALL, error: 'toast host gone' },
@@ -152,8 +161,8 @@ describe('checkInputTokens', () => {
       throw new Error('toast host gone')
     })
     configureTruncationNotice(throwing)
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100 })
     expect(throwing).toHaveBeenCalledOnce()
     expect(
       warn.mock.calls.filter(([kind]) => kind === 'provider.truncation_notice_failed'),
@@ -161,12 +170,62 @@ describe('checkInputTokens', () => {
   })
 
   it("attributes both logs to the call's action", () => {
-    checkInputTokens({ ...CALL, usage: usage(10), estimate: 100, actionId: 'act_1' })
+    checkCall({ ...CALL, usage: usage(10), estimate: 100, actionId: 'act_1' })
     expect(debug).toHaveBeenCalledWith('provider.input_ratio', expect.anything(), {
       actionId: 'act_1',
     })
     expect(warn).toHaveBeenCalledWith('provider.prompt_truncation_suspected', expect.anything(), {
       actionId: 'act_1',
     })
+  })
+})
+
+// architecture.md → Truncation cross-check: the ratio line carries the cache figures the provider sent.
+describe('checkInputTokens → cache figures', () => {
+  const withRaw = (raw: NonNullable<LanguageModelUsage['raw']>): LanguageModelUsage => ({
+    ...usage(120),
+    raw,
+  })
+  const ratioFields = () =>
+    debug.mock.calls
+      .filter(([event]) => event === 'provider.input_ratio')
+      .map(([, fields]) => fields)
+
+  it("adds an OpenAI-compatible server's cache read, 0 included", () => {
+    checkCall({
+      ...CALL,
+      usage: withRaw({ prompt_tokens_details: { cached_tokens: 80 } }),
+      estimate: 100,
+    })
+    checkCall({
+      ...CALL,
+      usage: withRaw({ prompt_tokens_details: { cached_tokens: 0 } }),
+      estimate: 100,
+    })
+    expect(ratioFields()).toEqual([
+      { ...CALL, estimate: 100, reported: 120, ratio: 1.2, cacheRead: 80 },
+      { ...CALL, estimate: 100, reported: 120, ratio: 1.2, cacheRead: 0 },
+    ])
+  })
+
+  it('adds none when the server sent no cache figure, though the SDK reads one as 0', () => {
+    const sdkZero: LanguageModelUsage = {
+      ...withRaw({ prompt_tokens: 120 }),
+      inputTokenDetails: { noCacheTokens: 120, cacheReadTokens: 0, cacheWriteTokens: undefined },
+    }
+    checkCall({ ...CALL, usage: sdkZero, estimate: 100 })
+    expect(ratioFields()).toEqual([{ ...CALL, estimate: 100, reported: 120, ratio: 1.2 }])
+  })
+
+  it("adds Anthropic's cache read and write", () => {
+    checkCall({
+      ...CALL,
+      providerType: 'anthropic',
+      usage: withRaw({ cache_read_input_tokens: 70, cache_creation_input_tokens: 30 }),
+      estimate: 100,
+    })
+    expect(ratioFields()).toEqual([
+      { ...CALL, estimate: 100, reported: 120, ratio: 1.2, cacheRead: 70, cacheWrite: 30 },
+    ])
   })
 })
