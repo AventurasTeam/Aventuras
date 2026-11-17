@@ -4,7 +4,8 @@ import { oneLine } from './one-line'
 export const SENTENCE_EXCERPT_MAX = 240
 
 // A Latin mark ends a sentence only before a space or the end, so "3.5" holds; a CJK mark needs
-// none. Closing quotes and brackets after the mark stay with the sentence it ends.
+// none. Closing quotes and brackets after the mark stay with the sentence it ends. The lookbehind
+// starts a match only at a run's first mark; without it a long run of marks backtracks quadratically.
 const SENTENCE_END = /(?<![.!?])[.!?]+["'”’»“«)\]]*(?=\s|$)|[。！？]+["'”’」』)）]*/gu
 
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
