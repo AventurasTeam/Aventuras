@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import { providerInstanceSchema } from '@/lib/db'
 
-import { fetchModelCatalog, normalizeModelCatalog, readContextWindow } from './catalog'
+import {
+  fetchModelCatalog,
+  normalizeModelCatalog,
+  readContextWindow,
+  readToolCalling,
+} from './catalog'
 import type { ProviderInstanceWithStub } from './types'
 
 const provider: ProviderInstanceWithStub = {
@@ -34,6 +39,31 @@ const ROUTER_CATALOG = {
     },
     { id: 'Gemma4-26B', object: 'model', owned_by: 'llamacpp', context_length: 262144 },
   ],
+}
+
+// OpenRouter's /api/v1/models, trimmed: every row lists the request parameters the model accepts,
+// and `context_length` is the served limit, which readContextWindow never reads.
+const OPENROUTER_CATALOG = {
+  data: [
+    {
+      id: 'qwen/qwen3-32b',
+      context_length: 40960,
+      supported_parameters: ['max_tokens', 'temperature', 'tool_choice', 'tools'],
+    },
+    {
+      id: 'sao10k/l3-euryale-70b',
+      context_length: 8192,
+      supported_parameters: ['max_tokens', 'temperature', 'top_p'],
+    },
+  ],
+}
+
+// Mistral's /v1/models row, trimmed: a capabilities object of booleans.
+const MISTRAL_ROW = {
+  id: 'mistral-small-latest',
+  object: 'model',
+  capabilities: { completion_chat: true, function_calling: true, vision: false },
+  max_context_length: 32768,
 }
 
 describe('readContextWindow', () => {
@@ -71,6 +101,47 @@ describe('readContextWindow', () => {
   })
 })
 
+describe('readToolCalling', () => {
+  it("reads OpenRouter's supported_parameters: tools listed is true, absent is false", () => {
+    expect(readToolCalling(OPENROUTER_CATALOG.data[0])).toBe(true)
+    expect(readToolCalling(OPENROUTER_CATALOG.data[1])).toBe(false)
+  })
+
+  it('reads an empty supported_parameters as no tool support', () => {
+    expect(readToolCalling({ supported_parameters: [] })).toBe(false)
+  })
+
+  it("reads Mistral's capabilities.function_calling", () => {
+    expect(readToolCalling(MISTRAL_ROW)).toBe(true)
+    expect(readToolCalling({ ...MISTRAL_ROW, capabilities: { function_calling: false } })).toBe(
+      false,
+    )
+  })
+
+  it('takes supported_parameters over capabilities when a row publishes both', () => {
+    expect(
+      readToolCalling({
+        supported_parameters: ['temperature'],
+        capabilities: { function_calling: true },
+      }),
+    ).toBe(false)
+  })
+
+  it.each([
+    ['no field', {}],
+    ['supported_parameters that is not an array', { supported_parameters: 'tools' }],
+    ['supported_parameters holding a non-string', { supported_parameters: ['tools', 1] }],
+    ['a function_calling that is not a boolean', { capabilities: { function_calling: 'yes' } }],
+    ['a capabilities that is not an object', { capabilities: ['function_calling'] }],
+  ])('reads nothing from %s', (_label, raw) => {
+    expect(readToolCalling(raw)).toBeUndefined()
+  })
+
+  it("reads nothing from a llama.cpp router's rows", () => {
+    for (const row of ROUTER_CATALOG.data) expect(readToolCalling(row)).toBeUndefined()
+  })
+})
+
 describe('fetchModelCatalog', () => {
   it('fetches GET {endpoint}/models and returns one entry per model', async () => {
     let calledUrl = ''
@@ -88,6 +159,16 @@ describe('fetchModelCatalog', () => {
     expect(await fetchModelCatalog(provider, { fetchImpl })).toStrictEqual([
       { id: 'Gemma4-26B-A4B-QAT-MTP', contextWindow: 65536 },
       { id: 'Gemma4-26B' },
+    ])
+  })
+
+  it("carries each entry's published tool support, and none where a row publishes nothing", async () => {
+    const fetchImpl: typeof fetch = async () =>
+      jsonResponse({ data: [...OPENROUTER_CATALOG.data, { id: 'local-model' }] })
+    expect(await fetchModelCatalog(provider, { fetchImpl })).toStrictEqual([
+      { id: 'qwen/qwen3-32b', toolCalling: true },
+      { id: 'sao10k/l3-euryale-70b', toolCalling: false },
+      { id: 'local-model' },
     ])
   })
 
@@ -175,6 +256,42 @@ describe('normalizeModelCatalog', () => {
     )
     expect(result).toEqual([
       { id: 'text-embedding-3-small', capabilities: { embedding: false, contextWindow: 8192 } },
+    ])
+  })
+
+  it.each([true, false])('stores a published toolCalling of %s on a model seen first', (flag) => {
+    expect(normalizeModelCatalog([{ id: 'qwen', toolCalling: flag }])).toStrictEqual([
+      { id: 'qwen', capabilities: { toolCalling: flag } },
+    ])
+  })
+
+  // architecture.md → Detection: a catalog's value replaces the stored one, `false` included.
+  it('replaces a stored toolCalling with a freshly published one, keeping the other keys', () => {
+    const result = normalizeModelCatalog(
+      [{ id: 'qwen', toolCalling: false }],
+      [{ id: 'qwen', capabilities: { toolCalling: true, reasoning: true } }],
+    )
+    expect(result).toStrictEqual([
+      { id: 'qwen', capabilities: { toolCalling: false, reasoning: true } },
+    ])
+  })
+
+  it('keeps the stored toolCalling when the fetch publishes none', () => {
+    const result = normalizeModelCatalog(
+      [{ id: 'qwen' }],
+      [{ id: 'qwen', capabilities: { toolCalling: false } }],
+    )
+    expect(result).toStrictEqual([{ id: 'qwen', capabilities: { toolCalling: false } }])
+  })
+
+  it('leaves toolCalling unset when neither the fetch nor the store has it', () => {
+    expect(normalizeModelCatalog([{ id: 'qwen' }])).toStrictEqual([{ id: 'qwen' }])
+  })
+
+  it('yields a toolCalling the stored schema keeps', () => {
+    const cachedModels = normalizeModelCatalog([{ id: 'qwen', toolCalling: false }])
+    expect(providerInstanceSchema.partial().parse({ cachedModels }).cachedModels).toStrictEqual([
+      { id: 'qwen', capabilities: { toolCalling: false } },
     ])
   })
 

@@ -4,7 +4,7 @@ import type { ProviderInstance } from '../db'
 import { createFetchWithCapture } from './transport/fetch'
 import type { ProviderInstanceWithStub } from './types'
 
-// Loose, so readContextWindow sees the fields the schema doesn't name.
+// Loose, so readContextWindow and readToolCalling see the fields the schema doesn't name.
 const catalogSchema = z.object({
   data: z.array(z.looseObject({ id: z.string() })),
 })
@@ -12,8 +12,8 @@ const catalogSchema = z.object({
 type CachedModel = NonNullable<ProviderInstance['cachedModels']>[number]
 type ProviderCapabilities = NonNullable<CachedModel['capabilities']>
 
-/** One `/models` entry: its id and the generation window it published, if any. */
-export type CatalogEntry = { id: string; contextWindow?: number }
+/** One `/models` entry: its id, and the generation window and tool support it published, if any. */
+export type CatalogEntry = { id: string; contextWindow?: number; toolCalling?: boolean }
 
 // Best-effort, id-pattern detection only — providers rarely expose a
 // structured capability flag over /models. False negatives fall back to the
@@ -39,21 +39,45 @@ export function readContextWindow(raw: Record<string, unknown>): number | undefi
   return asWindow(raw.max_model_len) ?? asWindow(nCtxOf(raw.meta))
 }
 
+// OpenRouter lists the request parameters each model accepts; `tools` among them is tool calling.
+function supportedParameters(raw: Record<string, unknown>): readonly string[] | undefined {
+  const value = raw.supported_parameters
+  return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined
+}
+
+function functionCallingOf(capabilities: unknown): unknown {
+  return typeof capabilities === 'object' &&
+    capabilities !== null &&
+    'function_calling' in capabilities
+    ? capabilities.function_calling
+    : undefined
+}
+
+/** A catalog's published tool support (architecture.md → Detection); undefined where it publishes none. */
+export function readToolCalling(raw: Record<string, unknown>): boolean | undefined {
+  const parameters = supportedParameters(raw)
+  if (parameters !== undefined) return parameters.includes('tools')
+  const flag = functionCallingOf(raw.capabilities)
+  return typeof flag === 'boolean' ? flag : undefined
+}
+
 /**
- * Later wins: id-pattern flags, the cached entry, then the published window; an absent window keeps
- * the stored one (architecture.md → The window figure). A stored flag, even `false`, beats the id
- * pattern, so turn a flag off by storing `false`: a deleted key is re-detected on the next refresh.
+ * Later wins: id-pattern flags, the cached entry, then the published window and tool support; an
+ * absent one keeps the stored value (architecture.md → Detection). A stored flag, even `false`,
+ * beats the id pattern, so turn a flag off by storing `false`: a deleted key is re-detected on the
+ * next refresh.
  */
 export function normalizeModelCatalog(
   entries: readonly CatalogEntry[],
   existing?: readonly CachedModel[],
 ): CachedModel[] {
   const existingById = new Map((existing ?? []).map((model) => [model.id, model]))
-  return entries.map(({ id, contextWindow }) => {
+  return entries.map(({ id, contextWindow, toolCalling }) => {
     const capabilities: ProviderCapabilities = {
       ...detectCapabilities(id),
       ...existingById.get(id)?.capabilities,
       ...(contextWindow !== undefined ? { contextWindow } : {}),
+      ...(toolCalling !== undefined ? { toolCalling } : {}),
     }
     return Object.keys(capabilities).length > 0 ? { id, capabilities } : { id }
   })
@@ -88,6 +112,11 @@ export async function fetchModelCatalog(
   const parsed = catalogSchema.parse(await response.json())
   return parsed.data.map((model) => {
     const contextWindow = readContextWindow(model)
-    return contextWindow === undefined ? { id: model.id } : { id: model.id, contextWindow }
+    const toolCalling = readToolCalling(model)
+    return {
+      id: model.id,
+      ...(contextWindow !== undefined ? { contextWindow } : {}),
+      ...(toolCalling !== undefined ? { toolCalling } : {}),
+    }
   })
 }

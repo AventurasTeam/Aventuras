@@ -123,13 +123,16 @@ const OVERFLOW_KEYWORDS = [
 ] as const
 
 // Parameter names before generic words, so "json_schema not supported for reasoning models"
-// points at structured output; tool_choice, the narrower parameter, before tools.
+// points at structured output; tool_choice, the narrower parameter, before tools. The spaced pair
+// is vLLM's and OpenRouter's wording for a model or server that takes no tools.
 const CAPABILITY_HINT_KEYWORDS = [
   { matched: 'response_format', capability: 'structuredOutput' },
   { matched: 'json_schema', capability: 'structuredOutput' },
   { matched: 'budget_tokens', capability: 'reasoning' },
   { matched: 'tool_choice', capability: 'toolCalling' },
+  { matched: 'tool choice', capability: 'toolCalling' },
   { matched: 'tools', capability: 'toolCalling' },
+  { matched: 'tool use', capability: 'toolCalling' },
   { matched: 'thinking', capability: 'reasoning' },
   { matched: 'reasoning', capability: 'reasoning' },
 ] as const satisfies readonly {

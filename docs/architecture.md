@@ -1013,8 +1013,9 @@ places
 ([`data-model.md → App settings storage`](./data-model.md#app-settings-storage)):
 
 - **Detected**: `cachedModels[].capabilities.contextWindow`, written
-  only by the catalog fetch. A fresh value replaces the stored one,
-  unlike every other capability, whose stored value wins; a fetch that
+  only by the catalog fetch. A fresh value replaces the stored one, as
+  it does for `toolCalling` ([Detection](#detection)) and unlike every
+  other capability, whose stored value wins; a fetch that
   reports none keeps the last seen, since a llama.cpp router model
   unloaded at refresh publishes nothing and its window hasn't changed.
 - **Configured**: `contextWindowOverrides[modelId]` on the provider,
@@ -1053,6 +1054,22 @@ usable figure on `/v1/models`, and by default cut an overlong prompt
 silently instead of rejecting it. On them the user's figure is the only
 check, and the [truncation cross-check](#truncation-cross-check) the
 only sign that one is missing.
+
+The same fetch reads tool support, the `toolCalling` flag a chapter
+close needs
+([`memory/chapter-close.md → Tool calling`](./memory/chapter-close.md#tool-calling)),
+from the two catalogs found to publish it (checked 2026-11-17):
+OpenRouter's `supported_parameters`, true when the list holds `tools`
+and false when it doesn't, then Mistral's boolean
+`capabilities.function_calling`. OpenAI, Google, Anthropic (whose every
+model takes tools), vLLM, llama.cpp, LM Studio, Ollama and NVIDIA NIM
+publish nothing about tools on `/models`, and NanoGPT only under
+`?detailed=true`, which the fetch doesn't send, so their models stay
+unknown, which a close runs on. As with the window, a published value
+replaces the stored one, `false` included, and a fetch that publishes
+none keeps it. No settings surface sets the flag yet (M7.1); a user's
+setting there has to live beside the detected value, as
+`contextWindowOverrides` does, or the next refresh would replace it.
 
 ### The pre-send check
 
