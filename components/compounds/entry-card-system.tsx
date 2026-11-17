@@ -6,8 +6,11 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Text } from '@/components/ui/text'
 import type { Tier } from '@/hooks/use-tier'
+import type { PromptSections } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+
+import { SectionRows } from './entry-card-tokens'
 
 const QUOTE_LINES = 2
 
@@ -143,10 +146,13 @@ export function HeldTextQuote({
 
 export function DetailsDisclosure({
   detail,
+  promptSections,
   onCopy,
   tier,
 }: {
   detail: string
+  /** A turn refused over its window: listed above the detail, as the token panel's rows. */
+  promptSections?: PromptSections
   onCopy?: (text: string) => void
   tier: Tier
 }) {
@@ -169,22 +175,25 @@ export function DetailsDisclosure({
         </Text>
       </TextToggle>
       {open ? (
-        <View ref={bodyRef} className="flex-row items-start gap-2">
-          <Text
-            size="xs"
-            variant="muted"
-            className="min-w-0 flex-1 font-mono [overflow-wrap:anywhere]"
-          >
-            {detail}
-          </Text>
-          {onCopy != null ? (
-            <IconAction
-              icon={Copy}
-              label={t('reader:systemEntry.copyDetails')}
-              size="sm"
-              onPress={() => onCopy(detail)}
-            />
-          ) : null}
+        <View ref={bodyRef} className="gap-2">
+          {promptSections != null ? <SectionRows sections={promptSections} /> : null}
+          <View className="flex-row items-start gap-2">
+            <Text
+              size="xs"
+              variant="muted"
+              className="min-w-0 flex-1 font-mono [overflow-wrap:anywhere]"
+            >
+              {detail}
+            </Text>
+            {onCopy != null ? (
+              <IconAction
+                icon={Copy}
+                label={t('reader:systemEntry.copyDetails')}
+                size="sm"
+                onPress={() => onCopy(detail)}
+              />
+            ) : null}
+          </View>
         </View>
       ) : null}
     </View>

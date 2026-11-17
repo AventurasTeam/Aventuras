@@ -11,13 +11,15 @@ import { z } from 'zod'
 import { boundedSignal } from '@/lib/abort'
 import { logger } from '@/lib/diagnostics'
 
-import type { ModelSettings, ProviderInstance } from '../db'
+import type { ModelSettings, PromptSections, ProviderInstance } from '../db'
 import type { ResolveTarget } from './agents'
 import { anthropicCacheMarkerMiddleware } from './cache-marker'
 import {
   ContextWindowError,
+  countPromptText,
   describeContextWindow,
   generationWindow,
+  primePromptCount,
   windowCheckMiddleware,
   type ContextWindowFailure,
   type GenerationWindow,
@@ -25,9 +27,17 @@ import {
 import { getModel } from './model'
 import {
   jsonResponseFormatMiddleware,
+  promptContract,
   promptSchemaMiddleware,
+  withClosing,
   type JsonSchema,
 } from './prompt-schema'
+import {
+  countSections,
+  promptSectionsOf,
+  type CountedSections,
+  type PromptSectionsInput,
+} from './prompt-sections'
 import {
   describeReplyCutOff,
   isCutOff,
@@ -46,6 +56,7 @@ import {
 } from './transport/classify-provider-error'
 import { runProviderCall, streamProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
+import { tokenFiguresOf, type TokenFigures } from './usage-figures'
 
 export type CallSettings = {
   temperature?: number
@@ -218,6 +229,8 @@ export type StreamTextOptions = {
   onError?: (event: { error: unknown }) => void
   /** Mark the system prefix for caching; honoured on `anthropic` providers only. */
   cacheSystemPrefix?: boolean
+  /** The prompt by section: counted before the request, its user half primed for the check. */
+  sections?: PromptSectionsInput
 }
 
 export type StreamTextResult =
@@ -242,6 +255,10 @@ export type StreamTextResult =
       contextWindowFailureOf: (error: unknown) => ContextWindowFailure | null
       /** The hint a rejection gives on a capability this call's request carried; else undefined. */
       capabilityHintOf: (error: unknown) => CapabilityHint | undefined
+      /** The prompt by section against the latest estimate; null without sections or an estimate. */
+      promptSections: () => PromptSections | null
+      /** The counts the provider reported, its cache and reasoning figures read from raw usage. */
+      tokensOf: (usage: LanguageModelUsage | undefined) => TokenFigures | undefined
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
@@ -253,10 +270,15 @@ export type StreamTextResult =
 export function streamText(target: ResolveTarget, opts: StreamTextOptions): StreamTextResult {
   const resolved = prepareGeneration(target, opts.config, opts.actionId)
   if (!resolved.ok) return resolved
-  const { providerId, modelId } = resolved
+  const { providerId, modelId, providerType } = resolved
   const attribution = opts.actionId === undefined ? undefined : { actionId: opts.actionId }
   const check = windowCheck(opts.config.providers, providerId, modelId, attribution)
   const sent = carriedCapabilities()
+  const counted =
+    opts.sections === undefined
+      ? null
+      : countSections(opts.sections, { providerId, modelId, ...attribution })
+  if (counted !== null) primePromptCount(opts.prompt.user, counted.userTokens)
   const bounded =
     resolved.timeoutMs === undefined ? null : boundedSignal(opts.abortSignal, resolved.timeoutMs)
   const abortSignal = bounded?.signal ?? opts.abortSignal
@@ -277,7 +299,14 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     // follow. After a fatal one the timer lapses on a call nothing awaits.
     onFinish: ({ usage }) => {
       bounded?.dispose()
-      checkInputTokens({ usage, estimate: check.estimate(), providerId, modelId, ...attribution })
+      checkInputTokens({
+        usage,
+        estimate: check.estimate(),
+        providerId,
+        modelId,
+        providerType,
+        ...attribution,
+      })
     },
     ...(bounded === null ? {} : { onAbort: () => bounded.dispose() }),
     ...resolved.callSettings,
@@ -295,7 +324,16 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     promptEstimate: check.estimate,
     contextWindowFailureOf: (error) => (error instanceof ContextWindowError ? error.failure : null),
     capabilityHintOf: (error) => capabilityHintOf(error, sent.carried()),
+    promptSections: () => sectionsAgainst(counted, check.estimate()),
+    tokensOf: (usage) => tokenFiguresOf(usage, providerType),
   }
+}
+
+function sectionsAgainst(
+  counted: CountedSections | null,
+  estimate: number | null,
+): PromptSections | null {
+  return counted === null || estimate === null ? null : promptSectionsOf(counted, estimate)
 }
 
 /**
@@ -395,6 +433,8 @@ export type StructuredCallOptions = {
   /** The run's action, linking the call's fetch capture (observability.md → actionId threading);
    *  `null` outside a run, as for the wizard. Required so no call compiles without one. */
   actionId: string | null
+  /** The prompt by section: counted before the request, its user half primed for the check. */
+  sections?: PromptSectionsInput
 }
 
 // A reply without them (a fake returning only text) reads as finished, with no counts.
@@ -406,7 +446,15 @@ type StructuredReply = {
 
 /** generation-pipeline.md → Two retry tiers: `recoverable` holds each retried attempt. */
 export type GenerateStructuredResult<T> =
-  | { status: 'ok'; value: T; recoverable: readonly CallRetryError[] }
+  | {
+      status: 'ok'
+      value: T
+      recoverable: readonly CallRetryError[]
+      /** The kept attempt's counts, as the provider reported them. */
+      tokens?: TokenFigures
+      /** The prompt by section, when the call was given its sections. */
+      promptSections?: PromptSections
+    }
   | { status: 'not-configured'; kind: ResolveFailureKind }
   | { status: 'failed'; error: CallRetryError; recoverable: readonly CallRetryError[] }
   | { status: 'aborted'; recoverable: readonly CallRetryError[] }
@@ -440,7 +488,7 @@ export async function generateStructured<T>(
 ): Promise<GenerateStructuredResult<T>> {
   const resolved = prepareGeneration(target, config, options.actionId ?? undefined)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
-  const { providerId, modelId } = resolved
+  const { providerId, modelId, providerType } = resolved
   const attribution = options.actionId === null ? undefined : { actionId: options.actionId }
 
   // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
@@ -462,12 +510,32 @@ export async function generateStructured<T>(
   }
   const check = windowCheck(config.providers, providerId, modelId, attribution)
   const sent = carriedCapabilities()
+  const injected = resolved.params.structuredOutput !== 'force-on'
+  // The contract's texts count under `output`; the user text is primed as sent, closing included.
+  const contract = injected ? promptContract(jsonSchema) : null
+  const counted =
+    options.sections === undefined
+      ? null
+      : countSections(options.sections, {
+          contract: contract === null ? [] : [contract.system, contract.closing],
+          providerId,
+          modelId,
+          ...attribution,
+        })
+  if (counted !== null) {
+    if (contract === null) primePromptCount(prompt.user, counted.userTokens)
+    else
+      primePromptCount(
+        withClosing(prompt.user, contract.closing),
+        counted.userTokens + countPromptText(contract.closing),
+      )
+  }
   // 'auto' puts the schema in the prompt (no capability signal yet); 'force-on' sends it natively.
   // Marker after the contract: on a blank system half, promptSchemaMiddleware makes the system
   // message. Window check last, to count the contract too (architecture.md → The pre-send check).
   const model = withMiddleware(resolved.model, [
     jsonResponseFormatMiddleware(jsonSchema),
-    ...(resolved.params.structuredOutput === 'force-on' ? [] : [promptSchemaMiddleware()]),
+    ...(injected ? [promptSchemaMiddleware()] : []),
     ...(marksSystemPrefix(options.cacheSystemPrefix, resolved.providerType)
       ? [anthropicCacheMarkerMiddleware()]
       : []),
@@ -483,7 +551,7 @@ export async function generateStructured<T>(
   }
   // generation-pipeline.md → Cut-off replies: a cut reply is accepted only as a strict document,
   // since jsonrepair would close a truncated one into a valid but shorter reply.
-  const parse = (reply: StructuredReply): T => {
+  const parseReply = (reply: StructuredReply): T => {
     if (reply.finishReason === 'content-filter') {
       try {
         return parseStructured(reply.text, schema, { repair: false })
@@ -516,6 +584,13 @@ export async function generateStructured<T>(
     logCutOff(failure, { outcome: 'accepted' })
     return value
   }
+  // The attempt whose reply parsed is the one the call returns.
+  let kept: StructuredReply | undefined
+  const parse = (reply: StructuredReply): T => {
+    const value = parseReply(reply)
+    kept = reply
+    return value
+  }
 
   const { timeoutMs } = resolved
   const result = await callWithRetry<T, StructuredReply>(
@@ -534,6 +609,7 @@ export async function generateStructured<T>(
           estimate: check.estimate(),
           providerId,
           modelId,
+          providerType,
           ...attribution,
         })
         return { text: call.text, finishReason: call.finishReason, usage: call.usage }
@@ -555,7 +631,17 @@ export async function generateStructured<T>(
   )
 
   const { recoverable } = result
-  if (result.status === 'ok') return { status: 'ok', value: result.result, recoverable }
+  if (result.status === 'ok') {
+    const tokens = tokenFiguresOf(kept?.usage, providerType)
+    const promptSections = sectionsAgainst(counted, check.estimate())
+    return {
+      status: 'ok',
+      value: result.result,
+      recoverable,
+      ...(tokens !== undefined ? { tokens } : {}),
+      ...(promptSections !== null ? { promptSections } : {}),
+    }
+  }
   if (result.status === 'aborted') return { status: 'aborted', recoverable }
   const { error } = result
   if (error.tier === 'context-window') {

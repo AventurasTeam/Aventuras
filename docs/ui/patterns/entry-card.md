@@ -63,7 +63,8 @@ type EntryCardProps = {
   sceneOptions?: { characters: EntityOption[]; items: EntityOption[]; locations: EntityOption[] } // candidate pool for the editor's selects; required alongside either edit handler
 
   // AI / opening:
-  meta?: Pick<EntryMetadata, 'tokens' | 'promptSections' | 'classifierCall'> // the top line renders the prompt and reply counts; sections make them the Token panel's toggle
+  meta?: Pick<EntryMetadata, 'tokens' | 'promptSections' | 'classifierCall' | 'reasoningEstimate'> // the top line renders the prompt and reply counts; sections make them the Token panel's toggle
+  replyEstimate?: number // ai_reply: the row's content_tokens, the reply's count when the provider reported none
   reasoning?: string
   onRegen?: () => void // ai only
   onBranch?: () => void // ai, opening
@@ -74,6 +75,7 @@ type EntryCardProps = {
 
   // Streaming-only:
   streamingPhase?: 'reasoning' | 'reply'
+  streamingTokens?: { reply: number; reasoning: number } // the counts so far, each chunk counted as it lands
 
   // System-only — see "System entry" below:
   detail?: string // renders the Details disclosure under the buttons

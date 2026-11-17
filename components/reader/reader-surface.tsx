@@ -258,6 +258,7 @@ const ReaderRow = memo(function ReaderRow({
       tier={tier}
       content={editing ? (editContent ?? '') : row.content}
       meta={row.metadata ?? undefined}
+      replyEstimate={row.kind === 'ai_reply' ? (row.contentTokens ?? undefined) : undefined}
       reasoning={row.metadata?.reasoning}
       disabled={editBlocked}
       disabledReason={disabledReason}
@@ -280,6 +281,7 @@ const ReaderRow = memo(function ReaderRow({
         isSystem || row.kind === 'opening' ? undefined : () => void onRequestRollback(row.id)
       }
       detail={isSystem ? row.metadata?.systemFailure?.detail : undefined}
+      promptSections={isSystem ? row.metadata?.systemFailure?.promptSections : undefined}
       heldText={heldText}
       onCopy={isSystem ? (text) => void onCopySystemText(text) : undefined}
       fixAction={
@@ -1250,6 +1252,7 @@ export function ReaderSurface({
                   ? 'reasoning'
                   : 'reply'
               }
+              streamingTokens={streaming.tokens}
             />
           </div>
         ) : null}

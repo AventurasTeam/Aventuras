@@ -2,7 +2,8 @@ import { Liquid } from 'liquidjs'
 
 import { registerFilters } from './filters'
 import type { MacroId } from './ids'
-import type { Pack, RenderedPrompt } from './types'
+import { SECTIONS, SectionCollector, SectionTag } from './sections'
+import type { Pack, RenderedPrompt, SectionedPrompt } from './types'
 
 export type TemplateHalf = 'system' | 'user'
 
@@ -32,6 +33,7 @@ export function createEngine(pack: Pack): Liquid {
   // Safe to cache: `templates` is this engine's own copy, fixed once built.
   const engine = new Liquid({ templates, cache: true })
   registerFilters(engine)
+  engine.registerTag('section', SectionTag)
   return engine
 }
 
@@ -78,14 +80,45 @@ export function macroGlobals(engine: Liquid, macroId: MacroId): Set<string> {
  * Renders both halves against one context, synchronously: every filter and
  * in-memory include is sync. Throws when the user half renders blank, since
  * there would be nothing for the model to answer; a blank system half is legal.
+ * With `sections`, each half also comes back split by its section tags.
  */
 export function renderWith(
   engine: Liquid,
   templateId: string,
   context: Record<string, unknown>,
-): RenderedPrompt {
-  const system = engine.renderFileSync(halfKey(templateId, 'system'), context) as string
-  const user = engine.renderFileSync(halfKey(templateId, 'user'), context) as string
+): RenderedPrompt
+export function renderWith(
+  engine: Liquid,
+  templateId: string,
+  context: Record<string, unknown>,
+  opts: { sections: true },
+): SectionedPrompt
+export function renderWith(
+  engine: Liquid,
+  templateId: string,
+  context: Record<string, unknown>,
+  opts?: { sections: true },
+): RenderedPrompt | SectionedPrompt {
+  const render = (half: TemplateHalf, collector?: SectionCollector): string =>
+    engine.renderFileSync(
+      halfKey(templateId, half),
+      context,
+      collector === undefined ? undefined : { globals: { [SECTIONS]: collector } },
+    ) as string
+  if (opts?.sections !== true) {
+    const system = render('system')
+    const user = render('user')
+    if (user.trim() === '') throw new Error(`template '${templateId}' rendered a blank user half`)
+    return { system, user }
+  }
+  const systemSections = new SectionCollector()
+  const userSections = new SectionCollector()
+  const system = render('system', systemSections)
+  const user = render('user', userSections)
   if (user.trim() === '') throw new Error(`template '${templateId}' rendered a blank user half`)
-  return { system, user }
+  return {
+    system,
+    user,
+    sections: { system: systemSections.finish(system), user: userSections.finish(user) },
+  }
 }

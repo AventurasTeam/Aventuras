@@ -114,6 +114,33 @@ function countOnce(text: string): number {
   return tokens
 }
 
+/** countTokens through the count cache; for lib/ai's own counting of what a request will send. */
+export function countPromptText(text: string): number {
+  return countOnce(text)
+}
+
+/**
+ * Counts a render that holds each entry's prose once and whole as its `blank` render (every entry's
+ * prose empty) plus the entries' stored counts, so the prose isn't encoded (architecture.md → The
+ * pre-send check). When `text` less `blank` isn't the prose's length, the template truncates, moves
+ * or doubles it, and a primed count would be wrong with no margin, so `text` is encoded instead.
+ * `record` keeps the count for `text`, for a text the check will count again.
+ */
+export function countWithStoredProse(
+  text: string,
+  blank: string,
+  prose: { chars: number; tokens: number },
+  opts: { record: boolean },
+): number {
+  // With no prose `text` is `blank`, so recording a priced count would overwrite the blank's own.
+  if (prose.chars > 0 && text.length - blank.length === prose.chars) {
+    const tokens = countOnce(blank) + prose.tokens
+    if (opts.record) remember(text, tokens)
+    return tokens
+  }
+  return opts.record ? countOnce(text) : (promptCounts.get(text) ?? countTokens(text))
+}
+
 /** Records a text's count without encoding it; a text over the character budget isn't kept, so it
  *  is encoded when counted. The pre-send check trusts `tokens` as this text's count, with no
  *  margin: an overcount can refuse a call that fits, so any lean must stay small. */

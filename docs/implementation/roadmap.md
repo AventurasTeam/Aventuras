@@ -912,22 +912,6 @@ code before it moved; resolve with the slice it names.
   empty. The editor is the first reader of `required`, so it picks the
   shape, beside the `validateRegistry` entry above. Raised in 5.8's slice
   review; routed from triage 2026-11-14.
-- **M7.2 — The close's count priming assumes the system half holds each
-  turn's prose once.** `renderClosePrompt` / `primeCloseSystemCount`
-  (`lib/pipeline/definitions/close-agent/turns.ts`) prime the system
-  half's count as the blank half's count plus the turns' stored prose
-  tokens, with no check. That holds while the bundled pack renders
-  `macro_story_entry` and the close templates as shipped. Once the pack
-  tab lets a user edit them, a truncating, moved or doubled
-  `{{ entry.content }}` makes the estimate wrong silently, and the
-  pre-send check has no margin. A guard: prime only when the rendered
-  half's length minus the blank half's equals the summed turn contents,
-  else count exactly. Raised in 5.5b's final review; routed from triage
-  2026-11-14. Canon now holds the guard for the close and the turn
-  ([`architecture.md → The pre-send check`](../architecture.md#the-pre-send-check)),
-  and the per-turn token breakdown's build
-  ([followups](../followups.md#ux)) ships it as one helper both use,
-  which closes this item.
 - **M7.2 — Nothing implements the window-level accounting canon
   describes.** Routed from the Slice 3.12 split (2026-08-19).
   [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)

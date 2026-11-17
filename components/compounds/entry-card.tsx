@@ -47,7 +47,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useEditOverlayGuard } from '@/hooks/use-edit-overlay-guard'
 import type { Tier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
-import type { EntityKind, EntryMetadata, StoryEntry } from '@/lib/db'
+import type { EntityKind, EntryMetadata, PromptSections, StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import {
@@ -61,6 +61,13 @@ import { cn } from '@/lib/utils'
 
 import { heldControl } from './entry-card-hold'
 import { DetailsDisclosure, HeldTextQuote } from './entry-card-system'
+import {
+  hasTokenBreakdown,
+  streamingTokenText,
+  TokenPanel,
+  TokenText,
+  type TokenMeta,
+} from './entry-card-tokens'
 import { RichEntryContent } from './rich-entry-content'
 import { SceneEditForm, sceneSaveErrorKey, type SceneSaveResult } from './scene-edit-form'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
@@ -68,10 +75,8 @@ import { WorldTimeEditForm, type MonotonicityBreak } from './world-time-edit-for
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
 
-// The card surfaces the canonical entry-metadata token shape directly rather
-// than a bespoke copy, so the two can't drift; only completion + reasoning are
-// displayed (prompt is carried but unused here).
-type EntryMeta = Pick<EntryMetadata, 'tokens'>
+// The canonical entry-metadata shape directly rather than a bespoke copy, so the two can't drift.
+type EntryMeta = TokenMeta
 
 /** An id the host tried to resolve; `name` absent means the row is gone. */
 type ResolvedEntity = { id: string; name?: string }
@@ -139,7 +144,10 @@ type EntryCardProps = {
   sceneOptions?: SceneOptions
 
   // ai / opening:
+  /** The meta line's counts; sections make its token text the token panel's toggle. */
   meta?: EntryMeta
+  /** ai_reply: the reply's stored estimate (content_tokens), shown when the provider reported none. */
+  replyEstimate?: number
   reasoning?: string
   /** ai only. */
   onRegen?: () => void
@@ -152,10 +160,14 @@ type EntryCardProps = {
 
   /** Streaming-only — drives the top-line indicator. */
   streamingPhase?: 'reasoning' | 'reply'
+  /** Streaming-only: the reply and reasoning tokens so far, as the host estimated them. */
+  streamingTokens?: { reply: number; reasoning: number }
 
   // system-only:
   /** Renders the collapsed Details disclosure under the buttons when non-empty. */
   detail?: string
+  /** A turn refused over its window: the refused prompt by section, listed inside Details. */
+  promptSections?: PromptSections
   /** The turn's text the entry keeps, shown verbatim as plain text; omit when blank. */
   heldText?: string
   /** The quote's and the detail's copy buttons; absent hides both. Not gated by `disabled`. */
@@ -1018,13 +1030,16 @@ export function EntryCard({
   onRequestEditScene,
   sceneOptions,
   meta,
+  replyEstimate,
   reasoning,
   onRegen,
   onBranch,
   onFlipEra,
   cutOffNotice,
   streamingPhase,
+  streamingTokens,
   detail,
+  promptSections,
   heldText,
   onCopy,
   fixAction,
@@ -1047,6 +1062,7 @@ export function EntryCard({
 }: EntryCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [stateExpanded, setStateExpanded] = useState(false)
+  const [tokensExpanded, setTokensExpanded] = useState(false)
   const [sceneEditOpen, setSceneEditOpen] = useState(false)
   // Only an edit started on this card takes focus: one mounting already open is a row scrolled
   // back into the reader's slice, and focusing it would raise the phone keyboard mid-scroll.
@@ -1081,6 +1097,7 @@ export function EntryCard({
   // scene editor reachable only when a parse happened to succeed — an affordance
   // whose availability depends on something the user cannot see.
   const hasState = kind === 'ai_reply' || kind === 'opening'
+  const hasBreakdown = kind === 'ai_reply' && hasTokenBreakdown(meta)
   const stateUnapplied = unappliedStateRole(stateReport) != null
   // Same tier split as the world-time footer: `onEditScene == null` also routes to
   // the request fork, since a Dialog whose Save has nowhere to report would discard
@@ -1177,22 +1194,17 @@ export function EntryCard({
             ) : null}
             {kind === 'streaming' ? (
               <Text size="xs" variant="muted" className="leading-none">
-                {t(
-                  streamingPhase === 'reasoning'
-                    ? 'reader:entryCard.thinking'
-                    : 'reader:entryCard.generating',
-                )}
+                {streamingTokenText(streamingTokens)}
               </Text>
-            ) : meta?.tokens != null ? (
-              <Text size="xs" variant="muted" className="leading-none">
-                {meta.tokens.reasoning != null
-                  ? t('reader:entryCard.tokensWithReasoning', {
-                      n: meta.tokens.completion,
-                      reasoning: meta.tokens.reasoning,
-                    })
-                  : t('reader:entryCard.tokens', { n: meta.tokens.completion })}
-              </Text>
-            ) : null}
+            ) : (
+              <TokenText
+                meta={meta}
+                replyEstimate={replyEstimate}
+                pressable={hasBreakdown}
+                expanded={tokensExpanded}
+                onToggle={() => setTokensExpanded((v) => !v)}
+              />
+            )}
           </>
         )}
       </View>
@@ -1230,6 +1242,10 @@ export function EntryCard({
             />
           ) : null}
         </>
+      ) : null}
+
+      {hasBreakdown && tokensExpanded && !editing && meta != null ? (
+        <TokenPanel meta={meta} replyEstimate={replyEstimate} />
       ) : null}
 
       {editing ? (
@@ -1314,7 +1330,12 @@ export function EntryCard({
             </View>
           )}
           {detail != null && detail !== '' ? (
-            <DetailsDisclosure detail={detail} onCopy={onCopy} tier={tier} />
+            <DetailsDisclosure
+              detail={detail}
+              promptSections={promptSections}
+              onCopy={onCopy}
+              tier={tier}
+            />
           ) : null}
         </View>
       ) : kind === 'streaming' && content.length === 0 ? null : ( // pre-first-chunk / reasoning-phase placeholder: nothing to render yet

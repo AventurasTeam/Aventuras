@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
-import { primePromptCount, type PromptHalves } from '@/lib/ai'
+import { countWithStoredProse, type PromptHalves } from '@/lib/ai'
 import {
   branches,
   chunked,
@@ -10,12 +10,11 @@ import {
   type StoryEntry,
   type StoryMode,
 } from '@/lib/db'
-import { promptProse } from '@/lib/piggyback'
 import { renderTemplate, type TemplateId } from '@/lib/prompts'
-import { countTokens } from '@/lib/tokens'
 
 import type { TaskPromptContext } from './task'
 import { buildCloseTurns, type CloseRangeEntry, type CloseTurn } from '../chapter-context'
+import { storedProseTokens } from '../entry-reads'
 
 /** A close task's turns, at least one: with none, its prompt's "# The turns" renders empty. */
 export type CloseTurns = readonly [CloseTurn, ...CloseTurn[]]
@@ -46,11 +45,7 @@ export async function readTaskTurns(ctx: TaskPromptContext): Promise<TaskTurns> 
     .flatMap((row): CloseRangeEntry[] =>
       row.kind === 'system' ? [] : [{ ...row, kind: row.kind }],
     )
-  // C5: content_tokens has no backfill, so a row stored without one is counted here.
-  const proseTokens = entries.reduce(
-    (sum, entry) => sum + (entry.contentTokens ?? countTokens(promptProse(entry))),
-    0,
-  )
+  const proseTokens = entries.reduce((sum, entry) => sum + storedProseTokens(entry), 0)
   // handleOf is a method on the id map: passed bare it would lose its `this`.
   return {
     entries,
@@ -59,25 +54,18 @@ export async function readTaskTurns(ctx: TaskPromptContext): Promise<TaskTurns> 
   }
 }
 
-/** The turns with every content blank: the half primeCloseSystemCount counts. */
+/** The turns with every content blank: the half the stored counts are added to. */
 export function blankTurns(turns: readonly CloseTurn[]): CloseTurn[] {
   return turns.map((turn) => ({ ...turn, content: '' }))
 }
 
 /**
- * Primes `system` at `countTokens(blankSystem) + proseTokens`, so a part's first step doesn't
- * encode the chapter (a half over the cache's character budget still is). Leans a little either
- * way: high on a stored stripped block, low where o200k merges text across a turn's edges.
+ * Renders a close template over `closeTurns` and primes its system half's count from the turns'
+ * stored counts, so a part's first step doesn't encode the chapter (a half over the cache's
+ * character budget still is). Leans a little either way: high on a stored stripped block, low where
+ * o200k merges text across a turn's edges. A template that doesn't render each turn's prose once
+ * and whole has its half encoded instead.
  */
-export function primeCloseSystemCount(
-  system: string,
-  blankSystem: string,
-  proseTokens: number,
-): void {
-  primePromptCount(system, countTokens(blankSystem) + proseTokens)
-}
-
-/** Renders a close template over `closeTurns` and primes the count of its system half. */
 export function renderClosePrompt(
   templateId: TemplateId,
   closeTurns: CloseTurns,
@@ -86,7 +74,13 @@ export function renderClosePrompt(
 ): PromptHalves {
   const halves = renderTemplate(templateId, { ...variables, closeTurns })
   const blank = renderTemplate(templateId, { ...variables, closeTurns: blankTurns(closeTurns) })
-  primeCloseSystemCount(halves.system, blank.system, proseTokens)
+  const chars = closeTurns.reduce((sum, turn) => sum + turn.content.length, 0)
+  countWithStoredProse(
+    halves.system,
+    blank.system,
+    { chars, tokens: proseTokens },
+    { record: true },
+  )
   return halves
 }
 

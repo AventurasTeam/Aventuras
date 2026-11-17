@@ -198,6 +198,7 @@ export async function generateToolStep(
       estimate: check.estimate(),
       providerId,
       modelId,
+      providerType: resolved.providerType,
       ...attribution,
     })
     return reply

@@ -8,11 +8,22 @@ import {
   type DbCtx,
   type StoryEntry,
 } from '@/lib/db'
-import { NARRATIVE_KINDS } from '@/lib/piggyback'
+import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { settingsCount } from '@/lib/settings-number'
+import { countTokens } from '@/lib/tokens'
 import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 
 const LAST_TURNS = 2
+
+/**
+ * An entry's stored token count, which a priced history adds up (architecture.md → The pre-send
+ * check). content_tokens has no backfill, so a row stored without one is counted from its prose.
+ */
+export function storedProseTokens(
+  entry: Pick<StoryEntry, 'kind' | 'content' | 'contentTokens'>,
+): number {
+  return entry.contentTokens ?? countTokens(promptProse(entry))
+}
 
 async function latestEntry(
   db: DbCtx['db'],

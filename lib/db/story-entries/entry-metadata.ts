@@ -1,6 +1,30 @@
 import { z } from 'zod'
 
+import { PROMPT_SECTION_IDS } from '@/lib/prompts'
+
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
+
+function optionalCounts<const K extends string>(ids: readonly K[]) {
+  return z.object(
+    Object.fromEntries(ids.map((id) => [id, z.number().optional()])) as Record<
+      K,
+      z.ZodOptional<z.ZodNumber>
+    >,
+  )
+}
+
+// A call's prompt by section, o200k estimates; a section that rendered nothing is absent.
+const promptSectionsSchema = optionalCounts([...PROMPT_SECTION_IDS, 'other'])
+
+// A call's counts as the provider reported them. The cache figures are absent when it sent none,
+// never 0 for one it didn't send (data-model.md → Entry metadata shape).
+const tokenCountsSchema = z.object({
+  prompt: z.number(),
+  completion: z.number(),
+  reasoning: z.number().optional(),
+  cacheRead: z.number().optional(),
+  cacheWrite: z.number().optional(),
+})
 
 // `condition` as emitted, before the bound; a reused place's isn't written.
 const createEmission = {
@@ -31,12 +55,19 @@ const newItemReportSchema = z.discriminatedUnion('outcome', [
 ])
 
 export const entryMetadataSchema = z.object({
-  tokens: z
-    .object({ prompt: z.number(), completion: z.number(), reasoning: z.number().optional() })
+  tokens: tokenCountsSchema.optional(),
+  // The narrative call's prompt by section, and the fallback classifier's call when it ran and
+  // returned; authored, never inherited (data-model.md → Entry metadata shape).
+  promptSections: promptSectionsSchema.optional(),
+  classifierCall: z
+    .object({ tokens: tokenCountsSchema.optional(), promptSections: promptSectionsSchema })
     .optional(),
   model: z.string().optional(),
   generationTimingMs: z.number().optional(),
   reasoning: z.string().optional(),
+  // o200k count of `reasoning`, written only when the provider reported no reasoning figure;
+  // authored, never inherited (data-model.md → Entry metadata shape).
+  reasoningEstimate: z.number().optional(),
   // The story text ended early; authored, never inherited (data-model.md → Entry metadata shape).
   // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is what the call sent.
   // `fromOverride`: the call's settings were the story's narrative override's; absent = the profile's.
@@ -169,6 +200,8 @@ export const entryMetadataSchema = z.object({
       // Open, as `kind` is; absent on errors that name none and on entries written before it.
       target: z.string().optional(),
       submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
+      // A turn's context-window failure only: the refused narrative prompt by section.
+      promptSections: promptSectionsSchema.optional(),
       // A close-failure entry, as `pass`; a close has no held state.
       close: z.enum(['failed', 'resolved']).optional(),
       // A pass refused the Send: Retry runs the pass alone; 'held' has no Retry. 'resolved': a
@@ -181,3 +214,5 @@ export const entryMetadataSchema = z.object({
 export type EntryMetadata = z.infer<typeof entryMetadataSchema>
 export type SystemFailureMeta = NonNullable<EntryMetadata['systemFailure']>
 export type CutOffMark = NonNullable<EntryMetadata['cutOff']>
+export type PromptSections = z.infer<typeof promptSectionsSchema>
+export type TokenCounts = z.infer<typeof tokenCountsSchema>

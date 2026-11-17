@@ -14,6 +14,7 @@ import {
   type GenerationWindow,
   type streamText,
   type StreamTextResult,
+  tokenFiguresOf,
 } from '@/lib/ai'
 import {
   APP_SETTINGS_DEFAULTS,
@@ -24,15 +25,18 @@ import {
   storyEntries,
   type Entity,
   type EntryMetadata,
+  type PromptSections,
+  type StoryEntry,
   type StorySettings,
 } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
 import { IdBiMap } from '@/lib/ids'
-import type { RenderedPrompt, TemplateId } from '@/lib/prompts'
+import { TEMPLATE_IDS, type RenderedPrompt, type TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 import { emptyEntityView } from '@/lib/world'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
@@ -73,12 +77,17 @@ vi.mock('@/lib/prompts', async (importOriginal) => {
   const render = actual.renderTemplate as (
     id: TemplateId,
     ctx: Record<string, unknown>,
+    opts?: { sections: true },
   ) => RenderedPrompt
   return {
     ...actual,
-    renderTemplate: (templateId: TemplateId, context: Record<string, unknown>) => {
-      renderTemplateMock(templateId, context)
-      return render(templateId, context)
+    renderTemplate: (
+      templateId: TemplateId,
+      context: Record<string, unknown>,
+      opts?: { sections: true },
+    ) => {
+      renderTemplateMock(templateId, context, opts)
+      return render(templateId, context, opts)
     },
   }
 })
@@ -111,7 +120,10 @@ function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
 
 type StreamCall = Extract<StreamTextResult, { ok: true }>
 
-/** streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure, no hint. */
+/**
+ * streamText's ok arm around a fake stream: an unknown window, no estimate, no window failure, no
+ * hint, no sections, and usage read as the fixture's anthropic provider reports it.
+ */
 function streamCall(
   fake: Partial<Omit<StreamCall, 'ok' | 'stream'>> & { stream: object },
 ): Omit<StreamCall, 'stream'> & { stream: object } {
@@ -127,6 +139,8 @@ function streamCall(
     promptEstimate: () => null,
     contextWindowFailureOf: () => null,
     capabilityHintOf: () => undefined,
+    promptSections: () => null,
+    tokensOf: (usage) => tokenFiguresOf(usage, 'anthropic'),
     ...fake,
   }
 }
@@ -1390,7 +1404,10 @@ async function runNarrativeWith(opts: {
     intermediates,
     prompt: halves.user,
     system: halves.system,
-    context: renderTemplateMock.mock.calls.at(-1)?.[1] as Record<string, unknown>,
+    // The render sent, not the blank one Story so far is priced against.
+    context: renderTemplateMock.mock.calls.find(
+      ([id]) => id === TEMPLATE_IDS.perTurnNarrative,
+    )?.[1] as Record<string, unknown>,
   }
 }
 
@@ -3004,6 +3021,8 @@ describe('narrative — how the reply ended', () => {
     piggyback?: boolean
     fromOverride?: boolean
     log?: ReturnType<typeof spyLogger>
+    call?: Partial<Omit<StreamCall, 'ok' | 'stream'>>
+    reasoningDeltas?: readonly string[]
   }) {
     currentStoryStore.set({
       storyId: 's1',
@@ -3042,14 +3061,17 @@ describe('narrative — how the reply ended', () => {
         fromOverride: opts.fromOverride ?? false,
         ...(opts.window !== undefined ? { window: opts.window } : {}),
         promptEstimate: () => estimate,
+        ...opts.call,
         stream: {
           fullStream: (async function* () {
+            for (const text of opts.reasoningDeltas ?? []) yield { type: 'reasoning-delta', text }
             if (opts.text !== '') yield { type: 'text-delta', text: opts.text }
             estimate = opts.promptEstimate ?? null
           })(),
           finishReason: opts.finishReason,
           rawFinishReason: opts.rawFinishReason,
           usage: opts.usage,
+          reasoningText: opts.reasoningDeltas?.join(''),
         },
       }),
     )
@@ -3513,6 +3535,103 @@ describe('narrative — how the reply ended', () => {
       maxOutput: 512,
     })
   })
+
+  // data-model.md → Entry metadata shape: the narrative call's prompt by section and the
+  // provider's figures, read from raw usage.
+  const SECTIONS: PromptSections = { instructions: 900, history: 4200, other: 12 }
+  const anthropicUsage = {
+    inputTokens: 5100,
+    outputTokens: 640,
+    outputTokenDetails: { reasoningTokens: 0 },
+    raw: { input_tokens: 100, cache_read_input_tokens: 4800, cache_creation_input_tokens: 200 },
+  }
+
+  it("records the call's sections and the provider's cache figures on the reply", async () => {
+    const { entry } = await runReply({
+      text: 'The lantern held.',
+      usage: anthropicUsage,
+      call: { promptSections: () => SECTIONS },
+    })
+
+    expect(entry?.metadata?.promptSections).toEqual(SECTIONS)
+    expect(entry?.metadata?.tokens).toEqual({
+      prompt: 5100,
+      completion: 640,
+      cacheRead: 4800,
+      cacheWrite: 200,
+    })
+  })
+
+  // Streamed in pieces, counted in pieces: the figure the streaming card showed.
+  // Split mid-word, as servers chunk: summed per chunk this counts higher than the whole text.
+  const THOUGHT = ['The kee', 'per lied ab', 'out the tide, so the lan', 'tern is a signal.']
+  const thoughtCount = THOUGHT.reduce((n, piece) => n + countTokens(piece), 0)
+  const openaiFigures = {
+    tokensOf: (usage: unknown) => tokenFiguresOf(usage as never, 'openai-compatible'),
+  }
+
+  it('estimates the reasoning a provider streamed but sent no count for, chunk by chunk', async () => {
+    const { entry } = await runReply({
+      text: 'The lantern held.',
+      usage: { ...anthropicUsage, raw: { prompt_tokens: 5100, completion_tokens: 640 } },
+      call: openaiFigures,
+      reasoningDeltas: THOUGHT,
+    })
+
+    expect(entry?.metadata?.reasoningEstimate).toBe(thoughtCount)
+    expect(entry?.metadata?.tokens).not.toHaveProperty('reasoning')
+  })
+
+  it('reads a reported 0 beside streamed reasoning as no count', async () => {
+    const { entry } = await runReply({
+      text: 'The lantern held.',
+      usage: {
+        ...anthropicUsage,
+        raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 0 } },
+      },
+      call: openaiFigures,
+      reasoningDeltas: THOUGHT,
+    })
+
+    expect(entry?.metadata?.reasoningEstimate).toBe(thoughtCount)
+    expect(entry?.metadata?.tokens).toEqual({ prompt: 5100, completion: 640 })
+  })
+
+  it("keeps the provider's reasoning count over an estimate, and estimates no reasoning it never streamed", async () => {
+    const counted = await runReply({
+      text: 'The lantern held.',
+      usage: {
+        ...anthropicUsage,
+        raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 30 } },
+      },
+      call: openaiFigures,
+      reasoningDeltas: THOUGHT,
+    })
+    const unthought = await runReply({
+      text: 'The lantern held.',
+      usage: {
+        ...anthropicUsage,
+        raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 0 } },
+      },
+      call: openaiFigures,
+    })
+
+    expect(counted.entry?.metadata?.tokens?.reasoning).toBe(30)
+    expect(counted.entry?.metadata).not.toHaveProperty('reasoningEstimate')
+    expect(unthought.entry?.metadata?.tokens?.reasoning).toBe(0)
+    expect(unthought.entry?.metadata).not.toHaveProperty('reasoningEstimate')
+  })
+
+  it('stores no reasoning or cache figure an OpenAI-compatible server never sent', async () => {
+    const { entry } = await runReply({
+      text: 'The lantern held.',
+      usage: { ...anthropicUsage, raw: { prompt_tokens: 5100, completion_tokens: 640 } },
+      call: { tokensOf: (usage) => tokenFiguresOf(usage, 'openai-compatible') },
+    })
+
+    expect(entry?.metadata?.tokens).toEqual({ prompt: 5100, completion: 640 })
+    expect(entry?.metadata).not.toHaveProperty('promptSections')
+  })
 })
 
 // architecture.md → The pre-send check; generation-pipeline.md → Fatal error categories.
@@ -3554,6 +3673,7 @@ describe('narrative — a stream error', () => {
     windowFailure: ContextWindowFailure | null = null,
     hint?: CapabilityHint,
     fromOverride = false,
+    promptSections: PromptSections | null = null,
   ) {
     currentStoryStore.set({
       storyId: 's1',
@@ -3574,6 +3694,7 @@ describe('narrative — a stream error', () => {
         contextWindowFailureOf,
         capabilityHintOf,
         fromOverride,
+        promptSections: () => promptSections,
         stream: {
           fullStream: (async function* () {
             yield { type: 'text-delta', text: 'The lantern gutt' }
@@ -3683,5 +3804,99 @@ describe('narrative — a stream error', () => {
       status: 'failed',
       error: { kind: 'provider', reason, detail },
     })
+  })
+
+  const REFUSED_SECTIONS: PromptSections = { instructions: 900, history: 4200, other: 12 }
+
+  it("keeps a refused prompt's sections on the window failure", async () => {
+    const error = new ContextWindowError(CHECK_FAILURE)
+
+    const { result } = await runStreamError(
+      error,
+      CHECK_FAILURE,
+      undefined,
+      false,
+      REFUSED_SECTIONS,
+    )
+
+    expect(result).toStrictEqual({
+      status: 'failed',
+      error: {
+        kind: 'context-window',
+        target: 'narrative',
+        ...CHECK_FAILURE,
+        promptSections: REFUSED_SECTIONS,
+      },
+    })
+  })
+})
+
+// data-model.md → Entry metadata shape: the narrative call records its prompt by section and the
+// provider's figures; architecture.md → The pre-send check: Story so far is priced from stored counts.
+
+describe("the turn's token breakdown", () => {
+  it("prices Story so far from the buffer's stored counts, a null one counted from its prose", async () => {
+    const rows = [
+      { kind: 'opening', content: 'The tide is out at Saltmere.', contentTokens: 11 },
+      { kind: 'user_action', content: 'I go down to the water.', contentTokens: null },
+      { kind: 'ai_reply', content: 'The water is colder than it looks.', contentTokens: 13 },
+    ] as const
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
+    })
+    hydrateEntries(
+      phaseDb,
+      'b1',
+      rows.map(
+        (row, i): StoryEntry => ({
+          id: `entry_${i + 1}`,
+          branchId: 'b1',
+          position: i + 1,
+          chapterId: null,
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
+          createdAt: i + 1,
+          ...row,
+        }),
+      ),
+    )
+    entitiesStore.hydrate('b1', [])
+    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [provider],
+      profiles: [
+        {
+          id: 'prof-narrative',
+          kind: 'narrative',
+          name: 'Narrative',
+          modelRef: { providerId: provider.id, modelId: 'model-1' },
+        },
+      ],
+      defaultProviderId: provider.id,
+    })
+
+    await runNarrativePhase()
+
+    const sections = streamTextMock.mock.calls[0]![1].sections
+    if (sections?.history === undefined) throw new Error('expected a priced history')
+    const history = (half: { named: readonly { id: string; text: string }[] }) =>
+      half.named
+        .filter(({ id }) => id === 'history')
+        .map(({ text }) => text)
+        .join('')
+    const sent = history(sections.halves.user)
+    const blank = history(sections.history.blank.user)
+    expect(sections.history.prose).toEqual({
+      chars: rows.reduce((n, row) => n + row.content.length, 0),
+      tokens: 11 + countTokens('I go down to the water.') + 13,
+    })
+    for (const row of rows) {
+      expect(sent).toContain(row.content)
+      expect(blank).not.toContain(row.content)
+    }
+    expect(sent.length - blank.length).toBe(sections.history.prose.chars)
+    expect(sections.history.renderMs).toBeGreaterThanOrEqual(0)
   })
 })

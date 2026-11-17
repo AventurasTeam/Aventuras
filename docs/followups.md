@@ -15,50 +15,6 @@ for the placement rule.
 
 ## UX
 
-- **The per-turn token breakdown isn't built.** A turn records what its
-  prompt held by section, for the narrative call and the fallback
-  classifier, and the entry's token text opens it
-  ([`architecture.md → Prompt sections`](./architecture.md#prompt-sections),
-  [`entry-card.md → Token panel`](./ui/patterns/entry-card.md#token-panel)).
-  Today an entry keeps only the provider's totals. To be built as a
-  plan-mode followup once the story override settings' PR merges,
-  since both touch `lib/pipeline/definitions/per-turn.ts`,
-  `lib/ai/generate.ts`'s result types and `locales/en/reader.json`.
-  Build notes:
-  - the `section` block tag in `lib/prompts/engine.ts`, sync
-    (`* render()`), pushing no scope, and implementing `* children()`:
-    without it LiquidJS's static analysis can't see inside the block,
-    `templateReads` loses `entries`, and `generation-context.ts` sends
-    a narrative prompt with no history. Acceptance: `templateReads`
-    and both turn templates' rendered bytes are the same with and
-    without the tags. The collector is per render;
-  - the tags in `per-turn.ts`, `piggyback-fallback-classifier.ts` and
-    `memory-blocks.ts` (`lib/prompts/bundled/`), per canon's table;
-  - counting each section through the count cache in
-    `lib/ai/context-window.ts`, Story so far priced from
-    `content_tokens` as the close prices its turns, the user half
-    primed with the sum. The guard shared with the close
-    (`close-agent/turns.ts`), which closes the roadmap's M7.2 priming
-    item. How the fallback's phase learns the size of the JSON contract
-    the call layer adds is open;
-  - usage and the estimate on `generateStructured`'s `ok` result, which
-    returns no usage today;
-  - a helper reading cache and reasoning figures from `usage.raw`:
-    `@ai-sdk/openai-compatible` reports a missing figure as 0, so
-    `per-turn.ts` stores `reasoning: 0` and the meta line likely reads
-    "(+0 reasoning)" on a server that sends none (read from the code,
-    not run);
-  - the metadata schema, `systemFailure.promptSections` on a turn's
-    window refusal, and `cacheRead`/`cacheWrite` on
-    `provider.input_ratio`;
-  - the meta line, the token panel and the refusal's Details in
-    `components/compounds/entry-card.tsx`, with stories;
-  - a measure of `provider.prompt_estimate`'s `ms` on a long story
-    before and after, in English and in a CJK story: the design
-    assumes a turn's count gets cheaper, and nothing has measured it.
-
-  Raised by the developer 2026-10-10; designed 2026-11-17.
-
 - **Measure the encoder build and a CJK count on a phone.** Slice 5.1
   measured the build on an x86_64 emulator's debug build, 942 to 1,325 ms
   during the open

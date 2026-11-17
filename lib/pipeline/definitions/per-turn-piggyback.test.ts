@@ -41,6 +41,9 @@ import {
   type PiggybackOutcome,
 } from './per-turn-piggyback'
 
+// The fallback's call carries its render split by section (architecture.md → Prompt sections).
+const SECTIONED = { sections: { halves: { system: expect.anything(), user: expect.anything() } } }
+
 const definition = {
   mode: 'adventure' as const,
   leadEntityId: null,
@@ -364,7 +367,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true, actionId: 'act_1' },
+        { cacheSystemPrefix: true, actionId: 'act_1', ...SECTIONED },
       )
 
       // With the narrative fold having written no report, this phase is the only writer:
@@ -1056,7 +1059,7 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true, actionId: 'act_1' },
+        { cacheSystemPrefix: true, actionId: 'act_1', ...SECTIONED },
       )
       expect(events[0]).toEqual({
         type: 'delta_emitted',
@@ -1557,6 +1560,83 @@ describe('per-turn-piggyback', () => {
         ])
       })
 
+      // data-model.md → Prompt sections: the fallback records the attempt the turn kept.
+      describe('its token breakdown', () => {
+        const FIRST = {
+          tokens: { prompt: 5000, completion: 90, cacheRead: 4100 },
+          promptSections: { roster: 400, history: 900, other: 20 },
+        }
+        const REROLLED = {
+          tokens: { prompt: 5010, completion: 85 },
+          promptSections: { roster: 400, history: 910, other: 21 },
+        }
+        const writtenCall = (events: readonly PhaseEmittedEvent[]) =>
+          events.flatMap((e) =>
+            e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata'
+              ? [e.action.payload.metadata]
+              : [],
+          )
+
+        it("records the call's counts and sections on the reply", async () => {
+          seedClearing(false)
+          generateStructuredMock.mockResolvedValueOnce({
+            status: 'ok',
+            recoverable: [],
+            value: { ...REPORT, worldTimeDelta: 15 },
+            ...FIRST,
+          })
+
+          expect(writtenCall(await drainPhase()).map((m) => m.classifierCall)).toEqual([FIRST])
+        })
+
+        it("keeps a re-roll's numbers, and the first call's when the re-roll fails", async () => {
+          seedClearing(false)
+          generateStructuredMock
+            .mockResolvedValueOnce({
+              status: 'ok',
+              recoverable: [],
+              value: { ...REPORT, worldTimeDelta: -10 },
+              ...FIRST,
+            })
+            .mockResolvedValueOnce({
+              status: 'ok',
+              recoverable: [],
+              value: { ...REPORT, worldTimeDelta: 15 },
+              ...REROLLED,
+            })
+          expect(writtenCall(await drainPhase()).map((m) => m.classifierCall)).toEqual([REROLLED])
+
+          generateStructuredMock.mockReset()
+          seedClearing(false)
+          generateStructuredMock
+            .mockResolvedValueOnce({
+              status: 'ok',
+              recoverable: [],
+              value: { ...REPORT, worldTimeDelta: -10 },
+              ...FIRST,
+            })
+            .mockResolvedValueOnce({
+              status: 'failed',
+              error: { tier: 'provider', reason: 'timeout', detail: 'provider timeout' },
+              recoverable: [],
+            })
+          expect(writtenCall(await drainPhase()).map((m) => m.classifierCall)).toEqual([FIRST])
+        })
+
+        it('records nothing for a call that failed', async () => {
+          seedClearing(false)
+          generateStructuredMock.mockResolvedValueOnce({
+            status: 'failed',
+            error: { tier: 'provider', reason: 'timeout', detail: 'provider timeout' },
+            recoverable: [],
+          })
+
+          const written = writtenCall(await drainPhase())
+          expect(written).toHaveLength(1)
+          expect(written[0]).not.toHaveProperty('classifierCall')
+        })
+      })
+
       describe('a re-roll that fails', () => {
         const first = { tier: 'parse', detail: 'Unexpected end of JSON input', attempt: 0 } as const
         const retried = { tier: 'provider', reason: 'network', detail: '503' } as const
@@ -1637,14 +1717,14 @@ describe('per-turn-piggyback', () => {
           ['a piggyback that never fired', { attempted: false, succeeded: false }],
         ])('marks the regular classifier call after %s', async (_label, outcome) => {
           expect(await callOptionsAfter(outcome, { withChips })).toEqual([
-            { cacheSystemPrefix: true, actionId: 'act_1' },
+            { cacheSystemPrefix: true, actionId: 'act_1', ...SECTIONED },
           ])
         })
 
         it('leaves a call recovering from a failed piggyback parse unmarked', async () => {
           expect(
             await callOptionsAfter({ attempted: true, succeeded: false }, { withChips }),
-          ).toEqual([{ cacheSystemPrefix: false, actionId: 'act_1' }])
+          ).toEqual([{ cacheSystemPrefix: false, actionId: 'act_1', ...SECTIONED }])
         })
 
         it.each([
@@ -1656,8 +1736,8 @@ describe('per-turn-piggyback', () => {
             expect(
               await callOptionsAfter(outcome, { worldTimeDeltas: [-10, 15], withChips }),
             ).toEqual([
-              { cacheSystemPrefix, actionId: 'act_1' },
-              { cacheSystemPrefix, actionId: 'act_1' },
+              { cacheSystemPrefix, actionId: 'act_1', ...SECTIONED },
+              { cacheSystemPrefix, actionId: 'act_1', ...SECTIONED },
             ])
           },
         )
@@ -1878,7 +1958,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierWithSuggestionsSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true, actionId: 'act_1' },
+        { cacheSystemPrefix: true, actionId: 'act_1', ...SECTIONED },
       )
       // One delta carries both scene state and chips — a second
       // updateStoryEntryMetadata delta here would mean the fold is patching
@@ -1959,7 +2039,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: false, actionId: 'act_1' },
+        { cacheSystemPrefix: false, actionId: 'act_1', ...SECTIONED },
       )
       const created = events[0]
       if (
@@ -2389,7 +2469,7 @@ describe('per-turn-piggyback', () => {
         fallbackClassifierSchema,
         expect.anything(),
         ctx.abortSignal,
-        { cacheSystemPrefix: true, actionId: 'act_1' },
+        { cacheSystemPrefix: true, actionId: 'act_1', ...SECTIONED },
       )
       const prompt = generateStructuredMock.mock.calls[0]![1].user
       expect(prompt).not.toContain('Action')

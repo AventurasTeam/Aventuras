@@ -12,6 +12,7 @@ import {
   __promptCountCacheChars,
   ContextWindowError,
   countPromptTokens,
+  countWithStoredProse,
   describeContextWindow,
   displayEstimate,
   generationWindow,
@@ -937,5 +938,70 @@ describe('displayEstimate', () => {
     [71_234, 71_300],
   ])('prints %i as %i', (tokens, shown) => {
     expect(displayEstimate(tokens)).toBe(shown)
+  })
+})
+
+// architecture.md → The pre-send check: a render holding each entry's prose once and whole is priced
+// from the entries' stored counts; any other render is encoded.
+describe('countWithStoredProse', () => {
+  beforeEach(() => {
+    __clearPromptCountCache()
+    countTokensSpy.mockClear()
+  })
+
+  const encoded = (text: string): boolean => countTokensSpy.mock.calls.some(([t]) => t === text)
+  const PROSE = ['Rain on the river, and the ferry late.', 'Tobin poles faster.']
+  const STORED = 17
+  const prose = { chars: PROSE.join('').length, tokens: STORED }
+  const wrap = (contents: readonly string[]): string =>
+    `# Story so far\n${contents.map((c) => `\n${c}\n`).join('')}`
+  const blank = wrap(PROSE.map(() => ''))
+
+  it('counts the blank render plus the stored counts, never encoding the prose', () => {
+    const text = wrap(PROSE)
+
+    expect(countWithStoredProse(text, blank, prose, { record: false })).toBe(
+      countTokens(blank) + STORED,
+    )
+    expect(encoded(text)).toBe(false)
+  })
+
+  it.each([
+    ['doubles', wrap(PROSE.map((c) => `${c} ${c}`))],
+    ['truncates', wrap(PROSE.map((c) => c.slice(0, 10)))],
+    ['moves elsewhere', wrap(PROSE.map(() => ''))],
+  ])('encodes a render that %s the prose', (_label, text) => {
+    expect(countWithStoredProse(text, blank, prose, { record: false })).toBe(countTokens(text))
+    expect(encoded(text)).toBe(true)
+  })
+
+  it('records the priced count for the check only when asked', () => {
+    const text = wrap(PROSE)
+    countWithStoredProse(text, blank, prose, { record: false })
+    countTokensSpy.mockClear()
+    countPromptTokens([{ role: 'system', content: text }])
+    expect(encoded(text)).toBe(true)
+
+    __clearPromptCountCache()
+    countWithStoredProse(text, blank, prose, { record: true })
+    countTokensSpy.mockClear()
+    expect(countPromptTokens([{ role: 'system', content: text }])).toBe(countTokens(blank) + STORED)
+    expect(encoded(text)).toBe(false)
+  })
+
+  // A render with no prose is its blank render: priced, the recorded count would land on the
+  // blank's own cache entry and grow by the stored counts at each render.
+  it('adds no stored count to a render that holds no prose', () => {
+    const none = { chars: 0, tokens: STORED }
+
+    expect(countWithStoredProse(blank, blank, none, { record: true })).toBe(countTokens(blank))
+    expect(countWithStoredProse(blank, blank, none, { record: true })).toBe(countTokens(blank))
+  })
+
+  it('keeps an unrecorded count out of the cache, a guard miss included', () => {
+    const before = __promptCountCacheChars()
+    countWithStoredProse(wrap(PROSE.map((c) => `${c} ${c}`)), blank, prose, { record: false })
+
+    expect(__promptCountCacheChars()).toBe(before)
   })
 })

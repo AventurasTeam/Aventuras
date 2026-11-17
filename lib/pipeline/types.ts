@@ -7,7 +7,7 @@ import type {
   ResolveFailureKind,
   ResolveTarget,
 } from '@/lib/ai'
-import type { DbCtx, StorySettings } from '@/lib/db'
+import type { DbCtx, PromptSections, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } from '@/lib/stores'
@@ -45,7 +45,12 @@ export type PipelineError =
   // magnitude to report — see RetrievalFailure in lib/retrieval.
   | { kind: 'embedder'; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
   // architecture.md → Model context window: a prompt over the model's window, refused or rejected.
-  | ({ kind: 'context-window'; target: ResolveTarget } & ContextWindowFailure)
+  // `promptSections`: a turn's narrative call only, the refused prompt by section.
+  | ({
+      kind: 'context-window'
+      target: ResolveTarget
+      promptSections?: PromptSections
+    } & ContextWindowFailure)
   // generation-pipeline.md → Fatal error categories: a cut reply the caller couldn't use.
   | ({ kind: 'reply-cut-off'; target: ResolveTarget } & ReplyCutOffFailure)
 

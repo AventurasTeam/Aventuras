@@ -10,6 +10,7 @@ export { CALL_TIMEOUT_DEFAULT_MS, callTimeoutMs, providerTimeoutDetail } from '.
 export { fetchModelCatalog, normalizeModelCatalog, type CatalogEntry } from './catalog'
 export {
   ContextWindowError,
+  countWithStoredProse,
   describeContextWindow,
   displayEstimate,
   generationWindow,
@@ -17,6 +18,8 @@ export {
   type ContextWindowFailure,
   type GenerationWindow,
 } from './context-window'
+export type { PromptSectionsInput } from './prompt-sections'
+export { tokenFiguresOf, type TokenFigures } from './usage-figures'
 export { embedViaProvider } from './embedding'
 export type { ProviderInstanceWithStub } from './types'
 export {

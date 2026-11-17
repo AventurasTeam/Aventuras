@@ -143,12 +143,17 @@ export const SystemKind: StoryT = {
   },
 }
 
+/** Before the first chunk: no count yet, the in-flight `…` alone after a dash. */
 export const StreamingPending: StoryT = {
   ...wrap,
   args: {
     kind: 'streaming',
     streamingPhase: 'reply',
     content: '',
+    streamingTokens: { reply: 0, reasoning: 0 },
+  },
+  play: async () => {
+    expect(await screen.findByText(t('reader:entryCard.streamingNotStarted'))).toBeVisible()
   },
 }
 
@@ -159,11 +164,15 @@ export const StreamingReasoning: StoryT = {
     streamingPhase: 'reasoning',
     content: '',
     reasoning: 'Thinking about how the warden would respond to direct aggression…',
+    streamingTokens: { reply: 0, reasoning: 1204 },
   },
   // The toggle is the only control this state renders, so its absence is the
   // whole "card body is blank" symptom.
   play: async () => {
     expect(await screen.findByRole('button', { name: 'Show reasoning' })).toBeInTheDocument()
+    expect(
+      screen.getByText(t('reader:entryCard.streamingReasoning', { reasoning: 1204 })),
+    ).toBeVisible()
     // parseFloat not Number: Number('') is 0, which passes with no animation at
     // all. This pins that the pulse animates, NOT the deps array — the freeze an
     // empty deps array causes is environment-dependent and does not reproduce
@@ -180,6 +189,30 @@ export const StreamingReply: StoryT = {
     streamingPhase: 'reply',
     reasoning: 'Thought about how the warden would respond to direct aggression.',
     content: 'The figure raises a single gloved hand and the air thickens around your bla',
+    streamingTokens: { reply: 17, reasoning: 1204 },
+  },
+  play: async () => {
+    expect(
+      await screen.findByText(
+        t('reader:entryCard.streamingReplyWithReasoning', { reply: 17, reasoning: 1204 }),
+      ),
+    ).toBeVisible()
+  },
+}
+
+/** A provider that streams no reasoning: the reply's count alone, `M…`. */
+export const StreamingReplyNoReasoning: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'streaming',
+    streamingPhase: 'reply',
+    content: 'The figure raises a single gloved hand',
+    streamingTokens: { reply: 8, reasoning: 0 },
+  },
+  play: async () => {
+    expect(
+      await screen.findByText(t('reader:entryCard.streamingReply', { reply: 8 })),
+    ).toBeVisible()
   },
 }
 
@@ -2953,5 +2986,259 @@ export const SystemRetryHeld: StoryT = {
   play: async () => {
     expect(await screen.findByRole('button', { name: /Retry/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /Dismiss/ })).not.toBeDisabled()
+  },
+}
+
+// entry-card.md → Token panel.
+const SECTIONS = {
+  instructions: 1830,
+  setup: 420,
+  scene: 380,
+  places: 610,
+  entities: 940,
+  lore: 520,
+  happenings: 700,
+  threads: 210,
+  history: 6140,
+  output: 110,
+  other: 40,
+}
+const SECTION_SUM = 11_900
+const CLASSIFIER_SECTIONS = { instructions: 1450, setup: 90, roster: 640, history: 420, other: 20 }
+const tokenMeta = {
+  tokens: { prompt: 12_340, completion: 840, reasoning: 1200, cacheRead: 10_980 },
+  promptSections: SECTIONS,
+}
+const showBreakdown = (counts: string) =>
+  screen.findByRole('button', { name: t('reader:entryCard.showTokenPanel', { counts }) })
+const NARRATIVE_SPOKEN = t('reader:entryCard.tokensSpokenWithReasoning', {
+  prompt: 12_340,
+  reply: 840,
+  reasoning: 1200,
+})
+const rowLabels = () =>
+  [
+    'instructions',
+    'setup',
+    'roster',
+    'scene',
+    'places',
+    'entities',
+    'lore',
+    'happenings',
+    'threads',
+    'chapters',
+    'history',
+    'output',
+    'other',
+  ] as const
+
+/** The narrative call alone, with the provider's counts and its cache read. */
+export const TokenPanelNarrative: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, meta: tokenMeta, replyEstimate: 790 },
+  play: async () => {
+    const toggle = await showBreakdown(NARRATIVE_SPOKEN)
+    expect(toggle).toHaveTextContent(
+      t('reader:entryCard.tokensWithReasoning', { prompt: 12_340, reply: 840, reasoning: 1200 }),
+    )
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText(t('reader:tokenPanel.narrative'))).not.toBeInTheDocument()
+
+    await userEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText(t('reader:tokenPanel.narrative'))).toBeVisible()
+    expect(
+      screen.getByText(t('reader:tokenPanel.counts', { prompt: 12_340, reply: 840 })),
+    ).toBeVisible()
+    expect(
+      screen.getByText(t('reader:tokenPanel.fromCache', { n: 10_980, share: 10_980 / 12_340 })),
+    ).toBeVisible()
+    expect(screen.queryByText(/^Written to cache/)).not.toBeInTheDocument()
+    expect(screen.getByText(t('reader:tokenPanel.bySection', { sum: SECTION_SUM }))).toBeVisible()
+    expect(screen.queryByText(t('reader:tokenPanel.classifier'))).not.toBeInTheDocument()
+
+    // Vocabulary order, never by size; a section the record lacks has no row.
+    const shown = rowLabels().filter(
+      (id) => screen.queryByText(t(`reader:tokenPanel.section.${id}`)) !== null,
+    )
+    expect(shown).toEqual(Object.keys(SECTIONS))
+    const labels = shown.map((id) => screen.getByText(t(`reader:tokenPanel.section.${id}`)))
+    for (const [above, below] of labels.slice(0, -1).map((l, i) => [l, labels[i + 1]!] as const))
+      expect(above.compareDocumentPosition(below) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText(t('reader:tokenPanel.count', { n: 6140 }))).toBeVisible()
+
+    await userEvent.click(toggle)
+    expect(screen.queryByText(t('reader:tokenPanel.narrative'))).not.toBeInTheDocument()
+  },
+}
+
+/** The fallback classifier ran too: its own group under its own header; no line sums the two. */
+export const TokenPanelWithClassifier: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    meta: {
+      ...tokenMeta,
+      tokens: { prompt: 9870, completion: 2100, cacheRead: 8700, cacheWrite: 300 },
+      classifierCall: {
+        tokens: { prompt: 5730, completion: 310 },
+        promptSections: CLASSIFIER_SECTIONS,
+      },
+    },
+  },
+  play: async () => {
+    await userEvent.click(
+      await showBreakdown(t('reader:entryCard.tokensSpoken', { prompt: 9870, reply: 2100 })),
+    )
+    expect(screen.getByText(t('reader:tokenPanel.classifier'))).toBeVisible()
+    expect(
+      screen.getByText(t('reader:tokenPanel.counts', { prompt: 5730, reply: 310 })),
+    ).toBeVisible()
+    expect(screen.getByText(t('reader:tokenPanel.writtenToCache', { n: 300 }))).toBeVisible()
+    // One cache-read line: the narrative call's. The classifier reported none.
+    expect(screen.getAllByText(/^From cache/)).toHaveLength(1)
+    expect(screen.getByText(t('reader:tokenPanel.bySection', { sum: 2620 }))).toBeVisible()
+    expect(screen.getByText(t('reader:tokenPanel.section.roster'))).toBeVisible()
+    expect(
+      screen.queryByText(t('reader:tokenPanel.counts', { prompt: 15_600, reply: 2410 })),
+    ).not.toBeInTheDocument()
+  },
+}
+
+/** No provider counts: the sections' sum and the reply's stored estimate, both marked. */
+export const TokenPanelNoProviderCounts: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    meta: { promptSections: SECTIONS, reasoningEstimate: 1200 },
+    replyEstimate: 840,
+  },
+  play: async () => {
+    const toggle = await showBreakdown(
+      t('reader:entryCard.tokensSpokenEstimatedWithReasoning', {
+        prompt: SECTION_SUM,
+        reply: 840,
+        reasoning: 1200,
+      }),
+    )
+    expect(toggle).toHaveTextContent(
+      t('reader:entryCard.tokensEstimatedWithReasoning', {
+        prompt: SECTION_SUM,
+        reply: 840,
+        reasoning: 1200,
+      }),
+    )
+    await userEvent.click(toggle)
+    expect(
+      screen.getByText(t('reader:tokenPanel.countsEstimated', { prompt: SECTION_SUM, reply: 840 })),
+    ).toBeVisible()
+    expect(screen.queryByText(/^From cache/)).not.toBeInTheDocument()
+  },
+}
+
+/** A row stored without content_tokens and no provider counts: the prompt's estimate alone, still a toggle. */
+export const TokenTextNoReplyFigure: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, meta: { promptSections: SECTIONS } },
+  play: async () => {
+    const toggle = await showBreakdown(
+      t('reader:entryCard.tokensSpokenEstimatedPrompt', { prompt: SECTION_SUM }),
+    )
+    expect(toggle).toHaveTextContent(
+      t('reader:entryCard.tokensEstimatedPrompt', { prompt: SECTION_SUM }),
+    )
+    await userEvent.click(toggle)
+    // The meta line and the narrative group's header read the same estimate.
+    expect(
+      screen.getAllByText(t('reader:tokenPanel.promptEstimated', { prompt: SECTION_SUM })),
+    ).toHaveLength(2)
+    expect(screen.getByText(t('reader:tokenPanel.narrative'))).toBeVisible()
+  },
+}
+
+/** The provider streamed reasoning but sent no count for it: the estimate, marked. */
+export const TokenTextReasoningEstimate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    meta: { tokens: { prompt: 12_340, completion: 840 }, reasoningEstimate: 1200 },
+  },
+  play: async () => {
+    expect(
+      await screen.findByText(
+        t('reader:entryCard.tokensWithReasoningEstimate', {
+          prompt: 12_340,
+          reply: 840,
+          reasoning: 1200,
+        }),
+      ),
+    ).toBeVisible()
+  },
+}
+
+/** An entry written before sections, or a provider count with none: plain text, nothing to open. */
+export const TokenTextPlain: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, meta: { tokens: { prompt: 1290, completion: 145 } } },
+  play: async () => {
+    const text = await screen.findByText(t('reader:entryCard.tokens', { prompt: 1290, reply: 145 }))
+    expect(text.closest('[role="button"]')).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: /Show the token breakdown/ }),
+    ).not.toBeInTheDocument()
+  },
+}
+
+/** At phone width the meta line wraps short of the entry actions, which sit over the header. */
+export const TokenPanelPhoneWidth: StoryT = {
+  decorators: [phoneWidthDecorator],
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    tier: 'phone',
+    reasoning: 'Lean on restraint, not combat.',
+    meta: {
+      ...tokenMeta,
+      classifierCall: { promptSections: CLASSIFIER_SECTIONS },
+    },
+  },
+  play: async () => {
+    const toggle = await showBreakdown(NARRATIVE_SPOKEN)
+    const edit = screen.getByRole('button', { name: t('reader:entryCard.editEntry') })
+    expect(toggle.getBoundingClientRect().right).toBeLessThanOrEqual(
+      edit.getBoundingClientRect().left,
+    )
+    await userEvent.click(toggle)
+    const frame = screen.getByTestId('phone-frame')
+    expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
+    expect(screen.getByText(t('reader:tokenPanel.promptEstimated', { prompt: 2620 }))).toBeVisible()
+  },
+}
+
+/** entry-card.md → System entry: a window refusal lists the refused prompt above its detail. */
+export const SystemWindowRefusalSections: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: 'This prompt is about 41,000 tokens; the context window is 32,768.',
+    detail: 'prompt over the context window (check): estimate 41000 tokens, window 32768',
+    promptSections: SECTIONS,
+    onRetry: fn(),
+    onDismiss: fn(),
+  },
+  play: async () => {
+    expect(screen.queryByText(t('reader:tokenPanel.section.history'))).not.toBeInTheDocument()
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('reader:systemEntry.details') }),
+    )
+    const history = screen.getByText(t('reader:tokenPanel.section.history'))
+    const detail = screen.getByText(/prompt over the context window/)
+    expect(history).toBeVisible()
+    expect(history.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   },
 }

@@ -33,7 +33,7 @@ import {
   type KindedView,
 } from '@/lib/world'
 
-import { readLastTurns, readSceneSource } from './entry-reads'
+import { readLastTurns, readSceneSource, storedProseTokens } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import type { GenerationPhaseName, PhaseContext, PhaseFailure } from '../types'
 
@@ -60,6 +60,18 @@ type BuildFlags = {
   // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
   // phase has it; blank everywhere else.
   refreshGuidance?: string
+  /** Sum the history's prose and stored counts, which price Story so far (the narrative only). */
+  priceHistory?: boolean
+}
+
+/** The prompt buffer's prose, summed: what a priced history must hold once and whole. */
+export type HistoryProse = { chars: number; tokens: number }
+
+function historyProseOf(buffer: readonly StoryEntry[]): HistoryProse {
+  return {
+    chars: buffer.reduce((sum, entry) => sum + promptProse(entry).length, 0),
+    tokens: buffer.reduce((sum, entry) => sum + storedProseTokens(entry), 0),
+  }
 }
 
 type GuardFailure = { ok: false; result: PhaseFailure }
@@ -357,6 +369,7 @@ export async function buildGenerationContext(
     piggybackFires = false,
     suggestionsFire = false,
     refreshGuidance = '',
+    priceHistory = false,
   } = flags
 
   // Both guards are defense-in-depth against store desync: a build against the
@@ -556,6 +569,8 @@ export async function buildGenerationContext(
     stateShownIds,
     // Real ids: the reply records them (data-model.md → Entry metadata shape).
     injectedHappenings: retrievedHappenings.map((row) => row.id),
+    // Beside the context, not in it: the context is the template's variable set.
+    ...(priceHistory ? { historyProse: historyProseOf(buffer) } : {}),
   }
 }
 

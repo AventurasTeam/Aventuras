@@ -30,6 +30,40 @@ export type Pack = {
 /** Both halves as rendered, untrimmed. `system` may be blank; `user` never is. */
 export type RenderedPrompt = { readonly system: string; readonly user: string }
 
+/**
+ * The ids a template's `section` tag may name (architecture.md → Prompt sections), in the order the
+ * reader lists them. Text no section holds is `other`.
+ */
+export const PROMPT_SECTION_IDS = [
+  'instructions',
+  'setup',
+  'roster',
+  'scene',
+  'places',
+  'entities',
+  'lore',
+  'happenings',
+  'threads',
+  'chapters',
+  'history',
+  'output',
+] as const
+export type PromptSectionId = (typeof PROMPT_SECTION_IDS)[number]
+
+/**
+ * One half split by section (architecture.md → Prompt sections): each named section's own text, the
+ * innermost section owning nested text, and `unnamed`, the text no known section holds. Their lengths
+ * add up to the half's.
+ */
+export type HalfSections = {
+  readonly named: readonly { readonly id: PromptSectionId; readonly text: string }[]
+  readonly unnamed: readonly string[]
+}
+
+export type SectionedPrompt = RenderedPrompt & {
+  readonly sections: { readonly system: HalfSections; readonly user: HalfSections }
+}
+
 export type IncludeViolation = {
   templateId: string
   macroId: string

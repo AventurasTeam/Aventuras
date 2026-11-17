@@ -108,6 +108,28 @@ const SCHEMA_CLOSING = 'Output ONLY the JSON object, no other text or markdown.'
 const SIMPLE_JSON_CONTRACT = 'Respond strictly with valid JSON.'
 const SIMPLE_JSON_CLOSING = 'Output ONLY the JSON, no other text.'
 
+/**
+ * The JSON contract the prompt-injection path adds (architecture.md → Structured output): `system`
+ * ends the system message, `closing` ends the last user text.
+ */
+export function promptContract(schema: JsonSchema | undefined): {
+  system: string
+  closing: string
+} {
+  return schema
+    ? {
+        // A function, so `$&` or `$$` in a describe() reaches the model as written.
+        system: SCHEMA_CONTRACT_TEMPLATE.replace('{schema}', () => schemaToTypeScriptBlock(schema)),
+        closing: SCHEMA_CLOSING,
+      }
+    : { system: SIMPLE_JSON_CONTRACT, closing: SIMPLE_JSON_CLOSING }
+}
+
+/** A user text as sent with the contract's closing line after it. */
+export function withClosing(text: string, closing: string): string {
+  return `${text.trimEnd()}\n\n${closing}`
+}
+
 function appendToLastSystem(prompt: ModelPrompt, contract: string): ModelPrompt {
   const lastSystemIdx = prompt.findLastIndex((msg) => msg.role === 'system')
   if (lastSystemIdx === -1) return [{ role: 'system', content: contract }, ...prompt]
@@ -134,7 +156,7 @@ function appendToLastUser(prompt: ModelPrompt, closing: string): ModelPrompt {
       ...msg,
       content: msg.content.map((part, j) =>
         j === lastTextIdx && part.type === 'text'
-          ? { ...part, text: `${part.text.trimEnd()}\n\n${closing}` }
+          ? { ...part, text: withClosing(part.text, closing) }
           : part,
       ),
     }
@@ -166,18 +188,11 @@ export function promptSchemaMiddleware(): LanguageModelMiddleware {
         return params
       }
 
-      const { schema } = responseFormat
-      const [contract, closing] = schema
-        ? [
-            // A function, so `$&` or `$$` in a describe() reaches the model as written.
-            SCHEMA_CONTRACT_TEMPLATE.replace('{schema}', () => schemaToTypeScriptBlock(schema)),
-            SCHEMA_CLOSING,
-          ]
-        : [SIMPLE_JSON_CONTRACT, SIMPLE_JSON_CLOSING]
+      const { system, closing } = promptContract(responseFormat.schema)
 
       return {
         ...params,
-        prompt: appendToLastUser(appendToLastSystem(params.prompt, contract), closing),
+        prompt: appendToLastUser(appendToLastSystem(params.prompt, system), closing),
         responseFormat: undefined,
       }
     },

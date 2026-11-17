@@ -4,9 +4,15 @@ import type { StoryEntry } from '@/lib/db'
 
 import type { ChapterBreaks } from './chapter-breaks'
 import type { SliceRequest, TrimRequest } from './reader-slice'
+import type { StreamingTokens } from './streaming-tokens'
 import type { WorldTimeDecoration } from './worldtime-decoration'
 
-export type StreamingPayload = { content: string; reasoning: string }
+/** The live reply; `tokens` are the reply and reasoning counted per chunk as they arrive. */
+export type StreamingPayload = {
+  content: string
+  reasoning: string
+  tokens: StreamingTokens
+}
 
 // `code` is the action layer's rejection code, so a caller can say WHY rather than
 // offering a retry the refusal will never accept.
