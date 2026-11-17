@@ -989,6 +989,15 @@ describe('countWithStoredProse', () => {
     expect(encoded(text)).toBe(false)
   })
 
+  // A render with no prose is its blank render: priced, the recorded count would land on the
+  // blank's own cache entry and grow by the stored counts at each render.
+  it('adds no stored count to a render that holds no prose', () => {
+    const none = { chars: 0, tokens: STORED }
+
+    expect(countWithStoredProse(blank, blank, none, { record: true })).toBe(countTokens(blank))
+    expect(countWithStoredProse(blank, blank, none, { record: true })).toBe(countTokens(blank))
+  })
+
   it('keeps an unrecorded count out of the cache, a guard miss included', () => {
     const before = __promptCountCacheChars()
     countWithStoredProse(wrap(PROSE.map((c) => `${c} ${c}`)), blank, prose, { record: false })

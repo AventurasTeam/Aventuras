@@ -132,7 +132,8 @@ export function countWithStoredProse(
   prose: { chars: number; tokens: number },
   opts: { record: boolean },
 ): number {
-  if (text.length - blank.length === prose.chars) {
+  // With no prose `text` is `blank`, so recording a priced count would overwrite the blank's own.
+  if (prose.chars > 0 && text.length - blank.length === prose.chars) {
     const tokens = countOnce(blank) + prose.tokens
     if (opts.record) remember(text, tokens)
     return tokens
