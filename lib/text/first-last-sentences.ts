@@ -10,8 +10,7 @@ const SENTENCE_END = /(?<![.!?])[.!?]+["'”’»“«)\]]*(?=\s|$)|[。！？]+
 
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
 
-// French spacing puts a space before », so the closer can land alone in a piece; it joins the
-// sentence before it.
+// A piece with no letter or digit (a French closer, an ellipsis, a scene break) joins the sentence before it.
 function addPiece(sentences: string[], piece: string): void {
   if (sentences.length > 0 && !LETTER_OR_DIGIT.test(piece)) {
     sentences[sentences.length - 1] += ` ${piece}`

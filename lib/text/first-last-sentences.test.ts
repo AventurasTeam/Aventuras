@@ -46,11 +46,14 @@ describe('firstLastSentences', () => {
     })
   })
 
-  it('keeps a French closer spaced off its mark, and German low-quote and guillemet closers', () => {
+  it('keeps the closing sentence when a French closer stands spaced off its mark', () => {
     expect(firstLastSentences('« Bonjour. » Il partit. « Adieu. »')).toEqual({
       first: '« Bonjour.',
       last: '« Adieu. »',
     })
+  })
+
+  it('keeps German low-quote and guillemet closers with their sentence', () => {
     expect(firstLastSentences('„Wir gehen.“ Er nickte.')).toEqual({
       first: '„Wir gehen.“',
       last: 'Er nickte.',
@@ -58,6 +61,17 @@ describe('firstLastSentences', () => {
     expect(firstLastSentences('»Gut.« Er nickte.')).toEqual({
       first: '»Gut.«',
       last: 'Er nickte.',
+    })
+  })
+
+  it('merges a letterless piece, an ellipsis, into the sentence before it', () => {
+    expect(firstLastSentences('He waited. ... Then nothing came.')).toEqual({
+      first: 'He waited. ...',
+      last: 'Then nothing came.',
+    })
+    expect(firstLastSentences('He left. ...')).toEqual({
+      first: 'He left. ...',
+      last: null,
     })
   })
 
