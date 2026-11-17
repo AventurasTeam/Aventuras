@@ -13,7 +13,6 @@ import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
   matchTerms,
   normalizeTerm,
-  countTokens,
   readPromptBuffer,
   type EntityRow,
   type LoreRow,
@@ -34,7 +33,7 @@ import {
   type KindedView,
 } from '@/lib/world'
 
-import { readLastTurns, readSceneSource } from './entry-reads'
+import { readLastTurns, readSceneSource, storedProseTokens } from './entry-reads'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import type { GenerationPhaseName, PhaseContext, PhaseFailure } from '../types'
 
@@ -68,16 +67,11 @@ type BuildFlags = {
 /** The prompt buffer's prose, summed: what a priced history must hold once and whole. */
 export type HistoryProse = { chars: number; tokens: number }
 
-// A row stored before content_tokens existed is counted from its prose.
 function historyProseOf(buffer: readonly StoryEntry[]): HistoryProse {
-  let chars = 0
-  let tokens = 0
-  for (const entry of buffer) {
-    const prose = promptProse(entry)
-    chars += prose.length
-    tokens += entry.contentTokens ?? countTokens(prose)
+  return {
+    chars: buffer.reduce((sum, entry) => sum + promptProse(entry).length, 0),
+    tokens: buffer.reduce((sum, entry) => sum + storedProseTokens(entry), 0),
   }
-  return { chars, tokens }
 }
 
 type GuardFailure = { ok: false; result: PhaseFailure }
