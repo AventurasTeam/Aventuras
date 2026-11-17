@@ -9,12 +9,13 @@ import {
   isEmbeddedSourceTable,
   rowsPerInsert,
 } from '@/lib/db'
+import { deepEqual } from '@/lib/deep-equal'
 import { isJsonObject } from '@/lib/json-object'
 import { withPlacement } from '@/lib/world'
 
 import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
-import { applyUndoPayload, deepEqual } from './delta-encoding'
+import { applyUndoPayload } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'

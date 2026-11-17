@@ -12,11 +12,12 @@ import {
   KIND_FIELDS,
   stories,
 } from '@/lib/db'
+import { deepEqual } from '@/lib/deep-equal'
 import { entitiesStore } from '@/lib/stores'
 import { parentIdOf, PLACE_REFUSAL } from '@/lib/world'
 
 import { cascadedDelete } from '../delta/delete-cascade'
-import { computeUndoPayload, deepEqual } from '../delta/delta-encoding'
+import { computeUndoPayload } from '../delta/delta-encoding'
 import {
   register,
   noopRefusal,

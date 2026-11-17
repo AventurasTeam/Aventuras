@@ -21,6 +21,7 @@ import {
   describeChain,
   modelsDirtyTargets,
   overrideProviderMissing,
+  pickedOverride,
   providerFavorites,
   providerListsModel,
   providerSources,
@@ -97,7 +98,7 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
     setDraft((prev) => {
       const next: StoryModels = { ...prev }
       if (ref == null) delete next[target]
-      else next[target] = { providerId: ref.providerId, modelId: ref.modelId }
+      else next[target] = pickedOverride(target, ref, prev[target], config)
       return next
     })
     if (target !== 'narrative') setPending((prev) => prev.filter((agent) => agent !== target))
