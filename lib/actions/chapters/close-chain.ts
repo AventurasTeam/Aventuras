@@ -39,8 +39,8 @@ export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD):
 
 /**
  * Starts the pass (entries unprocessed) or the close; resolves with the chain's end, the refusal,
- * or the failed pre-flight. Rejects when the origin throws, as `startChain` does: a caller must
- * handle it.
+ * or the failed pre-flight. Rejects when the origin or the pre-flight throws, as `startChain` does:
+ * a caller must handle it.
  */
 export async function startCloseChain(
   branchId: string,

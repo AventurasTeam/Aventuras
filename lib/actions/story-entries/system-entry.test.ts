@@ -176,6 +176,19 @@ describe('raiseSystemEntry', () => {
     expect(failure.mock.calls).toEqual([[undefined], [undefined]])
   })
 
+  it("never carries another branch's held text", async () => {
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'o', createdAt: 1 })
+    await writeSystemEntry(
+      { branchId: 'b2', content: 'turn failed', failure: { kind: 'provider', submission: HELD } },
+      ctx,
+    )
+    const failure = vi.fn(closeFailure)
+
+    await raiseSystemEntry({ branchId: 'b1', content: 'close failed', failure }, ctx)
+
+    expect(failure).toHaveBeenCalledWith(undefined)
+  })
+
   it("puts the entry in a loaded branch's store in place of the standing one", async () => {
     const standing = await writeSystemEntry({ branchId: 'b1', content: 'turn failed' }, ctx)
     await hydrateAll()
