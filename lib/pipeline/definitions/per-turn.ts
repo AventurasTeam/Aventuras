@@ -246,6 +246,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const { stream } = call
   timedOut = call.timedOut
   let content = ''
+  // Counted chunk by chunk, as the streaming card counts it: no encode of the whole text at commit.
+  let reasoningCount = 0
   try {
     // fullStream, not textStream: reasoning deltas stream to the UI as the
     // model thinks instead of appearing only post-hoc in metadata.
@@ -254,6 +256,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         content += part.text
         yield { type: 'stream_chunk', targetEntryId: entryId, text: part.text, channel: 'text' }
       } else if (part.type === 'reasoning-delta') {
+        reasoningCount += countTokens(part.text)
         yield {
           type: 'stream_chunk',
           targetEntryId: entryId,
@@ -511,11 +514,18 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   }
   ctx.intermediates.suggestionsCaptured = suggestionsCaptured
 
-  const tokens = call.tokensOf(usage)
+  const reported = call.tokensOf(usage)
   const promptSections = call.promptSections()
-  // A provider that streams reasoning but sends no count for it keeps an estimate instead.
-  const reasoningEstimate =
-    tokens?.reasoning === undefined && reasoningText ? countTokens(reasoningText) : undefined
+  // A provider that streams reasoning but reports no count for it, or a 0 beside it, keeps the
+  // streamed estimate instead (data-model.md → Reasoning text persistence).
+  const reasoningUncounted =
+    reasoningCount > 0 && (reported?.reasoning === undefined || reported.reasoning === 0)
+  let tokens = reported
+  if (reasoningUncounted && reported !== undefined) {
+    const { reasoning: _reportedZero, ...counts } = reported
+    tokens = counts
+  }
+  const reasoningEstimate = reasoningUncounted ? reasoningCount : undefined
   const metadata: EntryMetadata = {
     ...(tokens !== undefined ? { tokens } : {}),
     ...(promptSections !== null ? { promptSections } : {}),

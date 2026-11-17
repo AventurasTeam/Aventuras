@@ -2065,7 +2065,7 @@ story_entries.metadata: {
   model?: string
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
-  reasoningEstimate?: number        // o200k count of `reasoning`, written only when the provider streamed reasoning but reported no reasoning figure; authored, never inherited. See "Reasoning text persistence" below
+  reasoningEstimate?: number        // o200k count of the streamed reasoning, written only when the provider reported no reasoning figure (or 0 beside streamed reasoning); authored, never inherited. See "Reasoning text persistence" below
   cutOff?:                          // this reply ended early inside the prose; authored, never inherited. See "Cut-off mark" below
     | {
         cause: 'max-output' | 'window'
@@ -2178,10 +2178,11 @@ completion alongside `tokens.reasoning`. Field stays undefined for
 providers that don't expose reasoning text. A provider that streams
 reasoning text but reports no reasoning figure, as many
 OpenAI-compatible servers do, gets `reasoningEstimate` instead: the
-reasoning text counted once with o200k at commit, so the count the
-streaming card showed doesn't vanish when the entry commits. It is
-never written beside a reported `tokens.reasoning`, and like the
-token breakdown it is never inherited. Translation behavior:
+reasoning counted chunk by chunk with o200k as it streamed, the figure
+the streaming card showed, so it doesn't vanish when the entry commits.
+A reported 0 beside streamed reasoning text counts as no figure. It is
+never written beside a reported `tokens.reasoning`, and like the token
+breakdown it is never inherited. Translation behavior:
 stays untranslated (provenance, not user-facing narrative — same
 treatment as `model`). Read sites: the
 [EntryCard pattern](./ui/patterns/entry-card.md#reasoning-expansion)

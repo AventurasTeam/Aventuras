@@ -3022,7 +3022,7 @@ describe('narrative — how the reply ended', () => {
     fromOverride?: boolean
     log?: ReturnType<typeof spyLogger>
     call?: Partial<Omit<StreamCall, 'ok' | 'stream'>>
-    reasoningText?: string
+    reasoningDeltas?: readonly string[]
   }) {
     currentStoryStore.set({
       storyId: 's1',
@@ -3064,13 +3064,14 @@ describe('narrative — how the reply ended', () => {
         ...opts.call,
         stream: {
           fullStream: (async function* () {
+            for (const text of opts.reasoningDeltas ?? []) yield { type: 'reasoning-delta', text }
             if (opts.text !== '') yield { type: 'text-delta', text: opts.text }
             estimate = opts.promptEstimate ?? null
           })(),
           finishReason: opts.finishReason,
           rawFinishReason: opts.rawFinishReason,
           usage: opts.usage,
-          reasoningText: opts.reasoningText,
+          reasoningText: opts.reasoningDeltas?.join(''),
         },
       }),
     )
@@ -3561,18 +3562,39 @@ describe('narrative — how the reply ended', () => {
     })
   })
 
-  const THOUGHT = 'The keeper lied about the tide, so the lantern is a signal, not a welcome.'
+  // Streamed in pieces, counted in pieces: the figure the streaming card showed.
+  // Split mid-word, as servers chunk: summed per chunk this counts higher than the whole text.
+  const THOUGHT = ['The kee', 'per lied ab', 'out the tide, so the lan', 'tern is a signal.']
+  const thoughtCount = THOUGHT.reduce((n, piece) => n + countTokens(piece), 0)
+  const openaiFigures = {
+    tokensOf: (usage: unknown) => tokenFiguresOf(usage as never, 'openai-compatible'),
+  }
 
-  it('estimates the reasoning a provider streamed but sent no count for', async () => {
+  it('estimates the reasoning a provider streamed but sent no count for, chunk by chunk', async () => {
     const { entry } = await runReply({
       text: 'The lantern held.',
       usage: { ...anthropicUsage, raw: { prompt_tokens: 5100, completion_tokens: 640 } },
-      call: { tokensOf: (usage) => tokenFiguresOf(usage, 'openai-compatible') },
-      reasoningText: THOUGHT,
+      call: openaiFigures,
+      reasoningDeltas: THOUGHT,
     })
 
-    expect(entry?.metadata?.reasoningEstimate).toBe(countTokens(THOUGHT))
+    expect(entry?.metadata?.reasoningEstimate).toBe(thoughtCount)
     expect(entry?.metadata?.tokens).not.toHaveProperty('reasoning')
+  })
+
+  it('reads a reported 0 beside streamed reasoning as no count', async () => {
+    const { entry } = await runReply({
+      text: 'The lantern held.',
+      usage: {
+        ...anthropicUsage,
+        raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 0 } },
+      },
+      call: openaiFigures,
+      reasoningDeltas: THOUGHT,
+    })
+
+    expect(entry?.metadata?.reasoningEstimate).toBe(thoughtCount)
+    expect(entry?.metadata?.tokens).toEqual({ prompt: 5100, completion: 640 })
   })
 
   it("keeps the provider's reasoning count over an estimate, and estimates no reasoning it never streamed", async () => {
@@ -3582,13 +3604,21 @@ describe('narrative — how the reply ended', () => {
         ...anthropicUsage,
         raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 30 } },
       },
-      call: { tokensOf: (usage) => tokenFiguresOf(usage, 'openai-compatible') },
-      reasoningText: THOUGHT,
+      call: openaiFigures,
+      reasoningDeltas: THOUGHT,
     })
-    const unthought = await runReply({ text: 'The lantern held.', usage: anthropicUsage })
+    const unthought = await runReply({
+      text: 'The lantern held.',
+      usage: {
+        ...anthropicUsage,
+        raw: { prompt_tokens: 5100, completion_tokens_details: { reasoning_tokens: 0 } },
+      },
+      call: openaiFigures,
+    })
 
     expect(counted.entry?.metadata?.tokens?.reasoning).toBe(30)
     expect(counted.entry?.metadata).not.toHaveProperty('reasoningEstimate')
+    expect(unthought.entry?.metadata?.tokens?.reasoning).toBe(0)
     expect(unthought.entry?.metadata).not.toHaveProperty('reasoningEstimate')
   })
 
