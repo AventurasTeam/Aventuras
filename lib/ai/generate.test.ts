@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { logger, type Logger } from '@/lib/diagnostics'
 
-import type { ProviderInstance } from '../db'
+import type { ModelSettings, ProviderInstance } from '../db'
 import { describeContextWindow, type ContextWindowFailure } from './context-window'
 import {
   buildCallSettings,
@@ -14,6 +14,7 @@ import {
   profileTimeoutMs,
   streamText,
   type PromptHalves,
+  type StructuredCallOptions,
 } from './generate'
 import { getModel } from './model'
 import { resolveModel } from './resolve-model'
@@ -929,6 +930,103 @@ describe('generateStructured', () => {
           undefined,
         ],
       ])
+    })
+  })
+
+  // C2's per-call bound on output: a caller's default bounds a call the settings leave unbounded,
+  // and a cut names the figure the settings set, else that default (generation-pipeline.md →
+  // Cut-off replies).
+  describe('a default max output', () => {
+    let warn: MockInstance<Logger['warn']>
+
+    beforeEach(() => {
+      warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      vi.mocked(runProviderCall).mockClear()
+    })
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    function settings(params: ModelSettings): void {
+      vi.mocked(resolveModel).mockImplementation(() => ({
+        ok: true,
+        providerId: 'prov-1',
+        providerType: 'openai-compatible',
+        modelId: 'model-1',
+        params,
+        fromOverride: false,
+      }))
+    }
+
+    function call(options: StructuredCallOptions) {
+      return generateStructured(
+        'lore-mgmt',
+        PROMPT,
+        schema,
+        STRUCTURED_CFG,
+        new AbortController().signal,
+        options,
+      )
+    }
+
+    const sent = () => vi.mocked(runProviderCall).mock.calls.at(-1)?.[0]
+
+    // Cut inside its document, so the strict parse refuses it.
+    function cutReply(outputTokens: number, request?: { body: unknown }): void {
+      vi.mocked(runProviderCall).mockResolvedValue({
+        text: '{"description":"A ta',
+        finishReason: 'length',
+        usage: { outputTokens },
+        ...(request === undefined ? {} : { request }),
+      } as never)
+    }
+
+    it('sends the default when the settings set no max output', async () => {
+      settings({})
+      await call({ actionId: null, defaultMaxOutput: 8_000 })
+      expect(sent()).toHaveProperty('maxOutputTokens', 8_000)
+    })
+
+    it("sends the settings' own max output over the default", async () => {
+      settings({ maxOutput: 2_048 })
+      await call({ actionId: null, defaultMaxOutput: 8_000 })
+      expect(sent()).toHaveProperty('maxOutputTokens', 2_048)
+    })
+
+    it('sends no max output when neither sets one', async () => {
+      settings({})
+      await call({ actionId: null })
+      expect(sent()).not.toHaveProperty('maxOutputTokens')
+    })
+
+    it('reports the default it sent when the reply is cut at it', async () => {
+      settings({})
+      cutReply(8_000)
+      expect(await call({ actionId: null, defaultMaxOutput: 8_000 })).toMatchObject({
+        status: 'failed',
+        error: {
+          tier: 'reply-cut-off',
+          cause: 'max-output',
+          outputTokens: 8_000,
+          maxOutput: 8_000,
+        },
+      })
+    })
+
+    // The copy names the settings' figure, so a body whose max_tokens carries a thinking budget
+    // on top of it doesn't change what the cut reports.
+    it("reports the settings' own max output on a cut, over the default and the request body", async () => {
+      settings({ maxOutput: 2_048 })
+      cutReply(2_048, { body: { max_tokens: 6_144 } })
+      expect(await call({ actionId: null, defaultMaxOutput: 8_000 })).toMatchObject({
+        status: 'failed',
+        error: {
+          tier: 'reply-cut-off',
+          cause: 'max-output',
+          outputTokens: 2_048,
+          maxOutput: 2_048,
+        },
+      })
     })
   })
 })
