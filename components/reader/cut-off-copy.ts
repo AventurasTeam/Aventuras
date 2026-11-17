@@ -21,46 +21,65 @@ export function cutOffCopyOf(failure: ReplyCutOffFailure): CutOffCopy {
   return { key: 'unknown' }
 }
 
+/**
+ * The key prefix of the copy that names whose setting the call ran on: the story override's, or the
+ * profile's (generation-pipeline.md → Cut-off replies → Whose setting it was). A window or a stop
+ * names no setting, so it has one copy.
+ */
+export function whoseSetting(fromOverride: boolean | undefined): 'override.' | '' {
+  return fromOverride === true ? 'override.' : ''
+}
+
 /** The **Reply cut off before any text** entry: the narrative turn committed nothing. */
 export function turnCutOffContent(failure: ReplyCutOffFailure): string {
   const copy = cutOffCopyOf(failure)
+  const whose = whoseSetting(failure.fromOverride)
   // 0 reads as unreported: the OpenAI-compatible provider reports a missing count as 0.
   if (copy.key === 'maxOutput' && failure.reasoningTokens != null && failure.reasoningTokens > 0) {
-    return t('reader:systemEntry.failure.replyCutOff.maxOutputReasoning', {
+    return t(`reader:systemEntry.failure.replyCutOff.${whose}maxOutputReasoning`, {
       limit: copy.limit,
       reasoning: failure.reasoningTokens,
     })
   }
-  return copy.key === 'unknown'
-    ? t('reader:systemEntry.failure.replyCutOff.unknown')
-    : t(`reader:systemEntry.failure.replyCutOff.${copy.key}`, { limit: copy.limit })
+  if (copy.key === 'unknown') return t(`reader:systemEntry.failure.replyCutOff.${whose}unknown`)
+  if (copy.key === 'window')
+    return t('reader:systemEntry.failure.replyCutOff.window', { limit: copy.limit })
+  return t(`reader:systemEntry.failure.replyCutOff.${whose}${copy.key}`, { limit: copy.limit })
 }
 
 /** A **Memory update failed** entry whose pass reply was cut off. */
 export function passCutOffContent(failure: ReplyCutOffFailure): string {
   const copy = cutOffCopyOf(failure)
-  return copy.key === 'unknown'
-    ? t('reader:systemEntry.failure.memoryCutOff.unknown')
-    : t(`reader:systemEntry.failure.memoryCutOff.${copy.key}`, { limit: copy.limit })
+  const whose = whoseSetting(failure.fromOverride)
+  if (copy.key === 'unknown') return t(`reader:systemEntry.failure.memoryCutOff.${whose}unknown`)
+  if (copy.key === 'window')
+    return t('reader:systemEntry.failure.memoryCutOff.window', { limit: copy.limit })
+  return t(`reader:systemEntry.failure.memoryCutOff.${whose}${copy.key}`, { limit: copy.limit })
 }
 
 /** A **Chapter close failed** entry whose close reply was cut off. */
 export function closeCutOffContent(failure: ReplyCutOffFailure): string {
   const copy = cutOffCopyOf(failure)
-  return copy.key === 'unknown'
-    ? t('reader:systemEntry.failure.closeCutOff.unknown')
-    : t(`reader:systemEntry.failure.closeCutOff.${copy.key}`, { limit: copy.limit })
+  const whose = whoseSetting(failure.fromOverride)
+  if (copy.key === 'unknown') return t(`reader:systemEntry.failure.closeCutOff.${whose}unknown`)
+  if (copy.key === 'window')
+    return t('reader:systemEntry.failure.closeCutOff.window', { limit: copy.limit })
+  return t(`reader:systemEntry.failure.closeCutOff.${whose}${copy.key}`, { limit: copy.limit })
 }
 
 /** The notice on an `ai_reply` card whose prose ended early. */
 export function cutOffNoticeText(mark: CutOffMark): string {
   switch (mark.cause) {
-    case 'unknown':
+    case 'unknown': {
+      const whose = whoseSetting(mark.fromOverride)
       return mark.maxOutput !== undefined
-        ? t('reader:cutOffNotice.unknownWithMaxOutput', { limit: mark.maxOutput })
-        : t('reader:cutOffNotice.unknown')
+        ? t(`reader:cutOffNotice.${whose}unknownWithMaxOutput`, { limit: mark.maxOutput })
+        : t(`reader:cutOffNotice.${whose}unknown`)
+    }
     case 'max-output':
-      return t('reader:cutOffNotice.maxOutput', { limit: mark.limit })
+      return t(`reader:cutOffNotice.${whoseSetting(mark.fromOverride)}maxOutput`, {
+        limit: mark.limit,
+      })
     case 'window':
       return t('reader:cutOffNotice.window', { limit: mark.limit })
     case 'interrupted':

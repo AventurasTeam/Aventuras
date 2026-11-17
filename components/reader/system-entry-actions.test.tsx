@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OwedCloseRun } from '@/lib/actions'
 import { describeContextWindow, describeReplyCutOff } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { entryMetadataSchema, type SystemFailureMeta } from '@/lib/db'
+import { entryMetadataSchema, type StorySettings, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { hasCopy } from '@/lib/i18n/__tests__/locale-keys'
@@ -29,6 +29,7 @@ import {
   describeTurnFailure,
   dismissSystemEntry,
   passResolvedEntry,
+  profileFixSlot,
   retryCloseEntry,
   retryPassEntry,
   toCloseFailureMeta,
@@ -1124,7 +1125,7 @@ describe('useConfigFixAction', () => {
 
 describe('useProfileFixAction', () => {
   it('offers nothing when disabled', () => {
-    const { result } = renderHook(() => useProfileFixAction(false, leaveAtOnce))
+    const { result } = renderHook(() => useProfileFixAction(false, false, 'story_1', leaveAtOnce))
     expect(result.current).toBeUndefined()
   })
 
@@ -1133,7 +1134,7 @@ describe('useProfileFixAction', () => {
     const leaveStory = vi.fn((proceed: () => void) => {
       held.push(proceed)
     })
-    const { result } = renderHook(() => useProfileFixAction(true, leaveStory))
+    const { result } = renderHook(() => useProfileFixAction(true, false, 'story_1', leaveStory))
     expect(result.current?.label).toBe('Fix profile')
 
     act(() => result.current?.onPress())
@@ -1146,7 +1147,9 @@ describe('useProfileFixAction', () => {
 
   // Every reader row takes this action: a fresh identity per render re-renders them all per chunk.
   it('keeps its identity across renders with unchanged inputs', () => {
-    const { result, rerender } = renderHook(() => useProfileFixAction(true, leaveAtOnce))
+    const { result, rerender } = renderHook(() =>
+      useProfileFixAction(true, false, 'story_1', leaveAtOnce),
+    )
     const first = result.current
     rerender()
     expect(result.current).toBe(first)
@@ -1156,7 +1159,8 @@ describe('useProfileFixAction', () => {
     const firstGuard = vi.fn()
     const secondGuard = vi.fn()
     const { result, rerender } = renderHook(
-      ({ guard }: { guard: (proceed: () => void) => void }) => useProfileFixAction(true, guard),
+      ({ guard }: { guard: (proceed: () => void) => void }) =>
+        useProfileFixAction(true, false, 'story_1', guard),
       { initialProps: { guard: firstGuard } },
     )
     rerender({ guard: secondGuard })
@@ -1164,14 +1168,72 @@ describe('useProfileFixAction', () => {
     expect(secondGuard).toHaveBeenCalledTimes(1)
     expect(firstGuard).not.toHaveBeenCalled()
   })
+
+  // generation-pipeline.md → Cut-off replies → Whose setting it was: the action follows where the
+  // slot's settings live now, inside the story, so no story-leave guard.
+  it('reads Fix story override and opens the Models tab when the story overrides the slot', () => {
+    const leaveStory = vi.fn()
+    const { result } = renderHook(() => useProfileFixAction(true, true, 'story_1', leaveStory))
+    expect(result.current?.label).toBe('Fix story override')
+
+    act(() => result.current?.onPress())
+    expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    expect(leaveStory).not.toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
+  })
+
+  it('stays Fix profile when no story is resolved to route to', () => {
+    const { result } = renderHook(() => useProfileFixAction(true, true, null, leaveAtOnce))
+    expect(result.current?.label).toBe('Fix profile')
+  })
+
+  it('keeps its identity while the override stays, and changes when it comes or goes', () => {
+    const { result, rerender } = renderHook(
+      ({ overridden }: { overridden: boolean }) =>
+        useProfileFixAction(true, overridden, 'story_1', leaveAtOnce),
+      { initialProps: { overridden: true } },
+    )
+    const first = result.current
+    rerender({ overridden: true })
+    expect(result.current).toBe(first)
+    rerender({ overridden: false })
+    expect(result.current?.label).toBe('Fix profile')
+  })
+})
+
+describe('profileFixSlot', () => {
+  it.each([
+    {
+      entry: 'a turn entry',
+      failure: { kind: 'reply-cut-off', failure: 'max-output' },
+      slot: 'narrative',
+    },
+    { entry: 'no entry', failure: undefined, slot: 'narrative' },
+    {
+      entry: 'a pass entry',
+      failure: { kind: 'provider', failure: 'reasoning', pass: 'failed' },
+      slot: 'classifier',
+    },
+    {
+      entry: 'a close entry',
+      failure: { kind: 'reply-cut-off', failure: 'unknown', close: 'failed' },
+      slot: 'lore-mgmt',
+    },
+  ] as const)('reads $entry as the $slot slot', ({ failure, slot }) => {
+    expect(profileFixSlot(failure)).toBe(slot)
+  })
 })
 
 describe('useSystemEntryActions', () => {
   const onRetry = () => {}
 
-  function actionsFor(failure: SystemFailureMeta | undefined, storyId: string | null = 'story_1') {
-    return renderHook(() => useSystemEntryActions(failure, onRetry, storyId, leaveAtOnce)).result
-      .current
+  function actionsFor(
+    failure: SystemFailureMeta | undefined,
+    storyId: string | null = 'story_1',
+    models: StorySettings['models'] = {},
+  ) {
+    return renderHook(() => useSystemEntryActions(failure, onRetry, storyId, leaveAtOnce, models))
+      .result.current
   }
 
   it('offers Switch embedder for an embedder failure', () => {
@@ -1282,6 +1344,7 @@ describe('useSystemEntryActions', () => {
         onRetry,
         'story_1',
         leaveStory,
+        {},
       ),
     )
     act(() => result.current.fixAction?.onPress())
@@ -1319,11 +1382,63 @@ describe('useSystemEntryActions', () => {
         onRetry,
         'story_1',
         leaveStory,
+        {},
       ),
     )
     act(() => result.current.fixAction?.onPress())
     expect(leaveStory).toHaveBeenCalledTimes(1)
     expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+  })
+
+  // generation-pipeline.md → Cut-off replies → Whose setting it was: every Fix profile follows the
+  // story's override for the entry's slot as it stands now.
+  describe('when the story overrides the slot', () => {
+    const MODEL = { providerId: 'prov_local', modelId: 'qwen3-32b' }
+
+    it.each([
+      ["a turn's cut-off", toSystemFailureMeta(TURN_CUT, undefined), { narrative: MODEL }],
+      [
+        "a pass's cut-off",
+        toPassFailureMeta({ held: false, error: PASS_CUT }, undefined),
+        { classifier: MODEL },
+      ],
+      ["a close's cut-off", toCloseFailureMeta(CLOSE_CUT, undefined), { 'lore-mgmt': MODEL }],
+      [
+        "a close's tool-calling hint",
+        toCloseFailureMeta(CLOSE_HINTED, undefined),
+        { 'lore-mgmt': MODEL },
+      ],
+    ] as const)('offers Fix story override on %s', (_label, failure, models) => {
+      const actions = actionsFor(failure, 'story_1', models)
+      expect(actions.fixAction?.label).toBe('Fix story override')
+      expect(actions.onRetry).toBe(onRetry)
+      act(() => actions.fixAction?.onPress())
+      expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    })
+
+    it("stays Fix profile when only another slot's override exists", () => {
+      const pass = toPassFailureMeta({ held: false, error: PASS_CUT }, undefined)
+      expect(actionsFor(pass, 'story_1', { narrative: MODEL }).fixAction?.label).toBe('Fix profile')
+      const close = toCloseFailureMeta(CLOSE_CUT, undefined)
+      expect(actionsFor(close, 'story_1', { classifier: MODEL }).fixAction?.label).toBe(
+        'Fix profile',
+      )
+    })
+
+    // The entry's copy keeps whose setting it was; the action goes where the setting lives now.
+    it('routes to an override added after the failure, and away from one removed since', () => {
+      const fromProfile = toSystemFailureMeta(TURN_CUT, undefined)
+      expect(actionsFor(fromProfile, 'story_1', { narrative: MODEL }).fixAction?.label).toBe(
+        'Fix story override',
+      )
+      const fromOverride = toSystemFailureMeta({ ...TURN_CUT, fromOverride: true }, undefined)
+      expect(actionsFor(fromOverride, 'story_1', {}).fixAction?.label).toBe('Fix profile')
+    })
+
+    it('offers no fix for a window cut-off under an override either', () => {
+      const failure = { kind: 'reply-cut-off', failure: 'window' }
+      expect(actionsFor(failure, 'story_1', { narrative: MODEL }).fixAction).toBeUndefined()
+    })
   })
 })
 
@@ -1379,9 +1494,9 @@ describe('window and capability-hint entries', () => {
   const PASS_STRUCTURED_HINT =
     "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `json_schema`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
 
-  function actionsFor(failure: SystemFailureMeta) {
-    return renderHook(() => useSystemEntryActions(failure, onRetry, 'story_1', leaveAtOnce)).result
-      .current
+  function actionsFor(failure: SystemFailureMeta, models: StorySettings['models'] = {}) {
+    return renderHook(() => useSystemEntryActions(failure, onRetry, 'story_1', leaveAtOnce, models))
+      .result.current
   }
 
   describe('describeTurnFailure', () => {
@@ -1486,6 +1601,7 @@ describe('window and capability-hint entries', () => {
           onRetry,
           'story_1',
           leaveStory,
+          {},
         ),
       )
       act(() => result.current.fixAction?.onPress())
@@ -1507,6 +1623,47 @@ describe('window and capability-hint entries', () => {
       expect(
         actionsFor({ kind: 'provider', failure: 'from-a-newer-build' }).fixAction,
       ).toBeUndefined()
+    })
+
+    it('offers Fix story override on a hinted turn or pass entry when the story overrides its slot', () => {
+      const model = { providerId: 'prov_local', modelId: 'qwen3-32b' }
+      expect(
+        actionsFor(toSystemFailureMeta(TURN_HINTED, SUBMISSION), { narrative: model }).fixAction
+          ?.label,
+      ).toBe('Fix story override')
+      expect(
+        actionsFor(toPassFailureMeta({ held: false, error: PASS_HINTED }, undefined), {
+          classifier: model,
+        }).fixAction?.label,
+      ).toBe('Fix story override')
+    })
+  })
+
+  // generation-pipeline.md → Fatal error categories: under the story's override the hint names the
+  // override's setting, on each entry that words one.
+  describe("a hint from a call on the story's override", () => {
+    const OVERRIDE_REASONING =
+      "check this story's override's thinking setting and the model's 🧠 badge"
+    const OVERRIDE_STRUCTURED =
+      "check this story's override's structured-output setting and the model's badge"
+
+    it("names the override's setting on the turn, pass and close entries", () => {
+      expect(describeTurnFailure({ ...TURN_HINTED, fromOverride: true }).content).toContain(
+        OVERRIDE_REASONING,
+      )
+      expect(
+        describePassFailure({ held: false, error: { ...PASS_HINTED, fromOverride: true } }).content,
+      ).toContain(OVERRIDE_STRUCTURED)
+      expect(describeCloseFailure({ ...PASS_HINTED, fromOverride: true }).content).toContain(
+        OVERRIDE_STRUCTURED,
+      )
+    })
+
+    it("names the profile's setting when the call ran on the profile", () => {
+      expect(describeTurnFailure({ ...TURN_HINTED, fromOverride: false }).content).toBe(
+        TURN_REASONING_HINT,
+      )
+      expect(describeTurnFailure(TURN_HINTED).content).toBe(TURN_REASONING_HINT)
     })
   })
 })

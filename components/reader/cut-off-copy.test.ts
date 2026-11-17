@@ -209,3 +209,69 @@ describe('offersProfileFix', () => {
     expect(offersProfileFix(cause)).toBe(false)
   })
 })
+
+// generation-pipeline.md → Cut-off replies → Whose setting it was: a call on the story's override
+// names the override's limit, on every surface that names one.
+describe("the copy for a cut under the story's override", () => {
+  const OVER = { fromOverride: true } as const
+
+  it('names the narrative override on the turn entry, each cause that names a setting', () => {
+    expect(turnCutOffContent({ ...AT_MAX_OUTPUT, ...OVER })).toBe(
+      "The reply was cut off at the 4,096-token max output of this story's narrative override before any story text. Raise the max output, then Retry.",
+    )
+    expect(turnCutOffContent({ ...AT_MAX_OUTPUT, ...OVER, reasoningTokens: 3900 })).toBe(
+      "The reply was cut off at the 4,096-token max output of this story's narrative override before any story text; reasoning used 3,900 of them. Raise the max output, then Retry.",
+    )
+    expect(turnCutOffContent({ ...AT_SERVER_DEFAULT, ...OVER })).toBe(
+      "The server stopped the reply at its own limit before any story text. Setting a max output on this story's narrative override replaces it.",
+    )
+    expect(turnCutOffContent({ ...SHORT_OF_MAX_OUTPUT, ...OVER })).toBe(
+      "The server stopped the reply at its own limit before any story text, short of the 4,096-token max output of this story's narrative override.",
+    )
+  })
+
+  it('names the classifier override on a pass entry', () => {
+    expect(passCutOffContent({ ...AT_MAX_OUTPUT, ...OVER, maxOutput: 1024 })).toBe(
+      "Memory update failed, so your turn didn't start. The update's reply was cut off at the 1,024-token max output of this story's classifier override. Raise it, then Retry.",
+    )
+    expect(passCutOffContent({ ...AT_SERVER_DEFAULT, ...OVER })).toBe(
+      "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on this story's classifier override replaces it.",
+    )
+    expect(passCutOffContent({ ...SHORT_OF_MAX_OUTPUT, ...OVER, maxOutput: 1024 })).toBe(
+      "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the 1,024-token max output of this story's classifier override.",
+    )
+  })
+
+  it('names the lore management override on a close entry', () => {
+    expect(closeCutOffContent({ ...AT_MAX_OUTPUT, ...OVER, maxOutput: 2048 })).toBe(
+      "Chapter close failed, so your turn didn't start. The close's reply was cut off at the 2,048-token max output of this story's lore management override. Raise it, then Retry.",
+    )
+    expect(closeCutOffContent({ ...AT_SERVER_DEFAULT, ...OVER })).toBe(
+      "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit. Setting a max output on this story's lore management override replaces it.",
+    )
+    expect(closeCutOffContent({ ...SHORT_OF_MAX_OUTPUT, ...OVER, maxOutput: 2048 })).toBe(
+      "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit, short of the 2,048-token max output of this story's lore management override.",
+    )
+  })
+
+  it('names the narrative override on the card notice, for each cause the mark keeps it on', () => {
+    expect(cutOffNoticeText({ cause: 'max-output', limit: 4096, ...OVER })).toBe(
+      "Cut off at the 4,096-token max output of this story's narrative override.",
+    )
+    expect(cutOffNoticeText({ cause: 'unknown', ...OVER })).toBe(
+      "The server stopped the reply at its own limit. Setting a max output on this story's narrative override replaces it.",
+    )
+    expect(cutOffNoticeText({ cause: 'unknown', maxOutput: 4096, ...OVER })).toBe(
+      "The server stopped the reply at its own limit, short of the 4,096-token max output of this story's narrative override.",
+    )
+  })
+
+  // The window is the model's, not a setting either owner holds.
+  it('words a window cut the same on every surface', () => {
+    expect(turnCutOffContent({ ...AT_WINDOW, ...OVER })).toBe(turnCutOffContent(AT_WINDOW))
+    expect(passCutOffContent({ ...AT_WINDOW, ...OVER })).toBe(passCutOffContent(AT_WINDOW))
+    expect(closeCutOffContent({ ...AT_WINDOW, ...OVER })).toBe(closeCutOffContent(AT_WINDOW))
+    const mark = { cause: 'window', limit: 65536 } as const
+    expect(cutOffNoticeText({ ...mark, ...OVER })).toBe(cutOffNoticeText(mark))
+  })
+})

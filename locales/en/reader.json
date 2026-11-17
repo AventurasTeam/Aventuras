@@ -47,7 +47,12 @@
         "maxOutput": "The suggestion model's reply was cut off at the suggestion profile's {{limit, number}}-token max output. Raise it, then Retry.",
         "window": "The suggestion model's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
         "unknown": "The server stopped the suggestion model's reply at its own limit. Setting a max output on the suggestion profile overrides it.",
-        "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's {{limit, number}}-token max output."
+        "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's {{limit, number}}-token max output.",
+        "override": {
+          "maxOutput": "The suggestion model's reply was cut off at the {{limit, number}}-token max output of this story's suggestion override. Raise it, then Retry.",
+          "unknown": "The server stopped the suggestion model's reply at its own limit. Setting a max output on this story's suggestion override replaces it.",
+          "unknownWithMaxOutput": "The server stopped the suggestion model's reply at its own limit, short of the {{limit, number}}-token max output of this story's suggestion override."
+        }
       },
       "contextWindow": {
         "check": "The suggestion prompt is about {{estimate, number}} tokens, over {{model}}'s {{window, number}}-token context window ({{source}}). Nothing was sent. Shorten the history buffer in Story Settings, raise the window if the model allows more, or switch the suggestion model to one with a larger window.",
@@ -167,7 +172,12 @@
     "unknown": "The server stopped the reply at its own limit. Setting a max output on the profile overrides it.",
     "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the narrative profile's {{limit, number}}-token max output.",
     "interrupted": "The provider ended this reply without saying it had finished, so it may be incomplete.",
-    "contentFilter": "The provider's content filter stopped this reply."
+    "contentFilter": "The provider's content filter stopped this reply.",
+    "override": {
+      "maxOutput": "Cut off at the {{limit, number}}-token max output of this story's narrative override.",
+      "unknown": "The server stopped the reply at its own limit. Setting a max output on this story's narrative override replaces it.",
+      "unknownWithMaxOutput": "The server stopped the reply at its own limit, short of the {{limit, number}}-token max output of this story's narrative override."
+    }
   },
   "worldTimeEdit": {
     "title": "Edit time",
@@ -235,19 +245,35 @@
         "maxOutputReasoning": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text; reasoning used {{reasoning, number}} of them. Raise the max output, then Retry.",
         "window": "The reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window, before any story text.",
         "unknown": "The server stopped the reply at its own limit before any story text. Setting a max output on the profile overrides it.",
-        "unknownWithMaxOutput": "The server stopped the reply at its own limit before any story text, short of the narrative profile's {{limit, number}}-token max output."
+        "unknownWithMaxOutput": "The server stopped the reply at its own limit before any story text, short of the narrative profile's {{limit, number}}-token max output.",
+        "override": {
+          "maxOutput": "The reply was cut off at the {{limit, number}}-token max output of this story's narrative override before any story text. Raise the max output, then Retry.",
+          "maxOutputReasoning": "The reply was cut off at the {{limit, number}}-token max output of this story's narrative override before any story text; reasoning used {{reasoning, number}} of them. Raise the max output, then Retry.",
+          "unknown": "The server stopped the reply at its own limit before any story text. Setting a max output on this story's narrative override replaces it.",
+          "unknownWithMaxOutput": "The server stopped the reply at its own limit before any story text, short of the {{limit, number}}-token max output of this story's narrative override."
+        }
       },
       "memoryCutOff": {
         "maxOutput": "Memory update failed, so your turn didn't start. The update's reply was cut off at the classifier profile's {{limit, number}}-token max output. Raise it, then Retry.",
         "window": "Memory update failed, so your turn didn't start. The update's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
         "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on the classifier profile overrides it.",
-        "unknownWithMaxOutput": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's {{limit, number}}-token max output."
+        "unknownWithMaxOutput": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the classifier profile's {{limit, number}}-token max output.",
+        "override": {
+          "maxOutput": "Memory update failed, so your turn didn't start. The update's reply was cut off at the {{limit, number}}-token max output of this story's classifier override. Raise it, then Retry.",
+          "unknown": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit. Setting a max output on this story's classifier override replaces it.",
+          "unknownWithMaxOutput": "Memory update failed, so your turn didn't start. The server stopped the update's reply at its own limit, short of the {{limit, number}}-token max output of this story's classifier override."
+        }
       },
       "closeCutOff": {
         "maxOutput": "Chapter close failed, so your turn didn't start. The close's reply was cut off at the lore management profile's {{limit, number}}-token max output. Raise it, then Retry.",
         "window": "Chapter close failed, so your turn didn't start. The close's reply was cut off where the prompt and reply filled the model's {{limit, number}}-token window.",
         "unknown": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit. Setting a max output on the lore management profile overrides it.",
-        "unknownWithMaxOutput": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit, short of the lore management profile's {{limit, number}}-token max output."
+        "unknownWithMaxOutput": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit, short of the lore management profile's {{limit, number}}-token max output.",
+        "override": {
+          "maxOutput": "Chapter close failed, so your turn didn't start. The close's reply was cut off at the {{limit, number}}-token max output of this story's lore management override. Raise it, then Retry.",
+          "unknown": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit. Setting a max output on this story's lore management override replaces it.",
+          "unknownWithMaxOutput": "Chapter close failed, so your turn didn't start. The server stopped the close's reply at its own limit, short of the {{limit, number}}-token max output of this story's lore management override."
+        }
       },
       "contextWindow": {
         "check": "This prompt is about {{estimate, number}} tokens; {{model}}'s context window is {{window, number}} ({{source}}). Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
@@ -264,17 +290,29 @@
       "capabilityHint": {
         "reasoning": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
         "structuredOutput": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
-        "toolCalling": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
+        "toolCalling": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
+        "override": {
+          "reasoning": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check this story's override's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+          "structuredOutput": "The provider rejected the request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check this story's override's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+        }
       },
       "memoryCapabilityHint": {
         "reasoning": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
         "structuredOutput": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
-        "toolCalling": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
+        "toolCalling": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
+        "override": {
+          "reasoning": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check this story's override's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+          "structuredOutput": "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check this story's override's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+        }
       },
       "closeCapabilityHint": {
         "reasoning": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check the profile's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
         "structuredOutput": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
-        "toolCalling": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason."
+        "toolCalling": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
+        "override": {
+          "reasoning": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support reasoning: check this story's override's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+          "structuredOutput": "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `{{matched}}`. That can mean this model doesn't support structured output: check this story's override's structured-output setting and the model's badge. The provider may also have rejected the request for another reason."
+        }
       }
     }
   },

@@ -3,7 +3,7 @@ import { t } from '@/lib/i18n'
 import { SUGGESTIONS_UNUSABLE, type PipelineError } from '@/lib/pipeline'
 
 import { windowCopyOf } from './context-window-copy'
-import { cutOffCopyOf } from './cut-off-copy'
+import { cutOffCopyOf, whoseSetting } from './cut-off-copy'
 
 const SUGGESTION_RESOLVER_COPY = {
   'no-profile-assigned': 'reader:suggestions.failure.noProfileAssigned',
@@ -28,9 +28,11 @@ export function describeSuggestionFailure(error: PipelineError | null | undefine
     return t('reader:suggestions.failure.unusable')
   if (error?.kind === 'reply-cut-off') {
     const copy = cutOffCopyOf(error)
-    return copy.key === 'unknown'
-      ? t('reader:suggestions.failure.cutOff.unknown')
-      : t(`reader:suggestions.failure.cutOff.${copy.key}`, { limit: copy.limit })
+    const whose = whoseSetting(error.fromOverride)
+    if (copy.key === 'unknown') return t(`reader:suggestions.failure.cutOff.${whose}unknown`)
+    if (copy.key === 'window')
+      return t('reader:suggestions.failure.cutOff.window', { limit: copy.limit })
+    return t(`reader:suggestions.failure.cutOff.${whose}${copy.key}`, { limit: copy.limit })
   }
   if (error?.kind === 'context-window') return suggestionWindowCopy(error)
   if (error?.kind === 'provider') return t('reader:suggestions.failure.llmCall')
