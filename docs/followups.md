@@ -15,20 +15,49 @@ for the placement rule.
 
 ## UX
 
-- **Per-turn token usage breakdown.** Every turn records the tokens
-  each section of its prompt used (in-scene and retrieved entities, the
-  location map, the story history, retrieved happenings, lore, threads,
-  the instructions and so on) in its entry's metadata, and a UI shows
-  them. Today an entry keeps only totals (`metadata.tokens`), and the
-  Memory probe's per-pool numbers
-  ([`memory/probe.md`](./memory/probe.md)) cover only retrieval's pools
-  and the structural floor, and only on captured turns; the design
-  should build on the probe's accounting rather than beside it, and
-  shows whether the location map needs collapsing as a story grows. The
-  breakdown also records each call's cache read and write tokens
-  (`usage.inputTokenDetails`), the only measure of whether a cache
-  marker pays.
-  Wanted in v1, design deferred. Raised by the developer 2026-10-10.
+- **The per-turn token breakdown isn't built.** A turn records what its
+  prompt held by section, for the narrative call and the fallback
+  classifier, and the entry's token text opens it
+  ([`architecture.md → Prompt sections`](./architecture.md#prompt-sections),
+  [`entry-card.md → Token panel`](./ui/patterns/entry-card.md#token-panel)).
+  Today an entry keeps only the provider's totals. To be built as a
+  plan-mode followup once the story override settings' PR merges,
+  since both touch `lib/pipeline/definitions/per-turn.ts`,
+  `lib/ai/generate.ts`'s result types and `locales/en/reader.json`.
+  Build notes:
+  - the `section` block tag in `lib/prompts/engine.ts`, sync
+    (`* render()`), pushing no scope, and implementing `* children()`:
+    without it LiquidJS's static analysis can't see inside the block,
+    `templateReads` loses `entries`, and `generation-context.ts` sends
+    a narrative prompt with no history. Acceptance: `templateReads`
+    and both turn templates' rendered bytes are the same with and
+    without the tags. The collector is per render;
+  - the tags in `per-turn.ts`, `piggyback-fallback-classifier.ts` and
+    `memory-blocks.ts` (`lib/prompts/bundled/`), per canon's table;
+  - counting each section through the count cache in
+    `lib/ai/context-window.ts`, Story so far priced from
+    `content_tokens` as the close prices its turns, the user half
+    primed with the sum. The guard shared with the close
+    (`close-agent/turns.ts`), which closes the roadmap's M7.2 priming
+    item. How the fallback's phase learns the size of the JSON contract
+    the call layer adds is open;
+  - usage and the estimate on `generateStructured`'s `ok` result, which
+    returns no usage today;
+  - a helper reading cache and reasoning figures from `usage.raw`:
+    `@ai-sdk/openai-compatible` reports a missing figure as 0, so
+    `per-turn.ts` stores `reasoning: 0` and the meta line likely reads
+    "(+0 reasoning)" on a server that sends none (read from the code,
+    not run);
+  - the metadata schema, `systemFailure.promptSections` on a turn's
+    window refusal, and `cacheRead`/`cacheWrite` on
+    `provider.input_ratio`;
+  - the meta line, the token panel and the refusal's Details in
+    `components/compounds/entry-card.tsx`, with stories;
+  - a measure of `provider.prompt_estimate`'s `ms` on a long story
+    before and after, in English and in a CJK story: the design
+    assumes a turn's count gets cheaper, and nothing has measured it.
+
+  Raised by the developer 2026-10-10; designed 2026-11-17.
 
 - **Story overrides' settings aren't built.** A story's model override
   carries its own call settings, copied from what its slot resolves to
@@ -212,7 +241,7 @@ the roadmap's
 Unlike [parked-until-signal](./parked.md#parked-until-signal) items,
 these will be done; they wait because tuning earlier tunes against
 systems still changing. Their instruments land first: the
-[memory probe](./memory/probe.md) (M7.5) and the per-turn token usage
+[memory probe](./memory/probe.md) (M7.5) and the per-turn token
 breakdown under [UX](#ux).
 
 - **Play-check entity state in prompts.** Entity state reaches every

@@ -667,7 +667,7 @@ and brain affordance.
 Meta line is intentionally minimal. No model name — users don't care
 per-entry. Format:
 
-`📚  [🧠]  <reply-tok> / <reasoning-tok>`
+`📚  [🧠]  [🌐]  <prompt-tok> → <reply-tok> (+<reasoning-tok> reasoning)`
 
 - **Narrative glyph** (📚 placeholder, finalized in visual identity).
   Replaces a text "AI reply" label so the meta row stays compact at
@@ -678,8 +678,16 @@ per-entry. Format:
   muted, left-bordered reasoning body expansion **above** the content
   (chronological order: think, then speak). Absent when the provider
   doesn't expose reasoning tokens.
-- **Unified token display** as `<reply> / <reasoning>` in muted
-  monospace. Tooltip explains the slash.
+- **Globe icon** toggles the
+  [world-state panel](../../patterns/entry-card.md#world-state-panel).
+- **Token display** in muted text: the narrative call's prompt as the
+  provider counted it, then its reply, exact numbers with locale
+  grouping. The reasoning part shows only when the provider reported a
+  reasoning count. With sections but no provider counts it reads
+  `~<estimate> → ~<reply>`, the sections' sum and the reply's stored
+  `content_tokens`. It's the narrative call alone, never a sum of the
+  turn's calls. Tapping it toggles the
+  [token panel](../../patterns/entry-card.md#token-panel).
 - **Pulses** while the model is streaming reasoning (same animation
   as the gen-status pill dot). Static + clickable when done.
 - **Collapsed by default**, including during the reasoning phase —
@@ -730,18 +738,20 @@ entries collection identity.
 The streaming AI entry uses the same structure as a completed AI
 entry.
 
-- **Reasoning phase:** brain icon pulses, token display `— / N →`
-  (dash for reply-not-started, N = reasoning tokens so far).
-  Reasoning body stays **collapsed by default**; pulsing brain is
-  the signal. Content placeholder "reply hasn't started yet".
+- **Reasoning phase:** brain icon pulses, token display
+  `— (+N reasoning)…` (dash for reply-not-started, N = reasoning
+  tokens so far). Reasoning body stays **collapsed by default**;
+  pulsing brain is the signal. Content placeholder "reply hasn't
+  started yet".
 - **Reply phase:** brain icon static (reasoning complete), token
-  display `M / N →` (M = reply streamed, N = final reasoning),
-  content streams token-by-token.
-- **Complete:** entry commits; trailing `→` disappears, brain
+  display `M (+N reasoning)…` (M = reply streamed, N = final
+  reasoning), content streams token-by-token.
+- **Complete:** entry commits; the trailing `…` gives way to the
+  committed line, the prompt's count first, and the brain turns
   clickable for reasoning expansion.
 
 Non-reasoning providers: no brain, token display collapses to just
-reply tokens.
+reply tokens, `M…`.
 
 ## Error surface — system entries vs. persistent state pill
 
@@ -786,7 +796,10 @@ model's window with its source, or, when the provider rejected the
 prompt, says the provider's message suggests an overflow and quotes
 it. Either way it adds the remedies: shorten the prompt (Story
 Settings memory budgets and history buffer), raise the window if the
-model allows more, or switch to a model with a larger one. `Retry`
+model allows more, or switch to a model with a larger one. Its
+`Details` list the refused prompt by section, so the user can see which
+part to shorten
+([`entry-card.md → System entry`](../../patterns/entry-card.md#system-entry)). `Retry`
 stays, since it resends the held text once something has changed;
 `Set window` opens the model's row in
 [App Settings](../app-settings/app-settings.md#context-window). A

@@ -250,6 +250,10 @@ mismatches on pack load" without specifying:
     ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
     Needs the variable registry to tag each variable as stable
     or per-call.
+  - **Section ids** — a `{% section %}` tag naming an id outside
+    the vocabulary
+    ([`architecture.md → Prompt sections`](./architecture.md#prompt-sections)),
+    which counts as Other at runtime.
 - **What it surfaces — severity: warnings, not errors.** The
   validator surfaces issues as warnings in the editor; never
   blocks save or pack activation on user-authored packs. User
@@ -4243,7 +4247,10 @@ was not probed. The signal to revisit is a shipped bug from a dropped
 means moving `ai` and `@ai-sdk/openai-compatible` to their v7 releases
 too: an SDK migration, not a one-package bump. The 4.0.0 changelog also
 makes the package ESM-only and drops `cacheCreationInputTokens` from
-`providerMetadata`, which the app doesn't read. The 3.x line the app is
+`providerMetadata`, which the app doesn't read. The token breakdown
+reads cache and reasoning figures from each call's raw usage instead
+([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape)),
+so a migration re-checks that shape. The 3.x line the app is
 on still gets releases under the `ai-v6` dist-tag, and neither line
 sends Anthropic's browser-access header, which the app now sets itself.
 Parked 2026-10-24; the signal is a v7-only feature or fix the app needs,

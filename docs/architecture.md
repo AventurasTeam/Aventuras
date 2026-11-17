@@ -326,6 +326,58 @@ attempt or a direction from the narration; the opening and the replies
 render unmarked, though the close's turns also label the opening and each
 reply. The mark costs a few tokens per user turn.
 
+### Prompt sections
+
+A template marks its parts with a block tag,
+`{% section 'id' %}…{% endsection %}`, and the engine records each
+section's rendered text. A turn's two calls, the narrative and the
+fallback classifier, count those texts into the entry's token
+breakdown
+([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape)),
+which the reader shows by section
+([`entry-card.md → Token panel`](./ui/patterns/entry-card.md#token-panel)).
+The tag writes its body through unchanged: it adds no bytes, so the
+system half and the cached prefix stay as they were, and it opens no
+scope, so an `assign` inside a section holds after it. It hides nothing
+from the variables a template reads either. The context builder skips
+the history and the scene when the template doesn't read them
+(`templateReads`), so a variable read only inside a section must count
+as read, or the prompt goes out without it.
+
+- **Ids** come from a closed vocabulary the reader can name:
+  `instructions`, `setup`, `roster`, `scene`, `places`, `entities`,
+  `lore`, `happenings`, `threads`, `chapters`, `history` and `output`.
+  An unknown id counts as Other and logs a warning once per id per
+  session; the deferred
+  [pack validator](./parked.md#pack-validation-contract) flags it.
+- **An id may repeat**, and its counts add up: the narrator's
+  instructions in the system half and the ID instructions in the user
+  half are both `instructions`. Of nested sections, the innermost
+  counts the text.
+- **Other** is what no section holds: the call's estimate less every
+  named section, floored at zero. A pack that marks nothing shows one
+  Other line equal to the whole prompt.
+- **The memory blocks macro carries its own tags**, so every template
+  that includes it gets them.
+
+The bundled pack tags its two turn templates this way; the others carry
+no tags, and one that comes to record its sections adds them:
+
+| Section        | Per-turn narrative                                                              | Piggyback fallback classifier                                                   |
+| -------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `instructions` | The standing instructions and the note on the user's turns; the ID instructions | The mode rule; the report directives                                            |
+| `setup`        | Setting, Genre, Tone, Calendar                                                  | Calendar                                                                        |
+| `roster`       | —                                                                               | The ID roster and the lead                                                      |
+| `scene`        | In scene, Current location, Current time                                        | In scene, Current location                                                      |
+| `places`       | The location map                                                                | The location map                                                                |
+| `entities`     | The wider world                                                                 | The wider world; the characters the turn names                                  |
+| `lore`         | Relevant lore                                                                   | Relevant lore                                                                   |
+| `happenings`   | What has happened                                                               | What has happened                                                               |
+| `threads`      | Active and background threads                                                   | Active and background threads                                                   |
+| `chapters`     | Earlier chapters                                                                | Earlier chapters                                                                |
+| `history`      | Story so far                                                                    | The earlier turns and this turn                                                 |
+| `output`       | The output-format line, the state and suggestion emission                       | The suggestion emission, and the structured-output contract the call layer adds |
+
 ### Structured output — the JSON contract is not pack content
 
 Agent calls that parse a typed reply (wizard assist, classifiers)
@@ -1005,6 +1057,22 @@ chapter primed 0.4% low where English was exact. The lean goes either way by a l
 and is accepted as small, not as safe: the estimate is compared with no
 margin, as below, where a low lean is the cheaper miss.
 
+A turn's two calls count their prompt by
+[section](#prompt-sections), each section through the cache below, so
+one unchanged since the last turn costs nothing. Story so far is
+priced the way a close prices its turns, from the section rendered
+with every entry blank plus each entry's stored `content_tokens`. The
+user half's count, the sum of its sections, is recorded for the exact
+text sent, so the check doesn't encode it again, and its estimate stays
+the call's total, with the same lean.
+
+Both primed counts, the close's and the turn's, hold only while the
+template renders each entry's prose once and whole: the primed text's
+length less the blank render's must equal the entries' summed prose,
+or the text is encoded instead. An edited pack that truncates, moves or
+doubles `{{ entry.content }}` would otherwise prime a wrong count the
+check trusts with no margin.
+
 Counts are cached by text, up to 4,096 texts and 2,000,000 characters,
 the least recently used out, and a counting pass keeps its system half.
 A text over the character budget isn't kept
@@ -1090,6 +1158,11 @@ threshold sits well clear of tokenizer differences and is a starting
 value for tuning. The ratio itself is logged at debug level on every
 call, the evidence a calibration of the estimate would start from
 ([`parked.md → Calibrating the token estimate per model`](./parked.md#calibrating-the-token-estimate-per-model)).
+The same line carries the provider's cache reads and writes when it
+reported them, the measure of whether a
+[cache marker](#system-and-user-halves) pays. A close's tool steps,
+where the marker pays most, have no entry to keep them, so the log is
+where they're read.
 
 The OpenAI-compatible provider is built with `includeUsage`, so a
 streamed call asks for usage through `stream_options`; without it most

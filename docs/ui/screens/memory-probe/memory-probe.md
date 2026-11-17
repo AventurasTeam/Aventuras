@@ -371,6 +371,11 @@ Retrieved (per type, in injection order):
 The unified output view. Shows what actually went into the prompt
 context, in injection order, with per-row token cost. Each row is
 a clickable deep link to its source panel (World / Plot / chapter).
+The entry's own
+[token panel](../../patterns/entry-card.md#token-panel) is the
+coarser view of the same prompt, on every turn: the whole of it by
+section, instructions and Places included, priced as rendered, where
+this tab prices each retrieved row as the ranker measured it.
 
 This tab is the most common entry-point question's answer ("what
 did the model see for this turn?"); putting it first in the tab

@@ -2052,7 +2052,16 @@ delta-logged. Shape:
 ```ts
 story_entries.metadata: {
   // Generation provenance (AI entries only)
-  tokens?: { prompt: number, completion: number, reasoning?: number }
+  tokens?: {                        // the narrative call's counts, as the provider reported them
+    prompt: number, completion: number, reasoning?: number
+    cacheRead?: number              // input tokens served from the provider's cache; absent when it reported no cache figure, never 0 for one it didn't send
+    cacheWrite?: number             // input tokens written to its cache (Anthropic); absent likewise
+  }
+  promptSections?: PromptSections   // the narrative call's prompt by section; authored, never inherited. See "Prompt sections" below
+  classifierCall?: {                // the fallback classifier, when it ran on this turn and returned; authored, never inherited
+    tokens?: { prompt: number, completion: number, reasoning?: number, cacheRead?: number, cacheWrite?: number }  // as `tokens` above
+    promptSections: PromptSections
+  }
   model?: string
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
@@ -2121,11 +2130,46 @@ story_entries.metadata: {
       content: string
       composerMode: string
     }
+    promptSections?: PromptSections // a turn's context-window failure only: the refused narrative prompt by section
     close?: 'failed' | 'resolved'   // a close-failure entry, as `pass` below; a close has no held state
     pass?: 'failed' | 'held' | 'resolved'  // a pass-failure entry: its Retry runs the pass alone; held has no Retry; resolved is what a committed Retry leaves when the composer couldn't take the submission back, a notice holding it with no Retry
   }
 }
+
+// o200k estimates by section (architecture.md → Prompt sections); a section that rendered nothing is absent
+type PromptSections = Partial<Record<
+  | 'instructions' | 'setup' | 'roster' | 'scene' | 'places' | 'entities' | 'lore'
+  | 'happenings' | 'threads' | 'chapters' | 'history' | 'output' | 'other',
+  number
+>>
 ```
+
+**Prompt sections.** A turn records what its prompt held, by
+[section](./architecture.md#prompt-sections), for the narrative call in
+`promptSections` and for the fallback classifier, when it ran on the
+turn, in `classifierCall`. The sections are the pre-send check's
+estimate split up, so they sum to it within the lean
+[the check](./architecture.md#the-pre-send-check) accepts; `tokens` is
+the provider's own count, which differs by the tokenizer, so the two are
+never reconciled. Each call records the attempt the turn kept: a
+retried or re-rolled call's failed attempts aren't added, since the
+breakdown describes the prompt, the same on every attempt, not what
+the provider billed. A fallback that failed records nothing; its
+failure is in `stateReport`. The cache fields are read from the
+provider's raw usage and written only when it sent them: an
+OpenAI-compatible server that sends no cache figure reads as 0 in the
+SDK's usage, and so does one that sends no reasoning figure, so
+`tokens.reasoning` is held to the same rule. None of these fields is
+inherited or touched by an edit; a regenerated turn writes new ones on
+its new entry. The fallback's ride its metadata write, so undoing that
+write removes them. A turn refused over its model's window keeps the
+refused prompt's sections on its failure entry,
+`systemFailure.promptSections`
+([`reader-composer.md → Transient pipeline failures`](./ui/screens/reader-composer/reader-composer.md#transient-pipeline-failures--system-entries-in-chat)).
+Export and backup carry them with the entry, and a fork copies them
+with it, still describing the generation that wrote it. The reader
+shows them in the entry's
+[token panel](./ui/patterns/entry-card.md#token-panel).
 
 **Reasoning text persistence.** `reasoning` is written at stream
 completion alongside `tokens.reasoning`. Field stays undefined for

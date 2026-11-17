@@ -252,7 +252,8 @@ convention, and the expectation that subsystems route through
   kept, with `chars` and `budget`), `input_ratio` (debug: the provider's
   reported input tokens over the estimate, on every attempt that reported
   a positive count, with `providerId`, `modelId`, `estimate`,
-  `reported` and `ratio`), `prompt_truncation_suspected` (warn: that
+  `reported` and `ratio`, plus `cacheRead` and `cacheWrite` when the
+  provider reported them), `prompt_truncation_suspected` (warn: that
   ratio under `0.5`, logged every time with the same fields; the toast
   it raises shows once per provider and model per app session),
   `truncation_notice_failed` (warn: the truncation toast's sink threw;

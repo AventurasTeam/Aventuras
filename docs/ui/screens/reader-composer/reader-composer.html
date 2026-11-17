@@ -484,6 +484,25 @@
   @keyframes reasoning-pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 6px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
   .bubble.reasoning-open .reasoning-icon { background: var(--bg-highlight); opacity: 1; }
   .tok-display { font-size: 10px; color: var(--ink-faint); font-family: ui-monospace, monospace; }
+  /* token text: the narrative call's prompt as the provider counted it, then the reply. Pressable
+     only when the entry recorded sections; it opens the token panel (entry-card.md -> Token panel). */
+  .tok-display.tk-toggle { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+  .tok-display.tk-toggle:hover { color: var(--ink-muted); }
+  .tk-body { display: none; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 4px; background: rgba(0,0,0,0.015); font-size: 11px; color: var(--ink); }
+  .bubble.tk-open .tk-body { display: block; }
+  /* one group per call; no line sums the two */
+  .tk-group + .tk-group { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line-soft); }
+  .tk-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 11px; font-weight: 600; margin-bottom: 3px; }
+  .tk-head .counts { font-weight: 400; color: var(--ink-muted); font-family: ui-monospace, monospace; font-size: 10.5px; }
+  .tk-sub { font-size: 10.5px; color: var(--ink-muted); line-height: 1.6; }
+  .tk-sub.est { margin-top: 3px; color: var(--ink-faint); }
+  /* rows keep the vocabulary's order, never sorted, so turn 10 compares with turn 200 by position */
+  .tk-row { display: grid; grid-template-columns: 96px 52px 1fr; gap: 6px; align-items: center; font-size: 10.5px; line-height: 1.7; }
+  .tk-row .n { text-align: right; font-family: ui-monospace, monospace; color: var(--ink-muted); }
+  .tk-bar { height: 5px; border-radius: 2px; background: var(--ink-faint); opacity: 0.45; }
+  /* a refused turn's Details list the refused prompt in the same rows, above the log line */
+  .err-sections { display: none; margin-top: 4px; padding: 6px 8px; border: 1px solid var(--line-soft); border-radius: 3px; }
+  .err-details.open .err-sections.has { display: block; }
   .reasoning-body { display: none; margin-top: 10px; padding: 10px 12px; border-left: 2px solid var(--line-soft); font-size: 12px; color: var(--ink-muted); font-style: italic; line-height: 1.55; background: rgba(0,0,0,0.015); }
   .bubble.reasoning-open .reasoning-body { display: block; }
 
@@ -963,7 +982,7 @@
               <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
               <span class="reasoning-icon" data-reasoning-toggle title="Show reasoning trace">&#129504;</span>
               <span class="reasoning-icon" data-ws-toggle title="Show world state">&#127758;</span>
-              <span class="tok-display" title="reply tok / reasoning tok">1.8k / 3.2k</span>
+              <span class="tok-display tk-toggle" data-tk-toggle title="Prompt 12,340 tokens, reply 1,800, reasoning 3,200. Show the token breakdown">12,340 &rarr; 1,800 (+3,200 reasoning)</span>
             </span>
           </div>
           <div class="reasoning-body">
@@ -1019,6 +1038,17 @@
               <div class="ws-line">Aria pushed into the marshes; met an exiled noble who recognized House Eldrin's sigil.</div>
             </div>
           </div>
+          <!-- Token panel, a piggyback turn: the narrative call only. Header = the provider's counts,
+               the meta line's numbers; the sections are the pre-send check's o200k estimate and their
+               sum differs from the header by the tokenizer, never reconciled. A zero section
+               (Chapters here) has no row. -->
+          <div class="tk-body">
+            <div class="tk-group" data-tk-sections='[["Instructions",1830],["Story setup",420],["Scene",380],["Places",610],["World",940],["Lore",520],["Happenings",700],["Threads",210],["Story so far",6140],["Output format",110],["Other",40]]'>
+              <div class="tk-head">Narrative call <span class="counts">12,340 prompt &middot; 1,800 reply</span></div>
+              <div class="tk-sub">From cache 10,980 (89%)</div>
+              <div class="tk-sub est">Estimated by section &middot; 11,900</div>
+            </div>
+          </div>
           <div class="bubble-content placeholder">[narrative response &mdash; several paragraphs of story prose.]</div>
           <div class="entry-actions">
             <span class="entry-action" title="Edit">&#x270E;</span>
@@ -1049,7 +1079,7 @@
               <!-- Alert: the problems box below holds a line the turn didn't recover from. The card
                    shows it with the panel closed; the name says part of the state wasn't applied. -->
               <span class="reasoning-icon ws-alert" data-ws-toggle title="Show world state &mdash; part of it wasn't applied">&#127758;</span>
-              <span class="tok-display" title="reply tok / reasoning tok">2.1k / &mdash;</span>
+              <span class="tok-display tk-toggle" data-tk-toggle title="Prompt 9,870 tokens, reply 2,100. Show the token breakdown">9,870 &rarr; 2,100</span>
             </span>
           </div>
           <!-- World-state panel, TAIL entry, alert case. Stands in for the tail here so the
@@ -1096,6 +1126,20 @@
             </div>
             <div class="ws-note">Legacy rows written before the strip keep their inline block and render it here verbatim instead &mdash; tolerant reader, no migration.</div>
           </div>
+          <!-- Token panel, a fallback turn: the narrative call, then the classifier fallback, each its
+               own call under its own header. The meta line shows the narrative call alone. -->
+          <div class="tk-body">
+            <div class="tk-group" data-tk-sections='[["Instructions",1830],["Story setup",420],["Scene",520],["Places",610],["World",700],["Lore",300],["Happenings",520],["Threads",210],["Story so far",3980],["Output format",380],["Other",30]]'>
+              <div class="tk-head">Narrative call <span class="counts">9,870 prompt &middot; 2,100 reply</span></div>
+              <div class="tk-sub">From cache 8,700 (88%)</div>
+              <div class="tk-sub est">Estimated by section &middot; 9,500</div>
+            </div>
+            <div class="tk-group" data-tk-sections='[["Instructions",1450],["Story setup",90],["Entity roster",640],["Scene",520],["Places",610],["World",700],["Lore",300],["Happenings",520],["Threads",210],["Story so far",420],["Output format",210],["Other",20]]'>
+              <div class="tk-head">Classifier fallback <span class="counts">5,730 prompt &middot; 310 reply</span></div>
+              <div class="tk-sub">From cache 1,130 (20%)</div>
+              <div class="tk-sub est">Estimated by section &middot; 5,690</div>
+            </div>
+          </div>
           <div class="bubble-content placeholder">[narrative response &mdash; whose worldTime has been manually edited backward, e.g. the user noticed this scene took place earlier than the classifier inferred and dragged it back to 13:45.]</div>
           <div class="entry-actions">
             <span class="entry-action" title="Edit">&#x270E;</span>
@@ -1130,6 +1174,8 @@
           <!-- Details disclosure: collapsed by default, under the buttons so opening it never moves them -->
           <div class="err-details" id="err-details">
             <span class="err-details-toggle" id="err-details-toggle" aria-expanded="false">&#9656; Details</span>
+            <!-- a turn refused over its window: the refused prompt by section, in the token panel's rows -->
+            <div class="err-sections" id="err-sections"></div>
             <div class="err-details-body"><code id="err-details-text">rate-limit: APICallError: 429 Too Many Requests</code><span class="err-copy" data-copy title="Copy details">Copy</span></div>
           </div>
         </div>
@@ -1153,7 +1199,7 @@
             <span class="bubble-meta">
               <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
               <span class="reasoning-icon pulsing" id="streaming-brain" data-reasoning-toggle title="Reasoning in progress &mdash; click to show">&#129504;</span>
-              <span class="tok-display" id="streaming-toks">&mdash; / 0.8k &rarr;</span>
+              <span class="tok-display" id="streaming-toks">&mdash; (+800 reasoning)&hellip;</span>
             </span>
           </div>
           <div class="reasoning-body" id="streaming-reasoning-body">
@@ -1852,11 +1898,11 @@
         streamingBubble.classList.remove('reasoning-open');
         if (state === 'reasoning') {
           streamingBrain.classList.add('pulsing');
-          streamingToks.textContent = '— / 0.8k →';
+          streamingToks.textContent = '— (+800 reasoning)…';
           streamingContent.textContent = '[reply hasn’t started yet — model still reasoning]';
         } else if (state === 'generating') {
           streamingBrain.classList.remove('pulsing');
-          streamingToks.textContent = '0.4k / 3.2k →';
+          streamingToks.textContent = '400 (+3,200 reasoning)…';
           streamingContent.textContent = '[partial text appearing token by token…]';
         } else {
           // classifying / recalling-memory — keep streaming entry hidden
@@ -2079,6 +2125,21 @@
   const errKind = document.getElementById('err-kind');
   const errContent = document.getElementById('err-content');
   const errActions = document.getElementById('err-actions');
+  // The refused narrative prompt by section (systemFailure.promptSections); sums to the 71,200 estimate.
+  const WINDOW_SECTIONS = [['Instructions', 1900], ['Story setup', 650], ['Scene', 820], ['Places', 4300], ['World', 3100], ['Lore', 2400], ['Happenings', 2900], ['Threads', 600], ['Chapters', 1200], ['Story so far', 53100], ['Output format', 230]];
+  // Token panel rows: label, count, and a bar whose width is the section's share of the group's sum.
+  function renderTokenRows(container, sections) {
+    const sum = sections.reduce((total, [, n]) => total + n, 0);
+    sections.forEach(([label, n]) => {
+      const row = document.createElement('div');
+      row.className = 'tk-row';
+      row.innerHTML = `<span>${label}</span><span class="n">${n.toLocaleString('en-US')}</span><span><span class="tk-bar" style="display:block;width:${Math.max(1, Math.round((n / sum) * 100))}%"></span></span>`;
+      container.appendChild(row);
+    });
+  }
+  document.querySelectorAll('[data-tk-sections]').forEach(group => {
+    renderTokenRows(group, JSON.parse(group.dataset.tkSections));
+  });
   const errVariants = {
     llm: {
       kind: '⚠ System · generation error',
@@ -2141,6 +2202,7 @@
       kind: '⚠ System · prompt too large',
       content: "<b>This prompt is about 71,200 tokens; llama3.1:70b's context window is 65,536 (set by you).</b> Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
       detail: "prompt over the context window (check): estimate 71200 tokens, window 65536 (configured); model llama3.1:70b on provider prov_7f3a",
+      sections: WINDOW_SECTIONS,
       actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A provider rejection recognized as an overflow; the window was unknown, so nothing was checked.
@@ -2148,6 +2210,7 @@
       kind: '⚠ System · prompt too large',
       content: "<b>The provider rejected the prompt. Its message suggests it exceeded the model's context window:</b> “request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it”. Our estimate: about 71,200 tokens. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one.",
       detail: "prompt over the context window (provider): estimate 71200 tokens; model llama3.1:70b on provider prov_7f3a: request (71834 tokens) exceeds the available context size (65536 tokens), try increasing it",
+      sections: WINDOW_SECTIONS,
       actions: '<span class="err-btn primary">Set window</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
     // A narrative reply cut off before any prose (generation-pipeline.md -> Cut-off replies); the held text returns.
@@ -2222,6 +2285,10 @@
     measureHeldOverflow();
     errDetails.style.display = v.detail ? '' : 'none';
     errDetailsText.textContent = v.detail || '';
+    const errSections = document.getElementById('err-sections');
+    errSections.innerHTML = '';
+    errSections.classList.toggle('has', Boolean(v.sections));
+    if (v.sections) renderTokenRows(errSections, v.sections);
     errDetails.classList.remove('open');
     errDetailsToggle.setAttribute('aria-expanded', 'false');
     errDetailsToggle.innerHTML = '&#9656; Details';
@@ -2539,6 +2606,14 @@
       const bubble = t.closest('.bubble');
       bubble.classList.toggle('ws-open');
       t.setAttribute('title', bubble.classList.contains('ws-open') ? 'Hide world state' : 'Show world state');
+    });
+  });
+
+  // token panel toggle — the token text itself; no icon of its own.
+  document.querySelectorAll('[data-tk-toggle]').forEach(t => {
+    t.addEventListener('click', e => {
+      e.stopPropagation();
+      t.closest('.bubble').classList.toggle('tk-open');
     });
   });
 

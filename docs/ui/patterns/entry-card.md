@@ -63,7 +63,7 @@ type EntryCardProps = {
   sceneOptions?: { characters: EntityOption[]; items: EntityOption[]; locations: EntityOption[] } // candidate pool for the editor's selects; required alongside either edit handler
 
   // AI / opening:
-  meta?: Pick<EntryMetadata, 'tokens'> // the top line renders tokens.completion (+ tokens.reasoning when set)
+  meta?: Pick<EntryMetadata, 'tokens' | 'promptSections' | 'classifierCall'> // the top line renders the prompt and reply counts; sections make them the Token panel's toggle
   reasoning?: string
   onRegen?: () => void // ai only
   onBranch?: () => void // ai, opening
@@ -77,6 +77,7 @@ type EntryCardProps = {
 
   // System-only — see "System entry" below:
   detail?: string // renders the Details disclosure under the buttons
+  promptSections?: PromptSections // a refused turn's prompt by section; listed inside Details
   heldText?: string // the turn's text the entry keeps; renders the Your text quote
   onCopy?: (text: string) => void // the quote's and the detail's copy buttons; absent hides both
   fixAction?: { label: string; onPress: () => void } // kind-specific recovery route (e.g. "Fix profile" → settings); precedes Retry
@@ -114,18 +115,19 @@ Two structural choices:
 
 ## Per-kind structure
 
-| Slot                       | user_action                      | ai_reply                                  | opening                                | system                                                              | streaming                             |
-| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------- |
-| Top line                   | `You` badge                      | meta line (glyph, brain, tokens)          | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing → ) |
-| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`    |
-| World-state panel          | —                                | conditional (expanded)                    | conditional                            | —                                                                   | —                                     |
-| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                  |
-| Held-text quote            | —                                | —                                         | —                                      | conditional (`heldText` set), above the buttons                     | —                                     |
-| Details disclosure         | —                                | —                                         | —                                      | conditional (`detail` set), under the buttons                       | —                                     |
-| Cut-off notice             | —                                | conditional (`cutOff` set)                | —                                      | —                                                                   | —                                     |
-| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                     |
-| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                                |
-| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                      |
+| Slot                       | user_action                      | ai_reply                                  | opening                                | system                                                              | streaming                            |
+| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| Top line                   | `You` badge                      | meta line (glyph, brain, globe, tokens)   | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing …) |
+| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`   |
+| World-state panel          | —                                | conditional (expanded)                    | conditional                            | —                                                                   | —                                    |
+| Token panel                | —                                | conditional (sections set, expanded)      | —                                      | —                                                                   | —                                    |
+| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                 |
+| Held-text quote            | —                                | —                                         | —                                      | conditional (`heldText` set), above the buttons                     | —                                    |
+| Details disclosure         | —                                | —                                         | —                                      | conditional (`detail` set), under the buttons                       | —                                    |
+| Cut-off notice             | —                                | conditional (`cutOff` set)                | —                                      | —                                                                   | —                                    |
+| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                    |
+| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                               |
+| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                     |
 
 Streaming is deliberately not visually distinguished: the swap to
 the committed `ai_reply` row should not re-frame the card.
@@ -459,6 +461,53 @@ those — the raw block in monospace, read-only — rather than migrating
 them. Their absolute triple is intact, so a legacy tail entry still
 edits normally.
 
+## Token panel
+
+**Data source:** `story_entries.metadata.tokens`, `.promptSections`
+and `.classifierCall` (see
+[data-model.md → Entry metadata shape](../../data-model.md#entry-metadata-shape)),
+split by [section](../../architecture.md#prompt-sections).
+
+**Toggle.** The meta line's token text
+([`reader-composer.md`](../screens/reader-composer/reader-composer.md#reasoning-expansion--token-metadata-on-ai-entries)
+gives its format) toggles the panel, as the brain and the globe toggle
+theirs; it has no icon of its own. It is pressable only when the entry
+has `promptSections` or `classifierCall`, and plain text otherwise:
+unlike the globe's, nothing sits behind this tap on an entry without
+sections. Its spoken label names the prompt, reply and reasoning counts
+and says it opens the breakdown.
+
+**State:** internal `tokensExpanded: boolean`, default `false`, no
+external override, as the other two. The panel opens under the
+world-state panel, above the content, the same on every platform, and
+its open and close is the same measurable layout change the
+[reasoning body](#reasoning-expansion) gives the parent list.
+
+**Anatomy.** One group per call: the narrative call, then the fallback
+classifier when `classifierCall` is set, named as the world-state
+panel's badge names that layer. Each group stacks:
+
+- **Header:** the call's name and the provider's counts,
+  `<prompt> prompt · <reply> reply`. The narrative header shows the
+  meta line's numbers. No line sums the two groups: each is its own
+  call. Without provider counts the header shows the sections' sum,
+  marked as estimated, and the narrative call's reply as the entry's
+  stored `content_tokens`.
+- **Cache lines**, each only when the provider reported it:
+  `From cache <n> (<share of the prompt>)`, and `Written to cache <n>`.
+- **`Estimated by section · <sum>`**, always, above the rows: the
+  sections and the header are counted by different tokenizers, and the
+  panel doesn't reconcile them.
+- **One row per section**, label, count and a bar whose width is the
+  section's share of the group's sum. Rows keep the vocabulary's order,
+  never sorted by size, so a section sits in the same place on every
+  entry and turn 10 compares with turn 200 by position. A section the
+  record lacks has no row.
+
+Labels, through `t()`: Instructions, Story setup, Entity roster, Scene,
+Places, World, Lore, Happenings, Threads, Chapters, Story so far,
+Output format, Other. The bars are decorative; the rows are text.
+
 ## Edit mode
 
 When `editing === true`:
@@ -726,7 +775,9 @@ wrapping (`overflow-wrap: anywhere`) rather than scrolling, so a JSON
 body or a URL never widens the card. The detail is diagnostic, read at
 a glance before acting or pasted into a report: for most kinds the
 run's English log line, ids included, and it may repeat what the
-description quotes.
+description quotes. A turn refused over its model's window also passes
+`promptSections`, and the open disclosure lists the refused prompt by
+section above the detail, in the [Token panel](#token-panel)'s rows.
 
 **Copy.** The quote's label line and the open detail each carry a copy
 button, labelled "Copy your text" and "Copy details" for assistive
@@ -927,7 +978,11 @@ Live demos for: user kind, ai kind (with reasoning expanded /
 collapsed), opening kind (no delete action), system kind (held
 text short, clamped and with `Show all` open; with and without a
 detail, `Details` open; a held entry with no detail; at phone width;
-copy and toggles live while a run holds the gate), streaming kind
+copy and toggles live while a run holds the gate; a window refusal's
+sections in `Details`), token panel (the narrative call alone and
+with the classifier group, cache lines present and absent, no
+provider counts, plain token text on an entry without sections, at
+phone width), streaming kind
 (reasoning-phase, reply-phase),
 edit mode (textarea, with and without `Save & regenerate`),
 disabled state, the gate split during a pass (older entry, head turn, head-turn edit), world-time footer
