@@ -9,7 +9,7 @@ import {
   type TopLevelToken,
 } from 'liquidjs'
 
-import { PROMPT_SECTION_IDS, type PromptSectionId } from '@/lib/db'
+import type { PromptSectionId } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import type { HalfSections } from './types'
@@ -75,8 +75,28 @@ function collectorOf(ctx: Context): SectionCollector | undefined {
   return found instanceof SectionCollector ? found : undefined
 }
 
+// lib/db owns the vocabulary, but its barrel loads lib/prompts at evaluation, so a value import here
+// closes a cycle that leaves the barrel half-loaded under CommonJS. A type-only copy, checked both ways.
+const SECTION_IDS = [
+  'instructions',
+  'setup',
+  'roster',
+  'scene',
+  'places',
+  'entities',
+  'lore',
+  'happenings',
+  'threads',
+  'chapters',
+  'history',
+  'output',
+] as const satisfies readonly PromptSectionId[]
+const everyIdListed: Exclude<PromptSectionId, (typeof SECTION_IDS)[number]> extends never
+  ? true
+  : false = true
+
 function isSectionId(id: string): id is PromptSectionId {
-  return (PROMPT_SECTION_IDS as readonly string[]).includes(id)
+  return everyIdListed && (SECTION_IDS as readonly string[]).includes(id)
 }
 
 const warnedIds = new Set<string>()
