@@ -1,4 +1,5 @@
 export { blankToNull } from './blank-to-null'
 export { excerpt } from './excerpt'
+export { firstLastSentences, SENTENCE_EXCERPT_MAX } from './first-last-sentences'
 export { oneLine } from './one-line'
 export { stripMarkup } from './strip-markup'
