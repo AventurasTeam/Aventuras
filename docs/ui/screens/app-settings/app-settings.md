@@ -621,9 +621,10 @@ data binding differs.
 
 Two intentional differences from the per-story version:
 
-- **No classifier status block, no `Run classifier now` button.**
-  Those are per-story operational state (live progress, failures,
-  manual override), not seedable defaults.
+- **No classifier status block, no piggyback record, no `Run classifier
+now` button.** Those are per-story operational state (live progress,
+  failures, a branch's turns, manual override), not seedable defaults.
+  The piggyback toggle itself is here, off as shipped, never disabled.
 - **Embedder default is the selection only — backend toggle plus a
   model picker.** Picker source switches with the backend toggle:
   - **`local`** — lists installed local models from

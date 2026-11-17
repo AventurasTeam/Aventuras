@@ -28,10 +28,11 @@ Two architectural drivers shape the stratification:
   [the retrieval queries](./retrieval.md#q4-classifier-emitted-queries),
   which cannot be answered without seeing what the turn was given (see
   [`piggyback.md → Fallback classifier context`](./piggyback.md#fallback-classifier-context)).
-  This is affordable because it is the exception path: with piggyback
-  on, it fires only when a block fails to parse. A model that
-  permanently fails the capability gate pays it every turn, which is a
-  known consequence of the gate rather than a defect.
+  With piggyback on it is the exception path, firing only when a block
+  fails to parse. With piggyback off, the default until play testing
+  sets one, it fires every turn, a known cost of a fallback that can
+  stand in rather than a defect
+  ([`piggyback.md → When piggyback fires`](./piggyback.md#when-piggyback-fires)).
 
 See per-layer detail in [`piggyback.md`](./piggyback.md),
 [`classifier.md`](./classifier.md), and

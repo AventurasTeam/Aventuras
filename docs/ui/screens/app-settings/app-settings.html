@@ -1196,12 +1196,12 @@
               <span style="font-size: 11px; color: var(--ink-muted); margin-left: 4px;">turns</span>
             </div>
           </div>
-          <div class="switch-row" role="switch" aria-checked="true">
+          <div class="switch-row" role="switch" aria-checked="false">
             <div class="switch-row-text">
-              <div class="switch-row-label">use piggyback mode <span style="font-size: 10px; color: var(--ink-faint);">(recommended)</span></div>
-              <div class="switch-row-hint">narrative call emits a tagged trailing block; falls back to a per-turn classifier pass when off</div>
+              <div class="switch-row-label">use piggyback mode</div>
+              <div class="switch-row-hint">on: the narrative model writes the turn's state and suggestions after its prose, saving a second call; a turn whose state doesn't parse falls back to the classifier &mdash; off: the classifier reads every turn in a second call. Seeds new stories; off as shipped</div>
             </div>
-            <span class="toggle on"></span>
+            <span class="toggle off"></span>
           </div>
           <div class="switch-row" role="switch" aria-checked="false">
             <div class="switch-row-text">

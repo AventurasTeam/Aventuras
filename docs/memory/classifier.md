@@ -951,6 +951,51 @@ In-place edit of `stories.settings.classifierCadence`,
 renders inline so the user sees the cadence-vs-recent-buffer
 overlap.
 
+The `piggybackMode` toggle is never disabled: the user decides, for any
+model ([`piggyback.md → When piggyback fires`](./piggyback.md#when-piggyback-fires)).
+Its hint states the trade-off. On, the narrative model writes the turn's
+state and suggestions after its prose, saving a second call, and a turn
+whose state doesn't parse falls back to the classifier. Off, the
+classifier reads every turn in a second call about as large as the
+narrative's prompt.
+
+### Piggyback record
+
+Under the toggle, how the active branch's recent turns fared with
+piggyback: the evidence a user turns it on or off by. It reads the
+branch's newest AI replies, at most 200, and sorts each by what its
+metadata already holds
+([`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)):
+
+- **Parsed** — `stateReport.layer` is `piggyback_tagged_block`.
+- **Fell back** — the narrative attempt left `failedFields`, not
+  counting the fallback's own `classifier` entry, which marks the
+  fallback failing rather than the block.
+- **Cut off** — a turn that fell back and whose reply was cut short: it
+  carries `cutOff` (a limit, a filter or a dropped stream), or
+  `stateReport.blockCutOff`. A max output that fits
+  the prose but not the block reads here as a setting to raise, not a
+  model to give up on.
+- **Not tried** — anything else, which a turn with piggyback off
+  leaves. Left out.
+
+It shows the last 20 tried turns, one line per model (`metadata.model`)
+with the three counts: `gemma-4-26b · 17 parsed · 2 fell back · 1 cut
+off`. Under them, the five newest turns that fell back, each with its
+failed fields (`transfers`, or `state` when no block arrived) and an
+`entry #n` link that lands the reader on it, where the world-state
+panel holds the raw block. A turn the fallback recovered leaves that
+panel's toggle plain
+([`entry-card.md → State problems`](../ui/patterns/entry-card.md#state-problems)),
+so the reader alone doesn't point at these turns.
+
+"Parsed" means the block's format held, not that what it extracted is
+right; the world-state panel shows that per turn. With piggyback on and
+no tried turn yet, the record says none has tried it; with piggyback off
+it still shows earlier tries, and nothing when there are none. It
+updates as turns commit. Long model ids truncate at phone width. The
+window of 20 is a starting guess, tuned in play.
+
 ### Status block
 
 Reflects the classifier's current state:

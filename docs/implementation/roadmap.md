@@ -617,24 +617,6 @@ code before it moved; resolve with the slice it names.
   without room under `max_tokens`, and Anthropic requires it lower. Nothing
   writes `thinking` yet, so the slider's range is the place to bound it.
   Surfaced by the PR #673 review (2026-10-31).
-- **M7.1 — Tagged-block capability detection is unspecified, and its
-  reliability question is open at depth.**
-  [`memory/piggyback.md → Capability gate`](../memory/piggyback.md#capability-gate)
-  gates `piggybackMode` on a per-model "reliable at tagged blocks" flag
-  and states that no curation or detection pipeline exists — so every
-  model currently resolves to piggyback-off and pays the per-turn
-  fallback classifier, which since the
-  [query-stack design](../explorations/2026-09-06-retrieval-query-stack.md)
-  carries near-narrative context and therefore a second full input pass.
-  Detection lands with this slice's model-select surface. Two things it
-  must answer beyond "does the flag exist": how the flag is populated
-  (curation, probe, or both) given capabilities are always
-  user-overridable, and whether block reliability **degrades as the
-  context window fills** — piggyback tested working on Gemma 4 E4B
-  (April 2026), but only at modest depth, and a model that emits clean
-  blocks at turn 5 and malformed ones at turn 80 would silently move a
-  story onto the expensive path exactly as it gets long. Surfaced
-  2026-09-06 designing the query stack.
 - **M7.1 — Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
@@ -1178,6 +1160,35 @@ code before it moved; resolve with the slice it names.
   (`passFailure`, e.g. `timeout after 600000ms`). The panel slice picks
   one form. Predates the pass failure policy slice; raised 2026-10-23
   by its slice review.
+- **M7.2 — Build piggyback as the user's switch.** Designed 2026-11-17
+  ([`piggyback.md → When piggyback fires`](../memory/piggyback.md#when-piggyback-fires),
+  [`classifier.md → Piggyback record`](../memory/classifier.md#piggyback-record)):
+  the story's `piggybackMode` alone decides, for any model, and stays off
+  by default. Builds with the Classifier panel:
+  - `resolvePiggybackFires` (`lib/pipeline/definitions/per-turn-piggyback.ts`)
+    reads the setting alone, and its callers stop resolving the narrative
+    model's capabilities for it; `taggedBlockReliable` leaves
+    `providerCapabilitiesSchema`. The description of `piggybackFires`
+    in `lib/prompts/templateContextMap.ts`, which pack authors read, and
+    the comments in `generation-context.ts` and `per-turn.ts` (which names
+    the old section) drop the flag;
+  - the dev seed keeps its stories' `piggybackMode: 'on'` and drops the
+    flag on `seed/narrative`; the mock server's README and checks stop
+    naming it; the e2e harness's helper that clears the flag to force
+    the fallback sets the story's `piggybackMode` to `'off'` instead;
+  - `stateReport.blockCutOff`, written where `per-turn.ts` now only logs
+    an in-block cut (`logCutOff … 'in-block'`);
+  - the toggle, never disabled, with its trade-off hint, and the record
+    under it: the newest 200 replies scanned, the last 20 tried turns
+    by model, the five newest that fell back with an `entry #n` link
+    through the reader's `jumpToEntry`;
+  - App Settings' story-defaults toggle, never disabled, with the
+    trade-off hint and no record.
+
+  Whether a model's blocks hold as the context fills is play testing's
+  question, with the record as its instrument
+  ([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
+
 - **M7.1 — Reconcile's embeds have no timeout of their own.**
   Reconcile's description embeds (`scoreDescriptions` in
   `lib/classifier/reconcile.ts`, through `embedClassifierDescriptions`

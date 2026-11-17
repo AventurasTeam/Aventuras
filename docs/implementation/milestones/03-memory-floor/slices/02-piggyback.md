@@ -77,7 +77,7 @@ is off, a separate per-turn classifier call writes the same subset.
   on the direct tagged-block path; reject → re-roll the whole
   classification call once → clamp + warn on the per-turn fallback
   classifier path (see
-  [`piggyback.md → Capability gate`](../../../../memory/piggyback.md#capability-gate)).
+  [`piggyback.md → When piggyback fires`](../../../../memory/piggyback.md#when-piggyback-fires)).
 - **`<summary>` hand-off:** parse the trailing block's optional
   one-sentence summary and hand it off for the next turn's Q3
   retrieval query
@@ -176,7 +176,7 @@ change, not just a piggyback-local one.
 curation/detection pipeline exists yet anywhere in the codebase, so
 every model resolves to capability-off (and the per-turn classifier
 fallback) until a future slice builds one. See
-[`piggyback.md → Capability gate`](../../../../memory/piggyback.md#capability-gate).
+[`piggyback.md → When piggyback fires`](../../../../memory/piggyback.md#when-piggyback-fires).
 
 **Per-turn classifier fires on two triggers, same synchronous
 mechanism.** Originally scoped to `piggybackMode='off'` only; planning

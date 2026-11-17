@@ -1534,7 +1534,7 @@ stories.settings: {
   protectedBuffer: number            // default 10; chapter-boundary spillover floor — applies to BOTH modes. If current chapter has fewer entries, fill from previous chapter up to this floor. See docs/memory/cadence.md → User-tunable knobs
   classifierCadence: number          // entries between periodic classifier runs, each chained after the turn that brings it due and holding the gate; checked after each completed turn, so a run can fire up to one entry past it. Cadence-vs-window overlap warning only fires in partial mode (full mode catches up unclassified entries at chapter close)
   classifierContextEntries: number   // default 4, MINIMUM 2; trailing entries the per-turn fallback classifier sees. The floor is the fixed action-plus-reply pair it extracts from — see docs/memory/cadence.md → User-tunable knobs
-  piggybackMode: 'on' | 'off'       // capability-gated; on = narrative emits structured trailing block; off = separate per-turn classifier pass
+  piggybackMode: 'on' | 'off'       // the user's switch, for any model; default 'off' until play testing sets one. on = narrative emits structured trailing block; off = separate per-turn classifier pass. See docs/memory/piggyback.md → When piggyback fires
   classifierMentionedPlaces: boolean // default false; the periodic classifier also creates places the prose mentions but the scene doesn't enter. Read once per pass. See docs/memory/classifier.md → Mentioned places
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
@@ -2164,6 +2164,7 @@ story_entries.metadata: {
     seatedDisabled?: string[]        // rows the narrator was kept from that this turn's scene seats: a place it moved into that was disabled, judged from where the story stood, or a disabled member it brought in (ui/principles.md → Injection / retrieval rules)
     droppedRefs?: { field: string; ref?: string; id?: string; kind?: string; reason: 'unknown' | 'wrong-kind' | 'unreadable'; detail: string }[]  // the fallback's entries discarded before apply, ref as emitted and absent on an unreadable one (memory/piggyback.md → Parse strategy and failure recovery); a wrong-kind ref adds the kind it named and, unless a create's handle, the row's id, so the reader can name it; never the narrative's, which fails a field instead
     raw?: string                     // the unparseable block text; present only alongside failedFields
+    blockCutOff?: true               // the reply's end cut the narrative's trailing block, parsed or not; absent otherwise, never false. See "Cut-off mark" below
   }
 
   // Next-turn suggestions — emission output for the chip strip displayed below this entry
@@ -2248,6 +2249,16 @@ A content edit removes it in the same delta as the new content, so an
 undo of the edit restores both; a regenerate replaces the entry and the
 mark with it. Untranslated, like `model`.
 
+A reply cut once its trailing block had begun keeps its whole story
+text, so it takes no `cutOff`; the narrative attempt's report records
+the cut instead, as `stateReport.blockCutOff`. A cut block may still
+parse, a cut in `<suggestions>` after `</state>` for one. The mark
+exists for the
+[piggyback record](./memory/classifier.md#piggyback-record), which
+reads a turn that fell back with it as cut off rather than as a model
+that can't write the block. No card notice shows it; on a turn that
+fell back, the world-state panel's raw block shows where the cut fell.
+
 **Scene presence is kind-aware.** `sceneEntities` carries characters
 and items — the things that come and go. `currentLocationId` is the
 singleton "we are here" pointer. Factions are not scene-tagged; a
@@ -2318,8 +2329,8 @@ logs at the same points.
 per-turn fallback classifier writes the same entry's metadata, so the
 two roles inside `stateReport` are deliberately separated: `layer`
 names whoever ultimately supplied the fields (last writer wins), while
-`failedFields` and `raw` describe the failed _narrative_ attempt and
-survive the fallback's write. Four legible states result — clean
+`failedFields`, `raw` and `blockCutOff` describe the failed _narrative_
+attempt and survive the fallback's write. Four legible states result — clean
 piggyback; recovered (`per_turn_classifier` plus the narrative's
 `failedFields`); `piggybackMode='off'` (`per_turn_classifier`, no
 failure); and both failed, which appends a `classifier` entry to
@@ -3110,7 +3121,7 @@ by the same user-visible operation. Action boundaries:
 - **AI reply** — the `story_entries` create delta plus the per-turn
   piggyback deltas (`source = piggyback_tagged_block` on the direct
   tagged-block path, `source = per_turn_classifier` on the synchronous fallback —
-  see [`memory/piggyback.md → Capability gate`](./memory/piggyback.md#capability-gate))
+  see [`memory/piggyback.md → When piggyback fires`](./memory/piggyback.md#when-piggyback-fires))
   share one `action_id`. Undoing it is a **positional suffix
   reversal** from the turn's start, not merely its `action_id` group,
   so it also sweeps any **periodic-classifier** deltas that landed on

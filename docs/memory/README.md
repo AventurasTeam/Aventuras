@@ -27,7 +27,7 @@ the shape.
   `classifierCadence`), concurrency contract.
 - **[piggyback.md](./piggyback.md)** — per-turn writes contract:
   trailing tagged block, new locations and items, computed
-  bookkeeping, jsonrepair fallback, capability gate, mode-mixing
+  bookkeeping, jsonrepair fallback, when piggyback fires, mode-mixing
   across a story.
 - **[classifier.md](./classifier.md)** — periodic classifier
   contract: what it reads, write set, disambiguation on new-character

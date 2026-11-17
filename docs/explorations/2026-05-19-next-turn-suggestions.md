@@ -209,7 +209,7 @@ Source-tag written: `source: 'piggyback'`.
 
 The per-turn classifier pass (the existing fallback path piggyback
 documents at
-[piggyback's capability gate section](../memory/piggyback.md#capability-gate))
+[piggyback's When piggyback fires section](../memory/piggyback.md#when-piggyback-fires))
 gains the same `<suggestions>` fragment. One classifier call emits
 both `<state>` and `<suggestions>`; parse independence carries
 over.

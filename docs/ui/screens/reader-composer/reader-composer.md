@@ -1208,7 +1208,7 @@ to `loading`. (A re-roll holds the same gate, but drives `loading`
 on its own — the `disabled` prop is what covers a lock this strip
 did not cause.) The route can't know in advance whether this turn's
 piggyback or classifier-fold emission will actually produce chips —
-zero enabled categories or capability gating can silently skip it —
+zero enabled categories or a block that doesn't parse can silently skip it —
 so claiming "Generating suggestions…" could lie. What the strip was
 already showing stays put and locks until the turn resolves.
 

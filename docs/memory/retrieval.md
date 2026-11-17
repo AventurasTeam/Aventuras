@@ -942,7 +942,7 @@ entry, embedded as its own vector. Both per-turn writers produce it —
 piggyback's tagged block directly, the fallback classifier when
 piggyback did not fire or its block failed to parse — so it is
 available in either mode
-([`piggyback.md → Capability gate`](./piggyback.md#capability-gate)).
+([`piggyback.md → When piggyback fires`](./piggyback.md#when-piggyback-fires)).
 
 **Capped at 200 characters, the same cap and the same constant as
 [Q4](#q4-classifier-emitted-queries).** Applied at query build, not at parse or

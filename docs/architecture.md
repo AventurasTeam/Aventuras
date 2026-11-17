@@ -242,7 +242,7 @@ over tool calls sends the pair first and appends its steps after it.
 story's calls of that template, its standing instructions and the
 story definition, and must render byte-identically from one call to the
 next unless the user changes what it reads: the story, or a setting it
-resolves through, as reassigning the narrative model in App Settings
+resolves through. Turning the story's piggyback on or off, for one,
 changes `piggybackFires`. The one other change is the lead's name, which
 a pass's reveal can rename, rarely enough that the miss costs little. A
 system half names the lead and never brackets an id: placeholders are
@@ -857,7 +857,7 @@ stratification in [`memory/cadence.md`](./memory/cadence.md):
 
 | Layer                      | Trigger                                                                                   | Scope                                                                                                                                                                                                                                                                                                |
 | -------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Piggyback**              | Every AI reply, inline on the narrative call (capability-gated)                           | Physical state a turn changes — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, conditions, item transfers and drops, and the new locations and items they name                                                                                                                 |
+| **Piggyback**              | Every AI reply, inline on the narrative call, when the story turns it on                  | Physical state a turn changes — `sceneEntities`, `currentLocationId`, `worldTime`, visual mutations, conditions, item transfers and drops, and the new locations and items they name                                                                                                                 |
 | **Periodic classifier**    | Chained after a turn every `stories.settings.classifierCadence` entries; blocks the story | Facts evidenced across turns — happenings, involvements, awareness, threads, new characters and factions with their first profiles and (by story setting) mentioned places, names, where places sit, faction standing and memberships, entity status flips, keyword appends, character relationships |
 | **Chapter-close pipeline** | Token threshold crossed OR user-triggered                                                 | 5-phase pipeline: catch-up passes, boundary, metadata, lore-mgmt (six sub-jobs, run as ordered tool-calling tasks), lifecycle review                                                                                                                                                                 |
 
@@ -882,9 +882,9 @@ Two agents from the prior design were collapsed:
   upsert-at-write (UNIQUE constraint on awareness rows) plus
   semantic-cluster consolidation at chapter close. See
   [`memory/chapter-close.md → Phase 3`](./memory/chapter-close.md#phase-3--lore-management).
-- **Per-reply classifier** split into piggyback (when
-  `piggybackMode='on'` and the narrative model is capability-flagged
-  reliable at tagged blocks), its per-turn fallback classifier, and the
+- **Per-reply classifier** split into piggyback (when the story's
+  `piggybackMode` is `'on'`, the user's switch for any model), its
+  per-turn fallback classifier, and the
   periodic classifier (chained every few turns; handles the larger
   multi-turn batch). Parity holds between **piggyback and its per-turn
   fallback**, which cover the same write set — the periodic classifier
@@ -921,7 +921,7 @@ populates the new entry's metadata:
   The **periodic and per-turn-fallback classifiers re-roll the whole
   classification call once** before clamping — cheap, since it's an
   isolated structured-output call — see
-  [`memory/piggyback.md → Capability gate`](./memory/piggyback.md#capability-gate).
+  [`memory/piggyback.md → When piggyback fires`](./memory/piggyback.md#when-piggyback-fires).
   **Piggyback's direct (tagged-block) path clamps immediately, no
   re-roll**: the delta rides the same call as the narrative prose, so
   re-rolling it would mean regenerating the entire reply just to get a

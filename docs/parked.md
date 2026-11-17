@@ -3345,17 +3345,18 @@ split control (language-learning users wanting translated narrative
   some other use), add `granularToggles.suggestions: boolean` as its
   own toggle. Lands on demand.
 
-#### Split capability flag for `<suggestions>` parse reliability
+#### Split the piggyback switch for `<suggestions>`
 
-The piggyback + classifier emission paths reuse the existing tagged-
-block reliability capability flag on
-`app_settings.providers[].cachedModels[].capabilities` — a model
-that reliably emits `<state>` is presumed to emit `<suggestions>`
-reliably too. If field evidence shows a model reliable on
-`<state>` (structured extraction) but unreliable on `<suggestions>`
-(creative prose in a tagged block — potentially a different
-reliability axis), split into a dedicated `suggestionsBlock`
-capability flag. Surface on signal.
+One switch, the story's `piggybackMode`, moves both `<state>` and
+`<suggestions>` onto the narrative call: a model that reliably emits
+`<state>` is presumed to emit `<suggestions>` reliably too. If field
+evidence shows a model reliable on `<state>` (structured extraction)
+but unreliable on `<suggestions>` (creative prose in a tagged block —
+potentially a different reliability axis), split the switch so
+suggestions can stay with the classifier fold while state rides the
+narrative. The [piggyback record](./memory/classifier.md#piggyback-record)
+counts `<state>` only, so the signal comes from missing chips. Surface
+on signal.
 
 #### Re-roll cancel-and-restart on rapid double-click
 

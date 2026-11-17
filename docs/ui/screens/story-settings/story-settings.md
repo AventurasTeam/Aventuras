@@ -528,19 +528,20 @@ this section captures what the screen renders.
   `piggybackMode` toggle. Buffer-aware cadence indicator from
   [`memory/cadence.md → User-tunable knobs`](../../../memory/cadence.md#user-tunable-knobs)
   renders inline.
-- **`piggybackMode` capability gate.** The toggle is disabled when
-  the currently-resolved `models.narrative` lacks structured-output
-  capability (per
-  [`memory/cadence.md → Piggyback contract`](../../../memory/cadence.md)).
-  In that state the toggle reads as off, a one-line hint explains
-  the gate (`Requires a narrative model with structured-output
-capability`), and the **per-turn fallback classifier** covers the
-  work on every turn — not the periodic classifier, whose write set
-  covers none of piggyback's per-turn fields and could never supply
-  them (see
-  [`memory/piggyback.md → Capability gate`](../../../memory/piggyback.md#capability-gate)).
-  Swapping the narrative model to a capable profile re-enables the
-  toggle automatically.
+- **`piggybackMode` is the user's switch.** The toggle is never
+  disabled, whatever the narrative model, and is off by default. Its
+  hint gives the trade-off: on, the narrative model writes the turn's
+  state and suggestions after its prose and a turn whose state doesn't
+  parse falls back; off, the **per-turn fallback classifier** reads
+  every turn in a second call, not the periodic classifier, whose write
+  set covers none of piggyback's per-turn fields (see
+  [`memory/piggyback.md → When piggyback fires`](../../../memory/piggyback.md#when-piggyback-fires)).
+  A narrative model change leaves the toggle as it is.
+- **Piggyback record** — under the toggle, the branch's last 20 turns
+  that tried piggyback, one line per model counting parsed, fell back
+  and cut off, then the five newest that fell back with their failed
+  fields and an `entry #n` link each. Full spec in
+  [`memory/classifier.md → Piggyback record`](../../../memory/classifier.md#piggyback-record).
 - **Create mentioned places** — a SwitchRow bound to
   `stories.settings.classifierMentionedPlaces`, off by default. On,
   the periodic classifier also creates the places the story mentions

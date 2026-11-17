@@ -371,6 +371,23 @@ breakdown under [UX](#ux).
   reply is stripped of it or told not to (added 2026-10-30 by the
   content pass's implementation).
 
+- **Which way piggyback defaults.** Piggyback is the user's switch and
+  ships off
+  ([`piggyback.md → When piggyback fires`](./memory/piggyback.md#when-piggyback-fires)),
+  because nothing has measured it: the one data point, Gemma 4 E4B in
+  April 2026, predates the block's transfers, drops, conditions, visual
+  changes and creates, and the classifier probe's parse rates measure the
+  fallback's JSON, not a tagged block at narrative temperature. Play
+  turns piggyback on in played stories, on the dev model and a sample of
+  hosted ones, and reads the
+  [piggyback record](./memory/classifier.md#piggyback-record) for the
+  parse rate, and whether it falls as a story's context fills. It also
+  reads the prose under the fold, the
+  [narrative-quality risk](./parked.md#narrative-quality-empirical-risk-under-suggestion-fold)
+  parked until this signal. Then it sets the shipped default, and tunes
+  the record's window of 20 turns. Raised 2026-11-17 by the
+  piggyback-switch design.
+
 - **How many keywords a row may hold.** A model's keyword lists have
   no count bound, only a term-length one
   ([`retrieval.md → Keywords schema`](./memory/retrieval.md#keywords-schema)):
@@ -514,7 +531,7 @@ breakdown under [UX](#ux).
   only play produces, so play checks them rather than letting the
   signal pass unseen:
   - [Narrative quality empirical risk under suggestion fold](./parked.md#narrative-quality-empirical-risk-under-suggestion-fold)
-  - [Split capability flag for `<suggestions>` parse reliability](./parked.md#split-capability-flag-for-suggestions-parse-reliability)
+  - [Split the piggyback switch for `<suggestions>`](./parked.md#split-the-piggyback-switch-for-suggestions)
   - [Recency-bias diversity mitigation for suggestion category mix](./parked.md#recency-bias-diversity-mitigation-for-suggestion-category-mix)
   - [Multi-axis salience](./parked.md#multi-axis-salience)
   - [Prompt-cache optimization](./parked.md#prompt-cache-optimization)

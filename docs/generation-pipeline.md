@@ -92,7 +92,7 @@ export const pipelines: ReadonlyMap<string, Pipeline>
 - **`parallel` is the only declarative composition primitive.**
   No nesting (`parallel: [{ parallel: [...] }]`), no mixed types
   inside a group, no declarative conditionals. Phases that need
-  conditional inclusion (piggyback iff capability flag; fallback
+  conditional inclusion (piggyback iff the story's setting; fallback
   classifier iff piggyback didn't fire) check state internally
   and return early.
 - **No `transactionKind` field.** Every pipeline has the same
@@ -2223,8 +2223,8 @@ entry records `metadata.cutOff`
 ([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape))
 and its card says so
 ([`entry-card.md → Cut-off notice`](./ui/patterns/entry-card.md#cut-off-notice)).
-A cut inside the trailing block leaves the prose whole and marks
-nothing; the block is read like any block the stream cut off, failing
+A cut inside the trailing block leaves the prose whole and takes no
+`cutOff`, only the narrative report's `stateReport.blockCutOff`; the block is read like any block the stream cut off, failing
 `state` for the fallback when the cut may have lost a create, a drop or
 the scene's place, and parsing clean when it fell between tags of a
 block that held neither

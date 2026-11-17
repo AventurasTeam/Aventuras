@@ -819,12 +819,42 @@
           </div>
         </div>
 
-        <div class="switch-row" role="switch" aria-checked="true">
+        <div class="switch-row" role="switch" aria-checked="false">
           <div class="switch-row-text">
-            <div class="switch-row-label">use piggyback mode <span style="font-size: 10px; color: var(--ink-faint);">(recommended)</span></div>
-            <div class="switch-row-hint">narrative call emits a tagged trailing block &mdash; depends on the model's reliability with tagged blocks during prose generation; falls back to a per-turn classifier pass when off</div>
+            <div class="switch-row-label">use piggyback mode</div>
+            <div class="switch-row-hint">on: the narrative model writes the turn's state and suggestions after its prose, saving a second call; a turn whose state doesn't parse falls back to the classifier &mdash; off: the classifier reads every turn in a second call about as large as the narrative's prompt. Never disabled, whatever the model; off by default</div>
           </div>
-          <span class="toggle on"></span>
+          <span class="toggle off"></span>
+        </div>
+
+        <div class="field-row">
+          <div class="field-label">piggyback record
+            <span class="hint">last 20 turns that tried it, active branch &middot; <a href="#" style="color: var(--ink-faint);">demo states</a></span>
+          </div>
+          <div class="piggyback-record">
+            <div style="display: flex; gap: 4px; margin-bottom: 8px; font-size: 10px;">
+              <span class="pb-tab active" data-pbstate="none" style="padding: 3px 8px; border: 1px solid var(--border); background: var(--bg-highlight); cursor: pointer;">on, none tried</span>
+              <span class="pb-tab" data-pbstate="mixed" style="padding: 3px 8px; border: 1px solid var(--border); cursor: pointer;">mixed</span>
+              <span class="pb-tab" data-pbstate="parsed" style="padding: 3px 8px; border: 1px solid var(--border); cursor: pointer;">all parsed</span>
+            </div>
+            <div class="pb-body" data-pbstate="none">
+              <span style="font-size: 12px; color: var(--ink-muted);">No turns on this branch have tried piggyback yet.</span>
+            </div>
+            <div class="pb-body" data-pbstate="mixed" hidden>
+              <div style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><b>gemma-4-26b-a4b</b> &middot; 14 parsed &middot; 3 fell back &middot; 1 cut off</div>
+              <div style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px;"><b>qwen3-32b</b> &middot; 2 parsed</div>
+              <div style="font-size: 11px; color: var(--ink-muted);">fell back:</div>
+              <div style="font-size: 11px;">transfers &middot; <a href="#" style="color: var(--ink-muted);">entry #212 &rarr;</a></div>
+              <div style="font-size: 11px;">state (no block) &middot; <a href="#" style="color: var(--ink-muted);">entry #207 &rarr;</a></div>
+              <div style="font-size: 11px;">state &middot; cut off at max output &middot; <a href="#" style="color: var(--ink-muted);">entry #201 &rarr;</a></div>
+              <div style="font-size: 11px;">sceneEntities &middot; <a href="#" style="color: var(--ink-muted);">entry #196 &rarr;</a></div>
+              <div style="font-size: 10px; color: var(--ink-faint); margin-top: 6px;">parsed means the block's format held; open a turn's &#127760; panel for its raw block</div>
+            </div>
+            <div class="pb-body" data-pbstate="parsed" hidden>
+              <div style="font-size: 12px;"><b>gemma-4-26b-a4b</b> &middot; 20 parsed</div>
+            </div>
+            <div style="font-size: 10px; color: var(--ink-faint); margin-top: 6px;">with piggyback off and no tried turns, the record isn't shown</div>
+          </div>
         </div>
 
         <div class="switch-row" role="switch" aria-checked="false">
@@ -1429,6 +1459,22 @@
   });
   defModalBackdrop.addEventListener('click', e => {
     if (e.target === defModalBackdrop) defModalBackdrop.classList.remove('show');
+  });
+})();
+
+// Memory tab — piggyback record demo states
+(function() {
+  document.querySelectorAll('.pb-tab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      const state = t.dataset.pbstate;
+      document.querySelectorAll('.pb-tab').forEach(function (x) {
+        x.classList.toggle('active', x === t);
+        x.style.background = (x === t) ? 'var(--bg-highlight)' : '';
+      });
+      document.querySelectorAll('.pb-body').forEach(function (b) {
+        b.hidden = b.dataset.pbstate !== state;
+      });
+    });
   });
 })();
 

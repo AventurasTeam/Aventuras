@@ -743,7 +743,7 @@ route follow
 Regenerate is already in the action cluster. The notice is not
 dismissible: a committed edit clears it
 ([Edit mode](#edit-mode)), and a regenerate replaces the entry. A cut
-inside the trailing block leaves the prose whole and marks nothing
+inside the trailing block leaves the prose whole and shows no notice
 ([`generation-pipeline.md → Cut-off replies`](../../generation-pipeline.md#cut-off-replies)).
 
 ## System entry

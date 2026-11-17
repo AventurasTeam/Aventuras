@@ -506,7 +506,7 @@ fail `state`.
 
 **On any parse failure** — the whole `<state>` tag missing, or any
 field inside it failing — the same synchronous per-turn classifier
-pass described in [Capability gate](#capability-gate) fires for this
+pass described in [When piggyback fires](#when-piggyback-fires) fires for this
 turn, in the same pipeline run as the narrative call that produced
 the malformed block (same `action_id`, same hard gate — never a
 separate pass). This replaces an earlier draft of this
@@ -669,52 +669,64 @@ This is the **fast path** to staged promotion. The
 classifier covers cases where prose introduces a character without an
 explicit ID emission.
 
-## Capability gate
+## When piggyback fires
 
-Piggyback's gate is the narrative model's **empirical reliability
-emitting tagged trailing blocks at narrative-generation
-temperatures** — not its structured-output capability. Forcing a
-strict structured-output mode would lock the entire response to a
-JSON schema and conflict with the prose narrative the same call
-must produce; it can't be the mechanism here. The actual signal
-is whether the model reliably appends a parseable tagged block
-after the prose without breaking the narrative flow.
+**The story's `piggybackMode` is the only switch.** Piggyback fires
+when it's `'on'`; the narrative model's capabilities don't enter. What
+piggyback needs from a model is **empirical reliability emitting tagged
+trailing blocks at narrative-generation temperatures** — not its
+structured-output capability. Forcing a strict structured-output mode
+would lock the entire response to a JSON schema and conflict with the
+prose narrative the same call must produce; it can't be the mechanism
+here. The actual signal is whether the model reliably appends a
+parseable tagged block after the prose without breaking the narrative
+flow.
 
-We track this via the standard provider-capability path:
-`app_settings.providers[].cachedModels[].capabilities` carries a
-flag for tagged-block reliability, populated from our curation +
-detection and overridable by the user (capabilities are always
-user-overridable — providers report inconsistently, and custom
-endpoints may run models the provider's metadata doesn't
-recognize). Story Settings exposes a
-`piggybackMode: 'on' | 'off'` toggle — on by default when the
-narrative model's capability flag is set.
+No provider reports that, and a check at model-select time would answer
+the wrong question: a model that writes clean blocks at turn 5 can break
+them at turn 80, as the context fills. So the app doesn't decide. The
+user turns piggyback on in Story Settings, and App Settings' story
+defaults seed it for new stories. The app's part is evidence: the
+[piggyback record](./classifier.md#piggyback-record) shows how the
+branch's recent turns fared, at the depth the story is at. Trying it is
+cheap, because every failed turn falls back as below. A narrative model
+change leaves the setting as it is; the record shows the new model's
+turns apart.
+
+**The default is off** until play testing measures the block at its
+current size and the prose under the fold
+([`followups.md → Tuning and play testing`](../followups.md#tuning-and-play-testing)).
 
 The per-turn classifier pass fires whenever piggyback didn't
 successfully write its subset this turn — two triggers, same
 mechanism:
 
-- `piggybackMode='off'` or the capability flag is unset — fires
-  every turn, since piggyback never attempts to fire at all.
-- `piggybackMode='on'` and the flag is set, but this turn's trailing
-  block fails to parse — fires for that turn only, synchronously, in
-  the same pipeline run (see
+- `piggybackMode='off'` — fires every turn, since piggyback never
+  attempts to fire at all.
+- `piggybackMode='on'`, but this turn's trailing block fails to parse —
+  fires for that turn only, synchronously, in the same pipeline run
+  (see
   [Parse strategy and failure recovery](#parse-strategy-and-failure-recovery)).
 
-No curation/detection pipeline for the capability flag exists yet —
-until one does, every model resolves to the first bullet.
+A failed turn isn't free of the narrative model's writes: a block that
+fails one field has already landed its visual changes, conditions and
+item moves before the fallback runs. So piggyback on a model that writes
+poor blocks lands some of them on its failed turns, as it would on turns
+whose poor blocks parse. The world-state panel shows them per turn
+([`entry-card.md → State problems`](../ui/patterns/entry-card.md#state-problems)).
 
-**Failing the gate costs more than a different code path.** Because the
+**Piggyback off costs more than a different code path.** Because the
 fallback now carries near-narrative context
-([Fallback classifier context](#fallback-classifier-context)), a model
-that permanently fails the gate pays a second full input pass on every
-turn, not just on the occasional parse failure. That skews toward
-small, cheap and local models whose users are the most token-sensitive.
-It is an accepted consequence of the gate rather than a defect: the
-alternative is a stand-in that cannot stand in. Empirically the gate
-looks survivable at that size — piggyback tested working on Gemma 4
-E4B (April 2026) — and whether reliability degrades as the context
-fills is a question for whoever builds the detection pipeline.
+([Fallback classifier context](#fallback-classifier-context)), a story
+with piggyback off pays a second full input pass on every turn, not
+just on the occasional parse failure. That weighs most on small, cheap
+and local models, whose users are the most token-sensitive. It is an
+accepted consequence of a fallback that can stand in rather than a
+defect: the alternative is a stand-in that cannot stand in. Piggyback
+tested working on Gemma 4 E4B (April 2026), before the block gained
+transfers, drops, conditions, visual changes and creates; whether it
+holds at today's size, and as a story's context fills, is what the
+record shows the user and what play testing measures.
 
 **Delta provenance distinguishes the two paths.** The direct
 tagged-block path stamps its deltas `source = piggyback_tagged_block`;
