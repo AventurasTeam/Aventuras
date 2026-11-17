@@ -266,7 +266,9 @@ file beside the declaration (`chapter-close-boundary.ts` and so on), as
 per-turn's are, since 5.5a, 5.5b, 5.6, 5.8, 5.9 and 5.10 all touch them
 and some run at once. `boundary`, `metadata` and `agent` declare
 `resolves: [{ target: 'lore-mgmt' }]`, so an unassigned model fails at
-pre-flight, not in a phase.
+pre-flight, not in a phase. `agent`'s input also carries
+`requires: 'toolCalling'` (5.10), so a model flagged off for tool calling
+fails at pre-flight too; unknown passes.
 
 - **`boundary`** resolves the end entry into the intermediate below. In
   5.2 it reads `pendingClose` only. 5.6 adds the no-model fallback: the
