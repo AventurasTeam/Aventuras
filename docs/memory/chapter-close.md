@@ -94,7 +94,16 @@ writes so far. Nothing task-specific goes in the system half: a prompt
 is reused up to its first difference, so that would cost the chapter's
 cache at every task. Holding the chapter there is the one exception to
 the [stable system half](../architecture.md#system-and-user-halves): a
-close's is stable across a part's tasks, not across the story. On a template that puts the tools first (GLM, Qwen,
+close's is stable across a part's tasks, not across the story. Each
+task's user half names the branch's lead by handle and name, as a
+pass's prompt does
+([`classifier.md → What the classifier reads`](./classifier.md#what-the-classifier-reads)),
+so "I" and "you" in the turns have a referent. The shared instructions
+stay free of it, so the Happenings and Awareness tasks keep a system
+half stable across the story. Where the lead changes, counting from the
+lead the task names, a turn in the part carries a lead mark with its
+handle; a close keeps one id map, so the handle, and the half's bytes
+with it, hold across a part's tasks. On a template that puts the tools first (GLM, Qwen,
 MiMo and Kimi among those checked) a task's own tool list already costs
 it, which the switches below trade against.
 
@@ -158,7 +167,7 @@ the review shows. Only chapters too big to send whole pay this.
   `update_lore`.
 - **`read_turns`** is for the two tasks without the prose. It returns
   any turn of the branch up to the end entry, `system` rows aside, as
-  the prompt shows it, at most ten a call, and names the rest as
+  the prompt shows it, lead marks included, at most ten a call, and names the rest as
   unread: a high-frequency awareness row can come from any chapter.
   Citations stay inside the chapter. A turn of an earlier chapter is
   readable once a listed row's learned-at turn names it, which gives
@@ -404,10 +413,21 @@ them.
   which it knows of but doesn't pursue yet.
 - The story's mode, since the user's turns are read by it
   ([`ui/principles.md → Mode`](../ui/principles.md#1-mode--users-relationship-to-the-story)).
+- The branch's lead by name and the narration, in the user half, so the
+  model knows whose "I" and "you" the turns narrate; where the lead
+  changes, a turn carries a lead mark
+  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)).
 
-A part's call reads its own part's entries, with the mode. The merge
-reads no turns: only the part summaries in order, the previous chapter's
-summary and the open threads, and no mode.
+A part's call reads its own part's entries, with the mode, the lead and
+the narration. The merge reads no turns: only the part summaries in
+order, the previous chapter's summary and the open threads, and no mode,
+lead or narration.
+
+**The summary is told in the third person**, naming each character as
+the prose does, the lead included, never "I" or "you" outside quoted
+speech, whatever the narration's person. Later prompts recall it under
+whatever lead the story has then, so it can't lean on who "I" was. A
+part's summary and the merge follow the same rule.
 
 **Output (structured):**
 
@@ -441,6 +461,7 @@ seeing a field's current value before it writes it
 
 - Closed range entries (the chapter's content), or a [part](#parts)'s
   for a task that runs per part.
+- The branch's lead by handle and name, and the narration.
 - Existing lore rows — titles, bodies on request.
 - The entities the part touches, with their state, and the rest of
   the world on request: places, items and factions off the scene.
@@ -755,7 +776,9 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 
 **Mechanical merge:**
 
-- `description` — composite, LLM-authored ("X happened, then Y").
+- `description` — composite, LLM-authored ("X happened, then Y"), in
+  the third person as a pass writes one
+  ([`classifier.md`](./classifier.md#what-the-classifier-writes)).
 - `title` — pick the more general, or LLM-authored composite. Both
   texts are cut to the bounds the app's writers keep, never refused.
 - `occurred_at_entry_id` — earliest of the cluster by entry position (the

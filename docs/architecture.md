@@ -292,11 +292,11 @@ The bundled pack splits its templates this way:
 | Piggyback fallback classifier                            | Calendar, the mode rule                                                           | Everything else in its order: the ID roster and the lead, the scene, the location map and held items, the memory blocks, the characters the turn names, the turns and the report directives that follow them |
 | Periodic classifier                                      | The role line and the rules, the mode rule among them                             | The Known lists, the lead and the turns                                                                                                                                                                      |
 | Suggestion refresh                                       | Setting, Genre, Tone                                                              | In scene, Story so far, the next-turn options and the reader's draft                                                                                                                                         |
-| Chapter metadata (whole chapter)                         | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the chapter's entries                                                                                                                                      |
-| Chapter metadata (a part)                                | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the part's entries                                                                                                                                         |
+| Chapter metadata (whole chapter)                         | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the lead and the narration, the chapter's entries                                                                                                          |
+| Chapter metadata (a part)                                | The instructions, the mode rule                                                   | The previous chapter's summary, the open threads, the lead and the narration, the part's entries                                                                                                             |
 | Chapter metadata (merge)                                 | The instructions                                                                  | The previous chapter's summary, the open threads, the part summaries in order                                                                                                                                |
-| Close tasks (Lore, Identity, Threads, Upkeep, Lifecycle) | The close instructions, the mode rule among them, then the part's turns           | The task's instructions, its starting rows and the writes so far                                                                                                                                             |
-| Close tasks (Happenings, Awareness)                      | The close instructions, the mode rule among them                                  | The task's instructions, its starting rows (Happenings' clusters; Awareness's rows and the chapter's summary) and the writes so far                                                                          |
+| Close tasks (Lore, Identity, Threads, Upkeep, Lifecycle) | The close instructions, the mode rule among them, then the part's turns           | The task's instructions, the lead, its starting rows and the writes so far                                                                                                                                   |
+| Close tasks (Happenings, Awareness)                      | The close instructions, the mode rule among them                                  | The task's instructions, the lead, its starting rows (Happenings' clusters; Awareness's rows and the chapter's summary) and the writes so far                                                                |
 | Wizard templates                                         | Empty; on the prompt-injection path the structured-output contract supplies one   | Everything                                                                                                                                                                                                   |
 
 **The standing instructions are shared macros.** One holds the
@@ -326,6 +326,28 @@ mark a `user_action` entry as the user's, so a model can tell the lead's
 attempt or a direction from the narration; the opening and the replies
 render unmarked, though the close's turns also label the opening and each
 reply. The mark costs a few tokens per user turn.
+
+**Every history marks where the lead changes.** Each entry records the
+lead it was written under
+([`data-model.md → The lead`](./data-model.md#the-lead)), and the
+same histories name the branch's lead today, so a turn written under
+another would read as today's. One helper walks the turns a prompt
+renders, starting from the lead the prompt names, and gives a turn
+`leadMark` when its lead differs from the previous turn's (the first
+turn's from the named lead's): `{ id, name }`, the id in the prompt's
+own scheme; `{ gone: true }` for a character no longer in the story; or
+`{ none: true }` for a run written with no lead. `macro_story_entry`
+prints a marked turn's mark on a line before it, saying who "I" and
+"you" are from there; its `ids` flag adds the id, which the fallback
+classifier and a close's turns turn on and the narrator's history, the
+suggestion refresh and the chapter metadata calls leave off. A `{ gone }`
+run's "I" names no row, so a model writes no fact about it rather than
+crediting the lead of today. The periodic classifier prints the
+mark in its turn header. A line naming the lead ("'I' and 'you' in the
+turns are the lead") sits in a user half, and adds "except where a turn
+names another" only when a turn in the prompt is marked. A story whose lead never changed
+gets no marks and renders as before; one that changed gets a mark per
+run, not per turn.
 
 ### Prompt sections
 

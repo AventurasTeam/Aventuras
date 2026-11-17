@@ -1384,9 +1384,22 @@ recovery of a failed abort reaches
 It takes that row's write and leaves the old lead's, and the branch
 reads as having no lead, which the refused turn makes visible.
 
+**Each entry records its lead.** A `user_action`, `ai_reply` or
+`opening` stamps `metadata.leadId` with the branch's lead as it is
+created, and leaves it absent when the branch has none
+([Entry metadata shape](#entry-metadata-shape)). A turn's entries take
+the lead as the run starts, under the gate; a regenerate, a Retry or a
+Save & regenerate stamps the new reply with the lead then, and the
+user's action keeps its own stamp; the wizard stamps the opening. An
+edit keeps the stamp, a fork copies it, and undo or rollback removes it
+with its entry. A stamp naming a deleted character stays, and no name
+is kept with it: readers resolve the name, so a rename shows. Readers
+of past turns mark where the lead changes
+([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
+
 **Readers.** `resolveLead` (`lib/world/lead.ts`) returns the branch's
-flagged character from the entity map the caller holds. The generation
-and classifier contexts hand it to templates as `lead`, absent when the
+flagged character from the entity map the caller holds. The generation,
+classifier and chapter contexts hand it to templates as `lead`, absent when the
 branch has none
 ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
 A fork copies entity rows, and its rewind restores the flag as of the
@@ -2119,6 +2132,9 @@ story_entries.metadata: {
         outputTokens?: number
       }
   injectedHappenings?: string[]     // the happenings the ranker seated in this turn's prompt; authored, never inherited, absent when it seated none. The periodic classifier lists them (memory/classifier.md#what-the-classifier-reads)
+
+  // The lead — every user_action, ai_reply and opening
+  leadId?: string                   // the branch's lead when this entry was created; absent when it had none. Authored, never inherited, untouched by an edit. See "The lead"
 
   // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)

@@ -96,7 +96,13 @@ branch's world as lists the classifier addresses by placeholder id
   outside quoted speech, "I" and "you" in the turns are the lead. In
   first- or second-person narration, and in an adventure's actions,
   the prose never names the lead, and a scene with someone else in it
-  doesn't say which one "you" is.
+  doesn't say which one "you" is. Where the lead changes, counting from
+  the lead this line names, a turn carries a lead mark in its header,
+  naming who "I" and "you" are from there, and the lead line then adds
+  "except where a turn names another"
+  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)),
+  so a pass lagging behind a switch gives the old lead's turns to the
+  old lead.
 - **Turns to classify** — the window's entries by turn handle, each
   marked as the user's when it is a `user_action`, with its prose and
   the scene saved on it: the entry's
@@ -131,7 +137,10 @@ alias list (the keywords bullet below).
   awareness records, and a plan, which a thread records. Its description
   tells the notable moments in order, who did what, what was said,
   given or lost and how it ended, so that a character recalling it
-  has the scene to recall. Another event is another happening: one at
+  has the scene to recall. It is told in the third person, naming each
+  character as the prose does, the lead included, never "I" or "you"
+  outside quoted speech: it is recalled under whatever lead the story
+  has then. Another event is another happening: one at
   another time or place, or one the turns only recount. Each
   happening sits in story time at its source turn
   (`occurred_at_entry_id`), where the turns show it happen, or, for an

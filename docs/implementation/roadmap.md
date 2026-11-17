@@ -410,7 +410,16 @@ verified against the code first. Resolve with the slice each names.
   `Set as lead` on another branch's character isn't refused as
   `wrong-branch` once switching lands; and since `setStoryLead` stops
   writing `definition`, its whole-blob write and its ignored
-  `rehydrateStories` result go with it (both raised by Slice 4.2a). Story Settings' lead field, its `No lead` and
+  `rehydrateStories` result go with it (both raised by Slice 4.2a). It
+  also covers the lead each entry was written under: `metadata.leadId`
+  on every new entry, stamped on existing ones by the same migration;
+  the helper giving rendered turns their `leadMark`, printed by
+  `macro_story_entry` and the periodic classifier's turn header; the
+  chapter context's `lead` and `narration`, with `close-instructions`
+  and the metadata calls naming the lead; and the third-person rule for
+  chapter summaries and happening descriptions
+  ([`architecture.md → System and user halves`](../architecture.md#system-and-user-halves)).
+  Story Settings' lead field, its `No lead` and
   the confirm's other-branches line land with its definition tab
   (M7.2). Surfaced by
   4.2b planning (2026-09-28); routed from triage 2026-10-04.
@@ -895,8 +904,9 @@ code before it moved; resolve with the slice it names.
   never get.** `lib/prompts/templateContextMap.ts` describes one variable
   list per group and marks `chapter`'s `entries`, `previousChapterSummary`,
   `threads` and `mode` `required` for all ten of the group's templates,
-  but the close tasks' renders set only `mode` and their own variables,
-  and the metadata merge sets no `entries` or `mode`. Nothing reads
+  but the close tasks' renders set only `mode`, `lead`, `narration` and
+  their own variables, and the metadata merge sets no `entries`, `mode`,
+  `lead` or `narration`. Nothing reads
   `required` outside tests today, so it misleads only the template
   editor: an override that reads `entries` in a close task renders it
   empty. The editor is the first reader of `required`, so it picks the

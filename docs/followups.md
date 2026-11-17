@@ -346,7 +346,13 @@ breakdown under [UX](#ux).
   narrator's output-format line also left the end of the prompt for
   the system half, unmeasured; tuning checks where it reads best.
   Raised by the developer 2026-10-25, split from the prompt content
-  pass.
+  pass. The lead marks' wording and the third-person rule for chapter
+  summaries and happening descriptions are bundled defaults too
+  ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)):
+  play checks the narrator never copies a mark into its prose, and
+  whether other AI-written text (entity descriptions, traits, lore,
+  threads) ever turns up in "I" and needs the same rule (added
+  2026-11-17 by the lead-per-entry design).
 
   Two more placement questions wait on the same measurement: whether
   the wizard's shared macros split into an output contract and the
@@ -434,7 +440,12 @@ breakdown under [UX](#ux).
   one dev-model close told its summary in the second person against
   first-person narration, and one of fifteen ran away to 39,689 output
   tokens with no max output set and failed (the developer keeps the
-  profile without one). The third is
+  profile without one). The second-person summary was judged against
+  a rule that told the summary in the narration's person, with no lead
+  or narration in the close's context; summaries are now told in the
+  third person with both in context
+  ([`chapter-close.md → Phase 2`](./memory/chapter-close.md#phase-2--chapter-metadata)),
+  so play checks that rule holds instead. The third is
   [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#per-step-count-measure)
   (2026-11-09): a dev-route close on Gemma4-26B-A4B-QAT-MTP ran away to
   39,655 output tokens in the metadata call and failed.
