@@ -1,14 +1,7 @@
 import { and, asc, between, eq, inArray, ne } from 'drizzle-orm'
 import type { z } from 'zod'
 
-import { boundedSignal } from '@/lib/abort'
-import {
-  callTimeoutMs,
-  generateStructured,
-  type GenerateStructuredResult,
-  type PromptHalves,
-  type ResolveModelConfig,
-} from '@/lib/ai'
+import type { PromptHalves, ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 import { storyEntries, type DbCtx, type StoryMode, type Thread } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -29,7 +22,7 @@ import {
 import { closeParts } from './close-agent/parts'
 import { CLOSE_TARGET, CLOSE_PHASE, type CloseRange } from './intermediates'
 import { storesHoldBranch } from './stores-hold-branch'
-import { retriedAttemptEvents, structuredCallFailure } from '../call-error'
+import { boundedStructuredCall } from '../bounded-structured-call'
 import type { PhaseContext, PhaseEmittedEvent, PhaseFailure, PipelineError } from '../types'
 
 const TARGET = CLOSE_TARGET
@@ -119,35 +112,26 @@ type CallOutcome<T> =
   | { status: 'aborted' }
   | { status: 'failed'; error: PipelineError }
 
-// One call under its own lore-mgmt bound: a cancel returns `aborted`, an expiry fails as others do.
-async function* structuredCall<T>(
+// One lore-mgmt call under its agent's bound, with no output default (a cut fails the close);
+// the phase reports the run's error alone.
+async function* metadataCall<T>(
   ctx: PhaseContext,
   prompt: PromptHalves,
   schema: z.ZodType<T>,
   modelConfig: ResolveModelConfig,
 ): AsyncGenerator<PhaseEmittedEvent, CallOutcome<T>> {
-  const timeoutMs = callTimeoutMs(TARGET, modelConfig)
-  const bounded = boundedSignal(ctx.abortSignal, timeoutMs)
-  let result: GenerateStructuredResult<T>
-  try {
-    result = await generateStructured(TARGET, prompt, schema, modelConfig, bounded.signal, {
-      actionId: ctx.actionId,
-    })
-  } finally {
-    bounded.dispose()
-  }
-  yield* retriedAttemptEvents(result, TARGET)
-  if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
-  if (result.status !== 'ok')
-    return {
-      status: 'failed',
-      error: structuredCallFailure(result, {
-        target: TARGET,
-        phaseName: CLOSE_PHASE.metadata,
-        timeoutMs,
-      }).error,
-    }
-  return { status: 'ok', value: result.value }
+  const call = yield* boundedStructuredCall({
+    target: TARGET,
+    phaseName: CLOSE_PHASE.metadata,
+    prompt,
+    schema,
+    config: modelConfig,
+    signal: ctx.abortSignal,
+    options: { actionId: ctx.actionId },
+  })
+  if (call.status === 'ok') return { status: 'ok', value: call.value }
+  if (call.status === 'failed') return { status: 'failed', error: call.error }
+  return call
 }
 
 /**
@@ -168,7 +152,7 @@ export async function* requestChapterMetadata(
       TEMPLATE_IDS.chapterMetadata,
       buildChapterContext({ entries, previousChapterSummary, threads, mode }),
     )
-    const call = yield* structuredCall(ctx, prompt, chapterMetadataSchema, modelConfig)
+    const call = yield* metadataCall(ctx, prompt, chapterMetadataSchema, modelConfig)
     if (call.status !== 'ok') return call
     return { status: 'ok', metadata: normalizeChapterMetadata(call.value) }
   }
@@ -186,7 +170,7 @@ export async function* requestChapterMetadata(
         mode,
       }),
     )
-    const call = yield* structuredCall(ctx, prompt, chapterPartSummarySchema, modelConfig)
+    const call = yield* metadataCall(ctx, prompt, chapterPartSummarySchema, modelConfig)
     if (call.status !== 'ok') return call
     partSummaries.push(normalizeChapterPartSummary(call.value))
   }
@@ -195,7 +179,7 @@ export async function* requestChapterMetadata(
     TEMPLATE_IDS.chapterMetadataMerge,
     buildChapterMergeContext({ partSummaries, previousChapterSummary, threads }),
   )
-  const merge = yield* structuredCall(ctx, prompt, chapterMetadataSchema, modelConfig)
+  const merge = yield* metadataCall(ctx, prompt, chapterMetadataSchema, modelConfig)
   if (merge.status !== 'ok') return merge
   return { status: 'ok', metadata: normalizeChapterMetadata(merge.value) }
 }
