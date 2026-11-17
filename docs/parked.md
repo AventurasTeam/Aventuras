@@ -3999,6 +3999,23 @@ a user noticing the pause, or a story long enough for it to pass about
 2 s. Routed from the sliding reader window's Fold measure, 2026-11-16
 (developer decision).
 
+#### A regenerate drops World edits made after its reply
+
+A direct World edit carries no entry, so a regenerate sweeps every one
+made after the reply it replaces
+([`data-model.md → Survival anchor`](./data-model.md#survival-anchor);
+`resolveSweep` in `lib/actions/story-entries/operational.ts`), and a
+regenerate of the last reply opens no confirm
+([`reader-composer.md → Regenerate confirmation`](./ui/screens/reader-composer/reader-composer.md#regenerate-confirmation)).
+Fixing a character's description, or switching the lead, then
+regenerating the reply to see it take effect silently undoes the change
+and regenerates without it. A fix belongs to regenerate, for every
+edit, not to any one field: sparing user edits made after the reply,
+or confirming when the sweep holds any. **Revisit signal:** a user
+losing an edit this way, or play testing showing edit-then-regenerate
+as a habit. Raised 2026-11-17 by the per-branch lead's design
+(developer decision).
+
 ### Code structure (parked)
 
 #### The E2E embedder cache can rebuild under a parallel run

@@ -86,7 +86,7 @@ absence that makes "nothing shown" ambiguous):
 
 - **Lead badge** (accent pill led by the filled `Star` glyph per
   [`iconography.md → Status / state`](../foundations/iconography.md#status--state),
-  text mode-dependent): inline immediately after the name. Only present for the story's lead character. Label
+  text mode-dependent): inline immediately after the name. Only present for the branch's lead character. Label
   is `You` in adventure mode, `Protagonist` in creative mode.
 - **Status pill** (always shown, muted when active): on the far
   right. Every row carries one of `active` / `staged` / `retired`.

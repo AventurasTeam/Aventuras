@@ -557,6 +557,7 @@ deltas, or from the redo snapshot's, and the first match wins:
 | `chapter_close` with a `chapters` create                                       | chapter N's close                                                                                                                                     | unseen |
 | `chapter_close` with a `chapters` update and no create                         | chapter N's re-run                                                                                                                                    | unseen |
 | `chapter_close` with no `chapters` delta, the work a divider-only removal kept | the kept close work at entry #N, the end entry its deltas anchor on                                                                                   | unseen |
+| A user group writing `is_lead`, besides a delete or a merge                    | making `<name>` the lead, the row it sets; removing `<name>` as lead, the row it clears, when it sets none                                            | unseen |
 | Any other user group on one row besides entries                                | adding, deleting or your edit to `<name>`, by the delta's op                                                                                          | unseen |
 | Any other user group on several rows                                           | your changes to `<name>` and N more, `<name>` being the first row besides entries it wrote                                                            | unseen |
 | Anything else                                                                  | the latest change                                                                                                                                     | unseen |
@@ -1833,8 +1834,8 @@ rail's `Cmd/Ctrl+\` stays live inside the drawer, so it closes both.
 first-focusable default (per
 [`overlays.md → Sheet — ARIA contract`](../../patterns/overlays.md#sheet--aria-contract)):
 focus lands on the dialog itself, since for a non-lead character the
-first button is `Set as lead`, which one stray key would fire and
-Ctrl-Z can't undo. It stays on the dialog when `Set as lead` is
+first button is `Set as lead`, which one stray key would fire,
+switching the branch's lead unnoticed. It stays on the dialog when `Set as lead` is
 swapped for the badge or disabled, and on close it returns to the
 rail row that opened it, unless the close was a route out to a panel
 or the row has moved, as it does after `Set as lead`.
@@ -1882,7 +1883,8 @@ For a character peek:
   styling used in the Browse rail row, so the indicator is uniform
   wherever a character is surfaced.
 - **Not lead** — small inline `Set as lead` text-action after the
-  name. Click sets `stories.definition.leadEntityId` to this entity;
+  name. Click makes this character the branch's lead
+  ([`data-model.md → The lead`](../../../data-model.md#the-lead));
   the peek transitions to the badge state in place.
 
 For non-character kinds (location / item / faction / lore / threads /

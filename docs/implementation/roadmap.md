@@ -328,17 +328,6 @@ verified against the code first. Resolve with the slice each names.
   existing effect; the second keeps the mount stable for the keyboard
   handling around it. Surfaced resolving the failed-turn custody
   followup (2026-09-09).
-- **M6.3 — `setStoryLead` checks its target against
-  `stories.currentBranchId`, not the branch World shows.** The C5 lead
-  mutator (`lib/actions/stories/set-lead.ts`) reads "current branch" as
-  `stories.currentBranchId`, written only at create
-  (`lib/actions/stories/create-story.ts`), while World acts on the
-  route's `[branchId]`. A story has one branch today, so the two agree;
-  once switching lands, `Set as lead` on another branch's character is
-  refused as `wrong-branch`. Pass the caller's branch in, or have
-  switching write `currentBranchId`, which `openStory` already routes
-  through. Raised by Slice 4.2a against M7.2; routed from triage
-  2026-09-27, retargeted to the slice that makes it reachable.
 - **M6.3 — Branch switching during a pass or a close.** Settled
   2026-10-20: switching waits like any gated branch operation, and the
   way out is the pill's Cancel, which moves the pass or close to the
@@ -404,18 +393,27 @@ verified against the code first. Resolve with the slice each names.
   also log a false `reader.document_reloaded`, which reads the same
   painted state. Raised 2026-11-03 by 5.3's Task 9 review; the stale
   handle added by 5.3's slice review. Routed from triage 2026-11-04.
-- **M6 — The lead must be per-branch and delta-logged.** Two branches
-  with different leads is a valid use case (developer, 2026-09-28), and
-  a story-level `definition.leadEntityId` dangles on any branch lacking
-  the character — after a reversal of the lead's create, or when
-  `Set as lead` names a character another branch lacks. Logging the
-  lead change also makes CTRL-Z undo it before the create it depends on
-  and makes rollback / regenerate sweep it. Needs a design session
-  before M6.1 / M6.3 are authored; 4.2b's `resolveLead` interim is what
-  it replaces. Surfaced by 4.2b planning (2026-09-28). Deleting the lead
-  itself waits on the same logging: the delete would clear the lead in
-  its own undoable group, where today it refuses (`lead-entity`) in
-  every story. Routed from triage 2026-10-04.
+- **M6 — Build the per-branch lead.** Designed 2026-11-17: the lead
+  is a flag on the character row, logged like any World edit, and
+  `stories.definition.leadEntityId` goes
+  ([`data-model.md → The lead`](../data-model.md#the-lead)). M6's
+  planning makes it its own slice or folds it into M6.1. It covers the
+  `entities.is_lead` column with its `CHECK` (generated in a separate
+  drizzle-kit run from the column), a migration flagging the stored id
+  on every branch holding it as a character, `resolveLead` and its
+  callers, set and unset, the delete and the collision merge losing
+  their `lead-entity` refusals, the refused turn and its reason line on
+  a branch that needs a lead and has none, the undo target's lead row,
+  the History label for the flag, the wizard's Finish writing the flag,
+  and the dataset seed. Set and unset act on the caller's branch, not
+  `stories.currentBranchId`, which only story creation writes, so
+  `Set as lead` on another branch's character isn't refused as
+  `wrong-branch` once switching lands; and since `setStoryLead` stops
+  writing `definition`, its whole-blob write and its ignored
+  `rehydrateStories` result go with it (both raised by Slice 4.2a). Story Settings' lead field, its `No lead` and
+  the confirm's other-branches line land with its definition tab
+  (M7.2). Surfaced by
+  4.2b planning (2026-09-28); routed from triage 2026-10-04.
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
@@ -1075,19 +1073,6 @@ code before it moved; resolve with the slice it names.
   after a catalog refresh drops a model. Settle the wording with the
   providers tab, then fix (about 8 lines) with a play on a
   non-first-provider story. Raised 2026-09-22 by Slice 4.3.
-- **M7.2 — The lead mutator's store refresh and whole-blob
-  `definition` write.** `setStoryLead` (`lib/actions/stories/set-lead.ts`)
-  ignores `rehydrateStories`' result, where `updateStorySettings` throws
-  `StorySettingsStaleStoreError`. Harmless today: every lead reader goes
-  through `currentStoryStore`, which the mutator patches directly, but
-  this slice's lead picker reads the stories-store row. Throwing after
-  the committed write would report a `Set as lead` that succeeded as
-  failed, so settle the failure shape with the picker. The whole-blob
-  `definition` write should become `json_set`, as the periodic
-  classifier's status write already is, once this slice adds a second
-  concurrent `definition` writer; the wizard is the only other writer
-  and touches drafts only, which the mutator refuses. Raised by Slice
-  4.2a; routed from triage 2026-09-27.
 - **M7.2 — The era-name input must snap a typed variant at Flip.**
   Its canonical casing
   ([`reader-composer.md`](../ui/screens/reader-composer/reader-composer.md))
@@ -1105,17 +1090,6 @@ code before it moved; resolve with the slice it names.
   can't hold. Reseed it with an eras calendar or drop the rows. Raised
   by the 2026-10-24 triage pass's verification; filed by its slice
   review.
-- **M7.2 — `setStoryLead` can't clear the lead.** The lead picker is
-  optional unless the story is adventure or first / second person
-  ([`story-settings.md → Orthogonal axes`](../ui/screens/story-settings/story-settings.md#orthogonal-axes)),
-  so it needs a none choice, and the mutator takes only an entity id.
-  Accepting `null` and skipping the target lookup is enough:
-  `storyDefinitionSchema` already refuses a null lead where one is
-  required. It is also a creative third-person story's only way out of
-  a lead it no longer wants — today the lead can't be deleted in any
-  story, and the workaround makes another active character lead — so
-  [`world.md → Delete`](../ui/screens/world/world.md#delete) changes
-  with it. Raised by 4.2b; routed from triage 2026-10-04.
 - **M7.2 — The classifier prompt has no token budget beyond
   `classifierWindowMaxEntries`.** That knob bounds only the turns
   block; the entity, happening and relationship lists grow unbounded

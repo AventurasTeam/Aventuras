@@ -79,11 +79,12 @@ split avoids inflating the top-bar with a second entry point while
 keeping the cognitive separation clear.
 
 **Storage shape mirrors the section split.** The Story section maps
-to `stories.definition` JSON; the Settings section maps to
-`stories.settings` JSON. See
+to `stories.definition` JSON, except the Generation tab's lead, which
+is the current branch's
+([`data-model.md → The lead`](../../../data-model.md#the-lead)); the
+Settings section maps to `stories.settings` JSON. See
 [`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)
-for the authoritative schemas and the cross-field constraints they
-enforce.
+for the authoritative schemas.
 
 **No standalone "Edit Story" surface.** Editing story identity
 happens on the `About` tab. Title is additionally click-to-edit
@@ -290,13 +291,18 @@ Houses three groupings, each with its own sub-section:
 ### Orthogonal axes
 
 - **mode** — `Adventure | Creative` segment.
-- **lead** — character picker. Required when `mode='adventure'` OR
-  `narration ∈ {first, second}` (per the
-  [cross-field constraint](../../../data-model.md#story-settings-shape)).
-  Save is rejected if the constraint is unmet, with copy explaining
-  why.
+- **lead** — character picker for the lead on this branch: the lead
+  is per branch, so its hint says so, unlike every other field on the
+  screen. Required when `mode='adventure'` OR
+  `narration ∈ {first, second}`
+  ([`data-model.md → The lead`](../../../data-model.md#the-lead)); the
+  save checks the current branch, the lead picked in the session
+  included, and is rejected with copy explaining why. Where neither
+  holds, the picker also offers `No lead`, which unsets it. Setting or
+  unsetting is the same logged change as `Set as lead`, undoable from
+  the reader.
 - **narration** — `1st | 2nd | 3rd` segment. Picking 1st or 2nd
-  while lead is null surfaces an inline lead-required prompt before
+  while the branch has no lead surfaces an inline lead-required prompt before
   save can succeed.
 
 ### Story content
@@ -324,8 +330,9 @@ they shift AI output gradually without coherence breaks.
 
 The second sentence is the surface's only no-undo disclosure, and it
 is deliberately scoped here rather than to the whole screen. `stories`
-is story-scoped and therefore carries no deltas, so nothing on this
-screen is reachable by CTRL-Z (see
+is story-scoped and therefore carries no deltas, so nothing it holds
+is reachable by CTRL-Z; the lead and the era flips, per branch and
+delta-logged, are the screen's exceptions (see
 [`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)) —
 but that only _costs_ the user where a field holds prose they would
 have to retype. The Settings-section tabs are knobs a user can simply
@@ -935,7 +942,7 @@ to inform, not to gatekeep.
 
 Not flagged, deliberately:
 
-- `leadEntityId` — first-class action; see
+- `lead` — first-class action; see
   [principles → Mode, lead, narration](../../principles.md#mode-lead-and-narration--three-orthogonal-concepts).
 - `genre` / `tone` / `setting` — story-shaping content shifts AI
   output from the next turn forward without coherence breaks per
@@ -968,6 +975,14 @@ changes downstream:
 
 When multiple flagged fields are dirty in one session, the modal
 stacks one bullet per field.
+
+When a `mode` or `narration` change makes the story need a lead, and
+other branches have none, the modal adds one line after the bullets:
+"2 other branches have no lead. Each needs one before its next turn."
+It counts the branches besides the current one, whose lead the save
+already checks, and is absent when there are none. Those branches
+refuse a turn until a lead is set
+([`principles.md → Composer mode`](../../principles.md#composer-mode--send-time-transform-narration-aware)).
 
 ### Tab-level warn-box vs save-time modal
 

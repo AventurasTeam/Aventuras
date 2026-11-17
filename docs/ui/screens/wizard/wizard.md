@@ -912,7 +912,8 @@ One SQLite transaction, all or none:
    eras, its `branch_era_flips` row for the chosen era at
    `at_worldtime = 0` ([Calendar swap inside wizard](#calendar-swap-inside-wizard)).
 3. Insert wizard-authored `entities` rows (initial cast). Per-row:
-   `kind`, `name`, `description`, `status`, `state` JSON, and embed
+   `kind`, `name`, `description`, `status`, `state` JSON, `is_lead`
+   (1 on the lead's row only), and embed
    the `name + description` composite into `entities_vec` **in the
    same transaction**. This is a deliberate exception to the
    [sync-before-read default](../../../memory/retrieval.md#compute-lifecycle):

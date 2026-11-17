@@ -86,9 +86,12 @@ a pill on the Overview. The detail head carries only:
 
 The overflow menu holds rare-but-important actions:
 
-- **Set as lead** (sets `stories.definition.leadEntityId`;
+- **Set as lead** (makes this character the branch's lead, a logged
+  change CTRL-Z undoes, per
+  [`data-model.md → The lead`](../../../data-model.md#the-lead);
   characters only, and enabled only for an active character that is
-  not already the lead — a staged or retired character can't lead,
+  not already the lead — a staged or retired character can't be made
+  the lead,
   per
   [wizard.md → Status field](../wizard/wizard.md#status-field--active--staged))
 - **Export entity as JSON** (the row as an `aventuras-entity` `.avts`
@@ -99,8 +102,7 @@ The overflow menu holds rare-but-important actions:
   with unsaved edits in the pane, the file holds the saved row and a
   toast says so)
 - **View raw JSON** (debug/dev affordance)
-- **Delete entity** (destructive; confirms — see [Delete](#delete);
-  disabled for the lead)
+- **Delete entity** (destructive; confirms — see [Delete](#delete))
 
 Raw JSON lives here (not as a prominent link) because it's
 power-user/debug territory. One consistent pattern: ⋯ menus are where
@@ -562,14 +564,12 @@ cascade covers:
   `happening_awareness` rows, its translations, and its vectors in
   every dim family.
 
-**The lead can't be deleted.** The action refuses it (`lead-entity`)
-and the overflow entry disables with a reason pointing at `Set as
-lead`. The reason isn't the definitional lead requirement — a
-creative third-person story, where a lead is optional, still can't
-delete one once set — it's that the lead is story-level, not
-per-branch or delta-logged
-([`data-model.md → Story settings shape`](../../../data-model.md#story-settings-shape)),
-and `setStoryLead` has no path to clear it back to null.
+**Deleting the lead leaves the branch without one.** The flag goes
+with the row, and CTRL-Z of the delete brings both back
+([`data-model.md → The lead`](../../../data-model.md#the-lead)). The
+confirm adds a line naming it: "Aria is this branch's lead. The story
+can't continue here until you set another." when the story needs a
+lead, "This branch will have no lead." when it doesn't.
 
 A regenerate or rollback that reaches a turn before the delete brings
 the row back, like any World edit.
@@ -1231,10 +1231,12 @@ The primary button echoes the canonical pick, its side as well as
 its name, to keep the destructive direction obvious: the two names
 match by construction.
 
+When the non-canonical is the branch's lead, the canonical becomes the
+lead in the merge's group
+([`data-model.md → The lead`](../../../data-model.md#the-lead)).
+
 The merge refuses, with the reason inline and nothing written, when
-the non-canonical is the story's lead (`lead-entity`: the lead
-can't be deleted, see [Delete](#delete) — pick it as the row that
-survives), and when the canonical location descends from the
+the canonical location descends from the
 non-canonical through another location (`parent-cycle`: rewriting
 that location's parent to the canonical would make the canonical its
 own ancestor — picking the other row as canonical merges cleanly).

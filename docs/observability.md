@@ -203,7 +203,7 @@ convention, and the expectation that subsystems route through
   mutator refused, logged with its code), `entity_delete_rejected` /
   `lore_delete_rejected` / `thread_delete_rejected` /
   `happening_delete_rejected` (warn: a confirmed delete refused —
-  in-flight, not-found, or (entity only) the lead or a tail race; the
+  in-flight, not-found, or (entity only) a tail race; the
   tail race (`tail moved`) is logged from
   `lib/actions/row-delete/delete-entity.ts`, every other refusal from
   `delete-row.ts`, an entity's store-miss not-found (`delete-entity.ts`,

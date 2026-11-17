@@ -507,7 +507,7 @@
 
         <div class="field-row">
           <div class="field-label">lead character
-            <span class="hint">required in adventure<br>required when narration is 1st or 2nd<br>optional in creative + 3rd</span>
+            <span class="hint">the lead on this branch<br>required in adventure<br>required when narration is 1st or 2nd<br>optional in creative + 3rd, which offers "No lead"</span>
           </div>
           <div class="input-select">
             <span>&#9786; Aria <span style="font-size: 10px; color: var(--ink-muted); margin-left: 6px;">(character)</span></span>
@@ -1311,6 +1311,8 @@
         <li><b>composerWrapPov</b> — Affects how new user input in <code>Do</code> / <code>Say</code> / <code>Think</code> modes is rendered, and the person suggestions are written in. Existing entries stay as-saved.</li>
         <li><b>activePackId</b> — Switches the active pack — the prompt shape rewrites on the next turn. Story content stays; generation patterns change.</li>
       </ul>
+      <!-- Only when a mode or narration change makes the story need a lead and other branches have none. -->
+      <div class="lead">2 other branches have no lead. Each needs one before its next turn.</div>
     </div>
     <div class="def-modal-foot">
       <button class="btn" id="def-modal-cancel">Cancel</button>

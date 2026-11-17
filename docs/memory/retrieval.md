@@ -1700,8 +1700,8 @@ WHERE character_id IN ({sceneEntities ∩ characters} ∪ {lead})
 The lead joins the set in adventure and in first- or second-person
 narration, whether or not the turn's scene tags name them: the story
 is told from the lead's side there, and a missed tag mustn't wipe what
-the lead knows. Otherwise, and when the lead doesn't resolve on the
-branch, the set is the scene's characters alone.
+the lead knows. Otherwise, and when the branch has no lead, the set is
+the scene's characters alone.
 
 Lead-only filtering was considered for adventure mode and rejected.
 Characters can feasibly acquire knowledge without the protagonist

@@ -311,8 +311,9 @@ narrator's reply, the fallback classifier's fold and the refresh call
 ([`reader-composer.md → Next-turn suggestions`](./ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)).
 Each reads no context variable, only its parameters, as the memory
 blocks macro does, so each is `staticContent`, and a
-template passes the lead its context resolves: `lead`, the story's lead
-through `resolveLead`, absent when it dangles on the branch, or the
+template passes the lead its context resolves: `lead`, the branch's
+lead through `resolveLead`, absent when the branch has none
+([`data-model.md → The lead`](./data-model.md#the-lead)), or the
 wizard draft's. Without a lead the instructions name none, and
 narration in first or second person still holds.
 
@@ -678,8 +679,10 @@ exposes the wizard's state fields directly.
 | Pipeline intermediates (narrativeResult, etc.) | Same — written to the run's intermediates, available to later templates within the run                                                                                                                                                                                                             |
 | `packVariables.runtimeVariables`               | Same pattern; deferred until pack system lands (see [`parked.md → Pack runtimeVariables surface`](./parked.md#pack-runtimevariables-surface))                                                                                                                                                      |
 
-Definitional fields (mode, lead, narration, genre, tone, setting,
-calendar) are sourced from `story.definition`; operational fields
+Definitional fields (mode, narration, genre, tone, setting, calendar)
+are sourced from `story.definition`, the lead from the branch's
+entities ([`data-model.md → The lead`](./data-model.md#the-lead));
+operational fields
 (memory knobs, translation, models, pack) from `story.settings`. The
 two zod-parsed shapes feed `generationContext` through different
 sub-getters but compose into one rendered context object per the
@@ -722,8 +725,8 @@ Several shapes feed into it:
      stays acyclic
      ([`observability.md → Store ownership and gate wiring`](./observability.md#store-ownership-and-gate-wiring)).
 2. **Story-level definition** (`stories.definition` JSON on the
-   loaded story) — definitional content (`mode`, `leadEntityId`,
-   `narration`, `genre`, `tone`, `setting`, calendar fields). Zod-
+   loaded story) — definitional content (`mode`, `narration`,
+   `genre`, `tone`, `setting`, calendar fields). Zod-
    parsed strictly at story open via the `StoryDefinition` schema.
    Definition is wizard-authored and has no defaults. See
    [Story settings shape](./data-model.md#story-settings-shape).

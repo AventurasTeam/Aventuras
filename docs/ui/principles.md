@@ -525,7 +525,8 @@ rail of categories, right pane for selected category):
   language, about / diagnostics.
 - **Story Settings** — per-story, owned by the story row. Scope:
   identity (tags, cover, accent, etc.), definitional fields
-  (mode, lead, narration, genre, tone, setting, calendar),
+  (mode, narration, genre, tone, setting, calendar, and the current
+  branch's lead),
   operational knobs (memory, translation, pack, composer UX prefs as
   story-owned values), Models overrides.
 
@@ -548,8 +549,9 @@ icons are visually distinguishable — same screen never carries
 both gears.
 
 **Storage shape mirrors the UI section split.** `stories.definition`
-JSON holds definitional content (`mode`, `lead`, `narration`,
-`genre`, `tone`, `setting`, calendar fields); `stories.settings` JSON
+JSON holds definitional content (`mode`, `narration`, `genre`, `tone`,
+`setting`, calendar fields); the lead the Generation tab shows is the
+current branch's, a flag on its character row; `stories.settings` JSON
 holds operational config (memory, translation, models, pack,
 composer prefs). The Story Settings screen's left-rail "Story" /
 "Settings" sections map 1:1 to these two storage blobs. Full schema
@@ -639,9 +641,9 @@ and a direction's events come from the narration
 
 ### 2. Lead — which character the story is about
 
-The story's main character. In adventure mode, the user plays this
-character; in creative mode, they write about them. Same underlying
-field, different UI label:
+The story's main character, held per branch: each branch has its own.
+In adventure mode, the user plays this character; in creative mode,
+they write about them. Same underlying field, different UI label:
 
 - **Adventure mode UI label: `You`** (because you _are_ them)
 - **Creative mode UI label: `Protagonist`** (because you write about
@@ -672,44 +674,41 @@ the lead knows too. A limited narrator in second and third person is
 
 Field: `stories.definition.narration: 'first' | 'second' | 'third'`.
 
-A first- or second-person story always has a lead (whose "I" / "you"
-the narrator inhabits) — enforced as a hard zod constraint at the
-`definition` boundary, not just a documented principle. A
-third-person story can have a lead too (the camera's anchor) — or
-none (creative mode with omniscient narration).
+A first- or second-person story needs a lead (whose "I" / "you" the
+narrator inhabits). A third-person story can have a lead too (the
+camera's anchor) — or none (creative mode with omniscient narration).
 
 Encoding:
 
 - `stories.definition.mode = 'adventure' | 'creative'`
-- `stories.definition.leadEntityId` — must reference an entity with
-  `kind='character'`. Required when:
-  - `mode='adventure'`, OR
-  - `narration ∈ { 'first', 'second' }`.
-
-  The two requirements are independent; either alone is sufficient
-  to require a lead. Optional only in `mode='creative' +
-narration='third'` (the omniscient-narrator ensemble case).
-
 - `stories.definition.narration = 'first' | 'second' | 'third'`
+- The lead is per branch: `entities.is_lead` on one character row of
+  the branch. Two branches of a story can have different leads.
 
-Cross-field constraint summary:
+A branch **needs a lead** when either holds:
 
 ```
-narration ∈ { 'first', 'second' }  →  leadEntityId != null
-mode = 'adventure'                 →  leadEntityId != null
+mode = 'adventure'
+narration ∈ { 'first', 'second' }
 ```
 
-Both apply at the
-[`StoryDefinition` zod boundary](../data-model.md#story-settings-shape).
+The two are independent; either alone requires a lead. Optional only
+in `mode='creative'` with `narration='third'`, the omniscient-narrator
+ensemble case. The rule is checked where a branch acts — the wizard's
+Finish, the Story Settings save, the turn — per
+[`data-model.md → The lead`](../data-model.md#the-lead).
 
 **Lead is a generation-level concept, not a UI gate.** The UI never
 restricts what the user can see regardless of mode. The "view through
 character's eyes" filter is a separate, opt-in UI concept that can
 target any character, not just the lead.
 
-**Lead switching is a first-class feature.** Changing `leadEntityId`
-is allowed at any point in the narrative. Previous leads revert to
-plain characters. Entry points:
+**Lead switching is a first-class feature.** Changing the branch's
+lead is allowed at any point in the narrative. Previous leads revert
+to plain characters. A change is a World edit: CTRL-Z undoes it, and
+rollback and regenerate sweep one made after their target. Where the
+story doesn't need a lead, Story Settings can also set none. Entry
+points:
 
 - **World Panel · detail-head ⋯ menu** — `Set as lead` listed
   alongside Export / Delete / View raw JSON on any character
@@ -783,7 +782,9 @@ surface where the result shows up.
 
 `stories.definition` lives at the story row, not per-branch. All
 branches of a story share the same genre / tone / setting / mode /
-narration. Editing definition propagates to all branches. A user
+narration. Editing definition propagates to all branches. The lead is
+the exception: it is per branch
+([`data-model.md → The lead`](../data-model.md#the-lead)). A user
 wanting tonal experimentation across narrative paths uses a separate
 story, not a branch. Per-branch override is parked in
 [`parked.md → Per-branch definition override`](../parked.md#per-branch-definition-override).
@@ -871,25 +872,26 @@ want voice-matched entries can pick a wrap POV that aligns or use
 If either condition hides the picker, the composer reduces to
 textarea + regen + send.
 
-**A dangling lead disables third-person wrapping.** A non-first-person
-wrap (`third`) names the lead (`Aria reaches for the blade`); when
-`resolveLead` reads the story's lead as absent on this branch
-(per [`data-model.md → Story settings shape`](../data-model.md#story-settings-shape)),
-there's no name to wrap around. The mode picker then disables
-and shows `Free`, and Send wraps as `Free` — the text goes out
-verbatim. A visible reason line under the composer (not just a web
-tooltip, since Android has none) reads the
-`reader:composerLeadMissing` copy: "The story's lead isn't on this
-branch, so actions can't be written for them. Set a new lead in
-World." When the whole composer is disabled (the story still
-loading, or an embedder swap pending), that reason wins the reason
-line. While a turn is generating only Send is refused, and the
-lead-missing line stays. A first-person wrap is unaffected — `I`
-needs no lead name.
+**A branch without the lead it needs can't take a turn.** When the
+story needs a lead and the branch has none
+(per [`data-model.md → The lead`](../data-model.md#the-lead)) — the
+lead deleted, or a mode or narration change that left this branch
+without one — every action that starts a turn refuses: Send,
+regenerate, a failed turn's Retry and Save & regenerate. The draft
+stays in the composer. A visible reason line under the composer (not
+just a web tooltip, since Android has none) reads the
+`reader:composerLeadMissing` copy: "This story needs a lead on this
+branch before it can continue. Set one in World." In adventure the
+mode picker also disables and shows `Free`, since a third-person wrap
+names the lead (`Aria reaches for the blade`). When the whole composer
+is disabled (the story still loading, or an embedder swap pending),
+that reason wins the reason line; while a turn is generating, the
+lead-missing line stays. A creative third-person branch with no lead
+needs none and runs as usual.
 
 **The mode resets to `Free` while the lead is missing.** The selected
 mode isn't kept under the disabled picker: when the lead resolves
-again (a reader undo or redo, or `Set as lead` in World), the picker
+again (an undo or redo, or `Set as lead`), the picker
 re-enables on `Free`, and the user re-picks. A draft typed while the
 picker read `Free` never goes out wrapped.
 

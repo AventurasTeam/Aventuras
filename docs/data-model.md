@@ -83,6 +83,7 @@ erDiagram
         text retired_reason "free-form; only meaningful when status=retired. Hard-finality only — e.g. 'killed by Kael', 'faction disbanded after coup', 'exiled to the southern wastes'. Off-screen-but-alive characters stay status=active with stale lastSeenAt; see docs/memory/edge-cases.md → Retirement"
         json keywords "string[]; aliases / epithets / relational references beyond the canonical name. User-authored, OR periodic-classifier-emitted at entity creation and appended on later passes, OR added by chapter close, which alone removes, and only keywords an AI added. Matched alongside name in the keyword pathway. See docs/memory/retrieval.md → Keywords schema"
         text injection_mode "always | auto | disabled; short-circuited by active+in-scene invariant"
+        integer is_lead "0 | 1; 1 = the branch's lead, characters only, at most one per branch. See The lead"
         integer priority "0..100; orders keyword-inject overflow ONLY — unlike lore.priority it does not feed the ranker pin_signal, which stays 0 for entities. See docs/memory/retrieval.md → Keyword injection budget"
         integer name_collision_flag "0 | 1; 1 = possible duplicate of an exact or partial namesake, raised when the classifier or the per-turn writer creates the row, when a pass's rename meets a name another row holds, or by chapter close on a row it judges a duplicate; surfaces in World panel for review. See docs/memory/edge-cases.md → Name collision"
         text name_collision_partner_id "set iff flagged: the same-branch namesake the row's writer compared it against, the row a chapter close judged it a duplicate of, or the row a merge re-pointed it at, which World pairs it with; a flag whose pair no longer holds is dormant. See docs/memory/classifier.md → Disambiguation"
@@ -1326,6 +1327,72 @@ gives way to newer prose. Per-field provenance, for surfacing a stale
 field, is parked
 ([`parked.md → Per-field provenance metadata`](./parked.md#per-field-provenance-metadata-for-entitiesstate)).
 
+### The lead
+
+**Decided:** the lead is per branch, a flag on the character row:
+`entities.is_lead`, 0 or 1, default 0, with a `CHECK` allowing 1 only
+on a `character` row. What the lead means, and how it relates to mode
+and narration, is in
+[`principles.md → Mode, lead, and narration`](./ui/principles.md#mode-lead-and-narration--three-orthogonal-concepts).
+It isn't in `stories.definition`: two branches can have different
+leads, and a story-level id would dangle on a branch without the
+character.
+
+**A branch needs a lead** when the story's `mode` is `adventure` or its
+`narration` is `first` or `second`; either alone is enough. A creative
+third-person story may have none, the omniscient-narrator ensemble
+case. The rule is checked where a branch acts, not at the `definition`
+boundary: the wizard's Finish refuses a story that needs a lead and has
+none, a Story Settings save checks the current branch, and on a branch
+that needs a lead and has none every action that starts a turn refuses
+([`principles.md → Composer mode`](./ui/principles.md#composer-mode--send-time-transform-narration-aware)).
+A pass or a close runs regardless; its context treats a missing lead
+as absent.
+
+**At most one lead per branch, held by the writers.** Four logged
+writes touch the flag, each one user group:
+
+- **Set** turns every flagged row on the branch off, then the new lead
+  on. The new lead must be an active character on the branch.
+- **Unset** turns the lead off. It is offered only when the story
+  doesn't need a lead.
+- **Deleting the lead** takes the flag with the row. The delete's undo
+  record holds the row, flag included, so CTRL-Z restores the lead.
+- **A collision merge** whose disappearing row is the lead turns the
+  survivor's flag on in the merge's group.
+
+Story creation writes the flag unlogged: the wizard flags its lead's
+cast row in the root branch, the floor like the rest of the cast. No
+machine writer touches the flag, and none deletes or merges a
+character. No unique index backs the rule: redo replays a group
+newest-first, so it would set the new flag while the old one is still
+on. Because a set clears every flagged row, it repairs a double; a
+reader finding two logs an error and reads the branch as having no
+lead. A lead the classifier retires, or one the user stages or retires,
+stays the lead; only setting one requires `active`.
+
+**A lead change is a World edit.** Its deltas carry no entry, so
+rollback and regenerate sweep a change made after their target, and
+CTRL-Z undoes it newest-first
+([Survival anchor](#survival-anchor)). A switch's two writes share a
+group and a stretch of the log, so every sweep and CTRL-Z reverses
+both, and an entry-scoped reversal never reverses an entity create, so
+it can't remove a lead's row. One reversal can split a switch: the
+closure removing the new lead's row by its create, which only boot
+recovery of a failed abort reaches
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+It takes that row's write and leaves the old lead's, and the branch
+reads as having no lead, which the refused turn makes visible.
+
+**Readers.** `resolveLead` (`lib/world/lead.ts`) returns the branch's
+flagged character from the entity map the caller holds. The generation
+and classifier contexts hand it to templates as `lead`, absent when the
+branch has none
+([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
+A fork copies entity rows, and its rewind restores the flag as of the
+fork entry ([Branch model](#branch-model)), so the branch-copy manifest
+needs no row of its own.
+
 ### Story identity fields
 
 **Decided:** `stories` gains identity metadata as columns (not inside
@@ -1416,8 +1483,8 @@ The split mirrors the two-section left rail of the
 stories.definition: {
   // Author-relationship
   mode: 'adventure' | 'creative'
-  leadEntityId: string | null       // see cross-field constraint below; must reference entity with kind=character
   narration: 'first' | 'second' | 'third'
+  // The lead is per branch, not here: see "The lead"
 
   // Substantial prompt content — preset+prose hybrid (see "Genre + tone preset+prose hybrid" below)
   genre: { label: string; promptBody: string }
@@ -1437,40 +1504,9 @@ stories.definition: {
 }
 ```
 
-**Cross-field constraint** (enforced at the zod boundary on
-`definition`):
-
-```
-narration ∈ { 'first', 'second' }  →  leadEntityId != null
-```
-
-A first- or second-person story has a lead by definition (whose "I"
-or "you" the narrator inhabits). Coexists with the existing
-`mode='adventure' → leadEntityId != null` rule; either alone is
-sufficient to require a lead. Wizard rejects commit; Story Settings
-rejects save. Creative + third-person + null lead remains valid (the
-omniscient-narrator ensemble case).
-
-**The lead can dangle.** The lead is story-level while entities are
-per branch, so it dangles on any branch lacking the character — a
-reversal of the lead's create (CTRL-Z of a Blank create, a rollback
-past a classifier-created lead) keeps the id, and so does a branch
-that never had the character (branched before the lead's create, or
-`Set as lead` naming a character another branch lacks). Every UI
-reader resolves it through `resolveLead` and treats a dangling lead as
-absent — the composer disables its third-person wrap until a new lead
-is set. One reader still sees the raw id: `isStoryLead`
-(`lib/actions/entities/register.ts`) only matches it against a live
-row, so a dangling id is harmless there. The generation and classifier
-contexts resolve it the same way and hand templates `lead`, absent when
-it dangles, so no bundled template reads
-`stories.definition.leadEntityId` directly
-([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
-(The wizard context macro,
-`lib/prompts/bundled/wizard.ts`, reads the wizard draft's lead, not
-`stories.definition.leadEntityId`, so it's unaffected either way.)
-Deleting the lead is refused. A per-branch, delta-logged lead is
-an [M6 carried deferral](./implementation/roadmap.md#m6--branches--diff-cache).
+**The lead isn't here.** It is per branch, a flag on the character
+row, and whether a branch needs one follows from `mode` and `narration`
+([The lead](#the-lead)).
 
 **`stories.settings` shape (operational only):**
 
@@ -1865,7 +1901,7 @@ The per-mode `suggestionCategories` palette doesn't fit
 needs adventure / creative branches) so it lives on
 `app_settings.default_suggestion_categories` as a sibling field
 (see below). Definitional fields (those in `stories.definition` —
-`mode`, `leadEntityId`, `narration`, `genre`, `tone`, `setting`,
+`mode`, `narration`, `genre`, `tone`, `setting`,
 `calendarSystemId`, `worldTimeOrigin`) are absent from this default
 shape — they're wizard-authored per story with no global default.
 
@@ -3496,7 +3532,7 @@ manifest exhaustive.
 | `stories`                 | Travels — fields stripped | The story row. `settings.models`, `settings.embedding_provider_id`, `settings.embedding_model_id`, `settings.embedding_upgrade_declined` omitted (see below). All other `settings` and all of `definition` travel. |
 | `branches`                | Travels                   | All branches. Branch container — not delta-logged, but story content.                                                                                                                                              |
 | `story_entries`           | Travels                   | All entries, all branches; `metadata` JSON included.                                                                                                                                                               |
-| `entities`                | Travels                   | `embedding_stale` travels as-is; the post-import re-index reconciles it.                                                                                                                                           |
+| `entities`                | Travels                   | `embedding_stale` travels as-is; the post-import re-index reconciles it. `is_lead` travels; an import refuses a branch with more than one lead.                                                                    |
 | `lore`                    | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
 | `threads`                 | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
 | `happenings`              | Travels                   | Delta-logged story content.                                                                                                                                                                                        |
@@ -3665,7 +3701,8 @@ Per-row payloads carry one row's portable columns under the keys the
 app itself uses (camelCase, as the raw JSON viewer shows them; an
 entity's `state` keeps its stored keys). They leave out the
 server-owned columns (`id`, `branch_id`, `embedding_stale`,
-`name_collision_flag` with its partner and reason, the timestamps)
+`name_collision_flag` with its partner and reason, the timestamps), the
+lead flag
 and every branch-local id: the entity and entry references inside an
 entity's `state`, a thread's or happening's entry references, and
 link rows such as involvements, awareness and relationships. A
