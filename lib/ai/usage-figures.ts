@@ -1,6 +1,7 @@
 import type { LanguageModelUsage } from 'ai'
 
-import type { ProviderInstance, TokenCounts } from '../db'
+import type { TokenCounts } from '../db'
+import type { ProviderInstanceWithStub } from './types'
 
 /** A call's counts as the provider reported them, as an entry stores them. */
 export type TokenFigures = TokenCounts
@@ -26,7 +27,7 @@ function present<K extends string>(key: K, value: number | undefined): Partial<R
  */
 export function tokenFiguresOf(
   usage: LanguageModelUsage | undefined,
-  providerType: ProviderInstance['type'],
+  providerType: ProviderInstanceWithStub['type'],
 ): TokenFigures | undefined {
   // The SDK hands over a usage object of undefined fields when a stream reports none.
   if (usage?.inputTokens == null && usage?.outputTokens == null) return undefined
@@ -39,7 +40,9 @@ export function tokenFiguresOf(
         ...present('reasoning', numberIn(raw, 'completion_tokens_details', 'reasoning_tokens')),
         ...present('cacheRead', numberIn(raw, 'prompt_tokens_details', 'cached_tokens')),
       }
+    // The dev stub provider is built on the Anthropic adapter, so its usage has that shape.
     case 'anthropic':
+    case 'stub':
       return {
         ...counts,
         ...present('cacheRead', numberIn(raw, 'cache_read_input_tokens')),

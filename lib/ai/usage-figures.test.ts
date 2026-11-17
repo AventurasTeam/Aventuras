@@ -55,20 +55,23 @@ describe('tokenFiguresOf', () => {
     })
   })
 
-  it("records Anthropic's cache read and write, and no reasoning it never reports", () => {
-    const raw = {
-      input_tokens: 100,
-      cache_read_input_tokens: 900,
-      cache_creation_input_tokens: 200,
-    }
+  it.each(['anthropic', 'stub'] as const)(
+    "records %s's cache read and write, and no reasoning it never reports",
+    (providerType) => {
+      const raw = {
+        input_tokens: 100,
+        cache_read_input_tokens: 900,
+        cache_creation_input_tokens: 200,
+      }
 
-    expect(tokenFiguresOf(usage(raw), 'anthropic')).toEqual({
-      prompt: 1200,
-      completion: 300,
-      cacheRead: 900,
-      cacheWrite: 200,
-    })
-  })
+      expect(tokenFiguresOf(usage(raw), providerType)).toEqual({
+        prompt: 1200,
+        completion: 300,
+        cacheRead: 900,
+        cacheWrite: 200,
+      })
+    },
+  )
 
   it('reads no figure of one shape off another provider', () => {
     const anthropicShaped = usage({ cache_read_input_tokens: 900 })
