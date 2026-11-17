@@ -41,8 +41,8 @@ export function hydrateEntries(
   entriesStore.hydrate(branchId, [...rows])
   const stmt = testDb.sqlite.prepare(
     `INSERT OR REPLACE INTO story_entries
-       (id, branch_id, position, kind, content, chapter_id, metadata, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, branch_id, position, kind, content, content_tokens, chapter_id, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   // Columns the store never reads are routinely absent from a phase fixture,
   // which the `as never` casts at those call sites hide. Defaulted rather than
@@ -55,6 +55,7 @@ export function hydrateEntries(
       row.position,
       row.kind ?? 'ai_reply',
       row.content ?? '',
+      row.contentTokens ?? null,
       row.chapterId ?? null,
       row.metadata === null || row.metadata === undefined ? null : JSON.stringify(row.metadata),
       row.createdAt ?? row.position,

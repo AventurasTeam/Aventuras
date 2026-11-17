@@ -177,12 +177,15 @@ function failureMetaOf(
 ): SystemFailureMeta {
   const failure = failureTagOf(error)
   const target = failureTargetOf(error)
+  // A turn refused over its window keeps the refused prompt by section for its Details.
+  const promptSections = error?.kind === 'context-window' ? error.promptSections : undefined
   return {
     kind: error?.kind ?? 'orchestrator',
     ...(failure != null ? { failure } : {}),
     ...(detail != null ? { detail } : {}),
     ...(target != null ? { target } : {}),
     ...(submission != null ? { submission } : {}),
+    ...(promptSections != null ? { promptSections } : {}),
   }
 }
 

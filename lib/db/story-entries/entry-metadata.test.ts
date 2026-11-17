@@ -4,6 +4,7 @@ import { applyUndoPayload, computeUndoPayload } from '@/lib/actions/delta/delta-
 import { MAX_RETRIEVAL_QUERIES } from '@/lib/piggyback'
 
 import { entryMetadataSchema } from './entry-metadata'
+import { inheritedEntryMetadata } from './inherited-metadata'
 
 describe('entryMetadataSchema', () => {
   it('accepts a partial AI-authored blob', () => {
@@ -411,5 +412,47 @@ describe('cutOff', () => {
     const marked = { ...base, cutOff }
     const undo = computeUndoPayload(entryMetadataSchema, marked, base)
     expect(applyUndoPayload(entryMetadataSchema, base, undo)).toEqual(marked)
+  })
+})
+
+// data-model.md → Entry metadata shape → Prompt sections.
+describe('the token breakdown fields', () => {
+  const scene = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+  const breakdown = {
+    tokens: { prompt: 9000, completion: 700, reasoning: 120, cacheRead: 8000, cacheWrite: 300 },
+    promptSections: { instructions: 1200, setup: 300, history: 6000, output: 90, other: 40 },
+    classifierCall: {
+      tokens: { prompt: 5000, completion: 90 },
+      promptSections: { roster: 400, history: 900 },
+    },
+  }
+
+  it('round-trip, and a classifier call without counts still keeps its sections', () => {
+    expect(entryMetadataSchema.parse({ ...scene, ...breakdown })).toEqual({
+      ...scene,
+      ...breakdown,
+    })
+    const uncounted = { classifierCall: { promptSections: { roster: 400 } } }
+    expect(entryMetadataSchema.parse({ ...scene, ...uncounted })).toEqual({
+      ...scene,
+      ...uncounted,
+    })
+  })
+
+  it('parse on an entry written before them', () => {
+    const before = { ...scene, tokens: { prompt: 9000, completion: 700 } }
+    expect(entryMetadataSchema.parse(before)).toEqual(before)
+  })
+
+  it('reject a section outside the vocabulary only by dropping it', () => {
+    const parsed = entryMetadataSchema.parse({
+      ...scene,
+      promptSections: { history: 10, bogus: 5 },
+    })
+    expect(parsed.promptSections).toEqual({ history: 10 })
+  })
+
+  it('carry no counts into the next entry', () => {
+    expect(inheritedEntryMetadata({ ...scene, ...breakdown })).toEqual(scene)
   })
 })

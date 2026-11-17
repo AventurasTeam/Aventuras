@@ -183,10 +183,22 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     templateId: TEMPLATE_IDS.perTurnNarrative,
     piggybackFires: piggybackShouldFire,
     suggestionsFire: suggestionsShouldFire,
+    priceHistory: true,
   })
   if (!load.ok) return load.result
   const { idMap } = load
-  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context)
+  const { sections, ...prompt } = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context, {
+    sections: true,
+  })
+  // architecture.md → The pre-send check: Story so far is priced from the blank render plus the
+  // entries' stored counts, so its prose isn't encoded.
+  const blankStartedAt = performance.now()
+  const blank = renderTemplate(
+    TEMPLATE_IDS.perTurnNarrative,
+    { ...load.context, entries: load.context.entries.map((entry) => ({ ...entry, content: '' })) },
+    { sections: true },
+  )
+  const renderMs = performance.now() - blankStartedAt
 
   const entryId = generateId('entry')
   const startedAt = Date.now()
@@ -211,6 +223,12 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       if (!timedOut()) errorBeforeTimeout ??= error
     },
     cacheSystemPrefix: true,
+    sections: {
+      halves: sections,
+      ...(load.historyProse !== undefined
+        ? { history: { blank: blank.sections, prose: load.historyProse, renderMs } }
+        : {}),
+    },
   })
   // Preflight halts before this phase on a broken resolver, so a failure here only
   // covers a resolver-time race the preflight snapshot missed — surface it, don't fabricate.
@@ -266,9 +284,16 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     const windowFailure = call.contextWindowFailureOf(streamError)
     if (windowFailure !== null) {
       ctx.log.warn('provider.context_window', { target: 'narrative', ...windowFailure })
+      // The refused prompt's sections go on the failure entry (data-model.md → Prompt sections).
+      const promptSections = call.promptSections()
       return {
         status: 'failed',
-        error: { kind: 'context-window', target: 'narrative', ...windowFailure },
+        error: {
+          kind: 'context-window',
+          target: 'narrative',
+          ...windowFailure,
+          ...(promptSections !== null ? { promptSections } : {}),
+        },
       }
     }
     // The envelope message alone ("Failed to process successful response") names
@@ -485,19 +510,11 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   }
   ctx.intermediates.suggestionsCaptured = suggestionsCaptured
 
+  const tokens = call.tokensOf(usage)
+  const promptSections = call.promptSections()
   const metadata: EntryMetadata = {
-    // The SDK hands over a usage object of undefined fields when a stream reports none.
-    ...(usage?.inputTokens != null || usage?.outputTokens != null
-      ? {
-          tokens: {
-            prompt: usage.inputTokens ?? 0,
-            completion: usage.outputTokens ?? 0,
-            ...(usage.outputTokenDetails?.reasoningTokens != null
-              ? { reasoning: usage.outputTokenDetails.reasoningTokens }
-              : {}),
-          },
-        }
-      : {}),
+    ...(tokens !== undefined ? { tokens } : {}),
+    ...(promptSections !== null ? { promptSections } : {}),
     model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),

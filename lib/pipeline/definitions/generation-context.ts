@@ -13,6 +13,7 @@ import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
   matchTerms,
   normalizeTerm,
+  countTokens,
   readPromptBuffer,
   type EntityRow,
   type LoreRow,
@@ -60,6 +61,23 @@ type BuildFlags = {
   // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
   // phase has it; blank everywhere else.
   refreshGuidance?: string
+  /** Sum the history's prose and stored counts, which price Story so far (the narrative only). */
+  priceHistory?: boolean
+}
+
+/** The prompt buffer's prose, summed: what a priced history must hold once and whole. */
+export type HistoryProse = { chars: number; tokens: number }
+
+// A row stored before content_tokens existed is counted from its prose.
+function historyProseOf(buffer: readonly StoryEntry[]): HistoryProse {
+  let chars = 0
+  let tokens = 0
+  for (const entry of buffer) {
+    const prose = promptProse(entry)
+    chars += prose.length
+    tokens += entry.contentTokens ?? countTokens(prose)
+  }
+  return { chars, tokens }
 }
 
 type GuardFailure = { ok: false; result: PhaseFailure }
@@ -357,6 +375,7 @@ export async function buildGenerationContext(
     piggybackFires = false,
     suggestionsFire = false,
     refreshGuidance = '',
+    priceHistory = false,
   } = flags
 
   // Both guards are defense-in-depth against store desync: a build against the
@@ -556,6 +575,8 @@ export async function buildGenerationContext(
     stateShownIds,
     // Real ids: the reply records them (data-model.md → Entry metadata shape).
     injectedHappenings: retrievedHappenings.map((row) => row.id),
+    // Beside the context, not in it: the context is the template's variable set.
+    ...(priceHistory ? { historyProse: historyProseOf(buffer) } : {}),
   }
 }
 
