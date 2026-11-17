@@ -167,6 +167,7 @@ describe('stub fault scenarios', () => {
           window: null,
           providerId: 'prov-1',
           modelId: 'model-1',
+          fromOverride: false,
         },
       }
     }

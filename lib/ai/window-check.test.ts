@@ -16,7 +16,8 @@ import {
   type ModelPrompt,
   type ModelTools,
 } from './prompt-schema'
-import { resolveModel, type ResolvedParams, type ResolveModelConfig } from './resolve-model'
+import type { ModelSettings } from '../db'
+import { resolveModel, type ResolveModelConfig } from './resolve-model'
 import {
   __resetTruncationCheck,
   checkInputTokens,
@@ -131,7 +132,7 @@ const MODELS = {
 
 function useProvider(
   type: ProviderType,
-  opts: { window?: number; params?: ResolvedParams } = {},
+  opts: { window?: number; params?: ModelSettings } = {},
 ): ResolveModelConfig {
   vi.mocked(getModel).mockReturnValue(MODELS[type]())
   vi.mocked(resolveModel).mockReturnValue({
@@ -140,6 +141,7 @@ function useProvider(
     providerType: type,
     modelId: 'm',
     params: opts.params ?? {},
+    fromOverride: false,
   })
   return {
     providers: [
@@ -364,6 +366,7 @@ describe('generateStructured: after the reply', () => {
         window,
         providerId: 'prov',
         modelId: 'm',
+        fromOverride: false,
       },
       recoverable: [],
     })

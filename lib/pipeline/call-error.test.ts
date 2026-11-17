@@ -20,6 +20,7 @@ const CUT: ReplyCutOffFailure = {
   window: null,
   providerId: 'prov-1',
   modelId: 'model-1',
+  fromOverride: false,
 }
 
 const OVER: ContextWindowFailure = {
@@ -84,6 +85,21 @@ describe('toPipelineError', () => {
       reason: 'unknown',
       detail: 'thinking is not supported',
       possibleCapabilityMismatch: HINT,
+    })
+  })
+
+  it.each([true, false])('copies fromOverride %s along with the hint', (fromOverride) => {
+    const e: CallRetryError = {
+      tier: 'provider',
+      reason: 'unknown',
+      possibleCapabilityMismatch: HINT,
+      fromOverride,
+    }
+    expect(toPipelineError(e, 'classifier')).toStrictEqual({
+      kind: 'provider',
+      reason: 'unknown',
+      possibleCapabilityMismatch: HINT,
+      fromOverride,
     })
   })
 
@@ -253,6 +269,32 @@ describe('structuredCallFailure', () => {
       lastError: describeContextWindow(OVER),
       error: { kind: 'context-window', target: 'lore-mgmt', ...OVER },
     })
+  })
+
+  // The pass and the close's metadata call surface their failures through this function alone.
+  it('keeps fromOverride on a cut-off and beside a hint', () => {
+    const cut = { ...CUT, fromOverride: true }
+    expect(
+      structuredCallFailure(
+        { status: 'failed', error: { tier: 'reply-cut-off', ...cut }, recoverable: [] },
+        CALL,
+      ).error,
+    ).toMatchObject({ kind: 'reply-cut-off', fromOverride: true })
+    expect(
+      structuredCallFailure(
+        {
+          status: 'failed',
+          error: {
+            tier: 'provider',
+            reason: 'unknown',
+            possibleCapabilityMismatch: HINT,
+            fromOverride: true,
+          },
+          recoverable: [],
+        },
+        CALL,
+      ).error,
+    ).toMatchObject({ kind: 'provider', possibleCapabilityMismatch: HINT, fromOverride: true })
   })
 
   it('maps a cut-off reply to reply-cut-off, carrying the target', () => {

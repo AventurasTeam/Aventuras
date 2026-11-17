@@ -20,6 +20,8 @@ export type PipelineError =
       // Best-effort hint: a 4xx body naming a capability the request carried
       // (generation-pipeline.md → Fatal error categories).
       possibleCapabilityMismatch?: CapabilityHint
+      // Set with the hint: the call ran on the story's override, so the copy names its setting.
+      fromOverride?: boolean
     }
   | { kind: 'phase-logic'; detail: string; phaseName?: string; subsystem?: string }
   | {

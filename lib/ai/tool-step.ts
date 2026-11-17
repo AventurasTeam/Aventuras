@@ -169,7 +169,6 @@ export async function generateToolStep(
     }
   }
   const { tools } = prepared
-  // A story override resolves to no profile params, so it takes the default too.
   const maxOutput = resolved.params.maxOutput ?? TOOL_STEP_MAX_OUTPUT_DEFAULT
   const check = windowCheck(config.providers, providerId, modelId, attribution)
   const sent = carriedCapabilities()
@@ -218,6 +217,7 @@ export async function generateToolStep(
           promptEstimate: check.estimate(),
           providerId,
           modelId,
+          fromOverride: resolved.fromOverride,
         }),
       )
     }
@@ -233,6 +233,7 @@ export async function generateToolStep(
         maxParseAttempts: 1,
         signal: bounded.signal,
         carried: sent.carried,
+        fromOverride: resolved.fromOverride,
       })
       return { result, expired: bounded.expired() }
     } finally {

@@ -72,6 +72,7 @@ const CUT_FIELDS = {
   window: null,
   providerId: 'prov_local',
   modelId: 'qwen3-32b',
+  fromOverride: false,
 } as const
 
 // A narrative reply cut before any prose: the turn failed, and Retry resends the held input.

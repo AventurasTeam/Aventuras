@@ -118,10 +118,12 @@ function logCutOff(
 }
 
 // data-model.md → Entry metadata shape: a cause without the limit it names reads as `unknown`.
+// `fromOverride` is written only as true: absent is the profile's, and a stop names no setting.
 function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
   const outputTokens = failure.outputTokens !== null ? { outputTokens: failure.outputTokens } : {}
   if (failure.cause === 'interrupted' || failure.cause === 'content-filter')
     return { cause: failure.cause, ...outputTokens }
+  const whose = failure.fromOverride ? { fromOverride: true as const } : {}
   const limit =
     failure.cause === 'max-output'
       ? failure.maxOutput
@@ -129,11 +131,12 @@ function cutOffMark(failure: ReplyCutOffFailure): CutOffMark {
         ? failure.window
         : null
   if (failure.cause !== 'unknown' && limit !== null)
-    return { cause: failure.cause, ...outputTokens, limit }
+    return { cause: failure.cause, ...outputTokens, limit, ...whose }
   return {
     cause: 'unknown',
     ...outputTokens,
     ...(failure.maxOutput !== null ? { maxOutput: failure.maxOutput } : {}),
+    ...whose,
   }
 }
 
@@ -286,7 +289,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         kind: 'provider',
         reason: streamErrorReason(streamError),
         detail: describeProviderError(streamError),
-        ...(hint !== undefined ? { possibleCapabilityMismatch: hint } : {}),
+        ...(hint !== undefined
+          ? { possibleCapabilityMismatch: hint, fromOverride: call.fromOverride }
+          : {}),
       },
     }
   }
@@ -313,6 +318,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         promptEstimate: call.promptEstimate(),
         providerId: call.providerId,
         modelId: call.modelId,
+        fromOverride: call.fromOverride,
       }),
       inBlock: read.inBlock,
     }

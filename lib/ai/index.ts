@@ -49,9 +49,9 @@ export {
   type ResolveModelConfig,
   type ResolveModelResult,
   type ResolveFailureKind,
-  type ResolvedParams,
 } from './resolve-model'
 export { resolveModelCapabilities, type ModelCapabilities } from './model-capabilities'
+export { modelSettingsOf, overrideFieldsOf, overrideSettingsOf } from './model-settings'
 export {
   describeReplyCutOff,
   isCutOff,

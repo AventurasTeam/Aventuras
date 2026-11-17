@@ -70,6 +70,7 @@ describe('describeSuggestionFailure', () => {
       window: null,
       providerId: 'prov_local',
       modelId: 'qwen3-32b',
+      fromOverride: false,
     } satisfies PipelineError
     const UNKNOWN =
       "The server stopped the suggestion model's reply at its own limit. Setting a max output on the suggestion profile overrides it."

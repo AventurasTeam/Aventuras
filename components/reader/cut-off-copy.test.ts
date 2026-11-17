@@ -18,6 +18,7 @@ const AT_MAX_OUTPUT: ReplyCutOffFailure = {
   window: null,
   providerId: 'prov_local',
   modelId: 'qwen3-32b',
+  fromOverride: false,
 }
 
 const AT_WINDOW: ReplyCutOffFailure = {

@@ -372,6 +372,7 @@ describe('generateStructured', () => {
       providerType: structuredProvider.type,
       modelId: 'm',
       params: {},
+      fromOverride: false,
     }))
     vi.mocked(runProviderCall).mockImplementation(() =>
       Promise.resolve({ text: '{"description":"A tale."}' } as never),
@@ -520,6 +521,7 @@ describe('generateStructured', () => {
       providerType: structuredProvider.type,
       modelId: 'm',
       params: { temperature: 0.5, maxOutput: 100 },
+      fromOverride: false,
     })
     await generateStructured(
       'wizard-assist',
@@ -543,6 +545,7 @@ describe('generateStructured', () => {
         providerType: structuredProvider.type,
         modelId: 'm',
         params: { timeout: 30 },
+        fromOverride: false,
       })
       const attempts: AbortSignal[] = []
       vi.mocked(runProviderCall).mockImplementation(({ abortSignal }) => {
@@ -591,6 +594,7 @@ describe('generateStructured', () => {
         providerType: structuredProvider.type,
         modelId: 'm',
         params: { timeout: 30 },
+        fromOverride: false,
       })
       const attempts: AbortSignal[] = []
       vi.mocked(runProviderCall).mockImplementation(({ abortSignal }) => {
@@ -677,6 +681,7 @@ describe('generateStructured', () => {
         providerType: 'openai-compatible',
         modelId: 'model-1',
         params: { maxOutput: 256 },
+        fromOverride: false,
       }))
     })
     afterEach(() => {
@@ -721,6 +726,7 @@ describe('generateStructured', () => {
           window: null,
           providerId: 'prov-1',
           modelId: 'model-1',
+          fromOverride: false,
         },
         recoverable: [],
       })
@@ -791,6 +797,23 @@ describe('generateStructured', () => {
       })
     })
 
+    it("names a cut under a story override as the override's", async () => {
+      vi.mocked(resolveModel).mockReturnValue({
+        ok: true,
+        providerId: 'prov-1',
+        providerType: 'openai-compatible',
+        modelId: 'model-1',
+        params: { maxOutput: 256 },
+        fromOverride: true,
+      })
+      reply('{"description":"A ta', 'length', 256)
+
+      expect(await call()).toMatchObject({
+        status: 'failed',
+        error: { tier: 'reply-cut-off', cause: 'max-output', maxOutput: 256, fromOverride: true },
+      })
+    })
+
     it.each([['stop'], [undefined]])(
       'still repairs a malformed reply whose finish reason is %s',
       async (finishReason) => {
@@ -820,6 +843,7 @@ describe('generateStructured', () => {
             window: null,
             providerId: 'prov-1',
             modelId: 'model-1',
+            fromOverride: false,
             parseError: expect.stringContaining('Unterminated string in JSON'),
           },
           { actionId: 'act_1' },
@@ -869,6 +893,7 @@ describe('generateStructured', () => {
         providerType: 'openai-compatible',
         modelId: 'model-1',
         params: {},
+        fromOverride: false,
       }))
       reply('{"description":"A tale."}', 'length', 120)
       await call('act_2')
@@ -885,6 +910,7 @@ describe('generateStructured', () => {
             window: null,
             providerId: 'prov-1',
             modelId: 'model-1',
+            fromOverride: false,
           },
           { actionId: 'act_2' },
         ],
@@ -1043,6 +1069,7 @@ describe('describeCallRetryError', () => {
         window: null,
         providerId: 'prov-1',
         modelId: 'model-1',
+        fromOverride: false,
       }),
     ).toBe('reply cut off (unknown): 4096 output tokens; model model-1 on provider prov-1')
   })
