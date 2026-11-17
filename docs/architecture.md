@@ -1074,7 +1074,9 @@ stored `content_tokens`
 counting a null one from its prose. The rest of each step's request is
 encoded as above. Stored content can hold what the prompt leaves out,
 such as a trailing block an older reply still carries, so the count
-can lean slightly high; current writers store stripped prose, so that
+can lean slightly high. Current writers store stripped prose, except a
+reply that strips to nothing, which is
+[stored raw](./memory/piggyback.md#persistence-and-stripping), so that
 lean is small. It can also lean a few tokens low: the tokenizer can
 merge text across a turn's edges, so the half counted whole differs a
 little from its parts counted apart, and a synthetic 133-turn Japanese

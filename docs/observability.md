@@ -249,7 +249,13 @@ convention, and the expectation that subsystems route through
   `window`, `windowSource`
   and `ms`, the count's cost), `prompt_count_uncached` (debug: a text
   over the pre-send count cache's character budget, so its count isn't
-  kept, with `chars` and `budget`), `input_ratio` (debug: the provider's
+  kept, with `chars` and `budget`), `prompt_sections` (debug: a turn's
+  call counting its prompt by section before the request, with
+  `providerId`, `modelId` and `ms`, the count's cost, plus `renderMs`,
+  the blank render Story so far is priced against, on the narrative
+  call), `prompt_section_unknown` (warn: a template's section tag names
+  an id outside the vocabulary, counted as Other; logged once per id per
+  session with `id`), `input_ratio` (debug: the provider's
   reported input tokens over the estimate, on every attempt that reported
   a positive count, with `providerId`, `modelId`, `estimate`,
   `reported` and `ratio`, plus `cacheRead` and `cacheWrite` when the

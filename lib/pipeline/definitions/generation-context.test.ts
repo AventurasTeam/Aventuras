@@ -21,6 +21,7 @@ import type {
 } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import { countTokens } from '@/lib/tokens'
 import {
   emptyEntityView,
   type CharacterStateView,
@@ -169,6 +170,7 @@ type BuildArgs = {
   piggybackFires?: boolean
   suggestionsFire?: boolean
   refreshGuidance?: string
+  priceHistory?: boolean
 }
 
 async function buildLoad(args: BuildArgs) {
@@ -196,6 +198,7 @@ async function buildLoad(args: BuildArgs) {
     piggybackFires: args.piggybackFires,
     suggestionsFire: args.suggestionsFire,
     refreshGuidance: args.refreshGuidance,
+    priceHistory: args.priceHistory,
   })
   if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
   return load
@@ -708,6 +711,38 @@ describe('buildGenerationContext — composed prompt buffer', () => {
       settings: storySettings({ protectedBuffer: 0 }),
     })
     expect(contentsOf(ctx)).toEqual([])
+  })
+})
+
+// architecture.md → The pre-send check: Story so far is priced from the buffer's stored counts, so the
+// narrative call alone asks for their sums.
+describe('buildGenerationContext — history prose', () => {
+  const STATE = '\n<state>\n<scene_entities>c1</scene_entities>\n</state>'
+  const rows = () =>
+    [
+      { ...entry('e1', 1, 'The tide is out.', 'opening'), contentTokens: 5 },
+      { ...entry('e2', 2, 'I go down to the water.', 'user_action'), contentTokens: null },
+      { ...entry('e3', 3, `The water is cold.${STATE}`, 'ai_reply'), contentTokens: 40 },
+    ] as never[]
+
+  it("sums the buffer's prose and stored counts, a null count taken from its prose", async () => {
+    const load = await buildLoad({
+      entries: rows(),
+      settings: storySettings({ partialChapterBuffer: 10, protectedBuffer: 0 }),
+      priceHistory: true,
+    })
+
+    expect(load.historyProse).toEqual({
+      chars: 'The tide is out.I go down to the water.The water is cold.'.length,
+      tokens: 5 + countTokens('I go down to the water.') + 40,
+    })
+    expect(load.context).not.toHaveProperty('historyProse')
+  })
+
+  it('sums nothing for a phase that prices no history', async () => {
+    const load = await buildLoad({ entries: rows(), settings: storySettings() })
+
+    expect(load).not.toHaveProperty('historyProse')
   })
 })
 

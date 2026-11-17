@@ -1801,6 +1801,256 @@ function richStoryRows(): { story: NewStory; branch: NewBranch; entries: NewStor
 }
 
 // ---------------------------------------------------------------------------
+// Token-ledger story — one reply per token-line variant, read by eye against
+// ui/patterns/entry-card.md → Token panel; it ends on a window refusal whose
+// Details list the refused prompt's sections.
+// ---------------------------------------------------------------------------
+
+const LEDGER = 'story_tokens'
+const LMAIN = 'br_tokens_main'
+
+type Sections = NonNullable<EntryMetadata['promptSections']>
+type LedgerMeta = Pick<
+  EntryMetadata,
+  'tokens' | 'promptSections' | 'classifierCall' | 'reasoning' | 'reasoningEstimate'
+>
+
+const NARRATIVE_SECTIONS: Sections = {
+  instructions: 1_180,
+  setup: 420,
+  scene: 310,
+  places: 140,
+  entities: 860,
+  lore: 1_240,
+  happenings: 690,
+  threads: 210,
+  chapters: 380,
+  history: 4_620,
+  output: 540,
+  other: 38,
+}
+
+const CLASSIFIER_SECTIONS: Sections = {
+  instructions: 1_460,
+  setup: 420,
+  roster: 380,
+  scene: 310,
+  places: 140,
+  entities: 860,
+  history: 2_100,
+  output: 720,
+  other: 24,
+}
+
+const LEDGER_REASONING =
+  'The courier wants the ledger read aloud. Keep it terse: name the line, then the figure, then what the clerk does next.'
+
+const LEDGER_LINES: readonly { label: string; meta: LedgerMeta }[] = [
+  {
+    label:
+      'Provider counts with a section breakdown: the meta line reads prompt → reply, and tapping it opens the narrative call.',
+    meta: { tokens: { prompt: 10_694, completion: 412 }, promptSections: NARRATIVE_SECTIONS },
+  },
+  {
+    label:
+      'Cache read and write: the panel adds a From cache line with its share, and a Written to cache line.',
+    meta: {
+      tokens: { prompt: 10_702, completion: 388, cacheRead: 9_216, cacheWrite: 1_486 },
+      promptSections: NARRATIVE_SECTIONS,
+    },
+  },
+  {
+    label: 'A warm cache, read only: one From cache line, no write line.',
+    meta: {
+      tokens: { prompt: 10_731, completion: 405, cacheRead: 10_240 },
+      promptSections: NARRATIVE_SECTIONS,
+    },
+  },
+  {
+    label: 'Reasoning the provider counted: the meta line adds (+N reasoning).',
+    meta: {
+      tokens: { prompt: 10_688, completion: 356, reasoning: 1_284 },
+      promptSections: NARRATIVE_SECTIONS,
+      reasoning: LEDGER_REASONING,
+    },
+  },
+  {
+    label:
+      'Reasoning streamed without a count: the meta line adds (+~N reasoning), the estimate kept from the stream.',
+    meta: {
+      tokens: { prompt: 10_710, completion: 371 },
+      promptSections: NARRATIVE_SECTIONS,
+      reasoning: LEDGER_REASONING,
+      reasoningEstimate: 942,
+    },
+  },
+  {
+    label:
+      'No provider counts: both figures are estimates, the prompt summed from its sections and the reply counted from this text.',
+    meta: { promptSections: NARRATIVE_SECTIONS },
+  },
+  {
+    label: 'No provider counts, reasoning estimated: every figure carries a tilde.',
+    meta: {
+      promptSections: NARRATIVE_SECTIONS,
+      reasoning: LEDGER_REASONING,
+      reasoningEstimate: 618,
+    },
+  },
+  {
+    label:
+      'The classifier fallback ran: the panel shows a second call below a rule, with its own counts and sections.',
+    meta: {
+      tokens: { prompt: 10_716, completion: 401 },
+      promptSections: NARRATIVE_SECTIONS,
+      classifierCall: {
+        tokens: { prompt: 6_455, completion: 214 },
+        promptSections: CLASSIFIER_SECTIONS,
+      },
+    },
+  },
+  {
+    label:
+      'The classifier fallback ran and reported no counts: its group shows only an estimated prompt.',
+    meta: {
+      tokens: { prompt: 10_699, completion: 394 },
+      promptSections: NARRATIVE_SECTIONS,
+      classifierCall: { promptSections: CLASSIFIER_SECTIONS },
+    },
+  },
+  {
+    label: 'An early, lean prompt: a section that rendered nothing has no row.',
+    meta: {
+      tokens: { prompt: 2_431, completion: 298 },
+      promptSections: { instructions: 1_180, setup: 420, history: 262, output: 540, other: 12 },
+    },
+  },
+  {
+    label: 'A long story so far: a tiny section keeps a sliver of bar, never none.',
+    meta: {
+      tokens: { prompt: 58_906, completion: 512 },
+      promptSections: {
+        ...NARRATIVE_SECTIONS,
+        places: 9,
+        threads: 4,
+        chapters: 2_150,
+        history: 51_380,
+      },
+    },
+  },
+  {
+    label:
+      'A row written before sections were recorded: provider counts as plain text, with no panel behind them.',
+    meta: { tokens: { prompt: 10_640, completion: 377 } },
+  },
+]
+
+const LEDGER_ACTIONS = [
+  'I turn to the next line of the ledger.',
+  'I ask the clerk what this line cost.',
+  'I run a finger down the column of figures.',
+]
+
+const LEDGER_OPENING =
+  'The counting-house bills by the word. Every reply below is one line of its ledger, and each line is set down a different way.'
+
+const LEDGER_REFUSED_SECTIONS: Sections = {
+  ...NARRATIVE_SECTIONS,
+  entities: 1_200,
+  lore: 1_800,
+  happenings: 1_500,
+  threads: 400,
+  chapters: 600,
+  history: 3_020,
+}
+
+// A turn's window refusal as describeTurnFailure writes it: lib/db can't import the reader's copy.
+const LEDGER_REFUSAL: EntryMetadata['systemFailure'] = {
+  kind: 'context-window',
+  failure: 'check',
+  target: 'narrative',
+  detail:
+    'prompt over the context window (check): estimate 11163 tokens, window 8192 (configured); model seed/narrative on provider prov_local',
+  submission: { content: 'I ask the clerk to read the whole ledger back.', composerMode: 'free' },
+  promptSections: LEDGER_REFUSED_SECTIONS,
+}
+const LEDGER_REFUSAL_CONTENT =
+  "This prompt is about 11,200 tokens; seed/narrative's context window is 8,192 (set by you). Nothing was sent. Shorten the prompt in Story Settings (memory budgets, history buffer), raise the window if the model allows more, or switch to a model with a larger one."
+
+function ledgerEntries(t0: number): NewStoryEntry[] {
+  const rows: NewStoryEntry[] = []
+  const push = (kind: NewStoryEntry['kind'], content: string, meta: Partial<EntryMetadata>) => {
+    const position = rows.length + 1
+    rows.push({
+      id: entryId('tokens', position),
+      branchId: LMAIN,
+      position,
+      kind,
+      content,
+      chapterId: null,
+      metadata: entryMetadataSchema.parse({
+        sceneEntities: [],
+        currentLocationId: null,
+        worldTime: position,
+        ...meta,
+      }),
+      createdAt: t0 + position * MIN,
+    })
+  }
+  push('opening', LEDGER_OPENING, {})
+  LEDGER_LINES.forEach((line, i) => {
+    push('user_action', LEDGER_ACTIONS[i % LEDGER_ACTIONS.length]!, {})
+    push('ai_reply', `Line ${i + 1}. ${line.label}`, {
+      model: 'seed/narrative',
+      generationTimingMs: 4_200 + i * 310,
+      ...line.meta,
+    })
+  })
+  push('system', LEDGER_REFUSAL_CONTENT, { systemFailure: LEDGER_REFUSAL })
+  return rows
+}
+
+function ledgerStoryRows(): { story: NewStory; branch: NewBranch; entries: NewStoryEntry[] } {
+  const t0 = BASE + 10 * DAY
+  const entries = ledgerEntries(t0)
+  const last = t0 + entries.length * MIN
+  return {
+    story: {
+      id: LEDGER,
+      title: 'The Token Ledger',
+      description:
+        "Token-breakdown review set: one reply per meta-line variant, ending on a window refusal whose Details list the prompt's sections.",
+      tags: ['dev', 'tokens'],
+      accentColor: '#14b8a6',
+      status: 'active',
+      favorite: 0,
+      lastOpenedAt: last,
+      definition: definition({
+        mode: 'creative',
+        narration: 'third',
+        leadEntityId: null,
+        genre: 'bureaucratic fable',
+        tone: 'dry',
+        setting: 'a counting-house that bills by the word',
+      }),
+      settings: settings(),
+      createdAt: t0,
+      updatedAt: last,
+      currentBranchId: LMAIN,
+    },
+    branch: {
+      id: LMAIN,
+      storyId: LEDGER,
+      parentBranchId: null,
+      forkEntryId: null,
+      name: 'Main',
+      createdAt: t0,
+    },
+    entries,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Cross-story singletons.
 // ---------------------------------------------------------------------------
 
@@ -1941,9 +2191,14 @@ function parkedClassifierStatus(
 export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
   const rich = richStoryRows()
-  const allEntries = [...heroEntries(), ...forkEntries(), ...rich.entries, ...filler.entries].map(
-    withContentTokens,
-  )
+  const ledger = ledgerStoryRows()
+  const allEntries = [
+    ...heroEntries(),
+    ...forkEntries(),
+    ...rich.entries,
+    ...ledger.entries,
+    ...filler.entries,
+  ].map(withContentTokens)
   const deltaRows = interleaveHeroDeltas(entryCreateDeltas(allEntries))
   // Summed here, after withContentTokens: at import, a count would build the encoder on every launch.
   const chapterRows: NewChapter[] = heroChapters.map((chapter) => ({
@@ -2004,11 +2259,11 @@ export function buildSeedSteps(): SeedStep[] {
   const steps: SeedStep[] = [
     step('vault_calendars', vaultCalendars, vaultCalendarRows),
     step('assets', assets, assetRows),
-    step('stories', stories, [heroStory, rich.story, ...filler.stories]),
+    step('stories', stories, [heroStory, rich.story, ledger.story, ...filler.stories]),
     step(
       'branches',
       branches,
-      [...branchRows, rich.branch].map((branch) => ({
+      [...branchRows, rich.branch, ledger.branch].map((branch) => ({
         ...branch,
         classifierStatus: parkedClassifierStatus(branch.id, allEntries),
       })),

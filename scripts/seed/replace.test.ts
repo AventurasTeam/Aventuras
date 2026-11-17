@@ -29,7 +29,7 @@ describe('replaceSeedRows', () => {
     const ctx = await seeded()
     await ctx.db.insert(stories).values(extraStory)
     await replaceSeedRows(ctx.sqlite, ctx.db, buildSeedSteps())
-    expect(await storyCount(ctx)).toBe(7)
+    expect(await storyCount(ctx)).toBe(8)
   })
 
   it('keeps the old rows when an insert fails', async () => {
@@ -37,7 +37,7 @@ describe('replaceSeedRows', () => {
     const steps = buildSeedSteps()
     const duplicate = steps.find((s) => s.table === stories)!
     await expect(replaceSeedRows(ctx.sqlite, ctx.db, [...steps, duplicate])).rejects.toThrow()
-    expect(await storyCount(ctx)).toBe(7)
+    expect(await storyCount(ctx)).toBe(8)
   })
 
   it('keeps the old rows when a reference is broken', async () => {
@@ -50,6 +50,6 @@ describe('replaceSeedRows', () => {
     await expect(
       replaceSeedRows(ctx.sqlite, ctx.db, [...buildSeedSteps(), orphan]),
     ).rejects.toThrow(/FOREIGN KEY/)
-    expect(await storyCount(ctx)).toBe(7)
+    expect(await storyCount(ctx)).toBe(8)
   })
 })

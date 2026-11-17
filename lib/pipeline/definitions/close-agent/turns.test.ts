@@ -14,13 +14,7 @@ import { lifecycleTask } from './lifecycle'
 import { loreTask } from './lore'
 import type { CloseTaskDef, TaskPromptContext } from './task'
 import { threadsTask } from './threads'
-import {
-  blankTurns,
-  hasTurns,
-  primeCloseSystemCount,
-  readTaskTurns,
-  renderClosePrompt,
-} from './turns'
+import { blankTurns, hasTurns, readTaskTurns, renderClosePrompt } from './turns'
 import { upkeepTask } from './upkeep'
 import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
 
@@ -186,21 +180,6 @@ describe('blankTurns', () => {
       { handle: 't1', kind: 'opening', content: '' },
       { handle: 't2', kind: 'user_action', content: '' },
     ])
-  })
-})
-
-describe('primeCloseSystemCount', () => {
-  it("primes the system half at the blank half's count plus the prose count, never encoding the system half", () => {
-    __clearPromptCountCache()
-    countTokensSpy.mockClear()
-    const system = 'The rules.\n\n# The turns\n\nRain on the river, and the ferry late.'
-    const blank = 'The rules.\n\n# The turns\n\n'
-
-    primeCloseSystemCount(system, blank, 40)
-    const total = countPromptTokens([{ role: 'system', content: system }])
-
-    expect(encodedTexts()).not.toContain(system)
-    expect(total).toBe(countTokens(blank) + 40)
   })
 })
 

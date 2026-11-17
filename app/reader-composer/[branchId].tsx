@@ -82,6 +82,11 @@ import {
   sendRunStreams,
   type PassRefusal,
 } from '@/components/reader/send-run'
+import {
+  NO_STREAMING_TOKENS,
+  withChunk,
+  type StreamingTokens,
+} from '@/components/reader/streaming-tokens'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { suggestionRefreshBlocked } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
@@ -457,6 +462,7 @@ export default function ReaderComposerRoute() {
     entryId: string
     content: string
     reasoning: string
+    tokens: StreamingTokens
   } | null>(null)
   const composerRef = useRef<ComposerHandle>(null)
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
@@ -525,10 +531,16 @@ export default function ReaderComposerRoute() {
           const base =
             prev?.entryId === event.targetEntryId
               ? prev
-              : { entryId: event.targetEntryId, content: '', reasoning: '' }
+              : {
+                  entryId: event.targetEntryId,
+                  content: '',
+                  reasoning: '',
+                  tokens: NO_STREAMING_TOKENS,
+                }
+          const tokens = withChunk(base.tokens, event.channel, event.text)
           return event.channel === 'reasoning'
-            ? { ...base, reasoning: safe }
-            : { ...base, content: safe }
+            ? { ...base, reasoning: safe, tokens }
+            : { ...base, content: safe, tokens }
         })
       }),
     [branchId],
@@ -1722,7 +1734,11 @@ export default function ReaderComposerRoute() {
   const streamingPayload = useMemo(
     () =>
       streamingVisible && !slice.hasNewer
-        ? { content: streaming?.content ?? '', reasoning: streaming?.reasoning ?? '' }
+        ? {
+            content: streaming?.content ?? '',
+            reasoning: streaming?.reasoning ?? '',
+            tokens: streaming?.tokens ?? NO_STREAMING_TOKENS,
+          }
         : null,
     [streamingVisible, slice.hasNewer, streaming],
   )

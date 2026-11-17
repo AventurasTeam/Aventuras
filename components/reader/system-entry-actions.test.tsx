@@ -279,6 +279,39 @@ describe('toSystemFailureMeta', () => {
     expect(parsed.systemFailure).toEqual(meta)
   })
 
+  // data-model.md → Prompt sections: a turn refused over its window keeps the refused prompt by
+  // section, for its Details.
+  it("keeps a refused turn's prompt by section, through the persisted schema", () => {
+    const promptSections = { instructions: 1800, history: 38_000, other: 30 }
+    const meta = toSystemFailureMeta(
+      {
+        kind: 'context-window',
+        target: 'narrative',
+        detectedBy: 'check',
+        estimate: 41_000,
+        window: 32_768,
+        windowSource: 'configured',
+        providerId: 'prov_local',
+        modelId: 'llama3.1:70b',
+        promptSections,
+      },
+      { content: 'I open the door', composerMode: 'do' },
+    )
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: meta,
+    })
+
+    expect(meta.promptSections).toEqual(promptSections)
+    expect(parsed.systemFailure?.promptSections).toEqual(promptSections)
+  })
+
+  it('writes no sections for a window refusal that carries none', () => {
+    expect(toSystemFailureMeta(CLOSE_OVERFLOW, undefined)).not.toHaveProperty('promptSections')
+  })
+
   it("persists an empty reply's finish reason as its detail", () => {
     const submission = { content: 'I open the door', composerMode: 'do' }
     expect(toSystemFailureMeta(EMPTY_REPLY_FILTERED, submission)).toEqual({

@@ -503,7 +503,11 @@ export async function* piggybackFallbackClassifierPhase(
   // Run-scoped, so placeholder ids stay consistent with the narrative fold's
   // prompt instead of being renumbered from scratch.
   const { idMap } = load
-  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context)
+  const { sections, ...prompt } = renderTemplate(
+    TEMPLATE_IDS.piggybackFallbackClassifier,
+    load.context,
+    { sections: true },
+  )
 
   const appSettings = appSettingsStore.getAppSettings()
   const classifierConfig: ResolveModelConfig = {
@@ -517,6 +521,7 @@ export async function* piggybackFallbackClassifierPhase(
   const callOptions: StructuredCallOptions = {
     cacheSystemPrefix: !outcome?.attempted,
     actionId: ctx.actionId,
+    sections: { halves: sections },
   }
   const result = askForSuggestions
     ? await generateClassifierState(
@@ -733,6 +738,15 @@ export async function* piggybackFallbackClassifierPhase(
           ...(stateReport !== undefined ? { stateReport } : {}),
           ...(suggestionItems.length > 0
             ? { nextTurnSuggestions: { items: suggestionItems, source: 'classifier' as const } }
+            : {}),
+          // The kept attempt's call (data-model.md → Prompt sections); undoing this write removes it.
+          ...(result.promptSections !== undefined
+            ? {
+                classifierCall: {
+                  ...(result.tokens !== undefined ? { tokens: result.tokens } : {}),
+                  promptSections: result.promptSections,
+                },
+              }
             : {}),
         },
       },

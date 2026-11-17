@@ -8,7 +8,7 @@ import { t } from '@/lib/i18n'
 import { WHEEL_CHAIN_GAP_MS } from '@/lib/reader-scroll'
 
 import type { ChapterBreaks } from './chapter-breaks'
-import type { EditSession, ReaderSurfaceHandle } from './reader-document-types'
+import type { EditSession, ReaderSurfaceHandle, StreamingPayload } from './reader-document-types'
 import {
   deriveSlice,
   editingRowOf,
@@ -28,6 +28,15 @@ import {
   passResolvedEntry,
   toPassFailureMeta,
 } from './system-entry-actions'
+
+// A live reply as the route hands it over; a word count stands in for the per-chunk token count.
+function live(content: string): StreamingPayload {
+  return {
+    content,
+    reasoning: '',
+    tokens: { reply: content.split(/\s+/).filter(Boolean).length, reasoning: 0 },
+  }
+}
 
 const NOW = 1752900000000
 
@@ -976,7 +985,7 @@ function StreamEndHarness(props: ComponentProps<typeof ReaderSurface>) {
         <ReaderSurface
           {...props}
           rows={phase === 'streaming' ? OVERFLOW_ROWS : [...OVERFLOW_ROWS, reply]}
-          streaming={phase === 'streaming' ? { content: REPLY_TEXT, reasoning: '' } : null}
+          streaming={phase === 'streaming' ? live(REPLY_TEXT) : null}
         />
       </div>
     </div>
@@ -1093,7 +1102,7 @@ function StreamChunksHarness(props: ComponentProps<typeof ReaderSurface>) {
           <div style={{ height: 2000 }} />
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <ReaderSurface {...props} rows={OVERFLOW_ROWS} streaming={{ content, reasoning: '' }} />
+          <ReaderSurface {...props} rows={OVERFLOW_ROWS} streaming={live(content)} />
         </div>
       </div>
     </div>
@@ -1242,7 +1251,7 @@ function StreamBreakHarness(props: ComponentProps<typeof ReaderSurface>) {
           {...props}
           rows={OVERFLOW_ROWS}
           chapterBreaks={closed ? { o14: { number: 2 } } : {}}
-          streaming={{ content, reasoning: '' }}
+          streaming={live(content)}
         />
       </div>
     </div>
@@ -1607,10 +1616,7 @@ export const OlderBoundaryShimmer: Story = {
 
 export const Streaming: Story = {
   args: {
-    streaming: {
-      content: 'The corridor keeps unfolding as you walk, each step adding',
-      reasoning: '',
-    },
+    streaming: live('The corridor keeps unfolding as you walk, each step adding'),
   },
 }
 
@@ -1988,7 +1994,7 @@ function JumpHarness(props: ComponentProps<typeof ReaderSurface>) {
           rows={rows}
           branchKey={branchKey}
           hasOlder={hasOlder}
-          streaming={chunks > 0 ? { content, reasoning: '' } : null}
+          streaming={chunks > 0 ? live(content) : null}
         />
       </div>
     </div>
@@ -3664,7 +3670,7 @@ function SliceHostHarness({
           hasNewer={view.hasNewer}
           sliceKey={view.sliceKey}
           editingRow={editingRowOf(windowRows, view.rows, session?.entryId ?? null)}
-          streaming={chunks > 0 && !view.hasNewer ? { content, reasoning: '' } : null}
+          streaming={chunks > 0 && !view.hasNewer ? live(content) : null}
           onNearTop={async (request) => {
             await props.onNearTop(request)
             await answerOrQueue(() => commit(extendUp(stateRef.current, windowRows, request)))

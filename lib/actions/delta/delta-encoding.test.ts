@@ -209,3 +209,29 @@ describe("a place's unplaced flag through entityStateColumnSchema", () => {
     expect(applyUndoPayload(entityStateColumnSchema, next, undo)).toEqual(prior)
   })
 })
+
+// data-model.md → Prompt sections: the fallback's figures ride its metadata write, so undoing that
+// write removes them and leaves the narrative call's own record alone.
+describe('classifierCall round-trip through entryMetadataSchema', () => {
+  const base = {
+    sceneEntities: ['char_a'],
+    currentLocationId: 'loc_a',
+    worldTime: 100,
+    tokens: { prompt: 9000, completion: 700, cacheRead: 8000 },
+    promptSections: { instructions: 1200, history: 6000, other: 40 },
+  }
+
+  it('removes the fallback call on undo, the narrative call untouched', () => {
+    const next = {
+      ...base,
+      classifierCall: {
+        tokens: { prompt: 5000, completion: 90 },
+        promptSections: { roster: 400, history: 900 },
+      },
+    }
+    const undo = computeUndoPayload(entryMetadataSchema, base, next)
+
+    expect(undo).toEqual({ classifierCall: null })
+    expect(applyUndoPayload(entryMetadataSchema, next, undo)).toEqual(base)
+  })
+})

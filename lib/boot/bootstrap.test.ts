@@ -557,6 +557,7 @@ describe('ensureTruncationNotice', () => {
     estimate: 12_345,
     providerId: 'prov_local',
     modelId: 'qwen2.5-coder:32b',
+    providerType: 'openai-compatible' as const,
   }
   const WARNING =
     'qwen2.5-coder:32b may have dropped part of the prompt: it counted 1,234 tokens where about 12,400 were sent. Set its context window.'
