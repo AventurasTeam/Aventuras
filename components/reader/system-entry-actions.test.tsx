@@ -267,6 +267,7 @@ describe('toSystemFailureMeta', () => {
       kind: 'reply-cut-off',
       failure: 'max-output',
       detail: describeReplyCutOff(TURN_CUT),
+      target: 'narrative',
       submission,
     })
     const parsed = entryMetadataSchema.parse({
@@ -400,7 +401,12 @@ describe('toPassFailureMeta', () => {
         },
         undefined,
       ),
-    ).toEqual({ kind: 'config-resolver', failure: 'no-profile-assigned', pass: 'failed' })
+    ).toEqual({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      target: 'classifier',
+      pass: 'failed',
+    })
   })
 
   it('persists a provider failure with its detail line, and no submission the composer took', () => {
@@ -451,6 +457,7 @@ describe('toPassFailureMeta', () => {
       kind: 'reply-cut-off',
       failure: 'unknown',
       detail: describeReplyCutOff(PASS_CUT),
+      target: 'classifier',
       pass: 'failed',
     })
   })
@@ -550,6 +557,7 @@ describe('toCloseFailureMeta', () => {
     expect(toCloseFailureMeta(CLOSE_UNASSIGNED, undefined)).toEqual({
       kind: 'config-resolver',
       failure: 'no-profile-assigned',
+      target: 'lore-mgmt',
       close: 'failed',
     })
   })
@@ -569,6 +577,7 @@ describe('toCloseFailureMeta', () => {
       kind: 'reply-cut-off',
       failure: 'max-output',
       detail: describeReplyCutOff(CLOSE_CUT),
+      target: 'lore-mgmt',
       submission: SUBMISSION,
       close: 'failed',
     })
@@ -1121,6 +1130,38 @@ describe('useConfigFixAction', () => {
     expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
     expect(leaveStory).not.toHaveBeenCalled()
   })
+
+  // generation-pipeline.md → Cut-off replies → Whose setting it was: every `Fix profile`.
+  it("follows the story's override for its slot to the Models tab", () => {
+    const leaveStory = vi.fn()
+    const { result } = renderHook(() =>
+      useConfigFixAction('profile-missing', 'story_1', leaveStory, true),
+    )
+    expect(result.current?.label).toBe('Fix story override')
+    act(() => result.current?.onPress())
+    expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    expect(leaveStory).not.toHaveBeenCalled()
+  })
+
+  it('keeps Fix profile with no override, or no story to route to', () => {
+    for (const [overridden, storyId] of [
+      [false, 'story_1'],
+      [true, null],
+    ] as const) {
+      const { result } = renderHook(() =>
+        useConfigFixAction('profile-missing', storyId, leaveAtOnce, overridden),
+      )
+      expect(result.current?.label).toBe('Fix profile')
+    }
+  })
+
+  // Canon moves `Fix profile` only; the other config fixes keep their own rows.
+  it('leaves Assign profile and Fix default as they are under an override', () => {
+    for (const failure of ['no-profile-assigned', 'provider-missing', 'from-a-newer-build']) {
+      const { result } = renderHook(() => useConfigFixAction(failure, 'story_1', leaveAtOnce, true))
+      expect(result.current?.label).not.toBe('Fix story override')
+    }
+  })
 })
 
 describe('useProfileFixAction', () => {
@@ -1221,6 +1262,26 @@ describe('profileFixSlot', () => {
     },
   ] as const)('reads $entry as the $slot slot', ({ failure, slot }) => {
     expect(profileFixSlot(failure)).toBe(slot)
+  })
+
+  // A turn entry can carry the classifier's pre-flight failure: only the persisted target says so.
+  it('takes the target the error named over the entry it sits on', () => {
+    expect(
+      profileFixSlot({ kind: 'config-resolver', failure: 'profile-missing', target: 'classifier' }),
+    ).toBe('classifier')
+  })
+
+  it('falls back to the entry for a target with no story slot', () => {
+    expect(
+      profileFixSlot({
+        kind: 'config-resolver',
+        failure: 'profile-missing',
+        target: 'wizard-assist',
+      }),
+    ).toBe('narrative')
+    expect(
+      profileFixSlot({ kind: 'reply-cut-off', target: 'from-a-newer-build', pass: 'failed' }),
+    ).toBe('classifier')
   })
 })
 
@@ -1435,6 +1496,35 @@ describe('useSystemEntryActions', () => {
       expect(actionsFor(fromOverride, 'story_1', {}).fixAction?.label).toBe('Fix profile')
     })
 
+    it("routes a resolver failure's Fix profile by the target it named, not the entry", () => {
+      const classifierOnTurn = toSystemFailureMeta(
+        {
+          kind: 'config-resolver',
+          failure: 'profile-missing',
+          target: 'classifier',
+          phaseName: 'piggyback-fallback-classifier',
+        },
+        undefined,
+      )
+      expect(actionsFor(classifierOnTurn, 'story_1', { classifier: MODEL }).fixAction?.label).toBe(
+        'Fix story override',
+      )
+      expect(actionsFor(classifierOnTurn, 'story_1', { narrative: MODEL }).fixAction?.label).toBe(
+        'Fix profile',
+      )
+    })
+
+    it('routes an entry written before the target by its pass, close or narrative', () => {
+      const legacy = { kind: 'config-resolver', failure: 'profile-missing' }
+      expect(actionsFor(legacy, 'story_1', { narrative: MODEL }).fixAction?.label).toBe(
+        'Fix story override',
+      )
+      expect(
+        actionsFor({ ...legacy, close: 'failed' }, 'story_1', { 'lore-mgmt': MODEL }).fixAction
+          ?.label,
+      ).toBe('Fix story override')
+    })
+
     it('offers no fix for a window cut-off under an override either', () => {
       const failure = { kind: 'reply-cut-off', failure: 'window' }
       expect(actionsFor(failure, 'story_1', { narrative: MODEL }).fixAction).toBeUndefined()
@@ -1538,6 +1628,7 @@ describe('window and capability-hint entries', () => {
         kind: 'context-window',
         failure: 'check',
         detail: describeContextWindow(TURN_WINDOW),
+        target: 'narrative',
         submission: SUBMISSION,
       })
       const parsed = entryMetadataSchema.parse({
@@ -1554,6 +1645,7 @@ describe('window and capability-hint entries', () => {
         kind: 'context-window',
         failure: 'provider',
         detail: describeContextWindow(PASS_OVERFLOW),
+        target: 'classifier',
         pass: 'failed',
       })
     })

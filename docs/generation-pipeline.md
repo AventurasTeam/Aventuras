@@ -2298,7 +2298,10 @@ doesn't read it. Every `Fix profile`, whatever its failure, follows
 where the slot's settings live when the surface renders: it reads
 `Fix story override` and opens Story Settings → Models at that slot's row
 when the story overrides the slot now, and stays `Fix profile`
-otherwise. So a notice from before an override was added routes to the
+otherwise. The slot is the agent the failure named, which a system entry
+keeps as `systemFailure.target`
+([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape)).
+So a notice from before an override was added routes to the
 override, which is where its limit lives now.
 
 Every cut-off, committed or failed, logs a warning with the cause and

@@ -199,10 +199,10 @@ and the catalog bullet below drops out.
   Providers tab until M7.1. The action reads `Fix story override` when the
   story overrides `lore-mgmt`, by its rule
   ([`generation-pipeline.md → Cut-off replies`](../../../../generation-pipeline.md#cut-off-replies)).
-  `profileFixSlot` and `useProfileFixAction`'s `overridden` in
-  `components/reader/system-entry-actions.tsx` carry that rule for the
-  cut-off and hint entries; this entry's fix goes through `FIX_LABEL`'s
-  route instead, so it takes the same check there.
+  `useConfigFixAction` in `components/reader/system-entry-actions.tsx`
+  applies it to every `FIX_LABEL` kind that reads `Fix profile`, by the
+  slot the entry keeps in `systemFailure.target`, so mapping the new kind
+  to `fixProfile` is enough.
   The copy names the model, so it needs no `fromOverride`.
 - The can't-call-tools entry: canon's **Chapter close's model can't call
   tools**, as `CLOSE_RESOLVER_COPY`'s line through 5.6's

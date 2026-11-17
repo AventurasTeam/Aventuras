@@ -421,6 +421,7 @@ export default function ReaderComposerRoute() {
     stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
     storyId,
     guardLeave,
+    openForBranch?.settings.models.suggestion != null,
   )
 
   // The failure belongs to the entry it was fired on; a turn, a rollback or a

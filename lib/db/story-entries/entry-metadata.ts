@@ -165,6 +165,9 @@ export const entryMetadataSchema = z.object({
       kind: z.string(),
       failure: z.string().optional(),
       detail: z.string().optional(),
+      // The agent target the error named (config-resolver, cut-off, window): the slot a fix follows.
+      // Open, as `kind` is; absent on errors that name none and on entries written before it.
+      target: z.string().optional(),
       submission: z.object({ content: z.string(), composerMode: z.string() }).optional(),
       // A close-failure entry, as `pass`; a close has no held state.
       close: z.enum(['failed', 'resolved']).optional(),
