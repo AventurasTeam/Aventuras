@@ -3,14 +3,14 @@ import type { TemplateSources } from '../types'
 // piggyback.md → Fallback classifier context: most of what the narrative call gets, minus
 // Setting / Genre / Tone and either output-format macro, plus the flat bracketed ID roster.
 export const PIGGYBACK_FALLBACK_CLASSIFIER: TemplateSources = {
-  system: `{% if calendarVocabulary -%}
+  system: `{% section 'setup' %}{% if calendarVocabulary -%}
 # Calendar
 This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVocabulary.secondsPerBaseUnit != 1 %} ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}){% endif %}. Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}. Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
 
 {% endif -%}
-# The user's turns
-{% include 'macro_classifier_mode_rule', mode: definition.mode %}`,
-  user: `Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+{% endsection %}{% section 'instructions' %}# The user's turns
+{% include 'macro_classifier_mode_rule', mode: definition.mode %}{% endsection %}`,
+  user: `{% section 'roster' %}Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 {%- assign referenceable = entities | active -%}
 {%- assign stagedEntities = entities | staged -%}
 {% for e in referenceable %}
@@ -22,7 +22,7 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVo
 {% if referenceable.size == 0 and stagedEntities.size == 0 %}(none)
 {% endif %}{% if lead %}
 The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
-{% endif %}
+{% endif %}{% endsection %}
 {%- comment -%}
 Marking is mandatory, not stylistic (piggyback.md), and aimed at the memory blocks: older and
 bulkier than the entries. The scene sections are the baseline, so they are framed, not fenced off.
@@ -43,7 +43,7 @@ source, and a section that shows state without one leaves the model matching by 
 {%- unless listedElsewhere -%}{%- assign inScene = inScene | push: e -%}{%- endunless -%}
 {%- endif -%}
 {%- endfor -%}
-{% if inScene.size > 0 -%}
+{% section 'scene' %}{% if inScene.size > 0 -%}
 # In scene
 {% for e in inScene %}
 ## {{ e.name }} [{{ e.id }}]{% if e.description != blank %}
@@ -57,31 +57,31 @@ source, and a section that shows state without one leaves the model matching by 
 Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: i.state.condition, ids: true %}{% endfor %}{% endif %}
 
 {% endif -%}
-{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
+{% endsection %}{% section 'places' %}{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 # Places
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
 {% endfor %}{% if locationMapUnplaced.size > 0 %}Unplaced:
 {% for p in locationMapUnplaced %}  {% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}[{{ p.id }}] {{ p.name }}{% endif %}
 {% endfor %}{% endif %}
 {% endif -%}
-{% include 'macro_memory_blocks', ids: true -%}
+{% endsection %}{% include 'macro_memory_blocks', ids: true -%}
 {%- comment -%}
 piggyback.md → Fallback classifier context: a character the turn names whom nothing above
 shows with state is still a roster id a write can name, so it shows the values a write replaces.
 {%- endcomment -%}
-{% if namedCharacters.size > 0 -%}
+{% section 'entities' %}{% if namedCharacters.size > 0 -%}
 # Named in this turn — not necessarily present
 {% for e in namedCharacters %}
 [{{ e.id }}] {{ e.name }}{% if e.description != blank %}: {{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: false, ids: true %}
 {% endfor %}
 {% endif -%}
-{%- comment -%}
+{% endsection %}{%- comment -%}
 lastTurns is the knob's window over the pair (cadence.md → User-tunable knobs). Clamped because a
 negative offset slices from the END in Liquid — coinciding with the intended rows, not meaning them.
 {%- endcomment -%}
 {%- assign pairStart = lastTurns | size | minus: 2 -%}
 {%- if pairStart < 0 -%}{%- assign pairStart = 0 -%}{%- endif -%}
-{% if pairStart > 0 -%}
+{% section 'history' %}{% if pairStart > 0 -%}
 # Earlier turns — how the scene got here, not the turn you report on
 {% for entry in lastTurns limit: pairStart %}
 {% include 'macro_story_entry', entry: entry %}
@@ -91,7 +91,7 @@ negative offset slices from the END in Liquid — coinciding with the intended r
 {% for entry in lastTurns offset: pairStart %}
 {% include 'macro_story_entry', entry: entry %}
 {% endfor %}
-Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
+{% endsection %}{% section 'instructions' %}Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
 For the time delta, give {% if worldTimeDeltaBasis == 'sinceUserAction' %}seconds elapsed since the end of the user's action{% else %}seconds elapsed since the previous entry, including any time the user's action itself took{% endif %} (0 for a flashback or memory; never negative).
 
@@ -106,7 +106,7 @@ Create an item only when a character takes, receives or is given something that 
 Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.
 
 Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose.
-{% if suggestionsFire -%}
+{% endsection %}{% section 'output' %}{% if suggestionsFire -%}
 {% include 'macro_suggestion_emission_json' %}
-{%- endif -%}`,
+{%- endif -%}{% endsection %}`,
 }

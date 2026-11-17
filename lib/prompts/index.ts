@@ -2,7 +2,7 @@ import { bundledPack } from './bundled'
 import { renderWith, templateGlobals } from './engine'
 import type { TemplateId } from './ids'
 import { loadPack, type LoadedPack } from './load-pack'
-import type { RenderedPrompt } from './types'
+import type { RenderedPrompt, SectionedPrompt } from './types'
 
 export { BUNDLED_PACK_ID, TEMPLATE_IDS, MACRO_IDS } from './ids'
 export type { TemplateId, MacroId } from './ids'
@@ -14,6 +14,8 @@ export type {
   MacroEntry,
   TemplateSources,
   RenderedPrompt,
+  HalfSections,
+  SectionedPrompt,
   IncludeViolation,
 } from './types'
 export { loadPack, PackLoadError, type LoadedPack } from './load-pack'
@@ -30,8 +32,20 @@ function bundled(): LoadedPack {
 export function renderTemplate(
   templateId: TemplateId,
   context: Record<string, unknown>,
-): RenderedPrompt {
-  return renderWith(bundled().engine, templateId, context)
+): RenderedPrompt
+export function renderTemplate(
+  templateId: TemplateId,
+  context: Record<string, unknown>,
+  opts: { sections: true },
+): SectionedPrompt
+export function renderTemplate(
+  templateId: TemplateId,
+  context: Record<string, unknown>,
+  opts?: { sections: true },
+): RenderedPrompt | SectionedPrompt {
+  return opts?.sections === true
+    ? renderWith(bundled().engine, templateId, context, opts)
+    : renderWith(bundled().engine, templateId, context)
 }
 
 /**

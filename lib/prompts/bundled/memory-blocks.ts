@@ -9,13 +9,13 @@ anywhere else below invites a reference no parser resolves. Assigned first: Liqu
 filter on a for tag's collection.
 {%- endcomment -%}
 {%- assign mb_entities = structuralPinnedEntities | concat: structuralSceneFactions | concat: retrievedEntities -%}
-{% if mb_entities.size > 0 -%}
+{% section 'entities' %}{% if mb_entities.size > 0 -%}
 # The wider world
 {% for e in mb_entities %}
 {% if ids %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.status == 'staged' %} (available to introduce){% elsif e.status == 'active' and e.kind != 'faction' and e.kind != 'location' %} (not in the scene){% endif %}{% if e.description != blank %}: {{ e.description }}{% endif %}{% include 'macro_entity_state', e: e, here: false, ids: ids %}
 {% endfor %}
 {% endif -%}
-{% if structuralPinnedLore.size > 0 or retrievedLore.size > 0 -%}
+{% endsection %}{% section 'lore' %}{% if structuralPinnedLore.size > 0 or retrievedLore.size > 0 -%}
 # Relevant lore
 {% for l in structuralPinnedLore %}
 {{ l.title }}{% if l.body != blank %}
@@ -25,13 +25,13 @@ filter on a for tag's collection.
 {{ l.renderedText }}
 {% endfor %}
 {% endif -%}
-{% if retrievedHappenings.size > 0 -%}
+{% endsection %}{% section 'happenings' %}{% if retrievedHappenings.size > 0 -%}
 # What has happened
 {% for h in retrievedHappenings %}
 {{ h.renderedText }}
 {% endfor %}
 {% endif -%}
-{% if structuralActiveThreads.size > 0 -%}
+{% endsection %}{% section 'threads' %}{% if structuralActiveThreads.size > 0 -%}
 # Active threads
 {% for t in structuralActiveThreads %}
 {{ t.title }}{% if t.description != blank %}
@@ -48,9 +48,9 @@ filter on a for tag's collection.
 {{ t.renderedText }}
 {% endfor %}
 {% endif -%}
-{% if retrievedChapters.size > 0 -%}
+{% endsection %}{% section 'chapters' %}{% if retrievedChapters.size > 0 -%}
 # Earlier chapters
 {% for c in retrievedChapters %}
 {{ c.renderedText }}
 {% endfor %}
-{% endif -%}`
+{% endif -%}{% endsection %}`

@@ -2,6 +2,24 @@ import { z } from 'zod'
 
 import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
 
+// architecture.md → Prompt sections: the ids a template's `section` tag may name, in the order the
+// reader lists them. Text no section holds is `other`.
+export const PROMPT_SECTION_IDS = [
+  'instructions',
+  'setup',
+  'roster',
+  'scene',
+  'places',
+  'entities',
+  'lore',
+  'happenings',
+  'threads',
+  'chapters',
+  'history',
+  'output',
+] as const
+export type PromptSectionId = (typeof PROMPT_SECTION_IDS)[number]
+
 // `condition` as emitted, before the bound; a reused place's isn't written.
 const createEmission = {
   handle: z.string(),

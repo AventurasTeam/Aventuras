@@ -3,11 +3,11 @@ import type { TemplateSources } from '../types'
 export const PER_TURN_NARRATIVE: TemplateSources = {
   // architecture.md → System and user halves: the same bytes every call, so nothing per call goes
   // in it, and the lead by name only: its id is a placeholder allocated per call.
-  system: `{% include 'macro_narrator_instructions', mode: definition.mode, narration: definition.narration, lead: lead.name %}
+  system: `{% section 'instructions' %}{% include 'macro_narrator_instructions', mode: definition.mode, narration: definition.narration, lead: lead.name %}
 
 The user's turns are marked with <user_turn> tags in the story so far. Under What has happened, each happening ends with who in the scene knows it, or says it is common knowledge; a character in the scene it doesn't name doesn't know it.
 
-{% if definition.setting != blank -%}
+{% endsection %}{% section 'setup' %}{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
 
@@ -27,7 +27,7 @@ The user's turns are marked with <user_turn> tags in the story so far. Under Wha
 This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVocabulary.secondsPerBaseUnit != 1 %} ({{ calendarVocabulary.secondsPerBaseUnit }} seconds per {{ calendarVocabulary.baseUnitName }}){% endif %}. Tiers: {% for t in calendarVocabulary.tiers %}{{ t.name }}{% if t.labels.size > 0 %} ({{ t.labels | prose_join }}){% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}.{% if piggybackFires %} Convert relative-time prose ("two days later", "the next morning") into a seconds delta on <world_time_delta> using these units.{% endif %}
 
 {% endif -%}
-{% include 'macro_output_format_narrative' %}`,
+{% endsection %}{% section 'output' %}{% include 'macro_output_format_narrative' %}{% endsection %}`,
   // The scene loop ignores injectionMode on purpose (structural-floor invariant: active +
   // in-scene always inject), reading `entities`, not the floor, so it holds without retrieval.
   user: `{%- comment -%}
@@ -48,7 +48,7 @@ current location, a null one's id would match, since nil == nil.
 {%- unless listedElsewhere -%}{%- assign inScene = inScene | push: e -%}{%- endunless -%}
 {%- endif -%}
 {%- endfor -%}
-{% if inScene.size > 0 -%}
+{% section 'scene' %}{% if inScene.size > 0 -%}
 # In scene
 {% for e in inScene %}
 ## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}{% if e.description != blank %}
@@ -67,15 +67,15 @@ Here:{% for i in looseItems %}{% include 'macro_item_line', item: i, condition: 
 {{ currentTime }}
 
 {% endif -%}
-{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
+{% endsection %}{% section 'places' %}{% if locationMap.size > 0 or locationMapUnplaced.size > 0 -%}
 # Places
 {% for p in locationMap %}{% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
 {% endfor %}{% if locationMapUnplaced.size > 0 %}Unplaced:
 {% for p in locationMapUnplaced %}  {% for d in (1..p.depth) %}  {% endfor %}{% if p.retired %}{{ p.name }} (retired{% if p.retiredReason %}: {{ p.retiredReason }}{% endif %}){% else %}{% if piggybackFires %}[{{ p.id }}] {% endif %}{{ p.name }}{% endif %}
 {% endfor %}{% endif %}
 {% endif -%}
-{% include 'macro_memory_blocks', ids: piggybackFires -%}
-{% if piggybackFires -%}
+{% endsection %}{% include 'macro_memory_blocks', ids: piggybackFires -%}
+{% section 'instructions' %}{% if piggybackFires -%}
 {% if structuralPinnedEntities.size > 0 or retrievedEntities.size > 0 -%}
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
@@ -85,18 +85,18 @@ Use an ID from Places for <current_location>, or declare a new one with <new_loc
 
 {% endif -%}
 {% endif -%}
-# Story so far
+{% endsection %}{% section 'history' %}# Story so far
 {% for entry in entries %}
 {% include 'macro_story_entry', entry: entry %}
-{% endfor %}
+{% endfor %}{% endsection %}
 {%- comment -%}
 Each emission block opens with one newline: a blank line after the story's last
 entry, none between the state and suggestions blocks when both fire.
 {%- endcomment -%}
-{%- if piggybackFires %}
+{% section 'output' %}{%- if piggybackFires %}
 {% include 'macro_state_emission' %}
 {%- endif -%}
 {%- if suggestionsFire %}
 {% include 'macro_suggestion_emission' %}
-{%- endif %}`,
+{%- endif %}{% endsection %}`,
 }
