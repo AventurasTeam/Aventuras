@@ -19,6 +19,8 @@ export type CallRetryError =
       reason: ProviderReason
       detail?: string
       possibleCapabilityMismatch?: CapabilityHint
+      /** Set with the hint: the call's settings were the story override's, so its copy names it. */
+      fromOverride?: boolean
     }
   | { tier: 'parse'; detail: string; attempt: number }
   | ({ tier: 'context-window' } & ContextWindowFailure)
@@ -256,10 +258,14 @@ export function streamErrorReason(error: unknown): ProviderReason {
   return APICallError.isInstance(error) ? classifyProviderError(error).error.reason : 'network'
 }
 
-/** `carried`: what the failed request carried, for the hint; a caller that doesn't say gets none. */
+/**
+ * `carried`: what the failed request carried, for the hint; a caller that doesn't say gets none.
+ * `fromOverride` rides beside a hint, naming whose setting the hint's copy points at.
+ */
 export function classifyProviderError(
   error: unknown,
   carried: CarriedCapabilities = CARRIED_NOTHING,
+  fromOverride?: boolean,
 ): {
   error: ProviderFailure
   retryable: boolean
@@ -276,7 +282,12 @@ export function classifyProviderError(
       tier: 'provider',
       reason,
       detail: describeProviderError(error),
-      ...(hint !== undefined ? { possibleCapabilityMismatch: hint } : {}),
+      ...(hint !== undefined
+        ? {
+            possibleCapabilityMismatch: hint,
+            ...(fromOverride !== undefined ? { fromOverride } : {}),
+          }
+        : {}),
     })
     // An overflow recurs on every attempt, whatever its status.
     const overflow = recognizeOverflow(error) !== null

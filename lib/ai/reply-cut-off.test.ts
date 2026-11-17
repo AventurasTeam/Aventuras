@@ -36,6 +36,7 @@ const BASE: ReplyCutOffInput = {
   promptEstimate: null,
   providerId: 'prov-1',
   modelId: 'model-1',
+  fromOverride: false,
 }
 
 describe('isCutOff', () => {
@@ -92,7 +93,15 @@ describe('replyCutOff', () => {
       window: null,
       providerId: 'prov-1',
       modelId: 'model-1',
+      fromOverride: false,
     })
+  })
+
+  it('carries whose settings the call ran on', () => {
+    expect(replyCutOff({ ...BASE, usage: usage(512), maxOutput: 512 }).fromOverride).toBe(false)
+    expect(
+      replyCutOff({ ...BASE, usage: usage(512), maxOutput: 512, fromOverride: true }).fromOverride,
+    ).toBe(true)
   })
 
   it('reads max-output when the output passed the limit', () => {
@@ -127,6 +136,7 @@ describe('replyCutOff', () => {
       window: null,
       providerId: 'prov-1',
       modelId: 'model-1',
+      fromOverride: false,
     })
   })
 
@@ -181,6 +191,7 @@ describe('replyCutOff', () => {
         window: 8192,
         providerId: 'prov-1',
         modelId: 'model-1',
+        fromOverride: false,
       })
     })
 
@@ -241,6 +252,7 @@ const FAILURE: ReplyCutOffFailure = {
   window: null,
   providerId: 'prov-1',
   modelId: 'model-1',
+  fromOverride: false,
 }
 
 describe('describeReplyCutOff', () => {

@@ -20,7 +20,8 @@ import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
 
 // Story Settings → Models (components/story-settings/models-panel.tsx) end to
-// end: the override pinned on the tab is the `model` the next narrative call
+// end: the override pinned on the tab, with the settings it copied from the
+// narrative profile, is the `model` and `temperature` the next narrative call
 // puts on the wire, and clearing it restores the profile chain. Only a running
 // app shows the wire; the resolver and the panel are covered cheaper in unit and
 // Storybook. See docs/testing.md → Coverage.
@@ -29,6 +30,8 @@ const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 const SEED_MODEL = 'seed/narrative'
 const SEED_PROFILE = 'Seed Narrative'
+// The seed narrative profile's temperature, which an override made from the chain copies.
+const SEED_TEMPERATURE = 0.8
 const OVERRIDE_MODEL = 'e2e/override-model'
 const REPLY_OVERRIDE = 'E2E-MODELS-REPLY the courier answers.'
 const REPLY_CLEARED = 'E2E-MODELS-REPLY-2 the bell answers.'
@@ -43,9 +46,13 @@ async function readModels(app: LaunchedApp): Promise<StorySettings['models']> {
 // `streamed` is what separates the narrative call from a turn's structured ones:
 // per-turn's narrative phase is the app's only streamText call site, and the
 // mock flags a request streamed off `stream: true` in the body it received.
-function lastNarrativeModel(mock: MockLlm): string | undefined {
+function lastNarrativeBody(mock: MockLlm): Record<string, unknown> | undefined {
   const streamed = mock.requests.filter((r) => r.streamed)
-  return streamed[streamed.length - 1]?.body.model as string | undefined
+  return streamed[streamed.length - 1]?.body
+}
+
+function lastNarrativeModel(mock: MockLlm): string | undefined {
+  return lastNarrativeBody(mock)?.model as string | undefined
 }
 
 test.describe('story settings — narrative override reaches the wire', () => {
@@ -101,7 +108,7 @@ test.describe('story settings — narrative override reaches the wire', () => {
     await expect(storySettings.save(app.window)).toBeHidden()
     await expect
       .poll(async () => (await readModels(app)).narrative)
-      .toEqual({ providerId: 'prov_local', modelId: OVERRIDE_MODEL })
+      .toEqual({ providerId: 'prov_local', modelId: OVERRIDE_MODEL, temperature: SEED_TEMPERATURE })
 
     await chrome.back(app.window).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
@@ -112,6 +119,8 @@ test.describe('story settings — narrative override reaches the wire', () => {
     })
     await waitForTurnTerminal(app.window)
     expect(lastNarrativeModel(mock)).toBe(OVERRIDE_MODEL)
+    // The override's own copy, not the profile: an override sent no settings before it carried any.
+    expect(lastNarrativeBody(mock)?.temperature).toBe(SEED_TEMPERATURE)
 
     mock.setNarrative(REPLY_CLEARED)
 

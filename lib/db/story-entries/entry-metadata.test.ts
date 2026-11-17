@@ -369,6 +369,9 @@ describe('cutOff', () => {
     { cause: 'interrupted' },
     { cause: 'interrupted', outputTokens: 300 },
     { cause: 'content-filter', outputTokens: 300 },
+    { cause: 'max-output', outputTokens: 4096, limit: 4096, fromOverride: true },
+    { cause: 'window', limit: 65536, fromOverride: true },
+    { cause: 'unknown', maxOutput: 512, fromOverride: true },
   ])('keeps a $cause mark with its numbers', (mark) => {
     expect(entryMetadataSchema.parse({ ...base, cutOff: mark }).cutOff).toEqual(mark)
   })
@@ -389,10 +392,21 @@ describe('cutOff', () => {
     expect(entryMetadataSchema.safeParse({ ...base, cutOff: mark }).success).toBe(false)
   })
 
+  // Absent is the profile's, so a mark only ever says `true`; a stop that names no setting has
+  // no one whose setting it was.
+  it.each([
+    { cause: 'max-output', limit: 512, fromOverride: false },
+    { cause: 'interrupted', fromOverride: true },
+    { cause: 'content-filter', fromOverride: true },
+  ])('rejects fromOverride $fromOverride on a $cause mark', (mark) => {
+    expect(entryMetadataSchema.safeParse({ ...base, cutOff: mark }).success).toBe(false)
+  })
+
   // The schema drives the metadata undo encoder: a key it lacks is lost on undo.
   it.each([
     { cause: 'max-output' as const, outputTokens: 512, limit: 512 },
     { cause: 'unknown' as const, outputTokens: 300 },
+    { cause: 'max-output' as const, limit: 512, fromOverride: true as const },
   ])('undoes a cleared $cause mark back onto the metadata', (cutOff) => {
     const marked = { ...base, cutOff }
     const undo = computeUndoPayload(entryMetadataSchema, marked, base)

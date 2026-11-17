@@ -2126,6 +2126,7 @@ story_entries.metadata: {
     kind: string                    // open string, not an enum: the taxonomy spans pipeline errors, provider errors and refusals, and each side evolves on its own release cadence
     failure?: string                // provider- or pipeline-supplied failure tag, when one was given
     detail?: string                 // diagnostic cause, shown behind the entry's Details disclosure
+    target?: string                 // the agent the error named (config-resolver, reply-cut-off, context-window): the slot a fix action follows, since a turn entry can carry the classifier's pre-flight failure. Open, as `kind` is; absent on an error that names none, where the slot is a pass's classifier, a close's lore-mgmt, else the narrative
     submission?: {                  // the turn's text, kept across a restart and shown on the entry as its held-text quote: a turn entry's Retry resends it; on a pass entry it is custody only (always on a Send refused held; on a Retry come back held, the entry's own text, else the composer's draft; when failed, only when the composer couldn't take it back: the draft was occupied, or the user left the branch)
       content: string
       composerMode: string

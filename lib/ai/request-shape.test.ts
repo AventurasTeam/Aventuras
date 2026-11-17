@@ -7,7 +7,8 @@ import { z } from 'zod'
 import { generateStructured, streamText, type PromptHalves } from './generate'
 import { getModel } from './model'
 import { schemaToTypeScriptBlock, type JsonSchema } from './prompt-schema'
-import { resolveModel, type ResolvedParams, type ResolveModelConfig } from './resolve-model'
+import type { ModelSettings } from '../db'
+import { resolveModel, type ResolveModelConfig } from './resolve-model'
 import { generateToolStep } from './tool-step'
 import type { CallRetryError } from './transport/call-with-retry'
 import type { CapabilityHint } from './transport/classify-provider-error'
@@ -50,7 +51,11 @@ const MODELS = {
     })('local-model'),
 }
 
-function useProvider(type: ProviderType, params: ResolvedParams = {}): ResolveModelConfig {
+function useProvider(
+  type: ProviderType,
+  params: ModelSettings = {},
+  fromOverride = false,
+): ResolveModelConfig {
   vi.mocked(getModel).mockReturnValue(MODELS[type]())
   vi.mocked(resolveModel).mockReturnValue({
     ok: true,
@@ -58,6 +63,7 @@ function useProvider(type: ProviderType, params: ResolvedParams = {}): ResolveMo
     providerType: type,
     modelId: 'm',
     params,
+    fromOverride,
   })
   return {
     providers: [{ id: 'prov', type, displayName: 'P', apiKey: 'test-key', favoriteModelIds: [] }],
@@ -314,6 +320,70 @@ describe('the capability hint', () => {
 
     expect(lastBody()).not.toHaveProperty('response_format')
     expect(hint).toBeUndefined()
+  })
+})
+
+// generation-pipeline.md → Cut-off replies → Whose setting it was: the hint's copy names the
+// override's setting when the call ran on one, so the flag rides beside the hint.
+describe('whose setting a hint names', () => {
+  const FORCED_JSON = { structuredOutput: 'force-on' } as const
+
+  it.each([true, false])(
+    "carries fromOverride %s beside a structured call's hint",
+    async (whose) => {
+      rejection = rejectionOf('json_schema is not supported by this model')
+
+      const error = await structuredFailure(useProvider('openai-compatible', FORCED_JSON, whose))
+
+      expect(error).toMatchObject({
+        possibleCapabilityMismatch: { capability: 'structuredOutput', matched: 'json_schema' },
+        fromOverride: whose,
+      })
+    },
+  )
+
+  it('sets no fromOverride on a rejection that gives no hint', async () => {
+    rejection = rejectionOf('response_format is not supported by this model')
+
+    const error = await structuredFailure(useProvider('openai-compatible', {}, true))
+
+    expect(error).not.toHaveProperty('possibleCapabilityMismatch')
+    expect(error).not.toHaveProperty('fromOverride')
+  })
+
+  it("carries fromOverride beside a tool step's hint", async () => {
+    rejection = rejectionOf('tools are not supported by this model')
+
+    const res = await generateToolStep(
+      'lore-mgmt',
+      {
+        prompt: HALVES,
+        messages: [],
+        tools: { lookup: { description: 'Find a row by name.', inputSchema: schema } },
+        firstCall: true,
+      },
+      useProvider('openai-compatible', {}, true),
+      new AbortController().signal,
+      { actionId: null },
+    )
+
+    expect(res).toMatchObject({
+      status: 'failed',
+      error: { possibleCapabilityMismatch: { capability: 'toolCalling' }, fromOverride: true },
+    })
+  })
+
+  // The narrative's stream error never reaches callWithRetry, so its phase reads the call's own.
+  it.each([true, false])('tells the narrative phase fromOverride %s', async (whose) => {
+    const call = streamText('narrative', {
+      prompt: HALVES,
+      config: useProvider('openai-compatible', {}, whose),
+      onError: () => {},
+    })
+    if (!call.ok) throw new Error(`resolve failed: ${call.kind}`)
+    await call.stream.consumeStream()
+
+    expect(call.fromOverride).toBe(whose)
   })
 })
 

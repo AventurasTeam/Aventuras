@@ -6,6 +6,8 @@ import {
 } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 
+import { whoseSetting } from './cut-off-copy'
+
 /** The source label copy prints after a window figure. */
 export function windowSourceLabel(source: 'configured' | 'detected'): string {
   return t(`common:contextWindowSource.${source}`)
@@ -74,14 +76,20 @@ export function closeContextWindowContent(failure: ContextWindowFailure): string
 export function capabilityHintContent(
   hint: CapabilityHint,
   surface: 'turn' | 'pass' | 'close',
+  fromOverride: boolean | undefined,
 ): string {
   const values = { matched: hint.matched }
+  // Tool calling names no setting, only the model, so it has no override form.
+  const key =
+    hint.capability === 'toolCalling'
+      ? hint.capability
+      : (`${whoseSetting(fromOverride)}${hint.capability}` as const)
   switch (surface) {
     case 'turn':
-      return t(`reader:systemEntry.failure.capabilityHint.${hint.capability}`, values)
+      return t(`reader:systemEntry.failure.capabilityHint.${key}`, values)
     case 'pass':
-      return t(`reader:systemEntry.failure.memoryCapabilityHint.${hint.capability}`, values)
+      return t(`reader:systemEntry.failure.memoryCapabilityHint.${key}`, values)
     case 'close':
-      return t(`reader:systemEntry.failure.closeCapabilityHint.${hint.capability}`, values)
+      return t(`reader:systemEntry.failure.closeCapabilityHint.${key}`, values)
   }
 }

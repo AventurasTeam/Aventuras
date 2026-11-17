@@ -1,20 +1,12 @@
-import type { ModelProfile, ProviderInstance, StorySettings } from '../db'
+import type { ModelProfile, ModelSettings, ProviderInstance, StorySettings } from '../db'
 import { isStoryOverrideTarget, type ResolveTarget } from './agents'
+import { modelSettingsOf } from './model-settings'
 
 export type ResolveModelConfig = {
   providers: readonly ProviderInstance[]
   profiles: readonly ModelProfile[]
   assignments: Readonly<Record<string, string>>
   storyModels?: StorySettings['models']
-}
-
-export type ResolvedParams = {
-  temperature?: number
-  maxOutput?: number
-  thinking?: number
-  timeout?: number
-  structuredOutput?: 'auto' | 'force-on' | 'force-off'
-  customJson?: Record<string, unknown>
 }
 
 /** Breakage in the App Settings chain: assignment → profile → the profile's provider. */
@@ -30,24 +22,14 @@ export type ResolveModelResult =
       providerId: string
       providerType: ProviderInstance['type']
       modelId: string
-      params: ResolvedParams
+      /** The call settings of the override or profile the walk stopped at; unset fields absent. */
+      params: ModelSettings
+      /** The settings are the story override's, not a profile's: a failure's copy names whose. */
+      fromOverride: boolean
       /** The profile the chain landed on. Absent when a story override short-circuited it. */
       profileId?: string
     }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
-
-function paramsOf(profile: ModelProfile): ResolvedParams {
-  return {
-    ...(profile.temperature !== undefined ? { temperature: profile.temperature } : {}),
-    ...(profile.maxOutput !== undefined ? { maxOutput: profile.maxOutput } : {}),
-    ...(profile.thinking !== undefined ? { thinking: profile.thinking } : {}),
-    ...(profile.timeout !== undefined ? { timeout: profile.timeout } : {}),
-    ...(profile.structuredOutput !== undefined
-      ? { structuredOutput: profile.structuredOutput }
-      : {}),
-    ...(profile.customJson !== undefined ? { customJson: profile.customJson } : {}),
-  }
-}
 
 function fromProfile(
   profile: ModelProfile,
@@ -61,7 +43,8 @@ function fromProfile(
     providerId: provider.id,
     providerType: provider.type,
     modelId: profile.modelRef.modelId,
-    params: paramsOf(profile),
+    params: modelSettingsOf(profile),
+    fromOverride: false,
     profileId: profile.id,
   }
 }
@@ -80,7 +63,8 @@ export function resolveModel(
       providerId: provider.id,
       providerType: provider.type,
       modelId: override.modelId,
-      params: {},
+      params: modelSettingsOf(override),
+      fromOverride: true,
     }
   }
 

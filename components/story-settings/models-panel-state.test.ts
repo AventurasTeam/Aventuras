@@ -8,6 +8,7 @@ import {
   describeChain,
   modelsDirtyTargets,
   overrideProviderMissing,
+  pickedOverride,
   providerFavorites,
   providerListsModel,
   providerSources,
@@ -178,6 +179,32 @@ describe('override bookkeeping', () => {
     ).toEqual([])
   })
 
+  it('marks a slot whose settings changed, as a new model does', () => {
+    expect(
+      modelsDirtyTargets(
+        { narrative: { providerId: 'prov-1', modelId: 'a', maxOutput: 2048 } },
+        stored,
+      ),
+    ).toEqual(['narrative'])
+    const withJson = { narrative: { providerId: 'prov-1', modelId: 'a', customJson: { k: 1 } } }
+    expect(
+      modelsDirtyTargets(
+        { narrative: { providerId: 'prov-1', modelId: 'a', customJson: { k: 2 } } },
+        withJson,
+      ),
+    ).toEqual(['narrative'])
+  })
+
+  it('reads the same settings clean, in whatever key order', () => {
+    const settled = { narrative: { providerId: 'prov-1', modelId: 'a', timeout: 30, maxOutput: 9 } }
+    expect(
+      modelsDirtyTargets(
+        { narrative: { maxOutput: 9, timeout: 30, modelId: 'a', providerId: 'prov-1' } },
+        settled,
+      ),
+    ).toEqual([])
+  })
+
   it('treats the same model id on another provider as a change', () => {
     expect(
       modelsDirtyTargets({ narrative: { providerId: 'prov-2', modelId: 'a' } }, stored),
@@ -188,6 +215,97 @@ describe('override bookkeeping', () => {
     expect(
       availableAgents({ classifier: { providerId: 'p', modelId: 'm' } }, ['retrieval']),
     ).toEqual(['translation', 'suggestion', 'lore-mgmt'])
+  })
+})
+
+// story-settings.md → An override row: created as a copy, re-picked with its settings kept.
+describe('pickedOverride', () => {
+  const PICK = { providerId: 'prov-1', modelId: 'm-new' }
+  const NARRATIVE_SET: ModelProfile = {
+    ...NARRATIVE,
+    temperature: 0.9,
+    maxOutput: 4096,
+    timeout: 120,
+    // A narrative profile can't set structured output in the app, but a stored one is dropped.
+    structuredOutput: 'force-on',
+    customJson: { top_k: 40 },
+  }
+  const AGENT: ModelProfile = {
+    id: 'prof-fast',
+    kind: 'agent',
+    name: 'Fast tasks',
+    modelRef: { providerId: 'prov-1', modelId: 'm-fast' },
+    maxOutput: 1024,
+    structuredOutput: 'force-off',
+  }
+  const SET_UP = {
+    providers: [PROVIDER],
+    profiles: [NARRATIVE_SET, AGENT],
+    assignments: { classifier: 'prof-fast' },
+  }
+
+  it("copies the narrative profile's settings onto a new narrative override, without structured output", () => {
+    expect(pickedOverride('narrative', PICK, undefined, SET_UP)).toStrictEqual({
+      providerId: 'prov-1',
+      modelId: 'm-new',
+      temperature: 0.9,
+      maxOutput: 4096,
+      timeout: 120,
+      customJson: { top_k: 40 },
+    })
+  })
+
+  it("copies the assigned profile's settings onto a new agent override, structured output too", () => {
+    expect(pickedOverride('classifier', PICK, undefined, SET_UP)).toStrictEqual({
+      providerId: 'prov-1',
+      modelId: 'm-new',
+      maxOutput: 1024,
+      structuredOutput: 'force-off',
+    })
+  })
+
+  it('copies too when the pick is the model the chain already uses', () => {
+    const same = { providerId: 'prov-1', modelId: 'm-fast' }
+    expect(pickedOverride('classifier', same, undefined, SET_UP)).toStrictEqual({
+      ...same,
+      maxOutput: 1024,
+      structuredOutput: 'force-off',
+    })
+  })
+
+  it.each([
+    ['no profile assigned', { ...SET_UP, assignments: {} }],
+    ['the profile gone', { ...SET_UP, assignments: { classifier: 'prof-deleted' } }],
+    ["the profile's provider gone", { ...SET_UP, providers: [] }],
+  ])('copies nothing from a broken chain (%s)', (_label, config) => {
+    expect(pickedOverride('classifier', PICK, undefined, config)).toStrictEqual(PICK)
+  })
+
+  it('copies from the App Settings chain, never from a story override in the config', () => {
+    const withOverride = {
+      ...SET_UP,
+      storyModels: { classifier: { providerId: 'prov-1', modelId: 'm-x', maxOutput: 99 } },
+    }
+    expect(pickedOverride('classifier', PICK, undefined, withOverride)).toMatchObject({
+      maxOutput: 1024,
+    })
+  })
+
+  it('keeps the settings when the model is picked again', () => {
+    const current = { providerId: 'prov-1', modelId: 'm-old', maxOutput: 512, temperature: 0.2 }
+    expect(pickedOverride('narrative', PICK, current, SET_UP)).toStrictEqual({
+      ...current,
+      ...PICK,
+    })
+  })
+
+  it('keeps the settings when a broken-provider override is repaired', () => {
+    const broken = { providerId: 'gone', modelId: 'm-old', timeout: 45 }
+    expect(pickedOverride('classifier', PICK, broken, SET_UP)).toStrictEqual({
+      providerId: 'prov-1',
+      modelId: 'm-new',
+      timeout: 45,
+    })
   })
 })
 

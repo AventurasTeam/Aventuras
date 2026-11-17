@@ -70,6 +70,7 @@ describe('describeSuggestionFailure', () => {
       window: null,
       providerId: 'prov_local',
       modelId: 'qwen3-32b',
+      fromOverride: false,
     } satisfies PipelineError
     const UNKNOWN =
       "The server stopped the suggestion model's reply at its own limit. Setting a max output on the suggestion profile overrides it."
@@ -96,6 +97,25 @@ describe('describeSuggestionFailure', () => {
     it('names the max output the server stopped short of', () => {
       expect(describeSuggestionFailure({ ...cut, cause: 'unknown', outputTokens: 300 })).toBe(
         "The server stopped the suggestion model's reply at its own limit, short of the suggestion profile's 1,024-token max output.",
+      )
+    })
+
+    // reader-composer.md → the strip's error state: a call on the story's override names its limit.
+    it("names the suggestion override's limit when the call ran on it", () => {
+      const over = { ...cut, fromOverride: true }
+      expect(describeSuggestionFailure(over)).toBe(
+        "The suggestion model's reply was cut off at the 1,024-token max output of this story's suggestion override. Raise it, then Retry.",
+      )
+      expect(describeSuggestionFailure({ ...over, cause: 'unknown', maxOutput: null })).toBe(
+        "The server stopped the suggestion model's reply at its own limit. Setting a max output on this story's suggestion override replaces it.",
+      )
+      expect(describeSuggestionFailure({ ...over, cause: 'unknown', outputTokens: 300 })).toBe(
+        "The server stopped the suggestion model's reply at its own limit, short of the 1,024-token max output of this story's suggestion override.",
+      )
+      expect(
+        describeSuggestionFailure({ ...over, cause: 'window', maxOutput: null, window: 65536 }),
+      ).toBe(
+        "The suggestion model's reply was cut off where the prompt and reply filled the model's 65,536-token window.",
       )
     })
   })

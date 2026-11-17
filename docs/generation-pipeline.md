@@ -2099,6 +2099,7 @@ type CallRetryError =
       reason: 'auth' | 'network' | 'timeout' | 'unknown'
       detail?: string
       possibleCapabilityMismatch?: CapabilityHint // see Fatal error categories
+      fromOverride?: boolean // set with the hint: the call ran on the story's override (Fatal error categories)
     }
   | { tier: 'parse'; detail: string; attempt: number }
   | ({ tier: 'context-window' } & ContextWindowFailure)
@@ -2297,7 +2298,10 @@ doesn't read it. Every `Fix profile`, whatever its failure, follows
 where the slot's settings live when the surface renders: it reads
 `Fix story override` and opens Story Settings → Models at that slot's row
 when the story overrides the slot now, and stays `Fix profile`
-otherwise. So a notice from before an override was added routes to the
+otherwise. The slot is the agent the failure named, which a system entry
+keeps as `systemFailure.target`
+([`data-model.md → Entry metadata shape`](./data-model.md#entry-metadata-shape)).
+So a notice from before an override was added routes to the
 override, which is where its limit lives now.
 
 Every cut-off, committed or failed, logs a warning with the cause and
@@ -2462,12 +2466,14 @@ overflow recognition, so a body recognized as an overflow carries no
 hint. A 401 or a 429 carries none either: a status that names its own
 cause isn't a capability rejection, whatever its body says. A 403
 stays, being what a capability gate sends. A hit sets the field on the `provider` `CallRetryError` to the
-capability and the matched word, and the phase copies it onto
-`PipelineError.provider` as it maps the error; otherwise it's omitted.
+capability and the matched word, with `fromOverride` beside it saying
+whether the call ran on the story's override, and the phase copies both
+onto `PipelineError.provider` as it maps the error; otherwise both are
+omitted.
 The narrative's stream error never passes through `callWithRetry`, so
 the narrative phase asks its call for the hint (`capabilityHintOf` on
 the `streamText` result, the same rule over the same request) and sets
-the field itself.
+the field itself, with the call's own `fromOverride` beside it.
 Best-effort only — provider error messages are not standardised;
 the field is a hint for the UI, never an assertion that a user
 override was wrong. The copy names the setting and hedges: "The
@@ -2478,8 +2484,8 @@ for another reason." Its action is `Fix profile`, since the profile
 holds the per-call setting and App Settings · Providers the model's
 badge
 ([`app-settings.md → Override semantic — trust-the-user`](./ui/screens/app-settings/app-settings.md#override-semantic--trust-the-user)).
-Under a story's override the phase sets `fromOverride` beside the hint,
-and the copy reads "check this story's override's thinking setting";
+Under a story's override the hint carries `fromOverride`, and the copy
+reads "check this story's override's thinking setting";
 the action follows the rule in
 [Cut-off replies → Whose setting it was](#cut-off-replies).
 

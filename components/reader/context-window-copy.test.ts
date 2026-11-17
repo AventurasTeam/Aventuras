@@ -189,7 +189,7 @@ describe('capabilityHintContent', () => {
       "The provider rejected the request. Its message mentions `json_schema`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
     ],
   ] as const)('hedges a turn hint for %o', (hint, expected) => {
-    expect(capabilityHintContent(hint, 'turn')).toBe(expected)
+    expect(capabilityHintContent(hint, 'turn', false)).toBe(expected)
   })
 
   it.each([
@@ -202,7 +202,7 @@ describe('capabilityHintContent', () => {
       "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `response_format`. That can mean this model doesn't support structured output: check the profile's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
     ],
   ] as const)("hedges a pass hint in the pass's own words for %o", (hint, expected) => {
-    expect(capabilityHintContent(hint, 'pass')).toBe(expected)
+    expect(capabilityHintContent(hint, 'pass', false)).toBe(expected)
   })
 
   it.each([
@@ -220,7 +220,52 @@ describe('capabilityHintContent', () => {
       "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `tools`. That can mean this model doesn't support tool calling. The provider may also have rejected the request for another reason.",
     ],
   ] as const)("hedges a close hint in the close's own words for %o", (hint, expected) => {
-    expect(capabilityHintContent(hint, 'close')).toBe(expected)
+    expect(capabilityHintContent(hint, 'close', false)).toBe(expected)
+  })
+
+  // generation-pipeline.md → Fatal error categories: under the story's override the copy names
+  // the override's setting, on every surface.
+  it.each([
+    [
+      'turn',
+      { capability: 'reasoning', matched: 'thinking' },
+      "The provider rejected the request. Its message mentions `thinking`. That can mean this model doesn't support reasoning: check this story's override's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+    ],
+    [
+      'turn',
+      { capability: 'structuredOutput', matched: 'json_schema' },
+      "The provider rejected the request. Its message mentions `json_schema`. That can mean this model doesn't support structured output: check this story's override's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+    ],
+    [
+      'pass',
+      { capability: 'reasoning', matched: 'budget_tokens' },
+      "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `budget_tokens`. That can mean this model doesn't support reasoning: check this story's override's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+    ],
+    [
+      'pass',
+      { capability: 'structuredOutput', matched: 'response_format' },
+      "Memory update failed, so your turn didn't start. The provider rejected the update's request. Its message mentions `response_format`. That can mean this model doesn't support structured output: check this story's override's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+    ],
+    [
+      'close',
+      { capability: 'reasoning', matched: 'thinking' },
+      "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `thinking`. That can mean this model doesn't support reasoning: check this story's override's thinking setting and the model's 🧠 badge. The provider may also have rejected the request for another reason.",
+    ],
+    [
+      'close',
+      { capability: 'structuredOutput', matched: 'response_format' },
+      "Chapter close failed, so your turn didn't start. The provider rejected the close's request. Its message mentions `response_format`. That can mean this model doesn't support structured output: check this story's override's structured-output setting and the model's badge. The provider may also have rejected the request for another reason.",
+    ],
+  ] as const)("names the override's setting on a %s hint for %o", (surface, hint, expected) => {
+    expect(capabilityHintContent(hint, surface, true)).toBe(expected)
+  })
+
+  // Tool calling names the model, not a setting, so whose settings the call ran on changes nothing.
+  it('words a tool-calling hint the same under an override', () => {
+    const hint = { capability: 'toolCalling', matched: 'tools' } as const
+    expect(capabilityHintContent(hint, 'close', true)).toBe(
+      capabilityHintContent(hint, 'close', false),
+    )
   })
 })
 

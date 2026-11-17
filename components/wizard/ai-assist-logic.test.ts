@@ -131,6 +131,7 @@ describe('assistFailureReason', () => {
       window: null,
       providerId: 'prov_local',
       modelId: 'qwen3-32b',
+      fromOverride: false,
     } satisfies CallRetryError
     const UNKNOWN =
       'The server stopped the reply at its own limit. Setting a max output on the wizard-assist profile overrides it'

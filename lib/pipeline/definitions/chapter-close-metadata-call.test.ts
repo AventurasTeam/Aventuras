@@ -570,6 +570,7 @@ describe('requestChapterMetadata', () => {
         window: null,
         providerId: 'prov-1',
         modelId: 'm',
+        fromOverride: false,
       },
       expected: {
         kind: 'reply-cut-off',
@@ -581,6 +582,7 @@ describe('requestChapterMetadata', () => {
         window: null,
         providerId: 'prov-1',
         modelId: 'm',
+        fromOverride: false,
       },
     },
   ] satisfies { name: string; error: CallRetryError; expected: PipelineError }[])(

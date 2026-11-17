@@ -23,6 +23,7 @@ export function toPipelineError(e: CallRetryError, target: ResolveTarget): Pipel
         ...(e.possibleCapabilityMismatch !== undefined
           ? { possibleCapabilityMismatch: e.possibleCapabilityMismatch }
           : {}),
+        ...(e.fromOverride !== undefined ? { fromOverride: e.fromOverride } : {}),
       }
     case 'parse':
       return { kind: 'phase-logic', detail: e.detail }
