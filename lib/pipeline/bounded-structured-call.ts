@@ -24,7 +24,10 @@ export type BoundedStructuredOutcome<T> =
   | { status: 'aborted' }
   | { status: 'failed'; error: PipelineError; lastError: string; cause: StructuredCallFailure }
 
-/** One structured call under its agent's bound: a cancel is `aborted`, an expiry a provider timeout. */
+/**
+ * One structured call under its bound (the agent's unless `timeoutMs` is given): a cancel is
+ * `aborted`, an expiry a provider timeout.
+ */
 export async function* boundedStructuredCall<T>(call: {
   target: ResolveTarget
   phaseName: string

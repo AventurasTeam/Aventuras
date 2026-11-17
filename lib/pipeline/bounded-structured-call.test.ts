@@ -206,6 +206,17 @@ describe('boundedStructuredCall', () => {
     expect(signal.aborted).toBe(false)
   })
 
+  it('disarms its bound when the call throws', async () => {
+    vi.useFakeTimers()
+    generateStructuredMock.mockRejectedValue(new Error('boom'))
+
+    await expect(run()).rejects.toThrow('boom')
+    const signal = generateStructuredMock.mock.calls[0]![4]
+    await vi.advanceTimersByTimeAsync(1_000_000)
+
+    expect(signal.aborted).toBe(false)
+  })
+
   it('fails a call whose model does not resolve as a config fault at its phase', async () => {
     generateStructuredMock.mockResolvedValue({
       status: 'not-configured',
