@@ -94,7 +94,9 @@ function tokenLine(meta: TokenMeta, replyEstimate: number | undefined): Line | n
   }
 }
 
-const tokenTextClass = 'leading-none'
+// Shrinks, so a long line wraps short of the entry actions laid over the header's right end;
+// native text in a row doesn't shrink unless told to.
+const tokenTextClass = 'min-w-0 shrink leading-none'
 
 /** The meta line's token text: a toggle for the token panel when there's a breakdown behind it. */
 export function TokenText({
@@ -129,7 +131,7 @@ export function TokenText({
       )}
       onPress={onToggle}
       className={cn(
-        'group/token-toggle rounded-sm',
+        'group/token-toggle min-w-0 shrink rounded-sm',
         Platform.select({ web: 'cursor-pointer outline-none' }),
       )}
     >

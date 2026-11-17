@@ -3193,19 +3193,26 @@ export const TokenTextPlain: StoryT = {
   },
 }
 
+/** At phone width the meta line wraps short of the entry actions, which sit over the header. */
 export const TokenPanelPhoneWidth: StoryT = {
   decorators: [phoneWidthDecorator],
   args: {
     ...baseProps,
     ...aiEntry,
     tier: 'phone',
+    reasoning: 'Lean on restraint, not combat.',
     meta: {
       ...tokenMeta,
       classifierCall: { promptSections: CLASSIFIER_SECTIONS },
     },
   },
   play: async () => {
-    await userEvent.click(await showBreakdown(NARRATIVE_SPOKEN))
+    const toggle = await showBreakdown(NARRATIVE_SPOKEN)
+    const edit = screen.getByRole('button', { name: t('reader:entryCard.editEntry') })
+    expect(toggle.getBoundingClientRect().right).toBeLessThanOrEqual(
+      edit.getBoundingClientRect().left,
+    )
+    await userEvent.click(toggle)
     const frame = screen.getByTestId('phone-frame')
     expect(frame.scrollWidth).toBeLessThanOrEqual(frame.clientWidth)
     expect(screen.getByText(t('reader:tokenPanel.promptEstimated', { prompt: 2620 }))).toBeVisible()
