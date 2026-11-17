@@ -65,6 +65,18 @@ async function promptTotal(page: Page, entryId: string): Promise<number> {
   return Number(rows[0]?.[0] ?? 0)
 }
 
+// data-model.md → Entry metadata shape: the token breakdown's fields, null when absent.
+async function metadataFields(
+  page: Page,
+  sql: string,
+  params: unknown[],
+  paths: readonly string[],
+): Promise<unknown[]> {
+  const columns = paths.map((path) => `json_extract(metadata, '${path}')`).join(', ')
+  const rows = await queryApp(page, `SELECT ${columns} FROM story_entries WHERE ${sql}`, params)
+  return rows[0] ?? []
+}
+
 const streamedCalls = (mock: MockLlm): number => mock.requests.filter((r) => r.streamed).length
 
 test.describe('context window — a turn over a configured window', () => {
@@ -117,6 +129,15 @@ test.describe('context window — a turn over a configured window', () => {
     }).exec(row.content)
     expect(copy, row.content).not.toBeNull()
     expect(copyNumber(copy, 'estimate')).toBeGreaterThan(WINDOW)
+    // The refused prompt's sections reach its entry, for its Details.
+    const [history, other] = await metadataFields(
+      page,
+      "branch_id = ? AND kind = 'system'",
+      [branchId],
+      ['$.systemFailure.promptSections.history', '$.systemFailure.promptSections.other'],
+    )
+    expect(Number(history)).toBeGreaterThan(0)
+    expect(other === null || Number(other) >= 0).toBe(true)
     // The check refuses before anything is sent: nothing reached the server.
     expect(mock.requests).toHaveLength(0)
     expect(await entryIdOf(page, branchId, 'E2E-WINDOW-CHECK-U1')).toBeUndefined()
@@ -226,6 +247,23 @@ test.describe('context window — a provider overflow, then the truncation cross
     expect(fullPrompt).toBeGreaterThan(0)
     // The harness counts near the app's estimate, so a full count raises no warning.
     expect(await truncationToast().count()).toBe(0)
+    // Through the real openai-compatible adapter: sections recorded, and no cache or reasoning
+    // figure the server never sent (the SDK reads both as 0).
+    expect(
+      await metadataFields(
+        page,
+        'id = ?',
+        [replyId],
+        [
+          '$.promptSections.history',
+          '$.tokens.cacheRead',
+          '$.tokens.reasoning',
+          '$.reasoningEstimate',
+        ],
+      ),
+    ).toEqual([expect.any(Number), null, null, null])
+    const [history] = await metadataFields(page, 'id = ?', [replyId], ['$.promptSections.history'])
+    expect(Number(history)).toBeGreaterThan(0)
   })
 
   test('an under-reported prompt raises the warning toast with both counts', async () => {

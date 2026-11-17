@@ -682,8 +682,10 @@ per-entry. Format:
   [world-state panel](../../patterns/entry-card.md#world-state-panel).
 - **Token display** in muted text: the narrative call's prompt as the
   provider counted it, then its reply, exact numbers with locale
-  grouping. The reasoning part shows only when the provider reported a
-  reasoning count. With sections but no provider counts it reads
+  grouping. The reasoning part shows the provider's reasoning count
+  when it reported one; when it streamed reasoning but sent no count,
+  the entry's stored estimate, marked: `(+~1,200 reasoning)`. With
+  sections but no provider counts it reads
   `~<estimate> → ~<reply>`, the sections' sum and the reply's stored
   `content_tokens`. It's the narrative call alone, never a sum of the
   turn's calls. Tapping it toggles the
@@ -738,6 +740,8 @@ entries collection identity.
 The streaming AI entry uses the same structure as a completed AI
 entry.
 
+- **Before the first chunk:** the token display reads `—…`, nothing
+  counted yet.
 - **Reasoning phase:** brain icon pulses, token display
   `— (+N reasoning)…` (dash for reply-not-started, N = reasoning
   tokens so far). Reasoning body stays **collapsed by default**;
@@ -752,6 +756,10 @@ entry.
 
 Non-reasoning providers: no brain, token display collapses to just
 reply tokens, `M…`.
+
+The host counts each chunk with o200k as it lands and adds it to its
+channel's total, so a live count costs one small encode per chunk,
+never a recount of the reply.
 
 ## Error surface — system entries vs. persistent state pill
 

@@ -183,7 +183,7 @@ Serializable props in (native → document):
   `worldTimeDecorations`, holding only closed chapters whose end row
   is in the slice.
 - `streaming` — the live stream row (`content`, `reasoning`,
-  `phase`) or null, and null while the slice stops short of the tail.
+  `phase`, and `tokens`, the reply and reasoning counted so far) or null, and null while the slice stops short of the tail.
   The stream buffer withholds partial tags but sets no time throttle,
   so on native each chunk is one prop emission, carrying the slice
   with it: what an open costs, where the whole window carried 14.2 MB
