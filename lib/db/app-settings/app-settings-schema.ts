@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { modelSettingsSchema } from './model-settings-schema'
 import {
   storySettingsPartialSchema,
   suggestionCategorySchema,
@@ -73,12 +74,7 @@ export const modelProfileSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
   modelRef: z.object({ providerId: z.string(), modelId: z.string() }),
-  temperature: z.number().min(0).max(2).optional(),
-  maxOutput: z.number().int().positive().optional(),
-  thinking: z.number().int().nonnegative().optional(),
-  timeout: z.number().optional(),
-  structuredOutput: z.enum(['auto', 'force-on', 'force-off']).optional(),
-  customJson: z.record(z.string(), z.unknown()).optional(),
+  ...modelSettingsSchema.shape,
 })
 
 export const appSettingsDiagnosticsSchema = z.object({

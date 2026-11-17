@@ -39,17 +39,20 @@ export const entryMetadataSchema = z.object({
   reasoning: z.string().optional(),
   // The story text ended early; authored, never inherited (data-model.md → Entry metadata shape).
   // `limit` is the number the cause names; an `unknown` cut's `maxOutput` is what the call sent.
+  // `fromOverride`: the call's settings were the story's narrative override's; absent = the profile's.
   cutOff: z
     .discriminatedUnion('cause', [
       z.strictObject({
         cause: z.enum(['max-output', 'window']),
         outputTokens: z.number().optional(),
         limit: z.number(),
+        fromOverride: z.literal(true).optional(),
       }),
       z.strictObject({
         cause: z.literal('unknown'),
         outputTokens: z.number().optional(),
         maxOutput: z.number().optional(),
+        fromOverride: z.literal(true).optional(),
       }),
       z.strictObject({
         cause: z.enum(['interrupted', 'content-filter']),

@@ -12,9 +12,9 @@ import {
 } from '@/lib/ai'
 import {
   STORY_AGENT_IDS,
+  type ModelOverride,
   type ProviderInstance,
   type StoryAgentId,
-  type StoryModelRef,
   type StorySettings,
 } from '@/lib/db'
 
@@ -83,7 +83,7 @@ export function providerListsModel(provider: ProviderInstance, modelId: string):
 }
 
 export function overrideProviderMissing(
-  ref: StoryModelRef,
+  ref: ModelOverride,
   providers: readonly ProviderInstance[],
 ): boolean {
   return !providers.some((provider) => provider.id === ref.providerId)
@@ -111,7 +111,7 @@ export function appendedCustomModelIds(
   return current.includes(modelId) ? [...current] : [...current, modelId]
 }
 
-function sameRef(a: StoryModelRef | undefined, b: StoryModelRef | undefined): boolean {
+function sameRef(a: ModelOverride | undefined, b: ModelOverride | undefined): boolean {
   if (a == null || b == null) return a == null && b == null
   return a.providerId === b.providerId && a.modelId === b.modelId
 }
