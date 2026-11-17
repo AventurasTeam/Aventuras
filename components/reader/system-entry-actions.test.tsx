@@ -113,6 +113,15 @@ const CLOSE_UNASSIGNED = {
   phaseName: 'metadata',
 } satisfies PipelineError
 
+// A close's pre-flight found lore-mgmt's model flagged off for tool calling.
+const CLOSE_TOOLS_OFF = {
+  kind: 'config-resolver',
+  failure: 'tool-calling-off',
+  target: 'lore-mgmt',
+  phaseName: 'agent',
+  modelId: 'gemma-4-26b',
+} satisfies PipelineError
+
 const CLOSE_HINTED = {
   kind: 'provider',
   reason: 'unknown',
@@ -551,6 +560,14 @@ describe('describeCloseFailure', () => {
     })
   })
 
+  it("names the model a close's pre-flight found flagged off for tool calling", () => {
+    expect(describeCloseFailure(CLOSE_TOOLS_OFF)).toEqual({
+      content:
+        "Chapter close can't run: its model, gemma-4-26b, is marked as unable to call tools, which the close needs. Pick another model for chapter close, or set this story's own on its Models tab.",
+      detail: undefined,
+    })
+  })
+
   it("names the limit a cut close reply hit, in the close's own words", () => {
     expect(describeCloseFailure(CLOSE_CUT)).toEqual({
       content:
@@ -593,6 +610,23 @@ describe('toCloseFailureMeta', () => {
       target: 'lore-mgmt',
       close: 'failed',
     })
+  })
+
+  it("keeps the can't-call-tools failure and its slot, through the persisted schema", () => {
+    const meta = toCloseFailureMeta(CLOSE_TOOLS_OFF, undefined)
+    expect(meta).toEqual({
+      kind: 'config-resolver',
+      failure: 'tool-calling-off',
+      target: 'lore-mgmt',
+      close: 'failed',
+    })
+    const parsed = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      systemFailure: meta,
+    })
+    expect(parsed.systemFailure).toEqual(meta)
   })
 
   it("persists a hinted provider failure's capability and its detail line", () => {
@@ -1401,6 +1435,29 @@ describe('useSystemEntryActions', () => {
     const actions = actionsFor(toCloseFailureMeta(CLOSE_CUT, undefined))
     expect(actions.fixAction?.label).toBe('Fix profile')
     expect(actions.onRetry).toBe(onRetry)
+  })
+
+  // The card adds Dismiss to every system entry, so Fix profile · Retry · Dismiss is these two.
+  it("offers Fix profile beside Retry on a close entry whose model can't call tools", () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_TOOLS_OFF, undefined))
+    expect(actions.fixAction?.label).toBe('Fix profile')
+    expect(actions.onRetry).toBe(onRetry)
+
+    act(() => actions.fixAction?.onPress())
+
+    expect(router.push).toHaveBeenCalledWith('/settings?tab=providers')
+  })
+
+  it("reads Fix story override on the can't-call-tools entry when the story overrides lore-mgmt", () => {
+    const actions = actionsFor(toCloseFailureMeta(CLOSE_TOOLS_OFF, undefined), 'story_1', {
+      'lore-mgmt': { providerId: 'prov_local', modelId: 'qwen3-32b' },
+    })
+    expect(actions.fixAction?.label).toBe('Fix story override')
+
+    act(() => actions.fixAction?.onPress())
+
+    expect(router.navigate).toHaveBeenCalledWith('/story-settings/story_1?tab=models')
+    expect(router.push).not.toHaveBeenCalled()
   })
 
   it('offers Fix profile beside Retry on a close entry whose rejection hinted at tool calling', () => {

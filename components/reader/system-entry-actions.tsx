@@ -21,6 +21,7 @@ import {
   EMPTY_REPLY,
   PER_TURN_KIND,
   pipelineErrorDetail,
+  type ConfigFailureKind,
   type PipelineError,
   type RejectedStart,
   type TxResult,
@@ -107,12 +108,14 @@ const PASS_RESOLVER_COPY = {
   'override-provider-missing': 'reader:systemEntry.failure.memoryOverrideProviderMissing',
 } as const satisfies Record<ResolveFailureKind, string>
 
+// Only a close's pre-flight raises 'tool-calling-off', so the close's set alone words it.
 const CLOSE_RESOLVER_COPY = {
   'no-profile-assigned': 'reader:systemEntry.failure.closeNoProfileAssigned',
   'profile-missing': 'reader:systemEntry.failure.closeProfileMissing',
   'provider-missing': 'reader:systemEntry.failure.closeProviderMissing',
   'override-provider-missing': 'reader:systemEntry.failure.closeOverrideProviderMissing',
-} as const satisfies Record<ResolveFailureKind, string>
+  'tool-calling-off': 'reader:systemEntry.failure.closeToolCallingOff',
+} as const satisfies Record<ConfigFailureKind, string>
 
 const FIX_PROFILE = 'reader:systemEntry.fixProfile'
 
@@ -121,7 +124,8 @@ const FIX_LABEL = {
   'profile-missing': FIX_PROFILE,
   'provider-missing': 'reader:systemEntry.fixDefault',
   'override-provider-missing': 'reader:systemEntry.fixOverride',
-} as const satisfies Record<ResolveFailureKind, string>
+  'tool-calling-off': FIX_PROFILE,
+} as const satisfies Record<ConfigFailureKind, string>
 
 const PROVIDER_SETTINGS_ROUTE = '/settings?tab=providers'
 
@@ -131,7 +135,7 @@ function storyOverrideRoute(storyId: string): `/story-settings/${string}?tab=mod
   return `/story-settings/${storyId}?tab=models`
 }
 
-function isResolveFailureKind(failure: string): failure is ResolveFailureKind {
+function isConfigFailureKind(failure: string): failure is ConfigFailureKind {
   return Object.hasOwn(FIX_LABEL, failure)
 }
 
@@ -250,10 +254,16 @@ export function toSystemFailureMeta(
   return failureMetaOf(error, describeTurnFailure(error).detail, submission)
 }
 
+type ResolverCopyKey =
+  | (typeof PASS_RESOLVER_COPY)[ResolveFailureKind]
+  | (typeof CLOSE_RESOLVER_COPY)[ConfigFailureKind]
+
 // The words a failure entry for a Send's owed work speaks in; one arm serves pass and close.
 type WorkerVocabulary = {
   generic: 'reader:systemEntry.failure.memory' | 'reader:systemEntry.failure.close'
-  resolver: typeof PASS_RESOLVER_COPY | typeof CLOSE_RESOLVER_COPY
+  /** A kind this set doesn't word, as the pass's 'tool-calling-off', takes `generic`. */
+  resolver: Readonly<Record<ResolveFailureKind, ResolverCopyKey>> &
+    Readonly<Partial<Record<'tool-calling-off', ResolverCopyKey>>>
   hint: 'pass' | 'close'
   cutOff: (failure: ReplyCutOffFailure) => string
   window: (failure: ContextWindowFailure) => string
@@ -293,11 +303,9 @@ function describeWorkerFailure(
     }
   }
   if (error.kind === 'config-resolver') {
-    const content =
-      error.failure === 'tool-calling-off'
-        ? t(vocabulary.generic)
-        : t(vocabulary.resolver[error.failure])
-    return { content, detail: error.detail }
+    // Only the close's can't-call-tools line reads `model`.
+    const key = vocabulary.resolver[error.failure] ?? vocabulary.generic
+    return { content: t(key, { model: error.modelId }), detail: error.detail }
   }
   if (error.kind === 'reply-cut-off') {
     return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }
@@ -473,9 +481,9 @@ export async function retryCloseEntry(deps: {
 }
 
 // Shared by the bubble (Retry beside the fix) and the suggestion strip (fix alone). Widened past
-// ResolveFailureKind: the bubble reads a persisted `z.string()`; unknown values get "Fix default".
+// ConfigFailureKind: the bubble reads a persisted `z.string()`; unknown values get "Fix default".
 export function useConfigFixAction(
-  failure: ResolveFailureKind | (string & {}) | undefined,
+  failure: ConfigFailureKind | (string & {}) | undefined,
   storyId: string | null,
   /** App Settings is outside the story, so the push waits on the host's story-leave guard. */
   leaveStory: LeaveStory,
@@ -497,12 +505,12 @@ export function useConfigFixAction(
   if (
     overridden &&
     storyId !== null &&
-    isResolveFailureKind(failure) &&
+    isConfigFailureKind(failure) &&
     FIX_LABEL[failure] === FIX_PROFILE
   )
     return toOverride(storyId)
   return {
-    label: t(isResolveFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
+    label: t(isConfigFailureKind(failure) ? FIX_LABEL[failure] : 'reader:systemEntry.fixDefault'),
     onPress: () => leaveStory(() => router.push(PROVIDER_SETTINGS_ROUTE)),
   }
 }
