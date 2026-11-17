@@ -3139,6 +3139,26 @@ export const TokenPanelNoProviderCounts: StoryT = {
   },
 }
 
+/** A row stored without content_tokens and no provider counts: the prompt's estimate alone, still a toggle. */
+export const TokenTextNoReplyFigure: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, meta: { promptSections: SECTIONS } },
+  play: async () => {
+    const toggle = await showBreakdown(
+      t('reader:entryCard.tokensSpokenEstimatedPrompt', { prompt: SECTION_SUM }),
+    )
+    expect(toggle).toHaveTextContent(
+      t('reader:entryCard.tokensEstimatedPrompt', { prompt: SECTION_SUM }),
+    )
+    await userEvent.click(toggle)
+    // The meta line and the narrative group's header read the same estimate.
+    expect(
+      screen.getAllByText(t('reader:tokenPanel.promptEstimated', { prompt: SECTION_SUM })),
+    ).toHaveLength(2)
+    expect(screen.getByText(t('reader:tokenPanel.narrative'))).toBeVisible()
+  },
+}
+
 /** The provider streamed reasoning but sent no count for it: the estimate, marked. */
 export const TokenTextReasoningEstimate: StoryT = {
   ...wrap,

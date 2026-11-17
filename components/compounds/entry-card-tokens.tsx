@@ -71,7 +71,15 @@ function tokenLine(meta: TokenMeta, replyEstimate: number | undefined): Line | n
       spoken: t('reader:entryCard.tokensSpoken', counts),
     }
   }
-  if (promptSections == null || replyEstimate == null) return null
+  if (promptSections == null) return null
+  // A row stored without content_tokens has no reply figure; the toggle still opens its sections.
+  if (replyEstimate == null) {
+    const prompt = { prompt: sumOf(promptSections) }
+    return {
+      text: t('reader:entryCard.tokensEstimatedPrompt', prompt),
+      spoken: t('reader:entryCard.tokensSpokenEstimatedPrompt', prompt),
+    }
+  }
   const counts = { prompt: sumOf(promptSections), reply: replyEstimate }
   if (reasoningEstimate != null) {
     const params = { ...counts, reasoning: reasoningEstimate }
