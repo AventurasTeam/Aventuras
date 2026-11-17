@@ -196,10 +196,13 @@ and the catalog bullet below drops out.
   `CLOSE_RESOLVER_COPY` and `EXPECTED` in
   `components/reader/resolver-failure-copy.test.tsx` are keyed by it. `FIX_LABEL`
   maps the new kind to `reader:systemEntry.fixProfile`, which lands on the
-  Providers tab until M7.1. If the story-override settings followup
-  ([`followups.md → UX`](../../../../followups.md#ux)) has shipped, the action
-  reads `Fix story override` when the story overrides `lore-mgmt`, by its rule
+  Providers tab until M7.1. The action reads `Fix story override` when the
+  story overrides `lore-mgmt`, by its rule
   ([`generation-pipeline.md → Cut-off replies`](../../../../generation-pipeline.md#cut-off-replies)).
+  `profileFixSlot` and `useProfileFixAction`'s `overridden` in
+  `components/reader/system-entry-actions.tsx` carry that rule for the
+  cut-off and hint entries; this entry's fix goes through `FIX_LABEL`'s
+  route instead, so it takes the same check there.
   The copy names the model, so it needs no `fromOverride`.
 - The can't-call-tools entry: canon's **Chapter close's model can't call
   tools**, as `CLOSE_RESOLVER_COPY`'s line through 5.6's
