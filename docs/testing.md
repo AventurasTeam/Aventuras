@@ -500,6 +500,9 @@ on the request:
   the dev mock server) with an `EXAMPLES` reply beside it here; the
   match can't drift because it reuses the app's own renderer, and
   tests override a specific reply via `setStructured(name, value)`.
+  `chapter-boundary`'s match also rests on the refined schema the app
+  sends and the plain one registered here rendering the same JSON
+  Schema, which [`shapes.test.ts`](../scripts/mock-llm/shapes.test.ts) pins.
 
 Call sites that answer with the same schema render the same block, so
 the block alone cannot separate them — the wizard's thirteen assist

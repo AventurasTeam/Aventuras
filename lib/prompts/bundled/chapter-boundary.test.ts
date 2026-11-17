@@ -39,6 +39,13 @@ describe('bundled chapter-boundary template', () => {
     expect(system).toContain('Give one sentence on why the chapter ends there.')
   })
 
+  // A candidate shows its opening, so a turn that opens on a time skip reads as the place to end.
+  it('says the picked turn closes the chapter, so a turn opening a new scene is not the pick', () => {
+    expect(renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT).system).toContain(
+      'The chapter ends with the turn you pick and the next one opens with the turn after it, so where a listed turn opens on a new scene or after a time skip, end on the listed turn before it.',
+    )
+  })
+
   it('shows the length, the active threads, and each candidate by turn id, position and sentences', () => {
     expect(renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT).user).toBe(
       [

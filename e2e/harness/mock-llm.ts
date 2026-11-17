@@ -131,8 +131,8 @@ export const EXAMPLES: Record<string, unknown> = {
     theme: 'mock',
     keywords: ['mock'],
   },
-  // Names no candidate (a call's turn ids start at t1): the refined parse refuses it twice and the
-  // close takes its fallback end. A spec names a candidate with setStructured.
+  // Names no candidate (a call's turn ids start at t1): the refined parse refuses it on every attempt
+  // and the close takes its fallback end. A spec names a candidate with setStructured.
   'chapter-boundary': { end_entry_id: 't0', rationale: 'The mock names no candidate.' },
 
   // Wizard assist. Nothing here is written until the user imports it, so the
