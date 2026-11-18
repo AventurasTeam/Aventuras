@@ -347,7 +347,8 @@ convention, and the expectation that subsystems route through
   `branchId`, `endEntryId` and `error`, plus `preflight` (its `kind`,
   `failure`, `target` and `phaseName`) when the throw was the write of
   a failed pre-flight's entry; the user sees a generic warning
-  toast), `manual_close_refused` (warn, the same file: the confirmed
+  toast, unless a run had reserved before the throw, whose own failure
+  toast speaks while its close stays owed), `manual_close_refused` (warn, the same file: the confirmed
   start was refused, with `branchId`, `endEntryId` and the `blockedBy`
   code the toast turns into a remedy), `manual_close_preflight_failed`
   (warn, the same file: the close's pre-flight refused the pick before

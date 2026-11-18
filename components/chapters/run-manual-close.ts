@@ -8,12 +8,17 @@ import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import type { ConfigResolverError } from '@/lib/pipeline'
+import { generationStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
+const pendingPick = (branchId: string) => generationStore.getTxState().pendingClose.get(branchId)
+
 /** Starts the close the modal confirmed; speaks only for a refusal or a failed pre-flight. */
 export async function runManualClose(branchId: string, endEntryId: string): Promise<void> {
+  // The reserve writes a fresh record, so one that changed during the start is this click's.
+  const pickBefore = pendingPick(branchId)
   let preflight: ConfigResolverError | undefined
   try {
     const result = await startManualClose(branchId, endEntryId, ctx)
@@ -59,6 +64,9 @@ export async function runManualClose(branchId: string, endEntryId: string): Prom
         },
       }),
     })
-    toast.warning(t('chapters:closeModal.toast.startFailed'))
+    // A run that reserved failed as a run: its outcome toast speaks, and its close stays owed.
+    const pick = pendingPick(branchId)
+    if (pick === pickBefore || pick?.endEntryId !== endEntryId)
+      toast.warning(t('chapters:closeModal.toast.startFailed'))
   }
 }

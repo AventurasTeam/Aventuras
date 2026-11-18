@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
 import { CLASSIFIER_HELD, PER_TURN_KIND, type PipelineError } from '@/lib/pipeline'
+import { generationStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import { runManualClose } from './run-manual-close'
@@ -38,6 +39,7 @@ let logError: MockInstance<typeof logger.error>
 beforeEach(() => {
   actions.start.mockReset()
   actions.raise.mockReset().mockResolvedValue('sys_1')
+  generationStore.__reset()
   warn = vi.spyOn(toast, 'warning').mockReturnValue('')
   logWarn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
   logError = vi.spyOn(logger, 'error').mockImplementation(() => {})
@@ -162,4 +164,41 @@ describe('runManualClose', () => {
       expect(warn).toHaveBeenCalledExactlyOnceWith(t('chapters:closeModal.toast.startFailed'))
     },
   )
+
+  it("logs a throw after the run reserved, leaving the toast to that run's failure", async () => {
+    actions.start.mockImplementation(async () => {
+      generationStore.setPendingClose('br_1', { endEntryId: 'entry_65' })
+      throw new Error('boom')
+    })
+
+    await expect(runManualClose('br_1', 'entry_65')).resolves.toBeUndefined()
+
+    expect(logError).toHaveBeenCalledExactlyOnceWith('app.manual_close_failed', {
+      branchId: 'br_1',
+      endEntryId: 'entry_65',
+      error: 'boom',
+    })
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('toasts a throw before the reserve though an earlier close left the same pick owed', async () => {
+    generationStore.setPendingClose('br_1', { endEntryId: 'entry_65' })
+    actions.start.mockRejectedValue(new Error('boom'))
+
+    await runManualClose('br_1', 'entry_65')
+
+    expect(warn).toHaveBeenCalledExactlyOnceWith(t('chapters:closeModal.toast.startFailed'))
+  })
+
+  it('toasts a throw when the owed pick cleared during the start, no run reserving', async () => {
+    generationStore.setPendingClose('br_1', { endEntryId: 'entry_60' })
+    actions.start.mockImplementation(async () => {
+      generationStore.clearPendingClose('br_1')
+      throw new Error('boom')
+    })
+
+    await runManualClose('br_1', 'entry_65')
+
+    expect(warn).toHaveBeenCalledExactlyOnceWith(t('chapters:closeModal.toast.startFailed'))
+  })
 })
