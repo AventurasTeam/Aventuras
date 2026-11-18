@@ -74,9 +74,7 @@ export function AppActionsMenu({
   const storyTools =
     story != null && closeChapter != null
       ? buildStoryToolsGroup({
-          branchId: closeChapter.branchId,
-          canClose: closeChapter.canClose,
-          gateReason: closeChapter.gateReason,
+          ...closeChapter,
           openCloseModal: chapterOverlaysStore.openCloseModal,
         })
       : undefined
