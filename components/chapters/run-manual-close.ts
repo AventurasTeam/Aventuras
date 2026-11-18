@@ -16,11 +16,20 @@ export async function runManualClose(branchId: string, endEntryId: string): Prom
   try {
     const result = await startManualClose(branchId, endEntryId, ctx)
     if (result.outcome === 'rejected') {
+      logger.warn('app.manual_close_refused', { branchId, endEntryId, blockedBy: result.blockedBy })
       toast.warning(retryRefusalText(result.blockedBy, 'reader:systemEntry.closeRetryBlocked'))
       return
     }
     if (result.outcome !== 'preflight-failed') return
     const { error } = result
+    const { failure, target, phaseName } = error
+    logger.warn('app.manual_close_preflight_failed', {
+      branchId,
+      endEntryId,
+      failure,
+      target,
+      phaseName,
+    })
     await raiseSystemEntry(
       {
         branchId,

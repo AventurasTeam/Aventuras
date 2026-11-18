@@ -32,11 +32,13 @@ const TOOL_OFF: PipelineError = {
 type RaiseArgs = Parameters<typeof raiseSystemEntry>[0]
 
 let warn: MockInstance<typeof toast.warning>
+let logWarn: MockInstance<typeof logger.warn>
 
 beforeEach(() => {
   actions.start.mockReset()
   actions.raise.mockReset().mockResolvedValue('sys_1')
   warn = vi.spyOn(toast, 'warning').mockReturnValue('')
+  logWarn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
 })
 
 afterEach(() => {
@@ -67,6 +69,7 @@ describe('runManualClose', () => {
     await runManualClose('br_1', 'entry_65')
     expect(warn).not.toHaveBeenCalled()
     expect(actions.raise).not.toHaveBeenCalled()
+    expect(logWarn).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -76,12 +79,17 @@ describe('runManualClose', () => {
     { blockedBy: CLASSIFIER_HELD, key: 'reader:systemEntry.closeRetryBlocked' },
     { blockedBy: MANUAL_CLOSE_REFUSAL.invalidEnd, key: 'reader:systemEntry.closeRetryBlocked' },
   ] as const)(
-    'toasts the remedy for a start refused by $blockedBy, writing no entry',
+    'toasts the remedy for a start refused by $blockedBy, writing no entry, logging the code',
     async ({ blockedBy, key }) => {
       actions.start.mockResolvedValue({ outcome: 'rejected', blockedBy })
       await runManualClose('br_1', 'entry_65')
       expect(warn).toHaveBeenCalledExactlyOnceWith(t(key))
       expect(actions.raise).not.toHaveBeenCalled()
+      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.manual_close_refused', {
+        branchId: 'br_1',
+        endEntryId: 'entry_65',
+        blockedBy,
+      })
     },
   )
 
@@ -107,6 +115,13 @@ describe('runManualClose', () => {
     expect(actions.raise.mock.invocationCallOrder[0]).toBeLessThan(
       warn.mock.invocationCallOrder[0]!,
     )
+    expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.manual_close_preflight_failed', {
+      branchId: 'br_1',
+      endEntryId: 'entry_65',
+      failure: 'tool-calling-off',
+      target: 'lore-mgmt',
+      phaseName: 'agent',
+    })
   })
 
   it.each([

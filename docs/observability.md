@@ -345,7 +345,13 @@ convention, and the expectation that subsystems route through
   `components/chapters/run-manual-close.ts`: starting a close the
   modal confirmed threw rather than returning a result, with
   `branchId`, `endEntryId` and `error`; the user sees a generic warning
-  toast), `close_result_read_failed` (warn,
+  toast), `manual_close_refused` (warn, the same file: the confirmed
+  start was refused, with `branchId`, `endEntryId` and the `blockedBy`
+  code the toast turns into a remedy), `manual_close_preflight_failed`
+  (warn, the same file: the close's pre-flight refused the pick before
+  anything started, with `branchId`, `endEntryId` and the error's
+  `failure`, `target` and `phaseName`; the user sees the close-failure
+  entry and a toast pointing at it), `close_result_read_failed` (warn,
   `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),
