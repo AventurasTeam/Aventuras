@@ -541,6 +541,22 @@ breakdown under [UX](#ux).
     legitimately, so measure before changing anything. It refines
     the capability-floor entry's third bullet above.
 
+- **Boundary mis-picks at scene breaks.** Boundary shows each candidate
+  by its first and last sentences only, and Slice 5.10's runs on the
+  dev model missed a scene break two ways. On the shipped prompt, two of
+  ten picks took a turn that opens on a new scene (t16, a dated letter),
+  one turn late, which puts the scene's first turn in the closing
+  chapter. With a one-sentence guard against scene-opening turns (tried,
+  then reverted), six of ten took a turn that holds the break inside it
+  (t15, which crosses Part Two's opening time skip mid-turn and ends on
+  the letter's lead-in colon), and the real break, t14, fell from three
+  picks to two. A guard keyed on a turn's opening can't see a break
+  inside a turn. The lever to try is candidate display: more of each
+  turn, or a marked mid-turn break. The evidence so far is one chapter
+  of one novel. The record is
+  [Slice 5.10's boundary measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#boundary-measure).
+  Raised by Slice 5.10's measure, 2026-11-18 (developer, "Q12: C").
+
   The record is
   [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
   Raised by Slice 5.10's measure, 2026-11-18.

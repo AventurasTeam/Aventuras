@@ -787,26 +787,32 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   Bristol, March 1"), which puts the new scene's first turn in the
   closing chapter.
 
-  **The guard came back as one sentence (developer ruling, 2026-11-18,
-  "Q11: Then restore the short guard.").** The dropped sentence was the
-  step-by-step rule quoted above. The system half now says, after the
-  natural-ending line, "A turn that opens on a new scene or after a time
-  skip begins the next chapter, so it can't end this one." It states a
-  fact, with no procedure to follow.
-
-  The boundary bar's third run, on the restored guard at `cbca94d3c`
+  **A one-sentence guard was tried and reverted (developer rulings,
+  2026-11-18, "Q11: Then restore the short guard." and "Q12: C").** The
+  guard stated a fact after the natural-ending line: "A turn that opens on
+  a new scene or after a time skip begins the next chapter, so it can't
+  end this one." The boundary bar's third run, on it at `cbca94d3c`
   (prompt 2,481 tokens, 10:53 to 11:05 UTC), held: 10 of 10 runs picked a
   candidate and none was cut off, with replies of 3,655 to 7,958 output
-  tokens. No run picked t16 or the latest candidate. Six runs (2, 3, 4,
-  6, 7 and 9) picked t15 (position 93), most naming the letter's change
-  of scene and time as the reason. But t15 ends on the letter's lead-in,
-  "we found … the following important news:", so those chapters close on
-  a colon and the news opens the next one. Two runs (5 and 8) picked t14
-  (position 91), where the novel's Part One ends. Run 1 picked t27
-  (position 117), the Spy-glass chapter's end. Run 10 picked t5
-  (position 73), which ends after the riders, before Jim goes back to the
-  Admiral Benbow. The record is
-  `~/.cache/aventuras-measure/m5-10/probe-20261118T110532Z`.
+  tokens, and no run picked t16 or the latest candidate. But six runs (2,
+  3, 4, 6, 7 and 9) moved to t15 (position 93). It opens on the squire's
+  reply and holds Part Two's opening time skip mid-turn ("It was longer
+  than the squire imagined ere we were ready for the sea…", "So the weeks
+  passed on…"), and it ends on the letter's lead-in, "we found … the
+  following important news:". So those chapters cross the break and close
+  on a colon. t14 (position 91), where Part One ends, the real break, fell
+  from three picks to two (runs 5 and 8). Run 1 picked t27 (position 117)
+  and run 10 t5 (position 73). The prompt shows each candidate by its
+  first and last sentences only, so a guard keyed on a turn's opening
+  can't see a break inside a turn. The guard came out in `33b8ae215`. The
+  shipped prompt is the one the second run measured (`ebd11334c`, 10 of
+  10 picked, none cut off), and boundary's code path is unchanged since,
+  so no fourth run followed. The third run's record is
+  `~/.cache/aventuras-measure/m5-10/probe-20261118T110532Z`. Both kinds
+  of mis-pick, one turn late on a scene-opening turn (the second run's
+  t16) and a break inside a turn (the third run's t15), are filed under
+  [followups → Tuning and play testing](../../../../followups.md#tuning-and-play-testing),
+  with candidate display as the lever to try.
 
 - **`firstLastSentences` is tougher than its first cut.** It merges
   letterless pieces (French `»`, a bare ellipsis) into the sentence
