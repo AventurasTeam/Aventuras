@@ -204,6 +204,8 @@ export const entryMetadataSchema = z.object({
       promptSections: promptSectionsSchema.optional(),
       // A close-failure entry, as `pass`; a close has no held state.
       close: z.enum(['failed', 'resolved']).optional(),
+      // A close-failure entry a manual close's click raised: its end entry, which Retry restarts.
+      closePick: z.string().optional(),
       // A pass refused the Send: Retry runs the pass alone; 'held' has no Retry. 'resolved': a
       // committed Retry kept the entry only to hold a text the composer couldn't take back.
       pass: z.enum(['failed', 'held', 'resolved']).optional(),

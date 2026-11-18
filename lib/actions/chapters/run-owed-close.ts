@@ -3,6 +3,7 @@ import {
   closeOwed,
   isClassifierHeld,
   type ChainEnd,
+  type PreflightFailedStart,
   type RejectedStart,
 } from '@/lib/pipeline'
 import { currentStoryStore, generationStore } from '@/lib/stores'
@@ -10,10 +11,14 @@ import { currentStoryStore, generationStore } from '@/lib/stores'
 import { MANUAL_CLOSE_REFUSAL, refused, startCloseChain } from './close-chain'
 import type { DbCtx } from '../types'
 
-/** What a close entry's Retry ran: nothing, since no close is owed any more; a refusal; the end. */
+/**
+ * What a close entry's Retry ran: nothing, since no close is owed any more; a refusal; a failed
+ * click's pick refused again by its pre-flight (`runPickedClose`); the end.
+ */
 export type OwedCloseRun =
   | { outcome: 'nothing-owed' }
   | RejectedStart
+  | PreflightFailedStart
   | { outcome: 'ran'; end: ChainEnd }
 
 /**

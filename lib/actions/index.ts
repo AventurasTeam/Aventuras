@@ -17,6 +17,7 @@ export {
   type ChapterDeleteRefusal,
   type ChapterDeleteRefusalCode,
 } from './chapters/chapter-delete-set'
+export { runPickedClose } from './chapters/picked-close'
 export { removeChapter, type RemoveChapterResult } from './chapters/remove-chapter'
 export { runOwedClose, type OwedCloseRun } from './chapters/run-owed-close'
 export {
