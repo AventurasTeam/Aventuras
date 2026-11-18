@@ -952,8 +952,15 @@ code before it moved; resolve with the slice it names.
   until M7.1's override the user's only exit is another model. Pointing
   a saved provider at another server keeps the first server's figures
   too: a model id the new server lists without a window inherits the
-  old one. The providers tab owns endpoint edits and the override, so
-  it decides when a detected figure is dropped. Raised by the context
+  old one. A detected `toolCalling: false` carries over the same way
+  (`normalizeModelCatalog` keeps a stored flag when a fetch publishes
+  none), and pre-flight refuses every close whose `lore-mgmt` model is
+  flagged off, so after an endpoint change a stale `false` blocks closes
+  on that model until the user picks another; the flag has no editor
+  before this slice. The providers tab owns endpoint edits and the
+  override, so it decides when a detected figure is dropped. The
+  `toolCalling` case was added by Slice 5.10's slice review
+  (2026-11-18). Raised by the context
   window check and its slice review (2026-10-27).
 - **M7.1 — A capability editor must store an explicit `false`.**
   `normalizeModelCatalog` (`lib/ai/catalog.ts`) lets a stored capability
@@ -1605,7 +1612,7 @@ own.
   On native the reason shows nowhere, `ReasonTooltip` being a no-op there,
   unless a host writes a visible line under the button, as three M5 hosts
   do; the same pass decides whether every disabled button shows one
-  ([Slice 5.10 → Open questions](./milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
+  ([Slice 5.10 → Implementation notes](./milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes)).
   The same pass owns focus: RN Web maps `disabled` to the native
   attribute, so a control that disables under focus drops it to
   `<body>` (`Button`'s `loading`, History's `Load more`;

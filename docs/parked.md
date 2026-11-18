@@ -1140,7 +1140,9 @@ the gate. The one store guard that let the stale copy change a write,
 `promoteStagedEntity`'s, went in the same pass. One path is open and
 unverified: a deep link into another story while one is busy, which
 skips the story-leave guard
-([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
+([triage](./implementation/triage.md#inbox)). A close's failed click
+pre-flight writes its system entry through `raiseSystemEntry`, one more
+patching writer.
 **Revisit signal:** an open or re-hydrate path that can run while a
 write on that branch commits. Raised in 5.5a's review; routed from
 triage 2026-11-14.
@@ -4051,7 +4053,7 @@ cost about one change; if the time is paid per store write rather than
 per render, a close on that window pays it about 133 times. Owed closes
 run before a turn, so a long story reaches this without a manual close.
 **Revisit signal:** the first close measured on a grown window
-([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)),
+([Slice 5.10's grown-window close measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#grown-window-close-measure)),
 a user noticing the pause, or a story long enough for it to pass about
 2 s. Routed from the sliding reader window's Fold measure, 2026-11-16
 (developer decision).
