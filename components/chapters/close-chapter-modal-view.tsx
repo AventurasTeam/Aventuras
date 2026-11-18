@@ -234,7 +234,7 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     option.focus()
   }
   useEffect(focusPending)
-  const spaceDownOn = useRef<string | null>(null)
+  const spaceDownOn = useRef<HTMLElement | null>(null)
   const slotIndex = (event: KeyboardEvent<HTMLDivElement>) => {
     const slot = (event.target as HTMLElement).closest<HTMLElement>('[data-index]')
     return slot == null ? null : Number(slot.dataset.index)
@@ -246,8 +246,8 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     // does: picking on press hands its repeats to the trigger, whose Space press reopens the panel.
     if (event.key === ' ') {
       event.preventDefault()
-      // A repeat after a focus loss is no press: recording it would pick on a release that began elsewhere.
-      if (!event.repeat) spaceDownOn.current = replies[from]!.id
+      // A repeat is no press: after a focus loss it would arm a release that began elsewhere.
+      if (!event.repeat) spaceDownOn.current = event.target as HTMLElement
       return
     }
     const to = stepIndex(event.key, from, replies.length)
@@ -262,11 +262,14 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     const downOn = spaceDownOn.current
     spaceDownOn.current = null
     const from = slotIndex(event)
-    if (from == null || replies[from]!.id !== downOn) return
-    onPick(downOn)
+    // The armed node, not its id: a reply that virtualized out and back is a new node.
+    if (from == null || event.target !== downOn) return
+    onPick(replies[from]!.id)
   }
   // Leaving the panel drops what was armed in it: a release outside never reaches onKeyUp, and a
-  // pending focus would pull focus back from wherever it went once its reply mounts.
+  // pending focus would pull focus back from wherever it went once its reply mounts. A removed
+  // option's blur fires mid-commit, where React drops it, so End's own scroll keeps its pending
+  // focus; a native focusout listener would see that blur and break End.
   const onBlur = (event: FocusEvent<HTMLDivElement>) => {
     if (event.currentTarget.contains(event.relatedTarget)) return
     spaceDownOn.current = null

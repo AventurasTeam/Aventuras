@@ -396,7 +396,8 @@ export const KeyboardPickReturnsFocus: Story = {
   },
 }
 
-// The listbox's own keys: the oldest reply starts virtualized out, so End scrolls it in to focus it.
+// The listbox's own keys: the oldest reply starts virtualized out, so End scrolls it in to focus
+// it.
 export const ArrowKeysMoveBetweenReplies: Story = {
   args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
   play: async ({ args }) => {
@@ -425,7 +426,8 @@ export const ArrowKeysMoveBetweenReplies: Story = {
   },
 }
 
-// End on a virtualized-out reply only requests its focus; leaving the list before it mounts cancels the request.
+// End on a virtualized-out reply only requests its focus; leaving the list before it mounts
+// cancels the request.
 export const EndRequestDroppedOnLeavingTheList: Story = {
   args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
   play: async () => {
@@ -513,6 +515,31 @@ export const SpaceRepeatAfterFocusLossPicksNothing: Story = {
         cancelable: true,
       }),
     )
+    await user.keyboard('[/Space]')
+    expect(args.onSelect).not.toHaveBeenCalled()
+  },
+}
+
+// A press armed on a reply that virtualizes out goes stale: its release never reaches the list, and
+// a remounted reply is a new node that a later release must not pick.
+export const SpaceArmedOnVirtualizedOutReplyPicksNothing: Story = {
+  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  play: async ({ args }) => {
+    await dialog()
+    await userEvent.click(trigger())
+    const list = await screen.findByTestId('close-chapter-panel')
+    const armed = await screen.findByTestId('close-chapter-reply-entry_401')
+    const user = userEvent.setup()
+    armed.focus()
+    await user.keyboard('[Space>]')
+    list.scrollTop = list.scrollHeight
+    await waitFor(() => expect(screen.queryByTestId('close-chapter-reply-entry_401')).toBeNull())
+    await user.keyboard('[/Space]')
+    list.scrollTop = 0
+    const remounted = await screen.findByTestId('close-chapter-reply-entry_401')
+    ;(document.activeElement as HTMLElement | null)?.blur()
+    await user.keyboard('[Space>]')
+    remounted.focus()
     await user.keyboard('[/Space]')
     expect(args.onSelect).not.toHaveBeenCalled()
   },
