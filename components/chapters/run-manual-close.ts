@@ -7,12 +7,14 @@ import { raiseSystemEntry, startManualClose } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
+import type { ConfigResolverError } from '@/lib/pipeline'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
 /** Starts the close the modal confirmed; speaks only for a refusal or a failed pre-flight. */
 export async function runManualClose(branchId: string, endEntryId: string): Promise<void> {
+  let preflight: ConfigResolverError | undefined
   try {
     const result = await startManualClose(branchId, endEntryId, ctx)
     if (result.outcome === 'rejected') {
@@ -22,6 +24,7 @@ export async function runManualClose(branchId: string, endEntryId: string): Prom
     }
     if (result.outcome !== 'preflight-failed') return
     const { error } = result
+    preflight = error
     const { failure, target, phaseName } = error
     logger.warn('app.manual_close_preflight_failed', {
       branchId,
@@ -47,6 +50,14 @@ export async function runManualClose(branchId: string, endEntryId: string): Prom
       branchId,
       endEntryId,
       error: error instanceof Error ? error.message : String(error),
+      ...(preflight !== undefined && {
+        preflight: {
+          kind: preflight.kind,
+          failure: preflight.failure,
+          target: preflight.target,
+          phaseName: preflight.phaseName,
+        },
+      }),
     })
     toast.warning(t('chapters:closeModal.toast.startFailed'))
   }

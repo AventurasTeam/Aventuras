@@ -33,12 +33,14 @@ type RaiseArgs = Parameters<typeof raiseSystemEntry>[0]
 
 let warn: MockInstance<typeof toast.warning>
 let logWarn: MockInstance<typeof logger.warn>
+let logError: MockInstance<typeof logger.error>
 
 beforeEach(() => {
   actions.start.mockReset()
   actions.raise.mockReset().mockResolvedValue('sys_1')
   warn = vi.spyOn(toast, 'warning').mockReturnValue('')
   logWarn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+  logError = vi.spyOn(logger, 'error').mockImplementation(() => {})
 })
 
 afterEach(() => {
@@ -125,23 +127,39 @@ describe('runManualClose', () => {
   })
 
   it.each([
-    { name: 'the start throws', arrange: () => actions.start.mockRejectedValue(new Error('boom')) },
+    {
+      name: 'the start throws',
+      arrange: () => actions.start.mockRejectedValue(new Error('boom')),
+      fields: {},
+    },
     {
       name: 'the entry write throws',
       arrange: () => {
         actions.start.mockResolvedValue({ outcome: 'preflight-failed', error: TOOL_OFF })
         actions.raise.mockRejectedValue(new Error('boom'))
       },
+      // The failed pre-flight the entry was to record, by its codes.
+      fields: {
+        preflight: {
+          kind: 'config-resolver',
+          failure: 'tool-calling-off',
+          target: 'lore-mgmt',
+          phaseName: 'agent',
+        },
+      },
     },
-  ])('logs and toasts a generic failure when $name, and never rejects', async ({ arrange }) => {
-    arrange()
-    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
-    await expect(runManualClose('br_1', 'entry_65')).resolves.toBeUndefined()
-    expect(error).toHaveBeenCalledWith('app.manual_close_failed', {
-      branchId: 'br_1',
-      endEntryId: 'entry_65',
-      error: 'boom',
-    })
-    expect(warn).toHaveBeenCalledExactlyOnceWith(t('chapters:closeModal.toast.startFailed'))
-  })
+  ])(
+    'logs and toasts a generic failure when $name, and never rejects',
+    async ({ arrange, fields }) => {
+      arrange()
+      await expect(runManualClose('br_1', 'entry_65')).resolves.toBeUndefined()
+      expect(logError).toHaveBeenCalledExactlyOnceWith('app.manual_close_failed', {
+        branchId: 'br_1',
+        endEntryId: 'entry_65',
+        error: 'boom',
+        ...fields,
+      })
+      expect(warn).toHaveBeenCalledExactlyOnceWith(t('chapters:closeModal.toast.startFailed'))
+    },
+  )
 })

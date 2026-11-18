@@ -344,7 +344,9 @@ convention, and the expectation that subsystems route through
   `manual_close_failed` (error,
   `components/chapters/run-manual-close.ts`: starting a close the
   modal confirmed threw rather than returning a result, with
-  `branchId`, `endEntryId` and `error`; the user sees a generic warning
+  `branchId`, `endEntryId` and `error`, plus `preflight` (its `kind`,
+  `failure`, `target` and `phaseName`) when the throw was the write of
+  a failed pre-flight's entry; the user sees a generic warning
   toast), `manual_close_refused` (warn, the same file: the confirmed
   start was refused, with `branchId`, `endEntryId` and the `blockedBy`
   code the toast turns into a remedy), `manual_close_preflight_failed`
