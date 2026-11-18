@@ -464,13 +464,13 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     calls `openCloseModal` with the branch.
     `components/compounds/app-actions-menu-pure.stories.tsx` shows `GO TO`,
     `STORY TOOLS`, `APP` in that order.
-16. `e2e/tests/chapter-close-starts.spec.ts`: a close started from the Actions
+16. `chapter-close-starts-menus.spec.ts` and `-inline.spec.ts`: a close started from the Actions
     menu on World, Plot, Story Settings, the reader and the Timeline, from the
     popover, from the in-progress card and from `Close chapter here`, each at a
     picked `ai_reply`, ends with a `chapters` row whose `end_entry_id` is that
     entry, read from the DB, and every entry through it stamped. Chapters are named
     by title or number, never by position (C8).
-17. The same spec: with a dirty pane on World, Plot, Story Settings and the
+17. `chapter-close-starts-guards.spec.ts`: with a dirty pane on World, Plot, Story Settings and the
     Timeline, `Close chapter…` raises `Unsaved changes` first. Cancel leaves no
     modal, no run and no new `chapters` row, and Discard opens the modal.
 18. The same spec, with `toolCalling` false on the `lore-mgmt` model: the confirm
@@ -531,10 +531,10 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 - **Storybook, browser project:** the modal at both tiers, `EntryCard`,
   `ChapterPopover`, `ChapterInProgressCard`, `AppActionsMenuPure`. Phone tier
   through the viewport, not a narrow wrapper.
-- **E2E:** `chapter-close-starts.spec.ts` and `chapter-close-auto.spec.ts`. Both
-  drive the UI and assert the DB, set the threshold and flag through seed helpers
-  beside `setClassifierCadence` (`e2e/harness/seed.ts:281`), and read entry ids
-  from the DB. Tool steps go through `setToolSteps` with function steps, since a
+- **E2E:** `chapter-close-starts-{menus,inline,guards}.spec.ts` and
+  `chapter-close-auto.spec.ts`. All drive the UI and assert the DB, set the
+  threshold and flag through seed helpers beside `setClassifierCadence`
+  (`e2e/harness/seed.ts:281`), and read entry ids from the DB. Tool steps go through `setToolSteps` with function steps, since a
   step can name only the placeholders its prompt holds. A disabled
   `Close chapter here` renames itself to its reason, so a locator waits for the
   gate to open first.
@@ -547,216 +547,299 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 
 ## Open questions
 
-Each has a default this doc builds on. Slice planning confirms it, and any change
-amends the scope above.
-
-- **What does a failed click pre-flight leave behind?** Canon has the click
-  pre-flight the close and any pre-flight failure raise a system entry, while the
-  run's own pre-flight fires after phase 0. Default: nothing is owed and no pass
-  runs, and the entry goes in. From World the entry is off screen, so a warning
-  toast goes with it. Unlike 5.6's run failure toast, it promises no rerun. Is the
-  toast right, given that canon names only the entry?
-- **Does `Close chapter here` open the modal or start at once?** Default: the modal
-  with the end picked. It costs a second press and keeps one confirm, the token
-  count and canon's uniform flow, and C7's `endEntryId` exists for it. Canon's
-  "clicking pre-flights" then moves to the modal's confirm. Which glyph, and where
-  in the cluster? Suggested: Lucide `Flag`, before delete. The cluster has no room
-  to spare at phone width once M6's branch and M7.2's flip era arrive.
-- **What else gates `Close chapter…`?** C5 and C10 settle an empty region and an
-  opening-only branch, which hide it. A held branch and a close already owed are
-  undecided. Default: neither gates it. A held branch reaches `startManualClose`,
-  whose refusal toasts, with no new read per menu render, and a close already owed
-  opens the modal and follows 5.6's rule for a second pick. Should a held branch
-  show disabled with a reason instead?
-- **Where does `Ready to close` sit, and how does it differ from the red strip?**
-  Canon says only "near chapter management controls". Default: text in the popover's
-  progress row and on the in-progress card. At 90% and over the strip's canon meaning
-  is "close imminent", which is false with auto-close off. Does that copy need a line?
-- **Does a close landing under World or Plot hide the reply's last lines?** The reader's
-  surface records no height while it's hidden, so a break that commits then never re-pins.
-  Chromium keeps `scrollTop` across `display:none`, and a break committed while hidden at
-  the bottom left the reader short of the tail on return, with no scroll event to raise
-  the jump button. That shortfall was seen in Chromium, in a scratch story. On native a
-  covered WebView should keep its layout, which is reasoned, not run, so it hasn't been
-  observed on a device. Default: on return, re-pin when the reader was at the bottom as it
-  hid.
-- **Is any dirty-and-busy case left?** By trace, no: every start passes the guard,
-  inputs disable while a run holds the gate, and only the reader otherwise starts
-  a run. That trace predates 5.7's per-card session, so recheck it there first. A
-  case found means the merge and the two-dialog rework come back as a design
-  question, not a patch.
-- **Is a cut-off boundary reply unusable, or a failed call?** Canon names only a
-  provider failure as failed. Default: a `reply-cut-off` takes the fallback, since
-  that loses nothing and a failed close stops the next Send.
-- **Does boundary take the 8k output default?** Canon states it for a step, and a
-  story override with no max output otherwise sends no limit. Default: yes, as Scope has it. If 5.2
-  answered no for metadata, keep the two calls alike or say why they differ.
-- **Can the user withdraw a manual close?** [Slice 5.6](./06-close-owed.md)
-  ships Cancel deferring it, as canon says, and during phase 0 the toast names
-  only the memory update. So a close the user cancelled still runs at the next
-  Send, and one whose cause isn't transient stops the branch's turns until a
-  restart or a new pick. Options: Cancel of a manual close drops its pick,
-  leaving only a threshold close owed; or the modal offers a way to withdraw a
-  pick. Default: as 5.6 ships it, unless a run of the modal shows a user
-  expecting Cancel to drop the close.
-- **Does redo bring back a pick its undo dropped?** Take a manual pick ending on
-  the head reply. CTRL-Z of that turn during the close interrupts and defers the
-  close, and the prose-reversal bracket drops the pick, since its end entry is
-  gone (`dropRemovedPick`, `lib/actions/story-entries/prose-reversal.ts`). Redo
-  restores the entry exactly but not the pick, while `deferred.close` stays. At
-  the next Send, under the threshold, `closeOwed` reads false and Send clears
-  `deferred.close`, so the close the user picked never runs, though the prose is
-  back as it was. Probed through `undoLastAction` and `redoLastAction`. Today
-  only the dev route sets a pick; this slice's `Close chapter here` is the first
-  user path. Options: redo restores a pick its undo dropped, the undo group
-  carrying it; or accept it and fold the case into
-  [parked.md → The deferral toast can promise a close that never runs](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
-  Default: accept as 5.6 ships it, unless a run of the modal shows a user
-  expecting the close back. Surfaced by Slice 5.6's slice review.
-- **Does a pick a reversal stamped into a chapter stay owed?** Redo of an undone
-  close stamps a manual pick's end entry into the chapter again, and the
-  prose-reversal bracket's existence check keeps the pick, since the entry is
-  still there (`dropRemovedPick`, `lib/actions/story-entries/prose-reversal.ts`).
-  The next Send then fails once at `boundary` (stale pick) before the pick drops.
-  Canon prescribes that: a pick drops when "a reversal ... removes the entry"
-  ([`generation-pipeline.md`](../../../../generation-pipeline.md), and
-  [`chapter-close.md`](../../../../memory/chapter-close.md)). Reached today only
-  through the dev route. Options: accept the one failed Send; widen the check to
-  boundary's own criterion (`isNull(storyEntries.chapterId)` and `canEndChapter`)
-  and edit those canon sentences; or carry the pick in the undo group, which also
-  answers the question above. It shares a root with
-  [parked.md → The deferral toast can promise a close that never runs](../../../../parked.md#the-deferral-toast-can-promise-a-close-that-never-runs).
-  Surfaced by Slice 5.6's review; routed from triage 2026-11-07.
-- **Can a close run on each side of one turn?** Canon says one close per turn when
-  auto-close turns on late, and Send plus the turn's chain gives two.
-  [Slice 5.6](./06-close-owed.md) left the chain alone, because this slice's
-  candidates are what make it reachable, by capping a chapter's size. Its
-  `deferred-send.test.ts` pins one close before the turn and lets the turn's
-  chain run another. Run a story with auto-close turned on late and decide.
-  Options: per-turn's `chainsTo` skips the close when its Send ran one, or the
-  chain stands. Default: the chain stands until that run shows two closes in a
-  turn.
-- **May detection write `false`?** A stored flag beats detection, so a detected
-  value is never refreshed and can't be told from the user's. A catalog's `false`
-  stops the close on that model, with no switch in the app until M7.1, and with
-  auto-close on it stops every Send. Default: if a catalog publishes the capability,
-  store what it says; the remedy until M7.1 is a `lore-mgmt` override on the story's
-  Models tab, or auto-close off. Should detection write only `true`, leaving the
-  rest unknown?
-- **Is 5.5b's bar the right one for seven tasks?** Default: the same bar per task.
-  A miss on a task 5.5b didn't measure comes back to the developer, and tuning
-  stays in followups.
-- **Does the size hold?** The estimate is 20 tasks, at the ceiling. Check the plan
-  skeleton. If it passes, the modal and entry points can split from Phase 1 and the
-  flag, while the proofs need both and stay last.
-- **One helper for a bounded structured call?** The sequence
-  `boundedSignal`, `generateStructured`, dispose, `retriedAttemptEvents`,
-  aborted-versus-expired, `structuredCallFailure` is written out twice
-  after [Slice 5.2](./02-first-chapter.md): the periodic classifier pass
-  and the close's metadata call
-  (`lib/pipeline/definitions/chapter-close-metadata-call.ts`).
-  [Slice 5.4](./04-tool-step.md)'s tool step keeps its bound and expiry
-  branch inside `lib/ai`, so 5.10's boundary call would be the third copy
-  of the pipeline-side sequence, and a helper would have to decide whether
-  it also covers the step's in-`lib/ai` expiry branch. Suggested: one
-  helper in `lib/pipeline` returning `ok | aborted | failed`, landed with
-  the first new caller.
-  `ResolveModelConfig` is built inline at each structured caller too
-  (`lib/pipeline/runtime/preflight.ts:18`, and under
-  `lib/pipeline/definitions/`: `periodic-classifier.ts`,
-  `suggestion-refresh.ts`, `per-turn-piggyback.ts`,
-  `chapter-close-metadata-call.ts`; `per-turn.ts` builds it inline too),
-  and `generateToolStep` takes one (`config`, in
-  [Slice 5.4](./04-tool-step.md)). One builder would
-  keep a new field from being missed at one of them. Routed from triage
-  2026-11-06.
-- **Should the E2E harness fail a spec that leaves scripted tool steps unspent?**
-  `setToolSteps` keys a queue by the task's tool names, and a lane no request
-  reaches answers nothing, so a spec scripted under a stale tool list closes with no
-  writes and `close()` resolves. Starting answer: `close()` rejects while a lane
-  still holds steps, unless the spec opts out for a task that may end early. The
-  first scripted spec, this slice's Auto close, decides. Surfaced by
-  [Slice 5.4](./04-tool-step.md)'s slice review.
-- **Should the CTRL-Z E2E hold a close past its first write?**
-  [Slice 5.6](./06-close-owed.md)'s `chapter-close-owed.spec.ts` holds a close at
-  its metadata call, which has written nothing yet, so its CTRL-Z and banner-Cancel
-  checks of "no chapter, no `chapter_close` delta" can't fail. This slice plans the
-  close's first tool step through `setToolSteps`: once the close has a tool step
-  after its chapter write, should that spec hold that step instead, so it proves a
-  written close rolls back? Unit coverage of the rollback is
-  `lib/actions/story-entries/undo-classifier.test.ts`. Surfaced by Slice 5.6's
-  review.
-- **Does the `toolCalling` hint catch vLLM's and OpenRouter's wording?** Canon's
-  keywords are `tools` and `tool_choice`
-  ([`generation-pipeline.md → Fatal error categories`](../../../../generation-pipeline.md#fatal-error-categories)),
-  matched on the lowercased body as written, so `tool choice` and `tool use` miss.
-  vLLM refuses the step's `tool_choice: 'auto'` with a 400 saying "auto" tool choice
-  requires `--enable-auto-tool-choice` and `--tool-call-parser` (in its source), and
-  OpenRouter, per a third-party report, with a 404 saying no endpoints support tool
-  use. llama.cpp's `tool_choice param requires --jinja flag`
-  holds a keyword but answers 500, outside the hint's 4xx range, and only under
-  `--no-jinja`. Suggested: `tool choice` and `tool use` join the matched words, with
-  canon's `CapabilityHint` union, when this slice's hint test runs. Surfaced by
-  Slice 5.4's slice review; routed from triage 2026-11-07.
-- **Gate `/dev` once the chapter-close route goes?** `app/dev/_layout.tsx` has no
-  `__DEV__` gate, only the Settings button to the dev index does, so every
-  `/dev/*` route ships in a release bundle. On Android `aventuras://dev/<route>`
-  reaches them (by the `app.json` scheme; not run on a device); Electron registers
-  no protocol. Each destructive action needs a press: `reseed` throws in release,
-  `probe-captures` deletes on a button, and `chapter-close` starts a real close.
-  Slice 5.2 left that route ungated because E2E runs with `__DEV__` false, and this
-  slice deletes it. Suggested: then gate the layout with a redirect home, pinned by
-  an E2E that opens `/dev/reseed`. A deep link is also a push, which the
-  story-leave guard doesn't see, so one into another story skips the guard that
-  cancels runs (reasoned, not run on a device). Routed from triage 2026-11-07.
-- **One button that shows its disabled reason on native?** `ReasonTooltip` does
-  nothing on native, so `ChapterCard`'s action row (off phone),
-  `ChapterInProgressCard`'s `Close chapter…` (always, since it is always disabled
-  today) and the reader popover's `OverlayAction` each render the reason as muted
-  text under the `Button`, with different alignment and conditions. This slice
-  re-gates the last two and adds the close modal's `Close chapter`, "disabled with
-  the gate's reason", a fourth copy; once `Close chapter…` can be enabled, the
-  in-progress card's block would show a reason under an enabled button. Canon
-  doesn't say what a disabled reason does on native. Suggested: one shared compound
-  landed with the modal, its line shown only while disabled. Whether every disabled
-  button does the same belongs to
-  [M9's `disabledReason` pass](../../../roadmap.md#m9--storybook--per-surface-visual-polish--ship-gate).
-  Surfaced by Slice 5.7's slice review; routed from triage 2026-11-07.
-- **May an automatic close end on the newest reply?** Phase 1 keeps the newest
-  reply out of the candidates, since regenerating it would reverse the whole close.
-  But with no candidate it falls back to the head when the open region holds a
-  single reply (`fallbackChapterEnd` in `lib/chapters/fallback-chapter-end.ts`,
-  from `closeBoundaryPhase`), and a low threshold makes that routine. It also
-  makes the first two Accepted residue cases in
-  [`chapter-close.md → Failure modes and atomic rollback`](../../../../memory/chapter-close.md#failure-modes-and-atomic-rollback)
-  routine. A redo under a close at the head can leave duplicates in its closed
-  range that 3e never revisits. An edit of the head entry under a committed close
-  keeps the writes the close derived from the replaced prose. Default: as shipped,
-  with the residue accepted. The other option owes no automatic close until the
-  open region holds a second reply, so the close waits a turn and ends before the
-  newest reply. Routed from Slice 5.12's slice review.
-- **Does the Android measure run one close on a grown window?** The sliding
-  reader window's acceptance asked for a close's stamps on a grown window, and
-  no close could be started there by hand, so it never ran
-  ([5.3 → Re-measured with the sliding window](./03-reader-chapters.md#re-measured-with-the-sliding-window)).
-  On the Fold's 60-chapter window grown to its first row, each store change held
-  the host about 1.1 s
-  ([parked](../../../../parked.md#a-store-changes-host-cost-grows-with-the-loaded-window)).
-  A close writes its stamps as one group, whose store patches go out in one
-  synchronous loop, so it should cost about one change (read from the code); if
-  that time is paid per store write rather than per render, it is about 133.
-  Owed closes already run before a turn, so a long story meets this before this
-  slice's button does. Default: yes, one close on `pnpm db:seed:long` at 60
-  chapters with the reader grown, on the Fold's release build, against
-  [5.2's bar](./02-first-chapter.md#implementation-notes): no JS-thread stall
-  over 500 ms and no gap between the document's paints over 500 ms. A miss goes
-  to the developer and reopens the parked entry. Routed from the sliding reader
-  window's Fold measure, 2026-11-16 (developer decision).
-- **A fact for the planner, not a question.** If the host ever reads a run's result:
-  `completed` can be the catch-up pass alone (a late Cancel after its last phase, or
-  the open story leaving the branch), with no close run and the pick still owed.
-  Surfaced by Slice 5.6's review.
+None open: Implementation notes record each answer.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **One slice, two stacked PRs (developer decision at slice
+  planning).** PR 1 carries the flag, pre-flight, copy, start, Phase 1
+  and its mock; PR 2 the modal, entry points, dev-route removal, E2E,
+  proofs and canon. CodeRabbit's 100-file cap made the cut: a split
+  frees no dependency edge, since 5.13 needs both the `toolCalling`
+  pre-flight and the modal host. The plan came to 23 tasks, 9 in PR 1
+  and 14 in PR 2, the proofs last.
+- **`Close chapter here` opens the modal with the end picked (developer
+  decision).** Canon's "clicking pre-flights" moved to the modal's
+  confirm, so four triggers share one confirm path, with the token
+  count and the guard. The glyph is Lucide `SeparatorHorizontal`, before
+  delete: `Flag` is the faction kind's glyph, and one glyph keeps one
+  meaning.
+- **Boundary's output bound and fallback (developer decision).** The
+  boundary call sends 8,000 max output when the resolved settings, the
+  story override's own or else the profile's, set none, and a cut-off
+  reports what was sent. A `reply-cut-off` is an unusable reply, like a
+  parse failure after the retry, and an unusable reply ends the chapter
+  on the latest candidate, the newest reply whose running total is at
+  most 1.5× the threshold, else on `fallbackChapterEnd`. A departure
+  from canon's plain fallback, which would end one oversized chapter on
+  a region auto-close met late, a lowered threshold or a deleted chapter
+  left behind; in the usual case both pick the same entry. Metadata
+  keeps no default, since its cut-off fails the close, while
+  boundary's loses nothing. Canon now says so in `chapter-close.md`
+  (Phase 1's Validation, the failure table) and
+  `generation-pipeline.md → Cut-off replies`.
+- **`toolCalling` detection writes both values (developer decision).** A
+  catalog that publishes the flag replaces the stored one, as
+  `contextWindow` does, and one that doesn't keeps it, in place of the
+  brief's "stored wins". OpenRouter's `supported_parameters` carries it
+  on every row (411 of 474 included `tools` on 2026-11-17) and refuses a
+  tool request to the others with a 404, so a detected `false` moves a
+  mid-close failure to pre-flight; nothing in the app writes the flag
+  before M7.1. Detection reads OpenRouter's `supported_parameters` and
+  Mistral's `capabilities.function_calling`. NanoGPT publishes
+  `capabilities.tool_calling` only under `?detailed=true`, which the
+  fetch doesn't send, so its models stay unknown, and the dev llama.cpp
+  router publishes nothing. The survey read the rest too: OpenAI's rows
+  hold `id`, `created`, `object` and `owned_by`, and Anthropic's
+  `capabilities` has no client-tool key. Google's OpenAI-compatible
+  endpoint, vLLM, LM Studio, Ollama and NVIDIA NIM publish nothing about
+  tools on `/models`, Google, vLLM, LM Studio and NIM by their docs'
+  silence rather than a published schema.
+- **The tool-calling hint's words (developer decision).** `tool choice`
+  and `tool use` joined `tool_choice` and `tools`, for vLLM's 400 and
+  OpenRouter's 404, with `generation-pipeline.md → Fatal error
+categories` and its `CapabilityHint` union.
+- **The proofs' bars (developer decision).** The probe gained a boundary
+  arm, `PROBE_BOUNDARY=1`, whose bar is 8 valid picks of 10 with none
+  cut off. The seven-task bar is by kind: every task, no failed close
+  and no unrecovered 8k cut-off; Identity, Threads, Lore and Upkeep land
+  a write when they had a start; Happenings reads `no-start` on MiniLM;
+  Lifecycle and Awareness are reported, with no write required; 8 of 10
+  runs pass, and 5.5b's cap and merge coverage clauses stand. A task had
+  a start when it made a model step, a call or a stop. The reversal bar
+  is no JS-thread stall over 500 ms on the Fold's release build, for
+  CTRL-Z and redo of a full close group, wall time reported. The stall
+  meter, `startStallMeter` in `lib/diagnostics`, is committed, so 5.13
+  reuses it.
+- **A pick a reversal stamps is dropped (developer decision).**
+  `dropRemovedPick` drops a pick whose entry is gone, stamped into a
+  chapter or no longer a reply a chapter can end on, so a redo that
+  restores the chapter the user picked costs no failed Send. Canon's
+  "a reversal that removes the entry" gained "or closes it" in
+  `generation-pipeline.md` and `chapter-close.md`.
+- **Withdrawing a manual close, and redo after a dropped pick, stay as
+  5.6 shipped them (developer decision).** Cancel defers the pick. A
+  pick dropped by CTRL-Z of its turn stays dropped after redo, folded
+  into `parked.md → The deferral toast can promise a close that never
+runs`: the deferral toast tells the user, and CTRL-Z of the turn a
+  pick ends on reads as a change of mind.
+- **An automatic close ending on the newest reply stays as shipped
+  (developer decision),** with canon's accepted residue standing: after
+  the latest-candidate fallback it needs a region whose one reply is the
+  head, which a realistic threshold doesn't produce.
+- **No further gates on the four triggers (developer decision).**
+  `canClose` hides the Actions menu's entry and disables the popover's
+  and card's with a reason; the run gate disables all of them with the
+  uniform reason. A held branch reaches `startManualClose`'s refusal
+  toast, and a deferred owed close opens the modal, where a new pick
+  replaces it.
+- **`Ready to close` is a text label (developer decision),** in the
+  popover's progress row and on `ChapterInProgressCard`'s progress
+  line, and the strip's ≥ 90% line in `reader-composer.md` gained its
+  auto-close-off reading. It sits inside the counts line after a `·`,
+  not on a line of its own: a text-width sibling loses its last word on
+  Android ([the lesson](../../../lessons-learned/android-text-subpixel-wrap.md)).
+- **`/dev` is gated in release (developer decision):**
+  `app/dev/_layout.tsx` redirects home outside `__DEV__`, pinned by
+  `dev-gate.spec.ts`, and `first-chapter.spec` moved onto
+  `Close chapter here`.
+- **A failed click pre-flight writes the system entry and toasts,**
+  with no rerun promise, through `raiseSystemEntry`, which carries a
+  standing entry's held text and patches a loaded branch's store. From
+  World, Plot, Story Settings or the Timeline the entry is off screen.
+- **The click's entry keeps its pick, and its Retry re-runs it
+  (developer decision, 2026-11-17).** The entry written for a failed
+  click pre-flight carries `systemFailure.closePick`, the confirmed end
+  entry. Its `Retry` re-runs that pick through the manual start,
+  pre-flighting again: a second pre-flight failure rewrites the entry
+  with the same pick, and a chain that ran settles as a close's `Retry`
+  does. An entry without `closePick` keeps `runOwedClose`. The click
+  records no pick by design, so `runOwedClose` would have settled as
+  "Nothing left to close", or run a threshold close the user didn't
+  pick. Canon's `Fix profile · Retry · Dismiss` row stands;
+  `reader-composer.md → Transient pipeline failures` and
+  `data-model.md → Entry metadata shape` say so.
+- **A stale pick settles on Retry as nothing left to close (developer
+  decision, 2026-11-18).** A failed click's entry whose pick can no
+  longer end a chapter, closed into one or deleted, settles on Retry as
+  **Nothing left to close** through today's path and copy. Other
+  refusals keep the refusal arm. It doesn't clear a deferred owed close:
+  a stale pick says nothing about whether a threshold close is owed.
+- **The close modal's start row and picker trigger take two lines on
+  phone (developer decision, 2026-11-18).** Ref and tag on the first,
+  snippet and the right-aligned time on the second; at 320 px the tag
+  drops whole below the ref. Tablet and desktop keep one line, and the
+  dropdown items keep their anatomy, their head wrapping whole at the
+  narrowest widths. Canon's Mobile expression is updated.
+- **The copy split is narrower than the brief.** Only
+  `CLOSE_RESOLVER_COPY` and `FIX_LABEL` are keyed by `ConfigFailureKind`;
+  the turn, pass and suggestion records stay keyed by
+  `ResolveFailureKind` and read `'tool-calling-off'` as their generic
+  line, since that failure fires only on a close.
+- **Already shipped, so no task:** `openCloseModal`'s guard-first
+  behaviour and its store test (5.11), the reader's inline-edit guard
+  as the registered surface (#751), and the close tool-calling hint
+  test. AC10's second half and AC11's store half rest on them.
+- **One helper for a bounded structured call.**
+  `boundedStructuredCall` in `lib/pipeline` landed with boundary as its
+  third caller; the metadata call and the periodic pass moved onto it.
+  The shared `ResolveModelConfig` builder went to `triage.md`.
+- **Unspent scripted steps fail a spec.** The harness's `close()`
+  rejects while a lane still holds steps, naming it, unless the lane was
+  set `{ mayEndEarly: true }`; a held call the app drops takes no step.
+  The owed spec holds its CTRL-Z and Cancel cases at the first tool
+  lane, after the metadata write, and asserts the chapter row exists
+  while held, so its "no chapter, no `chapter_close` delta" can fail.
+- **A disabled reason shows on native through one compound,**
+  `ReasonButton`, in the modal's `Close chapter`, the in-progress card
+  and the popover's action. Whether every disabled button does the same
+  stays with M9's `disabledReason` pass.
+- **The EntryCard head's clearance follows its actions:** `pr-28` up to
+  four, `pr-36` for five, `pr-44` for six, so the cluster's width at
+  390 px is settled in code and M6's branch or M7.2's flip era needs no
+  new rule. The reader's open-region reply shows four today: edit,
+  regenerate, `Close chapter here`, delete.
+- **The modal opens above a dismissing Sheet.** Its `Dialog` renders on
+  `ABOVE_SHEETS_PORTAL_HOST`, so opened from the Actions Sheet it never
+  draws under that Sheet as it closes; the popover's action runs from
+  its Sheet's dismiss.
+- **Boundary's system half gained a sentence in review.** "The chapter
+  ends with the turn you pick and the next chapter opens with the turn
+  after it, so where a listed turn opens on a new scene or after a time
+  skip, end on the listed turn before it; if none is listed before it,
+  choose among the others." The picked turn closes the chapter, so a
+  turn that opens a new scene isn't the pick. The boundary probe's
+  cut-off run 5 spent its reasoning deliberating that rule.
+- **`firstLastSentences` is tougher than its first cut.** It merges
+  letterless pieces (French `»`, a bare ellipsis) into the sentence
+  before, takes `“` and `«` as closers, uses a lookbehind against
+  quadratic backtracking, and caps at a word ending exactly at the cap.
+- **`thresholdMet` in `lib/chapters` is the one threshold test,** for
+  the automatic close and for the `Ready to close` label.
+- **`preflightSnapshot` builds the pre-flight snapshot for both the run
+  and the click** (PR 1's review), and `startPickedCloseChain` shares
+  the manual start's composition with the click entry's Retry.
+- **The stall meter logs a tail beside the longest gap.** `tailGapMs`,
+  a second meter over 250 ms after the reversal resolves, sits beside
+  `longestGapMs`, because default-priority renders land after the
+  promise resolves.
+- **`chapter-close-starts` is split by describe** into `-menus`,
+  `-inline` and `-guards` (`testing.md → Workers`), with the shared
+  starts in `e2e/flows/close-start.ts`.
+- **Monitor items.**
+  - End entries that moved: none. Task 9's chapter E2E specs passed
+    unchanged. One existing spec changed, for the reason the plan
+    explains: `periodic-classifier-gated.spec.ts` now counts two gated
+    actions on an off-head reply, the edit and `Close chapter here`.
+  - The re-pin after a close under World or Plot: didn't fire. A
+    throwaway spec held the close's Awareness lane, moved to World and
+    to Plot, and released it: the reader returned at the tail, with no
+    jump button.
+  - The dirty-and-busy trace: didn't fire, in the guard specs and the
+    desktop smoke.
+  - Two closes in one turn: didn't fire. `chapter-close-auto` sees one
+    `chapter-close` run.
+  - The native guard's round trip: not measured with an editor open.
+    The Android smoke opened the modal after the Sheet dismissed, in
+    about 3 s, with no editor.
+  - The `Fix profile` route for `'tool-calling-off'`: the copy names the
+    working remedies, as designed.
+  - The grown-window measure: pending on the Fold.
+
+### Seven-task measure
+
+Bar: the proofs' bar above, set at planning.
+`PROBE_RUNS=10 PROBE_OVERLAY=1 pnpm probe:close` at `5f49358e1` on
+`Gemma4-26B-A4B-QAT-MTP` (window 65,536 tokens, read from `/v1/models`),
+on the dataset seed with the test overlay.
+
+| Run | Happenings | Lore             | Identity         | Threads | Upkeep                   | Lifecycle | Awareness | Steps                   | Tokens in / out    | Wall time | Report size  |
+| --- | ---------- | ---------------- | ---------------- | ------- | ------------------------ | --------- | --------- | ----------------------- | ------------------ | --------- | ------------ |
+| 1   | no-start   | held             | held             | held    | held                     | held      | held      | 2 / 3 / 2 / 3 / 5 / 1   | 565,973 / 38,507   | 566.5 s   | 15,617 bytes |
+| 2   | no-start   | held             | held             | held    | held                     | held      | held      | 2 / 2 / 2 / 3 / 7 / 4   | 672,389 / 53,522   | 714.4 s   | 16,414 bytes |
+| 3   | no-start   | missed: no write | held             | held    | missed: no write         | held      | held      | 2 / 15 / 2 / 1 / 8 / 1  | 978,488 / 32,706   | 487.3 s   | 9,849 bytes  |
+| 4   | no-start   | held             | held             | held    | missed: stopped (budget) | held      | held      | 2 / 2 / 7 / 24 / 2 / 1  | 1,305,829 / 29,104 | 439.9 s   | 10,667 bytes |
+| 5   | no-start   | held             | held             | held    | held                     | held      | held      | 2 / 14 / 2 / 20 / 4 / 3 | 1,504,717 / 29,308 | 458.3 s   | 15,334 bytes |
+| 6   | no-start   | held             | held             | held    | missed: stopped (budget) | held      | held      | 2 / 5 / 6 / 24 / 2 / 2  | 1,507,712 / 52,471 | 727.5 s   | 14,134 bytes |
+| 7   | no-start   | held             | missed: no write | held    | missed: stopped (budget) | held      | held      | 2 / 10 / 4 / 24 / 2 / 5 | 1,688,416 / 52,762 | 720.0 s   | 8,776 bytes  |
+| 8   | no-start   | held             | held             | held    | held                     | held      | held      | 3 / 2 / 6 / 17 / 6 / 3  | 1,238,330 / 43,958 | 613.8 s   | 13,173 bytes |
+| 9   | no-start   | held             | held             | held    | held                     | held      | held      | 3 / 3 / 2 / 3 / 3 / 3   | 522,336 / 39,088   | 551.9 s   | 13,354 bytes |
+| 10  | no-start   | held             | held             | held    | held                     | held      | held      | 2 / 20 / 7 / 20 / 2 / 1 | 1,868,898 / 43,143 | 603.4 s   | 19,256 bytes |
+
+Steps list the model steps of Lore, Identity, Threads, Upkeep, Lifecycle
+and Awareness in that order; Happenings had no start in any run.
+
+Verdict: `bar: 6 of 10 runs passed; a cap reached in 8 runs, merge_threads
+called in 10: missed`. Eight-k cut-offs, each recovered by the retry: run 1
+once, run 2 twice, run 6 twice, run 7 once, run 8 once, run 10 once. The
+largest report value is 215 characters (`update_character`
+`state.traits`, run 10), and the largest report 19,256 bytes (run 10).
+Saved at `~/.cache/aventuras-measure/m5-10/probe-20261118T061707Z`.
+
+The transcripts, read by hand:
+
+- Upkeep's three budget stops come from the 24-step budget against about
+  40 rows when the model emits one call per step: 6 of 10 runs went
+  serial, and the batched runs finished in 3 steps. Runs 4 and 6 landed
+  13 writes before the stop.
+- Run 7's Upkeep looped `update_item` on an invented id.
+- Run 3's Lore sent `turns: [true]`, was rejected and gave up. Its
+  Upkeep wrote its calls as text, with no tool calls.
+- Run 7's Identity sent arrays as JSON strings seven times.
+
+The bar code fails a task with a recorded stop even after landed writes.
+Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
+The merge decision on this miss is the developer's, pending at writing.
+
+### Boundary measure
+
+`PROBE_RUNS=10 PROBE_BOUNDARY=1 pnpm probe:close` at `5f49358e1` on
+`Gemma4-26B-A4B-QAT-MTP`, over the dataset chapter's region at the
+story's 24,000 threshold: 34 candidates, a prompt of 2,492 tokens.
+
+| Run | Outcome       | Ends on (position) | Latest candidate (position) | Largest reply (output tokens) | Wall time | Tokens in / out |
+| --- | ------------- | ------------------ | --------------------------- | ----------------------------- | --------- | --------------- |
+| 1   | picked        | 117                | 131                         | 4,346                         | 53.8 s    | 2,492 / 4,346   |
+| 2   | picked        | 131                | 131                         | 4,646                         | 55.1 s    | 2,492 / 4,646   |
+| 3   | picked        | 131                | 131                         | 5,188                         | 62.8 s    | 2,492 / 5,188   |
+| 4   | picked        | 93                 | 131                         | 5,608                         | 66.2 s    | 2,492 / 5,608   |
+| 5   | reply-cut-off | 131                | 131                         | 8,000                         | 91.9 s    | 2,492 / 8,000   |
+| 6   | picked        | 131                | 131                         | 4,237                         | 48.3 s    | 2,492 / 4,237   |
+| 7   | picked        | 131                | 131                         | 4,942                         | 60.5 s    | 2,492 / 4,942   |
+| 8   | picked        | 131                | 131                         | 4,276                         | 51.9 s    | 2,492 / 4,276   |
+| 9   | reply-cut-off | 131                | 131                         | 8,000                         | 96.3 s    | 2,492 / 8,000   |
+| 10  | reply-cut-off | 131                | 131                         | 8,000                         | 97.7 s    | 2,492 / 8,000   |
+
+Verdict: `boundary: 7 of 10 runs picked a candidate, 3 cut off: missed`.
+Run 2's reasoning reads "23,907 tokens so far; a chapter runs about
+24,000" as the chapter ending now and takes the last candidate; run 5
+spent its 8,000 deliberating the end-on-the-turn-before rule. The merge
+decision on this miss is the developer's, pending at writing.
+
+### Reversal measure
+
+Bar: no JS-thread stall over 500 ms on the Fold's release build, for
+CTRL-Z and for redo of the full close group; wall time is reported. On
+the dataset branch, its seed's close, timed by `startStallMeter` around
+`undoLastAction` and `redoLastAction` alone, never the confirm.
+
+| Platform, build                                                            | CTRL-Z wall / longest stall (2 runs)       | Redo wall / longest stall (2 runs)          |
+| -------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------- |
+| Desktop production bundle, Linux x86_64, kernel 7.2.6-arch2-1, `f0c98545c` | 387 / 98 ms and 332 / 92 ms (tails 54, 29) | 191 / 101 ms and 177 / 98 ms (tails 35, 29) |
+
+The group was the dataset seed's close: "1 lore row removed, 35 other
+changes reversed". A tail is `tailGapMs`, the longest gap in the 250 ms
+after the reversal resolves.
+
+Fold release build. Pending: runs on PR 2 before merge, and its bar
+decides the merge.
+
+### Grown-window close measure
+
+Bar, 5.2's: no JS-thread stall over 500 ms and no gap between the
+reader document's paints over 500 ms over one close on
+`pnpm db:seed:long`'s 60-chapter branch with the reader grown to its
+first chapter, on the Fold's release build. The branch's open region
+holds 14 entries and no entities.
+
+Pending: runs on PR 2 before merge, and its bar decides the merge.
