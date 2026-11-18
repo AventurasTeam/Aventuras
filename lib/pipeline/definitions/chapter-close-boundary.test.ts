@@ -420,6 +420,14 @@ const NEWEST_IN_RANGE = [
   { ...sized('e5', 5, 'ai_reply', 140), content: 'The newest reply ends at the toll house.' },
 ]
 
+// Totals e3 240, e5 400, e7 480: e7 sits inside the bounds but is the newest, so e3 and e5 (t1, t2).
+const TWO_BEFORE_NEWEST = [
+  ...NEWEST_IN_RANGE.slice(0, 4),
+  sized('e5', 5, 'ai_reply', 140),
+  sized('e6', 6, 'user_action', 20),
+  { ...sized('e7', 7, 'ai_reply', 60), content: 'The newest reply ends at the toll house.' },
+]
+
 const USAGE = {
   inputTokens: {
     total: undefined,
@@ -595,15 +603,25 @@ describe('closeBoundaryPhase over candidates', () => {
 })
 
 describe('closeBoundaryPhase — the newest reply', () => {
-  it('never offers it, though it sits inside the bounds', async () => {
+  // Every usable answer would name the one candidate, so a call could only fail the close.
+  it('leaves one candidate before it, ending there with no model call', async () => {
     openBranch({ chapterTokenThreshold: THRESHOLD })
     hydrateEntries(phaseDb, 'b1', NEWEST_IN_RANGE)
+    scriptModel([])
+    await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId: 'e3' })
+    expect(getModel).not.toHaveBeenCalled()
+  })
+
+  it('is never offered beside two candidates, which make the call', async () => {
+    openBranch({ chapterTokenThreshold: THRESHOLD })
+    hydrateEntries(phaseDb, 'b1', TWO_BEFORE_NEWEST)
     const model = scriptModel([{ text: reply('t1') }])
     const log = spyLogger()
     await expectEndsOn(phaseCtx({ log }), { startEntryId: 'e1', endEntryId: 'e3' })
+    expect(model.doGenerateCalls).toHaveLength(1)
     expect(log.debug).toHaveBeenCalledWith(
       'memory.close_boundary_picked',
-      expect.objectContaining({ endEntryId: 'e3', candidates: 1 }),
+      expect.objectContaining({ endEntryId: 'e3', candidates: 2 }),
     )
     expect(sentUser(model)).not.toContain('The newest reply ends at the toll house.')
   })

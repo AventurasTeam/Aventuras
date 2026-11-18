@@ -395,7 +395,9 @@ A chapter ends only on an `ai_reply`, so a candidate is a reply. A
 `system` entry deletes with no delta and would strand the anchor, the
 `opening` is the rollback floor, and a `user_action` splits a turn. With
 no candidate, the latest reply in the open region before the head is the
-end, with no model call, else the head if it's a reply. A region with no
+end, with no model call, else the head if it's a reply. With one, that
+candidate is the end, with no call either: every usable answer would name
+it, so a call could only fail the close. A region with no
 reply owes no close
 ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)).
 
@@ -985,7 +987,7 @@ that removes its end entry or closes it into a chapter.
 | Phase                      | Failure mode                                                                                                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                                                             |
-| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable or cut-off reply ends on the latest candidate. A region with no candidate makes no call and ends on the latest reply before the head. |
+| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable or cut-off reply ends on the latest candidate. No call with a single candidate (the end), or none (the latest reply before the head). |
 | **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                                                                                                      |
 | **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close, as does a code step's refused group.                                            |
 | **4** (lifecycle review)   | As phase 3.                                                                                                                                                                          |
