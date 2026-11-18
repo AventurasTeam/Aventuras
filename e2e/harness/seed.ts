@@ -287,6 +287,31 @@ export function setChapterTokenThreshold(dbPath: string, storyId: string, tokens
   setStorySetting(dbPath, storyId, 'chapterTokenThreshold', tokens)
 }
 
+// Story Settings → Chapter close's auto-close switch. Runs before launch.
+export function setChapterAutoClose(dbPath: string, storyId: string, on: boolean): void {
+  setStorySetting(dbPath, storyId, 'chapterAutoClose', on)
+}
+
+/**
+ * Flag `modelId` as able or unable to call tools on every provider that caches it, as a catalog's
+ * detection would (architecture.md → Detection). Throws when none caches it: the flag would stay
+ * unknown, which runs, and a spec waiting on a refusal would time out. Runs before launch.
+ */
+export function setToolCalling(dbPath: string, modelId: string, value: boolean): void {
+  updateProviders<{ cachedModels?: { id: string; capabilities?: Record<string, unknown> }[] }>(
+    dbPath,
+    (providers) => {
+      const models = providers.flatMap((provider) =>
+        (provider.cachedModels ?? []).filter((model) => model.id === modelId),
+      )
+      if (models.length === 0) {
+        throw new Error(`cannot set ${modelId}'s toolCalling: no provider caches it`)
+      }
+      for (const model of models) model.capabilities = { ...model.capabilities, toolCalling: value }
+    },
+  )
+}
+
 // Story Settings → Classifier's "Create mentioned places" switch. Runs before launch.
 export function setClassifierMentionedPlaces(dbPath: string, storyId: string, on: boolean): void {
   setStorySetting(dbPath, storyId, 'classifierMentionedPlaces', on)

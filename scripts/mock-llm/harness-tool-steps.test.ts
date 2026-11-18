@@ -560,3 +560,57 @@ describe('startMockLlm — tool lanes', () => {
     expect(llm.requests).toHaveLength(2)
   })
 })
+
+// A spec scripted under a stale tool list would otherwise close with no writes and pass.
+describe('startMockLlm — unspent tool steps', () => {
+  it('rejects close() once, naming each lane that still holds steps and how many', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [readRow('c1'), readRow('c2'), readRow('c3')])
+    llm.setToolSteps(['write_row'], [{ text: 'Never asked for.' }])
+    okStep(await step(config))
+
+    await expect(llm.close()).rejects.toThrow(
+      'mock harness: scripted tool steps left unspent: tools:read_row+write_row (2 left), tools:write_row (1 left)',
+    )
+    expect(await accepting(llm)).toBe(false)
+    await expect(llm.close()).resolves.toBeUndefined()
+  })
+
+  it('resolves close() once every scripted step was taken', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [readRow('c1')])
+    okStep(await step(config))
+
+    await expect(llm.close()).resolves.toBeUndefined()
+  })
+
+  it('lets a lane set with mayEndEarly close with steps left', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [readRow('c1'), readRow('c2')], { mayEndEarly: true })
+    okStep(await step(config))
+
+    await expect(llm.close()).resolves.toBeUndefined()
+  })
+
+  it('holds a lane to its steps again when a later setToolSteps leaves the option out', async () => {
+    const llm = await started()
+    llm.setToolSteps(NAMES, [readRow('c1')], { mayEndEarly: true })
+    llm.setToolSteps(NAMES, [readRow('c2')])
+
+    await expect(llm.close()).rejects.toThrow(
+      'mock harness: scripted tool steps left unspent: tools:read_row+write_row (1 left)',
+    )
+  })
+
+  it('reports a scripted throw ahead of the steps it left unspent', async () => {
+    const llm = await started()
+    const config = registerHarness(llm)
+    llm.setToolSteps(NAMES, [thrower('the spec broke'), readRow('c2')])
+    expect(await step(config)).toMatchObject({ status: 'failed' })
+
+    await expect(llm.close()).rejects.toThrow('the spec broke')
+  })
+})

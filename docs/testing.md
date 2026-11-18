@@ -583,8 +583,15 @@ too; with both pending, the one that came first is rethrown
 (`e2e/harness/mock-llm.ts`). A `setStructured` value JSON can't hold
 fails its call the same way. An empty queue answers the empty
 step, `{}`: no calls, empty text and `stop`, which ends a task with no
-writes, so a spec that scripts nothing writes nothing. A tool call's
-`MockRequest.agent` is its lane key, and `holdNextStructured`,
+writes, so a spec that scripts nothing writes nothing. The reverse fails
+loudly: `close()` rejects, once it has answered every held call, while a
+lane still holds steps, naming each lane and how many it has left, since
+a spec scripted under a stale tool list would otherwise close with no
+writes and pass. A lane whose task may stop before its last step is set
+with `{ mayEndEarly: true }` and left out, and a scripted throw is
+reported ahead of the unspent lanes. A tool call's
+`MockRequest.agent` is its lane key, which a spec builds with the
+harness's `toolLaneKey`, and `holdNextStructured`,
 `cutNextStructured` and `overflowNextStructured` take one: a held call
 takes its step at release, and a cut or an overflow answers without
 taking one, leaving it for the next call.
