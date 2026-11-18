@@ -6,7 +6,7 @@ import { FixtureDb, queryApp, queryScalar, OPEN_REGION_FROM } from '../harness/d
 import { installEmbedderModel } from '../harness/embedder'
 import { copyNumber, copyPattern, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { startMockLlm, type MockLlm } from '../harness/mock-llm'
+import { startMockLlm, toolLaneKey, type MockLlm } from '../harness/mock-llm'
 import {
   createSeededUserDataDir,
   removeUserDataDir,
@@ -24,6 +24,10 @@ const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
 // The harness keys structured calls by STRUCTURED_SHAPES name.
 const METADATA = 'chapter-metadata'
+// The close's first tool lane on this fixture, by PRODUCTION_CLOSE_SLOTS' order: the open region
+// anchors one happening, so the range embed forms no cluster and Happenings has no start, while
+// Lore starts on any turn. Held there, a close has written its chapter row and stamps.
+const LORE_LANE = toolLaneKey(['read_row', 'create_lore', 'update_lore'])
 const CHAPTER = {
   title: 'The Satchel at the Gate',
   summary: 'Kael hands the courier’s satchel to the gatekeeper and asks for the north road.',
@@ -118,15 +122,19 @@ function closeProbe(hero: () => Hero) {
       [branch, logPosition],
     )
 
-  // The open region's first row and latest reply, read before a turn: a close with no pick after
-  // that turn ends on the reply before the head, so here, and the turn stays open.
-  async function rangeBeforeTurn(branch: string): Promise<{ start: string; end: string }> {
+  // The open region before a turn: its first row, its latest reply, and how many rows a close
+  // ending there stamps. A close with no pick after that turn ends on that reply, and the turn
+  // stays open.
+  async function rangeBeforeTurn(
+    branch: string,
+  ): Promise<{ start: string; end: string; rows: number }> {
     const rows = (await queryApp(page(), `SELECT id, kind ${OPEN_REGION_FROM} ORDER BY position`, [
       branch,
     ])) as [string, string][]
     const replies = rows.filter(([, kind]) => kind === 'ai_reply')
     expect(replies.length, 'the open region holds a reply to end on').toBeGreaterThan(0)
-    return { start: rows[0][0], end: replies[replies.length - 1][0] }
+    const end = replies[replies.length - 1][0]
+    return { start: rows[0][0], end, rows: rows.findIndex(([id]) => id === end) + 1 }
   }
 
   const metadataCalls = (): number => mock().requests.filter((r) => r.agent === METADATA).length
@@ -140,6 +148,40 @@ function closeProbe(hero: () => Hero) {
       { kind: 'chapter-close', storyId: HERO_STORY, calls: metadataCalls },
       callsBefore,
     )
+
+  const loreCalls = (): number => mock().requests.filter((r) => r.agent === LORE_LANE).length
+
+  // The held close's action id, once its Lore call reached the mock past `callsBefore`.
+  const heldAtLore = (callsBefore: number) =>
+    heldRun(page(), { kind: 'chapter-close', storyId: HERO_STORY, calls: loreCalls }, callsBefore)
+
+  const stampedBy = (branch: string, chapterId: string): Promise<number> =>
+    queryScalar(
+      page(),
+      `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND chapter_id = ?`,
+      [branch, chapterId],
+    )
+
+  // The chapter a held close wrote, by number (C8): its end, its stamps and its run's deltas.
+  async function heldChapter(
+    branch: string,
+    sequenceNumber: number,
+    actionId: string,
+  ): Promise<{ id: string; endEntryId: string; stamped: number; deltas: unknown[][] }> {
+    const rows = (await queryApp(
+      page(),
+      `SELECT id, end_entry_id FROM chapters WHERE branch_id = ? AND sequence_number = ?`,
+      [branch, sequenceNumber],
+    )) as [string, string][]
+    expect(rows, `one chapter numbered ${sequenceNumber}`).toHaveLength(1)
+    const [id, endEntryId] = rows[0]
+    const deltas = await queryApp(
+      page(),
+      `SELECT target_table, op FROM deltas WHERE branch_id = ? AND action_id = ? ORDER BY log_position`,
+      [branch, actionId],
+    )
+    return { id, endEntryId, stamped: await stampedBy(branch, id), deltas }
+  }
 
   // The branch's system entries as the reader persisted them: Retry reads `close` back.
   async function systemEntries(branch: string): Promise<unknown[][]> {
@@ -181,6 +223,10 @@ function closeProbe(hero: () => Hero) {
     metadataCalls,
     streamedCalls,
     heldClose,
+    loreCalls,
+    heldAtLore,
+    stampedBy,
+    heldChapter,
     systemEntries,
     systemEntryIds,
     closeFailureToast,
@@ -391,7 +437,7 @@ test.describe('chapter close owed — a close that fails', () => {
 })
 
 // reader-composer.md → During a memory update: the banner's Cancel moves a close to the next turn,
-// and that Send runs it first under its own label.
+// reversing what it wrote, and that Send runs it first under its own label.
 test.describe('chapter close owed — a close cancelled from the banner', () => {
   const hero = launchesHero()
   const {
@@ -407,42 +453,59 @@ test.describe('chapter close owed — a close cancelled from the banner', () => 
     chapterCount,
     openRegionTokens,
     threshold,
+    rangeBeforeTurn,
     metadataCalls,
     heldClose,
+    loreCalls,
+    heldAtLore,
+    stampedBy,
+    heldChapter,
     closeDeferralToast,
   } = closeProbe(hero)
 
-  test('the banner’s Cancel moves a chained close to the next turn, and Send runs it first', async () => {
+  test('the banner’s Cancel reverses a chained close past its chapter write and moves it to the next turn, and Send runs it first', async () => {
     test.setTimeout(150_000)
     const page = hero().app.window
     await openStory(page, HERO_TITLE)
     const branch = await branchId()
     const chaptersBefore = await chapterCount(branch)
+    const range = await rangeBeforeTurn(branch)
     expect(await openRegionTokens(branch), 'one token short, so nothing is owed yet').toBe(
       (await threshold()) - 1,
     )
 
-    let calls = metadataCalls()
-    hero().mock.holdNextStructured(METADATA)
+    const loreBefore = loreCalls()
+    hero().mock.holdNextStructured(LORE_LANE)
     await send(
       'E2E-DEFER-U1 I hand the courier’s satchel to the gatekeeper.',
       'E2E-DEFER-R1 the gatekeeper weighs it and nods.',
     )
     await pollEntryId(branch, 'E2E-DEFER-R1')
-    const cancelled = await heldClose(calls)
-    await expect(memoryBanner.closingMetadata(page)).toBeVisible()
+    const cancelled = await heldAtLore(loreBefore)
+    await expect(memoryBanner.closingTask(page, 'lore')).toBeVisible()
+    // Held past the metadata group: C1's create and a stamp per entry, and nothing after them.
+    const held = await heldChapter(branch, chaptersBefore + 1, cancelled)
+    expect({ endEntryId: held.endEntryId, stamped: held.stamped }).toEqual({
+      endEntryId: range.end,
+      stamped: range.rows,
+    })
+    expect(held.deltas).toEqual([
+      ['chapters', 'create'],
+      ...Array.from({ length: range.rows }, () => ['story_entries', 'update']),
+    ])
     // Not Send's run: the composer offers no Cancel, so only the banner cancels it.
     await expect(reader.cancel(page)).toHaveCount(0)
     await memoryBanner.cancel(page).click()
     await expect(closeDeferralToast()).toBeVisible()
     await expect.poll(() => runOutcome(cancelled)).toBe('aborted')
-    // Held at its metadata call, it wrote nothing.
+    // The cancel reversed what the close had written.
     expect((await actionDeltas(cancelled)).count).toBe(0)
     expect(await chapterCount(branch)).toBe(chaptersBefore)
-    await expect(memoryBanner.closingMetadata(page)).toBeHidden()
+    expect(await stampedBy(branch, held.id)).toBe(0)
+    await expect(memoryBanner.closingTask(page, 'lore')).toBeHidden()
 
-    // The hold is one-shot: arm it again for the close this Send owes.
-    calls = metadataCalls()
+    // The hold is one-shot: arm one for the close this Send owes, at its metadata call.
+    const calls = metadataCalls()
     hero().mock.holdNextStructured(METADATA)
     await send(
       'E2E-DEFER-U2 I ask for the north road.',
@@ -473,7 +536,7 @@ test.describe('chapter close owed — a close cancelled from the banner', () => 
 })
 
 // generation-pipeline.md → Prose reversals and the interrupt: CTRL-Z of the turn passes a close
-// by interrupting it, and the turn reverses.
+// by interrupting it, the interrupt reverses what the close wrote, and the turn reverses.
 test.describe('chapter close owed — CTRL-Z of the turn during a close', () => {
   const hero = launchesHero()
   const {
@@ -488,33 +551,47 @@ test.describe('chapter close owed — CTRL-Z of the turn during a close', () => 
     threshold,
     logHead,
     closeDeltasAfter,
-    metadataCalls,
-    heldClose,
+    rangeBeforeTurn,
+    loreCalls,
+    heldAtLore,
+    stampedBy,
+    heldChapter,
   } = closeProbe(hero)
 
-  test('CTRL-Z of the turn interrupts the held close, which leaves no chapter and no delta', async () => {
+  test('CTRL-Z of the turn interrupts a close held past its chapter write, which leaves no chapter and no delta', async () => {
     test.setTimeout(120_000)
     const page = hero().app.window
     await openStory(page, HERO_TITLE)
     const branch = await branchId()
     const chaptersBefore = await chapterCount(branch)
     const head = await logHead(branch)
+    const range = await rangeBeforeTurn(branch)
     expect(await openRegionTokens(branch), 'one token short, so nothing is owed yet').toBe(
       (await threshold()) - 1,
     )
-    const calls = metadataCalls()
+    const calls = loreCalls()
 
-    hero().mock.holdNextStructured(METADATA)
+    hero().mock.holdNextStructured(LORE_LANE)
     await send(
       'E2E-UNDO-U1 I hand the courier’s satchel to the gatekeeper.',
       'E2E-UNDO-R1 the gatekeeper weighs it and nods.',
     )
     await pollEntryId(branch, 'E2E-UNDO-R1')
-    const interrupted = await heldClose(calls)
-    await expect(memoryBanner.closingMetadata(page)).toBeVisible()
+    const interrupted = await heldAtLore(calls)
+    await expect(memoryBanner.closingTask(page, 'lore')).toBeVisible()
+    // Held past the metadata group: C1's create and a stamp per entry, and nothing after them.
+    const held = await heldChapter(branch, chaptersBefore + 1, interrupted)
+    expect({ endEntryId: held.endEntryId, stamped: held.stamped }).toEqual({
+      endEntryId: range.end,
+      stamped: range.rows,
+    })
+    expect(held.deltas).toEqual([
+      ['chapters', 'create'],
+      ...Array.from({ length: range.rows }, () => ['story_entries', 'update']),
+    ])
 
     // CTRL-Z's touch-tier twin: the keyboard shortcut is inert while focus is in the composer. It
-    // names the turn, not the close the interrupt reverses on the way.
+    // names the turn: the running close heads the log, and the undo passes over it.
     const turnAt = await queryScalar(
       page,
       `SELECT position FROM story_entries WHERE branch_id = ? AND content LIKE 'E2E-UNDO-U1%'`,
@@ -533,6 +610,7 @@ test.describe('chapter close owed — CTRL-Z of the turn during a close', () => 
     expect((await actionDeltas(interrupted)).count).toBe(0)
     expect(await closeDeltasAfter(branch, head)).toBe(0)
     expect(await chapterCount(branch)).toBe(chaptersBefore)
-    await expect(memoryBanner.closingMetadata(page)).toBeHidden()
+    expect(await stampedBy(branch, held.id)).toBe(0)
+    await expect(memoryBanner.closingTask(page, 'lore')).toBeHidden()
   })
 })
