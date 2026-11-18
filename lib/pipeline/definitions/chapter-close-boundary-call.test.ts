@@ -127,6 +127,15 @@ const NETWORK = {
   reason: 'network',
   detail: 'ECONNRESET',
 } satisfies CallRetryError
+const OVER_WINDOW = {
+  tier: 'context-window',
+  detectedBy: 'check',
+  estimate: 9_000,
+  window: 8_192,
+  windowSource: 'configured',
+  providerId: PROVIDER.id,
+  modelId: 'm',
+} satisfies CallRetryError
 
 function thread(id: string, title: string, status: ThreadStatus, branchId = 'b1'): Thread {
   return {
@@ -379,6 +388,23 @@ describe('requestChapterBoundary — outcomes', () => {
       outcome: {
         status: 'failed',
         error: { kind: 'provider', reason: 'network', detail: 'ECONNRESET' },
+      },
+    },
+    {
+      name: 'a prompt over the context window fails',
+      result: { status: 'failed', error: OVER_WINDOW, recoverable: [] },
+      outcome: {
+        status: 'failed',
+        error: {
+          kind: 'context-window',
+          target: 'lore-mgmt',
+          detectedBy: 'check',
+          estimate: 9_000,
+          window: 8_192,
+          windowSource: 'configured',
+          providerId: PROVIDER.id,
+          modelId: 'm',
+        },
       },
     },
     {
