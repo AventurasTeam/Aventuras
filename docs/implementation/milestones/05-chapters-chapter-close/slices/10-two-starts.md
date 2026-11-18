@@ -405,8 +405,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
    non-candidate twice completes the phase on `fallbackChapterEnd`'s entry after
    two calls; a reply cut off falls back after one call; a provider failure returns
    `{ status: 'failed' }` and writes no range; an abort returns
-   `{ status: 'aborted' }`; with no profile max output the call sends 8000 (16,384 after the
-   2026-11-18 decision below), and a profile's value replaces it.
+   `{ status: 'aborted' }`; with no profile max output the call sends
+   8000 (16,384 after the 2026-11-18 decision below), and a profile's
+   value replaces it.
 3. The same file: `z.toJSONSchema` of the refined schema equals the plain one's,
    so a change to the wrapper fails here before the mock's match does.
 4. `scripts/mock-llm/shapes.test.ts` and `scripts/mock-llm/state.test.ts` pass
@@ -605,15 +606,15 @@ categories` and its `CapabilityHint` union.
 - **The proofs' bars (developer decision).** The probe gained a boundary
   arm, `PROBE_BOUNDARY=1`, whose bar is 8 valid picks of 10 with none
   cut off. The seven-task bar is by kind: every task, no failed close
-  and no unrecovered cut-off at the step output default; Identity, Threads, Lore and Upkeep land
-  a write when they had a start; Happenings reads `no-start` on MiniLM;
-  Lifecycle and Awareness are reported, with no write required; 8 of 10
-  runs pass, and 5.5b's cap and merge coverage clauses stand. A task had
-  a start when it made a model step, a call or a stop. The reversal bar
-  is no JS-thread stall over 500 ms on the Fold's release build, for
-  CTRL-Z and redo of a full close group, wall time reported. The stall
-  meter, `startStallMeter` in `lib/diagnostics`, is committed, so 5.13
-  reuses it.
+  and no unrecovered cut-off at the step output default; Identity,
+  Threads, Lore and Upkeep land a write when they had a start;
+  Happenings reads `no-start` on MiniLM; Lifecycle and Awareness are
+  reported, with no write required; 8 of 10 runs pass, and 5.5b's cap
+  and merge coverage clauses stand. A task had a start when it made a
+  model step, a call or a stop. The reversal bar is no JS-thread stall
+  over 500 ms on the Fold's release build, for CTRL-Z and redo of a full
+  close group, wall time reported. The stall meter, `startStallMeter` in
+  `lib/diagnostics`, is committed, so 5.13 reuses it.
 - **A pick a reversal stamps is dropped (developer decision).**
   `dropRemovedPick` drops a pick whose entry is gone, stamped into a
   chapter or no longer a reply a chapter can end on, so a redo that
@@ -675,34 +676,42 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   was 42,754 tokens, so 42,754 plus 16,384 is 59,138, inside the dev
   model's 65,536-token window, but that was measured under 24 steps.
   Upkeep's prompt starts near 31,600 and grows about 274 to 439 tokens a
-  step, so a step near the 57th to 64th reaches about 47k to 59k, where a
-  reply past roughly 6k to 18k tokens overruns the window and stops as
-  `window`; the rerun records each task's largest prompt. 16,384 is also
-  the most OpenAI's 4o models accept, and openai-compatible sends
-  `max_tokens` unchanged, so a model with a lower output cap needs its
-  profile's max output set (not verified live against a provider). The
-  boundary default `BOUNDARY_MAX_OUTPUT_DEFAULT`, 8,000 to 16,384, for the
-  same provider cap: picks spent 4,237 to 5,608 output tokens on a
-  2,492-token prompt, and 3 of 10 ran past 8,000. The per-task step
-  budget `CLOSE_TASK_STEP_BUDGET`, 24 to 64: Upkeep's prompt listed 43
-  rows in every run (12 characters, 16 places, 14 items, 1 faction), 36
-  of them with no keywords. The three runs stopped at the budget spent
-  10, 8 and 11 leading steps on `search_world` (15 in all in run 7); the
-  serial runs that finished (5 and 8) spent 1 and 4 and ended in 20 and
-  17 steps. Near 57 steps is a worst-case estimate (36 bare rows, a few
-  conditions, about 15 searches, the finishing reply), not a measured
-  run. The cost: a task that loops now runs up to 64 steps per part, as
-  run 7's Upkeep did on an invented `update_item` id until its 24th.
-  5.5b's bar is unchanged, so a stopped task still misses; its
-  output-bound clause reads the step default and judges at 16,384. Canon
-  says so in `chapter-close.md`, `generation-pipeline.md`,
+  step, so a step near the 57th to 64th reaches about 47k to 59k, where
+  a reply past roughly 6k to 18k tokens overruns the dev model's window.
+  On llama.cpp that reply is a cut-off whose cause is the window, and a
+  second cut stops the task as `cut-off`. Identity's prompt grows
+  faster, about 475 to 1,471 tokens a step (run 10: 29,510 to 38,534
+  over 20 steps; run 7: 29,511 to 42,754 over 10), so a looping Identity
+  reaches the window first, near step 25 at run 7's rate. The rerun
+  records each task's largest prompt. 16,384 is also the most OpenAI's
+  4o models accept, and openai-compatible sends `max_tokens` unchanged,
+  so a model with a lower output cap needs its profile's max output set
+  (not verified live against a provider). The boundary default
+  `BOUNDARY_MAX_OUTPUT_DEFAULT`, 8,000 to 16,384, for the same provider
+  cap: picks spent 4,237 to 5,608 output tokens on a 2,492-token prompt,
+  and 3 of 10 ran past 8,000. The per-task step budget
+  `CLOSE_TASK_STEP_BUDGET`, 24 to 64: Upkeep's prompt listed 43 rows in
+  every run (12 characters, 16 places, 14 items, 1 faction), 36 of them
+  with no keywords. The three runs stopped at the budget spent 10, 8 and
+  11 leading steps on `search_world` (15 in all in run 7); the serial
+  runs that finished (5, 8 and 10) spent 1, 4 and 1 leading searches and
+  ended in 20, 17 and 20 steps. Near 57 steps is a worst-case estimate
+  (36 bare rows, a few conditions, about 15 searches, the finishing
+  reply), not a measured run. The cost: a task that loops now runs up to
+  64 steps per part, as run 7's Upkeep did on an invented `update_item`
+  id until its 24th. 5.5b's bar is unchanged, so a stopped task still
+  misses; its output-bound clause reads the step default and judges at
+  16,384. Canon says so in `chapter-close.md`, `generation-pipeline.md`,
   `data-model.md`, `testing.md` and `followups.md`. The review of the
   raise found two provider cases: a model whose output cap sits between
   8,000 and 16,383 gets a 4xx, and a server that counts `max_tokens`
-  against the window refuses a long prompt. Developer decision, "Q5: A /
-  I'd park B, not a followup", keeps the values, records both in canon
-  with the profile's max output as the remedy, and
-  [parks the clamp](../../../../parked.md#clamp-a-default-max-output-to-the-window).
+  against the window (vLLM) refuses a call whose prompt passes the
+  window less 16,384, a full part's first step on windows under roughly
+  47k tokens and a late step on larger ones, and the refusal is
+  recognized as an overflow. Developer decision, "Q5: A / I'd park B,
+  not a followup", keeps the values, records both in canon with the
+  profile's max output as the remedy, and [parks the
+  clamp](../../../../parked.md#clamp-a-default-max-output-to-the-window).
 - **A stale pick settles on Retry as nothing left to close (developer
   decision, 2026-11-18).** A failed click's entry whose pick can no
   longer end a chapter, closed into one or deleted, settles on Retry as
@@ -846,9 +855,11 @@ Saved at `~/.cache/aventuras-measure/m5-10/probe-20261118T061707Z`.
 The transcripts, read by hand:
 
 - Upkeep's three budget stops come from the 24-step budget against 43
-  rows when the model emits one call per step: five runs (4, 5, 6, 7, 8)
-  sent one call per step throughout, and the batched runs finished in 3
-  steps. Runs 4 and 6 landed 13 writes before the stop.
+  rows when the model emits one call per step: six runs went serial (4,
+  5, 6, 7, 8, and 10 from its retry on, its first step having been cut
+  off at 8,000 tokens with 23 calls, none of which ran), and the batched
+  runs 1, 2 and 9 finished in 3 steps. Runs 4 and 6 landed 13 writes
+  before the stop.
 - Run 7's Upkeep looped `update_item` on an invented id.
 - Run 3's Lore sent `turns: [true]`, was rejected and gave up. Its
   Upkeep wrote its calls as text, with no tool calls.
@@ -856,7 +867,8 @@ The transcripts, read by hand:
 
 The bar code fails a task with a recorded stop even after landed writes.
 Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
-The merge decision on this miss is the developer's, pending at writing.
+The developer's call on this miss is the 2026-11-18 budget-raise
+decision above: tune, then rerun.
 
 Rerun on the raised budgets (and, for the boundary, the reworded prompt): pending.
 
@@ -883,8 +895,9 @@ story's 24,000 threshold: 34 candidates, a prompt of 2,492 tokens.
 Verdict: `boundary: 7 of 10 runs picked a candidate, 3 cut off: missed`.
 Run 2's reasoning reads "23,907 tokens so far; a chapter runs about
 24,000" as the chapter ending now and takes the last candidate; run 5
-spent its 8,000 deliberating the end-on-the-turn-before rule. The merge
-decision on this miss is the developer's, pending at writing.
+spent its 8,000 deliberating the end-on-the-turn-before rule. The
+developer's call on this miss is the 2026-11-18 budget-raise decision
+above: tune, then rerun.
 
 Rerun on the raised budgets (and, for the boundary, the reworded prompt): pending.
 

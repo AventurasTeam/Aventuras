@@ -249,12 +249,22 @@ goes out as it is, and so does
 [the boundary call's](#phase-1--boundary-selection): a model whose output
 cap sits below it gets a 4xx on every call, which reads as an unknown
 failure and isn't retried, and a server that counts `max_tokens` against
-the window refuses a call whose prompt plus it exceeds the window, which
-fails the close as an overflow. The remedy for both is the profile's max
-output, or the story's override, set to what the model and server accept
+the window (vLLM) refuses a call whose prompt plus it exceeds the
+window. That refusal reads as an overflow (its "maximum context length"
+wording is among the overflow keywords; that wording is the server's
+known behaviour, not checked live) and becomes a context-window error:
+on the boundary call or a task's first step it fails the close, and on a
+later step it stops the task as `window`, which the review reads as
+"outgrew the context window". It isn't confined to small windows: any
+call whose prompt passes the window less 16,384 is refused (49,152 on a
+65,536 window), which a late step under the 64-step budget can reach,
+and a window under roughly 47k refuses even a full part's first step.
+The remedy for both cases is the profile's max output, or the story's
+override, set to what the model and server accept
 ([`model-settings.md`](../ui/patterns/model-settings.md)); clamping a
-default to the window is [parked](../parked.md#clamp-a-default-max-output-to-the-window). Each call is
-bounded as a pass's is
+default to the window is
+[parked](../parked.md#clamp-a-default-max-output-to-the-window). Each
+call is bounded as a pass's is
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
 and a step's one retry after a cut-off or a filter stop is bounded
 afresh: the cut attempt is the one most likely to have spent the first

@@ -1455,13 +1455,19 @@ Parked 2026-11-18 on the developer's call, "most likely a non-issue for
 vast majority of users": the remedy stands in canon, the profile's max
 output ([`chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
 A clamp would fix a server that counts `max_tokens` against the window
-(vLLM), where a full part plus 16,384 is refused on small windows
-(roughly under 47k tokens), and a late close step whose long reply
-overruns the window. It would not fix a model whose output cap sits
-between 8,000 and 16,383 tokens, which gets a 4xx whatever the window.
-The refusal's overflow reading is under
-[Overflow shapes beyond llama.cpp's and OpenAI's](#overflow-shapes-beyond-llamacpps-and-openais).
-Raised by Slice 5.10's budget review.
+(vLLM), where a call whose prompt passes the window less 16,384 is
+refused: a full part's first step on small windows (roughly under 47k
+tokens), a late step on larger ones. It fixes the refused reservation
+only: a reply longer than the room left is cut whatever `max_tokens`
+says. It would not fix a model whose output cap sits between 8,000 and
+16,383 tokens, which gets a 4xx whatever the window. The refusal is
+recognized as an overflow by
+[the overflow keywords](./architecture.md#recognizing-an-overflow-rejection)
+(not checked live) and surfaces as a context-window failure. Its copy
+(`closeContextWindow.provider` in `locales/en/reader.json`, and
+"outgrew the context window" in `chapters.json`) names raising the
+window or switching the agent, never max output, so a revisit should
+also name that remedy. Raised by Slice 5.10's budget review.
 
 A user on vLLM, or on a model with an output cap between 8,000 and
 16,383 tokens, hitting the 4xx or the overflow refusal is the signal to

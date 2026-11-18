@@ -142,3 +142,9 @@ slice-planning gate forces its resolution before that slice is planned.
   (`e2e/locators/reader.ts`), unlike `dismissSystemEntry`, whose comment
   notes a toast shares the name; a toast with a Retry action would trip
   strict mode. Raised in 5.10's PR 2 review.
+- **`scripts/close-probe-bar.ts` judges the output-bound clause at the
+  step default.** Line 100 compares a step's reply to
+  `TOOL_STEP_MAX_OUTPUT_DEFAULT` even when the probe profile sets a max
+  output, so if the Q5 remedy is ever applied to the probe profile the
+  clause judges at the wrong bound. Raised by Slice 5.10's final review,
+  2026-11-18.
