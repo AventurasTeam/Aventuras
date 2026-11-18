@@ -117,11 +117,11 @@ export async function* requestChapterBoundary(
     const { first, last } = firstLastSentences(prose.get(candidate.id) ?? '')
     return { turn, position: candidate.position, opening: first, closing: last }
   })
-  const window = closeCandidateWindow(inputs.threshold)
+  const lengths = closeCandidateWindow(inputs.threshold)
   const prompt = renderTemplate(TEMPLATE_IDS.chapterBoundary, {
     boundaryCandidates,
-    boundaryLengthFrom: window.from,
-    boundaryLengthTo: window.to,
+    boundaryLengthFrom: lengths.from,
+    boundaryLengthTo: lengths.to,
     boundaryActiveThreads: inputs.activeThreads.map((thread) => ({ title: oneLine(thread.title) })),
   })
   const call = yield* boundedStructuredCall({
