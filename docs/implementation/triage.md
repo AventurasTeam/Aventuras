@@ -118,11 +118,12 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/chapters/chapter-card.tsx`) that `ReasonButton` now
   covers. Raised in 5.10's PR 2 review.
 - **Listbox keyboard models are thin.** `ProviderInlinePicker`
-  (`components/compounds/provider-model-picker.tsx`) and the close
-  modal's end picker make every option its own tab stop, take no arrow
-  keys, and ignore Space (RN-Web activates only button-like roles on
-  Space). `SearchableOverlayList`'s roving model is the in-repo shape to
-  share. Raised in 5.10's PR 2 review.
+  (`components/compounds/provider-model-picker.tsx`) makes every option
+  its own tab stop, takes no arrow keys, and ignores Space (RN-Web
+  activates only button-like roles on Space). The close modal's end
+  picker now takes the arrows, Home, End and Space, but each option is
+  still its own tab stop. `SearchableOverlayList`'s roving model is the
+  in-repo shape to share. Raised in 5.10's PR 2 review.
 - **`SearchableOverlayList` section headers carry no group role.**
   [`actions-menu.md → Keyboard & ARIA`](../ui/patterns/actions-menu.md#keyboard--aria)
   asks for `role="group"` with an `aria-label` per section; the headers
@@ -148,3 +149,12 @@ slice-planning gate forces its resolution before that slice is planned.
   output, so if the Q5 remedy is ever applied to the probe profile the
   clause judges at the wrong bound. Raised by Slice 5.10's final review,
   2026-11-18.
+- **`OverflowMenu` drops a picked entry when the tier changes while its
+  phone Sheet exits** (`components/compounds/overflow-menu.tsx`,
+  `SheetMenu`). The entry waits in a ref for `onDismissed`; a tier flip
+  swaps the Sheet for the Popover first, and the Sheet's unmount guard
+  then skips `onDismissed`, so the action never runs. The chapter
+  popover had the same pattern; there the pending run now lives above
+  the arm switch and goes when the tier leaves phone. Found by
+  CodeRabbit on Slice 5.10's PR 2, fixed there for the chapter popover
+  only, 2026-11-18.
