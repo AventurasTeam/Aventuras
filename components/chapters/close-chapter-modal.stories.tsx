@@ -243,9 +243,8 @@ const NARROWEST_ARGS = {
   initialSelectedId: 'entry_5081',
 } satisfies RowsArgs & { initialSelectedId: string }
 
-// chapter-timeline.md → Mobile expression: a row's labels stay whole inside its card, and the
-// snippet keeps a readable width. Phone puts ref and tag (wrapping whole if they don't fit) over
-// snippet and time; wider tiers keep one line.
+// chapter-timeline.md → Mobile expression: labels stay whole inside the row's card, the snippet
+// keeps a readable width. Phone stacks ref and tag over snippet and time; wider tiers one line.
 function expectRowLegible(
   card: HTMLElement,
   {
@@ -551,7 +550,7 @@ export const ShortWindow: Story = {
     const shown = await dialog()
     await userEvent.click(trigger())
     const list = await screen.findByTestId('close-chapter-panel')
-    // RN-Web's window height can trail the viewport change by a frame, and the dialog's cap with it.
+    // RN-Web's window height can trail the viewport change by a frame, and the dialog cap with it.
     await waitFor(() =>
       expect(shown.getBoundingClientRect().height).toBeLessThanOrEqual(
         window.innerHeight * 0.9 + 1,

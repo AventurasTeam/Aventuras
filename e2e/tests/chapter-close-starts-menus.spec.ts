@@ -1,8 +1,7 @@
 import { describeStart, pickFromMenu, type Start } from '../flows/close-start'
 import { goToChapterTimeline, goToPlot, goToStorySettings, goToWorld } from '../flows/navigation'
 
-// chapter-timeline.md → Chapter-close modal: every trigger opens the one modal. These five start
-// from STORY TOOLS → Close chapter… in the Actions menu.
+// chapter-timeline.md → Chapter-close modal; each start picks STORY TOOLS → Close chapter….
 const STARTS: readonly Start[] = [
   {
     from: 'the Actions menu on World',

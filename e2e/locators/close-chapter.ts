@@ -4,9 +4,8 @@ import { chapterTimeline } from './chapter-timeline'
 import { reader } from './reader'
 import { copyPattern, t } from '../harness/i18n'
 
-// The close modal (components/chapters/close-chapter-modal-view.tsx) and the four controls that
-// open it (chapter-timeline.md → Chapter-close modal). The picker trigger and its panel are Tier 3
-// testIDs: the trigger's name is the picked row's whole anatomy, and the panel's rows virtualize.
+// The close modal and the four controls that open it (chapter-timeline.md → Chapter-close modal).
+// Picker trigger and panel are Tier 3 testIDs: the trigger's name is the row's whole anatomy.
 
 const modal = (page: Page): Locator =>
   page.getByRole('dialog', { name: t('chapters:closeModal.title'), exact: true })

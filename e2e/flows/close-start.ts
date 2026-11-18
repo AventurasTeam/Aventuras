@@ -29,10 +29,8 @@ type Hero = { readonly app: LaunchedApp; readonly mock: MockLlm }
 type Row = { id: string; position: number; kind: string }
 export type Pick = { id: string; position: number; ref: string }
 
-// Registers its describe's launch: the seeded hero, with whatever `seed` changes before launch.
-// No embedder is installed: the hero's open region anchors one happening (Vorne's pact, entry 59),
-// so the close's range embed has nothing to cluster. If a close fails with an embedder error, the
-// region gained a second anchored happening: install one here with `installEmbedderModel`.
+// No embedder: the hero's open region anchors one happening (entry 59), so the range embed has
+// nothing to cluster. An embedder error on close means a second one: `installEmbedderModel` here.
 export function launchesHero(seed: (dbPath: string) => void = () => {}): () => Hero {
   let app: LaunchedApp | undefined
   let mock: MockLlm | undefined
@@ -104,8 +102,8 @@ export async function pickFromMenu(page: Page, pick: Pick): Promise<void> {
 
 export type Start = { from: string; open: (page: Page, pick: Pick) => Promise<void> }
 
-// milestone.md → Definition of done, Manual close: one fresh fixture per start, since the hero's
-// open region has too few replies for eight closes in a row.
+// milestone.md → Definition of done, Manual close: one fixture per start; the open region is too
+// short for eight closes in a row.
 export function describeStart(start: Start): void {
   test.describe(`a close started from ${start.from}`, () => {
     const hero = launchesHero()

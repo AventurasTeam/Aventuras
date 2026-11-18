@@ -6,9 +6,8 @@ import { home } from '../locators/home'
 
 const HERO_TITLE = 'The Veilstone Courier'
 
-// A hand-written URL (docs/testing.md → Harness structure): no in-app path reaches /dev in a
-// release build, as Settings renders its /dev link only under __DEV__, false in both launch modes;
-// and the deep link is itself the seam under test, since Android opens dev routes from outside.
+// Hand-written URL (docs/testing.md → Harness structure): Settings shows its /dev link only under
+// __DEV__ (false in both launch modes), and the deep link is the seam, as Android opens dev routes.
 test.describe('dev routes outside __DEV__', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined

@@ -96,7 +96,7 @@ const KEYWORD = 'bell tower'
 const RETIRED = 'She leaves the Hollow for good once the ledger is hidden.'
 const PIN = 0.6
 
-// The seeded reply each task's write cites: the first open reply (her scene) or the second (the bell).
+// The seeded reply each task's write cites: the first open reply (her scene) or the second (bell).
 const CITED = {
   happenings: ['scene', 'item'],
   lore: ['item'],
@@ -146,9 +146,8 @@ function readRegion(dbPath: string): RegionRow[] {
   }
 }
 
-// chapter-close.md → Phase 1: a reply whose running total sits from half a threshold to one and a
-// half, inclusive, never the newest. The crossing turn's reply is the newest, so each seeded reply
-// in the window is one.
+// chapter-close.md → Phase 1: a reply whose running total sits within half a threshold either side
+// of one, never the newest. The crossing turn's reply is the newest, so each seeded reply is one.
 function candidatesOf(region: readonly RegionRow[], threshold: number): RegionRow[] {
   const kept: RegionRow[] = []
   let total = 0

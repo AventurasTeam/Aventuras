@@ -381,8 +381,7 @@ export default function ReaderComposerRoute() {
       ),
     [slice.rows, worldTimeDecorations],
   )
-  // Over the slice the document renders, keyed on its identity so the surface sees no change
-  // between renders that keep it.
+  // Keyed on the rendered slice's identity: the surface sees no change between unchanged renders.
   const closeHereIds = useMemo(() => closeHereEntryIds(slice.rows), [slice.rows])
 
   // Same snapshot-stability contract as `rows` above: select the raw map, derive

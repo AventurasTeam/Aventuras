@@ -171,9 +171,8 @@ test.describe('a close whose model is flagged unable to call tools', () => {
     expect(hero().mock.requests.length, 'the confirm reached no provider').toBe(sent)
     expect(await chapterCount(page, branchId)).toBe(chaptersBefore)
 
-    // The Retry restarts the click's pick, not an owed close (there is none: "Nothing left to
-    // close"), so with the flag still off it fails the same pre-flight into a fresh entry that
-    // keeps the pick.
+    // The Retry restarts the click's pick, not an owed close ("Nothing left to close"): with the
+    // flag still off it fails the same pre-flight into a fresh entry that keeps the pick.
     const [{ id: firstEntryId }] = await systemEntryIds(page, branchId)
     await reader.retrySystemEntry(page).click()
     await expect

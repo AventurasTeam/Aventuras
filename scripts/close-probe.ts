@@ -151,9 +151,8 @@ function resolveDbPath(): string {
   return join(resolveDevSlot().dataDir, 'aventuras.db')
 }
 
-// A slot's userData holds both; an AVENTURAS_DB_PATH outside one, as dataset:chapter writes, falls
-// back to this checkout's slot. A stand-in or a boundary run loads no model, so it takes the first
-// unchecked.
+// An AVENTURAS_DB_PATH outside a slot's userData (as dataset:chapter writes) falls back to this
+// checkout's slot. A stand-in or boundary run loads no model, so it takes the first unchecked.
 function resolveEmbeddersRoot(source: string): string {
   const named = process.env.PROBE_EMBEDDERS_DIR
   const tried = [named ? resolve(named) : join(dirname(source), 'embedders')]

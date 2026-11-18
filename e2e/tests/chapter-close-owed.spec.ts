@@ -121,9 +121,8 @@ function closeProbe(hero: () => Hero) {
       [branch, logPosition],
     )
 
-  // The open region before a turn: its first row, its latest reply, and how many rows a close
-  // ending there stamps. A close with no pick after that turn ends on that reply, and the turn
-  // stays open.
+  // The open region before a turn: first row, latest reply, and the rows a close ending there
+  // stamps. A close with no pick after that turn ends on that reply; the turn stays open.
   async function rangeBeforeTurn(
     branch: string,
   ): Promise<{ start: string; end: string; rows: number }> {

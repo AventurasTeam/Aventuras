@@ -240,8 +240,7 @@ const REVIEW: CloseReview = {
   ],
 }
 
-// The open region after chapter 2: an action, then two turns. Running totals through each reply:
-// entry_60 420, entry_62 720, entry_64 1000.
+// The open region after chapter 2: an action, then two turns; running totals 420, 720, 1000.
 const SERIES: readonly OpenRegionRow[] = [
   { id: 'entry_59', kind: 'user_action', position: 59, tokens: 120 },
   { id: 'entry_60', kind: 'ai_reply', position: 60, tokens: 300 },

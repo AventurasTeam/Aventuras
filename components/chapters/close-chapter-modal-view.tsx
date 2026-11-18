@@ -104,7 +104,8 @@ function EntryLine({
         {tag}
       </Tag>
     ) : null
-  // w-0: a nowrap snippet's min-content is its full width, which would widen the dialog past the window.
+  // w-0: a nowrap snippet's min-content is its full width, which would widen the dialog past the
+  // window.
   const snippet = (
     <Text size="sm" variant="secondary" numberOfLines={1} className="w-0 min-w-0 flex-1 italic">
       {row.excerpt}
@@ -373,7 +374,7 @@ export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactE
   const { open, onCancel, disabledReason } = props
   const contentRef = useRef<View>(null)
   const gated = disabledReason != null
-  // Chromium blurs a button the moment it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
+  // Chromium blurs a button as it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
   useEffect(() => {
     if (Platform.OS !== 'web' || !open || !gated) return
     // The ref lands on the styled View inside Radix's focusable role=dialog element.

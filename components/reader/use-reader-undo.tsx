@@ -70,9 +70,8 @@ function redoNames(group: RedoGroup): UndoNames {
 // runs after its promise resolves, so a second window follows it.
 const TAIL_MS = 250
 
-// Timed only while its debug entry would land. A close's undo waits on a confirm first, the
-// user's wait and not the reversal's, so only the reversal's own await is in the window. The
-// entry lands after the tail, and the caller never waits for it.
+// Timed only while its debug entry would land; only the reversal's own await is in the window
+// (a close's confirm wait is the user's). The entry lands after the tail; the caller never waits.
 async function timedReversal(
   kind: 'reader.undo_measured' | 'reader.redo_measured',
   actionId: string,

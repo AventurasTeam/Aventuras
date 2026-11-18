@@ -63,7 +63,7 @@ export function ChapterInProgressCard({
       <Text size="sm" variant="muted" className="italic">
         {t('chapters:inProgress.placeholder')}
       </Text>
-      {/* chapter-timeline.md → Mobile expression: full width on phone. */}
+      {/* chapter-timeline.md → Mobile expression. */}
       <ReasonButton
         variant="primary"
         layout={isPhone ? 'stretch' : 'start'}
