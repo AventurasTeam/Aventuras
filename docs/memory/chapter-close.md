@@ -381,7 +381,9 @@ phase; the user-supplied entry is the boundary.
 
 The boundary selection agent reads the candidates' first and last
 sentences and the active threads, and picks a natural ending — scene
-transition, time skip, arc-beat resolution, or narrative pause.
+transition, time skip, arc-beat resolution, or narrative pause. A turn
+that opens a new scene or follows a time skip begins the next chapter,
+so it isn't a pick.
 
 **Candidates.** Code offers the turns where the chapter would hold
 between half and one and a half thresholds, never the newest reply. The

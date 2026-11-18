@@ -781,11 +781,19 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   its top sits at the running total before the newest reply, near the
   current total, which would bring the "end now" reading back.
   `boundaryRegionTokens` and `boundaryThreshold` are gone, so
-  `requestChapterBoundary` no longer takes the series. Dropping the rule
-  reopens a risk: a candidate shown by an opening sentence like "Three
-  days later…" invites the pick, which puts the new scene's first turn
-  in the closing chapter. The boundary rerun reads each picked turn's
-  opening to check.
+  `requestChapterBoundary` no longer takes the series. The rerun on the
+  reworded prompt showed what dropping the rule cost: runs 1 and 8
+  picked t16, a turn opening on a dated letter ("Old Anchor Inn,
+  Bristol, March 1"), which puts the new scene's first turn in the
+  closing chapter.
+
+  **The guard came back as one sentence (developer ruling, 2026-11-18,
+  "Q11: Then restore the short guard.").** The dropped sentence was the
+  step-by-step rule quoted above. The system half now says, after the
+  natural-ending line, "A turn that opens on a new scene or after a time
+  skip begins the next chapter, so it can't end this one." It is a fact
+  with no procedure, so run 5's deliberation has nothing to loop on.
+  Boundary bar on the restored guard: pending at writing.
 
 - **`firstLastSentences` is tougher than its first cut.** It merges
   letterless pieces (French `»`, a bare ellipsis) into the sentence
