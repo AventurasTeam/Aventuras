@@ -592,7 +592,7 @@
       <div class="modal-section">
         <div class="modal-section-label">Start of chapter</div>
         <div class="entry-row">
-          <span class="entry-num">entry 89</span>
+          <span class="entry-num">entry #89</span>
           <span class="entry-tag">Chapter 4 ended here</span>
           <span class="entry-snippet">&ldquo;Aria sets out at first light, Kael trailing two paces behind. The city walls lean inward, soaked in the dawn's grey light.&rdquo;</span>
           <span class="entry-time">Day 7 &middot; 06:42</span>
@@ -603,7 +603,7 @@
         <div class="modal-section-label">End of chapter</div>
         <div class="picker-wrap">
           <button class="entry-row trigger" id="end-picker" type="button">
-            <span class="entry-num" id="picker-num">entry 102</span>
+            <span class="entry-num" id="picker-num">entry #102</span>
             <span class="entry-tag" id="picker-tag">latest</span>
             <span class="entry-snippet" id="picker-snippet">&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be.&rdquo;</span>
             <span class="entry-time" id="picker-time">Day 9 &middot; 22:18</span>
@@ -612,7 +612,7 @@
           <div class="picker-panel" id="picker-panel">
             <div class="picker-item selected" data-entry="102" data-tag="latest" data-snippet="&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be. Lantern light catches on the bouncer's shoulder near the back door.&rdquo;" data-time="Day 9 &middot; 22:18">
               <div class="picker-item-head">
-                <span class="entry-num">entry 102</span>
+                <span class="entry-num">entry #102</span>
                 <span class="entry-tag">latest</span>
                 <span class="entry-time">Day 9 &middot; 22:18</span>
               </div>
@@ -620,28 +620,28 @@
             </div>
             <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;" data-time="Day 9 &middot; 22:14">
               <div class="picker-item-head">
-                <span class="entry-num">entry 100</span>
+                <span class="entry-num">entry #100</span>
                 <span class="entry-time">Day 9 &middot; 22:14</span>
               </div>
               <div class="picker-item-snippet">&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;</div>
             </div>
             <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;" data-time="Day 9 &middot; 21:50">
               <div class="picker-item-head">
-                <span class="entry-num">entry 98</span>
+                <span class="entry-num">entry #98</span>
                 <span class="entry-time">Day 9 &middot; 21:50</span>
               </div>
               <div class="picker-item-snippet">&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;</div>
             </div>
             <div class="picker-item" data-entry="96" data-tag="" data-snippet="&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;" data-time="Day 9 &middot; 21:38">
               <div class="picker-item-head">
-                <span class="entry-num">entry 96</span>
+                <span class="entry-num">entry #96</span>
                 <span class="entry-time">Day 9 &middot; 21:38</span>
               </div>
               <div class="picker-item-snippet">&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;</div>
             </div>
             <div class="picker-item" data-entry="94" data-tag="" data-snippet="&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;" data-time="Day 9 &middot; 21:25">
               <div class="picker-item-head">
-                <span class="entry-num">entry 94</span>
+                <span class="entry-num">entry #94</span>
                 <span class="entry-time">Day 9 &middot; 21:25</span>
               </div>
               <div class="picker-item-snippet">&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;</div>
@@ -1008,7 +1008,7 @@
       item.classList.add('selected');
       const num = item.dataset.entry;
       const tag = item.dataset.tag;
-      document.getElementById('picker-num').textContent = 'entry ' + num;
+      document.getElementById('picker-num').textContent = 'entry #' + num;
       const tagEl = document.getElementById('picker-tag');
       tagEl.textContent = tag;
       tagEl.style.display = tag ? '' : 'none';

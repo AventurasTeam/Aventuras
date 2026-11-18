@@ -101,9 +101,10 @@
   .chapter-popover-progress .bar.warn .fill { background: #d9a617; }
   .chapter-popover-progress .bar.danger .fill { background: var(--warn); }
   /* Ready to close (chapter-close.md → Manual user-triggered close): auto-close off, the threshold met;
-     the line under the progress label, inside the progress row */
-  .chapter-popover-progress .ready-to-close { display: none; font-size: 11px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
-  body[data-auto-close="off"][data-over-threshold="yes"] .chapter-popover-progress .ready-to-close { display: block; }
+     inline after a middot in the label's own text, not a block beside it (Android clips a text-width
+     sibling's last word: lessons-learned/android-text-subpixel-wrap.md) */
+  .chapter-popover-progress .ready-to-close { display: none; font-weight: 600; color: var(--ink); }
+  body[data-auto-close="off"][data-over-threshold="yes"] .chapter-popover-progress .ready-to-close { display: inline; }
   .chapter-popover-actions { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
   .chapter-popover-action { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; cursor: pointer; color: var(--ink); text-align: center; }
   .chapter-popover-action.link { border: none; color: var(--ink-muted); text-align: right; padding: 4px 10px; }
@@ -908,9 +909,8 @@
       <div class="chapter-popover-progress">
         <div class="label">
           <span>chapter progress</span>
-          <span>8,420 / 24,000 tok</span>
+          <span><span class="tok">8,420 / 24,000 tok</span><span class="ready-to-close"> &middot; Ready to close</span></span>
         </div>
-        <div class="ready-to-close">Ready to close</div>
         <div class="bar"><div class="fill" style="width: 35%"></div></div>
       </div>
       <div class="chapter-popover-actions">
@@ -2409,7 +2409,7 @@
     // update label tokens (24k = 24000)
     const tokens = Math.round(240 * p);
     topbarProgress.setAttribute('data-label', `Chapter 3 · ${tokens.toLocaleString()} / 24,000 tok`);
-    document.querySelector('.chapter-popover-progress .label span:last-child').textContent = `${tokens.toLocaleString()} / 24,000 tok`;
+    document.querySelector('.chapter-popover-progress .label .tok').textContent = `${tokens.toLocaleString()} / 24,000 tok`;
     document.querySelectorAll('[data-progress]').forEach(b => b.classList.toggle('active', b.dataset.progress === String(p)));
   }
   document.querySelectorAll('[data-progress]').forEach(b => b.addEventListener('click', () => setProgress(b.dataset.progress)));

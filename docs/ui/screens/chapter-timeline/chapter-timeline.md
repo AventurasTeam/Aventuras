@@ -327,8 +327,8 @@ Rendered:
   [reader-composer → Top-bar chapter navigation](../reader-composer/reader-composer.md#top-bar--chapter-navigation)):
   green < 80%, yellow 80–90%, red ≥ 90%.
 - **Ready to close** — with auto-close off, once the count reaches the
-  threshold and the region holds a reply to end on, the progress line
-  shows `Ready to close`
+  threshold and the region holds a reply to end on, the counts line
+  adds `Ready to close` after a `·`
   ([`chapter-close.md → Manual user-triggered close`](../../../memory/chapter-close.md#manual-user-triggered-close)).
 - **Summary placeholder** — italic muted
   `Summary, theme, and keywords generate on close.`
@@ -424,7 +424,7 @@ a readable width:
 
 Fields, left-to-right:
 
-- **Number** — `entry <N>` in muted monospace.
+- **Number** — `entry #<N>` in muted monospace.
 - **Optional tag** — small chip-style label when applicable
   (`Chapter <N> ended here` on the start row; `latest` on the
   picker trigger when the latest reply is selected).

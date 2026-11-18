@@ -121,7 +121,10 @@ signal to close.
   yet, right after a close, has nothing to jump to and isn't
   clickable.
 - **Progress bar + label** — `chapter progress · 8,420 / 24,000 tok`.
-  The progress row adds `Ready to close`, on the line under the label,
+  The progress row adds `Ready to close` after the label, behind a
+  `·` in the same line of text (a text-width sibling beside it loses
+  its last word on Android, per
+  [`android-text-subpixel-wrap.md`](../../../implementation/lessons-learned/android-text-subpixel-wrap.md)),
   while auto-close is off, the count has reached the threshold and the
   region holds a reply to end on
   ([`chapter-close.md → Manual user-triggered close`](../../../memory/chapter-close.md#manual-user-triggered-close)).
