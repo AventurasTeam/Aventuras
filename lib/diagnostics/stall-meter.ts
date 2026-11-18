@@ -4,16 +4,20 @@ const TICK_MS = 16
  * Times a window on the JS thread. `longestGapMs` is the longest gap between consecutive records
  * (start, each 16 ms tick, stop), so a stall no tick interrupts still measures to the stop. Late
  * timer delivery (hidden-window throttling, Android UI-thread frame stalls) reads as a stall too.
+ * `now` must be monotonic, so a system-clock change mid-window reads as neither a stall nor
+ * negative time.
  */
-export function startStallMeter(): { stop: () => { wallMs: number; longestGapMs: number } } {
-  const startedAt = Date.now()
+export function startStallMeter(now: () => number = () => performance.now()): {
+  stop: () => { wallMs: number; longestGapMs: number }
+} {
+  const startedAt = now()
   let last = startedAt
   let longestGapMs = 0
   const record = (): number => {
-    const now = Date.now()
-    longestGapMs = Math.max(longestGapMs, now - last)
-    last = now
-    return now
+    const at = now()
+    longestGapMs = Math.max(longestGapMs, at - last)
+    last = at
+    return at
   }
   const ticks = setInterval(record, TICK_MS)
   return {
