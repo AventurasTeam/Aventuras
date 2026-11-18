@@ -100,6 +100,10 @@
   .chapter-popover-progress .bar .fill { height: 100%; background: var(--ok); border-radius: 3px; transition: width 0.4s, background 0.2s; }
   .chapter-popover-progress .bar.warn .fill { background: #d9a617; }
   .chapter-popover-progress .bar.danger .fill { background: var(--warn); }
+  /* Ready to close (chapter-close.md → Manual user-triggered close): auto-close off, the threshold met;
+     the line under the progress label, inside the progress row */
+  .chapter-popover-progress .ready-to-close { display: none; font-size: 11px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  body[data-auto-close="off"][data-over-threshold="yes"] .chapter-popover-progress .ready-to-close { display: block; }
   .chapter-popover-actions { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
   .chapter-popover-action { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); font-size: 12px; cursor: pointer; color: var(--ink); text-align: center; }
   .chapter-popover-action.link { border: none; color: var(--ink-muted); text-align: right; padding: 4px 10px; }
@@ -680,7 +684,7 @@
   }
 </style>
 </head>
-<body data-probe="off" data-cutoff="off">
+<body data-probe="off" data-cutoff="off" data-auto-close="on" data-over-threshold="no">
 
 <div class="screen-label"><strong>Wireframe:</strong> Reader / Composer &mdash; responsive across phone / tablet / desktop</div>
 
@@ -795,6 +799,13 @@
     <button class="rb-btn active" data-progress="35">35% (safe)</button>
     <button class="rb-btn" data-progress="85">85% (warn)</button>
     <button class="rb-btn" data-progress="95">95% (danger)</button>
+    <button class="rb-btn" data-progress="105">105% (over)</button>
+  </div>
+
+  <div class="rb-group">
+    <span class="gl">auto-close:</span>
+    <button class="rb-btn active" data-auto-close="on">on</button>
+    <button class="rb-btn" data-auto-close="off">off (Ready to close past the threshold)</button>
   </div>
 
   <div class="rb-group">
@@ -899,6 +910,7 @@
           <span>chapter progress</span>
           <span>8,420 / 24,000 tok</span>
         </div>
+        <div class="ready-to-close">Ready to close</div>
         <div class="bar"><div class="fill" style="width: 35%"></div></div>
       </div>
       <div class="chapter-popover-actions">
@@ -1058,6 +1070,7 @@
             <span class="entry-action" title="Branch from this entry">&#x2387;</span>
             <span class="entry-action" title="Flip era from this entry (renders only when calendar has eras)" onclick="document.getElementById('flip-era-modal').classList.add('open')">&#128197;</span>
             <span class="entry-action probe" title="Probe this turn — open the memory probe scoped to this entry (visible only when probe mode is on)">&#128270;</span>
+            <span class="entry-action" title="Close chapter here — opens the close modal with this reply picked as the end (a reply in the open region only)">&#8258;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
           <!-- cut-off notice: the prose ended at the narrative profile's max output; an edit clears it -->
@@ -1147,6 +1160,7 @@
             <span class="entry-action" title="Edit">&#x270E;</span>
             <span class="entry-action" title="Regenerate this reply">&#x21BB;</span>
             <span class="entry-action" title="Branch from this entry">&#x2387;</span>
+            <span class="entry-action" title="Close chapter here — opens the close modal with this reply picked as the end (a reply in the open region only)">&#8258;</span>
             <span class="entry-action danger" title="Delete (rollback to before this entry)">&times;</span>
           </div>
           <!-- per-entry world-time footer (monotonicity-break state) — warning glyph + tooltip on desktop;
@@ -2363,6 +2377,16 @@
     });
   });
 
+  // auto-close — off shows Ready to close in the popover once the threshold is met
+  document.querySelectorAll('.review-bar [data-auto-close]').forEach(b => {
+    b.addEventListener('click', () => {
+      document.body.dataset.autoClose = b.dataset.autoClose;
+      document.querySelectorAll('.review-bar [data-auto-close]').forEach(x => {
+        x.classList.toggle('active', x.dataset.autoClose === b.dataset.autoClose);
+      });
+    });
+  });
+
   // progress state (safe / warn / danger) — applies to both top strip and popover bar
   const topbarProgress = document.querySelector('.topbar-progress');
   const topbarFill = topbarProgress.querySelector('.fill');
@@ -2371,7 +2395,8 @@
 
   function setProgress(pct) {
     const p = parseInt(pct, 10);
-    const width = p + '%';
+    const width = Math.min(p, 100) + '%';
+    document.body.dataset.overThreshold = p >= 100 ? 'yes' : 'no';
     topbarFill.style.width = width;
     popoverFill.style.width = width;
     const cls = p >= 90 ? 'danger' : p >= 80 ? 'warn' : '';

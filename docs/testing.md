@@ -279,14 +279,21 @@ import from `locators/` and `flows/`; they do not construct raw
 selectors inline.
 
 The same rule covers navigation: specs reach a screen by driving the
-UI, never by `page.goto`. The standing exception is
+UI, never by `page.goto`. The standing exceptions are
 `e2e/tests/story-open-failure.spec.ts`, which hand-writes reader and
 World URLs for a branch that does not exist, because no in-app path
 can produce that state — every entry point navigates only after
 `loadOpenStory` succeeds — and because the deep-route fallback
-(`app://bundle` → `index.html`) is itself the seam under test. A new
-spec that wants a URL needs the same two-part justification in a
-comment, or it does not get one.
+(`app://bundle` → `index.html`) is itself the seam under test, and
+`e2e/tests/dev-gate.spec.ts`, which hand-writes a `/dev` URL, because
+no in-app path reaches `/dev` outside `__DEV__` and because the deep
+link is the seam under test. A new spec that wants a URL needs the same
+two-part justification in a comment, or it does not get one.
+
+A flow may register describes and tests itself when several spec files
+share one per-start body: `e2e/flows/close-start.ts`'s `describeStart`,
+which `chapter-close-starts-menus.spec.ts` and
+`chapter-close-starts-inline.spec.ts` call once per start.
 
 ### Clipboard, file chooser and downloads
 

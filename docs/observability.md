@@ -339,7 +339,11 @@ convention, and the expectation that subsystems route through
   of the open region's rows or world times failed, with `branchId`,
   `read` (`series` or `times`) and `error`; with no rows the modal
   offers no reply to end on, and with no times its rows show none),
-  `close_result_read_failed` (warn,
+  `manual_close_failed` (error,
+  `components/chapters/run-manual-close.ts`: starting a close the
+  modal confirmed threw rather than returning a result, with
+  `branchId`, `endEntryId` and `error`; the user sees a generic warning
+  toast), `close_result_read_failed` (warn,
   `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),

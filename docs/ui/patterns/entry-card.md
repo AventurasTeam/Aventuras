@@ -69,6 +69,7 @@ type EntryCardProps = {
   onRegen?: () => void // ai only
   onBranch?: () => void // ai, opening
   onFlipEra?: () => void // user, ai, opening — host hides when eras: null
+  onCloseChapterHere?: () => void // ai_reply in the open region only; the host decides, not the card
 
   // ai_reply only — the prose ended early (see Cut-off notice):
   cutOffNotice?: { text: string; action?: { label: string; onPress: () => void } }
@@ -117,19 +118,19 @@ Two structural choices:
 
 ## Per-kind structure
 
-| Slot                       | user_action                      | ai_reply                                  | opening                                | system                                                              | streaming                            |
-| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
-| Top line                   | `You` badge                      | meta line (glyph, brain, globe, tokens)   | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing …) |
-| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`   |
-| World-state panel          | —                                | conditional (expanded)                    | conditional                            | —                                                                   | —                                    |
-| Token panel                | —                                | conditional (sections set, expanded)      | —                                      | —                                                                   | —                                    |
-| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                 |
-| Held-text quote            | —                                | —                                         | —                                      | conditional (`heldText` set), above the buttons                     | —                                    |
-| Details disclosure         | —                                | —                                         | —                                      | conditional (`detail` set), under the buttons                       | —                                    |
-| Cut-off notice             | —                                | conditional (`cutOff` set)                | —                                      | —                                                                   | —                                    |
-| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                    |
-| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                               |
-| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                     |
+| Slot                       | user_action                      | ai_reply                                                  | opening                                | system                                                              | streaming                            |
+| -------------------------- | -------------------------------- | --------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| Top line                   | `You` badge                      | meta line (glyph, brain, globe, tokens)                   | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing …) |
+| Reasoning body             | —                                | conditional (`reasoning` set, expanded)                   | conditional                            | —                                                                   | live-streaming on `streamingPhase`   |
+| World-state panel          | —                                | conditional (expanded)                                    | conditional                            | —                                                                   | —                                    |
+| Token panel                | —                                | conditional (sections set, expanded)                      | —                                      | —                                                                   | —                                    |
+| Content                    | prose (or textarea if `editing`) | prose                                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                 |
+| Held-text quote            | —                                | —                                                         | —                                      | conditional (`heldText` set), above the buttons                     | —                                    |
+| Details disclosure         | —                                | —                                                         | —                                      | conditional (`detail` set), under the buttons                       | —                                    |
+| Cut-off notice             | —                                | conditional (`cutOff` set)                                | —                                      | —                                                                   | —                                    |
+| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, `[close here]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                    |
+| World-time footer          | shown                            | shown                                                     | shown                                  | hidden                                                              | hidden                               |
+| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`                              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                     |
 
 Streaming is deliberately not visually distinguished: the swap to
 the committed `ai_reply` row should not re-frame the card.
@@ -922,17 +923,29 @@ No new mechanism.
 
 Per-kind action sets:
 
-| Kind        | edit                                                  | regen | branch | flip-era    | delete            |
-| ----------- | ----------------------------------------------------- | ----- | ------ | ----------- | ----------------- |
-| user_action | yes                                                   | —     | —      | conditional | yes               |
-| ai_reply    | yes                                                   | yes   | yes    | conditional | yes               |
-| opening     | yes                                                   | —     | yes    | conditional | no (block-delete) |
+| Kind        | edit                                                  | regen | branch | flip-era    | close here  | delete            |
+| ----------- | ----------------------------------------------------- | ----- | ------ | ----------- | ----------- | ----------------- |
+| user_action | yes                                                   | —     | —      | conditional | —           | yes               |
+| ai_reply    | yes                                                   | yes   | yes    | conditional | conditional | yes               |
+| opening     | yes                                                   | —     | yes    | conditional | —           | no (block-delete) |
 | system      | (inline buttons inside content; no top-right cluster) |
 | streaming   | (no actions; cancel via composer)                     |
 
 `flip-era` is conditional: host passes `onFlipEra` only when
 active calendar has eras. Same gating as the
 [per-screen doc](../screens/reader-composer/reader-composer.md#per-entry-actions).
+
+`close here` is conditional too: the host passes `onCloseChapterHere`
+only on a row a chapter can end on, an `ai_reply` no chapter has
+closed, and the card runs no kind test of its own, so the rule keeps
+one copy. It sits before delete as `Close chapter here`
+(`SeparatorHorizontal`, per
+[`iconography.md → Per-entry actions`](../foundations/iconography.md#per-entry-actions))
+and opens the
+[chapter-close modal](../screens/chapter-timeline/chapter-timeline.md#chapter-close-modal)
+with the entry picked as the end. The head's right padding grows with
+the number of actions shown, so its text clears the cluster at phone
+width however many render.
 
 Position: absolute top-right of bubble; opacity 0.55 default,
 1.0 on hover or focus per the
@@ -943,8 +956,8 @@ density-aware sizing inherit from icon-actions.
 ([`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation)),
 so the gate splits in three. `reversalDisabled` gates regen and
 delete, `editDisabled` gates the pencil and every edit-mode control,
-and `disabled` gates the rest: branch, flip era, the world-time
-footer, the scene editor and the system-entry buttons, though not the
+and `disabled` gates the rest: branch, flip era, `Close chapter here`,
+the world-time footer, the scene editor and the system-entry buttons, though not the
 [system entry's](#system-entry) copy buttons and toggles. Save &
 regenerate saves, then regenerates, so it needs both flags clear. Each
 split prop falls back to `disabled` when absent. The reader leaves regen and
@@ -993,7 +1006,10 @@ badge, rejected location, clamped delta, state problems and the
 alert toggle, legacy row, unknown-entity chip), scene editor (tail entry
 editable, non-tail read-only), cut-off notice (per cause, with and
 without its route, at phone width, its route live while a run is in
-flight, shown in edit mode, absent on every kind but `ai_reply`).
+flight, shown in edit mode, absent on every kind but `ai_reply`),
+`Close chapter here` (shown with a handler and absent without one,
+disabled with its reason under the gate, the head clear of the cluster
+at phone width).
 Belongs in
 `Patterns/Reader composer/EntryCard` when component
 implementation begins.

@@ -2274,6 +2274,17 @@ turn`, has the same gap when the boundary phase drops a stale pick and the
 region is under the threshold. Raised 2026-11-07 by Slice 5.6's planning. Parked
 2026-11-07; the signal is a tester expecting that close.
 
+Redo doesn't bring a dropped pick back either (Slice 5.10's planning,
+2026-11-17). Take a manual pick ending on the head reply: CTRL-Z of that
+turn during the close interrupts and defers it, and the bracket drops
+the pick, since its end entry is gone. Redo restores the entry exactly
+but not the pick, so at the next Send under the threshold nothing is
+owed and Send clears the record: the close the user picked never runs,
+though the prose is back. Accepted for the same reason: the deferral
+toast tells the user, and CTRL-Z of the turn a pick ends on reads as a
+change of mind. The signal is the same, and carrying the pick in the
+undo group is the option if it fires.
+
 #### A route mounted during a read starts the strip at 0
 
 `useChapterProgress` holds its last read per hook, so World, Plot or

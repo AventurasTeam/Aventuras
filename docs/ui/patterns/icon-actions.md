@@ -106,13 +106,14 @@ hover state can't fire.
 A small shared semantic mapping. The same glyph means the same
 action everywhere it appears.
 
-| Action        | Glyph | Use cases                                                                                                |
-| ------------- | ----- | -------------------------------------------------------------------------------------------------------- |
-| edit / rename | `✎`   | Edit entry content (reader); rename branch (navigator).                                                  |
-| regenerate    | `↻`   | Regenerate this AI reply (reader).                                                                       |
-| branch        | `⎇`   | Branch from this entry (reader).                                                                         |
-| delete        | `×`   | Delete entry (reader); delete branch (navigator); delete era flip (Story Settings · Calendar flip-list). |
-| flip era      | `📅`  | Flip era from this entry (reader, conditional on `eras !== null`).                                       |
+| Action             | Glyph | Use cases                                                                                                |
+| ------------------ | ----- | -------------------------------------------------------------------------------------------------------- |
+| edit / rename      | `✎`   | Edit entry content (reader); rename branch (navigator).                                                  |
+| regenerate         | `↻`   | Regenerate this AI reply (reader).                                                                       |
+| branch             | `⎇`   | Branch from this entry (reader).                                                                         |
+| delete             | `×`   | Delete entry (reader); delete branch (navigator); delete era flip (Story Settings · Calendar flip-list). |
+| flip era           | `📅`  | Flip era from this entry (reader, conditional on `eras !== null`).                                       |
+| close chapter here | `⁂`   | `Close chapter here` on a reply in the open region (reader).                                             |
 
 Glyphs above are wireframe placeholders; the consistent **semantic
 mapping** is what matters now and what extends as new actions

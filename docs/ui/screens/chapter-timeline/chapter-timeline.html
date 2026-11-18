@@ -142,6 +142,10 @@
   body[data-progress="warn"] .topbar-progress .fill, body[data-progress="warn"] .progress-bar-fill { width: 84%; background: var(--tone-warning); }
   body[data-progress="danger"] .topbar-progress .fill, body[data-progress="danger"] .progress-bar-fill { width: 95%; background: var(--tone-danger); }
   .progress-meta { font-size: 11px; color: var(--ink-muted); }
+  /* Ready to close (chapter-close.md → Manual user-triggered close): auto-close off, the threshold met */
+  .ready-to-close { display: none; font-weight: 600; color: var(--ink); }
+  body[data-auto-close="off"][data-progress="over"] .ready-to-close { display: inline; }
+  body[data-progress="over"] .topbar-progress .fill, body[data-progress="over"] .progress-bar-fill { width: 100%; background: var(--tone-danger); }
   .progress-summary-placeholder { padding: 0 16px 12px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
   .in-progress-actions { padding: 4px 16px 14px; }
   .close-chapter-btn { padding: 7px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
@@ -319,7 +323,7 @@
   }
 </style>
 </head>
-<body data-close-owed="no" data-rerun-turns="none" data-delete-after="closes" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
+<body data-auto-close="on" data-close-owed="no" data-rerun-turns="none" data-delete-after="closes" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
 
 <div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -385,6 +389,12 @@
     <button class="rb-btn active" data-progress="safe">59% (safe)</button>
     <button class="rb-btn" data-progress="warn">84% (warn)</button>
     <button class="rb-btn" data-progress="danger">95% (danger)</button>
+    <button class="rb-btn" data-progress="over">105% (over)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">auto-close:</span>
+    <button class="rb-btn active" data-auto-close="on">on</button>
+    <button class="rb-btn" data-auto-close="off">off (Ready to close past the threshold)</button>
   </div>
   <div class="rb-group">
     <span class="gl">gen:</span>
@@ -547,7 +557,7 @@
       </div>
       <div class="progress-row">
         <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
-        <div class="progress-meta" id="progress-tok">14,200 / 24,000 tok</div>
+        <div class="progress-meta"><span id="progress-tok">14,200 / 24,000 tok</span> <span class="ready-to-close">&middot; Ready to close</span></div>
       </div>
       <div class="progress-summary-placeholder">Summary, theme, and keywords generate on close.</div>
       <div class="in-progress-actions">
@@ -567,7 +577,9 @@
   </span>
 </div>
 
-<!-- chapter-close modal -->
+<!-- chapter-close modal — one modal for four triggers (chapter-timeline.md → Chapter-close modal): the Actions menu's
+     Close chapter…, the in-progress card's Close chapter…, the reader popover's Close chapter manually, and an
+     entry's Close chapter here, which opens it with that entry picked as the end -->
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal">
     <div class="modal-head">
@@ -869,7 +881,7 @@
   });
 
   // the open region's progress — one state for the strip and the in-progress card
-  const PROGRESS_COUNTS = { safe: '14,200 / 24,000 tok', warn: '20,200 / 24,000 tok', danger: '22,800 / 24,000 tok' };
+  const PROGRESS_COUNTS = { safe: '14,200 / 24,000 tok', warn: '20,200 / 24,000 tok', danger: '22,800 / 24,000 tok', over: '25,300 / 24,000 tok' };
   function setProgress(state) {
     body.dataset.progress = state;
     progressTok.textContent = PROGRESS_COUNTS[state];
@@ -880,6 +892,17 @@
   }
   document.querySelectorAll('.rb-btn[data-progress]').forEach(b => {
     b.addEventListener('click', () => setProgress(b.dataset.progress));
+  });
+
+  // auto-close — off shows Ready to close on the card once the threshold is met
+  function setAutoClose(state) {
+    body.dataset.autoClose = state;
+    document.querySelectorAll('.rb-btn[data-auto-close]').forEach(b => {
+      b.classList.toggle('active', b.dataset.autoClose === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-auto-close]').forEach(b => {
+    b.addEventListener('click', () => setAutoClose(b.dataset.autoClose));
   });
 
   // gen-state — in flight the card's inputs disable, and every gated control carries the gate's tooltip
