@@ -29,31 +29,32 @@ function button(props: { disabled?: boolean; disabledReason?: string }) {
 }
 
 // RN Web renders each Text as a dir="auto" element, so an empty line still counts here.
-function linesAfterButton(): (string | null)[] {
+function linesBesideButton(): { before: (string | null)[]; after: (string | null)[] } {
   const pressable = screen.getByRole('button')
-  return Array.from(document.querySelectorAll('[dir="auto"]'))
-    .filter(
-      (el) =>
-        !pressable.contains(el) &&
-        (pressable.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
-    )
-    .map((el) => el.textContent)
+  const outside = Array.from(document.querySelectorAll('[dir="auto"]')).filter(
+    (el) => !pressable.contains(el),
+  )
+  const follows = (el: Element) =>
+    (pressable.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+  return {
+    before: outside.filter((el) => !follows(el)).map((el) => el.textContent),
+    after: outside.filter(follows).map((el) => el.textContent),
+  }
 }
 
 describe('ReasonButton on native', () => {
   it("shows a disabled button's reason as a line under it", () => {
     button({ disabled: true, disabledReason: REASON })
-    expect(linesAfterButton()).toEqual([REASON])
+    expect(linesBesideButton()).toEqual({ before: [], after: [REASON] })
   })
 
   it('shows no line for a disabled button without a reason', () => {
     button({ disabled: true })
-    expect(linesAfterButton()).toEqual([])
+    expect(linesBesideButton()).toEqual({ before: [], after: [] })
   })
 
   it('shows no line while the button is enabled', () => {
     button({ disabledReason: REASON })
-    expect(screen.queryByText(REASON)).toBeNull()
-    expect(linesAfterButton()).toEqual([])
+    expect(linesBesideButton()).toEqual({ before: [], after: [] })
   })
 })
