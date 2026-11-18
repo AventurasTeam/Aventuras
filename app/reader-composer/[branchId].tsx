@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Platform, View } from 'react-native'
 
+import { closeChapterReason } from '@/components/chapters/close-chapter-reason'
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { heldControl } from '@/components/compounds/entry-card-hold'
@@ -149,6 +150,7 @@ import {
   type RollbackCounts,
   type StoryEntryRejection,
 } from '@/lib/actions'
+import { isReadyToClose } from '@/lib/chapters'
 import { copyText } from '@/lib/clipboard'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
 import { db, runInTransaction, type SystemFailureMeta } from '@/lib/db'
@@ -1825,6 +1827,11 @@ export default function ReaderComposerRoute() {
             entries={entries}
             frame={worldTimeFrame}
             progress={chapterProgress}
+            closeReason={closeChapterReason(gateReason, chapterProgress.canClose)}
+            readyToClose={isReadyToClose(
+              chapterProgress,
+              openForBranch?.settings.chapterAutoClose ?? true,
+            )}
             isFocused={isFocused}
             onJumpToEntry={followEntry}
             onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}

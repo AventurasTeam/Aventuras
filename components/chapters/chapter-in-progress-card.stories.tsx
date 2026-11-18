@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, waitFor } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import type { ChapterProgress, ChapterProgressTone } from '@/lib/chapters'
+import { isReadyToClose, type ChapterProgress, type ChapterProgressTone } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 
 import { ChapterInProgressCard } from './chapter-in-progress-card'
@@ -14,6 +14,8 @@ const SINCE = 'Day 9, dusk'
 // chapterProgressCounts prints both numbers at every tone; the bar's tone follows percent.
 const COUNTS = '14,200 / 24,000 tok'
 const PHONE_390 = { viewport: { value: 'phone390' } }
+const GATE_REASON = t('generationGate.inFlight')
+const READY = t('chapters:readyToClose')
 
 function progress(percent: number, tone: ChapterProgressTone): ChapterProgress {
   return {
@@ -24,6 +26,16 @@ function progress(percent: number, tone: ChapterProgressTone): ChapterProgress {
     canClose: true,
     startEntryId: 'entry_59',
   }
+}
+
+// Met exactly: isReadyToClose compares tokens >= threshold.
+const AT_THRESHOLD: ChapterProgress = {
+  tokens: 24_000,
+  threshold: 24_000,
+  percent: 100,
+  tone: 'danger',
+  canClose: true,
+  startEntryId: 'entry_59',
 }
 
 function TierMark() {
@@ -46,7 +58,7 @@ const meta = {
       },
     },
   },
-  args: { progress: progress(70, 'success'), sinceLabel: SINCE },
+  args: { progress: progress(70, 'success'), sinceLabel: SINCE, readyToClose: false },
   decorators: [
     (Story) => (
       <View className="w-full max-w-[760px] gap-2.5 self-center p-4">
@@ -82,13 +94,10 @@ async function expectProgress(tone: ChapterProgressTone, percent: number) {
   })
 }
 
-// No row stands behind the card: nothing on it or inside it discloses, and Close waits for 5.10.
-async function expectInert() {
+// No row stands behind the card: nothing on it or inside it discloses.
+async function expectNotExpandable() {
   await expect(card()).not.toHaveAttribute('aria-expanded')
   expect(card().querySelector('[aria-expanded]')).toBeNull()
-  const close = closeButton()
-  await expect(close).toHaveAttribute('aria-disabled', 'true')
-  await expect(screen.getByTitle(t('chapters:popover.closeLandsLater'))).toContainElement(close)
 }
 
 async function expectToneCard(tone: ChapterProgressTone, percent: number) {
@@ -98,7 +107,7 @@ async function expectToneCard(tone: ChapterProgressTone, percent: number) {
   ).toBeVisible()
   await expectProgress(tone, percent)
   await expect(screen.getByText(t('chapters:inProgress.placeholder'))).toBeVisible()
-  await expectInert()
+  await expectNotExpandable()
 }
 
 export const Success: Story = {
@@ -128,7 +137,7 @@ export const NoSince: Story = {
   play: async () => {
     await expect(await screen.findByText(t('chapters:inProgress.title'))).toBeVisible()
     expect(screen.queryByText(/since/)).toBeNull()
-    await expectInert()
+    await expectNotExpandable()
   },
 }
 
@@ -145,17 +154,17 @@ export const EmptyTimeline: Story = {
     expect(header.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       card().getBoundingClientRect().top,
     )
-    await expectInert()
+    await expectNotExpandable()
   },
 }
 
 export const Phone390: Story = {
   globals: PHONE_390,
-  args: { progress: progress(95, 'danger') },
+  args: { progress: progress(95, 'danger'), onCloseChapter: fn() },
   play: async () => {
     await waitForTier('phone')
     await expectProgress('danger', 95)
-    await expectInert()
+    await expectNotExpandable()
     // chapter-timeline.md → Mobile expression: Close chapter… runs full width on phone.
     await waitFor(() =>
       expect(closeButton().getBoundingClientRect().width).toBeGreaterThan(
@@ -163,4 +172,82 @@ export const Phone390: Story = {
       ),
     )
   },
+}
+
+/** C16: live with a handler and nothing holding it; a press hands off to the host. */
+export const CloseOpensTheModal: Story = {
+  args: { onCloseChapter: fn() },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const close = closeButton()
+    await expect(close).not.toHaveAttribute('aria-disabled', 'true')
+    expect(close.closest('[title]')).toBeNull()
+    await userEvent.click(close)
+    await expect(args.onCloseChapter).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** A run in flight disables it with the principle's tooltip, and a press reaches nothing. */
+export const CloseHeldByTheGate: Story = {
+  args: { onCloseChapter: fn(), closeReason: GATE_REASON },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const close = closeButton()
+    await expect(close).toHaveAttribute('aria-disabled', 'true')
+    await expect(screen.getByTitle(GATE_REASON)).toContainElement(close)
+    // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
+    fireEvent.click(close)
+    await expect(args.onCloseChapter).not.toHaveBeenCalled()
+  },
+}
+
+export const CloseWithoutAHandler: Story = {
+  play: async () => {
+    await waitForTier('desktop')
+    await expect(closeButton()).toHaveAttribute('aria-disabled', 'true')
+  },
+}
+
+const readyArgs = (measured: ChapterProgress, autoClose: boolean) => ({
+  progress: measured,
+  readyToClose: isReadyToClose(measured, autoClose),
+})
+
+async function expectReadyToClose(shown: boolean) {
+  await waitForTier('desktop')
+  const counts = await screen.findByText(/ \/ 24,000 tok$/)
+  await expect(counts).toBeVisible()
+  const ready = screen.queryByText(READY)
+  if (!shown) {
+    expect(ready).toBeNull()
+    return
+  }
+  if (ready == null) throw new Error('Ready to close is not shown')
+  await expect(ready).toBeVisible()
+  // On the progress line: after the counts, above the summary placeholder.
+  expect(counts.compareDocumentPosition(ready) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(ready.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    screen.getByText(t('chapters:inProgress.placeholder')).getBoundingClientRect().top,
+  )
+}
+
+/** chapter-close.md → Manual user-triggered close: auto-close off, threshold met, a reply to end on. */
+export const ReadyToClose: Story = {
+  args: readyArgs(AT_THRESHOLD, false),
+  play: () => expectReadyToClose(true),
+}
+
+export const ReadyToCloseNotWithAutoClose: Story = {
+  args: readyArgs(AT_THRESHOLD, true),
+  play: () => expectReadyToClose(false),
+}
+
+export const ReadyToCloseNotBelowThreshold: Story = {
+  args: readyArgs({ ...AT_THRESHOLD, tokens: 23_999, percent: 99.99 }, false),
+  play: () => expectReadyToClose(false),
+}
+
+export const ReadyToCloseNotWithoutAReply: Story = {
+  args: readyArgs({ ...AT_THRESHOLD, canClose: false }, false),
+  play: () => expectReadyToClose(false),
 }

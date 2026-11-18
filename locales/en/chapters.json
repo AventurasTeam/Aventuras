@@ -1,6 +1,8 @@
 {
   "label": "Chapter {{number}}",
   "labelWithTime": "Chapter {{number}} · {{time}}",
+  "readyToClose": "Ready to close",
+  "closeNoReply": "No reply to end a chapter on yet",
   "progress": {
     "counts": "{{tokens, number}} / {{threshold, number}} tok",
     "label": "chapter progress · {{counts}}"
@@ -11,7 +13,6 @@
     "inProgress": "{{number}} · in progress",
     "since": "since {{time}}",
     "closeManually": "Close chapter manually",
-    "closeLandsLater": "Closing a chapter lands in a later milestone",
     "manage": "Manage chapters →"
   },
   "time": {

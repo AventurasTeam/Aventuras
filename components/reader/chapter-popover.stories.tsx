@@ -5,7 +5,7 @@ import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/tes
 
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import type { ChapterProgress } from '@/lib/chapters'
+import { isReadyToClose, type ChapterProgress } from '@/lib/chapters'
 
 import {
   ChapterPopover,
@@ -123,6 +123,7 @@ const meta: Meta<typeof ChapterPopover> = {
     closed: CLOSED,
     sinceLabel: 'Day 3, dusk',
     progress: PROGRESS,
+    readyToClose: false,
     onOpenChange: fn(),
     onJumpToChapter: fn(),
     onManageChapters: fn(),
@@ -168,11 +169,10 @@ async function expectContents(args: ChapterPopoverProps) {
   const track = fill.parentElement?.getBoundingClientRect().width ?? Number.NaN
   expect(fill.getBoundingClientRect().width / track).toBeCloseTo(0.35, 1)
 
+  // No onCloseChapter: disabled, and a press neither closes the overlay nor reaches a host.
   const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
   await expect(closeChapter).toHaveAttribute('aria-disabled', 'true')
-  await expect(screen.getByTitle('Closing a chapter lands in a later milestone')).toContainElement(
-    closeChapter,
-  )
+  expect(screen.queryByText('Ready to close')).toBeNull()
   const manage = screen.getByRole('button', { name: 'Manage chapters →' })
   await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
   // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
@@ -324,7 +324,7 @@ export const ActionsClose: Story = {
     await openOverlay()
     const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
     await expect(closeChapter).not.toHaveAttribute('aria-disabled', 'true')
-    await expect(screen.queryByTitle('Closing a chapter lands in a later milestone')).toBeNull()
+    expect(closeChapter.closest('[title]')).toBeNull()
 
     await userEvent.click(closeChapter)
     await expect(args.onCloseChapter).toHaveBeenCalledTimes(1)
@@ -718,4 +718,98 @@ export const HandleOnPhone: Story = {
     await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
     await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
   },
+}
+
+/** layout.md → Stacking: on the Sheet the close runs after its exit, so no Sheet sits under the modal. */
+export const ActionsClosePhone: Story = {
+  globals: PHONE,
+  args: { onCloseChapter: fn() },
+  play: async ({ args }) => {
+    await waitForTier('phone')
+    await openOverlay()
+    await waitForSheetSettled()
+    await userEvent.click(screen.getByRole('button', { name: 'Close chapter manually' }))
+    // Its exit animation outlasts the press: a close run from the press itself is called by now.
+    await expect(args.onCloseChapter).not.toHaveBeenCalled()
+    await waitFor(async () => expect(await chip()).toHaveAttribute('aria-expanded', 'false'))
+    await waitFor(() => expect(args.onCloseChapter).toHaveBeenCalledTimes(1), ANIMATION)
+    expectClosedBeforeCalled(args.onOpenChange, args.onCloseChapter)
+    // Once per dismissal: a second report would open the modal twice.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await expect(args.onCloseChapter).toHaveBeenCalledTimes(1)
+  },
+}
+
+const GATE_REASON = 'Generation is in flight. Cancel to edit.'
+
+/** C16: disabled with its host's reason, the press reaching neither the host nor the overlay. */
+export const CloseHeldByTheGate: Story = {
+  args: { onCloseChapter: fn(), closeReason: GATE_REASON },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openOverlay()
+    const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
+    await expect(closeChapter).toHaveAttribute('aria-disabled', 'true')
+    await expect(screen.getByTitle(GATE_REASON)).toContainElement(closeChapter)
+    // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
+    fireEvent.click(closeChapter)
+    await expect(args.onCloseChapter).not.toHaveBeenCalled()
+    await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
+  },
+}
+
+// Met exactly: isReadyToClose compares tokens >= threshold.
+const AT_THRESHOLD: ChapterProgress = {
+  tokens: 24_000,
+  threshold: 24_000,
+  percent: 100,
+  tone: 'danger',
+  canClose: true,
+  startEntryId: 'entry_3',
+}
+
+const readyArgs = (progress: ChapterProgress, autoClose: boolean) => ({
+  progress,
+  readyToClose: isReadyToClose(progress, autoClose),
+})
+
+async function expectReadyToClose(shown: boolean) {
+  await waitForTier('desktop')
+  await openOverlay()
+  const label = screen.getByText(/^chapter progress · /)
+  await expect(label).toBeVisible()
+  const ready = screen.queryByText('Ready to close')
+  if (!shown) {
+    expect(ready).toBeNull()
+    return
+  }
+  if (ready == null) throw new Error('Ready to close is not shown')
+  await expect(ready).toBeVisible()
+  // The progress row: after its label, above the actions.
+  expect(label.compareDocumentPosition(ready) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
+  expect(ready.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    closeChapter.getBoundingClientRect().top,
+  )
+}
+
+/** chapter-close.md → Manual user-triggered close: auto-close off, threshold met, a reply to end on. */
+export const ReadyToClose: Story = {
+  args: readyArgs(AT_THRESHOLD, false),
+  play: () => expectReadyToClose(true),
+}
+
+export const ReadyToCloseNotWithAutoClose: Story = {
+  args: readyArgs(AT_THRESHOLD, true),
+  play: () => expectReadyToClose(false),
+}
+
+export const ReadyToCloseNotBelowThreshold: Story = {
+  args: readyArgs({ ...AT_THRESHOLD, tokens: 23_999, percent: 99.99 }, false),
+  play: () => expectReadyToClose(false),
+}
+
+export const ReadyToCloseNotWithoutAReply: Story = {
+  args: readyArgs({ ...AT_THRESHOLD, canClose: false }, false),
+  play: () => expectReadyToClose(false),
 }

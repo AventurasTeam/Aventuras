@@ -23,7 +23,7 @@ import { runOnUISync, scheduleOnRN } from 'react-native-worklets'
 
 import { ChapterProgressBar } from '@/components/compounds/chapter-progress-bar'
 import { chapterProgressLabel } from '@/components/compounds/chapter-progress-label'
-import { Button } from '@/components/ui/button'
+import { ReasonButton } from '@/components/compounds/reason-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   ContextScrollView,
@@ -65,10 +65,14 @@ export type ChapterPopoverProps = {
   sinceLabel: string | null
   /** Its `startEntryId` is the open row's jump; null leaves that row unpressable. */
   progress: ChapterProgress
+  /** isReadyToClose's verdict: `Ready to close` follows the progress label. */
+  readyToClose: boolean
   onOpenChange?: (open: boolean) => void
   onJumpToChapter: (startEntryId: string) => void
-  /** Absent: disabled with a reason. */
+  /** Runs once the overlay is gone, so the modal it opens has nothing under it. Absent: disabled. */
   onCloseChapter?: () => void
+  /** Why Close chapter manually is disabled; absent with onCloseChapter set means enabled. */
+  closeReason?: string
   onManageChapters: () => void
   ref?: Ref<ChapterPopoverHandle>
 }
@@ -154,6 +158,10 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
   const [open, changeOpen] = useReportedOpen(onOpenChange)
   const pressStartedOutside = usePressStartedOutside()
   const close = () => trigger.current?.close()
+  const closeThen = (run: () => void) => {
+    close()
+    run()
+  }
 
   // Radix's default is the first row, far above the last one the list opens on.
   const focusLastRow = (event: Event) => {
@@ -207,7 +215,13 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
         }}
       >
         <ScrollComponentContext.Provider value={POPOVER_SCROLL}>
-          <OverlayBody {...content} arm={POPOVER_ARM} close={close} lastRow={lastRow} />
+          <OverlayBody
+            {...content}
+            arm={POPOVER_ARM}
+            close={close}
+            closeThen={closeThen}
+            lastRow={lastRow}
+          />
         </ScrollComponentContext.Provider>
       </PopoverContent>
     </Popover>
@@ -216,17 +230,32 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
 
 function SheetArm({ onOpenChange, ref, ...content }: ArmProps) {
   const [open, changeOpen] = useReportedOpen(onOpenChange)
-  const close = () => changeOpen(false)
+  // A modal opened while this Sheet animates out would sit under it (layout.md → Stacking).
+  const afterDismiss = useRef<(() => void) | null>(null)
+  const change = (next: boolean) => {
+    if (next) afterDismiss.current = null
+    changeOpen(next)
+  }
+  const close = () => change(false)
+  const closeThen = (run: () => void) => {
+    afterDismiss.current = run
+    change(false)
+  }
+  const runAfterDismiss = () => {
+    const run = afterDismiss.current
+    afterDismiss.current = null
+    run?.()
+  }
 
   useImperativeHandle(ref, () => ({ open: () => {}, close }))
 
   return (
-    <Sheet open={open} onOpenChange={changeOpen} ariaLabel={t('chapters:popover.title')}>
+    <Sheet open={open} onOpenChange={change} ariaLabel={t('chapters:popover.title')}>
       <SheetTrigger asChild>
         <ChapterChip number={content.number} expanded={open} />
       </SheetTrigger>
-      <SheetContent size="medium">
-        <OverlayBody {...content} arm={SHEET_ARM} close={close} />
+      <SheetContent size="medium" onDismissed={runAfterDismiss}>
+        <OverlayBody {...content} arm={SHEET_ARM} close={close} closeThen={closeThen} />
       </SheetContent>
     </Sheet>
   )
@@ -248,6 +277,8 @@ function SheetUnlockWatcher({ onUnlocked }: { onUnlocked: () => void }) {
 type OverlayBodyProps = Omit<ArmProps, 'onOpenChange' | 'ref'> & {
   arm: Arm
   close: () => void
+  /** Closes the overlay and runs `run` once nothing of it is left on screen. */
+  closeThen: (run: () => void) => void
   /** The last pressable row, which takes focus on open. */
   lastRow?: Ref<View>
 }
@@ -257,11 +288,14 @@ function OverlayBody({
   closed,
   sinceLabel,
   progress,
+  readyToClose,
   onJumpToChapter,
   onCloseChapter,
+  closeReason,
   onManageChapters,
   arm,
   close,
+  closeThen,
   lastRow,
 }: OverlayBodyProps) {
   const list = useRef<ScrollComponentHandle>(null)
@@ -375,24 +409,32 @@ function OverlayBody({
 
       <View className="gap-1">
         <ChapterProgressBar percent={progress.percent} className="h-1.5 rounded-full" />
-        <Text size="xs" variant="muted">
-          {chapterProgressLabel(progress)}
-        </Text>
+        <View className="flex-row flex-wrap items-baseline gap-x-2">
+          <Text size="xs" variant="muted">
+            {chapterProgressLabel(progress)}
+          </Text>
+          {readyToClose ? (
+            <Text size="xs" variant="default" className="font-medium">
+              {t('chapters:readyToClose')}
+            </Text>
+          ) : null}
+        </View>
       </View>
 
       <View className="gap-1">
         <OverlayAction
           label={t('chapters:popover.closeManually')}
-          reason={t('chapters:popover.closeLandsLater')}
           variant="primary"
-          onPress={onCloseChapter}
-          close={close}
+          reason={closeReason}
+          onPress={onCloseChapter != null ? () => closeThen(onCloseChapter) : undefined}
         />
         <OverlayAction
           label={t('chapters:popover.manage')}
           variant="ghost"
-          onPress={onManageChapters}
-          close={close}
+          onPress={() => {
+            close()
+            onManageChapters()
+          }}
         />
       </View>
     </View>
@@ -442,36 +484,26 @@ function ChapterRow({
   )
 }
 
-// An action that can be absent carries the reason it is disabled; an always-live one has none.
 type OverlayActionProps = {
   label: string
   variant: 'primary' | 'ghost'
-  close: () => void
-} & (
-  | { onPress: () => void; reason?: never }
-  | { onPress: (() => void) | undefined; reason: string }
-)
+  /** Undefined disables the action. Closing the overlay is the caller's, before or after it runs. */
+  onPress: (() => void) | undefined
+  /** Disables the action and says why. */
+  reason?: string
+}
 
-function OverlayAction({ label, reason, variant, onPress, close }: OverlayActionProps) {
+function OverlayAction({ label, variant, onPress, reason }: OverlayActionProps) {
   return (
-    <View className="gap-0.5">
-      <Button
-        variant={variant}
-        size="sm"
-        disabled={onPress == null}
-        disabledReason={reason}
-        onPress={() => {
-          close()
-          onPress?.()
-        }}
-      >
-        <Text>{label}</Text>
-      </Button>
-      {onPress == null && reason != null && Platform.OS !== 'web' ? (
-        <Text size="xs" variant="muted">
-          {reason}
-        </Text>
-      ) : null}
-    </View>
+    <ReasonButton
+      variant={variant}
+      size="sm"
+      layout="stretch"
+      disabled={onPress == null || reason != null}
+      disabledReason={reason}
+      onPress={onPress}
+    >
+      <Text>{label}</Text>
+    </ReasonButton>
   )
 }
