@@ -82,8 +82,13 @@ describe('rejudgeSaved', () => {
     })
     const { runs, bar } = rejudgeSaved(dir, [])
     expect(tallyOf(runs, 0)?.holds).toEqual([
+      { task: 'happenings', held: true, why: 'no-start' },
+      { task: 'lore', held: true, why: 'no-start' },
       { task: 'identity', held: true, why: 'held' },
       { task: 'threads', held: true, why: 'held' },
+      { task: 'upkeep', held: true, why: 'no-start' },
+      { task: 'lifecycle', held: true, why: 'no-start' },
+      { task: 'awareness', held: true, why: 'no-start' },
     ])
     expect(tallyOf(runs, 0)?.cutOffs).toEqual([{ task: 'identity', step: 1, outputTokens: 8_000 }])
     expect(bar.runs).toBe(1)
@@ -100,7 +105,7 @@ describe('rejudgeSaved', () => {
       'report.json': reportOf(),
     })
     const tally = onlyTally()
-    expect(tally.holds.map(({ held }) => held)).toEqual([true, true])
+    expect(tally.holds.map(({ held }) => held)).toEqual([true, true, true, true, true, true, true])
     expect(tally.cutOffs.map(({ step }) => step)).toEqual([1, 2])
   })
 
@@ -113,12 +118,19 @@ describe('rejudgeSaved', () => {
     })
     save(2, { 'identity-p1-s1.json': reply('stop', 50) })
     const { runs } = rejudgeSaved(dir, [])
-    expect(tallyOf(runs, 0)?.holds.map(({ why }) => why)).toEqual(['stopped: cut-off', 'held'])
-    expect(tallyOf(runs, 0)?.cutOffs.map(({ outputTokens }) => outputTokens)).toEqual([8_000, 40])
-    expect(tallyOf(runs, 1)?.holds.map(({ why }) => why)).toEqual([
-      'no report: the close did not complete, or wrote none',
-      'no report: the close did not complete, or wrote none',
+    expect(tallyOf(runs, 0)?.holds.map(({ why }) => why)).toEqual([
+      'no-start',
+      'no-start',
+      'stopped: cut-off',
+      'held',
+      'no-start',
+      'no-start',
+      'no-start',
     ])
+    expect(tallyOf(runs, 0)?.cutOffs.map(({ outputTokens }) => outputTokens)).toEqual([8_000, 40])
+    expect(tallyOf(runs, 1)?.holds.map(({ why }) => why)).toEqual(
+      Array.from({ length: 7 }, () => 'no report: the close did not complete, or wrote none'),
+    )
   })
 
   it('orders runs by number, and names each by its own, across a gap', () => {
@@ -141,7 +153,11 @@ describe('rejudgeSaved', () => {
       'report.json': reportOf(),
     })
     const tally = onlyTally()
-    expect(tally.holds[0]).toEqual({ task: 'identity', held: true, why: 'held' })
+    expect(tally.holds.find(({ task }) => task === 'identity')).toEqual({
+      task: 'identity',
+      held: true,
+      why: 'held',
+    })
     expect(tally.cutOffs).toEqual([])
   })
 
