@@ -535,6 +535,9 @@ describe('useReaderUndo — the reversal meter', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     vi.useFakeTimers()
     vi.setSystemTime(1_000_000)
+    // The meter reads the monotonic clock, which setSystemTime doesn't move; tie it to the fake
+    // Date so a setSystemTime still holds the thread with no tick run.
+    vi.spyOn(performance, 'now').mockImplementation(() => Date.now())
   })
   afterEach(() => {
     vi.useRealTimers()
