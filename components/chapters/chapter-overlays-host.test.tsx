@@ -948,8 +948,37 @@ describe('ChapterOverlaysHost — the close modal', () => {
     expect(modalView.props?.tokensInRange).toBe(420)
   })
 
+  it('holds a pick over the end entry passed', async () => {
+    renderHost()
+    openModal({ branchId: 'br_1', endEntryId: 'entry_62' })
+    const props = await shownModal()
+    act(() => props.onSelect('entry_60'))
+    expect(modalView.props?.selectedId).toBe('entry_60')
+    expect(modalView.props?.tokensInRange).toBe(420)
+  })
+
+  // A close ending on entry_60 settled while the modal was up: the pick left the region.
+  it('falls back to the latest reply once the pick is no longer one', async () => {
+    renderHost()
+    openModal()
+    const props = await shownModal()
+    act(() => props.onSelect('entry_60'))
+    reads.series.mockResolvedValue(SERIES.slice(2))
+    settleRun()
+    await waitFor(() => expect(modalView.props?.replies).toHaveLength(2))
+    expect(modalView.props?.selectedId).toBe('entry_64')
+    expect(modalView.props?.tokensInRange).toBe(580)
+  })
+
   it('tags no chapter on a branch with none closed', async () => {
     chaptersStore.hydrate('br_1', [])
+    renderHost()
+    openModal()
+    expect((await shownModal()).start?.endedChapterNumber).toBeNull()
+  })
+
+  it("tags no chapter from another branch's rows still held", async () => {
+    chaptersStore.hydrate('br_2', [chapter({ id: 'chap_9', branchId: 'br_2', sequenceNumber: 9 })])
     renderHost()
     openModal()
     expect((await shownModal()).start?.endedChapterNumber).toBeNull()
@@ -1015,11 +1044,14 @@ describe('ChapterOverlaysHost — the close modal', () => {
     renderHost()
     openModal()
     await shownModal()
+    modalView.props = null
     act(() => openStory('br_2'))
     expect(chapterOverlaysStore.getState().closeModal).toBeNull()
     expect(modalView.mounted).toBe(false)
     act(() => openStory('br_1'))
     expect(modalView.mounted).toBe(false)
+    // Not a frame of the request on br_2's open.
+    expect(modalView.props).toBeNull()
   })
 
   it('drops a request for a branch the open story does not show', () => {
@@ -1027,6 +1059,9 @@ describe('ChapterOverlaysHost — the close modal', () => {
     openModal({ branchId: 'br_2' })
     expect(chapterOverlaysStore.getState().closeModal).toBeNull()
     expect(modalView.mounted).toBe(false)
+    // Never rendered, even for the frame before the drop.
+    expect(modalView.props).toBeNull()
+    expect(reads.series).not.toHaveBeenCalled()
   })
 
   it('shuts the modal at once on confirm, and starts the close on the selected end', async () => {
