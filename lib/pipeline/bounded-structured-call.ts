@@ -35,7 +35,7 @@ export async function* boundedStructuredCall<T>(call: {
   schema: z.ZodType<T>
   config: ResolveModelConfig
   signal: AbortSignal
-  options: StructuredCallOptions
+  options: Pick<StructuredCallOptions, 'actionId' | 'defaultMaxOutput'>
   /** Defaults to callTimeoutMs(target, config). */
   timeoutMs?: number
 }): AsyncGenerator<PhaseEmittedEvent, BoundedStructuredOutcome<T>> {

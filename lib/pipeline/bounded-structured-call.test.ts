@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import type { CallRetryError, generateStructured, ResolveModelConfig } from '@/lib/ai'
+import type {
+  CallRetryError,
+  generateStructured,
+  PromptSectionsInput,
+  ResolveModelConfig,
+} from '@/lib/ai'
 
 import { boundedStructuredCall, type BoundedStructuredOutcome } from './bounded-structured-call'
 import type { PhaseEmittedEvent } from './types'
@@ -268,5 +273,24 @@ describe('boundedStructuredCall', () => {
         cause: { status: 'failed', error: failure, recoverable: [PARSE_RETRY] },
       },
     })
+  })
+})
+
+describe('boundedStructuredCall options (checked by tsc)', () => {
+  it("takes no prompt sections, whose counts its outcome doesn't carry", () => {
+    const none = { named: [], unnamed: [] }
+    const sections: PromptSectionsInput = { halves: { system: none, user: none } }
+    const call = () =>
+      boundedStructuredCall({
+        target: 'lore-mgmt',
+        phaseName: 'boundary',
+        prompt: PROMPT,
+        schema,
+        config: CONFIG,
+        signal: new AbortController().signal,
+        // @ts-expect-error the outcome drops promptSections, so the sections would go uncounted
+        options: { ...OPTIONS, sections },
+      })
+    expect(call).toBeTypeOf('function')
   })
 })
