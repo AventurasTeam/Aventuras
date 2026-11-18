@@ -265,9 +265,12 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     if (from == null || replies[from]!.id !== downOn) return
     onPick(downOn)
   }
-  // A release outside the panel never reaches onKeyUp, so a stale press would pick on a later release.
+  // Leaving the panel drops what was armed in it: a release outside never reaches onKeyUp, and a
+  // pending focus would pull focus back from wherever it went once its reply mounts.
   const onBlur = (event: FocusEvent<HTMLDivElement>) => {
-    if (!event.currentTarget.contains(event.relatedTarget)) spaceDownOn.current = null
+    if (event.currentTarget.contains(event.relatedTarget)) return
+    spaceDownOn.current = null
+    pendingFocus.current = null
   }
   return (
     <div

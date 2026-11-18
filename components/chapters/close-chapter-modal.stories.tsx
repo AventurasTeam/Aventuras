@@ -425,6 +425,26 @@ export const ArrowKeysMoveBetweenReplies: Story = {
   },
 }
 
+// End on a virtualized-out reply only requests its focus; leaving the list before it mounts cancels the request.
+export const EndRequestDroppedOnLeavingTheList: Story = {
+  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const first = await screen.findByTestId('close-chapter-reply-entry_401')
+    first.focus()
+    expect(screen.queryByTestId('close-chapter-reply-entry_3')).toBeNull()
+    // Both in one task: the scroll that mounts the oldest reply lands only after focus has left.
+    first.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }),
+    )
+    trigger().focus()
+    await waitFor(() => expect(screen.getByTestId('close-chapter-reply-entry_3')).toBeVisible())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await expect(trigger()).toHaveFocus()
+  },
+}
+
 export const SpacePicksAReply: Story = {
   play: async ({ args }) => {
     await dialog()
