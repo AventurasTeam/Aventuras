@@ -791,9 +791,22 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   "Q11: Then restore the short guard.").** The dropped sentence was the
   step-by-step rule quoted above. The system half now says, after the
   natural-ending line, "A turn that opens on a new scene or after a time
-  skip begins the next chapter, so it can't end this one." It is a fact
-  with no procedure, so run 5's deliberation has nothing to loop on.
-  Boundary bar on the restored guard: pending at writing.
+  skip begins the next chapter, so it can't end this one." It states a
+  fact, with no procedure to follow.
+
+  The boundary bar's third run, on the restored guard at `cbca94d3c`
+  (prompt 2,481 tokens, 10:53 to 11:05 UTC), held: 10 of 10 runs picked a
+  candidate and none was cut off, with replies of 3,655 to 7,958 output
+  tokens. No run picked t16 or the latest candidate. Six runs (2, 3, 4,
+  6, 7 and 9) picked t15 (position 93), most naming the letter's change
+  of scene and time as the reason. But t15 ends on the letter's lead-in,
+  "we found … the following important news:", so those chapters close on
+  a colon and the news opens the next one. Two runs (5 and 8) picked t14
+  (position 91), where the novel's Part One ends. Run 1 picked t27
+  (position 117), the Spy-glass chapter's end. Run 10 picked t5
+  (position 73), which ends after the riders, before Jim goes back to the
+  Admiral Benbow. The record is
+  `~/.cache/aventuras-measure/m5-10/probe-20261118T110532Z`.
 
 - **`firstLastSentences` is tougher than its first cut.** It merges
   letterless pieces (French `»`, a bare ellipsis) into the sentence
