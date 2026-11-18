@@ -222,10 +222,17 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     overscan: 6,
   })
   // A key can target an option virtualized out: it takes focus once the scroll has mounted it.
-  const pendingFocus = useRef<number | null>(null)
+  const pendingFocus = useRef<string | null>(null)
   const focusPending = () => {
-    const index = pendingFocus.current
-    if (index == null) return
+    const id = pendingFocus.current
+    if (id == null) return
+    // A removed option's blur is dropped mid-commit, so the request can outlive a focus that left.
+    const active = document.activeElement
+    const index = replies.findIndex((row) => row.id === id)
+    if (index < 0 || (active !== document.body && !scrollRef.current?.contains(active))) {
+      pendingFocus.current = null
+      return
+    }
     const option = scrollRef.current?.querySelector<HTMLElement>(
       `[data-index="${index}"] [role="option"]`,
     )
@@ -254,7 +261,7 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     if (to == null) return
     event.preventDefault()
     virtualizer.scrollToIndex(to, { align: 'auto' })
-    pendingFocus.current = to
+    pendingFocus.current = replies[to]!.id
     focusPending()
   }
   const onKeyUp = (event: KeyboardEvent<HTMLDivElement>) => {

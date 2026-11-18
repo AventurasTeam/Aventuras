@@ -123,6 +123,27 @@ function GatedHarness(props: HarnessProps) {
   )
 }
 
+const PREPEND_EVENT = 'close-modal-prepend'
+
+// A play prepends a reply by event, the way a refresh landing a new reply would.
+function PrependHarness({ replies, ...props }: HarnessProps) {
+  const [prepended, setPrepended] = useState<CloseModalRow[]>([])
+  useEffect(() => {
+    const prepend = () =>
+      setPrepended([
+        {
+          id: 'entry_prepended',
+          ref: formatEntryRef(999),
+          excerpt: 'Reply 999: a new reply lands at the head.',
+          time: null,
+        },
+      ])
+    window.addEventListener(PREPEND_EVENT, prepend)
+    return () => window.removeEventListener(PREPEND_EVENT, prepend)
+  }, [])
+  return <ModalHarness {...props} replies={[...prepended, ...replies]} />
+}
+
 const meta = {
   title: 'Compounds/Chapters/CloseChapterModal',
   component: ModalHarness,
@@ -444,6 +465,45 @@ export const EndRequestDroppedOnLeavingTheList: Story = {
     await waitFor(() => expect(screen.getByTestId('close-chapter-reply-entry_3')).toBeVisible())
     await new Promise((resolve) => setTimeout(resolve, 100))
     await expect(trigger()).toHaveFocus()
+  },
+}
+
+// A request for a virtualized-out reply that is already pending when focus moves to the trigger
+// must not pull focus back once the reply mounts, even if the list never saw a blur.
+export const EndRequestDroppedWhenFocusMovedWithoutABlur: Story = {
+  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const first = await screen.findByTestId('close-chapter-reply-entry_401')
+    first.focus()
+    // The focused option's removal blurs it mid-commit, before the target's pending-focus effect:
+    // focus goes to the trigger there, where React drops the blur and the list never sees it.
+    first.addEventListener('blur', () => trigger().focus(), { once: true })
+    first.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }),
+    )
+    await waitFor(() => expect(screen.getByTestId('close-chapter-reply-entry_3')).toBeVisible())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await expect(trigger()).toHaveFocus()
+  },
+}
+
+// End targets the oldest reply by id: a reply prepended before it mounts shifts every position.
+export const EndFollowsItsReplyWhenOneIsPrepended: Story = {
+  render: (args) => <PrependHarness {...args} />,
+  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const first = await screen.findByTestId('close-chapter-reply-entry_401')
+    first.focus()
+    expect(screen.queryByTestId('close-chapter-reply-entry_3')).toBeNull()
+    first.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }),
+    )
+    window.dispatchEvent(new Event(PREPEND_EVENT))
+    await waitFor(() => expect(screen.getByTestId('close-chapter-reply-entry_3')).toHaveFocus())
   },
 }
 

@@ -158,3 +158,15 @@ slice-planning gate forces its resolution before that slice is planned.
   the arm switch and goes when the tier leaves phone. Found by
   CodeRabbit on Slice 5.10's PR 2, fixed there for the chapter popover
   only, 2026-11-18.
+- **RN-Web's `PressResponder` presses a button on a held Space's
+  repeat.** It starts a press on any Space keydown on a `role="button"`
+  element, repeats included (no `event.repeat` check;
+  `node_modules/react-native-web/dist/modules/usePressEvents/PressResponder.js`,
+  `isValidKeyPress` and `onKeyDown`), and fires `onPress` on the matching
+  keyup, so a Space held from elsewhere whose auto-repeat lands on a
+  button presses it on release. Generic to every RN-Web button, not the
+  close modal. Most OS keyboards stop a held key's auto-repeat once
+  another key (Tab) is pressed, which makes it hard to reach (not
+  verified per platform). A fix would belong in the `Button` primitive
+  or a pnpm patch. Raised by CodeRabbit on Slice 5.10's PR 2,
+  2026-11-18.
