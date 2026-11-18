@@ -28,24 +28,32 @@ function button(props: { disabled?: boolean; disabledReason?: string }) {
   )
 }
 
-// The wrapper holds the button, and the reason line after it when there is one.
-const wrapperChildren = (container: HTMLElement) => container.firstElementChild?.children.length
+// RN Web renders each Text as a dir="auto" element, so an empty line still counts here.
+function linesAfterButton(): (string | null)[] {
+  const pressable = screen.getByRole('button')
+  return Array.from(document.querySelectorAll('[dir="auto"]'))
+    .filter(
+      (el) =>
+        !pressable.contains(el) &&
+        (pressable.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    )
+    .map((el) => el.textContent)
+}
 
 describe('ReasonButton on native', () => {
   it("shows a disabled button's reason as a line under it", () => {
-    const { container } = button({ disabled: true, disabledReason: REASON })
-    expect(screen.getByText(REASON)).toBeTruthy()
-    expect(wrapperChildren(container)).toBe(2)
+    button({ disabled: true, disabledReason: REASON })
+    expect(linesAfterButton()).toEqual([REASON])
   })
 
   it('shows no line for a disabled button without a reason', () => {
-    const { container } = button({ disabled: true })
-    expect(wrapperChildren(container)).toBe(1)
+    button({ disabled: true })
+    expect(linesAfterButton()).toEqual([])
   })
 
   it('shows no line while the button is enabled', () => {
-    const { container } = button({ disabledReason: REASON })
+    button({ disabledReason: REASON })
     expect(screen.queryByText(REASON)).toBeNull()
-    expect(wrapperChildren(container)).toBe(1)
+    expect(linesAfterButton()).toEqual([])
   })
 })
