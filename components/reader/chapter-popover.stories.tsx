@@ -5,7 +5,8 @@ import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/tes
 
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { isReadyToClose, type ChapterProgress } from '@/lib/chapters'
+import type { ChapterProgress } from '@/lib/chapters'
+import { t } from '@/lib/i18n'
 
 import {
   ChapterPopover,
@@ -52,8 +53,14 @@ const PROGRESS: ChapterProgress = {
   startEntryId: 'entry_3',
 }
 
-// Right after a close at the tail: the open chapter has no entry to jump to.
-const EMPTY_OPEN: ChapterProgress = { ...PROGRESS, tokens: 0, percent: 0, startEntryId: null }
+// Right after a close at the tail: the open chapter has no entry to jump to, nor one to end on.
+const EMPTY_OPEN: ChapterProgress = {
+  ...PROGRESS,
+  tokens: 0,
+  percent: 0,
+  canClose: false,
+  startEntryId: null,
+}
 
 function TierMark() {
   return <Text testID="tier">{useTier()}</Text>
@@ -123,9 +130,11 @@ const meta: Meta<typeof ChapterPopover> = {
     closed: CLOSED,
     sinceLabel: 'Day 3, dusk',
     progress: PROGRESS,
-    readyToClose: false,
+    chapterAutoClose: true,
+    gateReason: undefined,
     onOpenChange: fn(),
     onJumpToChapter: fn(),
+    onCloseChapter: fn(),
     onManageChapters: fn(),
   },
   decorators: [
@@ -149,7 +158,7 @@ async function expectRowOrder() {
   expect(openRow.top).toBeGreaterThanOrEqual(list.getBoundingClientRect().top)
 }
 
-async function expectContents(args: ChapterPopoverProps) {
+async function expectContents() {
   await expectRowOrder()
   await expect(screen.getByRole('button', { name: /1 · Into the Undercity/ })).toBeVisible()
   await expect(screen.getByText('Day 1 → Day 2, dawn')).toBeVisible()
@@ -169,24 +178,19 @@ async function expectContents(args: ChapterPopoverProps) {
   const track = fill.parentElement?.getBoundingClientRect().width ?? Number.NaN
   expect(fill.getBoundingClientRect().width / track).toBeCloseTo(0.35, 1)
 
-  // No onCloseChapter: disabled, and a press neither closes the overlay nor reaches a host.
   const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
-  await expect(closeChapter).toHaveAttribute('aria-disabled', 'true')
   expect(screen.queryByText('Ready to close')).toBeNull()
   // The actions fill the overlay's width, as wide as the bar above them.
   expect(closeChapter.getBoundingClientRect().width).toBeCloseTo(track, 0)
   const manage = screen.getByRole('button', { name: 'Manage chapters →' })
   await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
-  // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
-  fireEvent.click(closeChapter)
-  await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
 }
 
 export const Desktop: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')
     await openOverlay()
-    await expectContents(args)
+    await expectContents()
     await expect(args.onOpenChange).toHaveBeenCalledWith(true)
     // Both surfaces are dialogs; only the Popover sits inside Radix's popper wrapper.
     await expect(
@@ -201,7 +205,7 @@ export const Phone: Story = {
     await waitForTier('phone')
     await openOverlay()
     await waitForSheetSettled()
-    await expectContents(args)
+    await expectContents()
     await expect(args.onOpenChange).toHaveBeenCalledWith(true)
     await expect(
       screen.getByText('3 · in progress').closest('[data-radix-popper-content-wrapper]'),
@@ -779,7 +783,7 @@ const GATE_REASON = 'Generation is in flight. Cancel to edit.'
 
 /** C16: disabled with its host's reason, the press reaching neither the host nor the overlay. */
 export const CloseHeldByTheGate: Story = {
-  args: { onCloseChapter: fn(), closeReason: GATE_REASON },
+  args: { onCloseChapter: fn(), gateReason: GATE_REASON },
   play: async ({ args }) => {
     await waitForTier('desktop')
     await openOverlay()
@@ -793,6 +797,20 @@ export const CloseHeldByTheGate: Story = {
   },
 }
 
+/** C10: an open region with no reply to end on disables it with that reason. */
+export const CloseWithoutAReply: Story = {
+  args: { onCloseChapter: fn(), progress: { ...PROGRESS, canClose: false } },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openOverlay()
+    const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
+    await expect(closeChapter).toHaveAttribute('aria-disabled', 'true')
+    await expect(screen.getByTitle(t('chapters:closeNoReply'))).toContainElement(closeChapter)
+    fireEvent.click(closeChapter)
+    await expect(args.onCloseChapter).not.toHaveBeenCalled()
+  },
+}
+
 // Met exactly: isReadyToClose compares tokens >= threshold.
 const AT_THRESHOLD: ChapterProgress = {
   tokens: 24_000,
@@ -803,9 +821,9 @@ const AT_THRESHOLD: ChapterProgress = {
   startEntryId: 'entry_3',
 }
 
-const readyArgs = (progress: ChapterProgress, autoClose: boolean) => ({
+const readyArgs = (progress: ChapterProgress, chapterAutoClose: boolean) => ({
   progress,
-  readyToClose: isReadyToClose(progress, autoClose),
+  chapterAutoClose,
 })
 
 async function expectReadyToClose(shown: boolean) {

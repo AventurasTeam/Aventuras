@@ -4,7 +4,7 @@ import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/tes
 
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { isReadyToClose, type ChapterProgress, type ChapterProgressTone } from '@/lib/chapters'
+import type { ChapterProgress, ChapterProgressTone } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 
 import { ChapterInProgressCard } from './chapter-in-progress-card'
@@ -58,7 +58,13 @@ const meta = {
       },
     },
   },
-  args: { progress: progress(70, 'success'), sinceLabel: SINCE, readyToClose: false },
+  args: {
+    progress: progress(70, 'success'),
+    sinceLabel: SINCE,
+    chapterAutoClose: true,
+    gateReason: undefined,
+    onCloseChapter: fn(),
+  },
   decorators: [
     (Story) => (
       <View className="w-full max-w-[760px] gap-2.5 self-center p-4">
@@ -160,7 +166,7 @@ export const EmptyTimeline: Story = {
 
 export const Phone390: Story = {
   globals: PHONE_390,
-  args: { progress: progress(95, 'danger'), onCloseChapter: fn() },
+  args: { progress: progress(95, 'danger') },
   play: async () => {
     await waitForTier('phone')
     await expectProgress('danger', 95)
@@ -174,7 +180,7 @@ export const Phone390: Story = {
   },
 }
 
-/** C16: live with a handler and nothing holding it; a press hands off to the host. */
+/** C16: live with a reply to end on and nothing holding it; a press hands off to the host. */
 export const CloseOpensTheModal: Story = {
   args: { onCloseChapter: fn() },
   play: async ({ args }) => {
@@ -189,7 +195,7 @@ export const CloseOpensTheModal: Story = {
 
 /** A run in flight disables it with the principle's tooltip, and a press reaches nothing. */
 export const CloseHeldByTheGate: Story = {
-  args: { onCloseChapter: fn(), closeReason: GATE_REASON },
+  args: { onCloseChapter: fn(), gateReason: GATE_REASON },
   play: async ({ args }) => {
     await waitForTier('desktop')
     const close = closeButton()
@@ -201,16 +207,22 @@ export const CloseHeldByTheGate: Story = {
   },
 }
 
-export const CloseWithoutAHandler: Story = {
-  play: async () => {
+/** C10: an open region with no reply to end on disables it with that reason. */
+export const CloseWithoutAReply: Story = {
+  args: { onCloseChapter: fn(), progress: { ...progress(70, 'success'), canClose: false } },
+  play: async ({ args }) => {
     await waitForTier('desktop')
-    await expect(closeButton()).toHaveAttribute('aria-disabled', 'true')
+    const close = closeButton()
+    await expect(close).toHaveAttribute('aria-disabled', 'true')
+    await expect(screen.getByTitle(t('chapters:closeNoReply'))).toContainElement(close)
+    fireEvent.click(close)
+    await expect(args.onCloseChapter).not.toHaveBeenCalled()
   },
 }
 
-const readyArgs = (measured: ChapterProgress, autoClose: boolean) => ({
+const readyArgs = (measured: ChapterProgress, chapterAutoClose: boolean) => ({
   progress: measured,
-  readyToClose: isReadyToClose(measured, autoClose),
+  chapterAutoClose,
 })
 
 async function expectReadyToClose(shown: boolean) {

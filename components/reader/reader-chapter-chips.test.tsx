@@ -103,8 +103,8 @@ function chips(
   overrides: {
     isFocused?: boolean
     frame?: CalendarFrame | null
-    closeReason?: string
-    readyToClose?: boolean
+    gateReason?: string
+    chapterAutoClose?: boolean
   } = {},
 ) {
   return (
@@ -113,8 +113,8 @@ function chips(
       entries={[entry(1, 3_600), entry(2, 7_200)]}
       frame={overrides.frame === undefined ? FRAME : overrides.frame}
       progress={PROGRESS}
-      closeReason={overrides.closeReason}
-      readyToClose={overrides.readyToClose ?? false}
+      chapterAutoClose={overrides.chapterAutoClose ?? true}
+      gateReason={overrides.gateReason}
       isFocused={overrides.isFocused ?? true}
       onJumpToEntry={jump}
       onManageChapters={manage}
@@ -226,18 +226,20 @@ describe('ReaderChapterChips', () => {
   it('opens the close modal on its branch from Close chapter manually', () => {
     render(chips())
     expect(chapterOverlaysStore.getState().closeModal).toBeNull()
-    stubs.popover?.onCloseChapter?.()
+    stubs.popover?.onCloseChapter()
     expect(chapterOverlaysStore.getState().closeModal).toEqual({ branchId: 'br_1' })
   })
 
-  it('hands the popover the host close reason and ready flag untouched', () => {
-    render(chips({ closeReason: 'Generation is in flight. Cancel to edit.', readyToClose: true }))
-    expect(stubs.popover?.closeReason).toBe('Generation is in flight. Cancel to edit.')
-    expect(stubs.popover?.readyToClose).toBe(true)
+  it('hands the popover the host gate reason and auto-close setting untouched', () => {
+    render(
+      chips({ gateReason: 'Generation is in flight. Cancel to edit.', chapterAutoClose: false }),
+    )
+    expect(stubs.popover?.gateReason).toBe('Generation is in flight. Cancel to edit.')
+    expect(stubs.popover?.chapterAutoClose).toBe(false)
     cleanup()
     render(chips())
-    expect(stubs.popover?.closeReason).toBeUndefined()
-    expect(stubs.popover?.readyToClose).toBe(false)
+    expect(stubs.popover?.gateReason).toBeUndefined()
+    expect(stubs.popover?.chapterAutoClose).toBe(true)
   })
 
   it('hands Manage chapters the host callback', () => {
@@ -263,7 +265,8 @@ describe('ReaderChapterChips', () => {
         entries={[]}
         frame={null}
         progress={PROGRESS}
-        readyToClose={false}
+        chapterAutoClose
+        gateReason={undefined}
         isFocused
         onJumpToEntry={jump}
         onManageChapters={manage}
