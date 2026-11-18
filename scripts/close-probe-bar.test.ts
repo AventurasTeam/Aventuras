@@ -588,11 +588,10 @@ describe('barVerdict', () => {
   })
 })
 
-const boundary = (outcome: BoundaryAttempt['outcome']): BoundaryAttempt => ({
-  outcome,
-  endEntryId: outcome === 'failed' || outcome === 'aborted' ? null : 'entry_0001',
-  outputTokens: 180,
-})
+const boundary = (outcome: BoundaryAttempt['outcome']): BoundaryAttempt =>
+  outcome === 'failed' || outcome === 'aborted'
+    ? { outcome, endEntryId: null, outputTokens: 180 }
+    : { outcome, endEntryId: 'entry_0001', outputTokens: 180 }
 
 const boundaryRuns = (counts: Partial<Record<BoundaryAttempt['outcome'], number>>) =>
   Object.entries(counts).flatMap(([outcome, n]) =>
@@ -679,6 +678,16 @@ describe('boundaryAttemptOf', () => {
       endEntryId: null,
       outputTokens: null,
     })
+  })
+})
+
+describe('BoundaryAttempt (checked by tsc)', () => {
+  it('holds an entry exactly when the call picked or fell back', () => {
+    // @ts-expect-error a failed call ends on no entry
+    const failed: BoundaryAttempt = { outcome: 'failed', endEntryId: 'e1', outputTokens: null }
+    // @ts-expect-error a pick ends on its entry
+    const picked: BoundaryAttempt = { outcome: 'picked', endEntryId: null, outputTokens: null }
+    expect([failed, picked]).toHaveLength(2)
   })
 })
 
