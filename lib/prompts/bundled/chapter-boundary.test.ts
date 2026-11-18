@@ -39,7 +39,6 @@ describe('bundled chapter-boundary template', () => {
     expect(system).toContain('Give one sentence on why the chapter ends there.')
   })
 
-  // The system half asks only for a natural ending: no rule on where the next chapter opens.
   it('describes the natural ending alone, with no rule on where the next chapter opens', () => {
     const { system } = renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT)
     expect(system).toContain(

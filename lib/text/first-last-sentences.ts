@@ -35,9 +35,9 @@ function capped(sentence: string, maxChars: number): string {
 }
 
 /**
- * A text's first and last sentences, each on one line and capped at `maxChars` code points. `last`
- * is null for a text of one sentence, or of none; a blank text gives an empty `first`. Prompt prose
- * takes `promptProse` first, which this module can't import.
+ * A text's first and last sentences, each on one line; one over `maxChars` code points is cut to
+ * at most that many, then '…'. `last` is null for a text of one sentence, or of none; a blank text
+ * gives an empty `first`. Prompt prose takes `promptProse` first, which this module can't import.
  */
 export function firstLastSentences(
   text: string,

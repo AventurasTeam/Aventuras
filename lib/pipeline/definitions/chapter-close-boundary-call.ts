@@ -99,7 +99,7 @@ function fallBack(
 /**
  * chapter-close.md → Phase 1's call over `candidates` (non-empty, oldest first): the model names a
  * candidate by its turn, and an unusable reply ends on the latest candidate, which keeps the
- * chapter under one and a half thresholds.
+ * chapter to at most one and a half thresholds.
  */
 export async function* requestChapterBoundary(
   ctx: BoundaryCallContext,
