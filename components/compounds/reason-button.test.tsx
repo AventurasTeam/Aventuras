@@ -48,8 +48,11 @@ describe('ReasonButton on native', () => {
     expect(linesBesideButton()).toEqual({ before: [], after: [REASON] })
   })
 
-  it('shows no line for a disabled button without a reason', () => {
-    button({ disabled: true })
+  it.each([
+    ['without a reason', undefined],
+    ['with an empty reason', ''],
+  ])('shows no line for a disabled button %s', (_, disabledReason) => {
+    button({ disabled: true, disabledReason })
     expect(linesBesideButton()).toEqual({ before: [], after: [] })
   })
 
