@@ -336,11 +336,12 @@ convention, and the expectation that subsystems route through
   `close_review_read_failed` (error,
   `components/chapters/chapter-overlays-host.tsx`: the review window's
   read failed, with `branchId`, `chapterId` and `error`; the window
-  shows `failed`), `close_modal_read_failed` (warn,
-  `components/chapters/close-chapter-modal.tsx`: the close modal's read
-  of the open region's rows or world times failed, with `branchId`,
-  `read` (`series` or `times`) and `error`; with no rows the modal
-  offers no reply to end on, and with no times its rows show none),
+  shows `failed`), `close_modal_read_failed` (error for `series`, warn
+  for `times`, `components/chapters/close-chapter-modal.tsx`: the close
+  modal's read of the open region's rows or world times failed, with
+  `branchId`, `read` (`series` or `times`) and `error`; with no rows the
+  modal offers no reply to end on until it reopens, and with no times
+  its rows show none),
   `manual_close_failed` (error,
   `components/chapters/run-manual-close.ts`: starting a close the
   modal confirmed threw rather than returning a result, with
