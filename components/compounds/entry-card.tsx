@@ -7,6 +7,7 @@ import {
   Globe,
   Pencil,
   RefreshCw,
+  SeparatorHorizontal,
   Trash2,
   X,
 } from 'lucide-react-native'
@@ -155,6 +156,8 @@ type EntryCardProps = {
   onBranch?: () => void
   /** user, ai, opening. Host hides when active calendar has no eras. */
   onFlipEra?: () => void
+  /** Before delete; the host passes it only on a row that may end a chapter (C10). */
+  onCloseChapterHere?: () => void
   /** ai_reply only: prose cut off at the server's limit. Not dismissible; shown while editing. */
   cutOffNotice?: CutOffNoticeContent
 
@@ -1008,6 +1011,13 @@ function CutOffNoticeLine({ text, action, tier }: CutOffNoticeContent & { tier: 
   )
 }
 
+// Clears the cluster at comfortable density, its widest: 28 px actions 2 px apart at right-2 over
+// the card's p-4, so pr-28 fits four and each further action needs 30 px more.
+function headClearance(actionCount: number): string {
+  if (actionCount <= 4) return 'pr-28'
+  return actionCount === 5 ? 'pr-36' : 'pr-44'
+}
+
 export function EntryCard({
   kind,
   content,
@@ -1035,6 +1045,7 @@ export function EntryCard({
   onRegen,
   onBranch,
   onFlipEra,
+  onCloseChapterHere,
   cutOffNotice,
   streamingPhase,
   streamingTokens,
@@ -1119,6 +1130,16 @@ export function EntryCard({
   }, [sceneDialogMounted])
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
+  // One record of what the cluster renders, so the head's clearance counts the same set.
+  const cluster = {
+    edit: onEdit != null,
+    regen: onRegen != null && kind === 'ai_reply',
+    branch: onBranch != null && (kind === 'ai_reply' || kind === 'opening'),
+    flipEra: onFlipEra != null,
+    closeHere: onCloseChapterHere != null,
+    delete: onDelete != null && kind !== 'opening',
+  }
+  const clusterCount = Object.values(cluster).filter(Boolean).length
   // Holds the label rather than a boolean so the footer receives it narrowed.
   const worldTimeFooterLabel =
     kind !== 'system' && kind !== 'streaming' ? worldTimeLabel : undefined
@@ -1131,7 +1152,12 @@ export function EntryCard({
       // as a turn commits and unshade it as the run settles.
       className={cn('relative w-full rounded-lg border p-4', KIND_BUBBLE[kind], className)}
     >
-      <View className={cn('mb-2 flex-row items-center gap-2', showActions && 'pr-28')}>
+      <View
+        className={cn(
+          'mb-2 flex-row items-center gap-2',
+          showActions && headClearance(clusterCount),
+        )}
+      >
         {kind === 'user_action' ? (
           <View className="rounded-sm bg-fg-primary px-2 py-0.5">
             <Text size="xs" className="font-medium text-bg-base">
@@ -1351,7 +1377,7 @@ export function EntryCard({
 
       {showActions ? (
         <View className="absolute right-2 top-4 flex-row items-center gap-0.5">
-          {onEdit != null ? (
+          {cluster.edit ? (
             <IconAction
               icon={Pencil}
               label={t('reader:entryCard.editEntry')}
@@ -1361,7 +1387,7 @@ export function EntryCard({
               disabledReason={editHold.reason}
             />
           ) : null}
-          {onRegen != null && kind === 'ai_reply' ? (
+          {cluster.regen ? (
             <IconAction
               icon={RefreshCw}
               label={t('reader:entryCard.regenerate')}
@@ -1371,7 +1397,7 @@ export function EntryCard({
               disabledReason={reversalHold.reason}
             />
           ) : null}
-          {onBranch != null && (kind === 'ai_reply' || kind === 'opening') ? (
+          {cluster.branch ? (
             <IconAction
               icon={GitBranch}
               label={t('reader:entryCard.branchFromHere')}
@@ -1381,7 +1407,7 @@ export function EntryCard({
               disabledReason={clusterHold.reason}
             />
           ) : null}
-          {onFlipEra != null ? (
+          {cluster.flipEra ? (
             <IconAction
               icon={ArrowLeftRight}
               label={t('reader:entryCard.flipEra')}
@@ -1391,7 +1417,17 @@ export function EntryCard({
               disabledReason={clusterHold.reason}
             />
           ) : null}
-          {onDelete != null && kind !== 'opening' ? (
+          {cluster.closeHere ? (
+            <IconAction
+              icon={SeparatorHorizontal}
+              label={t('reader:entryCard.closeChapterHere')}
+              size="sm"
+              onPress={onCloseChapterHere}
+              disabled={clusterHold.disabled}
+              disabledReason={clusterHold.reason}
+            />
+          ) : null}
+          {cluster.delete ? (
             <IconAction
               icon={Trash2}
               label={t('reader:entryCard.deleteEntry')}

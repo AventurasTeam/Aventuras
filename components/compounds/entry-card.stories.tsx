@@ -3242,3 +3242,152 @@ export const SystemWindowRefusalSections: StoryT = {
     expect(history.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   },
 }
+
+const CLOSE_HERE = t('reader:entryCard.closeChapterHere')
+
+/** entry-card.md → Action cluster: Close chapter here sits between flip era and delete. */
+export const CloseChapterHereBeforeDelete: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, onCloseChapterHere: fn() },
+  play: async ({ args }) => {
+    const closeHere = await screen.findByRole('button', { name: CLOSE_HERE })
+    const flipEra = screen.getByRole('button', { name: t('reader:entryCard.flipEra') })
+    const remove = screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') })
+    expect(
+      flipEra.compareDocumentPosition(closeHere) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      closeHere.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    await userEvent.click(closeHere)
+    await waitFor(() => expect(args.onCloseChapterHere).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** No handler, no action, on the reply that would otherwise carry it. */
+export const CloseChapterHereNeedsAHandler: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry },
+  play: async () => {
+    await screen.findByRole('button', { name: t('reader:entryCard.deleteEntry') })
+    expect(screen.queryByRole('button', { name: CLOSE_HERE })).toBeNull()
+  },
+}
+
+/** C10 lives in the host's table: the card renders the action for any kind it is handed. */
+export const CloseChapterHereHasNoKindTest: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    onCloseChapterHere: fn(),
+  },
+  play: async () => {
+    await expect(await screen.findByRole('button', { name: CLOSE_HERE })).toBeVisible()
+  },
+}
+
+const CLOSE_GATE = 'Generation is in flight. Cancel to edit.'
+
+/** Gated as branch is: a run in flight disables it, and it takes the gate's reason as its name. */
+export const CloseChapterHereGated: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'ai_reply',
+    content: aiEntry.content,
+    meta: aiMeta,
+    tier: 'desktop',
+    onCloseChapterHere: fn(),
+    disabled: true,
+    disabledReason: CLOSE_GATE,
+  },
+  play: async () => {
+    // Its card's only cluster action, so the one control named by the reason is it.
+    const gated = await screen.findByRole('button', { name: CLOSE_GATE })
+    expect(gated).toBeDisabled()
+    expect(screen.queryByRole('button', { name: CLOSE_HERE })).toBeNull()
+  },
+}
+
+/** An editor open on another entry holds it, with the held reason. */
+export const CloseChapterHereHeld: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'ai_reply',
+    content: aiEntry.content,
+    meta: aiMeta,
+    tier: 'desktop',
+    onCloseChapterHere: fn(),
+    held: true,
+    heldReason: t('reader:editFocus.held'),
+  },
+  play: async () => {
+    const held = await screen.findByRole('button', { name: t('reader:editFocus.held') })
+    expect(held).toBeDisabled()
+  },
+}
+
+const PHONE_390 = {
+  parameters: {
+    layout: 'fullscreen',
+    // No built-in viewport is 390 px wide, and an unknown key silently falls back to desktop.
+    viewport: {
+      options: {
+        phone390: {
+          name: 'Phone 390',
+          styles: { width: '390px', height: '844px' },
+          type: 'mobile',
+        },
+      },
+    },
+  },
+  // Comfortable's 28 px actions make the widest cluster.
+  globals: { viewport: { value: 'phone390' }, density: 'comfortable' },
+  decorators: [
+    (Story: () => ReactElement) => (
+      <View style={{ padding: 16 }}>
+        <Story />
+      </View>
+    ),
+  ],
+} satisfies Partial<StoryT>
+
+const TOKEN_LINE = t('reader:entryCard.tokensWithReasoning', {
+  prompt: 1840,
+  reply: 312,
+  reasoning: 87,
+})
+
+async function expectHeadClearsCluster() {
+  expect(await screen.findByRole('button', { name: CLOSE_HERE })).toBeVisible()
+  const edit = screen.getByRole('button', { name: t('reader:entryCard.editEntry') })
+  // The density and the viewport took: smaller actions would pass for the wrong reason.
+  await waitFor(() => expect(edit.getBoundingClientRect().width).toBe(28))
+  expect(window.innerWidth).toBe(390)
+  expect(screen.getByText(TOKEN_LINE).getBoundingClientRect().right).toBeLessThanOrEqual(
+    edit.getBoundingClientRect().left,
+  )
+}
+
+/** The reader's open-region reply: edit, regenerate, Close chapter here, delete. */
+export const CloseChapterHerePhoneClearsHead: StoryT = {
+  ...PHONE_390,
+  args: {
+    ...aiEntry,
+    tier: 'phone',
+    worldTimeLabel: baseProps.worldTimeLabel,
+    onEdit: fn(),
+    onRegen: fn(),
+    onCloseChapterHere: fn(),
+    onDelete: fn(),
+  },
+  play: expectHeadClearsCluster,
+}
+
+/** All six actions: the head's clearance grows past the four pr-28 fits. */
+export const SixActionsPhoneClearHead: StoryT = {
+  ...PHONE_390,
+  args: { ...baseProps, ...aiEntry, tier: 'phone', onCloseChapterHere: fn() },
+  play: expectHeadClearsCluster,
+}
