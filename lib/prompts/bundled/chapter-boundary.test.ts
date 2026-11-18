@@ -14,8 +14,8 @@ const CONTEXT = {
     },
     { turn: 't2', position: 65, opening: 'Nobody came to the ford.', closing: null },
   ],
-  boundaryRegionTokens: 6150,
-  boundaryThreshold: 4000,
+  boundaryLengthFrom: 2000,
+  boundaryLengthTo: 6000,
   boundaryActiveThreads: [{ title: 'Find the heir' }, { title: 'The debt to the guild' }],
 }
 
@@ -39,20 +39,22 @@ describe('bundled chapter-boundary template', () => {
     expect(system).toContain('Give one sentence on why the chapter ends there.')
   })
 
-  // A candidate shows its opening, so a turn that opens on a time skip reads as the place to end.
-  it('says the picked turn closes the chapter, so a turn opening a new scene is not the pick', () => {
-    expect(renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT).system).toContain(
-      'The chapter ends with the turn you pick and the next chapter opens with the turn after it, so where a listed turn opens on a new scene or after a time skip, end on the listed turn before it; if none is listed before it, choose among the others.',
+  // The system half asks only for a natural ending: no rule on where the next chapter opens.
+  it('describes the natural ending alone, with no rule on where the next chapter opens', () => {
+    const { system } = renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT)
+    expect(system).toContain(
+      'Pick the turn where the story comes to a natural ending: a scene changes, time skips ahead, a beat of its arc resolves, or the narrative pauses. The active threads, when listed, help tell where an arc beat resolves.',
     )
+    expect(system).not.toContain('the next chapter opens')
   })
 
-  it('shows the length, the active threads, and each candidate by turn id, position and sentences', () => {
+  it('shows the length range, the active threads, and each candidate by turn id, position and sentences', () => {
     expect(renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT).user).toBe(
       [
         'Pick the turn this chapter ends on.',
         '',
         '# The open chapter',
-        '6150 tokens so far; a chapter runs about 4000 tokens.',
+        'Each turn listed would end this chapter between 2000 and 6000 tokens long, all good lengths for a chapter, so choose by the story alone.',
         '',
         '# Active threads',
         '- Find the heir',
@@ -77,7 +79,7 @@ describe('bundled chapter-boundary template', () => {
     })
     expect(user).not.toContain('# Active threads')
     expect(user).toContain(
-      '6150 tokens so far; a chapter runs about 4000 tokens.\n\n# Candidate turns',
+      'between 2000 and 6000 tokens long, all good lengths for a chapter, so choose by the story alone.\n\n# Candidate turns',
     )
   })
 })

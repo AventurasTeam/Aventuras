@@ -118,7 +118,7 @@ describe('stub provider', () => {
     })
   })
 
-  // The adapter clamps the step's 8k default to the stub model's 4096, and a real cut reports the
+  // The adapter clamps the step's 16k default to the stub model's 4096, and a real cut reports the
   // output it was allowed, so the cause reads max-output only against what the request sent.
   it('tool-step-cut stops the step after one retry, as a cut at the max output', async () => {
     setTestProviders([stub])

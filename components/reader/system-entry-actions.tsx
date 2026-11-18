@@ -353,8 +353,8 @@ const RUN_BLOCKERS: ReadonlySet<string> = new Set([
   CHAPTER_CLOSE_KIND,
 ])
 
-/** A refused Retry's toast names the user's remedy, as a refused regenerate's does; never the code. */
-function retryRefusalText(
+/** A refused Retry's or manual start's toast names the user's remedy, never the code. */
+export function retryRefusalText(
   blockedBy: string,
   ownLine: 'reader:systemEntry.passRetryBlocked' | 'reader:systemEntry.closeRetryBlocked',
 ): string {
@@ -436,30 +436,45 @@ export function closeResolvedEntry(
 }
 
 /**
- * A close-failure entry's Retry: runs what the close owes, catch-up passes first. Committed or
- * nothing owed settles via `committed`, told which; a failed close rewrites the entry, a failed
- * catch-up pass or a held branch as a memory entry; a cancel, a chain ending before the close, or
- * any other refusal leaves it, the refusal told through `notify`. A `runClose` throw rewrites the
- * entry as an `orchestrator` close failure; throws from `held`, `committed` and the rewrites
+ * A close-failure entry's Retry: runs what the close owes, catch-up passes first, or for a failed
+ * click's entry its pick through the manual start. Committed or nothing owed settles via
+ * `committed`, told which, as does a pick that can no longer end a chapter; a failed close
+ * rewrites the entry, a failed catch-up pass or a held branch as a memory entry; a pick's failed
+ * pre-flight rewrites it keeping the pick; a cancel, a chain ending before the close, or any other
+ * refusal leaves it, the refusal told through `notify`. A run's throw rewrites the entry as an
+ * `orchestrator` close failure, keeping any pick; throws from `held`, `committed` and the rewrites
  * propagate.
  */
 export async function retryCloseEntry(deps: {
   runClose: () => Promise<OwedCloseRun>
+  /** A failed click's end entry (`SystemFailureMeta.closePick`): Retry restarts that pick. */
+  closePick: string | undefined
+  runPicked: (endEntryId: string) => Promise<OwedCloseRun>
   /** Read once the run ended: whether the branch is held `running`. */
   held: () => Promise<boolean>
   committed: (arm: CloseResolvedArm) => Promise<void>
-  rewriteClose: (error: PipelineError) => Promise<void>
+  /** With `closePick`, the rewritten entry keeps it. */
+  rewriteClose: (error: PipelineError, closePick?: string) => Promise<void>
   rewritePass: (refusal: PassRefusal) => Promise<void>
   notify: (message: string) => void
 }): Promise<void> {
   let run: OwedCloseRun
   try {
-    run = await deps.runClose()
+    run = await (deps.closePick == null ? deps.runClose() : deps.runPicked(deps.closePick))
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
-    return deps.rewriteClose({ kind: 'orchestrator', detail })
+    // A fresh restart validates the pick again, even when the throw came after the reserve.
+    return deps.rewriteClose({ kind: 'orchestrator', detail }, deps.closePick)
   }
-  if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
+  // A pick closed into a chapter or deleted since leaves no close owed.
+  const stalePick =
+    deps.closePick != null &&
+    run.outcome === 'rejected' &&
+    run.blockedBy === MANUAL_CLOSE_REFUSAL.invalidEnd
+  if (run.outcome === 'nothing-owed' || stalePick) return deps.committed('nothing-owed')
+  // Nothing started, so the pick is still the entry's alone; once a run reserves, it is the
+  // branch's pendingClose, and a failed run's entry drops it (the owed close's Retry serves it).
+  if (run.outcome === 'preflight-failed') return deps.rewriteClose(run.error, deps.closePick)
   if (run.outcome === 'rejected') {
     logger.debug('reader.close_retry_rejected', { blockedBy: run.blockedBy })
     if (run.blockedBy === CLASSIFIER_HELD) return deps.rewritePass({ held: true })

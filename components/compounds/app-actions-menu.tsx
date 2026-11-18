@@ -3,9 +3,10 @@ import { useRouter } from 'expo-router'
 import type { ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenuPure } from '@/components/compounds/app-actions-menu-pure'
 import { buildGoToGroup, type InStoryContext } from '@/components/compounds/go-to-group'
+import { buildStoryToolsGroup } from '@/components/compounds/story-tools-group'
 import { useIsRouteFocused } from '@/hooks/use-is-route-focused'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
-import { appSettingsStore } from '@/lib/stores'
+import { appSettingsStore, chapterOverlaysStore } from '@/lib/stores'
 
 type AppActionsMenuProps = {
   contextual?: ActionGroup
@@ -14,6 +15,11 @@ type AppActionsMenuProps = {
    * branch, self-omitting `surface`. Off-story screens omit it.
    */
   story?: InStoryContext
+  /**
+   * `Close chapter…`'s inputs: the route's `useChapterProgress` `canClose` and its run gate's
+   * reason. With `story`, builds `STORY TOOLS`; omitted, that group is absent.
+   */
+  closeChapter?: { canClose: boolean; gateReason: string | undefined }
   /**
    * Wraps every route jump this menu owns. A surface with a save session
    * passes its `requestLeave` so the jump routes through the unsaved-changes
@@ -42,6 +48,7 @@ type AppActionsMenuProps = {
 export function AppActionsMenu({
   contextual,
   story,
+  closeChapter,
   beforeNavigate,
   beforeLeaveStory,
   blocked,
@@ -62,12 +69,23 @@ export function AppActionsMenu({
     else go()
   }
   const navigateGoTo = (path: string) => jump(() => surfaceNavigate(path))
+  // Not through beforeNavigate: openCloseModal runs the surface's registered guard itself (C7).
+  const storyTools =
+    story != null && closeChapter != null
+      ? buildStoryToolsGroup({
+          branchId: story.branchId,
+          canClose: closeChapter.canClose,
+          gateReason: closeChapter.gateReason,
+          openCloseModal: chapterOverlaysStore.openCloseModal,
+        })
+      : undefined
   return (
     <AppActionsMenuPure
       diagnosticsEnabled={diagnosticsEnabled}
       onOpenDiagnosticsHub={() => jump(() => leaveStory(() => router.push('/diagnostics')))}
       contextual={contextual}
       goTo={story != null ? buildGoToGroup(story, navigateGoTo) : undefined}
+      storyTools={storyTools}
       hotkeyEnabled={hotkeyEnabled}
       blocked={blocked}
       onOpenChange={onOpenChange}

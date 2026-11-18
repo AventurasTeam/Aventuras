@@ -744,19 +744,19 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
     {
-      name: 'boundaryRegionTokens',
-      type: 'number',
-      category: 'Story',
-      description:
-        "The open region's token total: every entry no chapter closed yet, summed, as the chapter progress strip counts it. Only boundary selection's render sets it.",
-      required: false,
-    },
-    {
-      name: 'boundaryThreshold',
+      name: 'boundaryLengthFrom',
       type: 'number',
       category: 'Story Config',
       description:
-        "The story's chapter token threshold, the length an automatic close aims at. Only boundary selection's render sets it.",
+        "The low bound, inclusive, of the length a chapter ending on a listed turn would have: half the story's chapter threshold, rounded up. Only boundary selection's render sets it.",
+      required: false,
+    },
+    {
+      name: 'boundaryLengthTo',
+      type: 'number',
+      category: 'Story Config',
+      description:
+        "The high bound, inclusive, of the length a chapter ending on a listed turn would have: one and a half times the story's chapter threshold, rounded down. Only boundary selection's render sets it.",
       required: false,
     },
     {
@@ -796,8 +796,8 @@ export const MERGE_ONLY_CHAPTER_VARIABLES = ['partSummaries'] as const
 /** The `chapter` variables only boundary selection's render sets (chapter-close.md → Phase 1). */
 export const BOUNDARY_ONLY_CHAPTER_VARIABLES = [
   'boundaryCandidates',
-  'boundaryRegionTokens',
-  'boundaryThreshold',
+  'boundaryLengthFrom',
+  'boundaryLengthTo',
   'boundaryActiveThreads',
 ] as const
 
@@ -848,7 +848,6 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'closeChapterSummary',
     'closeChapterTurns',
     'boundaryCandidates',
-    'boundaryRegionTokens',
   ],
   Entities: [
     'entities',
@@ -913,7 +912,8 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'mentionedPlaces',
     'closeSoftCaps',
     'closeLoreLimits',
-    'boundaryThreshold',
+    'boundaryLengthFrom',
+    'boundaryLengthTo',
   ],
   'Generation Results': [
     'intermediates',

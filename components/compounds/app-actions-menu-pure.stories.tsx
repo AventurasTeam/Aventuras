@@ -3,6 +3,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { AppActionsMenuPure } from './app-actions-menu-pure'
 import { buildGoToGroup } from './go-to-group'
+import { buildStoryToolsGroup } from './story-tools-group'
 
 const meta: Meta<typeof AppActionsMenuPure> = {
   title: 'Compounds/AppActionsMenuPure',
@@ -89,5 +90,58 @@ export const InStoryWorld: Story = {
     await userEvent.click(trigger)
     await userEvent.click(await screen.findByRole('option', { name: 'Open Reader' }))
     await waitFor(() => expect(navigateFromWorld).toHaveBeenCalledWith('/reader-composer/br_1'))
+  },
+}
+
+// actions-menu.md → Anatomy: the curated core runs GO TO, STORY TOOLS, APP.
+const openCloseModalFromWorld = fn()
+
+export const InStoryCoreGroups: Story = {
+  args: {
+    diagnosticsEnabled: true,
+    onOpenDiagnosticsHub: fn(),
+    goTo: buildGoToGroup({ storyId: 'story_1', branchId: 'br_1', surface: 'world' }, fn()),
+    storyTools: buildStoryToolsGroup({
+      branchId: 'br_1',
+      canClose: true,
+      gateReason: undefined,
+      openCloseModal: openCloseModalFromWorld,
+    }),
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    await screen.findByPlaceholderText('Search actions…')
+    // The headers render uppercase through CSS; the DOM keeps the copy as written.
+    const goTo = screen.getByText('Go to')
+    const storyTools = screen.getByText('Story tools')
+    const app = screen.getByText('App')
+    expect(goTo.compareDocumentPosition(storyTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(storyTools.compareDocumentPosition(app) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    await userEvent.click(await screen.findByRole('option', { name: 'Close chapter…' }))
+    await waitFor(() => expect(openCloseModalFromWorld).toHaveBeenCalledTimes(1))
+    expect(openCloseModalFromWorld).toHaveBeenCalledWith({ branchId: 'br_1' })
+  },
+}
+
+// actions-menu.md → Gating: a run in flight shows the entry disabled with the uniform tooltip.
+const GATE_REASON = 'Generation is in flight. Cancel to edit.'
+
+export const StoryToolsWhileARunHolds: Story = {
+  args: {
+    diagnosticsEnabled: false,
+    onOpenDiagnosticsHub: fn(),
+    storyTools: buildStoryToolsGroup({
+      branchId: 'br_1',
+      canClose: true,
+      gateReason: GATE_REASON,
+      openCloseModal: fn(),
+    }),
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    const entry = await screen.findByRole('option', { name: 'Close chapter…' })
+    await expect(entry).toHaveAttribute('aria-disabled', 'true')
+    await expect(screen.getByTitle(GATE_REASON)).toBeInTheDocument()
   },
 }

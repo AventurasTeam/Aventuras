@@ -326,13 +326,19 @@ Rendered:
   top-strip uses (per
   [reader-composer → Top-bar chapter navigation](../reader-composer/reader-composer.md#top-bar--chapter-navigation)):
   green < 80%, yellow 80–90%, red ≥ 90%.
+- **Ready to close** — with auto-close off, once the count reaches the
+  threshold and the region holds a reply to end on, the counts line
+  adds `Ready to close` after a `·`
+  ([`chapter-close.md → Manual user-triggered close`](../../../memory/chapter-close.md#manual-user-triggered-close)).
 - **Summary placeholder** — italic muted
   `Summary, theme, and keywords generate on close.`
 - **Action: Close chapter…** — primary button. Opens the
   [chapter-close modal](#chapter-close-modal) below. Disabled while a
   generation pipeline is in flight, with the principle's tooltip,
   the same rule as
-  [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked).
+  [branch-navigator → during generation](../reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked),
+  and while the region holds no reply to end on, with that reason. On
+  native a disabled button's reason shows as a muted line under it.
 
 The card is not expandable / editable — there's nothing to edit
 yet. A close that lands while the Timeline is open adds the new
@@ -349,9 +355,15 @@ writing, which expands when the run ends like any fresh close.
 
 ## Chapter-close modal
 
-Triggered from two places: this screen's `Close chapter…` button
-**and** the reader's chapter popover `Close chapter manually`
-button. Same modal, same shape — uniform UX.
+Triggered from four places: the Actions menu's `Close chapter…`, a
+`STORY TOOLS` entry on every in-story surface; this screen's
+in-progress card's `Close chapter…`; the reader's chapter popover
+`Close chapter manually`; and an AI entry's `Close chapter here` in the
+reader, which opens it with that entry picked as the end. Same modal,
+same shape — uniform UX. A trigger on a surface with a dirty draft
+raises the
+[navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
+first, since a Save after the close would write the draft over it.
 
 ```
 ┌──── Close current chapter? ──────────────────── × ─┐
@@ -387,30 +399,42 @@ button. Same modal, same shape — uniform UX.
   picker + live token count.
 - **Foot** — `Cancel` (secondary) + `Close chapter` (primary, ink —
   this is constructive, not destructive). Esc and click-outside
-  cancel.
+  cancel. `Close chapter` is disabled with the gate's reason while a
+  run holds it; its press closes the modal at once, since the close
+  runs under the memory-run banner, and pre-flights the close per
+  [`chapter-close.md → Manual user-triggered close`](../../../memory/chapter-close.md#manual-user-triggered-close).
 
 ### Entry-row anatomy (start row + picker trigger)
 
 Both the start-of-chapter row and the **picker trigger** (the
 always-visible button representing the current end pick) use the
-same single-line shape:
+same shape: one line on tablet and desktop, two lines on phone.
 
 ```
 [entry-num] [optional tag] [snippet — truncates with …]    [time]  [▾]
 ```
 
+On phone the same fields stack, so the tag and the snippet each keep
+a readable width:
+
+```
+[entry-num] [optional tag]                                      [▾]
+[snippet — truncates with …]                               [time]
+```
+
 Fields, left-to-right:
 
-- **Number** — `entry <N>` in muted monospace.
+- **Number** — `entry #<N>` in muted monospace.
 - **Optional tag** — small chip-style label when applicable
   (`Chapter <N> ended here` on the start row; `latest` on the
   picker trigger when the latest reply is selected).
 - **Snippet** — first ~80 chars of `story_entries.content`,
-  italicized. Single line; trailing ellipsis when truncated.
+  italicized. Single line; trailing ellipsis when truncated. On
+  phone it takes the second line, beside the time.
 - **Time** — right-aligned. Formatted via the active calendar
   formatter (same formatter the reader's time chip uses).
 - **Chevron** — picker trigger only. Rotates 180° when the panel
-  is open.
+  is open. On phone it sits at the right of the first line.
 
 Both rows render with the same border + padding so the start row
 and picker trigger read as visually paired cards (start above,
@@ -478,11 +502,10 @@ modals are scanning surfaces, not reading surfaces.
 
 ### Why a single shared modal
 
-Both surfaces (this screen + reader popover) want the same close
-flow. A shared modal:
+Every trigger wants the same close flow. A shared modal:
 
 - Keeps the start/end picker UX uniform regardless of trigger.
-- Avoids drifting wording between two confirmation surfaces.
+- Avoids drifting wording between confirmation surfaces.
 - Mirrors the
   [save-sessions navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
   precedent — same modal, same copy across surfaces.
@@ -627,13 +650,22 @@ end-entry picker in-flow inside it.
   push content past viewport height. No Modal-over-Sheet stacking
   introduced; the surface stack stays flat per
   [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking).
+  A trigger in a Sheet, the Actions menu's or the chapter popover's,
+  closes it first; the modal renders above the Sheet layer, so it opens
+  over that Sheet while it dismisses and never under it.
 - **Re-run confirm** opened from the review window stacks over its
   Sheet on phone, the confirm-from-inside case
   [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking)
   allows.
-- **Entry-row anatomy** (start row, picker trigger, dropdown
-  items) unchanged on phone. Single-line `text-overflow: ellipsis`
-  handles narrow widths; time chip right-aligned.
+- **Entry-row anatomy**: the start row and picker trigger take two
+  lines on phone (entry number and tag, with the chevron at the
+  right, then the snippet with its time right-aligned), so the tag
+  keeps its whole label and the snippet a readable width. At the
+  narrowest widths the tag drops whole below the entry number
+  rather than spill past the card; the snippet still truncates with
+  `text-overflow: ellipsis`. Dropdown items keep their anatomy, and
+  their head wraps whole at the narrowest widths rather than
+  splitting a label.
 - **Empty state** (`Chapters · 0 closed + 1 in progress`) renders
   identically; only the in-progress card surfaces.
 - **Stack-aware Return** binds chrome `←`, Android `BackHandler`,

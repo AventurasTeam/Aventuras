@@ -97,3 +97,76 @@ slice-planning gate forces its resolution before that slice is planned.
   rather than breaking the call; worth a look once the probe or a real
   story shows boundary picking worse for it. Raised in 5.10's PR 1
   review.
+
+- **One builder for `ResolveModelConfig`.** Every structured and tool
+  caller builds `{ providers, profiles, assignments, storyModels }`
+  inline from `appSettingsStore` and the open story: ten sites in
+  `lib/pipeline`, among them the close's boundary call, agent phase and
+  metadata call, the periodic pass, suggestion refresh, per-turn and
+  pre-flight (`grep -rn "storyModels:" lib components` lists them), and
+  `components/wizard/wizard-assist.ts` passes the app settings as one,
+  with no `storyModels`. A field added to the type can be missed at one of them.
+  A builder in `lib/pipeline` beside `boundedStructuredCall`, which
+  lifted the call sequence but not the config, would keep them alike.
+  Routed from Slice 5.10's planning, 2026-11-17.
+
+- **A disabled action's reason is web-only in two shared places.** The
+  Actions menu shows a disabled entry's reason only as a web `title`
+  (`components/compounds/actions-menu.tsx`), so on native every gated
+  entry, `Close chapter…` among them, shows disabled with no reason;
+  `ChapterCard` still hand-rolls the native reason line
+  (`components/chapters/chapter-card.tsx`) that `ReasonButton` now
+  covers. Raised in 5.10's PR 2 review.
+- **Listbox keyboard models are thin.** `ProviderInlinePicker`
+  (`components/compounds/provider-model-picker.tsx`) makes every option
+  its own tab stop, takes no arrow keys, and ignores Space (RN-Web
+  activates only button-like roles on Space). The close modal's end
+  picker now takes the arrows, Home, End and Space, but each option is
+  still its own tab stop. `SearchableOverlayList`'s roving model is the
+  in-repo shape to share. Raised in 5.10's PR 2 review.
+- **`SearchableOverlayList` section headers carry no group role.**
+  [`actions-menu.md → Keyboard & ARIA`](../ui/patterns/actions-menu.md#keyboard--aria)
+  asks for `role="group"` with an `aria-label` per section; the headers
+  render as plain text (`components/ui/searchable-overlay-list.tsx`).
+  Raised in 5.10's PR 2 review.
+- **`Dialog` has no busy focus handoff.** `AlertDialogContent` takes
+  `busy` so a control that disables while focused hands focus to a
+  stable container; `DialogContent` has no equivalent, so each dialog
+  that disables a focused button hand-rolls it, as the close modal now
+  does (`lessons-learned/rnweb-disabled-under-focus-blurs.md`). Raised
+  in 5.10's PR 2 review.
+- **Story viewport presets are copied per file.** `phone390` is defined
+  in each of `chapter-in-progress-card`, `review-window`, `chapter-card`
+  and `close-chapter-modal` stories; one preset in
+  `.storybook/preview.tsx` would hold it. Raised in 5.10's PR 2 review.
+- **`reader.retrySystemEntry` isn't scoped to entry rows**
+  (`e2e/locators/reader.ts`), unlike `dismissSystemEntry`, whose comment
+  notes a toast shares the name; a toast with a Retry action would trip
+  strict mode. Raised in 5.10's PR 2 review.
+- **`scripts/close-probe-bar.ts` judges the output-bound clause at the
+  step default.** Line 100 compares a step's reply to
+  `TOOL_STEP_MAX_OUTPUT_DEFAULT` even when the probe profile sets a max
+  output, so if the Q5 remedy is ever applied to the probe profile the
+  clause judges at the wrong bound. Raised by Slice 5.10's final review,
+  2026-11-18.
+- **`OverflowMenu` drops a picked entry when the tier changes while its
+  phone Sheet exits** (`components/compounds/overflow-menu.tsx`,
+  `SheetMenu`). The entry waits in a ref for `onDismissed`; a tier flip
+  swaps the Sheet for the Popover first, and the Sheet's unmount guard
+  then skips `onDismissed`, so the action never runs. The chapter
+  popover had the same pattern; there the pending run now lives above
+  the arm switch and goes when the tier leaves phone. Found by
+  CodeRabbit on Slice 5.10's PR 2, fixed there for the chapter popover
+  only, 2026-11-18.
+- **RN-Web's `PressResponder` presses a button on a held Space's
+  repeat.** It starts a press on any Space keydown on a `role="button"`
+  element, repeats included (no `event.repeat` check;
+  `node_modules/react-native-web/dist/modules/usePressEvents/PressResponder.js`,
+  `isValidKeyPress` and `onKeyDown`), and fires `onPress` on the matching
+  keyup, so a Space held from elsewhere whose auto-repeat lands on a
+  button presses it on release. Generic to every RN-Web button, not the
+  close modal. Most OS keyboards stop a held key's auto-repeat once
+  another key (Tab) is pressed, which makes it hard to reach (not
+  verified per platform). A fix would belong in the `Button` primitive
+  or a pnpm patch. Raised by CodeRabbit on Slice 5.10's PR 2,
+  2026-11-18.

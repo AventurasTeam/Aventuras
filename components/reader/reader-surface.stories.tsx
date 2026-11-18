@@ -115,6 +115,7 @@ const noopHandlers = {
   onEditWorldTime: async () => ({ ok: true }),
   onRequestEditWorldTime: async () => {},
   onRegenerate: async () => {},
+  onCloseChapterHere: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
   onCopySystemText: async () => {},
@@ -202,6 +203,7 @@ const meta = {
     // these stories exercise the surface's scroll/edit machinery instead.
     worldTimeDecorations: {},
     chapterBreaks: {},
+    closeHereEntryIds: {},
     worldTimeFrame: null,
     streaming: null,
     branchKey: 'branch_story',
@@ -4223,5 +4225,44 @@ export const SliceEditorReopenedTakesFocus: Story = {
     await userEvent.click(within(entryRow('s100')).getByRole('button', { name: t('cancel') }))
     const reopened = await openEditor('s100')
     await waitFor(() => expect(reopened).toHaveFocus())
+  },
+}
+
+/** The surface follows the host's table, not the kind: e4 is a reply too and shows nothing. */
+export const CloseChapterHereFollowsTheTable: Story = {
+  args: { closeHereEntryIds: { e3: true }, onCloseChapterHere: fn(async () => {}) },
+  play: async ({ args }) => {
+    const closeHere = t('reader:entryCard.closeChapterHere')
+    await userEvent.click(await waitFor(() => rowButton('e3', closeHere)))
+    await waitFor(() => expect(args.onCloseChapterHere).toHaveBeenCalledWith('e3'))
+    expect(rowButton('e4', t('reader:entryCard.regenerate'))).toBeVisible()
+    expect(within(entryRow('e4')).queryByRole('button', { name: closeHere })).toBeNull()
+    expect(screen.getAllByRole('button', { name: closeHere })).toHaveLength(1)
+  },
+}
+
+/** A pass lets the head reversals through; Close chapter here waits on it, the head turn's too. */
+export const CloseChapterHereWaitsOnTheGate: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    closeHereEntryIds: { p3: true, p5: true },
+    editGate: 'interruptible',
+    gateReason: t('generationGate.updatingMemory'),
+  },
+  play: async () => {
+    const reason = t('generationGate.updatingMemory')
+    await waitFor(() => expect(rowButton('p5', t('reader:entryCard.editEntry'))).not.toBeDisabled())
+    expect(rowButton('p5', t('reader:entryCard.regenerate'))).not.toBeDisabled()
+    // The head turn's reply: only Close chapter here is held, named by the reason.
+    const headHeld = within(entryRow('p5')).getAllByRole('button', { name: reason })
+    expect(headHeld).toHaveLength(1)
+    expect(headHeld[0]).toBeDisabled()
+    // An older reply: its pencil and Close chapter here both wait.
+    const olderHeld = within(entryRow('p3')).getAllByRole('button', { name: reason })
+    expect(olderHeld).toHaveLength(2)
+    for (const button of olderHeld) expect(button).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: t('reader:entryCard.closeChapterHere') }),
+    ).not.toBeInTheDocument()
   },
 }

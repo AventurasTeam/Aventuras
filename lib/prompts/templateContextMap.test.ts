@@ -74,8 +74,8 @@ describe('templateContextMap', () => {
       'closeChapterSummary',
       'closeChapterTurns',
       'boundaryCandidates',
-      'boundaryRegionTokens',
-      'boundaryThreshold',
+      'boundaryLengthFrom',
+      'boundaryLengthTo',
       'boundaryActiveThreads',
     ])
   })
@@ -136,16 +136,16 @@ describe('templateContextMap', () => {
   it('lists the boundary-only chapter variables, none required, each under its display group', () => {
     expect(BOUNDARY_ONLY_CHAPTER_VARIABLES).toEqual([
       'boundaryCandidates',
-      'boundaryRegionTokens',
-      'boundaryThreshold',
+      'boundaryLengthFrom',
+      'boundaryLengthTo',
       'boundaryActiveThreads',
     ])
     const boundaryOnly: readonly string[] = BOUNDARY_ONLY_CHAPTER_VARIABLES
     const defs = VARIABLES.chapter.filter((v) => boundaryOnly.includes(v.name))
     expect(defs.map((v) => [v.name, v.category, v.required])).toEqual([
       ['boundaryCandidates', 'Story', false],
-      ['boundaryRegionTokens', 'Story', false],
-      ['boundaryThreshold', 'Story Config', false],
+      ['boundaryLengthFrom', 'Story Config', false],
+      ['boundaryLengthTo', 'Story Config', false],
       ['boundaryActiveThreads', 'Plot', false],
     ])
     for (const def of defs) expect(DISPLAY_GROUPS[def.category], def.name).toContain(def.name)

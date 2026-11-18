@@ -154,9 +154,10 @@ test.describe('periodic classifier — the gated pass', () => {
     await expect(reader.deleteEntry(page, reply)).toBeEnabled()
     await expect(reader.editEntry(page, reply)).toBeEnabled()
     await expect(reader.editEntry(page, userEntry)).toBeEnabled()
-    await expect(
-      reader.gatedEntryAction(page, offHead, t('generationGate.updatingMemory')),
-    ).toBeDisabled()
+    // Edit and Close chapter here: an off-head reply's actions that no pass interrupts.
+    const offHeadGated = reader.gatedEntryAction(page, offHead, t('generationGate.updatingMemory'))
+    await expect(offHeadGated).toHaveCount(2)
+    for (const action of await offHeadGated.all()) await expect(action).toBeDisabled()
     await expect(reader.suggestionRefreshAny(page)).toBeEnabled()
     const [[turnAt]] = await queryApp(page, `SELECT position FROM story_entries WHERE id = ?`, [
       userEntry,

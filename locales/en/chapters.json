@@ -1,6 +1,8 @@
 {
   "label": "Chapter {{number}}",
   "labelWithTime": "Chapter {{number}} · {{time}}",
+  "readyToClose": "Ready to close",
+  "closeNoReply": "No reply to end a chapter on yet",
   "progress": {
     "counts": "{{tokens, number}} / {{threshold, number}} tok",
     "label": "chapter progress · {{counts}}"
@@ -11,7 +13,6 @@
     "inProgress": "{{number}} · in progress",
     "since": "since {{time}}",
     "closeManually": "Close chapter manually",
-    "closeLandsLater": "Closing a chapter lands in a later milestone",
     "manage": "Manage chapters →"
   },
   "time": {
@@ -63,6 +64,21 @@
     "since": "In progress · since {{time}}",
     "placeholder": "Summary, theme, and keywords generate on close.",
     "close": "Close chapter…"
+  },
+  "closeModal": {
+    "title": "Close current chapter?",
+    "framing": "Closes the open chapter from {{start}} through the end entry you pick. The AI writes its title, summary, theme and keywords, and lore management runs as part of the close.",
+    "startHeading": "Start of chapter",
+    "endHeading": "End of chapter",
+    "chapterEndedHere": "Chapter {{number}} ended here",
+    "latest": "latest",
+    "tokensInRange": "{{count, number}} tokens in range",
+    "cancel": "Cancel",
+    "confirm": "Close chapter",
+    "toast": {
+      "preflightFailed": "Chapter close can't start. The reader shows why.",
+      "startFailed": "Couldn't start the chapter close."
+    }
   },
   "deleteConfirm": {
     "title": "Delete chapter {{number}}?",

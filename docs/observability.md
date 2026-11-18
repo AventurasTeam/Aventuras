@@ -334,7 +334,16 @@ convention, and the expectation that subsystems route through
   `close_review_read_failed` (error,
   `components/chapters/chapter-overlays-host.tsx`: the review window's
   read failed, with `branchId`, `chapterId` and `error`; the window
-  shows `failed`), `close_result_read_failed` (warn,
+  shows `failed`), `close_modal_read_failed` (warn,
+  `components/chapters/close-chapter-modal.tsx`: the close modal's read
+  of the open region's rows or world times failed, with `branchId`,
+  `read` (`series` or `times`) and `error`; with no rows the modal
+  offers no reply to end on, and with no times its rows show none),
+  `manual_close_failed` (error,
+  `components/chapters/run-manual-close.ts`: starting a close the
+  modal confirmed threw rather than returning a result, with
+  `branchId`, `endEntryId` and `error`; the user sees a generic warning
+  toast), `close_result_read_failed` (warn,
   `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),
@@ -342,11 +351,9 @@ convention, and the expectation that subsystems route through
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
   shown and toasts), `world_story_load_failed` / `plot_story_load_failed` /
-  `chapter_timeline_story_load_failed` /
-  `dev_chapter_close_story_load_failed` (a cold mount's `loadOpenStory`
+  `chapter_timeline_story_load_failed` (a cold mount's `loadOpenStory`
   rejection, `hooks/use-cold-open-story.ts`), `world_story_not_found` /
-  `plot_story_not_found` / `chapter_timeline_story_not_found` /
-  `dev_chapter_close_story_not_found` (warn: the
+  `plot_story_not_found` / `chapter_timeline_story_not_found` (warn: the
   same cold mount on a branch with no story, which leaves for the story
   list), `row_save_failed` (`hooks/use-row-save-session.ts` — a Save
   whose validation or commit threw; the user sees only the generic
@@ -457,7 +464,20 @@ convention, and the expectation that subsystems route through
   a reader document that had painted booted again, a reload or a
   renderer kill), and loading older entries adds `load_older_failed`
   (warn, `components/reader/use-load-older-entries.ts`: the read above
-  the window threw, and the boundary shimmer stays for the next scroll)
+  the window threw, and the boundary shimmer stays for the next scroll).
+  A reversal's cost adds two at debug, timed only while diagnostics and
+  their debug level are on (`components/reader/use-reader-undo.tsx`):
+  `undo_measured` and `redo_measured`, each with `wallMs`, the undo's or
+  redo's own wait and never the confirm before it, `longestGapMs`, the
+  longest JS-thread stall `startStallMeter` saw in it, `tailGapMs`, the
+  same meter's longest gap over the 250 ms after the reversal resolves
+  (the default-lane React work it schedules, logged then), and the
+  reversed group's `actionId`. The meter (`lib/diagnostics/stall-meter.ts`)
+  ticks every 16 ms and counts its start and stop as ticks, so a stall no
+  tick interrupts still measures. A gap is late timer delivery: on Android
+  timers fire from a UI-thread Choreographer callback, so a UI-thread
+  frame stall shows too, and a gap over the bar is not automatically a
+  JS-thread stall. A refused or failed reversal logs neither.
 
 Kinds grow organically as subsystems land.
 

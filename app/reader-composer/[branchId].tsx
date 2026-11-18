@@ -3,12 +3,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Platform, View } from 'react-native'
 
+import { closeChapterReason } from '@/components/chapters/close-chapter-reason'
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { heldControl } from '@/components/compounds/entry-card-hold'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
+import { closeHereEntryIds } from '@/components/reader/close-here-entries'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import {
@@ -141,6 +143,7 @@ import {
   rollbackToEntry,
   runClassifierNow,
   runOwedClose,
+  runPickedClose,
   sameRollbackCounts,
   submitTurn,
   writeSystemEntry,
@@ -148,6 +151,7 @@ import {
   type RollbackCounts,
   type StoryEntryRejection,
 } from '@/lib/actions'
+import { isReadyToClose } from '@/lib/chapters'
 import { copyText } from '@/lib/clipboard'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
 import { db, runInTransaction, type SystemFailureMeta } from '@/lib/db'
@@ -172,6 +176,7 @@ import {
   appSettingsStore,
   awaitRunTerminal,
   blockingOverlaysStore,
+  chapterOverlaysStore,
   chaptersStore,
   currentStoryStore,
   entitiesStore,
@@ -376,6 +381,8 @@ export default function ReaderComposerRoute() {
       ),
     [slice.rows, worldTimeDecorations],
   )
+  // Keyed on the rendered slice's identity: the surface sees no change between unchanged renders.
+  const closeHereIds = useMemo(() => closeHereEntryIds(slice.rows), [slice.rows])
 
   // Same snapshot-stability contract as `rows` above: select the raw map, derive
   // the array with useMemo. The whole branch, unwindowed — the panel resolves ids
@@ -661,12 +668,17 @@ export default function ReaderComposerRoute() {
   )
 
   const showCloseFailure = useCallback(
-    async (error: PipelineError, submission: SystemFailureMeta['submission']) => {
+    async (
+      error: PipelineError,
+      submission: SystemFailureMeta['submission'],
+      closePick?: string,
+    ) => {
+      const failure = toCloseFailureMeta(error, submission)
       await writeSystemEntry(
         {
           branchId,
           content: describeCloseFailure(error).content,
-          failure: toCloseFailureMeta(error, submission),
+          failure: closePick == null ? failure : { ...failure, closePick },
         },
         ctx,
       )
@@ -1231,12 +1243,16 @@ export default function ReaderComposerRoute() {
     try {
       await retryCloseEntry({
         runClose: () => runOwedClose(branchId, ctx),
+        closePick: systemFailure?.closePick,
+        runPicked: (endEntryId) => runPickedClose(branchId, endEntryId, ctx),
         held: () => isClassifierHeld(branchId, ctx),
         committed: (arm) =>
           settleCommittedRetry(stored, (submission) => closeResolvedEntry(submission, arm)),
         // A close never holds its branch; a failed catch-up pass may.
-        rewriteClose: (error) =>
-          settleRetryRewrite(false, stored, (submission) => showCloseFailure(error, submission)),
+        rewriteClose: (error, closePick) =>
+          settleRetryRewrite(false, stored, (submission) =>
+            showCloseFailure(error, submission, closePick),
+          ),
         rewritePass: (refusal) =>
           settleRetryRewrite(refusal.held, stored, (submission) =>
             showPassFailure(refusal, submission),
@@ -1754,6 +1770,13 @@ export default function ReaderComposerRoute() {
   // One read for whichever rail mounts: the column and peek drawer, or the phone chip's Sheet.
   const railData = useRailData(branchId)
 
+  // C7: the modal opens through the registered inline-edit guard, with the entry picked.
+  const handleCloseChapterHere = useCallback(
+    async (entryId: string) =>
+      chapterOverlaysStore.openCloseModal({ branchId, endEntryId: entryId }),
+    [branchId],
+  )
+
   const placeholder = readerPlaceholder({
     hydrationSucceeded,
     isEmpty: entries.length === 0,
@@ -1762,6 +1785,7 @@ export default function ReaderComposerRoute() {
   const surfaceProps = {
     rows: slice.rows,
     worldTimeDecorations: sliceDecorations,
+    closeHereEntryIds: closeHereIds,
     chapterBreaks,
     worldTimeFrame,
     streaming: streamingPayload,
@@ -1789,6 +1813,7 @@ export default function ReaderComposerRoute() {
     onEditScene: editScene,
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
+    onCloseChapterHere: handleCloseChapterHere,
     // Undefined for a held pass entry: its branch can't run a pass.
     onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
@@ -1815,6 +1840,11 @@ export default function ReaderComposerRoute() {
             entries={entries}
             frame={worldTimeFrame}
             progress={chapterProgress}
+            closeReason={closeChapterReason(gateReason, chapterProgress.canClose)}
+            readyToClose={isReadyToClose(
+              chapterProgress,
+              openForBranch?.settings.chapterAutoClose ?? true,
+            )}
             isFocused={isFocused}
             onJumpToEntry={followEntry}
             onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
@@ -1846,6 +1876,7 @@ export default function ReaderComposerRoute() {
         <AppActionsMenu
           contextual={contextualActions}
           story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
           blocked={rollback != null || timeEdit != null || undoConfirmOpen}

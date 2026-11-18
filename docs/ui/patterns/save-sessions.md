@@ -201,6 +201,13 @@ Three actions, no implicit default:
   leaving the surface.
 - **Window-close intent** — electron window-close or the web
   `beforeunload` event on page close / refresh.
+- **Starting a chapter close** — `Close chapter…` from the Actions
+  menu or the Timeline's in-progress card, the reader popover's
+  `Close chapter manually` and an entry's `Close chapter here`. The
+  close writes the rows a dirty pane edits, so a Save after it would
+  write the draft over the close's writes; the guard runs before the
+  [close modal](../screens/chapter-timeline/chapter-timeline.md#chapter-close-modal)
+  opens.
 - **Any other state transition that implicitly drops the dirty
   state** — closing a containing drawer/modal, sign-out actions,
   etc.

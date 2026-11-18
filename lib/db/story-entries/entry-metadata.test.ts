@@ -285,6 +285,19 @@ describe('systemFailure', () => {
     const systemFailure = { kind: 'provider', close: 'held' }
     expect(entryMetadataSchema.safeParse({ ...base, systemFailure }).success).toBe(false)
   })
+
+  // A manual close's click whose pre-flight failed keeps its pick, which its Retry restarts.
+  it("keeps a failed click's pick on a close-failure entry", () => {
+    const systemFailure = {
+      kind: 'config-resolver',
+      failure: 'tool-calling-off',
+      close: 'failed',
+      closePick: 'entry_65',
+    }
+    expect(entryMetadataSchema.parse({ ...base, systemFailure }).systemFailure).toEqual(
+      systemFailure,
+    )
+  })
 })
 
 // data-model.md → Entry metadata shape.

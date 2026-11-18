@@ -22,7 +22,7 @@ import {
   startManualClose,
   type GroupOutcome,
 } from '@/lib/actions'
-import { canEndChapter, partTokenLimit } from '@/lib/chapters'
+import { canEndChapter, closeCandidates, partTokenLimit, type CloseCandidate } from '@/lib/chapters'
 import {
   chapters,
   closeReportSchema,
@@ -37,8 +37,10 @@ import {
   clearBuffers,
   configureDiagnosticsGate,
   getDiagnosticsSnapshot,
+  makeLogger,
   type LogEntry,
 } from '@/lib/diagnostics'
+import { generateId } from '@/lib/ids'
 import {
   configureDeltaActionPort,
   ensureChapterClosePipelineRegistered,
@@ -47,6 +49,7 @@ import {
   readClassifierStatus,
   recoverInFlightRuns,
   unprocessedEntryCount,
+  type PhaseContext,
   type PhaseEmittedEvent,
   type PhaseResult,
   type PipelineError,
@@ -56,6 +59,11 @@ import {
 } from '@/lib/pipeline'
 import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
 import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
+import {
+  readBoundaryInputs,
+  requestChapterBoundary,
+  type BoundaryCallOutcome,
+} from '@/lib/pipeline/definitions/chapter-close-boundary-call'
 import { embedRangeStep } from '@/lib/pipeline/definitions/close-agent/close-happenings'
 import {
   __setCloseAgentSlots,
@@ -67,6 +75,7 @@ import {
 import { closeClustersOf } from '@/lib/pipeline/definitions/close-intermediates'
 import {
   appSettingsStore,
+  currentStoryStore,
   hydrateAppSettings,
   rehydrateStories,
   resetAllStores,
@@ -76,10 +85,13 @@ import {
   attemptOf,
   barLine,
   barVerdict,
+  boundaryAttemptOf,
+  boundaryVerdict,
   failedRunsExit,
   largestOf,
   stepFileName,
   tallyRun,
+  type BoundaryAttempt,
   type Measured,
   type RunTally,
   type StepAttempt,
@@ -106,15 +118,19 @@ import { resolveDevSlot } from './dev-slot/resolve'
 // else the dev slot's userData embedders/; where the range embed loads the story's local model,
 // through onnxruntime-node in this process),
 // PROBE_REJUDGE (a saved PROBE_OUT directory: judges its runs by the bar as it stands, from the
-// saved files, with no model call, and writes bar-rejudged.json beside them). Close the app
-// first: a live write moves the source's hash, and a held write lock fails the copy.
+// saved files, with no model call, and writes bar-rejudged.json beside them), PROBE_BOUNDARY=1
+// (the boundary call alone on the overlaid dataset branch, each call saved as boundary-c<n>.json,
+// judged by boundaryVerdict into boundary.json). Close the app first: a live write moves the
+// source's hash, and a held write lock fails the copy.
 // A PROBE_OUT that already holds files is refused, so each invocation saves to its own directory.
 const LLM_URL = process.env.SMOKE_LLM_URL
 const LLM_MODEL = process.env.SMOKE_LLM_MODEL
 const LLM_KEY = process.env.SMOKE_LLM_KEY ?? ''
 const RUNS = Number(process.env.PROBE_RUNS ?? 1)
 const OVERLAY = process.env.PROBE_OVERLAY === '1'
-const BRANCH_ID = process.env.PROBE_BRANCH_ID ?? (OVERLAY ? DATASET_BRANCH_ID : 'br_hero_main')
+const BOUNDARY = process.env.PROBE_BOUNDARY === '1'
+const BRANCH_ID =
+  process.env.PROBE_BRANCH_ID ?? (OVERLAY || BOUNDARY ? DATASET_BRANCH_ID : 'br_hero_main')
 const END_ENTRY = process.env.PROBE_END_ENTRY
 const OUT = process.env.PROBE_OUT
 const STAND_IN = process.env.PROBE_STAND_IN === '1'
@@ -135,12 +151,12 @@ function resolveDbPath(): string {
   return join(resolveDevSlot().dataDir, 'aventuras.db')
 }
 
-// A slot's userData holds both; an AVENTURAS_DB_PATH outside one, as dataset:chapter writes, falls
-// back to this checkout's slot. A stand-in loads no model, so it takes the first unchecked.
+// An AVENTURAS_DB_PATH outside a slot's userData (as dataset:chapter writes) falls back to this
+// checkout's slot. A stand-in or boundary run loads no model, so it takes the first unchecked.
 function resolveEmbeddersRoot(source: string): string {
   const named = process.env.PROBE_EMBEDDERS_DIR
   const tried = [named ? resolve(named) : join(dirname(source), 'embedders')]
-  if (STAND_IN || existsSync(tried[0])) return tried[0]
+  if (STAND_IN || BOUNDARY || existsSync(tried[0])) return tried[0]
   if (!named && process.env.AVENTURAS_DB_PATH) {
     const slot = join(resolveDevSlot().dataDir, 'embedders')
     if (existsSync(slot)) return slot
@@ -232,6 +248,12 @@ type StepCapture = {
   attempts: StepAttempt[]
   /** Debug log entries, each under the task or phase it was logged in. */
   log: { at: string; entry: LogEntry }[]
+  /** Every call the run sent, a retried attempt included. */
+  calls: number
+  /** The tokens the run's responses reported. */
+  tokens: { input: number; output: number }
+  /** The most output tokens one response reported; null when none reported any. */
+  largestOutput: number | null
 }
 
 const capture: StepCapture = {
@@ -243,6 +265,25 @@ const capture: StepCapture = {
   retries: [],
   attempts: [],
   log: [],
+  calls: 0,
+  tokens: { input: 0, output: 0 },
+  largestOutput: null,
+}
+
+function resetCapture(k: number): void {
+  capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
+  capture.phase = null
+  capture.task = null
+  capture.steps.clear()
+  capture.written.clear()
+  capture.retries = []
+  capture.attempts = []
+  capture.log = []
+  capture.calls = 0
+  capture.tokens = { input: 0, output: 0 }
+  capture.largestOutput = null
+  rangeClusters = null
+  clearBuffers()
 }
 
 function parseJson(text: string): unknown {
@@ -318,6 +359,34 @@ function savedError(error: unknown, depth = 0): unknown {
   }
 }
 
+// The probe's provider is OpenAI-compatible, so a response reports `usage` in that shape.
+function usageOf(body: unknown): { input: number | null; output: number | null } {
+  if (typeof body !== 'object' || body === null) return { input: null, output: null }
+  const { usage } = body as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } }
+  const count = (n: unknown): number | null => (typeof n === 'number' ? n : null)
+  return { input: count(usage?.prompt_tokens), output: count(usage?.completion_tokens) }
+}
+
+function noteUsage(body: unknown): void {
+  const { input, output } = usageOf(body)
+  capture.tokens.input += input ?? 0
+  capture.tokens.output += output ?? 0
+  if (output !== null) capture.largestOutput = Math.max(capture.largestOutput ?? 0, output)
+}
+
+// Every call of a boundary run is the boundary's, saved as a tool step is; elsewhere a call that is
+// no tool step is counted, not saved.
+function noteCall(call: number, saved: () => object): void {
+  if (!BOUNDARY || capture.dir === null) return
+  writeFileSync(
+    join(capture.dir, `boundary-c${call}.json`),
+    `${JSON.stringify(saved(), null, 2)}\n`,
+  )
+}
+
+const isJson = (response: Response): boolean =>
+  response.headers.get('content-type')?.includes('json') ?? false
+
 function captureSteps(): void {
   const sdkFetch = globalThis.fetch
   globalThis.fetch = async (input, init) => {
@@ -326,22 +395,34 @@ function captureSteps(): void {
     const text = input instanceof Request ? await input.clone().text() : (init?.body ?? undefined)
     const request = typeof text === 'string' ? parseJson(text) : null
     const step = toolStepNumber(request)
+    capture.calls += 1
+    const call = capture.calls
     let response: Response
     let body: unknown = null
     try {
       response = await sdkFetch(input, init)
-      // Read with no capture dir too: the bar reads each step's output tokens.
-      if (step !== null) body = parseJson(await response.clone().text())
+      // Read with no capture dir too: the bar reads each step's output, the run its usage. A
+      // stream's clone would hold this wrapper until the stream ends, so only JSON is read.
+      if (step !== null || isJson(response)) body = parseJson(await response.clone().text())
     } catch (error) {
       if (step !== null) noteStep(step, () => ({ request, error: savedError(error) }))
+      else noteCall(call, () => ({ request, error: savedError(error) }))
       throw error
     }
+    noteUsage(body)
     if (step !== null) {
       noteAttempt(step, body)
       noteStep(step, () => ({ request, response: body }))
-    }
+    } else noteCall(call, () => ({ request, response: body }))
     return response
   }
+}
+
+function printTokens(k: number): void {
+  const { input, output } = capture.tokens
+  console.log(
+    `[probe:close]   run ${k} tokens: ${input} input, ${output} output over ${capture.calls} calls`,
+  )
 }
 
 // The agent phase builds its model config from appSettingsStore, so the probe's provider goes there.
@@ -472,7 +553,7 @@ function printMeasures(
   bytes: number | null,
 ): void {
   for (const hold of tally.holds)
-    console.log(`[probe:close]   ${hold.task}: ${hold.held ? 'held' : `not held (${hold.why})`}`)
+    console.log(`[probe:close]   ${hold.task}: ${hold.held ? hold.why : `not held (${hold.why})`}`)
   console.log(`[probe:close]   cut-offs: ${tally.cutOffs.length}`)
   for (const cut of tally.cutOffs)
     console.log(
@@ -582,12 +663,15 @@ type RunResult = {
   reportBytes: number | null
 }
 
-async function probeRun(
+// Opens run k's scratch copy as the app's boot leaves it, the overlay applied where asked, and runs
+// `measure` on it; the copy is removed whatever the measure does.
+async function onScratchCopy<T>(
   k: number,
   source: string,
   server: Server,
   embedders: string,
-): Promise<RunResult> {
+  measure: (ctx: DbCtx) => Promise<T>,
+): Promise<T> {
   const scratch = mkdtempSync(join(tmpdir(), 'aventuras-close-probe-'))
   let sqlite: DatabaseSync | null = null
   let uninstall: (() => void) | null = null
@@ -602,16 +686,7 @@ async function probeRun(
     }
   }
   removeScratch = cleanUp
-  capture.dir = OUT === undefined ? null : join(resolve(OUT), `run${k}`)
-  capture.phase = null
-  capture.task = null
-  capture.steps.clear()
-  capture.written.clear()
-  capture.retries = []
-  capture.attempts = []
-  capture.log = []
-  rangeClusters = null
-  clearBuffers()
+  resetCapture(k)
   const unsubscribe = [
     pipelineEventBus.subscribe('phase_start', (event) => {
       drainLog()
@@ -641,7 +716,8 @@ async function probeRun(
     if (capture.dir !== null) mkdirSync(capture.dir, { recursive: true })
     resetAllStores()
     await recoverAsBootDoes(ctx)
-    if (OVERLAY) {
+    // The boundary arm needs it too: the overlay reopens the seed's closed chapter.
+    if (OVERLAY || BOUNDARY) {
       const overlay = await applyDatasetOverlay(ctx)
       console.log(
         `[probe:close] run ${k}: overlay applied${overlay.reopened ? ", the seed's close undone first" : ''}; its user edit ${overlay.userEdit}`,
@@ -661,32 +737,124 @@ async function probeRun(
     // The range embed reads the story's embedder from the stories store, which boot fills.
     if (!(await rehydrateStories(ctx.db)))
       throw new Error('[probe:close] the stories store did not load')
-    const end = END_ENTRY ?? latestReply(await openRegionSeries(BRANCH_ID, ctx))
-    const started = Date.now()
-    const result = await startManualClose(BRANCH_ID, end, ctx)
-    const ms = Date.now() - started
-    drainLog()
-    const completed = result.outcome === 'completed'
-    // A refused start leaves the chapter at `end` with an earlier close's report.
-    const report = completed ? await readReport(ctx, end) : null
-    if (report !== null && capture.dir !== null)
-      writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
-    printRun(k, result, ms, report)
-    if (!STAND_IN) printRangeEmbed(k)
-    const tally = tallyRun({
-      report,
-      attempts: capture.attempts,
-      cappedLists: OVERLAY ? OVERLAY_LISTS : [],
-    })
-    const largestValue = largestValueLogged()
-    const reportBytes = report === null ? null : Buffer.byteLength(JSON.stringify(report))
-    if (!STAND_IN) printMeasures(k, tally, largestValue, reportBytes)
-    return { completed, tally, largestValue, reportBytes }
+    return await measure(ctx)
   } finally {
     removeScratch = null
     for (const stop of unsubscribe) stop()
     cleanUp()
   }
+}
+
+async function closeRun(k: number, ctx: DbCtx): Promise<RunResult> {
+  const end = END_ENTRY ?? latestReply(await openRegionSeries(BRANCH_ID, ctx))
+  const started = Date.now()
+  const result = await startManualClose(BRANCH_ID, end, ctx)
+  const ms = Date.now() - started
+  drainLog()
+  const completed = result.outcome === 'completed'
+  // A refused start leaves the chapter at `end` with an earlier close's report.
+  const report = completed ? await readReport(ctx, end) : null
+  if (report !== null && capture.dir !== null)
+    writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
+  printRun(k, result, ms, report)
+  if (!STAND_IN) printRangeEmbed(k)
+  const tally = tallyRun({
+    report,
+    attempts: capture.attempts,
+    cappedLists: OVERLAY ? OVERLAY_LISTS : [],
+  })
+  const largestValue = largestValueLogged()
+  const reportBytes = report === null ? null : Buffer.byteLength(JSON.stringify(report))
+  if (!STAND_IN) {
+    printMeasures(k, tally, largestValue, reportBytes)
+    printTokens(k)
+  }
+  return { completed, tally, largestValue, reportBytes }
+}
+
+// The boundary call's own context: a fresh action id and a signal nothing aborts, on the copy.
+function boundaryContext(ctx: DbCtx): PhaseContext {
+  const open = currentStoryStore.getCurrentStory()
+  if (open === null) throw new Error('[probe:close] no open story to read the boundary inputs from')
+  const actionId = generateId('act')
+  return {
+    actionId,
+    abortSignal: new AbortController().signal,
+    intermediates: {},
+    log: makeLogger(actionId),
+    db: ctx.db,
+    runInTransaction: ctx.runInTransaction,
+    storyId: open.storyId,
+    branchId: BRANCH_ID,
+  }
+}
+
+function printBoundaryRun(
+  k: number,
+  outcome: BoundaryCallOutcome,
+  attempt: BoundaryAttempt,
+  candidates: readonly CloseCandidate<OpenRegionRow>[],
+  ms: number,
+): void {
+  console.log(
+    `[probe:close] run ${k} boundary: ${attempt.outcome} in ${(ms / 1000).toFixed(1)} s, largest reply ${attempt.outputTokens ?? 'unreported'} output tokens`,
+  )
+  for (const retry of capture.retries) console.log(`[probe:close]   retried ${retry}`)
+  if (outcome.status === 'failed')
+    console.log(`[probe:close]   failed: ${errorLine(outcome.error)}`)
+  const at = (id: string): string => {
+    const index = candidates.findIndex((candidate) => candidate.id === id)
+    const candidate = candidates[index]
+    return candidate === undefined
+      ? `${id}, no candidate`
+      : `position ${candidate.position}, candidate ${index + 1} of ${candidates.length}, ${candidate.tokensThrough} tokens through it`
+  }
+  if (attempt.endEntryId !== null) console.log(`[probe:close]   ends on ${at(attempt.endEntryId)}`)
+  const latest = candidates.at(-1)
+  if (latest !== undefined) console.log(`[probe:close]   latest candidate: ${at(latest.id)}`)
+}
+
+async function boundaryRun(k: number, ctx: DbCtx): Promise<BoundaryAttempt> {
+  const phase = boundaryContext(ctx)
+  const inputs = readBoundaryInputs(phase)
+  if ('status' in inputs)
+    throw new Error(`[probe:close] the boundary inputs did not read: ${errorLine(inputs.error)}`)
+  const series = await openRegionSeries(BRANCH_ID, ctx)
+  const candidates = closeCandidates(series, inputs.threshold)
+  if (candidates.length === 0)
+    throw new Error(
+      `[probe:close] branch ${BRANCH_ID} has no close candidate at its threshold of ${inputs.threshold} tokens, so boundary makes no call`,
+    )
+  const started = Date.now()
+  // Driven here, not by the orchestrator, so its retried attempts come off the generator.
+  const call = requestChapterBoundary(phase, candidates, inputs)
+  let next = await call.next()
+  while (!next.done) {
+    if (next.value.type === 'recoverable_error')
+      capture.retries.push(`boundary: ${errorLine(next.value.error)}`)
+    next = await call.next()
+  }
+  const ms = Date.now() - started
+  drainLog()
+  const attempt = boundaryAttemptOf(next.value, capture.largestOutput)
+  printBoundaryRun(k, next.value, attempt, candidates, ms)
+  printTokens(k)
+  return attempt
+}
+
+function printBoundaryVerdict(attempts: readonly BoundaryAttempt[]): void {
+  const verdict = boundaryVerdict(attempts)
+  console.log(
+    `[probe:close] boundary: ${verdict.picked} of ${verdict.runs} runs picked a candidate, ${verdict.cutOff} cut off: ${verdict.held ? 'held' : 'missed'}`,
+  )
+  if (OUT !== undefined) {
+    mkdirSync(resolve(OUT), { recursive: true })
+    writeFileSync(
+      join(resolve(OUT), 'boundary.json'),
+      `${JSON.stringify({ ...verdict, attempts }, null, 2)}\n`,
+    )
+  }
+  if (!verdict.held) process.exitCode = 1
 }
 
 function refuseUsedOutput(): void {
@@ -707,7 +875,7 @@ function rejudge(outDir: string): void {
   )
   for (const { run, tally } of runs) {
     const { holds, cutOffs } = tally
-    const verdicts = holds.map((hold) => `${hold.task} ${hold.held ? 'held' : hold.why}`)
+    const verdicts = holds.map((hold) => `${hold.task} ${hold.why}`)
     const cuts = cutOffs.map((cut) => `${cut.task} step ${cut.step} ${cut.outputTokens ?? '?'}`)
     console.log(
       `[probe:close] run ${run}: ${verdicts.join('; ')}; cut-offs: ${cuts.length === 0 ? 'none' : cuts.join(', ')}`,
@@ -723,6 +891,10 @@ function rejudge(outDir: string): void {
 }
 
 async function main(): Promise<void> {
+  if (BOUNDARY && REJUDGE !== undefined)
+    throw new Error(
+      '[probe:close] PROBE_BOUNDARY=1 runs the boundary call and PROBE_REJUDGE re-judges a saved directory with no model call: unset one',
+    )
   if (REJUDGE !== undefined) return rejudge(REJUDGE)
   if (!LLM_URL || !LLM_MODEL) {
     console.log('[probe:close] skipped: set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')
@@ -735,9 +907,13 @@ async function main(): Promise<void> {
     throw new Error(
       '[probe:close] PROBE_OVERLAY=1 and PROBE_STAND_IN=1 cannot run together: the stand-in has no Threads task, so the bar would always read missed',
     )
-  if (OVERLAY && BRANCH_ID !== DATASET_BRANCH_ID)
+  if (BOUNDARY && (OVERLAY || STAND_IN || END_ENTRY !== undefined))
     throw new Error(
-      `[probe:close] PROBE_OVERLAY=1 runs on the dataset branch ${DATASET_BRANCH_ID}, not ${BRANCH_ID}: unset PROBE_BRANCH_ID`,
+      '[probe:close] PROBE_BOUNDARY=1 runs the boundary call alone: unset PROBE_OVERLAY, PROBE_STAND_IN and PROBE_END_ENTRY',
+    )
+  if ((OVERLAY || BOUNDARY) && BRANCH_ID !== DATASET_BRANCH_ID)
+    throw new Error(
+      `[probe:close] ${BOUNDARY ? 'PROBE_BOUNDARY' : 'PROBE_OVERLAY'}=1 runs on the dataset branch ${DATASET_BRANCH_ID}, not ${BRANCH_ID}: unset PROBE_BRANCH_ID`,
     )
   const source = resolveDbPath()
   if (!existsSync(source)) throw new Error(`[probe:close] no database at ${source}`)
@@ -761,10 +937,20 @@ async function main(): Promise<void> {
   console.debug = () => {}
   enableDiagnosticsGate()
   captureSteps()
+  const server: Server = { url: LLM_URL, model: LLM_MODEL }
   try {
+    if (BOUNDARY) {
+      const attempts: BoundaryAttempt[] = []
+      for (let k = 1; k <= RUNS; k++)
+        attempts.push(
+          await onScratchCopy(k, source, server, embedders, (ctx) => boundaryRun(k, ctx)),
+        )
+      printBoundaryVerdict(attempts)
+      return
+    }
     const results: RunResult[] = []
     for (let k = 1; k <= RUNS; k++)
-      results.push(await probeRun(k, source, { url: LLM_URL, model: LLM_MODEL }, embedders))
+      results.push(await onScratchCopy(k, source, server, embedders, (ctx) => closeRun(k, ctx)))
     if (
       failedRunsExit(
         OVERLAY,

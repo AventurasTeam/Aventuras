@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
-import { CLOSE_TASKS, type CloseReport, type CloseReportCall } from '@/lib/db'
+import { CLOSE_TASKS, type CloseReport, type CloseReportCall, type CloseTask } from '@/lib/db'
 
 import {
   attemptOf,
   barVerdict,
+  boundaryAttemptOf,
+  boundaryVerdict,
   failedRunsExit,
   largestOf,
   parseStepFileName,
   stepFileName,
   tallyRun,
+  type BoundaryAttempt,
   type CapHit,
-  type StepAttempt,
   type RunTally,
+  type StepAttempt,
+  type TaskHold,
 } from './close-probe-bar'
 
 const CAPPED = 'char_00000000-0000-4000-8000-000000000001'
@@ -45,6 +49,20 @@ const LANDED_THREADS = call({
   result: 'ok',
   values: { description: 'Settled.' },
 })
+const LANDED_LORE = call({
+  task: 'lore',
+  tool: 'create_lore',
+  result: 'ok',
+  values: { body: 'The map marks three crosses in red ink.' },
+})
+const LANDED_UPKEEP = call({
+  task: 'upkeep',
+  tool: 'update_place',
+  result: 'ok',
+  values: { description: 'A cove on the island’s north shore.' },
+})
+// Run order (CLOSE_TASKS): lore, identity, threads, upkeep land a write each.
+const WRITES = [LANDED_LORE, LANDED_IDENTITY, LANDED_THREADS, LANDED_UPKEEP]
 
 const report = (calls: CloseReportCall[], stopped: CloseReport['stopped'] = []): CloseReport => ({
   version: 1,
@@ -65,25 +83,38 @@ const NO_REPORT = 'no report: the close did not complete, or wrote none'
 
 const run = (over: Partial<Parameters<typeof tallyRun>[0]> = {}) =>
   tallyRun({
-    report: report([LANDED_IDENTITY, LANDED_THREADS]),
+    report: report(WRITES),
     attempts: [],
     cappedLists: CAPPED_LISTS,
     ...over,
   })
 
+const holdFor = (tally: RunTally, task: CloseTask): TaskHold | undefined =>
+  tally.holds.find((hold) => hold.task === task)
+
 describe('tallyRun', () => {
-  it('holds both tasks on a completed close where each landed a write', () => {
+  it('judges all seven tasks in run order, a task with no start holding as no-start', () => {
     expect(run().holds).toEqual([
+      { task: 'happenings', held: true, why: 'no-start' },
+      { task: 'lore', held: true, why: 'held' },
       { task: 'identity', held: true, why: 'held' },
       { task: 'threads', held: true, why: 'held' },
+      { task: 'upkeep', held: true, why: 'held' },
+      { task: 'lifecycle', held: true, why: 'no-start' },
+      { task: 'awareness', held: true, why: 'no-start' },
     ])
   })
 
-  it('misses both tasks, and counts nothing, on a run with no report', () => {
-    expect(run({ report: null })).toEqual({
+  it('misses every task, a task with no start included, and counts nothing, on a run with no report', () => {
+    expect(run({ report: null, attempts: [attempt('identity', 1, 300)] })).toEqual({
       holds: [
+        { task: 'happenings', held: false, why: NO_REPORT },
+        { task: 'lore', held: false, why: NO_REPORT },
         { task: 'identity', held: false, why: NO_REPORT },
         { task: 'threads', held: false, why: NO_REPORT },
+        { task: 'upkeep', held: false, why: NO_REPORT },
+        { task: 'lifecycle', held: false, why: NO_REPORT },
+        { task: 'awareness', held: false, why: NO_REPORT },
       ],
       cutOffs: [],
       capCalls: 0,
@@ -93,19 +124,69 @@ describe('tallyRun', () => {
     })
   })
 
-  it('misses a task that stopped, whatever it landed', () => {
-    const stopped = report(
-      [LANDED_IDENTITY, LANDED_THREADS],
-      [{ task: 'identity', part: 1, reason: 'budget' }],
-    )
-    expect(run({ report: stopped }).holds).toEqual([
-      { task: 'identity', held: false, why: 'stopped: budget' },
-      { task: 'threads', held: true, why: 'held' },
+  it('counts a model step, a call or a recorded stop as a start', () => {
+    const refused = call({
+      task: 'lifecycle',
+      tool: 'retire_entity',
+      result: 'rejected',
+      reason: 'not-active',
+    })
+    const tallied = run({
+      report: report([...WRITES, refused], [{ task: 'awareness', part: 0, reason: 'window' }]),
+      attempts: [attempt('happenings', 1, 412)],
+    })
+    expect(holdFor(tallied, 'happenings')).toEqual({ task: 'happenings', held: true, why: 'held' })
+    expect(holdFor(tallied, 'lifecycle')).toEqual({ task: 'lifecycle', held: true, why: 'held' })
+    expect(holdFor(tallied, 'awareness')).toEqual({
+      task: 'awareness',
+      held: false,
+      why: 'stopped: window',
+    })
+  })
+
+  it('misses Identity, Threads, Lore or Upkeep when it started and landed nothing', () => {
+    for (const task of ['identity', 'threads', 'lore', 'upkeep'] as const) {
+      const others = WRITES.filter((landed) => landed.task !== task)
+      const tallied = run({ report: report(others), attempts: [attempt(task, 1, 240)] })
+      expect(holdFor(tallied, task), task).toEqual({ task, held: false, why: 'no write landed' })
+    }
+  })
+
+  it('holds Happenings, Lifecycle and Awareness once started, with no write', () => {
+    const tallied = run({
+      attempts: [
+        attempt('happenings', 1, 300),
+        attempt('lifecycle', 1, 200),
+        attempt('awareness', 1, 150),
+      ],
+    })
+    expect(tallied.holds.map(({ held }) => held)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
     ])
+    for (const task of ['happenings', 'lifecycle', 'awareness'] as const)
+      expect(holdFor(tallied, task), task).toEqual({ task, held: true, why: 'held' })
+  })
+
+  it('misses a task that stopped, whatever it landed', () => {
+    const stopped = report(WRITES, [{ task: 'identity', part: 1, reason: 'budget' }])
+    const tallied = run({ report: stopped })
+    expect(holdFor(tallied, 'identity')).toEqual({
+      task: 'identity',
+      held: false,
+      why: 'stopped: budget',
+    })
+    expect(holdFor(tallied, 'threads')).toEqual({ task: 'threads', held: true, why: 'held' })
   })
 
   it('misses a task whose calls landed nothing: a read, a refusal, an ok call wholly skipped', () => {
     const calls = [
+      LANDED_LORE,
       call({ task: 'identity', tool: 'read_row', result: 'ok', why: '', turns: [] }),
       call({
         task: 'identity',
@@ -122,8 +203,9 @@ describe('tallyRun', () => {
         skippedFields: [{ field: 'state.voice', reason: 'later-turn' }],
       }),
       LANDED_THREADS,
+      LANDED_UPKEEP,
     ]
-    expect(run({ report: report(calls) }).holds[0]).toEqual({
+    expect(holdFor(run({ report: report(calls) }), 'identity')).toEqual({
       task: 'identity',
       held: false,
       why: 'no write landed',
@@ -137,7 +219,8 @@ describe('tallyRun', () => {
       result: 'ok',
       survivor: { table: 'threads', id: KEEP },
     })
-    expect(run({ report: report([LANDED_IDENTITY, merged]) }).holds[1]).toEqual({
+    const calls = [LANDED_LORE, LANDED_IDENTITY, merged, LANDED_UPKEEP]
+    expect(holdFor(run({ report: report(calls) }), 'threads')).toEqual({
       task: 'threads',
       held: true,
       why: 'held',
@@ -148,23 +231,22 @@ describe('tallyRun', () => {
     const tallied = run({
       attempts: [attempt('identity', 1, 8_000, true), attempt('identity', 1, 3_323)],
     })
-    expect(tallied.holds[0]).toEqual({ task: 'identity', held: true, why: 'held' })
+    expect(holdFor(tallied, 'identity')).toEqual({ task: 'identity', held: true, why: 'held' })
     expect(tallied.cutOffs).toEqual([{ task: 'identity', step: 1, outputTokens: 8_000 }])
   })
 
   it('misses a task whose retry was cut off too, which stopped it, and reports both cut-offs', () => {
-    const stopped = report(
-      [LANDED_IDENTITY, LANDED_THREADS],
-      [{ task: 'identity', part: 1, reason: 'cut-off' }],
-    )
+    const stopped = report(WRITES, [{ task: 'identity', part: 1, reason: 'cut-off' }])
     const tallied = run({
       report: stopped,
       attempts: [attempt('identity', 1, 8_000, true), attempt('identity', 1, 8_000, true)],
     })
-    expect(tallied.holds).toEqual([
-      { task: 'identity', held: false, why: 'stopped: cut-off' },
-      { task: 'threads', held: true, why: 'held' },
-    ])
+    expect(holdFor(tallied, 'identity')).toEqual({
+      task: 'identity',
+      held: false,
+      why: 'stopped: cut-off',
+    })
+    expect(holdFor(tallied, 'threads')).toEqual({ task: 'threads', held: true, why: 'held' })
     expect(tallied.cutOffs).toEqual([
       { task: 'identity', step: 1, outputTokens: 8_000 },
       { task: 'identity', step: 1, outputTokens: 8_000 },
@@ -177,18 +259,28 @@ describe('tallyRun', () => {
     ])
   })
 
-  it("misses a task whose final attempt's reply reached 8,000 output tokens", () => {
-    expect(run({ attempts: [attempt('threads', 2, 8_000)] }).holds).toEqual([
-      { task: 'identity', held: true, why: 'held' },
-      { task: 'threads', held: false, why: "a step's reply reached 8000 output tokens" },
-    ])
-    expect(run({ attempts: [attempt('identity', 1, 7_999)] }).holds[0]?.held).toBe(true)
+  it("misses a task whose final attempt's reply reached 16,384 output tokens, written or not", () => {
+    const tallied = run({ attempts: [attempt('threads', 2, 16_384)] })
+    expect(holdFor(tallied, 'threads')).toEqual({
+      task: 'threads',
+      held: false,
+      why: "a step's reply reached 16384 output tokens",
+    })
+    expect(holdFor(tallied, 'identity')).toEqual({ task: 'identity', held: true, why: 'held' })
+    expect(holdFor(run({ attempts: [attempt('lifecycle', 1, 16_384)] }), 'lifecycle')).toEqual({
+      task: 'lifecycle',
+      held: false,
+      why: "a step's reply reached 16384 output tokens",
+    })
+    expect(holdFor(run({ attempts: [attempt('identity', 1, 16_383)] }), 'identity')?.held).toBe(
+      true,
+    )
   })
 
   it("leaves a cut attempt's output out of the task's largest step output", () => {
     const attempts = [
-      attempt('threads', 1, 8_000, true),
-      attempt('threads', 1, 7_999),
+      attempt('threads', 1, 16_384, true),
+      attempt('threads', 1, 16_383),
       attempt('identity', 2, 5_000),
     ]
     expect(run({ attempts }).holds.every(({ held }) => held)).toBe(true)
@@ -430,6 +522,7 @@ describe('step file names', () => {
       'identity-p1-s.json',
       'identity-s2.json',
       'scribe-p1-s2.json',
+      'boundary-c1.json',
     ])
       expect(parseStepFileName(name), name).toBeNull()
   })
@@ -464,8 +557,128 @@ describe('barVerdict', () => {
     expect(barVerdict(runs(5, (k) => tally(k < 3, 1, 1))).verdict).toBe('missed')
   })
 
+  it('passes runs whose untouched tasks hold as no-start, as Happenings does on MiniLM', () => {
+    const covered = (): RunTally => ({ ...run(), capCalls: 1, mergeCalls: 1 })
+    expect(barVerdict(runs(10, covered))).toEqual({
+      passing: 10,
+      runs: 10,
+      capRuns: 10,
+      mergeRuns: 10,
+      verdict: 'met',
+    })
+  })
+
+  it('counts a run with a non-write task missed as not passing', () => {
+    const lifecycleStopped = (): RunTally =>
+      run({ report: report(WRITES, [{ task: 'lifecycle', part: 1, reason: 'budget' }]) })
+    const lost = lifecycleStopped()
+    expect(lost.holds.filter(({ held }) => !held).map(({ task, why }) => ({ task, why }))).toEqual([
+      { task: 'lifecycle', why: 'stopped: budget' },
+    ])
+    const covered = (k: number): RunTally => ({
+      ...(k < 7 ? run() : lifecycleStopped()),
+      capCalls: 1,
+      mergeCalls: 1,
+    })
+    expect(barVerdict(runs(10, covered))).toMatchObject({ passing: 7, verdict: 'missed' })
+  })
+
   it('refuses to judge no runs', () => {
     expect(() => barVerdict([])).toThrow(/no runs/)
+  })
+})
+
+const boundary = (outcome: BoundaryAttempt['outcome']): BoundaryAttempt => ({
+  outcome,
+  endEntryId: outcome === 'failed' || outcome === 'aborted' ? null : 'entry_0001',
+  outputTokens: 180,
+})
+
+const boundaryRuns = (counts: Partial<Record<BoundaryAttempt['outcome'], number>>) =>
+  Object.entries(counts).flatMap(([outcome, n]) =>
+    Array.from({ length: n }, () => boundary(outcome as BoundaryAttempt['outcome'])),
+  )
+
+describe('boundaryVerdict', () => {
+  it('holds at 8 picks of 10 with none cut off', () => {
+    expect(boundaryVerdict(boundaryRuns({ picked: 8, parse: 1, failed: 1 }))).toEqual({
+      runs: 10,
+      picked: 8,
+      cutOff: 0,
+      held: true,
+    })
+  })
+
+  it('misses at 7 picks of 10', () => {
+    expect(boundaryVerdict(boundaryRuns({ picked: 7, parse: 3 }))).toEqual({
+      runs: 10,
+      picked: 7,
+      cutOff: 0,
+      held: false,
+    })
+  })
+
+  it('misses on one cut-off, whatever the picks', () => {
+    expect(boundaryVerdict(boundaryRuns({ picked: 9, 'reply-cut-off': 1 }))).toEqual({
+      runs: 10,
+      picked: 9,
+      cutOff: 1,
+      held: false,
+    })
+  })
+
+  it('counts a parse fallback, a failure and an abort as no pick', () => {
+    expect(boundaryVerdict(boundaryRuns({ parse: 4, failed: 3, aborted: 3 }))).toEqual({
+      runs: 10,
+      picked: 0,
+      cutOff: 0,
+      held: false,
+    })
+  })
+
+  it('scales to the runs made: 4 of 5 holds, 3 of 5 misses', () => {
+    expect(boundaryVerdict(boundaryRuns({ picked: 4, parse: 1 })).held).toBe(true)
+    expect(boundaryVerdict(boundaryRuns({ picked: 3, parse: 2 })).held).toBe(false)
+  })
+
+  it('refuses to judge no attempts', () => {
+    expect(() => boundaryVerdict([])).toThrow(/no attempts/)
+  })
+})
+
+describe('boundaryAttemptOf', () => {
+  it('maps a pick to a picked attempt on its entry', () => {
+    expect(boundaryAttemptOf({ status: 'picked', endEntryId: 'entry_0002' }, 180)).toEqual({
+      outcome: 'picked',
+      endEntryId: 'entry_0002',
+      outputTokens: 180,
+    })
+  })
+
+  it.each(['parse', 'reply-cut-off'] as const)(
+    'maps an unusable %s reply to that outcome on the fallback entry',
+    (tier) => {
+      expect(
+        boundaryAttemptOf({ status: 'unusable', endEntryId: 'entry_0009', tier }, null),
+      ).toEqual({ outcome: tier, endEntryId: 'entry_0009', outputTokens: null })
+    },
+  )
+
+  it('maps a failed call to a failed attempt with no entry', () => {
+    const error = { kind: 'orchestrator', detail: 'boom' } as const
+    expect(boundaryAttemptOf({ status: 'failed', error }, 40)).toEqual({
+      outcome: 'failed',
+      endEntryId: null,
+      outputTokens: 40,
+    })
+  })
+
+  it('maps an aborted call to an aborted attempt with no entry', () => {
+    expect(boundaryAttemptOf({ status: 'aborted' }, null)).toEqual({
+      outcome: 'aborted',
+      endEntryId: null,
+      outputTokens: null,
+    })
   })
 })
 

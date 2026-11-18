@@ -1799,8 +1799,9 @@ type ModelOverride = { providerId: string; modelId: string } & ModelSettings
 ```
 
 An unset field means the same on both owners: the call's own fallback
-applies (a close step's 8k output cap, a pass's or a close's ten-minute
-timeout, otherwise the provider's default). The fields, controls and
+applies (a close step's or the boundary call's 16,384-token output cap,
+a pass's or a close's ten-minute timeout, otherwise the provider's
+default). The fields, controls and
 per-slot rules are
 [`patterns/model-settings.md`](./ui/patterns/model-settings.md).
 
@@ -2187,6 +2188,7 @@ story_entries.metadata: {
     }
     promptSections?: PromptSections // a turn's context-window failure only: the refused narrative prompt by section
     close?: 'failed' | 'resolved'   // a close-failure entry, as `pass` below; a close has no held state
+    closePick?: string              // a close-failure entry a manual close's click raised when its pre-flight failed: the end entry the user picked, so the entry's Retry restarts that pick through the manual start, pre-flighting it again
     pass?: 'failed' | 'held' | 'resolved'  // a pass-failure entry: its Retry runs the pass alone; held has no Retry; resolved is what a committed Retry leaves when the composer couldn't take the submission back, a notice holding it with no Retry
   }
 }

@@ -605,6 +605,7 @@ export default function WorldRoute() {
           // The `[+]` isn't mounted before the story opens; an open armed then fires later.
           contextual={open != null ? contextual : undefined}
           story={storyId != null ? { storyId, branchId, surface: 'world' } : undefined}
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guard}
           beforeLeaveStory={guardLeave}
         />

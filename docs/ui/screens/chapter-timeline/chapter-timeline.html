@@ -142,6 +142,10 @@
   body[data-progress="warn"] .topbar-progress .fill, body[data-progress="warn"] .progress-bar-fill { width: 84%; background: var(--tone-warning); }
   body[data-progress="danger"] .topbar-progress .fill, body[data-progress="danger"] .progress-bar-fill { width: 95%; background: var(--tone-danger); }
   .progress-meta { font-size: 11px; color: var(--ink-muted); }
+  /* Ready to close (chapter-close.md → Manual user-triggered close): auto-close off, the threshold met */
+  .ready-to-close { display: none; font-weight: 600; color: var(--ink); }
+  body[data-auto-close="off"][data-progress="over"] .ready-to-close { display: inline; }
+  body[data-progress="over"] .topbar-progress .fill, body[data-progress="over"] .progress-bar-fill { width: 100%; background: var(--tone-danger); }
   .progress-summary-placeholder { padding: 0 16px 12px; font-size: 12px; color: var(--ink-faint); font-style: italic; }
   .in-progress-actions { padding: 4px 16px 14px; }
   .close-chapter-btn { padding: 7px 18px; border: 1px solid var(--ink); border-radius: 4px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
@@ -194,7 +198,7 @@
   .modal-section { margin-bottom: 14px; }
   .modal-section-label { font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
 
-  /* single-line entry rows — used for start-of-chapter row + picker trigger */
+  /* entry rows — one line here, two on phone; used for start-of-chapter row + picker trigger */
   .entry-row { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line-soft); border-radius: 3px; background: var(--bg); }
   .entry-row.trigger { background: var(--bg-region); border-color: var(--line); cursor: pointer; width: 100%; box-sizing: border-box; font-family: inherit; text-align: left; }
   .entry-row.trigger:hover { border-color: var(--ink-muted); }
@@ -215,7 +219,7 @@
   .picker-item { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
   .picker-item:hover { background: var(--bg-highlight); }
   .picker-item.selected { background: #f0f4ff; }
-  .picker-item-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .picker-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-bottom: 4px; }
   .picker-item-head .entry-time { margin-left: auto; }
   .picker-item-snippet { font-size: 12px; color: var(--ink); line-height: 1.45; font-style: italic; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .picker-item-tail { padding: 10px 12px; font-size: 11px; color: var(--ink-faint); font-style: italic; text-align: center; border-top: 1px dashed var(--line-soft); background: var(--bg); }
@@ -305,6 +309,11 @@
     .modal { width: 100%; max-width: calc(100% - 24px); margin: 0 12px; max-height: 85vh; overflow-y: auto; }
     .modal-foot { padding: 12px 16px; flex-wrap: wrap; }
     .modal-foot .btn { flex: 1 1 auto; }
+    /* entry rows take two lines: number, tag and chevron, then snippet and time (chapter-timeline.md → Entry-row anatomy) */
+    .entry-row { display: grid; grid-template-columns: auto auto 1fr auto; row-gap: 4px; }
+    .entry-row .entry-snippet { grid-column: 1 / 4; grid-row: 2; }
+    .entry-row .entry-time { grid-column: 4; grid-row: 2; justify-self: end; }
+    .entry-row .picker-arrow { grid-column: 4; grid-row: 1; justify-self: end; }
 
     /* review window — a Sheet here: bottom-anchored, drag handle in place of the ×, head still pinned */
     #review-backdrop { align-items: flex-end; }
@@ -314,7 +323,7 @@
   }
 </style>
 </head>
-<body data-close-owed="no" data-rerun-turns="none" data-delete-after="closes" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
+<body data-auto-close="on" data-close-owed="no" data-rerun-turns="none" data-delete-after="closes" data-card-state="expanded" data-empty="no" data-modal="hidden" data-not-applied="collapsed" data-progress="safe" data-picker="closed" data-gen-state="idle">
 
 <div class="screen-label"><strong>Wireframe:</strong> Chapter Timeline &mdash; responsive across phone / tablet / desktop &mdash; low-fi, interactive</div>
 
@@ -380,6 +389,12 @@
     <button class="rb-btn active" data-progress="safe">59% (safe)</button>
     <button class="rb-btn" data-progress="warn">84% (warn)</button>
     <button class="rb-btn" data-progress="danger">95% (danger)</button>
+    <button class="rb-btn" data-progress="over">105% (over)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">auto-close:</span>
+    <button class="rb-btn active" data-auto-close="on">on</button>
+    <button class="rb-btn" data-auto-close="off">off (Ready to close past the threshold)</button>
   </div>
   <div class="rb-group">
     <span class="gl">gen:</span>
@@ -542,7 +557,7 @@
       </div>
       <div class="progress-row">
         <div class="progress-bar-track"><div class="progress-bar-fill"></div></div>
-        <div class="progress-meta" id="progress-tok">14,200 / 24,000 tok</div>
+        <div class="progress-meta"><span id="progress-tok">14,200 / 24,000 tok</span> <span class="ready-to-close">&middot; Ready to close</span></div>
       </div>
       <div class="progress-summary-placeholder">Summary, theme, and keywords generate on close.</div>
       <div class="in-progress-actions">
@@ -562,7 +577,9 @@
   </span>
 </div>
 
-<!-- chapter-close modal -->
+<!-- chapter-close modal — one modal for four triggers (chapter-timeline.md → Chapter-close modal): the Actions menu's
+     Close chapter…, the in-progress card's Close chapter…, the reader popover's Close chapter manually, and an
+     entry's Close chapter here, which opens it with that entry picked as the end -->
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal">
     <div class="modal-head">
@@ -575,7 +592,7 @@
       <div class="modal-section">
         <div class="modal-section-label">Start of chapter</div>
         <div class="entry-row">
-          <span class="entry-num">entry 89</span>
+          <span class="entry-num">entry #89</span>
           <span class="entry-tag">Chapter 4 ended here</span>
           <span class="entry-snippet">&ldquo;Aria sets out at first light, Kael trailing two paces behind. The city walls lean inward, soaked in the dawn's grey light.&rdquo;</span>
           <span class="entry-time">Day 7 &middot; 06:42</span>
@@ -586,7 +603,7 @@
         <div class="modal-section-label">End of chapter</div>
         <div class="picker-wrap">
           <button class="entry-row trigger" id="end-picker" type="button">
-            <span class="entry-num" id="picker-num">entry 102</span>
+            <span class="entry-num" id="picker-num">entry #102</span>
             <span class="entry-tag" id="picker-tag">latest</span>
             <span class="entry-snippet" id="picker-snippet">&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be.&rdquo;</span>
             <span class="entry-time" id="picker-time">Day 9 &middot; 22:18</span>
@@ -595,7 +612,7 @@
           <div class="picker-panel" id="picker-panel">
             <div class="picker-item selected" data-entry="102" data-tag="latest" data-snippet="&ldquo;She stops at the threshold and listens. The room beyond is quieter than it should be. Lantern light catches on the bouncer's shoulder near the back door.&rdquo;" data-time="Day 9 &middot; 22:18">
               <div class="picker-item-head">
-                <span class="entry-num">entry 102</span>
+                <span class="entry-num">entry #102</span>
                 <span class="entry-tag">latest</span>
                 <span class="entry-time">Day 9 &middot; 22:18</span>
               </div>
@@ -603,28 +620,28 @@
             </div>
             <div class="picker-item" data-entry="100" data-tag="" data-snippet="&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;" data-time="Day 9 &middot; 22:14">
               <div class="picker-item-head">
-                <span class="entry-num">entry 100</span>
+                <span class="entry-num">entry #100</span>
                 <span class="entry-time">Day 9 &middot; 22:14</span>
               </div>
               <div class="picker-item-snippet">&ldquo;Kael waves her forward, palm open. 'It's clear,' he murmurs, and steps through the doorway into the lamp-lit corridor.&rdquo;</div>
             </div>
             <div class="picker-item" data-entry="98" data-tag="" data-snippet="&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;" data-time="Day 9 &middot; 21:50">
               <div class="picker-item-head">
-                <span class="entry-num">entry 98</span>
+                <span class="entry-num">entry #98</span>
                 <span class="entry-time">Day 9 &middot; 21:50</span>
               </div>
               <div class="picker-item-snippet">&ldquo;They reach the back hall, narrow and dim. Crates have been piled against the rear door &mdash; recent and deliberate, the wood still pale where it was dragged.&rdquo;</div>
             </div>
             <div class="picker-item" data-entry="96" data-tag="" data-snippet="&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;" data-time="Day 9 &middot; 21:38">
               <div class="picker-item-head">
-                <span class="entry-num">entry 96</span>
+                <span class="entry-num">entry #96</span>
                 <span class="entry-time">Day 9 &middot; 21:38</span>
               </div>
               <div class="picker-item-snippet">&ldquo;Two bouncers stand by the side door, watching the room with practiced disinterest. The taller one's hand rests inside his coat. He looks tired.&rdquo;</div>
             </div>
             <div class="picker-item" data-entry="94" data-tag="" data-snippet="&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;" data-time="Day 9 &middot; 21:25">
               <div class="picker-item-head">
-                <span class="entry-num">entry 94</span>
+                <span class="entry-num">entry #94</span>
                 <span class="entry-time">Day 9 &middot; 21:25</span>
               </div>
               <div class="picker-item-snippet">&ldquo;The room's volume drops a notch. Eyes flick toward the door, then back to drinks &mdash; nobody wants to look interested in whoever just walked in.&rdquo;</div>
@@ -864,7 +881,7 @@
   });
 
   // the open region's progress — one state for the strip and the in-progress card
-  const PROGRESS_COUNTS = { safe: '14,200 / 24,000 tok', warn: '20,200 / 24,000 tok', danger: '22,800 / 24,000 tok' };
+  const PROGRESS_COUNTS = { safe: '14,200 / 24,000 tok', warn: '20,200 / 24,000 tok', danger: '22,800 / 24,000 tok', over: '25,300 / 24,000 tok' };
   function setProgress(state) {
     body.dataset.progress = state;
     progressTok.textContent = PROGRESS_COUNTS[state];
@@ -875,6 +892,17 @@
   }
   document.querySelectorAll('.rb-btn[data-progress]').forEach(b => {
     b.addEventListener('click', () => setProgress(b.dataset.progress));
+  });
+
+  // auto-close — off shows Ready to close on the card once the threshold is met
+  function setAutoClose(state) {
+    body.dataset.autoClose = state;
+    document.querySelectorAll('.rb-btn[data-auto-close]').forEach(b => {
+      b.classList.toggle('active', b.dataset.autoClose === state);
+    });
+  }
+  document.querySelectorAll('.rb-btn[data-auto-close]').forEach(b => {
+    b.addEventListener('click', () => setAutoClose(b.dataset.autoClose));
   });
 
   // gen-state — in flight the card's inputs disable, and every gated control carries the gate's tooltip
@@ -980,7 +1008,7 @@
       item.classList.add('selected');
       const num = item.dataset.entry;
       const tag = item.dataset.tag;
-      document.getElementById('picker-num').textContent = 'entry ' + num;
+      document.getElementById('picker-num').textContent = 'entry #' + num;
       const tagEl = document.getElementById('picker-tag');
       tagEl.textContent = tag;
       tagEl.style.display = tag ? '' : 'none';

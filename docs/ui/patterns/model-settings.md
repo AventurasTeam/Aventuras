@@ -35,7 +35,12 @@ Used by:
   and its source (`Context window 65,536 · detected`, `· set by you`),
   or `Context window unknown · set it in Providers`. Max output is not
   checked against the window: it is a ceiling, and calls are checked
-  on the prompt alone.
+  on the prompt alone. A server that reserves max output within the
+  window (vLLM) refuses a call whose prompt plus it overflows, and a
+  model whose output cap sits below what is sent refuses it too, so
+  where a call falls back to a default (a close step and the boundary
+  call send 16,384) the user sets max output to fit
+  ([`chapter-close.md → When a task stops`](../../memory/chapter-close.md#when-a-task-stops)).
 - **thinking** — slider, **conditional** rendering rules:
   - Provider known + model supports → slider visible.
   - Provider known + model doesn't → slider hidden, info text

@@ -12,7 +12,7 @@ import { useChapterTimeRanges } from '@/hooks/use-chapter-time-ranges'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { ChapterProgress } from '@/lib/chapters'
 import type { StoryEntry } from '@/lib/db'
-import { chaptersStore } from '@/lib/stores'
+import { chapterOverlaysStore, chaptersStore } from '@/lib/stores'
 import { branchWorldTime } from '@/lib/world'
 
 import {
@@ -30,6 +30,10 @@ export type ReaderChapterChipsProps = {
   entries: readonly StoryEntry[]
   frame: CalendarFrame | null
   progress: ChapterProgress
+  /** Why the popover's Close chapter manually is disabled; absent leaves it enabled. */
+  closeReason?: string
+  /** isReadyToClose's verdict, for the popover's progress row. */
+  readyToClose: boolean
   isFocused: boolean
   onJumpToEntry: (entryId: string) => void
   /** The popover's `Manage chapters →`. */
@@ -44,6 +48,8 @@ export function ReaderChapterChips({
   entries,
   frame,
   progress,
+  closeReason,
+  readyToClose,
   isFocused,
   onJumpToEntry,
   onManageChapters,
@@ -96,8 +102,12 @@ export function ReaderChapterChips({
         closed={rows}
         sinceLabel={sinceLabel}
         progress={progress}
+        readyToClose={readyToClose}
         onOpenChange={handleOpenChange}
         onJumpToChapter={onJumpToEntry}
+        // C7: openCloseModal runs the reader's registered inline-edit guard first.
+        onCloseChapter={() => chapterOverlaysStore.openCloseModal({ branchId })}
+        closeReason={closeReason}
         onManageChapters={onManageChapters}
       />
       <TimeChip seconds={branchWorldTime(entries)} frame={frame} />

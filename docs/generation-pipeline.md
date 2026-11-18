@@ -633,8 +633,8 @@ reserves, so a refused start leaves the pick before it standing, and a
 second pick overwrites the first. A close's commit clears it; a
 cancelled or failed close leaves it owed. `boundary` drops a pick whose
 entry is no longer an open-region reply, failing the close, and a
-reversal that removes the entry drops it once its sweep has ended. A
-restart drops everything.
+reversal that removes the entry, or closes it into a chapter, drops it
+once its sweep has ended. A restart drops everything.
 
 `pendingRerun` holds a close's re-run for its chain's life, its
 chapter the one input a chained successor can't take. It's written as
@@ -745,8 +745,9 @@ Pre-flight failure on **the periodic classifier** or **a chapter
 close** is a failed run like any other: a toast, or the system entry
 when it fails a Send
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
-or, for a close, the manual close's click, which pre-flights before it
-starts anything
+or, for a close, the close modal's confirm, which pre-flights before it
+starts anything and raises the system entry with a toast, since the
+entry may be out of view
 ([`memory/chapter-close.md → Manual user-triggered close`](./memory/chapter-close.md#manual-user-triggered-close)).
 
 **Runtime resolver failure is the safety net.** A race between
@@ -1498,7 +1499,7 @@ build on a held pass's unreversed writes. A manual close records
 `pendingClose` with the user's end entry and starts the same way: a
 pass first when entries are unprocessed, the close otherwise. The
 record is in memory: a restart drops it, and so does a reversal that
-removes that entry. A pass started alone, by a pass-failure entry's
+removes that entry or closes it into a chapter. A pass started alone, by a pass-failure entry's
 `Retry` or Run now, chains nothing and leaves an owed close to the next Send.
 A close's re-run records `pendingRerun` and starts the same way, with
 passes only while an entry through its chapter's end is unprocessed. It
@@ -2205,7 +2206,10 @@ the fallback classifier fails and the turn commits with the failure in
 its state report; suggestion refresh and wizard-assist show their own
 errors, naming the limit as the reader does; a close's metadata call
 fails the close
-([`memory/chapter-close.md → Failure modes and atomic rollback`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)).
+([`memory/chapter-close.md → Failure modes and atomic rollback`](./memory/chapter-close.md#failure-modes-and-atomic-rollback)),
+while its boundary call's cut-off reply is unusable, and the chapter
+ends on the latest candidate, which loses nothing
+([`memory/chapter-close.md → Phase 1`](./memory/chapter-close.md#phase-1--boundary-selection)).
 
 **A close's tool step reads the same `'length'`, and a filter with it.**
 A cut-off reply is never a finished task, whatever it holds, so its
@@ -2268,7 +2272,10 @@ what it asked for, the profile's or the override's, or its own default;
 only the log reads it. A structured or narrative call keeps the
 `maxOutput` its settings set, the profile's or the override's, since
 its copy names that figure, so with thinking on a cut at the
-window can read as `max-output`. Then `window` when the model's window
+window can read as `max-output`. A structured call with a default of
+its own, the close's boundary call sending 16,384 when its settings set
+none, reports that default, the figure its copy names. Then `window`
+when the model's window
 is known and the prompt plus the output tokens reach it, reading the
 prompt from the provider's input count and from the estimate only when
 it reported none, since o200k can miss a server's own count by a

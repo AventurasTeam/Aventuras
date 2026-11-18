@@ -60,9 +60,10 @@ const PROVIDER = {
   favoriteModelIds: [] as string[],
 }
 
-// Threshold 400: candidates hold 200–600 tokens. Running totals: e3 240, e5 400, e7 580, e9 700,
-// e11 800. e9 is past the bound and e11 is the newest reply, so the candidates are e3, e5 and e7.
-const THRESHOLD = 400
+// Threshold 401 (odd, so the window 201–601 differs from a bare half and one and a half): running
+// totals e3 240, e5 400, e7 580, e9 700, e11 800. e9 is past the bound and e11 is the newest
+// reply, so the candidates are e3, e5 and e7.
+const THRESHOLD = 401
 const SERIES: readonly OpenRegionRow[] = [
   { id: 'e1', kind: 'opening', position: 1, tokens: 100 },
   { id: 'e2', kind: 'user_action', position: 2, tokens: 20 },
@@ -76,7 +77,6 @@ const SERIES: readonly OpenRegionRow[] = [
   { id: 'e10', kind: 'user_action', position: 10, tokens: 20 },
   { id: 'e11', kind: 'ai_reply', position: 11, tokens: 80 },
 ]
-const REGION_TOKENS = 800
 
 const CANDIDATES: readonly CloseCandidate<OpenRegionRow>[] = [
   { ...SERIES[2]!, tokensThrough: 240 },
@@ -114,9 +114,9 @@ const PARSE_LAST = { ...PARSE_FIRST, attempt: 1 } satisfies CallRetryError
 const CUT_OFF = {
   tier: 'reply-cut-off',
   cause: 'max-output',
-  outputTokens: 8000,
+  outputTokens: 16384,
   reasoningTokens: null,
-  maxOutput: 8000,
+  maxOutput: 16384,
   window: null,
   providerId: PROVIDER.id,
   modelId: 'm',
@@ -169,7 +169,7 @@ function inputs(): BoundaryCallInputs {
 }
 
 async function drain(ctx: PhaseContext = phaseCtx()) {
-  const gen = requestChapterBoundary(ctx, SERIES, CANDIDATES, inputs())
+  const gen = requestChapterBoundary(ctx, CANDIDATES, inputs())
   const events: PhaseEmittedEvent[] = []
   for (;;) {
     const next = await gen.next()
@@ -229,7 +229,7 @@ describe('readBoundaryInputs', () => {
   it("reads the threshold, the branch's active threads and lore-mgmt's config", () => {
     const settings = appSettingsStore.getAppSettings()
     expect(readBoundaryInputs(phaseCtx())).toEqual({
-      threshold: 400,
+      threshold: THRESHOLD,
       activeThreads: [{ title: 'Find the\nheir' }],
       modelConfig: {
         providers: settings.providers,
@@ -274,14 +274,14 @@ describe('readBoundaryInputs', () => {
 })
 
 describe('requestChapterBoundary — the call', () => {
-  it('asks lore-mgmt once, under the 8k default, with a schema refusing any turn but a candidate', async () => {
+  it('asks lore-mgmt once, under the 16k default, with a schema refusing any turn but a candidate', async () => {
     answer('t2')
     await drain()
 
     expect(generateStructuredMock).toHaveBeenCalledOnce()
     const [target, , schema, config, , options] = generateStructuredMock.mock.calls[0]!
     expect(target).toBe('lore-mgmt')
-    expect(options).toEqual({ actionId: 'act_close', defaultMaxOutput: 8000 })
+    expect(options).toEqual({ actionId: 'act_close', defaultMaxOutput: 16384 })
     expect(config).toMatchObject({ assignments: { 'lore-mgmt': 'prof-lore' }, storyModels: {} })
     // AC3: the block the mock matches on is the plain schema's.
     expect(z.toJSONSchema(schema)).toEqual(z.toJSONSchema(chapterBoundarySchema))
@@ -318,13 +318,14 @@ describe('requestChapterBoundary — the call', () => {
     for (const sentence of shown) expect(system).not.toContain(sentence)
   })
 
-  it("prompts with the whole region's tokens, the threshold and the active threads on one line", async () => {
+  it("prompts with the candidates' length range, not the region's total, and the active threads on one line", async () => {
     answer('t2')
     await drain()
 
     const { system, user } = generateStructuredMock.mock.calls[0]![1]
-    expect(user).toContain(String(REGION_TOKENS))
-    expect(user).toContain(String(THRESHOLD))
+    expect(user).toContain('between 201 and 601 tokens long, all good lengths for a chapter')
+    expect(user).not.toContain('800')
+    expect(user).not.toContain('tokens so far')
     expect(user).toContain('Find the heir')
     expect(user).not.toContain('Find the\nheir')
     expect(user).not.toContain('The ford crossing')

@@ -1,11 +1,19 @@
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import { TOOL_STEP_MAX_OUTPUT_DEFAULT } from '@/lib/ai'
 import { CLOSE_TASKS, type CloseReport, type CloseReportCall, type CloseTask } from '@/lib/db'
+import type { BoundaryCallOutcome } from '@/lib/pipeline/definitions/chapter-close-boundary-call'
 import type { CappedList } from '@/lib/pipeline/definitions/close-agent/fields'
 import { CLOSE_REASON } from '@/lib/pipeline/definitions/close-agent/verdict'
 
-// The measure's bar (testing.md → Real-provider checks).
-const BAR_TASKS = ['identity', 'threads'] as const satisfies readonly CloseTask[]
+// The measure's bar (testing.md → Real-provider checks): every task is judged, and these four must
+// land a write once they start. Happenings, Lifecycle and Awareness can be right writing nothing.
+export const WRITE_EXPECTED_TASKS = [
+  'identity',
+  'threads',
+  'lore',
+  'upkeep',
+] as const satisfies readonly CloseTask[]
+const writeExpected: ReadonlySet<CloseTask> = new Set(WRITE_EXPECTED_TASKS)
 const PASSING_OF_TEN = 8
 const COVERAGE_OF_TEN = 3
 
@@ -70,16 +78,31 @@ function largestFinalOutput(task: CloseTask, attempts: readonly StepAttempt[]): 
   )
 }
 
+// A task whose start read found nothing makes no model step, so a step, a call or a stop shows it
+// had one. A stop is checked too: a task can stop with no call of its own.
+function hadStart(task: CloseTask, input: RunInput, report: CloseReport): boolean {
+  return (
+    input.attempts.some((attempt) => attempt.task === task) ||
+    report.calls.some((call) => call.task === task) ||
+    report.stopped.some((stopped) => stopped.task === task)
+  )
+}
+
+// A failed close misses every task, one with no start included: nothing ran to judge.
 function holdOf(task: CloseTask, input: RunInput): TaskHold {
   const missed = (why: string): TaskHold => ({ task, held: false, why })
   const { report } = input
   if (report === null) return missed('no report: the close did not complete, or wrote none')
+  if (!hadStart(task, input, report)) return { task, held: true, why: 'no-start' }
   const stop = report.stopped.find((stopped) => stopped.task === task)
   if (stop !== undefined) return missed(`stopped: ${stop.reason}`)
   const most = largestFinalOutput(task, input.attempts)
   if (most >= TOOL_STEP_MAX_OUTPUT_DEFAULT)
     return missed(`a step's reply reached ${most} output tokens`)
-  if (!report.calls.some((call) => call.task === task && landedWrite(call)))
+  if (
+    writeExpected.has(task) &&
+    !report.calls.some((call) => call.task === task && landedWrite(call))
+  )
     return missed('no write landed')
   return { task, held: true, why: 'held' }
 }
@@ -168,7 +191,7 @@ export function tallyRun(input: RunInput): RunTally {
   const capped = calls.map((call) => capHitsOf(call, input.cappedLists))
   const merges = calls.filter((call) => call.task === 'threads' && call.tool === 'merge_threads')
   return {
-    holds: BAR_TASKS.map((task) => holdOf(task, input)),
+    holds: CLOSE_TASKS.map((task) => holdOf(task, input)),
     cutOffs: input.attempts
       .filter(({ cut }) => cut)
       .map(({ task, step, outputTokens }) => ({ task, step, outputTokens })),
@@ -206,6 +229,45 @@ export function barVerdict(tallies: readonly RunTally[]): BarVerdict {
         ? 'inconclusive'
         : 'met'
   return { passing, runs, capRuns, mergeRuns, verdict }
+}
+
+/** One run of the boundary arm. */
+export type BoundaryAttempt = {
+  outcome: 'picked' | 'parse' | 'reply-cut-off' | 'failed' | 'aborted'
+  /** The pick, or the latest candidate an unusable reply fell back to; null when the call failed or aborted. */
+  endEntryId: string | null
+  /** The most output tokens one response of the call reported; null when none reported any. */
+  outputTokens: number | null
+}
+
+/** A boundary call's outcome as an attempt, with the most output tokens one response reported. */
+export function boundaryAttemptOf(
+  outcome: BoundaryCallOutcome,
+  outputTokens: number | null,
+): BoundaryAttempt {
+  switch (outcome.status) {
+    case 'picked':
+      return { outcome: 'picked', endEntryId: outcome.endEntryId, outputTokens }
+    case 'unusable':
+      return { outcome: outcome.tier, endEntryId: outcome.endEntryId, outputTokens }
+    case 'failed':
+    case 'aborted':
+      return { outcome: outcome.status, endEntryId: null, outputTokens }
+  }
+}
+
+/** testing.md → Real-provider checks: 8 runs of 10 pick a candidate and none is cut off. */
+export function boundaryVerdict(attempts: readonly BoundaryAttempt[]): {
+  runs: number
+  picked: number
+  cutOff: number
+  held: boolean
+} {
+  const runs = attempts.length
+  if (runs === 0) throw new Error('boundaryVerdict: no attempts to judge')
+  const picked = attempts.filter(({ outcome }) => outcome === 'picked').length
+  const cutOff = attempts.filter(({ outcome }) => outcome === 'reply-cut-off').length
+  return { runs, picked, cutOff, held: picked >= shareOf(runs, PASSING_OF_TEN) && cutOff === 0 }
 }
 
 /** Whether a failed close sets a non-zero exit: an overlay run exits by its bar instead. */

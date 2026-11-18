@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { branches, storyEntries, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { indexEntryRefs, readEntryIndex } from './read'
+import { indexEntryRefs, readEntryIndex, readOpenRegionTimes } from './read'
 
 async function setup() {
   const { db } = await createTestDb()
@@ -223,5 +223,87 @@ describe('readEntryIndex', () => {
     ['only leading whitespace', `\n  ${unspaced.repeat(801)}`],
   ])('hard-cuts a mid-word head with %s instead of emptying it', async (_, content) => {
     expect(await readExcerpt(content)).toBe(`${unspaced.repeat(12)}…`)
+  })
+})
+
+describe('readOpenRegionTimes', () => {
+  it("reads each open-region row's world time, leaving out closed, system, timeless and other branches' rows", async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values([
+      { id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 },
+      { id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 },
+    ])
+    const at = (worldTime: number) => ({ sceneEntities: [], currentLocationId: null, worldTime })
+    await db.insert(storyEntries).values([
+      {
+        id: 'e_1',
+        branchId: 'br_1',
+        position: 1,
+        kind: 'opening',
+        content: 'You arrive.',
+        chapterId: 'chap_1',
+        metadata: at(30),
+        createdAt: 1,
+      },
+      // 0 is the story's origin, a time like any other.
+      {
+        id: 'e_2',
+        branchId: 'br_1',
+        position: 2,
+        kind: 'user_action',
+        content: 'I wait.',
+        chapterId: null,
+        metadata: at(0),
+        createdAt: 2,
+      },
+      {
+        id: 'e_3',
+        branchId: 'br_1',
+        position: 3,
+        kind: 'ai_reply',
+        content: 'Dusk falls.',
+        chapterId: null,
+        metadata: at(3_600),
+        createdAt: 3,
+      },
+      {
+        id: 'e_4',
+        branchId: 'br_1',
+        position: 4,
+        kind: 'system',
+        content: 'A note.',
+        chapterId: null,
+        metadata: at(7_200),
+        createdAt: 4,
+      },
+      {
+        id: 'e_5',
+        branchId: 'br_1',
+        position: 5,
+        kind: 'user_action',
+        content: 'I listen.',
+        chapterId: null,
+        metadata: null,
+        createdAt: 5,
+      },
+      {
+        id: 'e_x',
+        branchId: 'br_2',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'Elsewhere.',
+        chapterId: null,
+        metadata: at(60),
+        createdAt: 2,
+      },
+    ])
+
+    expect(await readOpenRegionTimes('br_1', db)).toEqual(
+      new Map([
+        ['e_2', 0],
+        ['e_3', 3_600],
+      ]),
+    )
   })
 })

@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
 import type { ResolveModelConfig } from '@/lib/ai'
-import type { CloseCandidate } from '@/lib/chapters'
+import { closeCandidateWindow, type CloseCandidate } from '@/lib/chapters'
 import { storyEntries, type OpenRegionRow } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -16,7 +16,7 @@ import type { StructuredCallFailure } from '../call-error'
 import type { PhaseContext, PhaseEmittedEvent, PhaseFailure, PipelineError } from '../types'
 
 // chapter-close.md → Phase 1: the boundary reply's output bound when the settings set none.
-const BOUNDARY_MAX_OUTPUT_DEFAULT = 8_000
+const BOUNDARY_MAX_OUTPUT_DEFAULT = 16_384
 
 export type BoundaryCallContext = Pick<
   PhaseContext,
@@ -102,7 +102,6 @@ function fallBack(
  */
 export async function* requestChapterBoundary(
   ctx: BoundaryCallContext,
-  series: readonly OpenRegionRow[],
   candidates: readonly CloseCandidate<OpenRegionRow>[],
   inputs: BoundaryCallInputs,
 ): AsyncGenerator<PhaseEmittedEvent, BoundaryCallOutcome> {
@@ -118,10 +117,11 @@ export async function* requestChapterBoundary(
     const { first, last } = firstLastSentences(prose.get(candidate.id) ?? '')
     return { turn, position: candidate.position, opening: first, closing: last }
   })
+  const lengths = closeCandidateWindow(inputs.threshold)
   const prompt = renderTemplate(TEMPLATE_IDS.chapterBoundary, {
     boundaryCandidates,
-    boundaryRegionTokens: series.reduce((sum, row) => sum + row.tokens, 0),
-    boundaryThreshold: inputs.threshold,
+    boundaryLengthFrom: lengths.from,
+    boundaryLengthTo: lengths.to,
     boundaryActiveThreads: inputs.activeThreads.map((thread) => ({ title: oneLine(thread.title) })),
   })
   const call = yield* boundedStructuredCall({

@@ -147,6 +147,10 @@
       "openChapterTimeline": "Open Chapter Timeline",
       "openStorySettings": "Open Story Settings"
     },
+    "storyTools": {
+      "header": "Story tools",
+      "closeChapter": "Close chapter…"
+    },
     "generationStatusPill": {
       "phase": {
         "reasoning": "reasoning…",

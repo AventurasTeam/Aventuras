@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { StoryEntry } from '@/lib/db'
 
 import { canEndChapter } from './can-end-chapter'
-import { closeCandidates } from './close-candidates'
+import { closeCandidates, closeCandidateWindow } from './close-candidates'
 
 // Passes through to the real rule; the C10 case swaps it, to prove the candidates ask it.
 vi.mock('./can-end-chapter', async (importOriginal) => {
@@ -128,5 +128,25 @@ describe('closeCandidates', () => {
     } finally {
       vi.mocked(canEndChapter).mockImplementation(actual.canEndChapter)
     }
+  })
+})
+
+// The window's bounds are the integer totals a candidate can hold: the filter is inclusive.
+describe('closeCandidateWindow', () => {
+  it('is half a threshold to one and a half for an even threshold', () => {
+    expect(closeCandidateWindow(1000)).toEqual({ from: 500, to: 1500 })
+  })
+
+  it('rounds the low bound up and the high bound down for an odd threshold', () => {
+    expect(closeCandidateWindow(1001)).toEqual({ from: 501, to: 1501 })
+    expect(closeCandidateWindow(4003)).toEqual({ from: 2002, to: 6004 })
+  })
+})
+
+describe('closeCandidates at an odd threshold', () => {
+  it('keeps the same rows the window names: totals 501 through 1501', () => {
+    // Running totals: 300, 500, 501, 1501, 1502, 1503.
+    const series = [opening(300), r(1, 200), r(2, 1), r(3, 1000), r(4, 1), r(5, 1)]
+    expect(ids(closeCandidates(series, 1001))).toEqual(['r2', 'r3'])
   })
 })

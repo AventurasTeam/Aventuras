@@ -38,7 +38,7 @@ import { runProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
 
 /** memory/chapter-close.md → When a task stops: a step's output when the profile sets none. */
-export const TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000
+export const TOOL_STEP_MAX_OUTPUT_DEFAULT = 16_384
 
 /** No `execute`: the SDK would run the calls itself, in parallel, where a phase can't yield. */
 export type ToolStepTool = { description: string; inputSchema: z.ZodObject; execute?: never }
@@ -133,8 +133,8 @@ function stepOf(reply: StepReply, finishReason: ToolStep['finishReason']): ToolS
   }
 }
 
-// Anthropic's adapter adds the thinking budget and clamps to the model's cap; openai-compatible's
-// body is a string, and its max_tokens is maxOutput unchanged.
+// Anthropic's adapter adds the thinking budget and clamps to the cap of the model ids its table
+// knows; openai-compatible's body is a string, and its max_tokens is maxOutput unchanged.
 function sentMaxOutput(reply: StepReply, maxOutput: number): number {
   const { body } = reply.request
   return typeof body === 'object' &&

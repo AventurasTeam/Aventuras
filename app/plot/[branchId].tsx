@@ -452,6 +452,7 @@ export default function PlotRoute() {
           // The `[+]` isn't mounted before the panes are; an open armed then fires later.
           contextual={panesReady ? contextual : undefined}
           story={storyId != null ? { storyId, branchId, surface: 'plot' } : undefined}
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guard}
           beforeLeaveStory={guardLeave}
         />

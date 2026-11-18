@@ -7,6 +7,7 @@ import { ChapterDeleteConfirm } from '@/components/chapters/chapter-delete-confi
 import { ChapterInProgressCard } from '@/components/chapters/chapter-in-progress-card'
 import { chapterTimelineData } from '@/components/chapters/chapter-timeline-data'
 import { ChapterTimelineHeader } from '@/components/chapters/chapter-timeline-header'
+import { closeChapterReason } from '@/components/chapters/close-chapter-reason'
 import { useChapterDeleteConfirm } from '@/components/chapters/use-chapter-delete-confirm'
 import { useTimelineEditing } from '@/components/chapters/use-timeline-editing'
 import { useTimelineTimeRanges } from '@/components/chapters/use-timeline-time-ranges'
@@ -29,7 +30,7 @@ import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
 import { getChapterDeletePreview, loadOpenStory, removeChapter, saveChapter } from '@/lib/actions'
 import { resolveCalendar, type CalendarFrame } from '@/lib/calendar'
-import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
+import { isReadyToClose, type ChapterDraft, type ChapterDraftRow } from '@/lib/chapters'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { singleParam } from '@/lib/route-param'
@@ -147,6 +148,7 @@ export default function ChapterTimelineRoute(): ReactElement {
       actions={
         <AppActionsMenu
           story={storyId != null ? { storyId, branchId, surface: 'chapter-timeline' } : undefined}
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guard}
           beforeLeaveStory={guardLeave}
         />
@@ -192,7 +194,13 @@ export default function ChapterTimelineRoute(): ReactElement {
                   onDelete={() => guard(() => void deleteConfirm.open(card.row.id))}
                 />
               ))}
-              <ChapterInProgressCard progress={chapterProgress} sinceLabel={timeline.sinceLabel} />
+              <ChapterInProgressCard
+                progress={chapterProgress}
+                sinceLabel={timeline.sinceLabel}
+                onCloseChapter={() => chapterOverlaysStore.openCloseModal({ branchId })}
+                closeReason={closeChapterReason(gateReason, chapterProgress.canClose)}
+                readyToClose={isReadyToClose(chapterProgress, open.settings.chapterAutoClose)}
+              />
             </View>
           </ScrollView>
           {isPhone ? (

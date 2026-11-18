@@ -1445,6 +1445,51 @@ Raised by the context window check.
 A real server's overflow reading as a plain provider failure is the
 signal to revisit; none we run sends these shapes.
 
+#### Clamp a default max output to the window
+
+**A call that falls back to a default max output is sent it unclamped.**
+When the model's window is known, such a call (a close step, the
+boundary call) would send the smaller of the default and the window
+less the prompt estimate; a profile's own max output is never clamped.
+Parked 2026-11-18 on the developer's call, "most likely a non-issue for
+vast majority of users": the remedy stands in canon, the profile's max
+output ([`chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
+A clamp would fix a server that counts `max_tokens` against the window
+(vLLM), where a call whose prompt passes the window less 16,384 is
+refused: a full part's first step on small windows (roughly under 47k
+tokens), a late step on larger ones. It fixes the refused reservation
+only: a reply longer than the room left is cut whatever `max_tokens`
+says. It would not fix a model whose output cap sits between 8,000 and
+16,383 tokens, which gets a 4xx whatever the window. The refusal is
+recognized as an overflow by
+[the overflow keywords](./architecture.md#recognizing-an-overflow-rejection)
+(not checked live) and surfaces as a context-window failure. Its copy
+(`closeContextWindow.provider` in `locales/en/reader.json`, and
+"outgrew the context window" in `chapters.json`) names raising the
+window or switching the agent, never max output, so a revisit should
+also name that remedy. Raised by Slice 5.10's budget review.
+
+A user on vLLM, or on a model with an output cap between 8,000 and
+16,383 tokens, hitting the 4xx or the overflow refusal is the signal to
+revisit.
+
+#### Stop a task that makes no progress
+
+**A task whose calls are all refused runs on to its step budget.** It
+would end after k consecutive steps whose calls were all refused (an
+unknown id, an invalid input), instead of spending the rest of its 64
+steps resending them. Parked 2026-11-18 on the developer's call: one
+64-step budget stands for every task, as committed, with no per-task
+budgets, and the budget is what ends a stuck loop
+([`chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
+A stop would save a stuck task's steps, tokens and wall time up to the
+budget: the first probe's run 7 had Upkeep send `update_item` on an
+invented id seven times (`id-unknown`) until its budget ran out. Raised
+by Slice 5.10's measure and review.
+
+A stuck task's steps, tokens or wall time showing up in play or a probe
+is the signal to revisit.
+
 #### A per-provider switch for stream usage
 
 The OpenAI-compatible provider always asks for streamed usage through
@@ -2273,6 +2318,17 @@ bracket ends. The close-failure toast, `It runs again before your next
 turn`, has the same gap when the boundary phase drops a stale pick and the
 region is under the threshold. Raised 2026-11-07 by Slice 5.6's planning. Parked
 2026-11-07; the signal is a tester expecting that close.
+
+Redo doesn't bring a dropped pick back either (Slice 5.10's planning,
+2026-11-17). Take a manual pick ending on the head reply: CTRL-Z of that
+turn during the close interrupts and defers it, and the bracket drops
+the pick, since its end entry is gone. Redo restores the entry exactly
+but not the pick, so at the next Send under the threshold nothing is
+owed and Send clears the record: the close the user picked never runs,
+though the prose is back. Accepted for the same reason: the deferral
+toast tells the user, and CTRL-Z of the turn a pick ends on reads as a
+change of mind. The signal is the same, and carrying the pick in the
+undo group is the option if it fires.
 
 #### A route mounted during a read starts the strip at 0
 

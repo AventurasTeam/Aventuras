@@ -119,8 +119,11 @@ story is open.
   ≥ 1 character entity exists.
 - **Flip era…** — opens the era-flip modal. Gated: the active
   calendar has `eras !== null`.
-- **Close chapter…** — opens the chapter-close modal. Gated by the
-  chapter-close feature's own availability predicate.
+- **Close chapter…** — opens the chapter-close modal. Gated:
+  `canClose`, the open region holds a reply a chapter can end on
+  ([`chapter-close.md → Phase 1`](../../memory/chapter-close.md#phase-1--boundary-selection));
+  absent when false. Disabled with the uniform tooltip while a run
+  holds the gate.
 
 **`APP`** — always present wherever the menu renders. Each entry
 self-omits on its own surface.
@@ -253,7 +256,8 @@ Two distinct mechanisms — do not conflate them:
 
 - **Capability gating** — the feature does not apply here
   (`eras: null`, diagnostics off, no character entity for
-  `Set lead`). The entry is **hidden / omitted entirely**. A
+  `Set lead`, no reply to end a chapter on for `Close chapter`). The
+  entry is **hidden / omitted entirely**. A
   directory should not list dead entries, and search must not
   surface un-actionable results.
 - **In-flight gating** — the feature applies but a pipeline is

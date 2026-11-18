@@ -31,6 +31,8 @@ import {
 
 /** The counter behind every usage the harness reports, for specs that assert a count. */
 export { mockUsage }
+/** A tool lane's key from its tool names: `requests[].agent` and `holdNextStructured` take it. */
+export { toolLaneKey }
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
 // (POST …/chat/completions) but a turn fans out into calls with different
@@ -217,11 +219,22 @@ export type MockLlm = {
   /**
    * Replace the tool lane's queue; each answered call takes the next step, none left: `stop`.
    * A step that throws or can't be serialized fails its call with a 400; the error rethrows from
-   * the release, or from close() for an unheld call.
+   * the release, or from close() for an unheld call. close() also rejects while the lane holds
+   * steps, unless this call passed `mayEndEarly` for a task that may stop before taking them. A
+   * held call the app drops (cancel, interrupt, teardown) takes no step, so a spec that cancels or
+   * leaves a scripted call held sets it.
    */
-  setToolSteps: (tools: readonly string[], steps: readonly MockToolStepReply[]) => void
+  setToolSteps: (
+    tools: readonly string[],
+    steps: readonly MockToolStepReply[],
+    opts?: { mayEndEarly?: boolean },
+  ) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
+  /**
+   * Answers every held call, then stops. Rejects with a scripted reply's throw, else with every
+   * lane still holding steps that wasn't set `mayEndEarly`; either is reported once.
+   */
   close: () => Promise<void>
 }
 
@@ -266,6 +279,8 @@ export async function startMockLlm(): Promise<MockLlm> {
   const overflowStructured = new Map<string, OverflowShape>()
   // Tool lane key → the steps its next answered calls take, in order.
   const toolSteps = new Map<string, MockToolStepReply[]>()
+  // Lanes whose task may stop before its last step: close() leaves their steps unreported.
+  const mayEndEarly = new Set<string>()
   // An unheld call's throw has no caller to reach, so close() rethrows the first one.
   let unheldThrow: { error: unknown } | undefined
 
@@ -398,6 +413,17 @@ export async function startMockLlm(): Promise<MockLlm> {
     if (thrown !== undefined) throw thrown.error
   }
 
+  // Cleared as it reports, so a second close() reports nothing twice.
+  const unspentSteps = (): Error | undefined => {
+    const left = [...toolSteps]
+      .filter(([lane, steps]) => steps.length > 0 && !mayEndEarly.has(lane))
+      .map(([lane, steps]) => `${lane} (${steps.length} left)`)
+    toolSteps.clear()
+    return left.length === 0
+      ? undefined
+      : new Error(`mock harness: scripted tool steps left unspent: ${left.join(', ')}`)
+  }
+
   const server = createServer((req, res) => {
     void (async () => {
       if (req.method === 'OPTIONS') {
@@ -503,8 +529,11 @@ export async function startMockLlm(): Promise<MockLlm> {
     overflowNextStructured: (agentName, shape = 'llamacpp') => {
       overflowStructured.set(agentName, shape)
     },
-    setToolSteps: (tools, steps) => {
-      toolSteps.set(toolLaneKey(tools), [...steps])
+    setToolSteps: (tools, steps, opts) => {
+      const lane = toolLaneKey(tools)
+      toolSteps.set(lane, [...steps])
+      if (opts?.mayEndEarly === true) mayEndEarly.add(lane)
+      else mayEndEarly.delete(lane)
     },
     requests,
     close: () =>
@@ -519,6 +548,9 @@ export async function startMockLlm(): Promise<MockLlm> {
         } catch (error) {
           thrown ??= { error }
         }
+        // After the release, which takes a held call's step; a script's throw explains more.
+        const unspent = unspentSteps()
+        if (unspent !== undefined) thrown ??= { error: unspent }
         server.close(() => (thrown === undefined ? resolve() : reject(thrown.error)))
       }),
   }

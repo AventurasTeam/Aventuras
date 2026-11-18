@@ -103,7 +103,9 @@ progress bar):
 
 - **< 80%**: green (safe)
 - **80–90%**: yellow (approaching — heads-up for manual-mode users)
-- **≥ 90%**: red / warn (at limit — close imminent)
+- **≥ 90%**: red / warn (at limit — close imminent; with auto-close
+  off nothing closes by itself, and from the threshold on the popover
+  reads `Ready to close`)
 
 Why coloring matters: auto-chapter-close is a story setting; some
 users wrap chapters manually. For them, the color is the primary
@@ -118,19 +120,28 @@ signal to close.
   at the branch's top for chapter 1. A current chapter with no entry
   yet, right after a close, has nothing to jump to and isn't
   clickable.
-- **Progress bar + label** — `chapter progress · 8,420 / 24,000 tok`
+- **Progress bar + label** — `chapter progress · 8,420 / 24,000 tok`.
+  The progress row adds `Ready to close` after the label, behind a
+  `·` in the same line of text (a text-width sibling beside it loses
+  its last word on Android, per
+  [`android-text-subpixel-wrap.md`](../../../implementation/lessons-learned/android-text-subpixel-wrap.md)),
+  while auto-close is off, the count has reached the threshold and the
+  region holds a reply to end on
+  ([`chapter-close.md → Manual user-triggered close`](../../../memory/chapter-close.md#manual-user-triggered-close)).
 - **Close chapter manually** — primary action; opens the
   [chapter-close modal](../chapter-timeline/chapter-timeline.md#chapter-close-modal)
-  to confirm the range and trigger the close sub-pipeline. Same
-  modal is reachable from the
-  [Chapter Timeline](../chapter-timeline/chapter-timeline.md) screen.
+  to confirm the range and trigger the close sub-pipeline, once the
+  popover has closed. Disabled with its reason while a run holds the
+  gate or the region holds no reply to end on. Same modal is reachable
+  from the [Chapter Timeline](../chapter-timeline/chapter-timeline.md)
+  screen.
 - **Manage chapters →** — link to the
   [Chapter Timeline](../chapter-timeline/chapter-timeline.md) screen
   for deeper chapter management (edit metadata, delete, regenerate
   summary, close with explicit end-entry pick).
 
-Chapter closing is reachable from both the popover AND the Actions
-menu.
+Chapter closing is reachable from the popover, the Actions menu's
+`Close chapter…` and an AI entry's `Close chapter here`.
 
 ## Top-bar — in-world time display
 
@@ -217,7 +228,8 @@ abstractly correcting "the latest entry" via top-bar chrome.
 
 ## Per-entry actions
 
-Actions on an individual entry (edit, regenerate, branch, delete)
+Actions on an individual entry (edit, regenerate, branch, close the
+chapter here, delete)
 follow the
 [icon-actions pattern](../../patterns/icon-actions.md) — icon
 buttons, always-visible-but-muted, brighten on row hover/focus,
@@ -229,26 +241,28 @@ Icon set (placeholder glyphs per the
 [shared glyph vocabulary](../../patterns/icon-actions.md#glyph-vocabulary);
 finalize with visual identity):
 
-| Action   | Glyph | Meaning                                                                                                                                           |
-| -------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| edit     | ✎     | Edit entry content                                                                                                                                |
-| regen    | ↻     | Regenerate this AI reply                                                                                                                          |
-| branch   | ⎇     | Branch from this entry — opens the [creation modal](./branch-navigator/branch-navigator.md#branch-creation--modal)                                |
-| flip era | 📅    | Flip era from this entry — opens the [flip-era modal](#era-flip). Conditional: renders only when active calendar has eras.                        |
-| probe    | 🔍    | Open the [memory probe](../memory-probe/memory-probe.md) for this turn. Conditional: renders only when probe mode is active at app + story level. |
-| delete   | ×     | Delete this entry — opens the [rollback confirmation](./rollback-confirm/rollback-confirm.md) (cascade preview + counts modal)                    |
+| Action     | Glyph | Meaning                                                                                                                                                                                                         |
+| ---------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| edit       | ✎     | Edit entry content                                                                                                                                                                                              |
+| regen      | ↻     | Regenerate this AI reply                                                                                                                                                                                        |
+| branch     | ⎇     | Branch from this entry — opens the [creation modal](./branch-navigator/branch-navigator.md#branch-creation--modal)                                                                                              |
+| flip era   | 📅    | Flip era from this entry — opens the [flip-era modal](#era-flip). Conditional: renders only when active calendar has eras.                                                                                      |
+| probe      | 🔍    | Open the [memory probe](../memory-probe/memory-probe.md) for this turn. Conditional: renders only when probe mode is active at app + story level.                                                               |
+| close here | ⁂     | `Close chapter here` — opens the [chapter-close modal](../chapter-timeline/chapter-timeline.md#chapter-close-modal) with this reply picked as the end. Conditional: renders only on a reply in the open region. |
+| delete     | ×     | Delete this entry — opens the [rollback confirmation](./rollback-confirm/rollback-confirm.md) (cascade preview + counts modal)                                                                                  |
 
 Per-entry action sets:
 
 - **User entry:** edit, `[flip era]`, `[probe]`, delete
-- **AI entry:** edit, regen, branch, `[flip era]`, `[probe]`, delete
+- **AI entry:** edit, regen, branch, `[flip era]`, `[probe]`,
+  `[close here]`, delete
 - **System entry:** content-level buttons (fix action / Retry /
   Dismiss)
 - **Streaming entry:** no per-entry actions; cancel happens via the
   composer's Send→Cancel transform
 
-Bracketed `[flip era]` and `[probe]` indicate conditional
-visibility:
+Bracketed `[flip era]`, `[probe]` and `[close here]` indicate
+conditional visibility:
 
 - `[flip era]` renders only when the active calendar has
   `eras !== null`. See [Era flip](#era-flip) below.
@@ -261,6 +275,9 @@ visibility:
   Per-turn deep-mode capture is opted in via a separate small
   checkbox next to the composer's Send button when probe mode is
   on; it resets after one turn.
+- `[close here]` renders only on a reply no chapter has closed, the
+  rows a chapter can end on. The host decides, so the rule keeps one
+  copy, and it is disabled while a run holds the gate, as branch is.
 
 ### Regenerate confirmation
 
@@ -394,7 +411,8 @@ failure shows as a
 [system entry](#transient-pipeline-failures--system-entries-in-chat)
 ([`memory/classifier.md → Failure policy`](../../../memory/classifier.md#failure-policy)).
 Its `Retry` runs that work without the turn, a pass alone and a close
-behind any catch-up pass it needs, and it holds the reader's actions,
+behind any catch-up pass it needs (a close entry the close modal's
+confirm wrote restarts its pick instead), and it holds the reader's actions,
 head reversals included, until it ends; the pill's Cancel ends it.
 
 ### Save and regenerate on a content edit
@@ -787,7 +805,7 @@ chrome blip.
 | **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `Retry` · `Dismiss`        |
 | **Chapter close failed** before the turn, failing the Send ([`memory/chapter-close.md → Failure modes`](../../../memory/chapter-close.md#failure-modes-and-atomic-rollback))                                           | `Retry` · `Dismiss`                        |
 | **Chapter closed** on a `Retry` whose close committed, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                           | `Dismiss`                                  |
-| **Nothing left to close** on a `Retry` that found none owed, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                                                                     | `Dismiss`                                  |
+| **Nothing left to close** on a `Retry` that found none owed, or whose pick can no longer end a chapter, its text kept on the entry ([Custody of the turn's text](#custody-of-the-turns-text))                          | `Dismiss`                                  |
 | **Chapter close's model can't call tools** (pre-flight; [`memory/chapter-close.md → Tool calling`](../../../memory/chapter-close.md#tool-calling))                                                                     | `Fix profile` · `Retry` · `Dismiss`        |
 | **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `Retry` · `Dismiss`        |
 | **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `Retry` · `Dismiss`     |
@@ -887,7 +905,13 @@ is where the broken row and its `×` live. Broken-model-catalog cases
 surface via the existing global broken-config banner instead. Each
 broken-reference row keeps `Retry` after its fix, on a turn's, a
 pass's or a close's entry alike: pressed after the fix it runs at once,
-and pressed before it only fails again.
+and pressed before it only fails again. A close's entry written when
+the close modal's confirm fails pre-flight keeps the end entry the user
+confirmed, so its `Retry` restarts that pick, pre-flighting again: a
+second failure rewrites the entry with the same pick, and a close that
+runs settles the entry as any close's `Retry` does. A pick whose reply
+was closed into a chapter or deleted since can't end one, so that
+`Retry` settles the entry as **Nothing left to close**.
 
 #### Custody of the turn's text
 
@@ -914,7 +938,8 @@ updated. The composer couldn't take your text back, so it's kept
 here." A close's reads "Chapter closed. The composer couldn't take your
 text back, so it's kept here." when its own close committed, and "Nothing
 left to close. The composer couldn't take your text back, so it's kept
-here." when the `Retry` found none owed.
+here." when the `Retry` found none owed or its pick could no longer end
+a chapter.
 
 **A Send supersedes the entry's text.** The user wrote the Send's
 text while the entry and its `Retry` stood, so the entry's text is
@@ -945,7 +970,7 @@ other branch's; no toast tells the user, and a warning in the log
 records the drop.
 
 A pass or close entry's `Retry` whose work commits, or a close's that
-finds no close owed, clears the entry through `Dismiss` only when the composer can take its text back, and asks
+finds no close owed or whose pick can no longer end a chapter, clears the entry through `Dismiss` only when the composer can take its text back, and asks
 again once the clear has landed, since the composer stays editable
 through it. Over an occupied draft, or once the user has left the
 branch, the entry stays as a notice holding the text, with no `Retry`
@@ -957,10 +982,10 @@ sending is the step the notice would otherwise invite. A close entry's
 failed**, with that pass's cause. It becomes the held entry instead
 (**Memory update failed**, branch held), with no cause and no `Retry`,
 when the `Retry` is refused because the branch is held or the failed
-pass leaves the branch held. A `Retry` refused for any other reason
-leaves the entry as it is, and an info toast names the remedy rather
-than the refusal: wait for the run in progress, or for the embedder
-switch to finish.
+pass leaves the branch held. A `Retry` refused for any other reason,
+a pick entry's stale pick aside, leaves the entry as it is, and an info
+toast names the remedy rather than the refusal: wait for the run in
+progress, or for the embedder switch to finish.
 
 A **Memory update failed** entry carries the submission only where
 the composer can't hold the text. A Send refused on a held branch
@@ -2023,7 +2048,10 @@ specifics below.
   phone per
   [layout.md → Surface bindings](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces)
   — multi-row content (chapter list, progress bar, manage-chapters
-  link) exceeds the tiny-popover threshold.
+  link) exceeds the tiny-popover threshold. `Close chapter manually`
+  runs from the Sheet's dismiss, so the close modal never opens over
+  the Sheet
+  ([layout.md → Stacking](../../foundations/mobile/layout.md#stacking)).
 - **Time chip popover** stays Popover all tiers — tiny content
   (era label and `Flip era…` action).
 - **Branch chip popover** binds to **Sheet (short, bottom)** on

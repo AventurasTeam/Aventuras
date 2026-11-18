@@ -1,6 +1,8 @@
 import type { Locator, Page } from '@playwright/test'
 
-import { t } from '../harness/i18n'
+import type { CloseTask } from '@/lib/db'
+
+import { copyPattern, t } from '../harness/i18n'
 
 // components/compounds/memory-run-banner.tsx: Cancel shares `common:cancel` with the composer's, so
 // scope queries to it. A stack keeps lower screens' banners mounted; only the visible one counts.
@@ -18,6 +20,14 @@ export const memoryBanner = {
   // A close Send runs, at its metadata step: before a turn each step's label says so.
   beforeTurnMetadata: (page: Page): Locator =>
     banner(page).getByText(t('chrome.memoryBanner.beforeTurnMetadata'), { exact: true }),
+  // A close at one of its tasks, whatever `N of M` it counts there.
+  closingTask: (page: Page, task: CloseTask): Locator =>
+    banner(page).getByText(
+      copyPattern('chrome.memoryBanner.closingTask', {
+        texts: ['index', 'total'],
+        fixed: { task: t(`chrome.memoryBanner.closeTask.${task}`) },
+      }),
+    ),
   cancel: (page: Page): Locator =>
     banner(page).getByRole('button', { name: t('cancel'), exact: true }),
   // A committed close's done state, in the same bar; dismiss is icon-only.

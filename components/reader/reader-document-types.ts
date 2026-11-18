@@ -59,6 +59,8 @@ export type ReaderSurfaceProps = {
   worldTimeDecorations: Record<string, WorldTimeDecoration>
   /** By end entry id; a side table, for the same reason as worldTimeDecorations. */
   chapterBreaks: ChapterBreaks
+  /** Rows that may end a chapter; a side table, as worldTimeDecorations. */
+  closeHereEntryIds: Record<string, true>
   /** Registry-resolved calendar + story origin (fallback applied) — null hides/inerts footers. */
   worldTimeFrame: CalendarFrame | null
   /** Non-null only while the streaming row should be visible (host-gated). */
@@ -117,6 +119,8 @@ export type ReaderSurfaceProps = {
   /** Phone tier: the document requests; the host presents the native Sheet. */
   onRequestEditScene: (entryId: string) => void
   onRegenerate: (entryId: string) => Promise<void>
+  /** Opens the close modal with this entry picked. */
+  onCloseChapterHere: (entryId: string) => Promise<void>
   /** Undefined when the system entry offers no Retry (a branch held `running`). */
   onRetrySystemEntry: (() => Promise<void>) | undefined
   onDismissSystemEntry: () => Promise<void>

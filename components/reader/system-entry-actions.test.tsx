@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { OwedCloseRun } from '@/lib/actions'
+import { MANUAL_CLOSE_REFUSAL, type OwedCloseRun } from '@/lib/actions'
 import { describeContextWindow, describeReplyCutOff } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { entryMetadataSchema, type StorySettings, type SystemFailureMeta } from '@/lib/db'
@@ -811,9 +811,9 @@ describe('retryCloseEntry', () => {
     end: result.outcome === 'completed' ? { kind, result, cancelled } : { kind, result },
   })
 
-  function harness(run: OwedCloseRun | Error, heldAfter = false) {
+  function harness(run: OwedCloseRun | Error, heldAfter = false, closePick?: string) {
     const calls: string[] = []
-    const rewriteClose = vi.fn(async (_error: PipelineError) => {
+    const rewriteClose = vi.fn(async (_error: PipelineError, _closePick?: string) => {
       calls.push('rewriteClose')
     })
     const rewritePass = vi.fn(async (_refusal: PassRefusal) => {
@@ -828,6 +828,9 @@ describe('retryCloseEntry', () => {
     const runClose = vi.fn(() =>
       run instanceof Error ? Promise.reject(run) : Promise.resolve(run),
     )
+    const runPicked = vi.fn((_endEntryId: string) =>
+      run instanceof Error ? Promise.reject(run) : Promise.resolve(run),
+    )
     const held = vi.fn(async () => heldAfter)
     return {
       calls,
@@ -835,9 +838,10 @@ describe('retryCloseEntry', () => {
       rewritePass,
       notify,
       runClose,
+      runPicked,
       held,
       committed,
-      deps: { runClose, held, committed, rewriteClose, rewritePass, notify },
+      deps: { runClose, closePick, runPicked, held, committed, rewriteClose, rewritePass, notify },
     }
   }
 
@@ -963,10 +967,10 @@ describe('retryCloseEntry', () => {
     const h = harness(new Error('marker insert failed'))
     await retryCloseEntry(h.deps)
     expect(h.calls).toEqual(['rewriteClose'])
-    expect(h.rewriteClose).toHaveBeenCalledWith({
-      kind: 'orchestrator',
-      detail: 'marker insert failed',
-    })
+    expect(h.rewriteClose).toHaveBeenCalledWith(
+      { kind: 'orchestrator', detail: 'marker insert failed' },
+      undefined,
+    )
   })
 
   // The close committed, so its failure copy would be wrong: the throw goes to the caller.
@@ -976,6 +980,90 @@ describe('retryCloseEntry', () => {
     await expect(retryCloseEntry({ ...h.deps, committed })).rejects.toThrow('reload failed')
     expect(h.rewriteClose).not.toHaveBeenCalled()
     expect(h.rewritePass).not.toHaveBeenCalled()
+  })
+
+  describe("a failed click's entry", () => {
+    const PICK = 'entry_65'
+    const TOOLS_OFF: PipelineError = {
+      kind: 'config-resolver',
+      failure: 'tool-calling-off',
+      target: 'lore-mgmt',
+      phaseName: 'agent',
+      modelId: 'gemma-4-26b',
+    }
+
+    it('restarts its pick through the manual start, not the owed close', async () => {
+      const h = harness(
+        ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'completed' }),
+        false,
+        PICK,
+      )
+      await retryCloseEntry(h.deps)
+      expect(h.runPicked).toHaveBeenCalledExactlyOnceWith(PICK)
+      expect(h.runClose).not.toHaveBeenCalled()
+      expect(h.committed).toHaveBeenCalledWith('closed')
+    })
+
+    it('runs the owed close for an entry holding no pick', async () => {
+      const h = harness({ outcome: 'nothing-owed' })
+      await retryCloseEntry(h.deps)
+      expect(h.runClose).toHaveBeenCalledOnce()
+      expect(h.runPicked).not.toHaveBeenCalled()
+    })
+
+    it('rewrites a throw from the restart, keeping the pick', async () => {
+      const h = harness(new Error('bridge closed'), false, PICK)
+      await retryCloseEntry(h.deps)
+      expect(h.rewriteClose).toHaveBeenCalledExactlyOnceWith(
+        { kind: 'orchestrator', detail: 'bridge closed' },
+        PICK,
+      )
+    })
+
+    it('rewrites a pre-flight that fails again, keeping the pick', async () => {
+      const h = harness({ outcome: 'preflight-failed', error: TOOLS_OFF }, false, PICK)
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['rewriteClose'])
+      expect(h.rewriteClose).toHaveBeenCalledExactlyOnceWith(TOOLS_OFF, PICK)
+    })
+
+    // The start wrote the pick as the branch's pendingClose, which the owed close's Retry serves.
+    it('rewrites a failed run of the pick without it', async () => {
+      const error: PipelineError = { kind: 'provider', reason: 'network', detail: 'ECONNRESET' }
+      const h = harness(
+        ended(CHAPTER_CLOSE_KIND, { ...closeRan, outcome: 'failed', error }),
+        false,
+        PICK,
+      )
+      await retryCloseEntry(h.deps)
+      expect(h.rewriteClose).toHaveBeenCalledExactlyOnceWith(error)
+    })
+
+    // Closed into a chapter or deleted since, the pick leaves no close owed.
+    it('settles as nothing left to close when the pick can no longer end a chapter', async () => {
+      const h = harness(
+        { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.invalidEnd },
+        false,
+        PICK,
+      )
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['committed'])
+      expect(h.committed).toHaveBeenCalledExactlyOnceWith('nothing-owed')
+    })
+
+    it('leaves the entry and says so when a busy story refused the restart', async () => {
+      const h = harness({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy }, false, PICK)
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
+    })
+
+    it('keeps the refusal arm for an invalid end on an entry holding no pick', async () => {
+      const h = harness({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.invalidEnd })
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet.")
+    })
   })
 })
 

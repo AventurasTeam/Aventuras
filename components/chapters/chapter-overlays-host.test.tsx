@@ -14,6 +14,7 @@ import {
   type Thread,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import type { EntryRef } from '@/lib/entry-refs'
 import type { CloseReview, CloseReviewChange, CloseReviewLookup } from '@/lib/history'
 import { makeEntity, makeLore } from '@/lib/list-modules/__tests__/fixtures'
 import {
@@ -48,6 +49,9 @@ vi.mock('@/lib/db', async (importOriginal) => ({
   db: {},
 }))
 
+// The close-failure copy's module also holds a hook on expo-router, which the unit project can't load.
+vi.mock('expo-router', () => ({ useRouter: () => ({}) }))
+
 vi.mock('@/lib/history', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   readCloseReport: reads.report,
@@ -64,7 +68,7 @@ const entryIndex = vi.hoisted(() => {
   const retry = vi.fn<() => void>()
   const READY = {
     entries: [],
-    index: new Map([
+    index: new Map<string, EntryRef>([
       [
         'entry_47',
         {
@@ -116,6 +120,7 @@ vi.mock('./review-window', () => ({
     return null
   },
 }))
+vi.mock('./close-chapter-modal-view', () => ({ CloseChapterModalView: () => null }))
 
 const REPORT: CloseReport = {
   version: 1,

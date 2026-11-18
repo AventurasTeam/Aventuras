@@ -287,6 +287,31 @@ export function setChapterTokenThreshold(dbPath: string, storyId: string, tokens
   setStorySetting(dbPath, storyId, 'chapterTokenThreshold', tokens)
 }
 
+// Story Settings → Chapter close's auto-close switch. Runs before launch.
+export function setChapterAutoClose(dbPath: string, storyId: string, on: boolean): void {
+  setStorySetting(dbPath, storyId, 'chapterAutoClose', on)
+}
+
+/**
+ * Flag `modelId` as able or unable to call tools on every provider that caches it, as a catalog's
+ * detection would (architecture.md → Detection). Throws when none caches it: the flag would stay
+ * unknown, which runs, and a spec waiting on a refusal would time out. Runs before launch.
+ */
+export function setToolCalling(dbPath: string, modelId: string, value: boolean): void {
+  updateProviders<{ cachedModels?: { id: string; capabilities?: Record<string, unknown> }[] }>(
+    dbPath,
+    (providers) => {
+      const models = providers.flatMap((provider) =>
+        (provider.cachedModels ?? []).filter((model) => model.id === modelId),
+      )
+      if (models.length === 0) {
+        throw new Error(`cannot set ${modelId}'s toolCalling: no provider caches it`)
+      }
+      for (const model of models) model.capabilities = { ...model.capabilities, toolCalling: value }
+    },
+  )
+}
+
 // Story Settings → Classifier's "Create mentioned places" switch. Runs before launch.
 export function setClassifierMentionedPlaces(dbPath: string, storyId: string, on: boolean): void {
   setStorySetting(dbPath, storyId, 'classifierMentionedPlaces', on)
@@ -792,6 +817,156 @@ export function corruptStorySettings(dbPath: string, storyId: string): void {
       JSON.stringify(settings),
       storyId,
     )
+  } finally {
+    db.close()
+  }
+}
+
+export type SeededCloseStarts = {
+  character: { id: string; name: string }
+  item: { id: string; name: string }
+  /** Anchored on the open region's first two replies, in that order: one cluster. */
+  happenings: readonly [{ id: string; title: string }, { id: string; title: string }]
+  /** The character's awareness of the first happening, learned at the first reply. */
+  awareness: { id: string; pin: number }
+  /** The first open reply: the character is in its scene and in no later reply's. */
+  sceneEntryId: string
+  /** The second open reply, whose prose names the item. */
+  itemEntryId: string
+}
+
+const CLOSE_STARTS = {
+  character: 'Odile Varrance',
+  item: 'Bell',
+  happenings: [
+    'Odile hides the ledger in the bell tower',
+    'Odile stows the ledger in the bell tower',
+  ],
+  description: 'Odile Varrance slips the Syndicate ledger behind a loose stone in the bell tower.',
+  pin: 0.5,
+} as const
+
+// close-clusters.ts: every pair of a cluster sits at most this many non-system entries apart.
+const CLUSTER_ENTRY_SPAN_MAX = 3
+
+/**
+ * A start for each close task on `branchId`'s open region beyond what the seed gives (memory/
+ * chapter-close.md → Run order), on rows no delta protects: a character in the first open reply's
+ * scene (Identity, Lifecycle), an item the second names (Upkeep), two near-identical happenings on
+ * those replies with her as cast (Happenings' one cluster) and her awareness of the first
+ * (Awareness). Ids are UUIDv5, as prompts substitute them. Runs before launch.
+ */
+export function seedCloseTaskStarts(dbPath: string, branchId: string): SeededCloseStarts {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const replies = db
+      .prepare(
+        `SELECT id, position, content FROM story_entries
+          WHERE branch_id = ? AND chapter_id IS NULL AND kind = 'ai_reply'
+          ORDER BY position LIMIT 2`,
+      )
+      .all(branchId) as { id: string; position: number; content: string }[]
+    if (replies.length < 2) {
+      throw new Error(
+        `${branchId}'s open region holds ${replies.length} replies; a cluster needs two`,
+      )
+    }
+    const [scene, named] = replies
+    const apart = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM story_entries
+          WHERE branch_id = ? AND kind <> 'system' AND position > ? AND position <= ?`,
+      )
+      .get(branchId, scene.position, named.position) as { n: number }
+    if (Number(apart.n) > CLUSTER_ENTRY_SPAN_MAX) {
+      throw new Error(`the first two open replies sit ${apart.n} entries apart: no cluster forms`)
+    }
+    // Upkeep's start matches whole words, as retrieval does (close-agent/name-match.ts).
+    if (!new RegExp(`\\b${CLOSE_STARTS.item}\\b`, 'i').test(named.content)) {
+      throw new Error(`reply ${named.id} no longer names a ${CLOSE_STARTS.item}`)
+    }
+
+    const characterId = `char_${seedUuid(`char:${CLOSE_STARTS.character}`)}`
+    const itemId = `item_${seedUuid(`item:${CLOSE_STARTS.item}`)}`
+    const happenings: SeededCloseStarts['happenings'] = [
+      { id: `hap_${seedUuid('hap:close-starts:0')}`, title: CLOSE_STARTS.happenings[0] },
+      { id: `hap_${seedUuid('hap:close-starts:1')}`, title: CLOSE_STARTS.happenings[1] },
+    ]
+    const awarenessId = `haw_${seedUuid('haw:close-starts')}`
+    const characterState = {
+      visual: {},
+      traits: [],
+      drives: [],
+      current_location_id: null,
+      equipped_items: [],
+      inventory: [],
+      faction_id: null,
+      lastSeenAt: null,
+    }
+    const insertEntity = db.prepare(
+      `INSERT INTO entities (id, branch_id, kind, name, description, status, injection_mode, state, tags, keywords, priority, embedding_stale, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'active', 'auto', ?, '[]', '[]', 0, 1, 1, 1)`,
+    )
+    const insertHappening = db.prepare(
+      `INSERT INTO happenings (id, branch_id, title, description, category, icon, temporal, occurred_at_entry_id, common_knowledge, embedding_stale, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, 0, 1, 1, 1)`,
+    )
+    const insertInvolvement = db.prepare(
+      `INSERT INTO happening_involvements (id, branch_id, happening_id, entity_id, role)
+       VALUES (?, ?, ?, ?, NULL)`,
+    )
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      insertEntity.run(
+        characterId,
+        branchId,
+        'character',
+        CLOSE_STARTS.character,
+        'A courier who keeps the Syndicate’s ledgers.',
+        JSON.stringify(characterState),
+      )
+      insertEntity.run(
+        itemId,
+        branchId,
+        'item',
+        CLOSE_STARTS.item,
+        'A cracked bronze bell in the old tower.',
+        JSON.stringify({ at_location_id: null }),
+      )
+      happenings.forEach(({ id, title }, i) => {
+        insertHappening.run(id, branchId, title, CLOSE_STARTS.description, replies[i].id)
+        insertInvolvement.run(
+          `hinv_${seedUuid(`hinv:close-starts:${i}`)}`,
+          branchId,
+          id,
+          characterId,
+        )
+      })
+      db.prepare(
+        `INSERT INTO happening_awareness (id, branch_id, happening_id, character_id, learned_at_entry_id, decay_resistance, retrieval_count, source)
+         VALUES (?, ?, ?, ?, ?, ?, 0, 'saw it hidden')`,
+      ).run(awarenessId, branchId, happenings[0].id, characterId, scene.id, CLOSE_STARTS.pin)
+      const { changes } = db
+        .prepare(
+          `UPDATE story_entries SET metadata = json_insert(metadata, '$.sceneEntities[#]', ?)
+            WHERE branch_id = ? AND id = ? AND metadata IS NOT NULL`,
+        )
+        .run(characterId, branchId, scene.id)
+      if (Number(changes) !== 1) throw new Error(`reply ${scene.id} carries no scene to join`)
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
+    return {
+      character: { id: characterId, name: CLOSE_STARTS.character },
+      item: { id: itemId, name: CLOSE_STARTS.item },
+      happenings,
+      awareness: { id: awarenessId, pin: CLOSE_STARTS.pin },
+      sceneEntryId: scene.id,
+      itemEntryId: named.id,
+    }
   } finally {
     db.close()
   }

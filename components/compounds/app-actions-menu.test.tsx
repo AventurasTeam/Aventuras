@@ -2,6 +2,8 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { chapterOverlaysStore } from '@/lib/stores'
+
 import { AppActionsMenu } from './app-actions-menu'
 import type { AppActionsMenuPureProps } from './app-actions-menu-pure'
 
@@ -105,5 +107,73 @@ describe('AppActionsMenu navigation', () => {
     expect(captured.props?.goTo).toBeUndefined()
     captured.props?.onOpenDiagnosticsHub()
     expect(router.push).toHaveBeenCalledWith('/diagnostics')
+  })
+})
+
+describe('AppActionsMenu STORY TOOLS', () => {
+  // A call, not a property read: TS narrows `captured.props` to null after the reset below.
+  const rendered = () => captured.props
+
+  beforeEach(() => {
+    chapterOverlaysStore.__reset()
+  })
+
+  it('builds Close chapter… for the story branch, opening the close modal', () => {
+    render(
+      <AppActionsMenu
+        story={STORY}
+        closeChapter={{ canClose: true, gateReason: undefined }}
+        beforeLeaveStory={leaveAtOnce}
+      />,
+    )
+    const close = captured.props?.storyTools?.entries.find((e) => e.id === 'close-chapter')
+    expect(close).toBeDefined()
+    expect(close?.disabled).toBe(false)
+    expect(chapterOverlaysStore.getState().closeModal).toBeNull()
+    close?.onActivate()
+    expect(chapterOverlaysStore.getState().closeModal).toEqual({ branchId: 'br_1' })
+  })
+
+  it('hands the route gate reason to a disabled entry', () => {
+    const reason = 'Generation is in flight. Cancel to edit.'
+    render(
+      <AppActionsMenu
+        story={STORY}
+        closeChapter={{ canClose: true, gateReason: reason }}
+        beforeLeaveStory={leaveAtOnce}
+      />,
+    )
+    expect(captured.props?.storyTools?.entries).toEqual([
+      expect.objectContaining({ id: 'close-chapter', disabled: true, disabledReason: reason }),
+    ])
+  })
+
+  it('omits STORY TOOLS off-story, without closeChapter, and with nothing to close', () => {
+    render(
+      <AppActionsMenu
+        closeChapter={{ canClose: true, gateReason: undefined }}
+        beforeLeaveStory={null}
+      />,
+    )
+    expect(rendered()).not.toBeNull()
+    expect(rendered()?.storyTools).toBeUndefined()
+
+    cleanup()
+    captured.props = null
+    render(<AppActionsMenu story={STORY} beforeLeaveStory={leaveAtOnce} />)
+    expect(rendered()).not.toBeNull()
+    expect(rendered()?.storyTools).toBeUndefined()
+
+    cleanup()
+    captured.props = null
+    render(
+      <AppActionsMenu
+        story={STORY}
+        closeChapter={{ canClose: false, gateReason: undefined }}
+        beforeLeaveStory={leaveAtOnce}
+      />,
+    )
+    expect(rendered()).not.toBeNull()
+    expect(rendered()?.storyTools).toBeUndefined()
   })
 })

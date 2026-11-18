@@ -239,11 +239,32 @@ the exception and skips whole ([3e](#3e--happenings-consolidation)).
 
 ### When a task stops
 
-A task's budget is 24 steps per part, tuned in play. Each step's output
-is bounded by the max output of the profile or the story's override,
-else 8k tokens, since a model
-can reason through its whole limit and never reply. Each call is bounded
-as a pass's is
+A task's budget is 64 steps per part, raised from 24 after the dev model
+went one call per step through Upkeep's 43 rows. Each step's output is
+bounded by the max output of the profile or the story's override, else
+16,384 tokens, raised from 8,000 after a seven-task measure's 342
+finished steps and 8 attempts cut off there (a cut reply is not a step);
+a model can reason through its whole limit and never reply. The default
+goes out as it is, and so does
+[the boundary call's](#phase-1--boundary-selection): a model whose output
+cap sits below it gets a 4xx on every call, which reads as an unknown
+failure and isn't retried, and a server that counts `max_tokens` against
+the window (vLLM) refuses a call whose prompt plus it exceeds the
+window. That refusal reads as an overflow (its "maximum context length"
+wording is among the overflow keywords; that wording is the server's
+known behaviour, not checked live) and becomes a context-window error:
+on the boundary call or a task's first step it fails the close, and on a
+later step it stops the task as `window`, which the review reads as
+"outgrew the context window". It isn't confined to small windows: any
+call whose prompt passes the window less 16,384 is refused (49,152 on a
+65,536 window), which a late step under the 64-step budget can reach,
+and a window under roughly 47k refuses even a full part's first step.
+The remedy for both cases is the profile's max output, or the story's
+override, set to what the model and server accept
+([`model-settings.md`](../ui/patterns/model-settings.md)); clamping a
+default to the window is
+[parked](../parked.md#clamp-a-default-max-output-to-the-window). Each
+call is bounded as a pass's is
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
 and a step's one retry after a cut-off or a filter stop is bounded
 afresh: the cut attempt is the one most likely to have spent the first
@@ -259,6 +280,11 @@ so:
 - A reply is cut off or stopped by a filter, and again on its one
   retry. Neither counts as a finished task, whatever it holds.
 
+The step budget is one for every task, shared alike, and it is what ends
+a task stuck in a loop: a refused call spends a step like any other.
+Ending a task after consecutive refused steps is
+[parked](../parked.md#stop-a-task-that-makes-no-progress).
+
 ### Logs and anchors
 
 Phases 1–4 share one `action_id` and `source = chapter_close`, and every
@@ -270,13 +296,18 @@ A close writes no story entries.
 
 ### Tool calling
 
-`toolCalling` is a capability flag, detected where a catalog publishes
-it and user-overridable
-([`data-model.md → App settings storage`](../data-model.md#app-settings-storage)).
-A close runs unless the flag is off, since many servers publish nothing
-about tools. Off stops the close at pre-flight, which surfaces as any
-close's pre-flight failure does: the system entry when it fails a Send
-or the manual close's click, a toast otherwise
+`toolCalling` is a capability flag
+([`data-model.md → App settings storage`](../data-model.md#app-settings-storage)),
+detected where a catalog publishes it: a fetch that publishes it
+replaces the stored value on each refresh, and one that doesn't keeps
+it. Which catalogs publish it, and in which field, is in
+[`architecture.md → Detection`](../architecture.md#detection). A user's
+own setting arrives in M7.1 beside the detected one, as
+`contextWindowOverrides` does for the window. A close runs unless the
+flag is off, since many servers publish nothing about tools. Off stops
+the close at pre-flight, which surfaces as any close's pre-flight
+failure does: the system entry when it fails a Send, the system entry
+and a toast when it fails the close modal's confirm, a toast otherwise
 ([`generation-pipeline.md → Config pre-flight validation`](../generation-pipeline.md#config-pre-flight-validation)).
 App Settings warns on the `lore-mgmt` assignment long before that. A
 close on a model that takes the tool list and answers in plain text
@@ -348,9 +379,9 @@ and the close, still owed, follows it.
 **Auto mode only.** Manual user-triggered chapter close skips this
 phase; the user-supplied entry is the boundary.
 
-The boundary selection agent reads the open region's entries and
-picks a natural ending — scene transition, time skip, arc-beat
-resolution, or narrative pause.
+The boundary selection agent reads the candidates' first and last
+sentences and the active threads, and picks a natural ending — scene
+transition, time skip, arc-beat resolution, or narrative pause.
 
 **Candidates.** Code offers the turns where the chapter would hold
 between half and one and a half thresholds, never the newest reply. The
@@ -373,8 +404,11 @@ reply owes no close
 - The candidates by position, each by its opening and closing sentences
   (compact representation; entries have no title, and full prose would
   blow context on long open regions).
-- The chapter's accumulated token count and the threshold value.
-- Active threads in the chapter's range.
+- The range every candidate keeps the chapter within, half to one and
+  a half thresholds, stated as a range so the count favours none of
+  them (a running total beside the target read as "end now" on the dev
+  model).
+- The branch's active threads.
 
 **Output (structured):**
 
@@ -385,13 +419,24 @@ reply owes no close
 }
 ```
 
-**Validation.** `end_entry_id` must be a candidate. Invalid output
-triggers the standard `callWithRetry` same-prompt retry (per
-[`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry));
-an unusable reply across the retry budget falls back as with no
-candidate, which loses nothing. A provider failure is a failed
-call. (Prompts aren't generated on the fly — the retry contract is
-"same prompt, sampling variance catches transient malformed output.")
+**Validation.** `end_entry_id` must be a candidate's turn handle (`t1`,
+`t2`…), which code resolves to its entry. Invalid output triggers the
+standard `callWithRetry` same-prompt retry (per
+[`generation-pipeline.md → Error, cancel, and retry`](../generation-pipeline.md#error-cancel-and-retry)).
+An unusable reply across the retry budget, or one cut off at its output
+bound, ends the chapter on the latest candidate: the newest reply whose
+chapter would hold at most one and a half thresholds. That loses
+nothing and keeps the upper bound on a region that grew past it, as one
+does when auto-close is turned on late or the threshold lowered; in the
+usual case, a region that just crossed the threshold, it is the reply
+the no-candidate fallback would take. The call sends a 16,384-token max
+output when its settings set none (raised from 8,000, which cut off 3
+of 10 picks on the dev model), so a reasoning spiral costs one
+bounded reply
+([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
+A provider failure is a failed call. (Prompts aren't generated on the
+fly — the retry contract is "same prompt, sampling variance catches
+transient malformed output.")
 
 The chapter `start_entry_id` is automatically the entry after the
 previous chapter's `end_entry_id` (or position 1 if first chapter).
@@ -935,15 +980,15 @@ come back. Send owes a close whenever one is owed by the settings or a
 pending manual close, read at Send, so a failure, an interrupt, a crash
 and a restart end the same way, and every Send is a fresh attempt. A
 manual close isn't persisted: a restart drops it, and so does a reversal
-that removes its end entry.
+that removes its end entry or closes it into a chapter.
 
-| Phase                      | Failure mode                                                                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                  |
-| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable reply falls back to the latest reply before the head.                                      |
-| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                                                           |
-| **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close, as does a code step's refused group. |
-| **4** (lifecycle review)   | As phase 3.                                                                                                                               |
+| Phase                      | Failure mode                                                                                                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **0** (catch-up passes)    | The failed pass stops the chain; it runs before the next turn, and the close follows it.                                                                                             |
+| **1** (boundary selection) | `callWithRetry` same-prompt retry; an unusable or cut-off reply ends on the latest candidate. A region with no candidate makes no call and ends on the latest reply before the head. |
+| **2** (metadata)           | A failed call fails the close, and so does a create or stamp that doesn't land.                                                                                                      |
+| **3** (lore-mgmt)          | A refused write goes back to the task; a failed call, an embedder failure included, fails the close, as does a code step's refused group.                                            |
+| **4** (lifecycle review)   | As phase 3.                                                                                                                                                                          |
 
 These don't fail a close:
 
@@ -1054,13 +1099,25 @@ is reversed, to run again only when one is next due or the user starts it
 Phases 0, 2-4 run normally, under the same gate and interrupt rule as an
 auto close.
 
-UX surface: a "Close chapter here" affordance on entries in the open
-region. Clicking pre-flights the chapter-close pipeline with the
-selected entry as boundary.
+UX surface: four triggers open one
+[chapter-close modal](../ui/screens/chapter-timeline/chapter-timeline.md#chapter-close-modal):
+the Actions menu's `Close chapter…`, the reader popover's
+`Close chapter manually`, the Timeline's in-progress card's
+`Close chapter…`, and `Close chapter here` on a reply in the open
+region, which opens it with that entry picked as the end. The modal's
+confirm pre-flights the chapter-close pipeline with the picked entry as
+the boundary. A failure starts nothing and owes nothing: it raises the
+system entry with a toast beside it, since the confirm can come from a
+screen where the entry is out of view
+([`generation-pipeline.md → Config pre-flight validation`](../generation-pipeline.md#config-pre-flight-validation)).
+The entry keeps the confirmed end entry, so its `Retry` re-runs that
+close, pre-flighting again.
 
-When `chapterAutoClose = false` AND the threshold is crossed, the
-UI shows a "Ready to close" indicator near chapter management
-controls, but doesn't auto-fire. User confirms the close manually.
+When `chapterAutoClose = false` AND the threshold is crossed, the UI
+shows `Ready to close`, a text label in the reader popover's progress
+row and on the Timeline's in-progress card, while the region holds a
+reply to end on, but doesn't auto-fire. User confirms the close
+manually.
 
 ## Deleting a chapter
 

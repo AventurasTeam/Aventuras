@@ -557,10 +557,10 @@ describe('closeBoundaryPhase over candidates', () => {
 
   it.each([
     {
-      name: 'sends 8000 when neither the profile nor an override sets a max output',
+      name: 'sends 16384 when neither the profile nor an override sets a max output',
       profile: {},
       override: undefined,
-      sent: 8000,
+      sent: 16384,
     },
     {
       name: "sends the profile's max output",
@@ -575,10 +575,10 @@ describe('closeBoundaryPhase over candidates', () => {
       sent: 2500,
     },
     {
-      name: 'sends 8000 under an override that sets none, though the profile does',
+      name: 'sends 16384 under an override that sets none, though the profile does',
       profile: { maxOutput: 3000 },
       override: { providerId: PROVIDER.id, modelId: 'big' },
-      sent: 8000,
+      sent: 16384,
     },
   ])('$name', async ({ profile, override, sent }) => {
     await wireLore(profile)

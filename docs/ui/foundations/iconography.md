@@ -215,13 +215,20 @@ implementation doesn't conflate them:
 Source scratch in
 [`../patterns/icon-actions.md → Glyph vocabulary`](../patterns/icon-actions.md#glyph-vocabulary).
 
-| Action                 | Scratch                   | Lucide name                                   |
-| ---------------------- | ------------------------- | --------------------------------------------- |
-| edit / rename          | `✎`                       | `Pencil`                                      |
-| regenerate             | `↻`                       | `RotateCw`                                    |
-| branch                 | `⎇`                       | `GitBranch` (shared with top-bar branch chip) |
-| delete                 | `×` (in this row context) | `Trash2`                                      |
-| flip era (conditional) | `📅`                      | `CalendarClock`                               |
+| Action                           | Scratch                   | Lucide name                                   |
+| -------------------------------- | ------------------------- | --------------------------------------------- |
+| edit / rename                    | `✎`                       | `Pencil`                                      |
+| regenerate                       | `↻`                       | `RotateCw`                                    |
+| branch                           | `⎇`                       | `GitBranch` (shared with top-bar branch chip) |
+| delete                           | `×` (in this row context) | `Trash2`                                      |
+| flip era (conditional)           | `📅`                      | `CalendarClock`                               |
+| Close chapter here (conditional) | `⁂`                       | `SeparatorHorizontal`                         |
+
+`Close chapter here` takes `SeparatorHorizontal`, a rule between two
+runs of text, for the break the close puts after the entry. `Flag` was
+turned down: it is the faction kind's glyph
+([Entity kind glyphs](#entity-kind-glyphs)), and one glyph keeps one
+meaning.
 
 ### Entity kind glyphs
 
@@ -264,6 +271,9 @@ The reader's per-entry icon row carries:
   `delete` (`Trash2`).
 - **Conditional 5th icon:** `flip era` (`CalendarClock`) —
   visible only when `story.calendarSystem.eras !== null`.
+- **Conditional on open-region replies:** `Close chapter here`
+  (`SeparatorHorizontal`), before `delete`, on a reply no chapter has
+  closed yet.
 
 User rows carry only `edit` and `delete`; regen / branch /
 flip-era don't apply.
@@ -274,7 +284,9 @@ When the 5th icon is active, the row stays **flat — no overflow
 menu introduced.** Width budget at 20 px (`--icon-md`) icons +
 8 px gaps: 5 × 20 + 4 × 8 = **132 px** total. Comfortable on
 desktop and on 375 px mobile viewports next to entry prose; the
-everyday case (no era-flip) is 4 icons = 104 px.
+everyday case (no era-flip) is 4 icons = 104 px. A reply in the open
+region adds `Close chapter here`: 5 icons = 132 px, or 6 = 160 px with
+eras on, still flat.
 
 Rejected at session 5: the 4-inline + per-entry-overflow-menu
 refactor (introduces a new pattern) and the 4-inline + chip-class
