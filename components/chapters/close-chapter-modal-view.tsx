@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronUp } from 'lucide-react-native'
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -214,10 +215,12 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
   // TanStack Virtual's instance mutates in place; compiled memos keyed on it would go stale.
   'use no memo'
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Measured heights keyed as the rows are, so a reply landing above keeps the others' heights.
+  // Stable per list: the virtualizer rebuilds every measurement when the function changes.
+  const itemKey = useCallback((index: number) => replies[index]!.id, [replies])
   const virtualizer = useVirtualizer({
     count: replies.length,
-    // Measured heights keyed as the rows are, so a reply landing above keeps the others' heights.
-    getItemKey: (index) => replies[index]!.id,
+    getItemKey: itemKey,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => REPLY_ROW_ESTIMATE,
     overscan: 6,
