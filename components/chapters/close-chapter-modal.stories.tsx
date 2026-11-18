@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { formatEntryRef } from '@/lib/entry-refs'
@@ -102,6 +102,24 @@ function ModalHarness({ initialSelectedId, onSelect, ...props }: HarnessProps) {
   )
 }
 
+const GATE_EVENT = 'close-modal-gate'
+
+// A play flips the gate by event, the way a run starting under the open dialog would.
+function GatedHarness(props: HarnessProps) {
+  const [gated, setGated] = useState(false)
+  useEffect(() => {
+    const raise = () => setGated(true)
+    window.addEventListener(GATE_EVENT, raise)
+    return () => window.removeEventListener(GATE_EVENT, raise)
+  }, [])
+  return (
+    <ModalHarness
+      {...props}
+      disabledReason={gated ? t('generationGate.inFlight') : props.disabledReason}
+    />
+  )
+}
+
 const meta = {
   title: 'Compounds/Chapters/CloseChapterModal',
   component: ModalHarness,
@@ -113,6 +131,11 @@ const meta = {
         phone390: {
           name: 'Phone 390',
           styles: { width: '390px', height: '844px' },
+          type: 'mobile',
+        },
+        phone360: {
+          name: 'Phone 360',
+          styles: { width: '360px', height: '800px' },
           type: 'mobile',
         },
         phoneShort: {
@@ -168,9 +191,36 @@ function expectReachable(element: HTMLElement) {
   expect(element === top || element.contains(top)).toBe(true)
 }
 
+// One line at narrow widths: every item of the row stays inside its card and the excerpt keeps a
+// readable width (chapter-timeline.md → Mobile expression).
+function expectOneLine(card: HTMLElement, excerpt: string) {
+  const edge = card.getBoundingClientRect().right
+  const row = card.firstElementChild!
+  for (const item of Array.from(row.children)) {
+    expect(item.getBoundingClientRect().right).toBeLessThanOrEqual(edge + 1)
+  }
+  expect(within(card).getByText(excerpt).getBoundingClientRect().width).toBeGreaterThan(24)
+}
+
+const PHONE_ARGS = {
+  start: { ...START, endedChapterNumber: 12 },
+  replies: manyReplies(40),
+  latestId: 'entry_81',
+  initialSelectedId: 'entry_81',
+}
+
+async function expectRowsOnOneLine() {
+  await dialog()
+  await waitFor(() => expectOneLine(startRow(), START.excerpt))
+  await waitFor(() => expectOneLine(trigger(), manyReplies(40)[0]!.excerpt))
+}
+
 export const Default: Story = {
   play: async ({ args }) => {
-    await dialog()
+    const shown = await dialog()
+    await expect(shown).toHaveAccessibleDescription(
+      t('chapters:closeModal.framing', { start: START.ref }),
+    )
     await expect(within(startRow()).getByText(formatEntryRef(59))).toBeVisible()
     await expect(
       within(startRow()).getByText(t('chapters:closeModal.chapterEndedHere', { number: 2 })),
@@ -194,6 +244,7 @@ export const PanelListsReplies: Story = {
     await userEvent.click(trigger())
     await waitFor(() => expect(panel()).not.toBeNull())
     await expect(trigger()).toHaveAttribute('aria-expanded', 'true')
+    await expect(trigger()).toHaveAttribute('aria-haspopup', 'listbox')
     expect(optionRefs()).toEqual([71, 69, 67, 65, 63, 61].map(formatEntryRef))
     const [latest] = within(panel()!).getAllByRole('option')
     await expect(latest).toHaveAttribute('aria-selected', 'true')
@@ -210,6 +261,31 @@ export const PickUpdatesTheTriggerAndCount: Story = {
     await expect(within(trigger()).getByText(formatEntryRef(65))).toBeVisible()
     expect(within(trigger()).queryByText(t('chapters:closeModal.latest'))).toBeNull()
     await expect(tokens()).toHaveTextContent('9,850 tokens in range')
+    // The tint and aria-selected follow the pick, not the latest.
+    await userEvent.click(trigger())
+    await expect(await screen.findByTestId('close-chapter-reply-entry_65')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await expect(screen.getByTestId('close-chapter-reply-entry_71')).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
+  },
+}
+
+// Focus goes back to the trigger, not to the dialog the removed option leaves it on (overlays.md).
+export const KeyboardPickReturnsFocus: Story = {
+  play: async ({ args }) => {
+    await dialog()
+    await userEvent.click(trigger())
+    const option = await screen.findByTestId('close-chapter-reply-entry_65')
+    option.focus()
+    await expect(option).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await expect(args.onSelect).toHaveBeenCalledWith('entry_65')
+    await waitFor(() => expect(panel()).toBeNull())
+    await expect(trigger()).toHaveFocus()
   },
 }
 
@@ -233,13 +309,42 @@ export const NoClosedChapter: Story = {
   },
 }
 
+// Nothing to close at: the reads are loading or failed, so there is no end entry to confirm.
+export const NoSelection: Story = {
+  args: { initialSelectedId: null },
+  play: async ({ args }) => {
+    await dialog()
+    await expect(confirm()).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.queryByTestId('close-chapter-picker')).toBeNull()
+    await userEvent.click(confirm(), { pointerEventsCheck: 0 })
+    expect(args.onConfirm).not.toHaveBeenCalled()
+  },
+}
+
 export const Disabled: Story = {
   args: { disabledReason: t('generationGate.inFlight') },
   play: async ({ args }) => {
     await dialog()
     await expect(confirm()).toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByTitle(t('generationGate.inFlight'))).toContainElement(confirm())
+    await userEvent.click(confirm(), { pointerEventsCheck: 0 })
     expect(args.onConfirm).not.toHaveBeenCalled()
+  },
+}
+
+// Chromium blurs a button as it disables; focus must stay inside the dialog
+// (lessons-learned/rnweb-disabled-under-focus-blurs.md).
+export const FocusStaysWhenGateBlocks: Story = {
+  render: (args) => <GatedHarness {...args} />,
+  play: async () => {
+    const shown = await dialog()
+    confirm().focus()
+    await expect(confirm()).toHaveFocus()
+    window.dispatchEvent(new Event(GATE_EVENT))
+    await waitFor(() => expect(confirm()).toHaveAttribute('aria-disabled', 'true'))
+    await waitFor(() => expect(shown.contains(document.activeElement)).toBe(true))
+    await userEvent.tab()
+    expect(shown.contains(document.activeElement)).toBe(true)
   },
 }
 
@@ -270,12 +375,13 @@ export const LongRegionVirtualizes: Story = {
 // trigger, and the foot on screen with the panel open.
 export const Phone390: Story = {
   globals: { viewport: { value: 'phone390' } },
-  args: { replies: manyReplies(40), latestId: 'entry_81', initialSelectedId: 'entry_81' },
+  args: PHONE_ARGS,
   play: async () => {
     const shown = await dialog()
     await waitFor(() =>
       expect(shown.getBoundingClientRect().width).toBeLessThanOrEqual(window.innerWidth),
     )
+    await expectRowsOnOneLine()
     await userEvent.click(trigger())
     const list = await screen.findByTestId('close-chapter-panel')
     expect(shown).toContainElement(list)
@@ -287,6 +393,18 @@ export const Phone390: Story = {
     )
     expect(list.getBoundingClientRect().height).toBeLessThanOrEqual(PANEL_MAX + 1)
     await waitFor(() => expectReachable(confirm()))
+  },
+}
+
+export const Phone360: Story = {
+  globals: { viewport: { value: 'phone360' } },
+  args: PHONE_ARGS,
+  play: async () => {
+    const shown = await dialog()
+    await waitFor(() =>
+      expect(shown.getBoundingClientRect().width).toBeLessThanOrEqual(window.innerWidth),
+    )
+    await expectRowsOnOneLine()
   },
 }
 
