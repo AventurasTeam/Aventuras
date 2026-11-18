@@ -141,6 +141,7 @@ import {
   rollbackToEntry,
   runClassifierNow,
   runOwedClose,
+  runPickedClose,
   sameRollbackCounts,
   submitTurn,
   writeSystemEntry,
@@ -661,12 +662,17 @@ export default function ReaderComposerRoute() {
   )
 
   const showCloseFailure = useCallback(
-    async (error: PipelineError, submission: SystemFailureMeta['submission']) => {
+    async (
+      error: PipelineError,
+      submission: SystemFailureMeta['submission'],
+      closePick?: string,
+    ) => {
+      const failure = toCloseFailureMeta(error, submission)
       await writeSystemEntry(
         {
           branchId,
           content: describeCloseFailure(error).content,
-          failure: toCloseFailureMeta(error, submission),
+          failure: closePick == null ? failure : { ...failure, closePick },
         },
         ctx,
       )
@@ -1231,12 +1237,16 @@ export default function ReaderComposerRoute() {
     try {
       await retryCloseEntry({
         runClose: () => runOwedClose(branchId, ctx),
+        closePick: systemFailure?.closePick,
+        runPicked: (endEntryId) => runPickedClose(branchId, endEntryId, ctx),
         held: () => isClassifierHeld(branchId, ctx),
         committed: (arm) =>
           settleCommittedRetry(stored, (submission) => closeResolvedEntry(submission, arm)),
         // A close never holds its branch; a failed catch-up pass may.
-        rewriteClose: (error) =>
-          settleRetryRewrite(false, stored, (submission) => showCloseFailure(error, submission)),
+        rewriteClose: (error, closePick) =>
+          settleRetryRewrite(false, stored, (submission) =>
+            showCloseFailure(error, submission, closePick),
+          ),
         rewritePass: (refusal) =>
           settleRetryRewrite(refusal.held, stored, (submission) =>
             showPassFailure(refusal, submission),
