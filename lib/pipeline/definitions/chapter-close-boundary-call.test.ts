@@ -511,18 +511,46 @@ describe('requestChapterBoundary — outcomes', () => {
     expect(log.warn).not.toHaveBeenCalled()
   })
 
-  it('warns of a fallback with its tier and the entry it ends on', async () => {
-    generateStructuredMock.mockResolvedValue({
-      status: 'failed',
-      error: CUT_OFF,
-      recoverable: [],
-    } as never)
-    const log = spyLogger()
-    await drain(phaseCtx(undefined, log))
-    expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
+  // A content-filter stop lands as a parse failure, so only the detail tells it from a bad reply.
+  it.each<{ name: string; result: unknown; tier: string; detail: string }>([
+    {
+      name: 'a cut-off reply',
+      result: { status: 'failed', error: CUT_OFF, recoverable: [] },
       tier: 'reply-cut-off',
-      endEntryId: 'e7',
-    })
-    expect(log.debug).not.toHaveBeenCalled()
-  })
+      detail:
+        'reply cut off (max-output): 16384 output tokens, max output 16384; model m on provider prov-1',
+    },
+    {
+      name: 'a content-filter stop',
+      result: {
+        status: 'failed',
+        error: {
+          ...PARSE_LAST,
+          detail: 'content filter stopped the reply: Unexpected end of JSON',
+        },
+        recoverable: [PARSE_FIRST],
+      },
+      tier: 'parse',
+      detail: 'content filter stopped the reply: Unexpected end of JSON',
+    },
+    {
+      name: 'a turn no candidate holds',
+      result: { status: 'ok', value: { end_entry_id: 't9', rationale: 'x' }, recoverable: [] },
+      tier: 'parse',
+      detail: 'end_entry_id "t9" names no candidate',
+    },
+  ])(
+    'warns of a fallback on $name with its tier, cause and end',
+    async ({ result, tier, detail }) => {
+      generateStructuredMock.mockResolvedValue(result as never)
+      const log = spyLogger()
+      await drain(phaseCtx(undefined, log))
+      expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
+        tier,
+        endEntryId: 'e7',
+        detail,
+      })
+      expect(log.debug).not.toHaveBeenCalled()
+    },
+  )
 })

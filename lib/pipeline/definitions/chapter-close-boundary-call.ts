@@ -90,8 +90,9 @@ function fallBack(
   ctx: BoundaryCallContext,
   tier: UnusableTier,
   latest: CloseCandidate<OpenRegionRow>,
+  detail: string,
 ): BoundaryCallOutcome {
-  ctx.log.warn('memory.close_boundary_fallback', { tier, endEntryId: latest.id })
+  ctx.log.warn('memory.close_boundary_fallback', { tier, endEntryId: latest.id, detail })
   return { status: 'unusable', endEntryId: latest.id, tier }
 }
 
@@ -137,12 +138,15 @@ export async function* requestChapterBoundary(
   const latest = candidates[candidates.length - 1]!
   if (call.status === 'failed') {
     const tier = unusableTier(call.cause)
-    return tier === null ? { status: 'failed', error: call.error } : fallBack(ctx, tier, latest)
+    return tier === null
+      ? { status: 'failed', error: call.error }
+      : fallBack(ctx, tier, latest, call.lastError)
   }
   const { end_entry_id: turn, rationale } = call.value
   const picked = byTurn.get(turn)
   // The refined schema refuses a handle no candidate holds; this guards a call it didn't parse.
-  if (picked == null) return fallBack(ctx, 'parse', latest)
+  if (picked == null)
+    return fallBack(ctx, 'parse', latest, `end_entry_id ${JSON.stringify(turn)} names no candidate`)
   ctx.log.debug('memory.close_boundary_picked', {
     endEntryId: picked.id,
     turn,

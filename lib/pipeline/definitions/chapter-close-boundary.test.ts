@@ -506,6 +506,7 @@ describe('closeBoundaryPhase over candidates', () => {
     expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
       tier: 'parse',
       endEntryId: 'e7',
+      detail: expect.stringContaining('end_entry_id must be one of the listed turns: t1, t2, t3'),
     })
   })
 
@@ -523,6 +524,7 @@ describe('closeBoundaryPhase over candidates', () => {
     expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
       tier: 'reply-cut-off',
       endEntryId: 'e7',
+      detail: 'reply cut off (unknown): 24 output tokens; model m on provider prov-1',
     })
   })
 
