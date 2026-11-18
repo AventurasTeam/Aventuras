@@ -220,7 +220,9 @@ export type MockLlm = {
    * Replace the tool lane's queue; each answered call takes the next step, none left: `stop`.
    * A step that throws or can't be serialized fails its call with a 400; the error rethrows from
    * the release, or from close() for an unheld call. close() also rejects while the lane holds
-   * steps, unless this call passed `mayEndEarly` for a task that may stop before taking them.
+   * steps, unless this call passed `mayEndEarly` for a task that may stop before taking them. A
+   * held call the app drops (cancel, interrupt, teardown) takes no step, so a spec that cancels or
+   * leaves a scripted call held sets it.
    */
   setToolSteps: (
     tools: readonly string[],

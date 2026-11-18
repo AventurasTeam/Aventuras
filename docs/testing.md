@@ -587,9 +587,11 @@ writes, so a spec that scripts nothing writes nothing. The reverse fails
 loudly: `close()` rejects, once it has answered every held call, while a
 lane still holds steps, naming each lane and how many it has left, since
 a spec scripted under a stale tool list would otherwise close with no
-writes and pass. A lane whose task may stop before its last step is set
-with `{ mayEndEarly: true }` and left out, and a scripted throw is
-reported ahead of the unspent lanes. A tool call's
+writes and pass. A held call the app drops (a cancel, an interrupt or
+teardown) takes no step, so a spec that cancels a close, or leaves a
+scripted call held, sets `{ mayEndEarly: true }`: the lane is left out of
+the report, as is any lane whose task may stop before its last step. A
+scripted throw is reported ahead of the unspent lanes. A tool call's
 `MockRequest.agent` is its lane key, which a spec builds with the
 harness's `toolLaneKey`, and `holdNextStructured`,
 `cutNextStructured` and `overflowNextStructured` take one: a held call

@@ -24,9 +24,8 @@ const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
 // The harness keys structured calls by STRUCTURED_SHAPES name.
 const METADATA = 'chapter-metadata'
-// The close's first tool lane on this fixture, by PRODUCTION_CLOSE_SLOTS' order: the open region
-// anchors one happening, so the range embed forms no cluster and Happenings has no start, while
-// Lore starts on any turn. Held there, a close has written its chapter row and stamps.
+// Lore starts on any turn and runs after the metadata phase, so a close held at it has written its
+// chapter row and stamps.
 const LORE_LANE = toolLaneKey(['read_row', 'create_lore', 'update_lore'])
 const CHAPTER = {
   title: 'The Satchel at the Gate',
