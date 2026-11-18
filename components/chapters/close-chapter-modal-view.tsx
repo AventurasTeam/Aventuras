@@ -216,6 +216,8 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const virtualizer = useVirtualizer({
     count: replies.length,
+    // Measured heights keyed as the rows are, so a reply landing above keeps the others' heights.
+    getItemKey: (index) => replies[index]!.id,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => REPLY_ROW_ESTIMATE,
     overscan: 6,

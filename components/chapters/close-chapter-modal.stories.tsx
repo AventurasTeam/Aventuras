@@ -87,6 +87,17 @@ function manyReplies(
   })
 }
 
+// One- and two-line excerpts in turn: a height cached for the wrong reply leaves a gap or overlap.
+function mixedReplies(count: number): CloseModalRow[] {
+  return manyReplies(count).map((row, i) => ({
+    ...row,
+    excerpt:
+      i % 2 === 0
+        ? 'She stops at the threshold, one hand on the cold iron of the gate, and does not look back at the river or at the lamps of the town behind her.'
+        : 'The lantern holds.',
+  }))
+}
+
 type HarnessProps = Omit<CloseChapterModalViewProps, 'selectedId' | 'tokensInRange'> & {
   initialSelectedId: string | null
 }
@@ -504,6 +515,49 @@ export const EndFollowsItsReplyWhenOneIsPrepended: Story = {
     )
     window.dispatchEvent(new Event(PREPEND_EVENT))
     await waitFor(() => expect(screen.getByTestId('close-chapter-reply-entry_3')).toHaveFocus())
+  },
+}
+
+// Each rendered row's offset from the bottom of the one above it; toEqual tells -0 from 0.
+function rowGaps(list: HTMLElement): number[] {
+  const slots = Array.from(list.querySelectorAll<HTMLElement>('[data-index]')).sort(
+    (a, b) => Number(a.dataset.index) - Number(b.dataset.index),
+  )
+  return slots
+    .slice(1)
+    .map(
+      (slot, i) =>
+        Math.round(slot.getBoundingClientRect().top - slots[i]!.getBoundingClientRect().bottom) ||
+        0,
+    )
+}
+
+async function expectRowsFlush(list: HTMLElement) {
+  await waitFor(() => {
+    const gaps = rowGaps(list)
+    expect(gaps.length).toBeGreaterThan(4)
+    expect(gaps).toEqual(gaps.map(() => 0))
+  })
+}
+
+// The measured heights follow each reply, not its position: a reply prepended while the list is
+// open moves the others down without handing them their neighbours' heights.
+export const RowsKeepTheirHeightsWhenOneIsPrepended: Story = {
+  render: (args) => <PrependHarness {...args} />,
+  args: { replies: mixedReplies(12), initialSelectedId: 'entry_25' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const list = await screen.findByTestId('close-chapter-panel')
+    await expectRowsFlush(list)
+    const heights = Array.from(list.querySelectorAll('[data-index]'), (slot) =>
+      Math.round(slot.getBoundingClientRect().height),
+    )
+    // Past the first row, whose latest tag already sets its height apart.
+    expect(new Set(heights.slice(1)).size).toBeGreaterThan(1)
+    window.dispatchEvent(new Event(PREPEND_EVENT))
+    await screen.findByTestId('close-chapter-reply-entry_prepended')
+    await expectRowsFlush(list)
   },
 }
 
