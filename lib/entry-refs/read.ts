@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm'
 
 import type { DbCtx } from '@/lib/db'
-import { chunked, storyEntries } from '@/lib/db'
+import { chunked, openRegionWhere, storyEntries } from '@/lib/db'
 import { excerpt, oneLine, stripMarkup } from '@/lib/text'
 
 import type { EntryIndex, EntryRef } from './types'
@@ -133,4 +133,18 @@ export async function readEntryIndex(branchId: string, database: DbCtx['db']): P
 
 export function indexEntryRefs(rows: readonly EntryRef[]): EntryIndex {
   return new Map(rows.map((r) => [r.id, r]))
+}
+
+const worldTime = sql<number>`json_extract(${storyEntries.metadata}, '$.worldTime')`
+
+/** Each open-region row's `metadata.worldTime`, by id; a row with none is absent. */
+export async function readOpenRegionTimes(
+  branchId: string,
+  database: DbCtx['db'],
+): Promise<ReadonlyMap<string, number>> {
+  const rows = await database
+    .select({ id: storyEntries.id, worldTime })
+    .from(storyEntries)
+    .where(and(openRegionWhere(branchId), isNotNull(worldTime)))
+  return new Map(rows.map((row) => [row.id, row.worldTime]))
 }
