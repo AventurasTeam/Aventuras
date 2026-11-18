@@ -8,6 +8,7 @@ import {
   type ReactElement,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from 'react'
 import {
   Platform,
@@ -95,12 +96,23 @@ const END_HELD_LIST = { scrollEventsHandlersHook: useEndLockedScrollHandlers }
 
 type ArmProps = ChapterPopoverProps & { number: number }
 
+type AfterDismissRef = RefObject<(() => void) | null>
+
 /** Popover on desktop and tablet, a medium bottom Sheet on phone, each opened from its own chip. */
 export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const number = openChapterNumber(props.closed.map((row) => ({ sequenceNumber: row.number })))
+  // Held above the arm switch: a Sheet unmounted mid-exit never fires onDismissed, so the run it
+  // held goes when the tier leaves phone.
+  const afterDismissRef = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    if (isPhone) return
+    const run = afterDismissRef.current
+    afterDismissRef.current = null
+    run?.()
+  }, [isPhone])
   return isPhone ? (
-    <SheetArm {...props} number={number} />
+    <SheetArm {...props} number={number} afterDismissRef={afterDismissRef} />
   ) : (
     <PopoverArm {...props} number={number} />
   )
@@ -228,22 +240,26 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
   )
 }
 
-function SheetArm({ onOpenChange, ref, ...content }: ArmProps) {
+function SheetArm({
+  onOpenChange,
+  ref,
+  afterDismissRef,
+  ...content
+}: ArmProps & { afterDismissRef: AfterDismissRef }) {
   const [open, changeOpen] = useReportedOpen(onOpenChange)
   // layout.md → Stacking: the Sheet dismisses before the modal it leads to takes over.
-  const afterDismiss = useRef<(() => void) | null>(null)
   const change = (next: boolean) => {
-    if (next) afterDismiss.current = null
+    if (next) afterDismissRef.current = null
     changeOpen(next)
   }
   const close = () => change(false)
   const closeThen = (run: () => void) => {
-    afterDismiss.current = run
+    afterDismissRef.current = run
     change(false)
   }
   const runAfterDismiss = () => {
-    const run = afterDismiss.current
-    afterDismiss.current = null
+    const run = afterDismissRef.current
+    afterDismissRef.current = null
     run?.()
   }
 
