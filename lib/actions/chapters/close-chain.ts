@@ -37,21 +37,35 @@ export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD):
   blockedBy,
 })
 
+type CloseChainOpts = {
+  /** Runs after the held check, before the unprocessed count; a refusal ends the start. */
+  validate?: () => Promise<RejectedStart | null>
+  /** Runs in the synchronous section before the reserve; a failure starts nothing. */
+  preflight?: (open: OpenStory) => ConfigResolverError | null
+  onReserved?: () => void
+}
+
+type PreflightedOpts = CloseChainOpts & Required<Pick<CloseChainOpts, 'preflight'>>
+
 /**
  * Starts the pass (entries unprocessed) or the close; resolves with the chain's end, the refusal,
- * or the failed pre-flight. Rejects when the origin or the pre-flight throws, as `startChain` does:
- * a caller must handle it.
+ * or, given a pre-flight, its failure. Rejects when the origin or the pre-flight throws, as
+ * `startChain` does: a caller must handle it.
  */
+export function startCloseChain(
+  branchId: string,
+  ctx: DbCtx,
+  opts: PreflightedOpts,
+): Promise<ChainEnd | RejectedStart | PreflightFailedStart>
+export function startCloseChain(
+  branchId: string,
+  ctx: DbCtx,
+  opts?: Omit<CloseChainOpts, 'preflight'>,
+): Promise<ChainEnd | RejectedStart>
 export async function startCloseChain(
   branchId: string,
   ctx: DbCtx,
-  opts?: {
-    /** Runs after the held check, before the unprocessed count; a refusal ends the start. */
-    validate?: () => Promise<RejectedStart | null>
-    /** Runs in the synchronous section before the reserve; a failure starts nothing. */
-    preflight?: (open: OpenStory) => ConfigResolverError | null
-    onReserved?: () => void
-  },
+  opts?: CloseChainOpts,
 ): Promise<ChainEnd | RejectedStart | PreflightFailedStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
     return refused(MANUAL_CLOSE_REFUSAL.branchNotOpen)
