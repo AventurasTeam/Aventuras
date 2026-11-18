@@ -233,14 +233,19 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     option.focus()
   }
   useEffect(focusPending)
-  // RN-Web presses an option on Enter only; Space is a press on button roles alone.
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const spaceDownOn = useRef<string | null>(null)
+  const slotIndex = (event: KeyboardEvent<HTMLDivElement>) => {
     const slot = (event.target as HTMLElement).closest<HTMLElement>('[data-index]')
-    if (slot == null) return
-    const from = Number(slot.dataset.index)
+    return slot == null ? null : Number(slot.dataset.index)
+  }
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const from = slotIndex(event)
+    if (from == null) return
+    // RN-Web presses an option on Enter only, so Space is ours. It picks on release, as Enter
+    // does: picking on press hands its repeats to the trigger, whose Space press reopens the panel.
     if (event.key === ' ') {
       event.preventDefault()
-      onPick(replies[from]!.id)
+      spaceDownOn.current = replies[from]!.id
       return
     }
     const to = stepIndex(event.key, from, replies.length)
@@ -249,6 +254,14 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     virtualizer.scrollToIndex(to, { align: 'auto' })
     pendingFocus.current = to
     focusPending()
+  }
+  const onKeyUp = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== ' ') return
+    const downOn = spaceDownOn.current
+    spaceDownOn.current = null
+    const from = slotIndex(event)
+    if (from == null || replies[from]!.id !== downOn) return
+    onPick(downOn)
   }
   return (
     <div
@@ -259,6 +272,7 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
       className="min-h-0 shrink overflow-y-auto overflow-x-hidden rounded-md border border-border"
       style={PANEL_WEB_STYLE}
       onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
     >
       <div style={trackStyle(virtualizer.getTotalSize())}>
         {virtualizer.getVirtualItems().map((slot) => {

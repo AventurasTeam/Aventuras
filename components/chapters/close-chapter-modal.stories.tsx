@@ -429,10 +429,23 @@ export const SpacePicksAReply: Story = {
   play: async ({ args }) => {
     await dialog()
     await userEvent.click(trigger())
-    ;(await screen.findByTestId('close-chapter-reply-entry_69')).focus()
-    await userEvent.keyboard(' ')
+    const option = await screen.findByTestId('close-chapter-reply-entry_69')
+    // A release whose press began on the trigger picks nothing. One instance keeps Space held.
+    const user = userEvent.setup()
+    trigger().focus()
+    await user.keyboard('[Space>]')
+    option.focus()
+    await user.keyboard('[/Space]')
+    expect(args.onSelect).not.toHaveBeenCalled()
+    await expect(panel()).not.toBeNull()
+    option.focus()
+    // Held with repeats: the pick lands on release, so no repeat reaches the trigger to reopen it.
+    await userEvent.keyboard('[Space>3/]')
+    await expect(args.onSelect).toHaveBeenCalledTimes(1)
     await expect(args.onSelect).toHaveBeenCalledWith('entry_69')
     await waitFor(() => expect(panel()).toBeNull())
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(panel()).toBeNull()
     await expect(trigger()).toHaveFocus()
   },
 }
