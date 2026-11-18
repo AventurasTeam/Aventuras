@@ -799,8 +799,8 @@ the probe prints which. It needs the directory's `bar.json`, writes
 overlay applied, which reopens the seed's chapter: the call over the
 open region's candidates at the story's threshold, as the phase makes
 it, writing nothing and loading no embedder. `PROBE_OVERLAY=1`,
-`PROBE_STAND_IN=1` and `PROBE_END_ENTRY` are refused beside it, as is
-another branch. `PROBE_OUT` saves each call's request and response, a
+`PROBE_STAND_IN=1`, `PROBE_END_ENTRY` and `PROBE_REJUDGE` are refused
+beside it, as is another branch. `PROBE_OUT` saves each call's request and response, a
 same-prompt retry's included, as `boundary-c<n>.json` in the run's
 folder. Each run prints its outcome (`picked`; `parse` or
 `reply-cut-off`, an unusable reply that fell back to the latest
