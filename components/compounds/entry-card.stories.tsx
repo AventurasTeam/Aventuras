@@ -638,6 +638,7 @@ export const HeadTurnDuringPass: StoryT = {
   args: {
     ...baseProps,
     ...aiEntry,
+    onCloseChapterHere: fn(),
     disabled: true,
     disabledReason: PASS_REASON,
     editDisabled: false,
@@ -652,9 +653,9 @@ export const HeadTurnDuringPass: StoryT = {
     expect(
       screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
     ).not.toBeDisabled()
-    // Branch and flip era are no head reversal.
+    // Branch, flip era and Close chapter here are no head reversal.
     const gated = screen.getAllByRole('button', { name: PASS_REASON })
-    expect(gated).toHaveLength(2)
+    expect(gated).toHaveLength(3)
     for (const button of gated) expect(button).toBeDisabled()
 
     await userEvent.click(pencil)
@@ -3390,4 +3391,14 @@ export const SixActionsPhoneClearHead: StoryT = {
   ...PHONE_390,
   args: { ...baseProps, ...aiEntry, tier: 'phone', onCloseChapterHere: fn() },
   play: expectHeadClearsCluster,
+}
+
+/** Five actions, with flip era left out: the head's clearance is pr-36, not the pr-28 four fit. */
+export const FiveActionsPhoneClearHead: StoryT = {
+  ...PHONE_390,
+  args: { ...baseProps, ...aiEntry, tier: 'phone', onFlipEra: undefined, onCloseChapterHere: fn() },
+  play: async () => {
+    expect(screen.queryByRole('button', { name: t('reader:entryCard.flipEra') })).toBeNull()
+    await expectHeadClearsCluster()
+  },
 }
