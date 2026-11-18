@@ -47,16 +47,18 @@ export function ChapterInProgressCard({
       </Text>
       <View className="gap-1">
         <ChapterProgressBar percent={progress.percent} className="h-1 rounded-full" />
-        <View className="flex-row flex-wrap items-baseline gap-x-2">
-          <Text size="xs" variant="muted">
-            {chapterProgressCounts(progress)}
-          </Text>
+        {/* One paragraph: a text-width label beside it would drop its last word on Android. */}
+        <Text size="xs" variant="muted">
+          {chapterProgressCounts(progress)}
           {readyToClose ? (
-            <Text size="xs" variant="default" className="font-medium">
-              {t('chapters:readyToClose')}
-            </Text>
+            <>
+              {' · '}
+              <Text size="xs" variant="default" className="font-medium">
+                {t('chapters:readyToClose')}
+              </Text>
+            </>
           ) : null}
-        </View>
+        </Text>
       </View>
       <Text size="sm" variant="muted" className="italic">
         {t('chapters:inProgress.placeholder')}

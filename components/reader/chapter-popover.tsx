@@ -230,7 +230,7 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
 
 function SheetArm({ onOpenChange, ref, ...content }: ArmProps) {
   const [open, changeOpen] = useReportedOpen(onOpenChange)
-  // A modal opened while this Sheet animates out would sit under it (layout.md → Stacking).
+  // layout.md → Stacking: the Sheet dismisses before the modal it leads to takes over.
   const afterDismiss = useRef<(() => void) | null>(null)
   const change = (next: boolean) => {
     if (next) afterDismiss.current = null
@@ -409,16 +409,18 @@ function OverlayBody({
 
       <View className="gap-1">
         <ChapterProgressBar percent={progress.percent} className="h-1.5 rounded-full" />
-        <View className="flex-row flex-wrap items-baseline gap-x-2">
-          <Text size="xs" variant="muted">
-            {chapterProgressLabel(progress)}
-          </Text>
+        {/* One paragraph: a text-width label beside it would drop its last word on Android. */}
+        <Text size="xs" variant="muted">
+          {chapterProgressLabel(progress)}
           {readyToClose ? (
-            <Text size="xs" variant="default" className="font-medium">
-              {t('chapters:readyToClose')}
-            </Text>
+            <>
+              {' · '}
+              <Text size="xs" variant="default" className="font-medium">
+                {t('chapters:readyToClose')}
+              </Text>
+            </>
           ) : null}
-        </View>
+        </Text>
       </View>
 
       <View className="gap-1">

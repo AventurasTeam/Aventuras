@@ -173,6 +173,8 @@ async function expectContents(args: ChapterPopoverProps) {
   const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
   await expect(closeChapter).toHaveAttribute('aria-disabled', 'true')
   expect(screen.queryByText('Ready to close')).toBeNull()
+  // The actions fill the overlay's width, as wide as the bar above them.
+  expect(closeChapter.getBoundingClientRect().width).toBeCloseTo(track, 0)
   const manage = screen.getByRole('button', { name: 'Manage chapters →' })
   await expect(manage).not.toHaveAttribute('aria-disabled', 'true')
   // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
@@ -728,13 +730,46 @@ export const ActionsClosePhone: Story = {
     await waitForTier('phone')
     await openOverlay()
     await waitForSheetSettled()
+    // Where the Sheet is when the host's close runs: a modal opened over a Sheet still on screen
+    // is the stack layout.md forbids.
+    let sheetTopAtCall = Number.NaN
+    ;(args.onCloseChapter as ReturnType<typeof fn>).mockImplementation(() => {
+      const sheet = screen.queryByRole('dialog', { name: 'Chapters' })
+      sheetTopAtCall = sheet == null ? Number.POSITIVE_INFINITY : sheet.getBoundingClientRect().top
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Close chapter manually' }))
     // Its exit animation outlasts the press: a close run from the press itself is called by now.
     await expect(args.onCloseChapter).not.toHaveBeenCalled()
     await waitFor(async () => expect(await chip()).toHaveAttribute('aria-expanded', 'false'))
     await waitFor(() => expect(args.onCloseChapter).toHaveBeenCalledTimes(1), ANIMATION)
     expectClosedBeforeCalled(args.onOpenChange, args.onCloseChapter)
+    expect(sheetTopAtCall).toBeGreaterThanOrEqual(window.innerHeight)
     // Once per dismissal: a second report would open the modal twice.
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await expect(args.onCloseChapter).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** A pending close is spent with its dismissal: a later dismissal with no action must not run it. */
+export const ClosePhoneDoesNotRepeat: Story = {
+  globals: PHONE,
+  args: { onCloseChapter: fn() },
+  play: async ({ args }) => {
+    await waitForTier('phone')
+    await openOverlay()
+    await waitForSheetSettled()
+    await userEvent.click(screen.getByRole('button', { name: 'Close chapter manually' }))
+    await waitFor(() => expect(args.onCloseChapter).toHaveBeenCalledTimes(1), ANIMATION)
+
+    await openOverlay()
+    await waitForSheetSettled()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(async () => expect(await chip()).toHaveAttribute('aria-expanded', 'false'))
+    await waitFor(
+      () => expect(screen.queryByRole('dialog', { name: 'Chapters' })).toBeNull(),
+      ANIMATION,
+    )
+    // Past the exit: a stale run would have landed by now.
     await new Promise((resolve) => setTimeout(resolve, 500))
     await expect(args.onCloseChapter).toHaveBeenCalledTimes(1)
   },
@@ -785,8 +820,10 @@ async function expectReadyToClose(shown: boolean) {
   }
   if (ready == null) throw new Error('Ready to close is not shown')
   await expect(ready).toBeVisible()
-  // The progress row: after its label, above the actions.
-  expect(label.compareDocumentPosition(ready) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  // One paragraph with the label (Android clips a text-width sibling's last word): after it,
+  // above the actions.
+  await expect(label).toContainElement(ready)
+  expect(label.textContent).toMatch(/ tok · Ready to close$/)
   const closeChapter = screen.getByRole('button', { name: 'Close chapter manually' })
   expect(ready.getBoundingClientRect().bottom).toBeLessThanOrEqual(
     closeChapter.getBoundingClientRect().top,

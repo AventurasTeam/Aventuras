@@ -215,7 +215,7 @@ const readyArgs = (measured: ChapterProgress, autoClose: boolean) => ({
 
 async function expectReadyToClose(shown: boolean) {
   await waitForTier('desktop')
-  const counts = await screen.findByText(/ \/ 24,000 tok$/)
+  const counts = await screen.findByText(/ \/ 24,000 tok/)
   await expect(counts).toBeVisible()
   const ready = screen.queryByText(READY)
   if (!shown) {
@@ -224,8 +224,10 @@ async function expectReadyToClose(shown: boolean) {
   }
   if (ready == null) throw new Error('Ready to close is not shown')
   await expect(ready).toBeVisible()
-  // On the progress line: after the counts, above the summary placeholder.
-  expect(counts.compareDocumentPosition(ready) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  // One paragraph with the counts (Android clips a text-width sibling's last word): after them,
+  // above the summary placeholder.
+  await expect(counts).toContainElement(ready)
+  expect(counts.textContent).toMatch(/ tok · Ready to close$/)
   expect(ready.getBoundingClientRect().bottom).toBeLessThanOrEqual(
     screen.getByText(t('chapters:inProgress.placeholder')).getBoundingClientRect().top,
   )
