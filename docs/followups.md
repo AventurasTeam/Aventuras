@@ -479,21 +479,69 @@ breakdown under [UX](#ux).
   - The close's tool steps send no temperature, so the dev server
     samples at its 1.0 with no repeat penalty; all four replies cut
     off at the 8,000-token bound were loops or over-long deliberation.
+    Whether sampling feeds these slips is measured under
+    the invalid-call entry below, third part.
 
   The record and the saved conversations are the inputs; see 5.5b's
   measure record in its slice doc. Raised in 5.5b's measure.
 
-- **Bound the invalid-call answer the close echoes back.** A code
-  bound, not prompt tuning. The SDK answers an invalid tool call
-  itself, and `stepMessages` in `close-agent/run-task.ts` hands that
-  answer back to the model unchanged: the whole value and one schema
-  issue per bad entry. In Slice 5.10's seven-task rerun (run 2), an
-  Identity retry padded `turns` with 1,324 `true` entries, the slip
-  above. Its answer came back as a 238,990-character tool result, so the
-  next step's prompt reached 116,118 tokens, llama.cpp refused it
-  against a 65,536 window, and the task stopped as `window`. Cap the
-  value and the issue list the answer echoes, for example the first few
-  issues and a count. The record is
+- **The close's invalid tool calls: a bounded answer, a list repair, and
+  sampling.** Code bounds and a measure, not prompt tuning. The
+  developer, on Slice 5.10's run 2: "Let's keep it as A and fix this in a
+  followup. The model was also called with temperature 1.0 so that is
+  potentially a contributing factor to both." Three parts:
+  - **Bound the answer past a size: a verbosity-versus-context
+    trade-off.** The SDK answers an invalid tool call itself, and
+    `stepMessages` in `close-agent/run-task.ts` hands that answer back
+    to the model unchanged: the whole value and one schema issue per bad
+    entry. The developer: "the error as it stands today is fine for most
+    cases, except when goes wrong like this. So i guess it's a question
+    between verbosity and context usage." Run 2 is the case that goes
+    wrong: an Identity retry padded `turns` with 1,324 `true` entries,
+    its answer came back as a 238,990-character tool result, the next
+    step's prompt reached 116,118 tokens, llama.cpp refused it against a
+    65,536 window, and the task stopped as `window`. Keep the answer as
+    it is when it is small, and bound it only past a size: collapse
+    identical issues into one line with their path range (for example
+    `turns[6]` to `turns[1329]`: expected string, received boolean) and
+    truncate the echoed value. `tool-step.ts` carries the same unbounded
+    message in `invalidCalls[].detail`, logged as
+    `memory.close_tool_call_invalid`.
+  - **Repair string-encoded lists before validation.** The dev model
+    sends lists as JSON strings (a traits list arriving as one quoted
+    string of an array) and has looped on it: the first probe's run 7
+    Identity resent it seven times. The SDK doesn't reject such a call
+    outright. `ai` 6.0.193's `parseToolCall` (`node_modules/ai/dist/index.mjs`,
+    from about line 3717) calls `generateText`'s `experimental_repairToolCall`
+    on an invalid input and re-validates what it returns; `null` keeps
+    today's invalid call. `tool-step.ts` passes none. A deterministic
+    repair, JSON-parsing a string where the schema expects an array,
+    needs no model call. Write the hook against the SDK's exported
+    `ToolCallRepairFunction` type and read only `toolCall.input`, not
+    `system`, so it ports to AI SDK v7 unchanged but for the option
+    name: v7 (7.0.176) makes it stable as `repairToolCall`, keeps
+    `experimental_repairToolCall` as a deprecated alias, renames
+    `system` to `instructions`, and types the call as
+    `LanguageModelV4ToolCall` (v6: `LanguageModelV3ToolCall`). That is
+    checked from both versions' type definitions, not their runtime. The
+    option is experimental in v6. A v6 to v7 upgrade is wanted at some
+    point, outside this item.
+  - **Sampling: a question to measure, not a fix.** The close's
+    tool-step request sends no sampling parameters (run 2's Identity
+    retry request carries only `model`, `max_tokens` 16,384 and
+    `tool_choice` `auto`), so the router's server defaults applied. For
+    `Gemma4-26B-A4B-QAT-MTP` those are `--temperature 1.0`, `--top-k 20`,
+    `--top-p 0.95`, `--min-p 0` and `--repeat-penalty 1.0`; a repeat
+    penalty of 1.0 multiplies by one in llama.cpp, so no repetition
+    penalty was in effect. The developer names temperature 1.0 a
+    possible contributor to both slips: the `true`-padded `turns` (run
+    2's Pew call sent six handles, then `true` 1,324 times, and no
+    `why`) and the string-encoded lists. A penalty above 1.0 would also
+    weigh on the punctuation and handles a tool call repeats
+    legitimately, so measure before changing anything. It refines
+    the capability-floor entry's third bullet above.
+
+  The record is
   [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
   Raised by Slice 5.10's measure, 2026-11-18.
 

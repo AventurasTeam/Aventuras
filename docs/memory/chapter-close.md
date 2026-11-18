@@ -280,6 +280,11 @@ so:
 - A reply is cut off or stopped by a filter, and again on its one
   retry. Neither counts as a finished task, whatever it holds.
 
+The step budget is one for every task, shared alike, and it is what ends
+a task stuck in a loop: a refused call spends a step like any other.
+Ending a task after consecutive refused steps is
+[parked](../parked.md#stop-a-task-that-makes-no-progress).
+
 ### Logs and anchors
 
 Phases 1–4 share one `action_id` and `source = chapter_close`, and every

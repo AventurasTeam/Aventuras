@@ -1473,6 +1473,23 @@ A user on vLLM, or on a model with an output cap between 8,000 and
 16,383 tokens, hitting the 4xx or the overflow refusal is the signal to
 revisit.
 
+#### Stop a task that makes no progress
+
+**A task whose calls are all refused runs on to its step budget.** It
+would end after k consecutive steps whose calls were all refused (an
+unknown id, an invalid input), instead of spending the rest of its 64
+steps resending them. Parked 2026-11-18 on the developer's call: one
+64-step budget stands for every task, as committed, with no per-task
+budgets, and the budget is what ends a stuck loop
+([`chapter-close.md → When a task stops`](./memory/chapter-close.md#when-a-task-stops)).
+A stop would save a stuck task's steps, tokens and wall time up to the
+budget: the first probe's run 7 had Upkeep send `update_item` on an
+invented id seven times (`id-unknown`) until its budget ran out. Raised
+by Slice 5.10's measure and review.
+
+A stuck task's steps, tokens or wall time showing up in play or a probe
+is the signal to revisit.
+
 #### A per-provider switch for stream usage
 
 The OpenAI-compatible provider always asks for streamed usage through

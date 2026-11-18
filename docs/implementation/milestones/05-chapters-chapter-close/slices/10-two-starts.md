@@ -712,6 +712,8 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   not a followup", keeps the values, records both in canon with the
   profile's max output as the remedy, and [parks the
   clamp](../../../../parked.md#clamp-a-default-max-output-to-the-window).
+  "Q7: 1 + park 3" keeps the one shared 64-step budget for every task
+  and [parks a no-progress stop](../../../../parked.md#stop-a-task-that-makes-no-progress).
 - **A stale pick settles on Retry as nothing left to close (developer
   decision, 2026-11-18).** A failed click's entry whose pick can no
   longer end a chapter, closed into one or deleted, settles on Retry as
@@ -916,7 +918,8 @@ Run 2's two misses:
 
 Developer decision, 2026-11-18 ("Q8: A"): the bar stands as met, with
 run 2 on record, and no code change and no third run follow in this
-slice. Bounding the echoed answer is filed under
+slice. The followup carries a bounded echoed answer, a list repair and a
+sampling measure, filed under
 [followups → Tuning and play testing](../../../../followups.md#tuning-and-play-testing).
 
 ### Boundary measure
