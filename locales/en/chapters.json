@@ -73,7 +73,11 @@
     "latest": "latest",
     "tokensInRange": "{{count, number}} tokens in range",
     "cancel": "Cancel",
-    "confirm": "Close chapter"
+    "confirm": "Close chapter",
+    "toast": {
+      "preflightFailed": "Chapter close can't start. The reader shows why.",
+      "startFailed": "Couldn't start the chapter close."
+    }
   },
   "deleteConfirm": {
     "title": "Delete chapter {{number}}?",
