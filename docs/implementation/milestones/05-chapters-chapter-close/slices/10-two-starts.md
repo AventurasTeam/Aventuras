@@ -914,7 +914,10 @@ Run 2's two misses:
   as `window`. Under the old 8,000 cap that retry would have been cut too,
   a `cut-off` stop and still a miss.
 
-The developer's ruling on the `window` stop: pending at writing.
+Developer decision, 2026-11-18 ("Q8: A"): the bar stands as met, with
+run 2 on record, and no code change and no third run follow in this
+slice. Bounding the echoed answer is filed under
+[followups → Tuning and play testing](../../../../followups.md#tuning-and-play-testing).
 
 ### Boundary measure
 

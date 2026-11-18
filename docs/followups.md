@@ -483,6 +483,20 @@ breakdown under [UX](#ux).
   The record and the saved conversations are the inputs; see 5.5b's
   measure record in its slice doc. Raised in 5.5b's measure.
 
+- **Bound the invalid-call answer the close echoes back.** A code
+  bound, not prompt tuning. The SDK answers an invalid tool call
+  itself, and `stepMessages` in `close-agent/run-task.ts` hands that
+  answer back to the model unchanged: the whole value and one schema
+  issue per bad entry. In Slice 5.10's seven-task rerun (run 2), an
+  Identity retry padded `turns` with 1,324 `true` entries, the slip
+  above. Its answer came back as a 238,990-character tool result, so the
+  next step's prompt reached 116,118 tokens, llama.cpp refused it
+  against a 65,536 window, and the task stopped as `window`. Cap the
+  value and the issue list the answer echoes, for example the first few
+  issues and a count. The record is
+  [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
+  Raised by Slice 5.10's measure, 2026-11-18.
+
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
   signal pass unseen:
