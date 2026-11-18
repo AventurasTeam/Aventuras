@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
+// @ts-expect-error react-dom ships no types here and @types/react-dom is not installed
+import { flushSync } from 'react-dom'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { formatEntryRef } from '@/lib/entry-refs'
@@ -125,19 +127,22 @@ function GatedHarness(props: HarnessProps) {
 
 const PREPEND_EVENT = 'close-modal-prepend'
 
-// A play prepends a reply by event, the way a refresh landing a new reply would.
+// A play prepends a reply by event, the way a refresh landing a new reply would. flushSync commits
+// it inside the dispatching task, so it lands before any scroll-driven mount of End's target.
 function PrependHarness({ replies, ...props }: HarnessProps) {
   const [prepended, setPrepended] = useState<CloseModalRow[]>([])
   useEffect(() => {
     const prepend = () =>
-      setPrepended([
-        {
-          id: 'entry_prepended',
-          ref: formatEntryRef(999),
-          excerpt: 'Reply 999: a new reply lands at the head.',
-          time: null,
-        },
-      ])
+      flushSync(() =>
+        setPrepended([
+          {
+            id: 'entry_prepended',
+            ref: formatEntryRef(999),
+            excerpt: 'Reply 999: a new reply lands at the head.',
+            time: null,
+          },
+        ]),
+      )
     window.addEventListener(PREPEND_EVENT, prepend)
     return () => window.removeEventListener(PREPEND_EVENT, prepend)
   }, [])
