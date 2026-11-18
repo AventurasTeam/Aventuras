@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { branches, stories, storyEntries, type SystemFailureMeta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -135,45 +135,50 @@ describe('clearSystemEntry', () => {
 describe('raiseSystemEntry', () => {
   const HELD = { content: 'I go north.', composerMode: 'do' }
 
-  // A close's failure as the reader writes it, the held text riding on it.
-  const closeFailure = (submission: SystemFailureMeta['submission']): SystemFailureMeta => ({
+  // A close's failure as the reader writes it; the held text is raiseSystemEntry's to add.
+  const CLOSE_FAILURE = {
     kind: 'config-resolver',
     failure: 'tool-calling-off',
     target: 'lore-mgmt',
     close: 'failed',
-    ...(submission !== undefined ? { submission } : {}),
-  })
+  } satisfies Omit<SystemFailureMeta, 'submission'>
 
   const hydrateAll = async () =>
     entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
   const heldIds = () => [...entriesStore.getEntries().keys()].sort()
+  const failureOf = async (id: string) =>
+    (await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id)))[0]?.metadata
+      ?.systemFailure
 
   it("carries a standing entry's held text onto the entry it raises", async () => {
     await writeSystemEntry(
       { branchId: 'b1', content: 'turn failed', failure: { kind: 'provider', submission: HELD } },
       ctx,
     )
-    const failure = vi.fn(closeFailure)
 
     const id = await raiseSystemEntry(
-      { branchId: 'b1', content: "Chapter close can't run.", failure },
+      { branchId: 'b1', content: "Chapter close can't run.", failure: CLOSE_FAILURE },
       ctx,
     )
 
-    expect(failure).toHaveBeenCalledWith(HELD)
     const rows = await systemRows()
     expect(rows.map((r) => r.id)).toEqual([id])
     expect(rows[0].content).toBe("Chapter close can't run.")
-    expect(rows[0].metadata?.systemFailure).toEqual(closeFailure(HELD))
+    expect(rows[0].metadata?.systemFailure).toEqual({ ...CLOSE_FAILURE, submission: HELD })
   })
 
-  it('hands the failure no text when none stands, or the standing entry holds none', async () => {
-    const failure = vi.fn(closeFailure)
+  it('raises no held text when none stands, or the standing entry holds none', async () => {
+    const first = await raiseSystemEntry(
+      { branchId: 'b1', content: 'first', failure: CLOSE_FAILURE },
+      ctx,
+    )
+    expect(await failureOf(first)).toEqual(CLOSE_FAILURE)
 
-    await raiseSystemEntry({ branchId: 'b1', content: 'first', failure }, ctx)
-    await raiseSystemEntry({ branchId: 'b1', content: 'second', failure }, ctx)
-
-    expect(failure.mock.calls).toEqual([[undefined], [undefined]])
+    const second = await raiseSystemEntry(
+      { branchId: 'b1', content: 'second', failure: CLOSE_FAILURE },
+      ctx,
+    )
+    expect(await failureOf(second)).toEqual(CLOSE_FAILURE)
   })
 
   it("never carries another branch's held text", async () => {
@@ -182,11 +187,37 @@ describe('raiseSystemEntry', () => {
       { branchId: 'b2', content: 'turn failed', failure: { kind: 'provider', submission: HELD } },
       ctx,
     )
-    const failure = vi.fn(closeFailure)
 
-    await raiseSystemEntry({ branchId: 'b1', content: 'close failed', failure }, ctx)
+    const id = await raiseSystemEntry(
+      { branchId: 'b1', content: 'close failed', failure: CLOSE_FAILURE },
+      ctx,
+    )
 
-    expect(failure).toHaveBeenCalledWith(undefined)
+    expect(await failureOf(id)).toEqual(CLOSE_FAILURE)
+  })
+
+  it("takes the held text from the standing entry alone, never the caller's failure", async () => {
+    // A full SystemFailureMeta still type-checks as the argument, its submission included.
+    const stray: SystemFailureMeta = {
+      ...CLOSE_FAILURE,
+      submission: { content: 'Not the user’s text.', composerMode: 'say' },
+    }
+
+    const unheld = await raiseSystemEntry(
+      { branchId: 'b1', content: 'close failed', failure: stray },
+      ctx,
+    )
+    expect(await failureOf(unheld)).toEqual(CLOSE_FAILURE)
+
+    await writeSystemEntry(
+      { branchId: 'b1', content: 'turn failed', failure: { kind: 'provider', submission: HELD } },
+      ctx,
+    )
+    const held = await raiseSystemEntry(
+      { branchId: 'b1', content: 'close failed', failure: stray },
+      ctx,
+    )
+    expect(await failureOf(held)).toEqual({ ...CLOSE_FAILURE, submission: HELD })
   })
 
   it("puts the entry in a loaded branch's store in place of the standing one", async () => {
@@ -194,7 +225,7 @@ describe('raiseSystemEntry', () => {
     await hydrateAll()
 
     const id = await raiseSystemEntry(
-      { branchId: 'b1', content: 'close failed', failure: closeFailure },
+      { branchId: 'b1', content: 'close failed', failure: CLOSE_FAILURE },
       ctx,
     )
 
@@ -208,7 +239,7 @@ describe('raiseSystemEntry', () => {
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'o', createdAt: 1 })
     entriesStore.hydrate('b2', [])
 
-    await raiseSystemEntry({ branchId: 'b1', content: 'close failed', failure: closeFailure }, ctx)
+    await raiseSystemEntry({ branchId: 'b1', content: 'close failed', failure: CLOSE_FAILURE }, ctx)
 
     expect(entriesStore.getLoadedBranch()).toBe('b2')
     expect(heldIds()).toEqual([])

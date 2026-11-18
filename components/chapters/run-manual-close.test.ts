@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
-import { MANUAL_CLOSE_REFUSAL } from '@/lib/actions'
+import { MANUAL_CLOSE_REFUSAL, type raiseSystemEntry } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -29,11 +29,7 @@ const TOOL_OFF: PipelineError = {
   modelId: 'gemma-4-26b',
 }
 
-type RaiseArgs = {
-  branchId: string
-  content: string
-  failure: (standing: { content: string; composerMode: string } | undefined) => unknown
-}
+type RaiseArgs = Parameters<typeof raiseSystemEntry>[0]
 
 let warn: MockInstance<typeof toast.warning>
 
@@ -99,23 +95,13 @@ describe('runManualClose', () => {
     // The can't-call-tools line names the model.
     expect(args.content).toContain('gemma-4-26b')
     expect(ctx).toEqual({ db: expect.anything(), runInTransaction: expect.any(Function) })
-    // The entry keeps the confirmed end, which its Retry restarts.
-    expect(args.failure(undefined)).toEqual({
+    // The entry keeps the confirmed end, which its Retry restarts; the held text is the raise's.
+    expect(args.failure).toEqual({
       kind: 'config-resolver',
       failure: 'tool-calling-off',
       target: 'lore-mgmt',
       close: 'failed',
       closePick: 'entry_65',
-    })
-    // A failed Send's held text, read from the standing entry, carries across.
-    const held = { content: 'I wade in.', composerMode: 'action' }
-    expect(args.failure(held)).toEqual({
-      kind: 'config-resolver',
-      failure: 'tool-calling-off',
-      target: 'lore-mgmt',
-      close: 'failed',
-      closePick: 'entry_65',
-      submission: held,
     })
     expect(warn).toHaveBeenCalledExactlyOnceWith(t('chapters:closeModal.toast.preflightFailed'))
     expect(actions.raise.mock.invocationCallOrder[0]).toBeLessThan(

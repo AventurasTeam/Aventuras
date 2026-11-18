@@ -26,7 +26,7 @@ export async function runManualClose(branchId: string, endEntryId: string): Prom
         branchId,
         content: describeCloseFailure(error).content,
         // The entry keeps the pick, so its Retry pre-flights the same pick again.
-        failure: (standing) => ({ ...toCloseFailureMeta(error, standing), closePick: endEntryId }),
+        failure: { ...toCloseFailureMeta(error, undefined), closePick: endEntryId },
       },
       ctx,
     )

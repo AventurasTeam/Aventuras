@@ -511,7 +511,7 @@ describe('ChapterOverlaysHost — the close modal', () => {
       {
         branchId: 'br_1',
         content: expect.stringContaining('gemma-4-26b'),
-        failure: expect.any(Function),
+        failure: expect.objectContaining({ kind: 'config-resolver', closePick: 'entry_64' }),
       },
       { db: {}, runInTransaction: expect.any(Function) },
     )
