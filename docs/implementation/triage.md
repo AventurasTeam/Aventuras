@@ -109,3 +109,36 @@ slice-planning gate forces its resolution before that slice is planned.
   A builder in `lib/pipeline` beside `boundedStructuredCall`, which
   lifted the call sequence but not the config, would keep them alike.
   Routed from Slice 5.10's planning, 2026-11-17.
+
+- **A disabled action's reason is web-only in two shared places.** The
+  Actions menu shows a disabled entry's reason only as a web `title`
+  (`components/compounds/actions-menu.tsx`), so on native every gated
+  entry, `Close chapter…` among them, shows disabled with no reason;
+  `ChapterCard` still hand-rolls the native reason line
+  (`components/chapters/chapter-card.tsx`) that `ReasonButton` now
+  covers. Raised in 5.10's PR 2 review.
+- **Listbox keyboard models are thin.** `ProviderInlinePicker`
+  (`components/compounds/provider-model-picker.tsx`) and the close
+  modal's end picker make every option its own tab stop, take no arrow
+  keys, and ignore Space (RN-Web activates only button-like roles on
+  Space). `SearchableOverlayList`'s roving model is the in-repo shape to
+  share. Raised in 5.10's PR 2 review.
+- **`SearchableOverlayList` section headers carry no group role.**
+  [`actions-menu.md → Keyboard & ARIA`](../ui/patterns/actions-menu.md#keyboard--aria)
+  asks for `role="group"` with an `aria-label` per section; the headers
+  render as plain text (`components/ui/searchable-overlay-list.tsx`).
+  Raised in 5.10's PR 2 review.
+- **`Dialog` has no busy focus handoff.** `AlertDialogContent` takes
+  `busy` so a control that disables while focused hands focus to a
+  stable container; `DialogContent` has no equivalent, so each dialog
+  that disables a focused button hand-rolls it, as the close modal now
+  does (`lessons-learned/rnweb-disabled-under-focus-blurs.md`). Raised
+  in 5.10's PR 2 review.
+- **Story viewport presets are copied per file.** `phone390` is defined
+  in each of `chapter-in-progress-card`, `review-window`, `chapter-card`
+  and `close-chapter-modal` stories; one preset in
+  `.storybook/preview.tsx` would hold it. Raised in 5.10's PR 2 review.
+- **`reader.retrySystemEntry` isn't scoped to entry rows**
+  (`e2e/locators/reader.ts`), unlike `dismissSystemEntry`, whose comment
+  notes a toast shares the name; a toast with a Retry action would trip
+  strict mode. Raised in 5.10's PR 2 review.
