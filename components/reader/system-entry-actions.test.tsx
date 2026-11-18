@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { OwedCloseRun } from '@/lib/actions'
+import { MANUAL_CLOSE_REFUSAL, type OwedCloseRun } from '@/lib/actions'
 import { describeContextWindow, describeReplyCutOff } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { entryMetadataSchema, type StorySettings, type SystemFailureMeta } from '@/lib/db'
@@ -1039,18 +1039,31 @@ describe('retryCloseEntry', () => {
       expect(h.rewriteClose).toHaveBeenCalledExactlyOnceWith(error)
     })
 
-    it.each([
-      ['a pick that can no longer end a chapter', 'invalid-end', "Chapter close can't start yet."],
-      ['a busy story', 'story-busy', 'Unavailable while generating.'],
-    ])(
-      'leaves the entry and says so when %s refused the restart',
-      async (_label, blockedBy, text) => {
-        const h = harness({ outcome: 'rejected', blockedBy }, false, PICK)
-        await retryCloseEntry(h.deps)
-        expect(h.calls).toEqual(['notify'])
-        expect(h.notify).toHaveBeenCalledWith(text)
-      },
-    )
+    // Closed into a chapter or deleted since, the pick leaves no close owed.
+    it('settles as nothing left to close when the pick can no longer end a chapter', async () => {
+      const h = harness(
+        { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.invalidEnd },
+        false,
+        PICK,
+      )
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['committed'])
+      expect(h.committed).toHaveBeenCalledExactlyOnceWith('nothing-owed')
+    })
+
+    it('leaves the entry and says so when a busy story refused the restart', async () => {
+      const h = harness({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy }, false, PICK)
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
+    })
+
+    it('keeps the refusal arm for an invalid end on an entry holding no pick', async () => {
+      const h = harness({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.invalidEnd })
+      await retryCloseEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith("Chapter close can't start yet.")
+    })
   })
 })
 

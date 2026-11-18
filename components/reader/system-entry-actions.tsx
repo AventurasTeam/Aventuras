@@ -438,11 +438,12 @@ export function closeResolvedEntry(
 /**
  * A close-failure entry's Retry: runs what the close owes, catch-up passes first, or for a failed
  * click's entry its pick through the manual start. Committed or nothing owed settles via
- * `committed`, told which; a failed close rewrites the entry, a failed catch-up pass or a held
- * branch as a memory entry; a pick's failed pre-flight rewrites it keeping the pick; a cancel, a
- * chain ending before the close, or any other refusal leaves it, the refusal told through
- * `notify`. A run's throw rewrites the entry as an `orchestrator` close failure; throws from
- * `held`, `committed` and the rewrites propagate.
+ * `committed`, told which, as does a pick that can no longer end a chapter; a failed close
+ * rewrites the entry, a failed catch-up pass or a held branch as a memory entry; a pick's failed
+ * pre-flight rewrites it keeping the pick; a cancel, a chain ending before the close, or any other
+ * refusal leaves it, the refusal told through `notify`. A run's throw rewrites the entry as an
+ * `orchestrator` close failure, keeping any pick; throws from `held`, `committed` and the rewrites
+ * propagate.
  */
 export async function retryCloseEntry(deps: {
   runClose: () => Promise<OwedCloseRun>
@@ -465,7 +466,12 @@ export async function retryCloseEntry(deps: {
     // A fresh restart validates the pick again, even when the throw came after the reserve.
     return deps.rewriteClose({ kind: 'orchestrator', detail }, deps.closePick)
   }
-  if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
+  // A pick closed into a chapter or deleted since leaves no close owed.
+  const stalePick =
+    deps.closePick != null &&
+    run.outcome === 'rejected' &&
+    run.blockedBy === MANUAL_CLOSE_REFUSAL.invalidEnd
+  if (run.outcome === 'nothing-owed' || stalePick) return deps.committed('nothing-owed')
   // Nothing started, so the pick is still the entry's alone; once a run reserves, it is the
   // branch's pendingClose, and a failed run's entry drops it (the owed close's Retry serves it).
   if (run.outcome === 'preflight-failed') return deps.rewriteClose(run.error, deps.closePick)
