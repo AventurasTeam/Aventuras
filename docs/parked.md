@@ -1519,6 +1519,24 @@ pre-fill needs exists (the context window check, 2026-10-27). Parked 2026-10-26;
 self-hosted embedders leaving the window unset and hitting the silent
 truncation it warns about.
 
+#### Two closes in one turn when auto-close is turned on late
+
+A region far past the threshold, as turning auto-close on late or
+lowering the threshold leaves one, owes a close at the next Send. Send
+runs it before the turn, ending at most one and a half thresholds in,
+and the region past that end can still owe one, so the turn's own chain
+can close again after the reply
+([`generation-pipeline.md → chainsTo on predecessor`](./generation-pipeline.md#chainsto-on-predecessor)).
+Phase 1's bounds mean to close such a region one chapter a turn
+([`memory/chapter-close.md → Phase 1`](./memory/chapter-close.md#phase-1--boundary-selection));
+two in one turn doubles the wait and the memory banner. Unmeasured:
+Slice 5.10's check didn't run, since `chapter-close-auto` seeds
+auto-close on (its
+[Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes),
+Monitor items, "Two closes in one turn"). **Revisit signal:** seeing it
+in play, or a test that turns auto-close on late. Parked 2026-11-18
+from the slice review (developer).
+
 ### Memory pipeline (parked)
 
 #### A failed store refresh after a swap hides its marker from the guard

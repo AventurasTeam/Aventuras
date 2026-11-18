@@ -847,13 +847,29 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
     desktop smoke.
   - Two closes in one turn: not run. Its signal needs auto-close
     turned on late, and `chapter-close-auto` seeds it on, so its one
-    `chapter-close` run can't show the case.
+    `chapter-close` run can't show the case. Parked (developer, slice
+    review):
+    [`parked.md → Two closes in one turn when auto-close is turned on late`](../../../../parked.md#two-closes-in-one-turn-when-auto-close-is-turned-on-late).
   - The native guard's round trip: not measured with an editor open.
     The Android smoke opened the modal after the Sheet dismissed, in
     about 3 s, with no editor.
   - The `Fix profile` route for `'tool-calling-off'`: the copy names the
     working remedies, as designed.
   - The grown-window measure: pending on the Fold.
+- **A confirmed pick that fails its check drops the owed one (developer
+  decision, slice review).** The click's failed pre-flight, or its
+  entry's `Retry` failing again, clears the branch's `pendingClose`, so
+  the next Send owes no close at an earlier failed close's pick (one the
+  threshold owes still runs) and the entry's `Retry` closes at the
+  confirmed pick. Canon:
+  [`chapter-close.md → Manual user-triggered close`](../../../../memory/chapter-close.md#manual-user-triggered-close)
+  and
+  [`generation-pipeline.md → Multi-run txState`](../../../../generation-pipeline.md#multi-run-txstate).
+- **A lone boundary candidate is the end, with no call (developer
+  decision, slice review).** Every usable answer would name it, so the
+  call could only fail the close; two or more still call. The boundary
+  measure's 34 candidates still cover the call. Canon:
+  [`chapter-close.md → Phase 1`](../../../../memory/chapter-close.md#phase-1--boundary-selection).
 
 ### Seven-task measure
 
