@@ -147,6 +147,7 @@ export default function ChapterTimelineRoute(): ReactElement {
       actions={
         <AppActionsMenu
           story={storyId != null ? { storyId, branchId, surface: 'chapter-timeline' } : undefined}
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guard}
           beforeLeaveStory={guardLeave}
         />

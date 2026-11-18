@@ -8,6 +8,8 @@ type AppActionsMenuPureProps = {
   contextual?: ActionGroup
   /** The in-story `GO TO` group (go-to-group.ts); omitted off-story. */
   goTo?: ActionGroup
+  /** The in-story `STORY TOOLS` group (story-tools-group.ts); omitted when it has no entry. */
+  storyTools?: ActionGroup
   /** Passed through to `ActionsMenu`; the route owns the focus state. */
   hotkeyEnabled?: boolean
   /** Passed through to `ActionsMenu`; the route owns which overlays block it. */
@@ -24,6 +26,7 @@ export function AppActionsMenuPure({
   onOpenDiagnosticsHub,
   contextual,
   goTo,
+  storyTools,
   hotkeyEnabled,
   blocked,
   onOpenChange,
@@ -43,11 +46,15 @@ export function AppActionsMenuPure({
         ]
       : [],
   }
+  // actions-menu.md → Anatomy: GO TO, STORY TOOLS, APP.
+  const coreGroups = [goTo, storyTools, appGroup].filter(
+    (group): group is ActionGroup => group != null,
+  )
   // Chrome bar trigger — lg to match the top-bar IconActions.
   return (
     <ActionsMenu
       contextual={contextual}
-      coreGroups={goTo != null ? [goTo, appGroup] : [appGroup]}
+      coreGroups={coreGroups}
       triggerLabel={t('chrome.actions')}
       triggerSize="lg"
       hotkeyEnabled={hotkeyEnabled}

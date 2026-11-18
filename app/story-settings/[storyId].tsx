@@ -351,6 +351,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               ? { storyId, branchId: currentBranchId, surface: 'story-settings' }
               : undefined
           }
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason: disabledReason }}
           beforeNavigate={session.requestLeave}
           beforeLeaveStory={guardLeave}
           blocked={session.pendingLeave || session.pendingConfirmation}

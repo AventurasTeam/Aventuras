@@ -1856,6 +1856,7 @@ export default function ReaderComposerRoute() {
         <AppActionsMenu
           contextual={contextualActions}
           story={storyId != null ? { storyId, branchId, surface: 'reader' } : undefined}
+          closeChapter={{ canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
           blocked={rollback != null || timeEdit != null || undoConfirmOpen}
