@@ -15,7 +15,10 @@ const ctx = { db, runInTransaction }
 
 const pendingPick = (branchId: string) => generationStore.getTxState().pendingClose.get(branchId)
 
-/** Starts the close the modal confirmed; speaks only for a refusal or a failed pre-flight. */
+/**
+ * Starts the close the modal confirmed; speaks for a refusal, a failed pre-flight, and a throw
+ * before any run reserved. A run's own surfaces speak for the rest.
+ */
 export async function runManualClose(branchId: string, endEntryId: string): Promise<void> {
   // The reserve writes a fresh record, so one that changed during the start is this click's.
   const pickBefore = pendingPick(branchId)
