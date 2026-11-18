@@ -11,6 +11,15 @@ import { copyPattern, t } from '../harness/i18n'
 const modal = (page: Page): Locator =>
   page.getByRole('dialog', { name: t('chapters:closeModal.title'), exact: true })
 
+// A modal over the page hides it from the accessibility tree, so absence under one is read with
+// hidden nodes.
+const mounted = (page: Page): Locator =>
+  page.getByRole('dialog', {
+    name: t('chapters:closeModal.title'),
+    exact: true,
+    includeHidden: true,
+  })
+
 const pickerTrigger = (page: Page): Locator => modal(page).getByTestId('close-chapter-picker')
 
 const panel = (page: Page): Locator => modal(page).getByTestId('close-chapter-panel')
@@ -21,6 +30,7 @@ const footButton = (page: Page, key: 'confirm' | 'cancel'): Locator =>
 
 export const closeChapter = {
   modal,
+  mounted,
   pickerTrigger,
 
   // Opens the panel, pages it from the top until the row renders in the virtualized window, picks
