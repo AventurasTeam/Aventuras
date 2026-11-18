@@ -368,20 +368,20 @@ first, since a Save after the close would write the draft over it.
 ```
 ┌──── Close current chapter? ──────────────────── × ─┐
 │                                                      │
-│  Closes the open chapter from entry 89 through       │
+│  Closes the open chapter from entry #89 through      │
 │  your chosen end entry. The AI generates title,      │
 │  summary, theme, and keywords; lore management       │
 │  runs as part of the close.                          │
 │                                                      │
 │  ── Start of chapter ──                              │
 │  ┌────────────────────────────────────────────────┐ │
-│  │ entry 89 [Chapter 4 ended here] "Aria sets…"   │ │
+│  │ entry #89 [Chapter 4 ended here] "Aria sets…"  │ │
 │  │                                Day 7 · 06:42   │ │
 │  └────────────────────────────────────────────────┘ │
 │                                                      │
 │  ── End of chapter ── (picker trigger, click to open)│
 │  ┌────────────────────────────────────────────────┐ │
-│  │ entry 102 [latest] "She stops at the threshol…"│ │
+│  │ entry #102 [latest] "She stops at the thresho…"│ │
 │  │                              Day 9 · 22:18  ▾  │ │
 │  └────────────────────────────────────────────────┘ │
 │                                                      │
@@ -589,7 +589,7 @@ close stands.
 When the story has no closed chapters yet (entries 1..N all in the
 open region), only the in-progress card renders. Header reads
 `Chapters · 0 closed + 1 in progress`. The card itself works
-normally — `Close chapter…` opens the modal with `Start: entry 1`
+normally — `Close chapter…` opens the modal with `Start: entry #1`
 fixed.
 
 ## Top-bar
@@ -650,9 +650,10 @@ end-entry picker in-flow inside it.
   push content past viewport height. No Modal-over-Sheet stacking
   introduced; the surface stack stays flat per
   [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking).
-  A trigger in a Sheet, the Actions menu's or the chapter popover's,
-  closes it first; the modal renders above the Sheet layer, so it opens
-  over that Sheet while it dismisses and never under it.
+  A trigger in a Sheet closes it first. The Actions menu's opens the
+  modal at once, which renders above the Sheet layer, so it opens over
+  that Sheet while it dismisses and never under it; the chapter
+  popover's opens it once its Sheet has dismissed.
 - **Re-run confirm** opened from the review window stacks over its
   Sheet on phone, the confirm-from-inside case
   [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking)

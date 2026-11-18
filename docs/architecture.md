@@ -1062,9 +1062,10 @@ close needs
 from the two catalogs found to publish it (checked 2026-11-17):
 OpenRouter's `supported_parameters`, true when the list holds `tools`
 and false when it doesn't, then Mistral's boolean
-`capabilities.function_calling`. OpenAI, Google, Anthropic (whose every
-model takes tools), vLLM, llama.cpp, LM Studio, Ollama and NVIDIA NIM
-publish nothing about tools on `/models`, and NanoGPT only under
+`capabilities.function_calling`. OpenAI, Anthropic (whose every model
+takes tools), llama.cpp and Ollama publish nothing about tools on
+`/models`, Google, vLLM, LM Studio and NVIDIA NIM by their docs' silence
+rather than a published schema, and NanoGPT only under
 `?detailed=true`, which the fetch doesn't send, so their models stay
 unknown, which a close runs on. As with the window, a published value
 replaces the stored one, `false` included, and a fetch that publishes

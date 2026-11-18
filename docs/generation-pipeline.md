@@ -2131,7 +2131,7 @@ type ReplyCutOffFailure = {
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
-  maxOutput: number | null // the profile's or the override's, or a tool step's as sent; null when none (see the cause)
+  maxOutput: number | null // the profile's or the override's, or a tool step's or structured call's default as sent; null when none (see the cause)
   window: number | null // the model's known window; null when unknown
   providerId: string
   modelId: string
@@ -2274,7 +2274,9 @@ only the log reads it. A structured or narrative call keeps the
 its copy names that figure, so with thinking on a cut at the
 window can read as `max-output`. A structured call with a default of
 its own, the close's boundary call sending 16,384 when its settings set
-none, reports that default, the figure its copy names. Then `window`
+none, reports that default; a boundary cut-off has no copy, since it
+always ends the chapter on the latest candidate, so only the log reads
+it. Then `window`
 when the model's window
 is known and the prompt plus the output tokens reach it, reading the
 prompt from the provider's input count and from the estimate only when
