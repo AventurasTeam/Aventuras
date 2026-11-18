@@ -2,7 +2,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import type { CallRetryError, generateStructured } from '@/lib/ai'
-import type { CloseCandidate } from '@/lib/chapters'
 import {
   STORY_SETTINGS_DEFAULTS,
   type OpenRegionRow,
@@ -24,10 +23,12 @@ import {
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { chapterBoundarySchema } from './chapter-boundary-schema'
 import {
+  hasCandidates,
   readBoundaryInputs,
   requestChapterBoundary,
   type BoundaryCallInputs,
   type BoundaryCallOutcome,
+  type BoundaryCandidates,
 } from './chapter-close-boundary-call'
 import type { PhaseContext, PhaseEmittedEvent } from '../types'
 
@@ -78,7 +79,7 @@ const SERIES: readonly OpenRegionRow[] = [
   { id: 'e11', kind: 'ai_reply', position: 11, tokens: 80 },
 ]
 
-const CANDIDATES: readonly CloseCandidate<OpenRegionRow>[] = [
+const CANDIDATES: BoundaryCandidates = [
   { ...SERIES[2]!, tokensThrough: 240 },
   { ...SERIES[4]!, tokensThrough: 400 },
   { ...SERIES[6]!, tokensThrough: 580 },
@@ -279,6 +280,22 @@ describe('readBoundaryInputs', () => {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
     })
+  })
+})
+
+describe('hasCandidates', () => {
+  it('holds for one candidate or more, and not for none', () => {
+    expect(hasCandidates([])).toBe(false)
+    expect(hasCandidates([CANDIDATES[0]])).toBe(true)
+  })
+})
+
+describe('BoundaryCandidates (checked by tsc)', () => {
+  it('takes no empty list into the call', () => {
+    const call = () =>
+      // @ts-expect-error with no candidate, an unusable reply has no latest one to end on
+      requestChapterBoundary(phaseCtx(), [], inputs())
+    expect(call).toBeTypeOf('function')
   })
 })
 

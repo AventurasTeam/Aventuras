@@ -3,7 +3,11 @@ import { openRegionSeries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
-import { readBoundaryInputs, requestChapterBoundary } from './chapter-close-boundary-call'
+import {
+  hasCandidates,
+  readBoundaryInputs,
+  requestChapterBoundary,
+} from './chapter-close-boundary-call'
 import { setCloseRange } from './close-intermediates'
 import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -54,7 +58,7 @@ export async function* closeBoundaryPhase(
   const inputs = readBoundaryInputs(ctx)
   if ('status' in inputs) return inputs
   const candidates = closeCandidates(series, inputs.threshold)
-  if (candidates.length === 0) {
+  if (!hasCandidates(candidates)) {
     // closeOwed owes no close to a region with no reply (C10), so this refusal is a backstop.
     const end = fallbackChapterEnd(series)
     if (!end)
