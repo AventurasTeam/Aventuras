@@ -565,7 +565,8 @@ None open: Implementation notes record each answer.
   delete: `Flag` is the faction kind's glyph, and one glyph keeps one
   meaning.
 - **Boundary's output bound and fallback (developer decision).** The
-  boundary call sends 8,000 max output when the resolved settings, the
+  boundary call sends 16,384 max output (8,000 at planning, raised in
+  the 2026-11-18 decision below) when the resolved settings, the
   story override's own or else the profile's, set none, and a cut-off
   reports what was sent. A `reply-cut-off` is an unusable reply, like a
   parse failure after the retry, and an unusable reply ends the chapter
@@ -602,7 +603,7 @@ categories` and its `CapabilityHint` union.
 - **The proofs' bars (developer decision).** The probe gained a boundary
   arm, `PROBE_BOUNDARY=1`, whose bar is 8 valid picks of 10 with none
   cut off. The seven-task bar is by kind: every task, no failed close
-  and no unrecovered 8k cut-off; Identity, Threads, Lore and Upkeep land
+  and no unrecovered cut-off at the step output default; Identity, Threads, Lore and Upkeep land
   a write when they had a start; Happenings reads `no-start` on MiniLM;
   Lifecycle and Awareness are reported, with no write required; 8 of 10
   runs pass, and 5.5b's cap and merge coverage clauses stand. A task had
@@ -659,6 +660,34 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   pick. Canon's `Fix profile · Retry · Dismiss` row stands;
   `reader-composer.md → Transient pipeline failures` and
   `data-model.md → Entry metadata shape` say so.
+- **The close's budgets are raised, then both probes rerun (developer
+  decision, 2026-11-18).** After the first probe run missed both bars:
+  "Raise the bugets, the dev model has relatively consistently
+  demostrated 8k response budget is not enough for it even when it
+  doesnt loop. This is mostly inherent to the model itself when given a
+  substantial amount of work." Three budgets rise. The step output
+  default `TOOL_STEP_MAX_OUTPUT_DEFAULT`, 8,000 to 16,384: the largest
+  step reply that finished was 7,710 tokens, 8 of 350 steps cut off at
+  8,000 and each one retry finished in 522 to 7,710, and the largest
+  prompt any step sent was 42,754 tokens, so 42,754 plus 16,384 is 59,138,
+  inside the dev model's 65,536-token window, where a larger cap lets a
+  long reply run into the window and stop as `window`. 16,384 is also the
+  most OpenAI's 4o models accept, and openai-compatible sends
+  `max_tokens` unchanged, so a model with a lower output cap needs its
+  profile's max output set (not verified live against a provider). The
+  boundary default `BOUNDARY_MAX_OUTPUT_DEFAULT`, 8,000 to 16,384, for the
+  same provider cap: picks spent 4,237 to 5,608 output tokens on a
+  2,492-token prompt, and 3 of 10 ran past 8,000. The per-task step
+  budget `CLOSE_TASK_STEP_BUDGET`, 24 to 64: Upkeep's prompt listed 45 to
+  52 rows, 36 with no keywords, and the runs that sent one call per step
+  spent 8 to 15 steps on `search_world` first, so writing each bare row
+  once plus a few conditions ends near 57 steps. The cost: a task that
+  loops now runs up to 64 steps per part, as run 7's Upkeep did on an
+  invented `update_item` id until its 24th. 5.5b's bar is unchanged, so a
+  stopped task still misses; its output-bound clause reads the step
+  default and judges at 16,384. Canon says so in `chapter-close.md`,
+  `generation-pipeline.md`, `data-model.md`, `testing.md` and
+  `followups.md`.
 - **A stale pick settles on Retry as nothing left to close (developer
   decision, 2026-11-18).** A failed click's entry whose pick can no
   longer end a chapter, closed into one or deleted, settles on Retry as
@@ -748,7 +777,8 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
 
 ### Seven-task measure
 
-Bar: the proofs' bar above, set at planning.
+Bar: the proofs' bar above, set at planning. The table below is the
+first run, with the 8,000-token step output and the 24-step budget.
 `PROBE_RUNS=10 PROBE_OVERLAY=1 pnpm probe:close` at `5f49358e1` on
 `Gemma4-26B-A4B-QAT-MTP` (window 65,536 tokens, read from `/v1/models`),
 on the dataset seed with the test overlay.
@@ -791,8 +821,11 @@ The bar code fails a task with a recorded stop even after landed writes.
 Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
 The merge decision on this miss is the developer's, pending at writing.
 
+Rerun on the raised budgets: pending.
+
 ### Boundary measure
 
+The table below is the first run, with the 8,000-token default.
 `PROBE_RUNS=10 PROBE_BOUNDARY=1 pnpm probe:close` at `5f49358e1` on
 `Gemma4-26B-A4B-QAT-MTP`, over the dataset chapter's region at the
 story's 24,000 threshold: 34 candidates, a prompt of 2,492 tokens.
@@ -815,6 +848,8 @@ Run 2's reasoning reads "23,907 tokens so far; a chapter runs about
 24,000" as the chapter ending now and takes the last candidate; run 5
 spent its 8,000 deliberating the end-on-the-turn-before rule. The merge
 decision on this miss is the developer's, pending at writing.
+
+Rerun on the raised budgets: pending.
 
 ### Reversal measure
 

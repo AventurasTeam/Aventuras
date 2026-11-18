@@ -765,12 +765,12 @@ close that failed misses every task. A task with no start, no model
 step, call or stop of its own, holds as `no-start`: Happenings when the
 range embed finds no cluster, as on MiniLM. A task that started holds
 when it ended on a reply with no tool call and no budget, window or
-cut-off stop, and no step's reply reached the 8k output bound; Identity,
+cut-off stop, and no step's reply reached the step output default (16,384 tokens); Identity,
 Threads, Lore and Upkeep must also land at least one write, while
 Happenings, Lifecycle and Awareness can be right writing nothing, so
 their calls are reported, not required. A step cut off at that bound, or
 stopped by a filter, whose one retry succeeds still holds; a task whose
-retry is cut off too is stopped, and misses. The 8k clause judges each
+retry is cut off too is stopped, and misses. The output-bound clause judges each
 step by its final attempt, so a cut attempt's output never counts toward
 it. It also prints each run's cut-offs (task, step and output tokens;
 `cutOffs` in each tally of `bar.json`), each step's

@@ -1799,7 +1799,7 @@ type ModelOverride = { providerId: string; modelId: string } & ModelSettings
 ```
 
 An unset field means the same on both owners: the call's own fallback
-applies (a close step's 8k output cap, a pass's or a close's ten-minute
+applies (a close step's 16k output cap, a pass's or a close's ten-minute
 timeout, otherwise the provider's default). The fields, controls and
 per-slot rules are
 [`patterns/model-settings.md`](./ui/patterns/model-settings.md).

@@ -239,9 +239,11 @@ the exception and skips whole ([3e](#3e--happenings-consolidation)).
 
 ### When a task stops
 
-A task's budget is 24 steps per part, tuned in play. Each step's output
+A task's budget is 64 steps per part, raised from 24 after the dev model
+went one call per step through Upkeep's 40 rows. Each step's output
 is bounded by the max output of the profile or the story's override,
-else 8k tokens, since a model
+else 16,384 tokens, raised from 8,000 after 8 of 350 steps of a seven-task
+measure were cut there; a model
 can reason through its whole limit and never reply. Each call is bounded
 as a pass's is
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
@@ -400,8 +402,9 @@ chapter would hold at most one and a half thresholds. That loses
 nothing and keeps the upper bound on a region that grew past it, as one
 does when auto-close is turned on late or the threshold lowered; in the
 usual case, a region that just crossed the threshold, it is the reply
-the no-candidate fallback would take. The call sends an 8,000-token max
-output when its settings set none, so a reasoning spiral costs one
+the no-candidate fallback would take. The call sends a 16,384-token max
+output when its settings set none (raised from 8,000, which cut off 3
+of 10 picks on the dev model), so a reasoning spiral costs one
 bounded reply
 ([`generation-pipeline.md → Cut-off replies`](../generation-pipeline.md#cut-off-replies)).
 A provider failure is a failed call. (Prompts aren't generated on the

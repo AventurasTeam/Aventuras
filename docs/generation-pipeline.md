@@ -2273,7 +2273,7 @@ only the log reads it. A structured or narrative call keeps the
 `maxOutput` its settings set, the profile's or the override's, since
 its copy names that figure, so with thinking on a cut at the
 window can read as `max-output`. A structured call with a default of
-its own, the close's boundary call sending 8,000 when its settings set
+its own, the close's boundary call sending 16,384 when its settings set
 none, reports that default, the figure its copy names. Then `window`
 when the model's window
 is known and the prompt plus the output tokens reach it, reading the

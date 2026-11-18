@@ -389,9 +389,9 @@ breakdown under [UX](#ux).
   classifier's were through its probe. It also measures what the design
   left open:
   - whether the agent keeps to the rules at full size, and how many
-    steps a task takes against its budget of 24;
+    steps a task takes against its budget of 64;
   - reasoning spirals: one prompt shape sent the dev model through its
-    whole output limit in 7 of 14 runs, with no known cause, so the 8k
+    whole output limit in 7 of 14 runs, with no known cause, so the 16k
     bound and the prompts both need a measure;
   - a rule refined in a later part, which landed as a second lore row in
     3 of 10 runs that dropped reasoning, and needs repeating with it;
