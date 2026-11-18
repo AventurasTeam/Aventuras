@@ -541,6 +541,10 @@ breakdown under [UX](#ux).
     legitimately, so measure before changing anything. It refines
     the capability-floor entry's third bullet above.
 
+  The record is
+  [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
+  Raised by Slice 5.10's measure, 2026-11-18.
+
 - **Boundary mis-picks at scene breaks.** Boundary shows each candidate
   by its first and last sentences only, and Slice 5.10's runs on the
   dev model missed a scene break two ways. On the shipped prompt, two of
@@ -554,12 +558,10 @@ breakdown under [UX](#ux).
   inside a turn. The lever to try is candidate display: more of each
   turn, or a marked mid-turn break. The evidence so far is one chapter
   of one novel. The record is
-  [Slice 5.10's boundary measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#boundary-measure).
+  [Slice 5.10's boundary measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#boundary-measure),
+  and the guard's run is in its
+  [Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes).
   Raised by Slice 5.10's measure, 2026-11-18 (developer, "Q12: C").
-
-  The record is
-  [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
-  Raised by Slice 5.10's measure, 2026-11-18.
 
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the
