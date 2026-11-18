@@ -933,7 +933,8 @@ async function main(): Promise<void> {
   registerAllDomains()
   configureDeltaActionPort(realDeltaActionPort())
   ensureChapterClosePipelineRegistered()
-  __setCloseAgentSlots(STAND_IN ? standInSlots() : measuredSlots())
+  // A boundary run reads no slots; measuredSlots throws when the shipped ones hold no range embed.
+  if (!BOUNDARY) __setCloseAgentSlots(STAND_IN ? standInSlots() : measuredSlots())
   // The logger mirrors each debug entry to console.debug; the buffer the probe drains still fills.
   console.debug = () => {}
   enableDiagnosticsGate()
