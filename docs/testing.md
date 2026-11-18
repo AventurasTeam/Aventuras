@@ -753,32 +753,57 @@ and before the classifier check. `PROBE_BRANCH_ID` then defaults to the
 dataset branch, and another branch is refused, as is `PROBE_STAND_IN=1`
 beside it, since the stand-in has no Threads task. Every run, overlay or
 not, turns diagnostics and their debug level on, and unless it is a
-stand-in run prints whether Identity and Threads held: the close
-completed, the task ended on a reply with no tool call and no budget,
-window or cut-off stop, it landed at least one write, and no step's
-reply reached the 8k output bound. A step cut off at that bound, or
+stand-in run prints whether each of the close's seven tasks held. A
+close that failed misses every task. A task with no start, no model
+step, call or stop of its own, holds as `no-start`: Happenings when the
+range embed finds no cluster, as on MiniLM. A task that started holds
+when it ended on a reply with no tool call and no budget, window or
+cut-off stop, and no step's reply reached the 8k output bound; Identity,
+Threads, Lore and Upkeep must also land at least one write, while
+Happenings, Lifecycle and Awareness can be right writing nothing, so
+their calls are reported, not required. A step cut off at that bound, or
 stopped by a filter, whose one retry succeeds still holds; a task whose
 retry is cut off too is stopped, and misses. The 8k clause judges each
 step by its final attempt, so a cut attempt's output never counts toward
 it. It also prints each run's cut-offs (task, step and output tokens;
 `cutOffs` in each tally of `bar.json`), each step's
 `provider.input_ratio`, a cut attempt's output tokens beside its retry,
-the largest value the report recorded, measured before its bound, and
-the report's size in bytes. The overlay adds the coverage counts:
-Identity calls whose list on an overlay row at or over its cap reached
-the cap check, landed or refused, and `merge_threads` calls, each with
-its hits. After the runs it prints the bar: met when there are 8 runs of
-10 in which both tasks held and each coverage count came up in 3 runs
-of 10, both scaled to `PROBE_RUNS`; inconclusive when enough runs held
-but a count fell short; missed otherwise. It writes the verdict, each
-run's tally and the overlay's capped lists that coverage counted by to
-`bar.json` in `PROBE_OUT`, and exits non-zero unless the bar is met.
+the run's input and output tokens over its calls, the largest value the
+report recorded, measured before its bound, and the report's size in
+bytes. The overlay adds the coverage counts: Identity calls whose list
+on an overlay row at or over its cap reached the cap check, landed or
+refused, and `merge_threads` calls, each with its hits. After the runs
+it prints the bar: met when there are 8 runs of 10 in which every task
+held and each coverage count came up in 3 runs of 10, both scaled to
+`PROBE_RUNS`; inconclusive when enough runs held but a count fell short;
+missed otherwise. It writes the verdict, each run's tally and the
+overlay's capped lists that coverage counted by to `bar.json` in
+`PROBE_OUT`, and exits non-zero unless the bar is met.
 `PROBE_REJUDGE=<probe-out dir>` judges a saved overlay measure by the
 bar as it stands, rebuilding each run's tally from its saved steps and
 report with no model call. Coverage counts by the capped lists
 `bar.json` recorded, or by today's overlay where it records none, and
 the probe prints which. It needs the directory's `bar.json`, writes
 `bar-rejudged.json` beside the runs, and never overwrites one.
+
+`PROBE_BOUNDARY=1` runs the close's boundary call alone
+([`memory/chapter-close.md → Phase 1`](./memory/chapter-close.md#phase-1--boundary-selection)),
+`PROBE_RUNS` times, each on a fresh copy of the dataset branch with the
+overlay applied, which reopens the seed's chapter: the call over the
+open region's candidates at the story's threshold, as the phase makes
+it, writing nothing and loading no embedder. `PROBE_OVERLAY=1`,
+`PROBE_STAND_IN=1` and `PROBE_END_ENTRY` are refused beside it, as is
+another branch. `PROBE_OUT` saves each call's request and response, a
+same-prompt retry's included, as `boundary-c<n>.json` in the run's
+folder. Each run prints its outcome (`picked`; `parse` or
+`reply-cut-off`, an unusable reply that fell back to the latest
+candidate; `failed`; `aborted`), the entry it ends on beside the latest
+candidate, each with its position and the tokens through it, its
+retries, its largest reply's output tokens, its wall time and its
+tokens. After the runs it prints the verdict: held when 8 runs of 10
+picked a candidate and none was cut off, scaled to `PROBE_RUNS`. It
+writes the verdict and each attempt to `boundary.json` in `PROBE_OUT`,
+and exits non-zero unless held.
 
 ## Selector strategy
 
