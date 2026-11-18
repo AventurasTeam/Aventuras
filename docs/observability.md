@@ -292,8 +292,10 @@ convention, and the expectation that subsystems route through
   `endEntryId`, its `turn` handle, the model's one-sentence `rationale`,
   which nothing stores, and the count of `candidates` it was offered),
   `close_boundary_fallback` (warn: a boundary reply that was unusable, a
-  parse failure after the retry or a cut-off, with its `tier` and the
-  `endEntryId` of the latest candidate the chapter ends on instead),
+  parse failure after the retry or a cut-off, with its `tier`, the
+  `endEntryId` of the latest candidate the chapter ends on instead, and
+  the failure's `detail`, which tells a content-filter stop or a reply
+  naming no candidate from a malformed one),
   `close_reason_unkeyed` (warn: a ledger reason that isn't a
   `CLOSE_REASON_KEYS` member, recorded as `other`, with the raw
   `reason`, its call's `task` and `tool`, under the close's `actionId`),
