@@ -9,6 +9,7 @@ import {
   __resetRegistry,
   CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
+  definePipeline,
   ensurePerTurnPipelineRegistered,
   isClassifierHeld,
   PER_TURN_KIND,
@@ -16,6 +17,7 @@ import {
   startPipeline,
   type ChainEnd,
   type ConfigResolverError,
+  type PhaseResult,
   type PipelineEvent,
   type PreflightFailedStart,
   type RejectedStart,
@@ -40,6 +42,7 @@ import {
 } from '@/lib/stores'
 
 import { startCloseChain } from './close-chain'
+import { runPickedClose } from './picked-close'
 import { MANUAL_CLOSE_REFUSAL, startManualClose } from './start-manual-close'
 import { writeSystemEntry } from '../story-entries/system-entry'
 import {
@@ -574,14 +577,14 @@ describe('startManualClose pre-flight', () => {
     expect(await f.ctx.db.select().from(pipelineRuns)).toEqual([])
   })
 
-  it('leaves a pick an earlier close left as it stood', async () => {
+  it('drops a pick an earlier close left: the confirmed pick replaces it, though nothing starts', async () => {
     generationStore.setPendingClose(f.branchId, { endEntryId: f.replyIds[0]! })
     await flagToolCalling('lore-model', false)
 
     expect((await startManualClose(f.branchId, lastReply(), f.ctx)).outcome).toBe(
       'preflight-failed',
     )
-    expect(pickOn()).toEqual({ endEntryId: f.replyIds[0] })
+    expect(pickOn()).toBeUndefined()
   })
 
   it.each([
@@ -657,6 +660,98 @@ describe('startManualClose pre-flight', () => {
       await startManualClose(f.branchId, action.id, f.ctx),
       MANUAL_CLOSE_REFUSAL.invalidEnd,
     )
+  })
+})
+
+// chapter-close.md → Manual user-triggered close: a confirmed pick replaces the owed one.
+describe('a failed check after a failed close', () => {
+  const SENT = 'I wait at the milestone.'
+
+  // A turn that writes nothing past its user_action, so only Send's owed work can close.
+  function standInTurn(): void {
+    definePipeline({
+      kind: PER_TURN_KIND,
+      phases: [
+        {
+          name: 'p',
+          run: async function* (): AsyncGenerator<never, PhaseResult> {
+            return { status: 'completed' }
+          },
+        },
+      ],
+      concurrencyPolicy: { blockedBy: [PER_TURN_KIND] },
+      affordance: 'pill-only',
+      gateBehavior: 'hard-gate',
+    })
+  }
+
+  // A close at `owed` starts and fails, then a confirm at `confirmed` fails its check; the
+  // setting is fixed after.
+  async function failACloseThenACheck(): Promise<{ owed: string; confirmed: string }> {
+    const owed = f.replyIds[1]!
+    const confirmed = f.replyIds[3]!
+    vi.mocked(generateStructured).mockResolvedValueOnce({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'network', detail: 'connect ECONNREFUSED' },
+      recoverable: [],
+    })
+    expect((await startManualClose(f.branchId, owed, f.ctx)).outcome).toBe('failed')
+    expect(pickOn()).toEqual({ endEntryId: owed })
+    await flagToolCalling('lore-model', false)
+    expect((await startManualClose(f.branchId, confirmed, f.ctx)).outcome).toBe('preflight-failed')
+    await flagToolCalling('lore-model', true)
+    return { owed, confirmed }
+  }
+
+  const send = () =>
+    within(
+      submitTurn(
+        { storyId: f.storyId, branchId: f.branchId },
+        { content: SENT, composerMode: 'free' },
+        f.ctx,
+      ),
+      'the Send',
+    )
+
+  const chapterEnds = async () => (await f.ctx.db.select().from(chapters)).map((r) => r.endEntryId)
+
+  it('runs no close at the replaced pick on Send; the entry’s Retry closes at the confirmed one', async () => {
+    standInTurn()
+    const { confirmed } = await failACloseThenACheck()
+    const completes = recordCompletes()
+
+    expect((await send()).outcome).toBe('completed')
+    expect(completes.map((e) => e.kind)).toEqual([PER_TURN_KIND])
+    expect(await chapterEnds()).toEqual([])
+
+    // As a pass over the turn leaves it, so the Retry starts the close itself.
+    const [sent] = await f.ctx.db.select().from(storyEntries).where(eq(storyEntries.content, SENT))
+    await setClassifierStatus(f, { state: 'idle', processedThrough: sent!.position })
+    const retried = await within(runPickedClose(f.branchId, confirmed, f.ctx), 'the Retry')
+
+    expect(retried).toMatchObject({
+      outcome: 'ran',
+      end: { kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } },
+    })
+    expect(await chapterEnds()).toEqual([confirmed])
+  })
+
+  it('still runs a close the threshold owes on Send, at its own end', async () => {
+    standInTurn()
+    const { owed } = await failACloseThenACheck()
+    // Every reply is past one and a half thresholds: no candidate, so the latest before the head.
+    const open = currentStoryStore.getCurrentStory()!
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
+    })
+    const completes = recordCompletes()
+
+    expect((await send()).outcome).toBe('completed')
+
+    expect(completes.map((e) => e.kind)).toEqual([CHAPTER_CLOSE_KIND, PER_TURN_KIND])
+    expect(await chapterEnds()).toEqual([f.replyIds.at(-2)])
+    expect(f.replyIds.at(-2)).not.toBe(owed)
   })
 })
 

@@ -630,7 +630,10 @@ the threshold owes is derived fresh by `closeOwed` each time, so a
 rollback below the threshold leaves nothing stale, and no record means
 boundary selection. The manual start writes the pick as its run
 reserves, so a refused start leaves the pick before it standing, and a
-second pick overwrites the first. A close's commit clears it; a
+second pick overwrites the first. A start whose pre-flight fails drops
+it, since the confirmed pick replaces it though nothing starts
+([`memory/chapter-close.md → Manual user-triggered close`](./memory/chapter-close.md#manual-user-triggered-close)).
+A close's commit clears it; a
 cancelled or failed close leaves it owed. `boundary` drops a pick whose
 entry is no longer an open-region reply, failing the close, and a
 reversal that removes the entry, or closes it into a chapter, drops it

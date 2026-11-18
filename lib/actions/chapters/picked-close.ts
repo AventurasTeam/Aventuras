@@ -31,8 +31,13 @@ export async function startPickedCloseChain(
       const row = (await openRegionSeries(branchId, ctx)).find((r) => r.id === endEntryId)
       return row && canEndChapter(row) ? null : refused(MANUAL_CLOSE_REFUSAL.invalidEnd)
     },
-    preflight: (open) =>
-      runPreflight(getPipeline(CHAPTER_CLOSE_KIND), preflightSnapshot(open.settings)),
+    preflight: (open) => {
+      const failed = runPreflight(getPipeline(CHAPTER_CLOSE_KIND), preflightSnapshot(open.settings))
+      // The confirmed pick replaces the owed one though nothing starts; dropped before any await,
+      // so no other start's reserve lands in between.
+      if (failed) generationStore.clearPendingClose(branchId)
+      return failed
+    },
     // Fires only on reserve: a start the orchestrator rejects leaves the record as it stood.
     onReserved: () => generationStore.setPendingClose(branchId, { endEntryId }),
   })

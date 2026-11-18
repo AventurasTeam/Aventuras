@@ -1110,8 +1110,10 @@ the boundary. A failure starts nothing and owes nothing: it raises the
 system entry with a toast beside it, since the confirm can come from a
 screen where the entry is out of view
 ([`generation-pipeline.md → Config pre-flight validation`](../generation-pipeline.md#config-pre-flight-validation)).
-The entry keeps the confirmed end entry, so its `Retry` re-runs that
-close, pre-flighting again.
+It does drop a pick an earlier failed close left owed, since the
+confirmed end replaces it: the next Send owes no manual close, though
+one the threshold owes still runs. The entry keeps the confirmed end
+entry, so its `Retry` re-runs that close, pre-flighting again.
 
 When `chapterAutoClose = false` AND the threshold is crossed, the UI
 shows `Ready to close`, a text label in the reader popover's progress
