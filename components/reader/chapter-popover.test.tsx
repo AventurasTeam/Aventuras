@@ -11,11 +11,23 @@ import { ChapterPopover, type ChapterPopoverProps } from './chapter-popover'
 const tier = vi.hoisted(() => ({ value: 'phone' as 'phone' | 'tablet' | 'desktop' }))
 vi.mock('@/hooks/use-tier', () => ({ useTier: () => tier.value }))
 
-// The unit project can't load the overlays' RN-Web and gorhom chrome; the Sheet's onDismissed is
-// the seam, captured from each render.
-const sheet = vi.hoisted(() => ({ onDismissed: null as (() => void) | null }))
+// The unit project can't load the overlays' RN-Web and gorhom chrome; the Sheet's onOpenChange and
+// onDismissed are the seam, captured from each render.
+const sheet = vi.hoisted(() => ({
+  onOpenChange: null as ((open: boolean) => void) | null,
+  onDismissed: null as (() => void) | null,
+}))
 vi.mock('@/components/ui/sheet', () => ({
-  Sheet: ({ children }: { children: ReactNode }) => children,
+  Sheet: ({
+    children,
+    onOpenChange,
+  }: {
+    children: ReactNode
+    onOpenChange?: (open: boolean) => void
+  }) => {
+    sheet.onOpenChange = onOpenChange ?? null
+    return children
+  },
   SheetTrigger: () => null,
   SheetContent: ({ children, onDismissed }: { children: ReactNode; onDismissed?: () => void }) => {
     sheet.onDismissed = onDismissed ?? null
@@ -102,6 +114,7 @@ function pressCloseChapter(): void {
 
 beforeEach(() => {
   tier.value = 'phone'
+  sheet.onOpenChange = null
   sheet.onDismissed = null
   onCloseChapter.mockReset()
 })
@@ -131,6 +144,15 @@ describe('ChapterPopover — a close requested from the phone Sheet', () => {
     tier.value = 'desktop'
     rerender(popover())
     expect(onCloseChapter).toHaveBeenCalledOnce()
+  })
+
+  it('runs nothing on a tier change once the Sheet reopened over the pending close', () => {
+    const { rerender } = render(popover())
+    pressCloseChapter()
+    act(() => sheet.onOpenChange?.(true))
+    tier.value = 'desktop'
+    rerender(popover())
+    expect(onCloseChapter).not.toHaveBeenCalled()
   })
 
   it('runs nothing on a tier change with no close pending', () => {
