@@ -7,7 +7,7 @@ import { CLOSE_REASON } from '@/lib/pipeline/definitions/close-agent/verdict'
 
 // The measure's bar (testing.md → Real-provider checks): every task is judged, and these four must
 // land a write once they start. Happenings, Lifecycle and Awareness can be right writing nothing.
-export const WRITE_EXPECTED_TASKS = [
+const WRITE_EXPECTED_TASKS = [
   'identity',
   'threads',
   'lore',
