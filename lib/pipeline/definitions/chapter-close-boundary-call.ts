@@ -38,6 +38,17 @@ export type BoundaryCallOutcome =
 
 type UnusableTier = Extract<BoundaryCallOutcome, { status: 'unusable' }>['tier']
 
+type BoundaryCandidate = CloseCandidate<OpenRegionRow>
+
+/** Phase 1's candidates, oldest first, at least one: an unusable reply ends on the last. */
+export type BoundaryCandidates = readonly [BoundaryCandidate, ...BoundaryCandidate[]]
+
+export function hasCandidates(
+  candidates: readonly BoundaryCandidate[],
+): candidates is BoundaryCandidates {
+  return candidates.length > 0
+}
+
 /**
  * Synchronous: the threshold, the branch's active threads and lore-mgmt's config, while the check
  * holds. An open publishing during a later await replaces the stores with another branch's rows.
@@ -89,20 +100,21 @@ function unusableTier(cause: StructuredCallFailure): UnusableTier | null {
 function fallBack(
   ctx: BoundaryCallContext,
   tier: UnusableTier,
-  latest: CloseCandidate<OpenRegionRow>,
+  latest: BoundaryCandidate,
+  detail: string,
 ): BoundaryCallOutcome {
-  ctx.log.warn('memory.close_boundary_fallback', { tier, endEntryId: latest.id })
+  ctx.log.warn('memory.close_boundary_fallback', { tier, endEntryId: latest.id, detail })
   return { status: 'unusable', endEntryId: latest.id, tier }
 }
 
 /**
- * chapter-close.md → Phase 1's call over `candidates` (non-empty, oldest first): the model names a
- * candidate by its turn, and an unusable reply ends on the latest candidate, which keeps the
- * chapter under one and a half thresholds.
+ * chapter-close.md → Phase 1's call over `candidates`: the model names a candidate by its turn, and
+ * an unusable reply ends on the latest candidate, which keeps the chapter to at most one and a half
+ * thresholds.
  */
 export async function* requestChapterBoundary(
   ctx: BoundaryCallContext,
-  candidates: readonly CloseCandidate<OpenRegionRow>[],
+  candidates: BoundaryCandidates,
   inputs: BoundaryCallInputs,
 ): AsyncGenerator<PhaseEmittedEvent, BoundaryCallOutcome> {
   const prose = await candidateProse(
@@ -110,7 +122,7 @@ export async function* requestChapterBoundary(
     candidates.map((candidate) => candidate.id),
   )
   // Handles are this call's own: no chapter range exists yet to share them with.
-  const byTurn = new Map<string, CloseCandidate<OpenRegionRow>>()
+  const byTurn = new Map<string, BoundaryCandidate>()
   const boundaryCandidates = candidates.map((candidate, index) => {
     const turn = `t${index + 1}`
     byTurn.set(turn, candidate)
@@ -134,15 +146,18 @@ export async function* requestChapterBoundary(
     options: { actionId: ctx.actionId, defaultMaxOutput: BOUNDARY_MAX_OUTPUT_DEFAULT },
   })
   if (call.status === 'aborted' || ctx.abortSignal.aborted) return { status: 'aborted' }
-  const latest = candidates[candidates.length - 1]!
+  const latest = candidates[candidates.length - 1]
   if (call.status === 'failed') {
     const tier = unusableTier(call.cause)
-    return tier === null ? { status: 'failed', error: call.error } : fallBack(ctx, tier, latest)
+    return tier === null
+      ? { status: 'failed', error: call.error }
+      : fallBack(ctx, tier, latest, call.lastError)
   }
   const { end_entry_id: turn, rationale } = call.value
   const picked = byTurn.get(turn)
   // The refined schema refuses a handle no candidate holds; this guards a call it didn't parse.
-  if (picked == null) return fallBack(ctx, 'parse', latest)
+  if (picked == null)
+    return fallBack(ctx, 'parse', latest, `end_entry_id ${JSON.stringify(turn)} names no candidate`)
   ctx.log.debug('memory.close_boundary_picked', {
     endEntryId: picked.id,
     turn,

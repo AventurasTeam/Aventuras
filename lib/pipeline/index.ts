@@ -81,6 +81,7 @@ export type {
 export type {
   ConcurrencyPolicy,
   ConfigFailureKind,
+  ConfigResolverError,
   PhaseContext,
   PhaseEmittedEvent,
   PhaseFn,

@@ -81,22 +81,25 @@ slice-planning gate forces its resolution before that slice is planned.
   profile's model, not the override's. 5.10's tool-calling check inherits
   this. Whether such a run is reachable today is unchecked. Raised in
   5.10's PR 1 review.
-- **A store patch can be lost while a story opens.** `loadAndPublish`
-  (`lib/actions/stories/operational.ts`) reads the entries, makes about
-  nine more awaited reads, then hydrates; an `entriesStore` patch that
-  lands in between (any patching writer, `raiseSystemEntry` included) is
-  overwritten by the older snapshot. Whether a write during an open is
-  reachable is unchecked. Raised in 5.10's PR 1 review.
 - **Boundary's candidate lines split badly on some prose.**
   `firstLastSentences` (`lib/text/first-last-sentences.ts`) splits after
   a title's period ("Mr. Smith arrived." opens with "Mr."), starts the
   next sentence with a French closer that stands mid-text ("» Il
   partit."), gives "..." as the first sentence of a text that opens
   with one, and doesn't split on markdown emphasis or Japanese
-  half-width marks. Each degrades a candidate's `Opens:` or `Ends:` line
-  rather than breaking the call; worth a look once the probe or a real
-  story shows boundary picking worse for it. Raised in 5.10's PR 1
-  review.
+  half-width marks. It also splits a `!”` or `?”` before a lowercase
+  dialogue tag, so `Ends:` shows only the tag ("reiterated Pew, striking
+  with his stick upon the road."), and it cuts a closing sentence over
+  240 code points from its start, dropping the words that show where the
+  turn stops. Each degrades a candidate's `Opens:` or `Ends:` line
+  rather than breaking the call. In the boundary rerun's own prompt
+  (Slice 5.10's measure, 34 candidates from Treasure Island) titles
+  alone damaged 11 lines across 10 candidates, and two closing lines
+  lost their ends. No pick is shown worse for it yet; candidate display
+  is the lever
+  [`followups.md` → Boundary mis-picks at scene breaks](../followups.md#tuning-and-play-testing)
+  names. Raised in 5.10's PR 1 review; cases and measure counts added
+  by its slice review.
 
 - **One builder for `ResolveModelConfig`.** Every structured and tool
   caller builds `{ providers, profiles, assignments, storyModels }`
@@ -122,8 +125,12 @@ slice-planning gate forces its resolution before that slice is planned.
   its own tab stop, takes no arrow keys, and ignores Space (RN-Web
   activates only button-like roles on Space). The close modal's end
   picker now takes the arrows, Home, End and Space, but each option is
-  still its own tab stop. `SearchableOverlayList`'s roving model is the
-  in-repo shape to share. Raised in 5.10's PR 2 review.
+  still its own tab stop, and its list always opens at the newest reply,
+  so an older selection (a `Close chapter here` pick) sits out of view;
+  on native that needs the variable-height `FlatList` to scroll to a row
+  it hasn't measured. `SearchableOverlayList`'s roving model and its
+  `initialScrollRowId` are the in-repo shapes to share. Raised in 5.10's
+  PR 2 review; the opening position added by its slice review.
 - **`SearchableOverlayList` section headers carry no group role.**
   [`actions-menu.md → Keyboard & ARIA`](../ui/patterns/actions-menu.md#keyboard--aria)
   asks for `role="group"` with an `aria-label` per section; the headers
@@ -157,7 +164,11 @@ slice-planning gate forces its resolution before that slice is planned.
   popover had the same pattern; there the pending run now lives above
   the arm switch and goes when the tier leaves phone. Found by
   CodeRabbit on Slice 5.10's PR 2, fixed there for the chapter popover
-  only, 2026-11-18.
+  only, 2026-11-18. Both copies work around `components/ui/sheet.tsx`
+  skipping `onDismissed` once the Sheet has unmounted, so with two
+  consumers the fix belongs in the Sheet (a run held there survives the
+  arm swap) rather than in a second per-consumer copy, per
+  [lessons-learned → Adding a new entry](lessons-learned/README.md#adding-a-new-entry).
 - **RN-Web's `PressResponder` presses a button on a held Space's
   repeat.** It starts a press on any Space keydown on a `role="button"`
   element, repeats included (no `event.repeat` check;
@@ -170,3 +181,52 @@ slice-planning gate forces its resolution before that slice is planned.
   verified per platform). A fix would belong in the `Button` primitive
   or a pnpm patch. Raised by CodeRabbit on Slice 5.10's PR 2,
   2026-11-18.
+- **A Dialog opened without a trigger returns focus to `<body>` on
+  close.** Radix's modal `DialogContent` focuses only its
+  `DialogTrigger` when it closes (`@radix-ui/react-dialog`,
+  `onCloseAutoFocus`), and 28 of the app's 30 Dialog and AlertDialog
+  consumers open from state with no trigger, so focus falls to
+  `<body>` and the next Tab starts at the top of the page. Seen on the
+  close modal opened from the reader popover, the Actions menu and
+  `Close chapter here` (desktop dev build). Where the opener unmounts as
+  the dialog opens (a popover row, a menu option), returning to it isn't
+  enough, so a fix needs a return target per opener;
+  [`overlays.md`](../ui/patterns/overlays.md) has a close-focus rule for
+  Sheet and Popover but none for Dialog, and
+  [`import-dialog.md → Accessibility`](../ui/patterns/import-dialog.md#accessibility)
+  says the primitive returns focus to the trigger, which holds only
+  with one. Raised in 5.10's slice review, 2026-11-18.
+- **A deep link into another story skips the story-leave guard.** A deep
+  link is a push, which the story-leave guard doesn't see, so one into
+  another story while a run holds skips the guard that cancels runs
+  (reasoned from the `app.json` scheme, not run on a device; Electron
+  registers no protocol). Slice 5.10 gated `/dev` but left this path; it
+  is the open path in
+  [`parked.md` → A write that commits while a story opens is lost from its stores](../parked.md#a-write-that-commits-while-a-story-opens-is-lost-from-its-stores).
+  Routed by 5.10's slice review, 2026-11-18, from that slice's Open
+  questions.
+- **A held row keeps a world-time decoration the incoming slice
+  removed.** `composeHeld` (`components/reader/slice-hold.ts`) merges
+  `{ ...shown.worldTimeDecorations, ...incoming.worldTimeDecorations }`,
+  so while a change above the anchor waits for scroll rest, a row the
+  incoming slice still holds but no longer decorates keeps the shown
+  label until the hold ends. Its docblock promises the held rows' own
+  decorations only where the incoming slice dropped the row, which the
+  close-here marks now follow. Transient and unverified as reachable (a
+  time edit landing on a held row mid-gesture). Raised in 5.10's slice
+  review, 2026-11-18.
+- **Small shared homes Slice 5.10 left as copies.** Its review's
+  simplifier pass skipped four because each needs a home it couldn't
+  create: the open-region test `chapterId == null && canEndChapter(row)`
+  in `components/reader/close-here-entries.ts` and
+  `lib/actions/story-entries/prose-reversal.ts` (a predicate beside
+  `canEndChapter` in `lib/chapters`); the `CalendarFrame` memo in
+  `components/chapters/close-chapter-modal.tsx`,
+  `app/chapter-timeline/[branchId].tsx` and
+  `components/reader/world-time-editing.ts` (a `useCalendarFrame` hook);
+  the `Ready to close` label with its Android note in
+  `chapter-in-progress-card.tsx` and `chapter-popover.tsx` (a small
+  component, with its inventory row); and the metadata phase's re-map of
+  a result `requestChapterMetadata` already narrows
+  (`lib/pipeline/definitions/chapter-close-metadata.ts`). No defect in
+  any; each copy can drift. Raised in 5.10's slice review, 2026-11-18.

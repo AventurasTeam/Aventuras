@@ -60,6 +60,7 @@ import {
 import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
 import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import {
+  hasCandidates,
   readBoundaryInputs,
   requestChapterBoundary,
   type BoundaryCallOutcome,
@@ -821,7 +822,7 @@ async function boundaryRun(k: number, ctx: DbCtx): Promise<BoundaryAttempt> {
     throw new Error(`[probe:close] the boundary inputs did not read: ${errorLine(inputs.error)}`)
   const series = await openRegionSeries(BRANCH_ID, ctx)
   const candidates = closeCandidates(series, inputs.threshold)
-  if (candidates.length === 0)
+  if (!hasCandidates(candidates))
     throw new Error(
       `[probe:close] branch ${BRANCH_ID} has no close candidate at its threshold of ${inputs.threshold} tokens, so boundary makes no call`,
     )
@@ -932,7 +933,8 @@ async function main(): Promise<void> {
   registerAllDomains()
   configureDeltaActionPort(realDeltaActionPort())
   ensureChapterClosePipelineRegistered()
-  __setCloseAgentSlots(STAND_IN ? standInSlots() : measuredSlots())
+  // A boundary run reads no slots; measuredSlots throws when the shipped ones hold no range embed.
+  if (!BOUNDARY) __setCloseAgentSlots(STAND_IN ? standInSlots() : measuredSlots())
   // The logger mirrors each debug entry to console.debug; the buffer the probe drains still fills.
   console.debug = () => {}
   enableDiagnosticsGate()

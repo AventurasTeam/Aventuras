@@ -15,6 +15,14 @@ import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } f
 /** The resolver's failures, and pre-flight's refusal of a model flagged off for tool calling. */
 export type ConfigFailureKind = ResolveFailureKind | 'tool-calling-off'
 
+/** A resolver failure, or pre-flight's refusal of a flagged-off model, which names that model. */
+export type ConfigResolverError = {
+  kind: 'config-resolver'
+  target: ResolveTarget
+  phaseName: string
+  detail?: string
+} & ({ failure: ResolveFailureKind } | { failure: 'tool-calling-off'; modelId: string })
+
 export type PipelineError =
   | {
       kind: 'provider'
@@ -35,15 +43,7 @@ export type PipelineError =
       constraintViolated?: string
     }
   | { kind: 'orchestrator'; detail: string }
-  | {
-      kind: 'config-resolver'
-      failure: ConfigFailureKind
-      target: ResolveTarget
-      phaseName: string
-      detail?: string
-      /** The resolved model, set with 'tool-calling-off' so the copy can name it. */
-      modelId?: string
-    }
+  | ConfigResolverError
   // The blocking pre-retrieval sync stage and the query embed beside it
   // (model-management.md → Embed failure is blocking). Distinct from 'provider',
   // whose retry story is the LLM's. `staleCount` is null when there is no
@@ -221,4 +221,4 @@ export type TxResult =
 export type RejectedStart = { outcome: 'rejected'; blockedBy: string }
 
 /** A start its own pre-flight refused before any run reserved: like a rejection, no run exists. */
-export type PreflightFailedStart = { outcome: 'preflight-failed'; error: PipelineError }
+export type PreflightFailedStart = { outcome: 'preflight-failed'; error: ConfigResolverError }

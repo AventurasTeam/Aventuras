@@ -16,10 +16,11 @@ type AppActionsMenuProps = {
    */
   story?: InStoryContext
   /**
-   * `Close chapter…`'s inputs: the route's `useChapterProgress` `canClose` and its run gate's
-   * reason. With `story`, builds `STORY TOOLS`; omitted, that group is absent.
+   * `Close chapter…`'s inputs: the route's `useChapterProgress` `canClose`, the branch it was read
+   * for, which the entry opens the modal on, and the run gate's reason. With `story`, builds
+   * `STORY TOOLS`; omitted, that group is absent.
    */
-  closeChapter?: { canClose: boolean; gateReason: string | undefined }
+  closeChapter?: { branchId: string; canClose: boolean; gateReason: string | undefined }
   /**
    * Wraps every route jump this menu owns. A surface with a save session
    * passes its `requestLeave` so the jump routes through the unsaved-changes
@@ -73,9 +74,7 @@ export function AppActionsMenu({
   const storyTools =
     story != null && closeChapter != null
       ? buildStoryToolsGroup({
-          branchId: story.branchId,
-          canClose: closeChapter.canClose,
-          gateReason: closeChapter.gateReason,
+          ...closeChapter,
           openCloseModal: chapterOverlaysStore.openCloseModal,
         })
       : undefined

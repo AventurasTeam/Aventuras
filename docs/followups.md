@@ -151,6 +151,43 @@ for the placement rule.
   bottom shimmer, which that PR's acceptance asked for and couldn't run.
   Raised 2026-11-16 by its Fold session (developer decision).
 
+- **A store change's host cost grows with the loaded window.**
+  The reader's document renders a capped slice, but the host still works
+  over the whole loaded window on every store change: the route,
+  `useBranchWorldTime`, `useStoryPlace` and `useRowSignals` each copy,
+  filter and sort the entries store. A fresh open loads about 50 rows; a
+  far jump or reading back grows the window, and it stays grown until
+  the reader reopens. On the Fold's release build with
+  `pnpm db:seed:long`, a reply's end held the host for two changes (the
+  saved row replacing the stream card, then the next update) with
+  nothing emitted in between: about 1.1 to 1.2 s each on the 60-chapter
+  window grown to its first row (7,943 rows), about 0.4 s at 20 chapters
+  (2,659 rows), about 0.2 s on a fresh window at 60 chapters. The
+  streamed text itself painted with no gap over 160 ms at either size.
+  The split of that time between the four copies and the rest of the
+  host's work isn't profiled. A chapter close writes its stamps as one
+  group, whose store patches go out in one synchronous loop, so it should
+  cost about one change; if the time is paid per store write rather than
+  per render, a close on that window pays it about 133 times. Owed closes
+  run before a turn, so a long story reaches this without a manual close.
+  **Revisit signal:** the first close measured on a grown window
+  ([Slice 5.10's grown-window close measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#grown-window-close-measure)),
+  a user noticing the pause, or a story long enough for it to pass about
+  2 s. Routed from the sliding reader window's Fold measure, 2026-11-16
+  (developer decision).
+
+  The revisit signal fired at that measure on 2026-11-18. One close on
+  the 60-chapter window grown to its first row, on the Fold's release
+  build (`470e8956b` with the measure's temporary marks), held the JS
+  thread 1,290.5 and 1,133.8 ms in two runs against 5.2's 500 ms bar,
+  the close taking 1,799.0 and 1,436.3 ms; the reader document's longest
+  paint gap was 77 and 50 ms. Logcat places each stall between the
+  metadata call's reply and the agent's first tool call, where the close
+  writes its row and stamps as one group: about one change, as estimated
+  above, not 133. A close on a fresh window wasn't measured. Moved here
+  from `parked.md` by the developer, 2026-11-18, with no fix in Slice
+  5.10.
+
 ## Tuning and play testing
 
 v1 work held for the end of the cycle, once every base system is
@@ -541,6 +578,10 @@ breakdown under [UX](#ux).
     legitimately, so measure before changing anything. It refines
     the capability-floor entry's third bullet above.
 
+  The record is
+  [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
+  Raised by Slice 5.10's measure, 2026-11-18.
+
 - **Boundary mis-picks at scene breaks.** Boundary shows each candidate
   by its first and last sentences only, and Slice 5.10's runs on the
   dev model missed a scene break two ways. On the shipped prompt, two of
@@ -554,12 +595,10 @@ breakdown under [UX](#ux).
   inside a turn. The lever to try is candidate display: more of each
   turn, or a marked mid-turn break. The evidence so far is one chapter
   of one novel. The record is
-  [Slice 5.10's boundary measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#boundary-measure).
+  [Slice 5.10's boundary measure](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#boundary-measure),
+  and the guard's run is in its
+  [Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes).
   Raised by Slice 5.10's measure, 2026-11-18 (developer, "Q12: C").
-
-  The record is
-  [Slice 5.10's seven-task rerun](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#seven-task-rerun-on-the-raised-budgets).
-  Raised by Slice 5.10's measure, 2026-11-18.
 
 - **Parked items play gives a signal for.** Each waits on evidence
   only play produces, so play checks them rather than letting the

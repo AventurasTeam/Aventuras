@@ -62,7 +62,8 @@ const ARGS: ReaderChapterChipsProps = {
     startEntryId: 'tail',
   },
   isFocused: true,
-  readyToClose: false,
+  chapterAutoClose: true,
+  gateReason: undefined,
   onJumpToEntry: noop,
   onManageChapters: noop,
 }

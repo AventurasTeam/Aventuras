@@ -630,7 +630,10 @@ the threshold owes is derived fresh by `closeOwed` each time, so a
 rollback below the threshold leaves nothing stale, and no record means
 boundary selection. The manual start writes the pick as its run
 reserves, so a refused start leaves the pick before it standing, and a
-second pick overwrites the first. A close's commit clears it; a
+second pick overwrites the first. A start whose pre-flight fails drops
+it, since the confirmed pick replaces it though nothing starts
+([`memory/chapter-close.md → Manual user-triggered close`](./memory/chapter-close.md#manual-user-triggered-close)).
+A close's commit clears it; a
 cancelled or failed close leaves it owed. `boundary` drops a pick whose
 entry is no longer an open-region reply, failing the close, and a
 reversal that removes the entry, or closes it into a chapter, drops it
@@ -2131,7 +2134,7 @@ type ReplyCutOffFailure = {
   outputTokens: number | null // as the provider reported; null when it reported none
   // 0 can mean unreported (OpenAI-compatible reports a missing count as 0); described as absent
   reasoningTokens: number | null // the part of outputTokens spent thinking, when reported
-  maxOutput: number | null // the profile's or the override's, or a tool step's as sent; null when none (see the cause)
+  maxOutput: number | null // the profile's or the override's, or a tool step's or structured call's default as sent; null when none (see the cause)
   window: number | null // the model's known window; null when unknown
   providerId: string
   modelId: string
@@ -2274,7 +2277,9 @@ only the log reads it. A structured or narrative call keeps the
 its copy names that figure, so with thinking on a cut at the
 window can read as `max-output`. A structured call with a default of
 its own, the close's boundary call sending 16,384 when its settings set
-none, reports that default, the figure its copy names. Then `window`
+none, reports that default; a boundary cut-off has no copy, since it
+always ends the chapter on the latest candidate, so only the log reads
+it. Then `window`
 when the model's window
 is known and the prompt plus the output tokens reach it, reading the
 prompt from the provider's input count and from the estimate only when
@@ -2400,16 +2405,17 @@ type PipelineError =
       constraintViolated?: string // 'UNIQUE' | 'CHECK' | 'FK' | etc.
     }
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
-  | {
+  | ({
       kind: 'config-resolver'
-      // resolver could not produce a usable model config, or pre-flight found the model flagged off
-      // for a capability its phase requires (Config pre-flight validation)
-      failure: ResolveFailureKind | 'tool-calling-off'
       target: ResolveTarget
       phaseName: string
       detail?: string
-      modelId?: string // the resolved model, set with 'tool-calling-off' so the copy names it
-    }
+    } & (
+      | { failure: ResolveFailureKind } // resolver could not produce a usable model config
+      // pre-flight found the model flagged off for a capability its phase requires (Config
+      // pre-flight validation); the resolved model rides along so the copy names it
+      | { failure: 'tool-calling-off'; modelId: string }
+    ))
   | {
       kind: 'embedder'
       reason: EmbedderErrorKind // 'init' | 'call'

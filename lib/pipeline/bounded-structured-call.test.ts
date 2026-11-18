@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import type { CallRetryError, generateStructured, ResolveModelConfig } from '@/lib/ai'
+import type {
+  CallRetryError,
+  generateStructured,
+  PromptSectionsInput,
+  ResolveModelConfig,
+} from '@/lib/ai'
 
 import { boundedStructuredCall, type BoundedStructuredOutcome } from './bounded-structured-call'
 import type { PhaseEmittedEvent } from './types'
@@ -52,7 +57,7 @@ const NETWORK_RETRY: CallRetryError = { tier: 'provider', reason: 'network' }
 
 async function run(
   signal: AbortSignal = new AbortController().signal,
-  timeoutMs?: number,
+  options: { actionId: string; defaultMaxOutput?: number } = OPTIONS,
 ): Promise<{
   events: PhaseEmittedEvent[]
   outcome: BoundedStructuredOutcome<{ answer: string }>
@@ -64,8 +69,7 @@ async function run(
     schema,
     config: CONFIG,
     signal,
-    options: OPTIONS,
-    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    options,
   })
   const events: PhaseEmittedEvent[] = []
   for (;;) {
@@ -125,6 +129,22 @@ describe('boundedStructuredCall', () => {
     expect(signal.aborted).toBe(false)
   })
 
+  it('sends only the action and the max output, an absent max output left absent', async () => {
+    generateStructuredMock.mockResolvedValue({
+      status: 'ok',
+      value: { answer: 't2' },
+      recoverable: [],
+    })
+    const none = { named: [], unnamed: [] }
+    const stray = { actionId: 'act_1', sections: { halves: { system: none, user: none } } }
+    // An upcast drops what the options type knows: the sections ride along unseen.
+    const options: { actionId: string } = stray
+
+    await run(undefined, options)
+
+    expect(generateStructuredMock.mock.calls[0]![5]).toStrictEqual({ actionId: 'act_1' })
+  })
+
   it('returns the value and the attempts it recovered from, one event per retried attempt', async () => {
     generateStructuredMock.mockResolvedValue({
       status: 'ok',
@@ -173,21 +193,6 @@ describe('boundedStructuredCall', () => {
         lastError: 'timeout after 45000ms',
         cause: { status: 'aborted', recoverable: [] },
       },
-    })
-  })
-
-  it("holds a bound it is given over the agent's own", async () => {
-    vi.useFakeTimers()
-    const elapsed = hangUntilAborted()
-
-    const pending = run(new AbortController().signal, 5_000)
-    await vi.advanceTimersByTimeAsync(1_000_000)
-
-    expect(await elapsed).toBe(5_000)
-    expect((await pending).outcome).toMatchObject({
-      status: 'failed',
-      error: { kind: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 5000ms' },
-      lastError: 'timeout after 5000ms',
     })
   })
 
@@ -268,5 +273,37 @@ describe('boundedStructuredCall', () => {
         cause: { status: 'failed', error: failure, recoverable: [PARSE_RETRY] },
       },
     })
+  })
+})
+
+describe('boundedStructuredCall options (checked by tsc)', () => {
+  it("takes no prompt sections, whose counts its outcome doesn't carry", () => {
+    const none = { named: [], unnamed: [] }
+    const sections: PromptSectionsInput = { halves: { system: none, user: none } }
+    const call = () =>
+      boundedStructuredCall({
+        target: 'lore-mgmt',
+        phaseName: 'boundary',
+        prompt: PROMPT,
+        schema,
+        config: CONFIG,
+        signal: new AbortController().signal,
+        // @ts-expect-error the outcome drops promptSections, so the sections would go uncounted
+        options: { ...OPTIONS, sections },
+      })
+    const withSections = { ...OPTIONS, sections }
+    const callWithVariable = () =>
+      boundedStructuredCall({
+        target: 'lore-mgmt',
+        phaseName: 'boundary',
+        prompt: PROMPT,
+        schema,
+        config: CONFIG,
+        signal: new AbortController().signal,
+        // @ts-expect-error a variable takes no excess-property check, so only the type refuses it
+        options: withSections,
+      })
+    expect(call).toBeTypeOf('function')
+    expect(callWithVariable).toBeTypeOf('function')
   })
 })

@@ -87,6 +87,17 @@ function manyReplies(
   })
 }
 
+// One- and two-line excerpts in turn: a height cached for the wrong reply leaves a gap or overlap.
+function mixedReplies(count: number): CloseModalRow[] {
+  return manyReplies(count).map((row, i) => ({
+    ...row,
+    excerpt:
+      i % 2 === 0
+        ? 'She stops at the threshold, one hand on the cold iron of the gate, and does not look back at the river or at the lamps of the town behind her.'
+        : 'The lantern holds.',
+  }))
+}
+
 type HarnessProps = Omit<CloseChapterModalViewProps, 'selectedId' | 'tokensInRange'> & {
   initialSelectedId: string | null
 }
@@ -189,7 +200,6 @@ const meta = {
     open: true,
     start: START,
     replies: REPLIES,
-    latestId: 'entry_71',
     initialSelectedId: 'entry_71',
     onSelect: fn(),
     onConfirm: fn(),
@@ -233,13 +243,11 @@ function expectReachable(element: HTMLElement) {
 type RowsArgs = {
   start: NonNullable<CloseChapterModalViewProps['start']>
   replies: CloseModalRow[]
-  latestId: string
 }
 
 const PHONE_ARGS = {
   start: { ...START, endedChapterNumber: 12 },
   replies: manyReplies(40, { time: 'Day 9 · 22:18' }),
-  latestId: 'entry_81',
   initialSelectedId: 'entry_81',
 } satisfies RowsArgs & { initialSelectedId: string }
 
@@ -252,7 +260,6 @@ const FOUR_DIGIT_ARGS = {
     endedChapterNumber: 12,
   },
   replies: manyReplies(40, { time: 'Day 113 · 22:18', offset: 1000 }),
-  latestId: 'entry_1081',
   initialSelectedId: 'entry_1081',
 } satisfies RowsArgs & { initialSelectedId: string }
 
@@ -265,7 +272,6 @@ const NARROWEST_ARGS = {
     endedChapterNumber: 123,
   },
   replies: manyReplies(40, { time: 'Day 113 · 22:18', offset: 5000 }),
-  latestId: 'entry_5081',
   initialSelectedId: 'entry_5081',
 } satisfies RowsArgs & { initialSelectedId: string }
 
@@ -325,12 +331,12 @@ async function expectLatestOptionWhole(row: CloseModalRow) {
 }
 
 async function expectRowsLegible(
-  { start, replies, latestId }: RowsArgs,
+  { start, replies }: RowsArgs,
   layout: 'two-line' | 'one-line',
   minSnippet: number,
 ) {
   await dialog()
-  const selected = replies.find((row) => row.id === latestId)!
+  const selected = replies[0]!
   const startTag = t('chapters:closeModal.chapterEndedHere', { number: start.endedChapterNumber! })
   await waitFor(() =>
     expectRowLegible(startRow(), { row: start, tag: startTag, layout, minSnippet }),
@@ -425,7 +431,7 @@ export const KeyboardPickReturnsFocus: Story = {
 // The listbox's own keys: the oldest reply starts virtualized out, so End scrolls it in to focus
 // it.
 export const ArrowKeysMoveBetweenReplies: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async ({ args }) => {
     await dialog()
     await userEvent.click(trigger())
@@ -455,7 +461,7 @@ export const ArrowKeysMoveBetweenReplies: Story = {
 // End on a virtualized-out reply only requests its focus; leaving the list before it mounts
 // cancels the request.
 export const EndRequestDroppedOnLeavingTheList: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -476,7 +482,7 @@ export const EndRequestDroppedOnLeavingTheList: Story = {
 // A request for a virtualized-out reply that is already pending when focus moves to the trigger
 // must not pull focus back once the reply mounts, even if the list never saw a blur.
 export const EndRequestDroppedWhenFocusMovedWithoutABlur: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -497,7 +503,7 @@ export const EndRequestDroppedWhenFocusMovedWithoutABlur: Story = {
 // End targets the oldest reply by id: a reply prepended before it mounts shifts every position.
 export const EndFollowsItsReplyWhenOneIsPrepended: Story = {
   render: (args) => <PrependHarness {...args} />,
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -509,6 +515,49 @@ export const EndFollowsItsReplyWhenOneIsPrepended: Story = {
     )
     window.dispatchEvent(new Event(PREPEND_EVENT))
     await waitFor(() => expect(screen.getByTestId('close-chapter-reply-entry_3')).toHaveFocus())
+  },
+}
+
+// Each rendered row's offset from the bottom of the one above it; toEqual tells -0 from 0.
+function rowGaps(list: HTMLElement): number[] {
+  const slots = Array.from(list.querySelectorAll<HTMLElement>('[data-index]')).sort(
+    (a, b) => Number(a.dataset.index) - Number(b.dataset.index),
+  )
+  return slots
+    .slice(1)
+    .map(
+      (slot, i) =>
+        Math.round(slot.getBoundingClientRect().top - slots[i]!.getBoundingClientRect().bottom) ||
+        0,
+    )
+}
+
+async function expectRowsFlush(list: HTMLElement) {
+  await waitFor(() => {
+    const gaps = rowGaps(list)
+    expect(gaps.length).toBeGreaterThan(4)
+    expect(gaps).toEqual(gaps.map(() => 0))
+  })
+}
+
+// The measured heights follow each reply, not its position: a reply prepended while the list is
+// open moves the others down without handing them their neighbours' heights.
+export const RowsKeepTheirHeightsWhenOneIsPrepended: Story = {
+  render: (args) => <PrependHarness {...args} />,
+  args: { replies: mixedReplies(12), initialSelectedId: 'entry_25' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const list = await screen.findByTestId('close-chapter-panel')
+    await expectRowsFlush(list)
+    const heights = Array.from(list.querySelectorAll('[data-index]'), (slot) =>
+      Math.round(slot.getBoundingClientRect().height),
+    )
+    // Past the first row, whose latest tag already sets its height apart.
+    expect(new Set(heights.slice(1)).size).toBeGreaterThan(1)
+    window.dispatchEvent(new Event(PREPEND_EVENT))
+    await screen.findByTestId('close-chapter-reply-entry_prepended')
+    await expectRowsFlush(list)
   },
 }
 
@@ -588,7 +637,7 @@ export const SpaceRepeatAfterFocusLossPicksNothing: Story = {
 // A press armed on a reply that virtualizes out goes stale: its release never reaches the list, and
 // a remounted reply is a new node that a later release must not pick.
 export const SpaceArmedOnVirtualizedOutReplyPicksNothing: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async ({ args }) => {
     await dialog()
     await userEvent.click(trigger())
@@ -621,6 +670,16 @@ export const EndEntryPicked: Story = {
   },
 }
 
+export const OneTokenInRange: Story = {
+  render: ({ initialSelectedId, ...args }) => (
+    <CloseChapterModalView {...args} selectedId={initialSelectedId} tokensInRange={1} />
+  ),
+  play: async () => {
+    await dialog()
+    await expect(tokens()).toHaveTextContent(/^1 token in range$/)
+  },
+}
+
 export const NoClosedChapter: Story = {
   args: { start: { ...START, id: 'entry_1', ref: formatEntryRef(1), endedChapterNumber: null } },
   play: async () => {
@@ -630,13 +689,16 @@ export const NoClosedChapter: Story = {
   },
 }
 
-// Nothing to close at: the reads are loading or failed, so there is no end entry to confirm.
+// Replies but none selected, which the connected modal never hands over (it selects the latest
+// whenever it lists one): the view's own guard still keeps Close chapter from confirming nothing.
 export const NoSelection: Story = {
   args: { initialSelectedId: null },
   play: async ({ args }) => {
     await dialog()
     await expect(confirm()).toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByTestId('close-chapter-picker')).toBeNull()
+    // React DOM drops a click on a disabled <button> before any press handler: this pins the
+    // disabled button, not the Pressable's press guard.
     await userEvent.click(confirm(), { pointerEventsCheck: 0 })
     expect(args.onConfirm).not.toHaveBeenCalled()
   },
@@ -648,6 +710,7 @@ export const Disabled: Story = {
     await dialog()
     await expect(confirm()).toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByTitle(t('generationGate.inFlight'))).toContainElement(confirm())
+    // As in NoSelection: this pins the disabled button, not the Pressable's press guard.
     await userEvent.click(confirm(), { pointerEventsCheck: 0 })
     expect(args.onConfirm).not.toHaveBeenCalled()
   },
@@ -679,7 +742,7 @@ export const EscapeCancels: Story = {
 
 // A region with auto-close off has no upper bound, so the panel virtualizes.
 export const LongRegionVirtualizes: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -759,7 +822,7 @@ export const Tablet640: Story = {
 // A short window: the panel gives up height so the foot stays on screen.
 export const ShortWindow: Story = {
   globals: { viewport: { value: 'phoneShort' } },
-  args: { replies: manyReplies(40), latestId: 'entry_81', initialSelectedId: 'entry_81' },
+  args: { replies: manyReplies(40), initialSelectedId: 'entry_81' },
   play: async () => {
     const shown = await dialog()
     await userEvent.click(trigger())

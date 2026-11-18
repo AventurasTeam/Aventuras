@@ -2,7 +2,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import type { CallRetryError, generateStructured } from '@/lib/ai'
-import type { CloseCandidate } from '@/lib/chapters'
 import {
   STORY_SETTINGS_DEFAULTS,
   type OpenRegionRow,
@@ -24,10 +23,12 @@ import {
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { chapterBoundarySchema } from './chapter-boundary-schema'
 import {
+  hasCandidates,
   readBoundaryInputs,
   requestChapterBoundary,
   type BoundaryCallInputs,
   type BoundaryCallOutcome,
+  type BoundaryCandidates,
 } from './chapter-close-boundary-call'
 import type { PhaseContext, PhaseEmittedEvent } from '../types'
 
@@ -78,7 +79,7 @@ const SERIES: readonly OpenRegionRow[] = [
   { id: 'e11', kind: 'ai_reply', position: 11, tokens: 80 },
 ]
 
-const CANDIDATES: readonly CloseCandidate<OpenRegionRow>[] = [
+const CANDIDATES: BoundaryCandidates = [
   { ...SERIES[2]!, tokensThrough: 240 },
   { ...SERIES[4]!, tokensThrough: 400 },
   { ...SERIES[6]!, tokensThrough: 580 },
@@ -126,6 +127,15 @@ const NETWORK = {
   tier: 'provider',
   reason: 'network',
   detail: 'ECONNRESET',
+} satisfies CallRetryError
+const OVER_WINDOW = {
+  tier: 'context-window',
+  detectedBy: 'check',
+  estimate: 9_000,
+  window: 8_192,
+  windowSource: 'configured',
+  providerId: PROVIDER.id,
+  modelId: 'm',
 } satisfies CallRetryError
 
 function thread(id: string, title: string, status: ThreadStatus, branchId = 'b1'): Thread {
@@ -273,6 +283,22 @@ describe('readBoundaryInputs', () => {
   })
 })
 
+describe('hasCandidates', () => {
+  it('holds for one candidate or more, and not for none', () => {
+    expect(hasCandidates([])).toBe(false)
+    expect(hasCandidates([CANDIDATES[0]])).toBe(true)
+  })
+})
+
+describe('BoundaryCandidates (checked by tsc)', () => {
+  it('takes no empty list into the call', () => {
+    const call = () =>
+      // @ts-expect-error with no candidate, an unusable reply has no latest one to end on
+      requestChapterBoundary(phaseCtx(), [], inputs())
+    expect(call).toBeTypeOf('function')
+  })
+})
+
 describe('requestChapterBoundary — the call', () => {
   it('asks lore-mgmt once, under the 16k default, with a schema refusing any turn but a candidate', async () => {
     answer('t2')
@@ -316,6 +342,16 @@ describe('requestChapterBoundary — the call', () => {
     expect(user).not.toContain('I keep walking')
     expect(user).not.toContain('t4')
     for (const sentence of shown) expect(system).not.toContain(sentence)
+  })
+
+  it("heads each candidate with its turn and its entry's position, not its index", async () => {
+    answer('t2')
+    await drain()
+
+    const { user } = generateStructuredMock.mock.calls[0]![1]
+    expect(user).toContain('## t1 (position 3)')
+    expect(user).toContain('## t2 (position 5)')
+    expect(user).toContain('## t3 (position 7)')
   })
 
   it("prompts with the candidates' length range, not the region's total, and the active threads on one line", async () => {
@@ -379,6 +415,23 @@ describe('requestChapterBoundary — outcomes', () => {
       outcome: {
         status: 'failed',
         error: { kind: 'provider', reason: 'network', detail: 'ECONNRESET' },
+      },
+    },
+    {
+      name: 'a prompt over the context window fails',
+      result: { status: 'failed', error: OVER_WINDOW, recoverable: [] },
+      outcome: {
+        status: 'failed',
+        error: {
+          kind: 'context-window',
+          target: 'lore-mgmt',
+          detectedBy: 'check',
+          estimate: 9_000,
+          window: 8_192,
+          windowSource: 'configured',
+          providerId: PROVIDER.id,
+          modelId: 'm',
+        },
       },
     },
     {
@@ -475,18 +528,46 @@ describe('requestChapterBoundary — outcomes', () => {
     expect(log.warn).not.toHaveBeenCalled()
   })
 
-  it('warns of a fallback with its tier and the entry it ends on', async () => {
-    generateStructuredMock.mockResolvedValue({
-      status: 'failed',
-      error: CUT_OFF,
-      recoverable: [],
-    } as never)
-    const log = spyLogger()
-    await drain(phaseCtx(undefined, log))
-    expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
+  // A content-filter stop lands as a parse failure, so only the detail tells it from a bad reply.
+  it.each<{ name: string; result: unknown; tier: string; detail: string }>([
+    {
+      name: 'a cut-off reply',
+      result: { status: 'failed', error: CUT_OFF, recoverable: [] },
       tier: 'reply-cut-off',
-      endEntryId: 'e7',
-    })
-    expect(log.debug).not.toHaveBeenCalled()
-  })
+      detail:
+        'reply cut off (max-output): 16384 output tokens, max output 16384; model m on provider prov-1',
+    },
+    {
+      name: 'a content-filter stop',
+      result: {
+        status: 'failed',
+        error: {
+          ...PARSE_LAST,
+          detail: 'content filter stopped the reply: Unexpected end of JSON',
+        },
+        recoverable: [PARSE_FIRST],
+      },
+      tier: 'parse',
+      detail: 'content filter stopped the reply: Unexpected end of JSON',
+    },
+    {
+      name: 'a turn no candidate holds',
+      result: { status: 'ok', value: { end_entry_id: 't9', rationale: 'x' }, recoverable: [] },
+      tier: 'parse',
+      detail: 'end_entry_id "t9" names no candidate',
+    },
+  ])(
+    'warns of a fallback on $name with its tier, cause and end',
+    async ({ result, tier, detail }) => {
+      generateStructuredMock.mockResolvedValue(result as never)
+      const log = spyLogger()
+      await drain(phaseCtx(undefined, log))
+      expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
+        tier,
+        endEntryId: 'e7',
+        detail,
+      })
+      expect(log.debug).not.toHaveBeenCalled()
+    },
+  )
 })

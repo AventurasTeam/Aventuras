@@ -351,10 +351,13 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               ? { storyId, branchId: currentBranchId, surface: 'story-settings' }
               : undefined
           }
-          // canClose reads the open branch; the host drops a request for any other.
           closeChapter={
-            openBranchId === currentBranchId
-              ? { canClose: chapterProgress.canClose, gateReason: disabledReason }
+            openBranchId != null
+              ? {
+                  branchId: openBranchId,
+                  canClose: chapterProgress.canClose,
+                  gateReason: disabledReason,
+                }
               : undefined
           }
           beforeNavigate={session.requestLeave}

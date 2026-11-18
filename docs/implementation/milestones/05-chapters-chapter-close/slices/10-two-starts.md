@@ -130,8 +130,8 @@ and the catalog bullet below drops out.
   the user half (C3), so it takes no exemption in
   `system-half-stability.test.ts`. Variables, in `templateContextMap.ts`:
   each candidate's handle, position, and opening and closing sentences; the
-  region's token total; the threshold (replaced by the window's bounds, the
-  2026-11-18 decision below); the branch's active threads.
+  region's token total and the threshold (both replaced by the window's
+  bounds, the 2026-11-18 decision below); the branch's active threads.
 - `firstLastSentences(text)` in `lib/text`, over `promptProse`, as the
   pass's window reads prose. Nothing in `lib` splits sentences today. It
   takes CJK sentence marks and a character cap, so a reply with no sentence
@@ -144,7 +144,8 @@ and the catalog bullet below drops out.
   its same-prompt retry, yielding `recoverable_error` per retried attempt:
   - `ok`: the handle's entry.
   - `failed`, tier `parse` or `reply-cut-off`: `fallbackChapterEnd`, as
-    `lib/pipeline/definitions/suggestion-refresh.ts:156-159` branches.
+    `lib/pipeline/definitions/suggestion-refresh.ts:156-159` branches
+    (the latest candidate after the output-bound decision below).
     Logged, with the event added to
     [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory).
     The cut-off half follows [Open questions](#open-questions).
@@ -178,7 +179,8 @@ and the catalog bullet below drops out.
 - If a catalog publishes it: `CatalogEntry` gains `toolCalling?`,
   `readToolCalling(raw)` sits beside `readContextWindow`, and
   `normalizeModelCatalog` layers it under the stored capability, so a stored
-  value wins, as every user-overridable flag does (`lib/ai/catalog.ts:53-57`).
+  value wins, as every user-overridable flag does (`lib/ai/catalog.ts:53-57`;
+  a published value replaces it after the detection decision below).
 - `ResolverInput` gains `requires?: 'toolCalling'`
   (`ResolverInput` in `lib/pipeline/types.ts`), and the `agent` phase's `lore-mgmt`
   input sets it. C2's three `resolves` stay as pinned.
@@ -402,8 +404,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 2. `lib/pipeline/definitions/chapter-close-boundary.test.ts`: a standing
    `pendingClose` and a region with no candidate each make no model call; a
    valid handle sets the range's `endEntryId` to that candidate; a reply naming a
-   non-candidate twice completes the phase on `fallbackChapterEnd`'s entry after
-   two calls; a reply cut off falls back after one call; a provider failure returns
+   non-candidate twice completes the phase on `fallbackChapterEnd`'s entry (the
+   latest candidate's, after the output-bound decision below) after two calls; a
+   reply cut off falls back after one call; a provider failure returns
    `{ status: 'failed' }` and writes no range; an abort returns
    `{ status: 'aborted' }`; with no profile max output the call sends
    8000 (16,384 after the 2026-11-18 decision below), and a profile's
@@ -425,7 +428,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
    story override's model is the one read; a `no-profile-assigned` still comes
    first.
 7. `lib/ai/catalog.test.ts`, if a catalog publishes the field: a published value
-   lands, a stored value beats it, an absent one stays undefined.
+   lands, a stored value beats it (a published value replaces it, after the
+   detection decision below), an absent one stays undefined.
    `lib/db/app-settings/app-settings-schema.test.ts` keeps the flag through a
    parse either way.
 8. `components/reader/resolver-failure-copy.test.tsx` covers
@@ -841,14 +845,32 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
     jump button.
   - The dirty-and-busy trace: didn't fire, in the guard specs and the
     desktop smoke.
-  - Two closes in one turn: didn't fire. `chapter-close-auto` sees one
-    `chapter-close` run.
+  - Two closes in one turn: not run. Its signal needs auto-close
+    turned on late, and `chapter-close-auto` seeds it on, so its one
+    `chapter-close` run can't show the case. Parked (developer, slice
+    review):
+    [`parked.md → Two closes in one turn when auto-close is turned on late`](../../../../parked.md#two-closes-in-one-turn-when-auto-close-is-turned-on-late).
   - The native guard's round trip: not measured with an editor open.
     The Android smoke opened the modal after the Sheet dismissed, in
     about 3 s, with no editor.
   - The `Fix profile` route for `'tool-calling-off'`: the copy names the
     working remedies, as designed.
-  - The grown-window measure: pending on the Fold.
+  - The grown-window measure: the JS-stall bar missed on the Fold
+    ([Grown-window close measure](#grown-window-close-measure)).
+- **A confirmed pick that fails its check drops the owed one (developer
+  decision, slice review).** The click's failed pre-flight, or its
+  entry's `Retry` failing again, clears the branch's `pendingClose`, so
+  the next Send owes no close at an earlier failed close's pick (one the
+  threshold owes still runs) and the entry's `Retry` closes at the
+  confirmed pick. Canon:
+  [`chapter-close.md → Manual user-triggered close`](../../../../memory/chapter-close.md#manual-user-triggered-close)
+  and
+  [`generation-pipeline.md → Multi-run txState`](../../../../generation-pipeline.md#multi-run-txstate).
+- **A lone boundary candidate is the end, with no call (developer
+  decision, slice review).** Every usable answer would name it, so the
+  call could only fail the close; two or more still call. The boundary
+  measure's 34 candidates still cover the call. Canon:
+  [`chapter-close.md → Phase 1`](../../../../memory/chapter-close.md#phase-1--boundary-selection).
 
 ### Seven-task measure
 
@@ -895,7 +917,8 @@ The transcripts, read by hand:
 - Run 7's Identity sent arrays as JSON strings seven times.
 
 The bar code fails a task with a recorded stop even after landed writes.
-Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
+Read by its landed writes instead, runs 4 and 6 would pass, and the count
+would be 8 of 10.
 The developer's call on this miss is the 2026-11-18 budget-raise
 decision above: tune, then rerun.
 
@@ -1021,16 +1044,29 @@ CTRL-Z and for redo of the full close group; wall time is reported. On
 the dataset branch, its seed's close, timed by `startStallMeter` around
 `undoLastAction` and `redoLastAction` alone, never the confirm.
 
-| Platform, build                                                            | CTRL-Z wall / longest stall (2 runs)       | Redo wall / longest stall (2 runs)          |
-| -------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------- |
-| Desktop production bundle, Linux x86_64, kernel 7.2.6-arch2-1, `f0c98545c` | 387 / 98 ms and 332 / 92 ms (tails 54, 29) | 191 / 101 ms and 177 / 98 ms (tails 35, 29) |
+| Platform, build                                                                                    | CTRL-Z wall / longest stall (2 runs)                     | Redo wall / longest stall (2 runs)                       |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
+| Desktop production bundle, Linux x86_64, kernel 7.2.6-arch2-1, `f0c98545c`                         | 387 / 98 ms and 332 / 92 ms (tails 54, 29)               | 191 / 101 ms and 177 / 98 ms (tails 35, 29)              |
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, `470e8956b` and temporary marks | 399.2 / 399.2 ms and 348.8 / 348.8 ms (tails 49.3, 29.7) | 238.3 / 238.3 ms and 181.1 / 181.1 ms (tails 33.4, 27.2) |
 
 The group was the dataset seed's close: "1 lore row removed, 35 other
 changes reversed". A tail is `tailGapMs`, the longest gap in the 250 ms
 after the reversal resolves.
 
-Fold release build. Pending: runs on PR 2 before merge, and its bar
-decides the merge.
+On the Fold the bar holds, at 399.2 ms for the longest stall, about
+100 ms under it. There the longest stall equals the wall time in every run:
+no 16 ms tick lands while the reversal runs, so it holds the JS thread
+for all of it, where desktop's ticks broke it into gaps of about 100 ms.
+The tails show the meter ticking. The build was one release APK for this
+measure and the grown-window one, so it carried that measure's temporary
+marks, which run only in a manual close and in the reader document. The
+numbers come from the logger's console mirror in logcat
+(`adb logcat -s ReactNativeJS`, where a release build writes debug
+entries too), since the Diagnostics Hub's Logs tab is still a
+placeholder. Run 1's redo came
+from Actions → `Redo chapter 1's close`, since its notice had dismissed
+before the press; that runs the same `runRedo` and window as the
+notice's `Redo`, which run 2 used.
 
 ### Grown-window close measure
 
@@ -1040,4 +1076,35 @@ reader document's paints over 500 ms over one close on
 first chapter, on the Fold's release build. The branch's open region
 holds 14 entries and no entities.
 
-Pending: runs on PR 2 before merge, and its bar decides the merge.
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, `470e8956b` and temporary marks | Close wall | Longest JS-thread stall | Longest document paint gap |
+| -------------------------------------------------------------------------------------------------- | ---------- | ----------------------- | -------------------------- |
+| Run 1                                                                                              | 1,799.0 ms | 1,290.5 ms (miss)       | 77 ms                      |
+| Run 2                                                                                              | 1,436.3 ms | 1,133.8 ms (miss)       | 50 ms                      |
+
+The temporary marks, never committed: a stall meter around
+`runManualClose`'s `startManualClose`, which awaits the chain to its
+end, logged as `app.manual_close_measured` and read from logcat as the
+reversal measure's were, and a readout of the longest gap between the
+reader document's frames since a tap on it. Each run started from a
+freshly pushed fixture, grew the reader through the chapter chip's Sheet
+to chapter 1 (it landed on the opening), reset the readout, and closed
+through Actions → `Close chapter…` at the modal's default end, entry
+7935, on `pnpm mock`: one `chapter-metadata` call and one Lore tool
+step, and the close completed as "The Bell Under the Water".
+
+The JS-stall bar is missed in both runs; the paint-gap bar holds, and
+the document painted through the stall. Logcat places each stall between
+the metadata call's reply and the agent's first tool call (1.29 s and
+1.13 s), where the metadata phase writes the chapter row and its stamps
+as one group: about one store change on this window, as the entry's
+estimate put it, not 133. For scale only, since its fixture differs,
+5.5a's one-group close of 133 stamps under a 50-row reader stalled 161
+to 229 ms
+([5.5a's Write-burst measure](./05a-task-runner.md#write-burst-measure)).
+Not run: the same
+close on a fresh window, which would split this stall between the window
+and the close itself. Developer decision (2026-11-18, "Q15: A"): the
+miss is recorded with no fix in this slice, and the entry, "A store
+change's host cost grows with the loaded window", moved from `parked.md`
+to [`followups.md → UX`](../../../../followups.md#ux) with these
+numbers. Merging stays the developer's.

@@ -292,8 +292,10 @@ convention, and the expectation that subsystems route through
   `endEntryId`, its `turn` handle, the model's one-sentence `rationale`,
   which nothing stores, and the count of `candidates` it was offered),
   `close_boundary_fallback` (warn: a boundary reply that was unusable, a
-  parse failure after the retry or a cut-off, with its `tier` and the
-  `endEntryId` of the latest candidate the chapter ends on instead),
+  parse failure after the retry or a cut-off, with its `tier`, the
+  `endEntryId` of the latest candidate the chapter ends on instead, and
+  the failure's `detail`, which tells a content-filter stop or a reply
+  naming no candidate from a malformed one),
   `close_reason_unkeyed` (warn: a ledger reason that isn't a
   `CLOSE_REASON_KEYS` member, recorded as `other`, with the raw
   `reason`, its call's `task` and `tool`, under the close's `actionId`),
@@ -334,16 +336,26 @@ convention, and the expectation that subsystems route through
   `close_review_read_failed` (error,
   `components/chapters/chapter-overlays-host.tsx`: the review window's
   read failed, with `branchId`, `chapterId` and `error`; the window
-  shows `failed`), `close_modal_read_failed` (warn,
-  `components/chapters/close-chapter-modal.tsx`: the close modal's read
-  of the open region's rows or world times failed, with `branchId`,
-  `read` (`series` or `times`) and `error`; with no rows the modal
-  offers no reply to end on, and with no times its rows show none),
+  shows `failed`), `close_modal_read_failed` (error for `series`, warn
+  for `times`, `components/chapters/close-chapter-modal.tsx`: the close
+  modal's read of the open region's rows or world times failed, with
+  `branchId`, `read` (`series` or `times`) and `error`; with no rows the
+  modal offers no reply to end on until it reopens, and with no times
+  its rows show none),
   `manual_close_failed` (error,
   `components/chapters/run-manual-close.ts`: starting a close the
   modal confirmed threw rather than returning a result, with
-  `branchId`, `endEntryId` and `error`; the user sees a generic warning
-  toast), `close_result_read_failed` (warn,
+  `branchId`, `endEntryId` and `error`, plus `preflight` (its `kind`,
+  `failure`, `target` and `phaseName`) when the throw was the write of
+  a failed pre-flight's entry; the user sees a generic warning
+  toast, unless a run had reserved before the throw, whose own failure
+  toast speaks while its close stays owed), `manual_close_refused` (warn, the same file: the confirmed
+  start was refused, with `branchId`, `endEntryId` and the `blockedBy`
+  code the toast turns into a remedy), `manual_close_preflight_failed`
+  (warn, the same file: the close's pre-flight refused the pick before
+  anything started, with `branchId`, `endEntryId` and the error's
+  `failure`, `target` and `phaseName`; the user sees the close-failure
+  entry and a toast pointing at it), `close_result_read_failed` (warn,
   `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),

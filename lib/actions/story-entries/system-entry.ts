@@ -69,19 +69,15 @@ async function standingSubmission(
 
 /**
  * `writeSystemEntry` for a writer with no route to reload: the standing entry's held text carries
- * across (reader-composer.md → Custody of the turn's text), and the reader's store takes the new
- * row in place of the old when it holds the branch.
+ * across as the new entry's `submission` (reader-composer.md → Custody of the turn's text), and the
+ * reader's store takes the new row in place of the old when it holds the branch.
  */
 export async function raiseSystemEntry(
-  args: {
-    branchId: string
-    content: string
-    /** Built from the standing system entry's submission, which carries across. */
-    failure: (standing: SystemFailureMeta['submission']) => SystemFailureMeta
-  },
+  args: { branchId: string; content: string; failure: Omit<SystemFailureMeta, 'submission'> },
   ctx: DbCtx,
 ): Promise<string> {
-  const failure = args.failure(await standingSubmission(args.branchId, ctx))
+  // Overrides any submission the caller's value carried: only the standing text is the user's.
+  const failure = { ...args.failure, submission: await standingSubmission(args.branchId, ctx) }
   const id = await writeSystemEntry(
     { branchId: args.branchId, content: args.content, failure },
     ctx,

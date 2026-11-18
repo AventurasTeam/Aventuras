@@ -22,6 +22,7 @@ import { ScrollView as GestureScrollView } from 'react-native-gesture-handler'
 import { useAnimatedReaction, useSharedValue } from 'react-native-reanimated'
 import { runOnUISync, scheduleOnRN } from 'react-native-worklets'
 
+import { closeChapterReason } from '@/components/chapters/close-chapter-reason'
 import { ChapterProgressBar } from '@/components/compounds/chapter-progress-bar'
 import { chapterProgressLabel } from '@/components/compounds/chapter-progress-label'
 import { ReasonButton } from '@/components/compounds/reason-button'
@@ -35,7 +36,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { openChapterNumber, type ChapterProgress } from '@/lib/chapters'
+import { isReadyToClose, openChapterNumber, type ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -66,14 +67,14 @@ export type ChapterPopoverProps = {
   sinceLabel: string | null
   /** Its `startEntryId` is the open row's jump; null leaves that row unpressable. */
   progress: ChapterProgress
-  /** isReadyToClose's verdict: `Ready to close` follows the progress label. */
-  readyToClose: boolean
+  /** The story's setting: `Ready to close` shows only while it's off. */
+  chapterAutoClose: boolean
+  /** The run gate's reason while it holds; it, or no reply to end on, disables Close. */
+  gateReason: string | undefined
   onOpenChange?: (open: boolean) => void
   onJumpToChapter: (startEntryId: string) => void
-  /** Runs once the overlay is gone, so the modal it opens has nothing under it. Absent: disabled. */
-  onCloseChapter?: () => void
-  /** Why Close chapter manually is disabled; absent with onCloseChapter set means enabled. */
-  closeReason?: string
+  /** Runs as the Popover closes, or after the phone Sheet's exit so no Sheet is under the modal. */
+  onCloseChapter: () => void
   onManageChapters: () => void
   ref?: Ref<ChapterPopoverHandle>
 }
@@ -98,6 +99,12 @@ type ArmProps = ChapterPopoverProps & { number: number }
 
 type AfterDismissRef = RefObject<(() => void) | null>
 
+function runHeld(ref: AfterDismissRef): void {
+  const run = ref.current
+  ref.current = null
+  run?.()
+}
+
 /** Popover on desktop and tablet, a medium bottom Sheet on phone, each opened from its own chip. */
 export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   const isPhone = useTier() === 'phone'
@@ -106,10 +113,7 @@ export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   // held goes when the tier leaves phone.
   const afterDismissRef = useRef<(() => void) | null>(null)
   useEffect(() => {
-    if (isPhone) return
-    const run = afterDismissRef.current
-    afterDismissRef.current = null
-    run?.()
+    if (!isPhone) runHeld(afterDismissRef)
   }, [isPhone])
   return isPhone ? (
     <SheetArm {...props} number={number} afterDismissRef={afterDismissRef} />
@@ -257,11 +261,6 @@ function SheetArm({
     afterDismissRef.current = run
     change(false)
   }
-  const runAfterDismiss = () => {
-    const run = afterDismissRef.current
-    afterDismissRef.current = null
-    run?.()
-  }
 
   useImperativeHandle(ref, () => ({ open: () => {}, close }))
 
@@ -270,7 +269,7 @@ function SheetArm({
       <SheetTrigger asChild>
         <ChapterChip number={content.number} expanded={open} />
       </SheetTrigger>
-      <SheetContent size="medium" onDismissed={runAfterDismiss}>
+      <SheetContent size="medium" onDismissed={() => runHeld(afterDismissRef)}>
         <OverlayBody {...content} arm={SHEET_ARM} close={close} closeThen={closeThen} />
       </SheetContent>
     </Sheet>
@@ -293,7 +292,7 @@ function SheetUnlockWatcher({ onUnlocked }: { onUnlocked: () => void }) {
 type OverlayBodyProps = Omit<ArmProps, 'onOpenChange' | 'ref'> & {
   arm: Arm
   close: () => void
-  /** Closes the overlay and runs `run` once nothing of it is left on screen. */
+  /** Closes the overlay, then runs `run`: at once on the Popover, after its exit on the Sheet. */
   closeThen: (run: () => void) => void
   /** The last pressable row, which takes focus on open. */
   lastRow?: Ref<View>
@@ -304,10 +303,10 @@ function OverlayBody({
   closed,
   sinceLabel,
   progress,
-  readyToClose,
+  chapterAutoClose,
+  gateReason,
   onJumpToChapter,
   onCloseChapter,
-  closeReason,
   onManageChapters,
   arm,
   close,
@@ -428,7 +427,7 @@ function OverlayBody({
         {/* One paragraph: a text-width label beside it would drop its last word on Android. */}
         <Text size="xs" variant="muted">
           {chapterProgressLabel(progress)}
-          {readyToClose ? (
+          {isReadyToClose(progress, chapterAutoClose) ? (
             <>
               {' · '}
               <Text size="xs" variant="default" className="font-medium">
@@ -443,8 +442,8 @@ function OverlayBody({
         <OverlayAction
           label={t('chapters:popover.closeManually')}
           variant="primary"
-          reason={closeReason}
-          onPress={onCloseChapter != null ? () => closeThen(onCloseChapter) : undefined}
+          reason={closeChapterReason(gateReason, progress.canClose)}
+          onPress={() => closeThen(onCloseChapter)}
         />
         <OverlayAction
           label={t('chapters:popover.manage')}
@@ -505,8 +504,8 @@ function ChapterRow({
 type OverlayActionProps = {
   label: string
   variant: 'primary' | 'ghost'
-  /** Undefined disables the action. Closing the overlay is the caller's, before or after it runs. */
-  onPress: (() => void) | undefined
+  /** Closing the overlay is the caller's, before or after it runs. */
+  onPress: () => void
   /** Disables the action and says why. */
   reason?: string
 }
@@ -517,7 +516,7 @@ function OverlayAction({ label, variant, onPress, reason }: OverlayActionProps) 
       variant={variant}
       size="sm"
       layout="stretch"
-      disabled={onPress == null || reason != null}
+      disabled={reason != null}
       disabledReason={reason}
       onPress={onPress}
     >

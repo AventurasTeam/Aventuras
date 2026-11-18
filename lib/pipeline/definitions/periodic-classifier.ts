@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
-import { CALL_TIMEOUT_DEFAULT_MS, callTimeoutMs, type ResolveModelConfig } from '@/lib/ai'
+import { CALL_TIMEOUT_DEFAULT_MS, type ResolveModelConfig } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   buildClassifierActions,
@@ -91,11 +91,6 @@ async function readWindowEntries(
 export const PASS_TIMEOUT_DEFAULT_MS = CALL_TIMEOUT_DEFAULT_MS
 
 const CLASSIFY_PHASE = 'classify'
-
-/** The classifier profile's `timeout` over the whole structured call, retries included. */
-export function passTimeoutMs(config: ResolveModelConfig): number {
-  return callTimeoutMs('classifier', config)
-}
 
 /** classifier.md → What the classifier reads → Known happenings, for a window that isn't empty. */
 export async function readKnownHappenings(
@@ -263,7 +258,6 @@ export async function* periodicClassifierPhase(
     assignments: cfg.assignments,
     storyModels: open.settings.models,
   }
-  const timeoutMs = passTimeoutMs(modelConfig)
 
   // Read by the status block; left behind by a crash, it holds the branch until a boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
@@ -276,7 +270,6 @@ export async function* periodicClassifierPhase(
     config: modelConfig,
     signal: ctx.abortSignal,
     options: { actionId: ctx.actionId },
-    timeoutMs,
   })
   // An interrupt leaves the watermark; onInterrupt restores the pre-run status.
   if (call.status === 'aborted') return { status: 'aborted' }

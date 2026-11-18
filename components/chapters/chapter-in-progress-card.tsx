@@ -6,31 +6,34 @@ import { chapterProgressCounts } from '@/components/compounds/chapter-progress-l
 import { ReasonButton } from '@/components/compounds/reason-button'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import type { ChapterProgress } from '@/lib/chapters'
+import { isReadyToClose, type ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+
+import { closeChapterReason } from './close-chapter-reason'
 
 export type ChapterInProgressCardProps = {
   progress: ChapterProgress
   /** From chapterTimelineData's sinceLabel; null drops `since`. */
   sinceLabel: string | null
-  /** Opens the close modal; absent disables `Close chapter…`. */
-  onCloseChapter?: () => void
-  /** Why `Close chapter…` is disabled; absent with onCloseChapter set means enabled. */
-  closeReason?: string
-  /** isReadyToClose's verdict, shown on the progress line. */
-  readyToClose: boolean
+  /** The story's setting: `Ready to close` shows only while it's off. */
+  chapterAutoClose: boolean
+  /** The run gate's reason while it holds; it, or no reply to end on, disables `Close chapter…`. */
+  gateReason: string | undefined
+  /** Opens the close modal. */
+  onCloseChapter: () => void
 }
 
 /** The open region's last card: it has no row yet, so nothing on it expands or edits. */
 export function ChapterInProgressCard({
   progress,
   sinceLabel,
+  chapterAutoClose,
+  gateReason,
   onCloseChapter,
-  closeReason,
-  readyToClose,
 }: ChapterInProgressCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
+  const closeReason = closeChapterReason(gateReason, progress.canClose)
   return (
     <View
       testID="chapter-in-progress-card"
@@ -50,7 +53,7 @@ export function ChapterInProgressCard({
         {/* One paragraph: a text-width label beside it would drop its last word on Android. */}
         <Text size="xs" variant="muted">
           {chapterProgressCounts(progress)}
-          {readyToClose ? (
+          {isReadyToClose(progress, chapterAutoClose) ? (
             <>
               {' · '}
               <Text size="xs" variant="default" className="font-medium">
@@ -63,11 +66,11 @@ export function ChapterInProgressCard({
       <Text size="sm" variant="muted" className="italic">
         {t('chapters:inProgress.placeholder')}
       </Text>
-      {/* chapter-timeline.md → Mobile expression. */}
+      {/* Full width on phone, for a clear tap target. */}
       <ReasonButton
         variant="primary"
         layout={isPhone ? 'stretch' : 'start'}
-        disabled={onCloseChapter == null || closeReason != null}
+        disabled={closeReason != null}
         disabledReason={closeReason}
         onPress={onCloseChapter}
       >

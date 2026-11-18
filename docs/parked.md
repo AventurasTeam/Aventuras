@@ -1140,7 +1140,9 @@ the gate. The one store guard that let the stale copy change a write,
 `promoteStagedEntity`'s, went in the same pass. One path is open and
 unverified: a deep link into another story while one is busy, which
 skips the story-leave guard
-([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)).
+([triage](./implementation/triage.md#inbox)). A close's failed click
+pre-flight writes its system entry through `raiseSystemEntry`, one more
+patching writer.
 **Revisit signal:** an open or re-hydrate path that can run while a
 write on that branch commits. Raised in 5.5a's review; routed from
 triage 2026-11-14.
@@ -1516,6 +1518,24 @@ an input, is unchecked. The catalog fetch already stores vLLM's
 pre-fill needs exists (the context window check, 2026-10-27). Parked 2026-10-26; the signal is users of
 self-hosted embedders leaving the window unset and hitting the silent
 truncation it warns about.
+
+#### Two closes in one turn when auto-close is turned on late
+
+A region far past the threshold, as turning auto-close on late or
+lowering the threshold leaves one, owes a close at the next Send. Send
+runs it before the turn, ending at most one and a half thresholds in,
+and the region past that end can still owe one, so the turn's own chain
+can close again after the reply
+([`generation-pipeline.md → chainsTo on predecessor`](./generation-pipeline.md#chainsto-on-predecessor)).
+Phase 1's bounds mean to close such a region one chapter a turn
+([`memory/chapter-close.md → Phase 1`](./memory/chapter-close.md#phase-1--boundary-selection));
+two in one turn doubles the wait and the memory banner. Unmeasured:
+Slice 5.10's check didn't run, since `chapter-close-auto` seeds
+auto-close on (its
+[Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes),
+Monitor items, "Two closes in one turn"). **Revisit signal:** seeing it
+in play, or a test that turns auto-close on late. Parked 2026-11-18
+from the slice review (developer).
 
 ### Memory pipeline (parked)
 
@@ -4029,32 +4049,6 @@ Slice 5.3's slice review, 2026-11-03, left Space on a `<button>` or
 too and weren't probed. Revisit when an entry with media controls is
 reported, or when the sanitizer's allowlist changes. Routed from
 triage 2026-11-05.
-
-#### A store change's host cost grows with the loaded window
-
-The reader's document renders a capped slice, but the host still works
-over the whole loaded window on every store change: the route,
-`useBranchWorldTime`, `useStoryPlace` and `useRowSignals` each copy,
-filter and sort the entries store. A fresh open loads about 50 rows; a
-far jump or reading back grows the window, and it stays grown until
-the reader reopens. On the Fold's release build with
-`pnpm db:seed:long`, a reply's end held the host for two changes (the
-saved row replacing the stream card, then the next update) with
-nothing emitted in between: about 1.1 to 1.2 s each on the 60-chapter
-window grown to its first row (7,943 rows), about 0.4 s at 20 chapters
-(2,659 rows), about 0.2 s on a fresh window at 60 chapters. The
-streamed text itself painted with no gap over 160 ms at either size.
-The split of that time between the four copies and the rest of the
-host's work isn't profiled. A chapter close writes its stamps as one
-group, whose store patches go out in one synchronous loop, so it should
-cost about one change; if the time is paid per store write rather than
-per render, a close on that window pays it about 133 times. Owed closes
-run before a turn, so a long story reaches this without a manual close.
-**Revisit signal:** the first close measured on a grown window
-([Slice 5.10's Open questions](./implementation/milestones/05-chapters-chapter-close/slices/10-two-starts.md#open-questions)),
-a user noticing the pause, or a story long enough for it to pass about
-2 s. Routed from the sliding reader window's Fold measure, 2026-11-16
-(developer decision).
 
 #### A regenerate drops World edits made after its reply
 

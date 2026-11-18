@@ -26,7 +26,10 @@ export type OwedCloseRun =
  * (chains the close) while entries are unprocessed, else the close. Rejects when the origin throws.
  * The owed check precedes `startCloseChain`, which starts a pass over any backlog.
  */
-export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCloseRun> {
+export async function runOwedClose(
+  branchId: string,
+  ctx: DbCtx,
+): Promise<Exclude<OwedCloseRun, PreflightFailedStart>> {
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return refused(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   // A held branch fails the next Send as held, so it can't settle as nothing owed.
@@ -36,10 +39,7 @@ export async function runOwedClose(branchId: string, ctx: DbCtx): Promise<OwedCl
     generationStore.clearDeferredClose(branchId)
     return { outcome: 'nothing-owed' }
   }
+  // No click pre-flight: the close's own run pre-flights, and fails as that run.
   const started = await startCloseChain(branchId, ctx)
-  if (!('outcome' in started)) return { outcome: 'ran', end: started }
-  // Given no pre-flight, the start can't report one; the close's own pre-flight speaks as its run.
-  if (started.outcome === 'preflight-failed')
-    throw new Error('runOwedClose: a start given no pre-flight reported a failed one')
-  return started
+  return 'outcome' in started ? started : { outcome: 'ran', end: started }
 }

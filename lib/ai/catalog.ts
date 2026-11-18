@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { isJsonObject } from '@/lib/json-object'
+
 import type { ProviderInstance } from '../db'
 import { createFetchWithCapture } from './transport/fetch'
 import type { ProviderInstanceWithStub } from './types'
@@ -30,27 +32,16 @@ function asWindow(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
 }
 
-function nCtxOf(meta: unknown): unknown {
-  return typeof meta === 'object' && meta !== null && 'n_ctx' in meta ? meta.n_ctx : undefined
-}
-
 /** max_model_len, then meta.n_ctx; positive safe integers only (architecture.md → Detection). */
 export function readContextWindow(raw: Record<string, unknown>): number | undefined {
-  return asWindow(raw.max_model_len) ?? asWindow(nCtxOf(raw.meta))
+  const { meta } = raw
+  return asWindow(raw.max_model_len) ?? asWindow(isJsonObject(meta) ? meta.n_ctx : undefined)
 }
 
 // OpenRouter lists the request parameters each model accepts.
 function supportedParameters(raw: Record<string, unknown>): readonly string[] | undefined {
   const value = raw.supported_parameters
   return Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined
-}
-
-function functionCallingOf(capabilities: unknown): unknown {
-  return typeof capabilities === 'object' &&
-    capabilities !== null &&
-    'function_calling' in capabilities
-    ? capabilities.function_calling
-    : undefined
 }
 
 /**
@@ -60,7 +51,8 @@ function functionCallingOf(capabilities: unknown): unknown {
 export function readToolCalling(raw: Record<string, unknown>): boolean | undefined {
   const parameters = supportedParameters(raw)
   if (parameters !== undefined) return parameters.includes('tools')
-  const flag = functionCallingOf(raw.capabilities)
+  const { capabilities } = raw
+  const flag = isJsonObject(capabilities) ? capabilities.function_calling : undefined
   return typeof flag === 'boolean' ? flag : undefined
 }
 

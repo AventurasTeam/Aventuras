@@ -13,7 +13,7 @@ import {
 import { applyDeltaAction as realApplyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '@/lib/actions/delta/branch-write-lock'
 import { registerStandInClose } from '@/lib/actions/turns/__tests__/stand-in-close'
-import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
+import { generateStructured } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   classifierExtractionSchema,
@@ -64,7 +64,6 @@ import { passChainsTo, unprocessedEntryCount } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import {
   ensurePeriodicClassifierPipelineRegistered,
-  passTimeoutMs,
   PERIODIC_CLASSIFIER_KIND,
   PERIODIC_CLASSIFIER_RESOLVES,
   periodicClassifierPhase,
@@ -3852,43 +3851,6 @@ describe('periodicClassifierPhase — mentioned places', () => {
     )
     expect(log?.level).toBe('warn')
     expect(log?.fields).toEqual({ handle: 'new:inn', parent: ford.id, cause: 'retired' })
-  })
-})
-
-describe('passTimeoutMs', () => {
-  const [profile] = CLASSIFIER_WIRED_CONFIG.profiles
-  const config = (timeout?: number): ResolveModelConfig => ({
-    providers: CLASSIFIER_WIRED_CONFIG.providers,
-    profiles: [{ ...profile, ...(timeout !== undefined ? { timeout } : {}) }],
-    assignments: CLASSIFIER_WIRED_CONFIG.assignments,
-  })
-
-  // Profile timeouts are seconds, as the SDK call settings read them.
-  it("reads the classifier profile's timeout, shorter or longer than ten minutes", () => {
-    expect(passTimeoutMs(config(30))).toBe(30_000)
-    expect(passTimeoutMs(config(900))).toBe(900_000)
-  })
-
-  it('is ten minutes when the profile sets none, the chain does not resolve, or a story overrides', () => {
-    expect(passTimeoutMs(config())).toBe(600_000)
-    expect(passTimeoutMs({ ...config(30), assignments: {} })).toBe(600_000)
-    expect(
-      passTimeoutMs({
-        ...config(30),
-        storyModels: { classifier: { providerId: 'prov-1', modelId: 'other' } },
-      }),
-    ).toBe(600_000)
-  })
-
-  it.each([0, -30, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
-    'reads an invalid profile timeout (%s) as none',
-    (timeout) => {
-      expect(passTimeoutMs(config(timeout))).toBe(600_000)
-    },
-  )
-
-  it("caps a huge timeout at setTimeout's largest delay", () => {
-    expect(passTimeoutMs(config(9_999_999))).toBe(2_147_483_647)
   })
 })
 

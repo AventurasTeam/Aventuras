@@ -7,7 +7,7 @@ import { CLOSE_REASON } from '@/lib/pipeline/definitions/close-agent/verdict'
 
 // The measure's bar (testing.md → Real-provider checks): every task is judged, and these four must
 // land a write once they start. Happenings, Lifecycle and Awareness can be right writing nothing.
-export const WRITE_EXPECTED_TASKS = [
+const WRITE_EXPECTED_TASKS = [
   'identity',
   'threads',
   'lore',
@@ -231,11 +231,14 @@ export function barVerdict(tallies: readonly RunTally[]): BarVerdict {
   return { passing, runs, capRuns, mergeRuns, verdict }
 }
 
-/** One run of the boundary arm. */
-export type BoundaryAttempt = {
-  outcome: 'picked' | 'parse' | 'reply-cut-off' | 'failed' | 'aborted'
-  /** The pick, or the latest candidate an unusable reply fell back to; null when the call failed or aborted. */
-  endEntryId: string | null
+/**
+ * One run of the boundary arm: `endEntryId` is the pick, or the latest candidate an unusable reply
+ * fell back to.
+ */
+export type BoundaryAttempt = (
+  | { outcome: 'picked' | 'parse' | 'reply-cut-off'; endEntryId: string }
+  | { outcome: 'failed' | 'aborted'; endEntryId: null }
+) & {
   /** The most output tokens one response of the call reported; null when none reported any. */
   outputTokens: number | null
 }

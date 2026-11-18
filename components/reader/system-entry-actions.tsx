@@ -305,7 +305,8 @@ function describeWorkerFailure(
   if (error.kind === 'config-resolver') {
     // Only the close's can't-call-tools line reads `model`.
     const key = vocabulary.resolver[error.failure] ?? vocabulary.generic
-    return { content: t(key, { model: error.modelId }), detail: error.detail }
+    const model = error.failure === 'tool-calling-off' ? error.modelId : undefined
+    return { content: t(key, { model }), detail: error.detail }
   }
   if (error.kind === 'reply-cut-off') {
     return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }

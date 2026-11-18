@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { generateStructured } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -9,12 +9,15 @@ import {
   __resetRegistry,
   CHAPTER_CLOSE_KIND,
   CLASSIFIER_HELD,
+  definePipeline,
   ensurePerTurnPipelineRegistered,
   isClassifierHeld,
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
-  type PipelineError,
+  type ChainEnd,
+  type ConfigResolverError,
+  type PhaseResult,
   type PipelineEvent,
   type PreflightFailedStart,
   type RejectedStart,
@@ -39,6 +42,7 @@ import {
 } from '@/lib/stores'
 
 import { startCloseChain } from './close-chain'
+import { runPickedClose } from './picked-close'
 import { MANUAL_CLOSE_REFUSAL, startManualClose } from './start-manual-close'
 import { writeSystemEntry } from '../story-entries/system-entry'
 import {
@@ -154,7 +158,7 @@ function overrideLoreModel(modelId: string): void {
   })
 }
 
-const TOOLS_OFF = (modelId: string): PipelineError => ({
+const TOOLS_OFF = (modelId: string): ConfigResolverError => ({
   kind: 'config-resolver',
   failure: 'tool-calling-off',
   target: 'lore-mgmt',
@@ -573,29 +577,58 @@ describe('startManualClose pre-flight', () => {
     expect(await f.ctx.db.select().from(pipelineRuns)).toEqual([])
   })
 
-  it('leaves a pick an earlier close left as it stood', async () => {
+  it('drops a pick an earlier close left: the confirmed pick replaces it, though nothing starts', async () => {
     generationStore.setPendingClose(f.branchId, { endEntryId: f.replyIds[0]! })
     await flagToolCalling('lore-model', false)
 
     expect((await startManualClose(f.branchId, lastReply(), f.ctx)).outcome).toBe(
       'preflight-failed',
     )
-    expect(pickOn()).toEqual({ endEntryId: f.replyIds[0] })
+    expect(pickOn()).toBeUndefined()
   })
 
-  it('refuses any resolver failure the same way, at its first phase', async () => {
-    const settings = appSettingsStore.getAppSettings()
-    const unassigned = { ...settings, assignments: { classifier: 'prof_close_classifier' } }
-    expect(await hydrateAppSettings(async () => unassigned)).toEqual({ status: 'ok' })
+  it.each([
+    {
+      failure: 'profile-missing',
+      arrange: async () => {
+        const settings = appSettingsStore.getAppSettings()
+        const assignments = { ...settings.assignments, 'lore-mgmt': 'prof_deleted' }
+        expect(await hydrateAppSettings(async () => ({ ...settings, assignments }))).toEqual({
+          status: 'ok',
+        })
+      },
+    },
+    {
+      failure: 'provider-missing',
+      arrange: async () => {
+        const settings = appSettingsStore.getAppSettings()
+        const profiles = settings.profiles.map((p) =>
+          p.id === 'prof_close_lore'
+            ? { ...p, modelRef: { providerId: 'prov_deleted', modelId: 'lore-model' } }
+            : p,
+        )
+        expect(await hydrateAppSettings(async () => ({ ...settings, profiles }))).toEqual({
+          status: 'ok',
+        })
+      },
+    },
+    {
+      failure: 'override-provider-missing',
+      arrange: async () => {
+        const open = currentStoryStore.getCurrentStory()!
+        const lore = { providerId: 'prov_deleted', modelId: 'lore-model' }
+        currentStoryStore.set({
+          ...open,
+          settings: { ...open.settings, models: { ...open.settings.models, 'lore-mgmt': lore } },
+        })
+      },
+    },
+  ] as const)('refuses $failure the same way, at its first phase', async ({ failure, arrange }) => {
+    await arrange()
 
     expect(await startManualClose(f.branchId, lastReply(), f.ctx)).toEqual({
       outcome: 'preflight-failed',
-      error: {
-        kind: 'config-resolver',
-        failure: 'no-profile-assigned',
-        target: 'lore-mgmt',
-        phaseName: 'boundary',
-      },
+      error: { kind: 'config-resolver', failure, target: 'lore-mgmt', phaseName: 'boundary' },
     })
     expect(pickOn()).toBeUndefined()
     expect(closeRuns()).toBe(0)
@@ -627,6 +660,98 @@ describe('startManualClose pre-flight', () => {
       await startManualClose(f.branchId, action.id, f.ctx),
       MANUAL_CLOSE_REFUSAL.invalidEnd,
     )
+  })
+})
+
+// chapter-close.md → Manual user-triggered close: a confirmed pick replaces the owed one.
+describe('a failed check after a failed close', () => {
+  const SENT = 'I wait at the milestone.'
+
+  // A turn that writes nothing past its user_action, so only Send's owed work can close.
+  function standInTurn(): void {
+    definePipeline({
+      kind: PER_TURN_KIND,
+      phases: [
+        {
+          name: 'p',
+          run: async function* (): AsyncGenerator<never, PhaseResult> {
+            return { status: 'completed' }
+          },
+        },
+      ],
+      concurrencyPolicy: { blockedBy: [PER_TURN_KIND] },
+      affordance: 'pill-only',
+      gateBehavior: 'hard-gate',
+    })
+  }
+
+  // A close at `owed` starts and fails, then a confirm at `confirmed` fails its check; the
+  // setting is fixed after.
+  async function failACloseThenACheck(): Promise<{ owed: string; confirmed: string }> {
+    const owed = f.replyIds[1]!
+    const confirmed = f.replyIds[3]!
+    vi.mocked(generateStructured).mockResolvedValueOnce({
+      status: 'failed',
+      error: { tier: 'provider', reason: 'network', detail: 'connect ECONNREFUSED' },
+      recoverable: [],
+    })
+    expect((await startManualClose(f.branchId, owed, f.ctx)).outcome).toBe('failed')
+    expect(pickOn()).toEqual({ endEntryId: owed })
+    await flagToolCalling('lore-model', false)
+    expect((await startManualClose(f.branchId, confirmed, f.ctx)).outcome).toBe('preflight-failed')
+    await flagToolCalling('lore-model', true)
+    return { owed, confirmed }
+  }
+
+  const send = () =>
+    within(
+      submitTurn(
+        { storyId: f.storyId, branchId: f.branchId },
+        { content: SENT, composerMode: 'free' },
+        f.ctx,
+      ),
+      'the Send',
+    )
+
+  const chapterEnds = async () => (await f.ctx.db.select().from(chapters)).map((r) => r.endEntryId)
+
+  it('runs no close at the replaced pick on Send; the entry’s Retry closes at the confirmed one', async () => {
+    standInTurn()
+    const { confirmed } = await failACloseThenACheck()
+    const completes = recordCompletes()
+
+    expect((await send()).outcome).toBe('completed')
+    expect(completes.map((e) => e.kind)).toEqual([PER_TURN_KIND])
+    expect(await chapterEnds()).toEqual([])
+
+    // As a pass over the turn leaves it, so the Retry starts the close itself.
+    const [sent] = await f.ctx.db.select().from(storyEntries).where(eq(storyEntries.content, SENT))
+    await setClassifierStatus(f, { state: 'idle', processedThrough: sent!.position })
+    const retried = await within(runPickedClose(f.branchId, confirmed, f.ctx), 'the Retry')
+
+    expect(retried).toMatchObject({
+      outcome: 'ran',
+      end: { kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } },
+    })
+    expect(await chapterEnds()).toEqual([confirmed])
+  })
+
+  it('still runs a close the threshold owes on Send, at its own end', async () => {
+    standInTurn()
+    const { owed } = await failACloseThenACheck()
+    // Every reply is past one and a half thresholds: no candidate, so the latest before the head.
+    const open = currentStoryStore.getCurrentStory()!
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
+    })
+    const completes = recordCompletes()
+
+    expect((await send()).outcome).toBe('completed')
+
+    expect(completes.map((e) => e.kind)).toEqual([CHAPTER_CLOSE_KIND, PER_TURN_KIND])
+    expect(await chapterEnds()).toEqual([f.replyIds.at(-2)])
+    expect(f.replyIds.at(-2)).not.toBe(owed)
   })
 })
 
@@ -699,12 +824,26 @@ describe('startCloseChain', () => {
   it('never pre-flights a start a refusal ends', async () => {
     ensurePerTurnPipelineRegistered()
     holdStoryWithTurn()
-    const preflight = vi.fn<(open: OpenStory) => PipelineError | null>(() => null)
+    const preflight = vi.fn<(open: OpenStory) => ConfigResolverError | null>(() => null)
 
     expect(await startCloseChain(f.branchId, f.ctx, { preflight })).toEqual({
       outcome: 'rejected',
       blockedBy: MANUAL_CLOSE_REFUSAL.busy,
     })
     expect(preflight).not.toHaveBeenCalled()
+  })
+
+  it('types a pre-flight failure into any start whose options may carry a pre-flight', () => {
+    type MaybePreflighted = {
+      validate?: () => Promise<RejectedStart | null>
+      preflight?: (open: OpenStory) => ConfigResolverError | null
+    }
+    const maybePreflighted = (opts: MaybePreflighted) => startCloseChain(f.branchId, f.ctx, opts)
+    const unpreflighted = () => startCloseChain(f.branchId, f.ctx, { validate: async () => null })
+
+    expectTypeOf(maybePreflighted).returns.resolves.toEqualTypeOf<
+      ChainEnd | RejectedStart | PreflightFailedStart
+    >()
+    expectTypeOf(unpreflighted).returns.resolves.toEqualTypeOf<ChainEnd | RejectedStart>()
   })
 })

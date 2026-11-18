@@ -1,6 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronUp } from 'lucide-react-native'
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -42,9 +43,8 @@ export type CloseModalRow = {
 export type CloseChapterModalViewProps = {
   open: boolean
   start: (CloseModalRow & { endedChapterNumber: number | null }) | null
-  /** Rows passing canEndChapter, newest first. */
+  /** Rows passing canEndChapter, newest first: the first is the one tagged latest. */
   replies: readonly CloseModalRow[]
-  latestId: string | null
   selectedId: string | null
   tokensInRange: number
   /** Set while the gate holds: Close chapter disables with it. */
@@ -215,8 +215,12 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
   // TanStack Virtual's instance mutates in place; compiled memos keyed on it would go stale.
   'use no memo'
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Measured heights keyed as the rows are, so a reply landing above keeps the others' heights.
+  // Stable per list: the virtualizer rebuilds every measurement when the function changes.
+  const itemKey = useCallback((index: number) => replies[index]!.id, [replies])
   const virtualizer = useVirtualizer({
     count: replies.length,
+    getItemKey: itemKey,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => REPLY_ROW_ESTIMATE,
     overscan: 6,
@@ -346,7 +350,6 @@ function ReplyPanelNative({ replies, latestId, selectedId, onPick }: PanelProps)
 function CloseModalBody({
   start,
   replies,
-  latestId,
   selectedId,
   tokensInRange,
   disabledReason,
@@ -356,6 +359,7 @@ function CloseModalBody({
 }: CloseChapterModalViewProps) {
   const [panelOpen, setPanelOpen] = useState(false)
   const triggerRef = useRef<View>(null)
+  const latestId = replies[0]?.id ?? null
   const selected = replies.find((row) => row.id === selectedId) ?? null
   const pick = (entryId: string) => {
     onSelect(entryId)

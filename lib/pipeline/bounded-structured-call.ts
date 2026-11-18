@@ -25,8 +25,8 @@ export type BoundedStructuredOutcome<T> =
   | { status: 'failed'; error: PipelineError; lastError: string; cause: StructuredCallFailure }
 
 /**
- * One structured call under its bound (the agent's unless `timeoutMs` is given): a cancel is
- * `aborted`, an expiry a provider timeout.
+ * One structured call under its agent's bound (callTimeoutMs): a cancel is `aborted`, an expiry a
+ * provider timeout.
  */
 export async function* boundedStructuredCall<T>(call: {
   target: ResolveTarget
@@ -35,12 +35,13 @@ export async function* boundedStructuredCall<T>(call: {
   schema: z.ZodType<T>
   config: ResolveModelConfig
   signal: AbortSignal
-  options: StructuredCallOptions
-  /** Defaults to callTimeoutMs(target, config). */
-  timeoutMs?: number
+  /** No `sections`: the outcome drops the call's section counts. */
+  options: Pick<StructuredCallOptions, 'actionId' | 'defaultMaxOutput'> & { sections?: never }
 }): AsyncGenerator<PhaseEmittedEvent, BoundedStructuredOutcome<T>> {
-  const timeoutMs = call.timeoutMs ?? callTimeoutMs(call.target, call.config)
+  const timeoutMs = callTimeoutMs(call.target, call.config)
   const bounded = boundedSignal(call.signal, timeoutMs)
+  // Named, not passed whole: an upcast options value can still carry sections.
+  const { actionId, defaultMaxOutput } = call.options
   let result: GenerateStructuredResult<T>
   try {
     result = await generateStructured(
@@ -49,7 +50,7 @@ export async function* boundedStructuredCall<T>(call: {
       call.schema,
       call.config,
       bounded.signal,
-      call.options,
+      defaultMaxOutput === undefined ? { actionId } : { actionId, defaultMaxOutput },
     )
   } finally {
     bounded.dispose()
