@@ -967,10 +967,10 @@ describe('retryCloseEntry', () => {
     const h = harness(new Error('marker insert failed'))
     await retryCloseEntry(h.deps)
     expect(h.calls).toEqual(['rewriteClose'])
-    expect(h.rewriteClose).toHaveBeenCalledWith({
-      kind: 'orchestrator',
-      detail: 'marker insert failed',
-    })
+    expect(h.rewriteClose).toHaveBeenCalledWith(
+      { kind: 'orchestrator', detail: 'marker insert failed' },
+      undefined,
+    )
   })
 
   // The close committed, so its failure copy would be wrong: the throw goes to the caller.
@@ -1009,6 +1009,15 @@ describe('retryCloseEntry', () => {
       await retryCloseEntry(h.deps)
       expect(h.runClose).toHaveBeenCalledOnce()
       expect(h.runPicked).not.toHaveBeenCalled()
+    })
+
+    it('rewrites a throw from the restart, keeping the pick', async () => {
+      const h = harness(new Error('bridge closed'), false, PICK)
+      await retryCloseEntry(h.deps)
+      expect(h.rewriteClose).toHaveBeenCalledExactlyOnceWith(
+        { kind: 'orchestrator', detail: 'bridge closed' },
+        PICK,
+      )
     })
 
     it('rewrites a pre-flight that fails again, keeping the pick', async () => {

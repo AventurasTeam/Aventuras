@@ -462,7 +462,8 @@ export async function retryCloseEntry(deps: {
     run = await (deps.closePick == null ? deps.runClose() : deps.runPicked(deps.closePick))
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
-    return deps.rewriteClose({ kind: 'orchestrator', detail })
+    // A fresh restart validates the pick again, even when the throw came after the reserve.
+    return deps.rewriteClose({ kind: 'orchestrator', detail }, deps.closePick)
   }
   if (run.outcome === 'nothing-owed') return deps.committed('nothing-owed')
   // Nothing started, so the pick is still the entry's alone; once a run reserves, it is the
