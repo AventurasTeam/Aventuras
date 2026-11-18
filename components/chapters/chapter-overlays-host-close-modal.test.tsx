@@ -406,18 +406,20 @@ describe('ChapterOverlaysHost — the close modal', () => {
     expect(reads.series).toHaveBeenCalledTimes(1)
   })
 
-  it('logs a failed region read and offers nothing to confirm', async () => {
+  it('logs a failed region read as an error and offers nothing to confirm', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     reads.series.mockRejectedValue(new Error('disk'))
     renderHost()
     openModal()
     await waitFor(() =>
-      expect(warn).toHaveBeenCalledWith('app.close_modal_read_failed', {
+      expect(error).toHaveBeenCalledWith('app.close_modal_read_failed', {
         branchId: 'br_1',
         read: 'series',
         error: 'disk',
       }),
     )
+    expect(warn).not.toHaveBeenCalled()
     expect(modalView.props).toMatchObject({
       start: null,
       replies: [],
@@ -426,6 +428,24 @@ describe('ChapterOverlaysHost — the close modal', () => {
     })
     act(() => modalView.props!.onConfirm())
     expect(actions.start).not.toHaveBeenCalled()
+  })
+
+  it('logs a failed world-time read as a warning and still offers the replies', async () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.times.mockRejectedValue(new Error('disk'))
+    renderHost()
+    openModal()
+    await waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('app.close_modal_read_failed', {
+        branchId: 'br_1',
+        read: 'times',
+        error: 'disk',
+      }),
+    )
+    expect(error).not.toHaveBeenCalled()
+    await waitFor(() => expect(modalView.props?.replies).toHaveLength(3))
+    expect(modalView.props?.selectedId).toBe('entry_64')
   })
 
   // AC11's host half: the request belongs to the branch it was made on.

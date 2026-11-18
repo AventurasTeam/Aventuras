@@ -22,7 +22,8 @@ import { CloseChapterModalView, type CloseModalRow } from './close-chapter-modal
 
 const NO_TIMES: ReadonlyMap<string, number> = new Map()
 
-// Logs from the shared fetch, since every mounted observer receives the same error.
+// Logs from the shared fetch, since every mounted observer receives the same error. Without the
+// series there is nothing to confirm; without the times the rows only lose their labels.
 async function readLogged<T>(
   branchId: string,
   read: 'series' | 'times',
@@ -31,7 +32,7 @@ async function readLogged<T>(
   try {
     return await run()
   } catch (error) {
-    logger.warn('app.close_modal_read_failed', {
+    logger[read === 'series' ? 'error' : 'warn']('app.close_modal_read_failed', {
       branchId,
       read,
       error: error instanceof Error ? error.message : String(error),
