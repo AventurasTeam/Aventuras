@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useMemo, useState, type ReactElement } from 'react'
 
 import { worldTimeLabel } from '@/components/reader/chapter-time-range'
@@ -75,6 +75,8 @@ export function CloseChapterModal({
   const { data: series } = useQuery({
     queryKey: ['close-modal-series', branchId, settleCount, tailId],
     queryFn: () => readLogged(branchId, 'series', () => openRegionSeries(branchId, { db })),
+    // A settle re-reads under a new key; the rows stay up meanwhile. The body's branch is fixed.
+    placeholderData: keepPreviousData,
   })
   // C15: a world-time edit moves neither key part and the client never goes stale, so the read
   // runs again each time the modal opens.
@@ -82,6 +84,7 @@ export function CloseChapterModal({
     queryKey: ['close-modal-times', branchId, settleCount, tailId],
     queryFn: () => readLogged(branchId, 'times', () => readOpenRegionTimes(branchId, db)),
     refetchOnMount: 'always',
+    placeholderData: keepPreviousData,
   })
   const [picked, setPicked] = useState<string | null>(null)
 

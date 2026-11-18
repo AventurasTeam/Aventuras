@@ -145,12 +145,15 @@ vi.mock('./review-window', () => ({
 const modalView = vi.hoisted(() => ({
   props: null as CloseChapterModalViewProps | null,
   mounted: false,
+  // What each render showed, so a test can see a frame that dropped the rows or their times.
+  frames: [] as { replies: number; startTime: string | null }[],
 }))
 vi.mock('./close-chapter-modal-view', async () => {
   const { useEffect } = await import('react')
   return {
     CloseChapterModalView: (props: CloseChapterModalViewProps) => {
       modalView.props = props
+      modalView.frames.push({ replies: props.replies.length, startTime: props.start?.time ?? null })
       useEffect(() => {
         modalView.mounted = true
         return () => {
@@ -409,6 +412,7 @@ beforeEach(() => {
   actions.raise.mockReset().mockResolvedValue('sys_1')
   modalView.props = null
   modalView.mounted = false
+  modalView.frames = []
   openStory()
   chaptersStore.hydrate('br_1', [chapter()])
   entitiesStore.hydrate('br_1', [makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael' })])
@@ -955,11 +959,20 @@ describe('ChapterOverlaysHost — the close modal', () => {
     renderHost()
     openModal()
     await shownModal()
+    modalView.frames = []
     const run = gateRun()
     act(() => generationStore.startRun(run))
     await waitFor(() => expect(modalView.props?.disabledReason).toBe(t('generationGate.inFlight')))
     act(() => generationStore.finishRun(run.runId))
     await waitFor(() => expect(modalView.props?.disabledReason).toBeUndefined())
+    // The settle re-reads both under a new key; the rows stay up meanwhile.
+    await waitFor(() => expect(reads.series).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(reads.times).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(modalView.frames).not.toContainEqual(expect.objectContaining({ replies: 0 }))
+    expect(modalView.frames).not.toContainEqual(expect.objectContaining({ startTime: null }))
   })
 
   // C15: a world-time edit moves neither settleCount nor the tail, and the client never goes stale.
