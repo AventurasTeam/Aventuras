@@ -474,7 +474,7 @@ describe('ChapterOverlaysHost — the close modal', () => {
     expect(modalView.props?.selectedId).toBe('entry_60')
     act(() => modalView.props!.onConfirm())
     expect(chapterOverlaysStore.getState().closeModal).toBeNull()
-    expect(actions.start).toHaveBeenCalledWith('br_1', 'entry_60', {
+    expect(actions.start).toHaveBeenCalledExactlyOnceWith('br_1', 'entry_60', {
       db: {},
       runInTransaction: expect.any(Function),
     })
