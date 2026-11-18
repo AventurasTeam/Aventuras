@@ -205,3 +205,13 @@ slice-planning gate forces its resolution before that slice is planned.
   [`parked.md` → A write that commits while a story opens is lost from its stores](../parked.md#a-write-that-commits-while-a-story-opens-is-lost-from-its-stores).
   Routed by 5.10's slice review, 2026-11-18, from that slice's Open
   questions.
+- **A held row keeps a world-time decoration the incoming slice
+  removed.** `composeHeld` (`components/reader/slice-hold.ts`) merges
+  `{ ...shown.worldTimeDecorations, ...incoming.worldTimeDecorations }`,
+  so while a change above the anchor waits for scroll rest, a row the
+  incoming slice still holds but no longer decorates keeps the shown
+  label until the hold ends. Its docblock promises the held rows' own
+  decorations only where the incoming slice dropped the row, which the
+  close-here marks now follow. Transient and unverified as reachable (a
+  time edit landing on a held row mid-gesture). Raised in 5.10's slice
+  review, 2026-11-18.
