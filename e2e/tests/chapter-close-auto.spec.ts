@@ -96,12 +96,27 @@ const KEYWORD = 'bell tower'
 const RETIRED = 'She leaves the Hollow for good once the ledger is hidden.'
 const PIN = 0.6
 
+// The seeded reply each task's write cites: the first open reply (her scene) or the second (the bell).
+const CITED = {
+  happenings: ['scene', 'item'],
+  lore: ['item'],
+  identity: ['scene'],
+  threads: ['scene'],
+  upkeep: ['item'],
+  lifecycle: ['scene'],
+  awareness: ['scene'],
+} as const satisfies Record<(typeof TASK_ORDER)[number], readonly ('scene' | 'item')[]>
+
+// The boundary call's handle the scripted reply names, t1…tN over the candidates oldest first: a
+// middle one, so neither the oldest nor the latest (the unusable reply's end) passes for the pick.
+const PICKED_CANDIDATE = 2
+
 type RegionRow = { id: string; position: number; kind: string; tokens: number }
 
 type ClosePlan = {
   threshold: number
   region: readonly RegionRow[]
-  /** The boundary call's t1, the oldest candidate: the end the scripted reply names. */
+  /** The candidate the scripted reply names, between the oldest and the latest. */
   end: RegionRow
   /** fallbackChapterEnd's entry, and the latest candidate: where an unusable reply ends. */
   latestReply: RegionRow
@@ -150,11 +165,11 @@ function planClose(region: readonly RegionRow[], starts: SeededCloseStarts): Clo
   // One token over the region: nothing is owed at launch, and any turn crosses.
   const threshold = region.reduce((sum, row) => sum + row.tokens, 0) + 1
   const candidates = candidatesOf(region, threshold)
-  const end = candidates[0]
+  const end = candidates[PICKED_CANDIDATE - 1]
   const latestReply = region.filter((row) => row.kind === 'ai_reply').at(-1)
-  if (end === undefined || latestReply === undefined || candidates.length < 2) {
+  if (end === undefined || latestReply === undefined || candidates.length <= PICKED_CANDIDATE) {
     throw new Error(
-      `the region gives ${candidates.length} candidates at ${threshold}: the pick must differ from the latest`,
+      `the region gives ${candidates.length} candidates at ${threshold}: the pick must differ from the oldest and the latest`,
     )
   }
   const itemAt = region.find((row) => row.id === starts.itemEntryId)
@@ -187,19 +202,23 @@ function handleIn(request: MockRequest, pattern: RegExp): string {
 
 const call = (name: string, args: Record<string, unknown>) => ({ toolCalls: [{ name, args }] })
 
+function citedEntries(starts: SeededCloseStarts, task: keyof typeof CITED): string[] {
+  return CITED[task].map((reply) => (reply === 'scene' ? starts.sceneEntryId : starts.itemEntryId))
+}
+
 // One write per task, each on a row its start shows, so none needs a read_row first (C11). Each
 // lane's next call gets the empty step, which ends the task.
 function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan): void {
   const [kept, absorbed] = starts.happenings
-  const sceneTurn = plan.turnOf(starts.sceneEntryId)
-  const itemTurn = plan.turnOf(starts.itemEntryId)
+  const turns = (task: keyof typeof CITED) =>
+    citedEntries(starts, task).map((entryId) => plan.turnOf(entryId))
   const character = escapeRegExp(starts.character.name)
   mock.setToolSteps(TOOLS.happenings, [
     (request) =>
       call('merge_happenings', {
         keep: handleIn(request, new RegExp(`### (hp\\d+): ${escapeRegExp(kept.title)}`)),
         absorb: [handleIn(request, new RegExp(`### (hp\\d+): ${escapeRegExp(absorbed.title)}`))],
-        turns: [sceneTurn, itemTurn],
+        turns: turns('happenings'),
         why: 'Both record Odile hiding the one ledger in the bell tower.',
       }),
   ])
@@ -207,7 +226,7 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
     call('create_lore', {
       title: LORE.title,
       body: LORE.body,
-      turns: [itemTurn],
+      turns: turns('lore'),
       why: 'The turns show where the Hollow’s couriers keep their ledgers.',
     }),
   ])
@@ -216,7 +235,7 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
       call('update_character', {
         id: handleIn(request, new RegExp(`^## (c\\d+): ${character}$`, 'm')),
         traits: TRAITS,
-        turns: [sceneTurn],
+        turns: turns('identity'),
         why: 'She watches the street before she moves.',
       }),
   ])
@@ -225,7 +244,7 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
       call('update_thread', {
         id: handleIn(request, new RegExp(`## (th\\d+): ${escapeRegExp(THREAD)} \\(`)),
         description: THREAD_DESCRIPTION,
-        turns: [sceneTurn],
+        turns: turns('threads'),
         why: 'The hidden ledger moves the hunt for the broker on.',
       }),
   ])
@@ -237,7 +256,7 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
           new RegExp(`## (i\\d+): ${escapeRegExp(starts.item.name)} \\(item, off the scene\\)`),
         ),
         add: [KEYWORD],
-        turns: [itemTurn],
+        turns: turns('upkeep'),
         why: 'The turn places the bell in its tower.',
       }),
   ])
@@ -245,7 +264,7 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
     (request) =>
       call('retire_entity', {
         id: handleIn(request, new RegExp(`## (c\\d+): ${character} \\(character\\)`)),
-        turns: [sceneTurn],
+        turns: turns('lifecycle'),
         why: RETIRED,
       }),
   ])
@@ -257,7 +276,7 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
           new RegExp(`- (aw\\d+): ${character} \\(c\\d+\\), pin ${starts.awareness.pin}`),
         ),
         value: PIN,
-        turns: [sceneTurn],
+        turns: turns('awareness'),
         why: 'The hidden ledger is what her part of the story now turns on.',
       }),
   ])
@@ -284,7 +303,7 @@ test.describe('the whole auto close', () => {
     mock = await startMockLlm()
     mock.setNarrative(REPLY)
     mock.setStructured('chapter-boundary', {
-      end_entry_id: 't1',
+      end_entry_id: `t${PICKED_CANDIDATE}`,
       rationale: 'The scene turns once the ledger is hidden.',
     })
     mock.setStructured('chapter-metadata', CHAPTER)
@@ -480,21 +499,24 @@ test.describe('the whole auto close', () => {
       const report = JSON.parse(json) as CloseReport
       expect(report.actionId).toBe(actionId)
       expect(
-        report.calls.map(({ task, tool, result, reason, skippedFields }) => [
+        report.calls.map(({ task, part, tool, turns, result, reason, skippedFields }) => [
           task,
+          part,
           tool,
+          turns,
           result,
           reason ?? null,
           skippedFields ?? [],
         ]),
+        'each call’s part (0 chapter-wide, the one part from 1) and its turns back as entry ids',
       ).toEqual([
-        ['happenings', 'merge_happenings', 'ok', null, []],
-        ['lore', 'create_lore', 'ok', null, []],
-        ['identity', 'update_character', 'ok', null, []],
-        ['threads', 'update_thread', 'ok', null, []],
-        ['upkeep', 'set_keywords', 'ok', null, []],
-        ['lifecycle', 'retire_entity', 'ok', null, []],
-        ['awareness', 'set_pin', 'ok', null, []],
+        ['happenings', 0, 'merge_happenings', citedEntries(starts, 'happenings'), 'ok', null, []],
+        ['lore', 1, 'create_lore', citedEntries(starts, 'lore'), 'ok', null, []],
+        ['identity', 1, 'update_character', citedEntries(starts, 'identity'), 'ok', null, []],
+        ['threads', 1, 'update_thread', citedEntries(starts, 'threads'), 'ok', null, []],
+        ['upkeep', 1, 'set_keywords', citedEntries(starts, 'upkeep'), 'ok', null, []],
+        ['lifecycle', 1, 'retire_entity', citedEntries(starts, 'lifecycle'), 'ok', null, []],
+        ['awareness', 0, 'set_pin', citedEntries(starts, 'awareness'), 'ok', null, []],
       ])
       expect(report.stopped).toEqual([])
       expect(report.noToolCalls).toBe(false)
