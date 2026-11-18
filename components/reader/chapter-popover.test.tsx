@@ -14,17 +14,21 @@ vi.mock('@/hooks/use-tier', () => ({ useTier: () => tier.value }))
 // The unit project can't load the overlays' RN-Web and gorhom chrome; the Sheet's onOpenChange and
 // onDismissed are the seam, captured from each render.
 const sheet = vi.hoisted(() => ({
+  open: null as boolean | null,
   onOpenChange: null as ((open: boolean) => void) | null,
   onDismissed: null as (() => void) | null,
 }))
 vi.mock('@/components/ui/sheet', () => ({
   Sheet: ({
     children,
+    open,
     onOpenChange,
   }: {
     children: ReactNode
+    open?: boolean
     onOpenChange?: (open: boolean) => void
   }) => {
+    sheet.open = open ?? null
     sheet.onOpenChange = onOpenChange ?? null
     return children
   },
@@ -114,6 +118,7 @@ function pressCloseChapter(): void {
 
 beforeEach(() => {
   tier.value = 'phone'
+  sheet.open = null
   sheet.onOpenChange = null
   sheet.onDismissed = null
   onCloseChapter.mockReset()
@@ -133,6 +138,17 @@ describe('ChapterPopover — a close requested from the phone Sheet', () => {
     rerender(popover())
     tier.value = 'desktop'
     rerender(popover())
+    expect(onCloseChapter).toHaveBeenCalledOnce()
+  })
+
+  it('asks the Sheet to close before the close runs on its dismissal', () => {
+    render(popover())
+    act(() => sheet.onOpenChange?.(true))
+    expect(sheet.open).toBe(true)
+    pressCloseChapter()
+    expect(sheet.open).toBe(false)
+    expect(onCloseChapter).not.toHaveBeenCalled()
+    act(() => sheet.onDismissed?.())
     expect(onCloseChapter).toHaveBeenCalledOnce()
   })
 

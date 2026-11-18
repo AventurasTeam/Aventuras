@@ -50,7 +50,7 @@ vi.mock('expo-router', () => ({ useRouter: () => ({}) }))
 
 vi.mock('@/hooks/use-surface-navigate', () => ({ useSurfaceNavigate: () => vi.fn() }))
 
-const entryIndex = vi.hoisted(() => ({ index: new Map<string, unknown>() }))
+const entryIndex = vi.hoisted(() => ({ index: new Map<string, EntryRef>() }))
 vi.mock('@/hooks/use-entry-index', () => ({
   useEntryIndex: () => ({
     entries: [],
@@ -460,6 +460,21 @@ describe('ChapterOverlaysHost — the close modal', () => {
     expect(chapterOverlaysStore.getState().closeModal).toBeNull()
     expect(modalView.mounted).toBe(false)
     expect(actions.start).toHaveBeenCalledWith('br_1', 'entry_64', {
+      db: {},
+      runInTransaction: expect.any(Function),
+    })
+  })
+
+  it('starts the close on the picked end, not the latest', async () => {
+    actions.start.mockReturnValue(new Promise(() => {}))
+    renderHost()
+    openModal()
+    const props = await shownModal()
+    act(() => props.onSelect('entry_60'))
+    expect(modalView.props?.selectedId).toBe('entry_60')
+    act(() => modalView.props!.onConfirm())
+    expect(chapterOverlaysStore.getState().closeModal).toBeNull()
+    expect(actions.start).toHaveBeenCalledWith('br_1', 'entry_60', {
       db: {},
       runInTransaction: expect.any(Function),
     })
