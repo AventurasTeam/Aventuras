@@ -1,6 +1,7 @@
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
 import { TOOL_STEP_MAX_OUTPUT_DEFAULT } from '@/lib/ai'
 import { CLOSE_TASKS, type CloseReport, type CloseReportCall, type CloseTask } from '@/lib/db'
+import type { BoundaryCallOutcome } from '@/lib/pipeline/definitions/chapter-close-boundary-call'
 import type { CappedList } from '@/lib/pipeline/definitions/close-agent/fields'
 import { CLOSE_REASON } from '@/lib/pipeline/definitions/close-agent/verdict'
 
@@ -233,10 +234,26 @@ export function barVerdict(tallies: readonly RunTally[]): BarVerdict {
 /** One run of the boundary arm. */
 export type BoundaryAttempt = {
   outcome: 'picked' | 'parse' | 'reply-cut-off' | 'failed' | 'aborted'
-  /** The pick, or the latest candidate an unusable reply fell back to; null when the call failed. */
+  /** The pick, or the latest candidate an unusable reply fell back to; null when the call failed or aborted. */
   endEntryId: string | null
   /** The most output tokens one response of the call reported; null when none reported any. */
   outputTokens: number | null
+}
+
+/** A boundary call's outcome as an attempt, with the most output tokens one response reported. */
+export function boundaryAttemptOf(
+  outcome: BoundaryCallOutcome,
+  outputTokens: number | null,
+): BoundaryAttempt {
+  switch (outcome.status) {
+    case 'picked':
+      return { outcome: 'picked', endEntryId: outcome.endEntryId, outputTokens }
+    case 'unusable':
+      return { outcome: outcome.tier, endEntryId: outcome.endEntryId, outputTokens }
+    case 'failed':
+    case 'aborted':
+      return { outcome: outcome.status, endEntryId: null, outputTokens }
+  }
 }
 
 /** testing.md → Real-provider checks: 8 runs of 10 pick a candidate and none is cut off. */

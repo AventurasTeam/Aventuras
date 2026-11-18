@@ -85,6 +85,7 @@ import {
   attemptOf,
   barLine,
   barVerdict,
+  boundaryAttemptOf,
   boundaryVerdict,
   failedRunsExit,
   largestOf,
@@ -789,21 +790,6 @@ function boundaryContext(ctx: DbCtx): PhaseContext {
   }
 }
 
-function boundaryAttemptOf(
-  outcome: BoundaryCallOutcome,
-  outputTokens: number | null,
-): BoundaryAttempt {
-  switch (outcome.status) {
-    case 'picked':
-      return { outcome: 'picked', endEntryId: outcome.endEntryId, outputTokens }
-    case 'unusable':
-      return { outcome: outcome.tier, endEntryId: outcome.endEntryId, outputTokens }
-    case 'failed':
-    case 'aborted':
-      return { outcome: outcome.status, endEntryId: null, outputTokens }
-  }
-}
-
 function printBoundaryRun(
   k: number,
   outcome: BoundaryCallOutcome,
@@ -906,6 +892,10 @@ function rejudge(outDir: string): void {
 }
 
 async function main(): Promise<void> {
+  if (BOUNDARY && REJUDGE !== undefined)
+    throw new Error(
+      '[probe:close] PROBE_BOUNDARY=1 runs the boundary call and PROBE_REJUDGE re-judges a saved directory with no model call: unset one',
+    )
   if (REJUDGE !== undefined) return rejudge(REJUDGE)
   if (!LLM_URL || !LLM_MODEL) {
     console.log('[probe:close] skipped: set SMOKE_LLM_URL and SMOKE_LLM_MODEL to run')

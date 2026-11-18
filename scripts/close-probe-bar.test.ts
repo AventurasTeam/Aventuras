@@ -5,6 +5,7 @@ import { CLOSE_TASKS, type CloseReport, type CloseReportCall, type CloseTask } f
 import {
   attemptOf,
   barVerdict,
+  boundaryAttemptOf,
   boundaryVerdict,
   failedRunsExit,
   largestOf,
@@ -565,6 +566,21 @@ describe('barVerdict', () => {
     })
   })
 
+  it('counts a run with a non-write task missed as not passing', () => {
+    const lifecycleStopped = (): RunTally =>
+      run({ report: report(WRITES, [{ task: 'lifecycle', part: 1, reason: 'budget' }]) })
+    const lost = lifecycleStopped()
+    expect(lost.holds.filter(({ held }) => !held).map(({ task, why }) => ({ task, why }))).toEqual([
+      { task: 'lifecycle', why: 'stopped: budget' },
+    ])
+    const covered = (k: number): RunTally => ({
+      ...(k < 7 ? run() : lifecycleStopped()),
+      capCalls: 1,
+      mergeCalls: 1,
+    })
+    expect(barVerdict(runs(10, covered))).toMatchObject({ passing: 7, verdict: 'missed' })
+  })
+
   it('refuses to judge no runs', () => {
     expect(() => barVerdict([])).toThrow(/no runs/)
   })
@@ -625,6 +641,42 @@ describe('boundaryVerdict', () => {
 
   it('refuses to judge no attempts', () => {
     expect(() => boundaryVerdict([])).toThrow(/no attempts/)
+  })
+})
+
+describe('boundaryAttemptOf', () => {
+  it('maps a pick to a picked attempt on its entry', () => {
+    expect(boundaryAttemptOf({ status: 'picked', endEntryId: 'entry_0002' }, 180)).toEqual({
+      outcome: 'picked',
+      endEntryId: 'entry_0002',
+      outputTokens: 180,
+    })
+  })
+
+  it.each(['parse', 'reply-cut-off'] as const)(
+    'maps an unusable %s reply to that outcome on the fallback entry',
+    (tier) => {
+      expect(
+        boundaryAttemptOf({ status: 'unusable', endEntryId: 'entry_0009', tier }, null),
+      ).toEqual({ outcome: tier, endEntryId: 'entry_0009', outputTokens: null })
+    },
+  )
+
+  it('maps a failed call to a failed attempt with no entry', () => {
+    const error = { kind: 'orchestrator', detail: 'boom' } as const
+    expect(boundaryAttemptOf({ status: 'failed', error }, 40)).toEqual({
+      outcome: 'failed',
+      endEntryId: null,
+      outputTokens: 40,
+    })
+  })
+
+  it('maps an aborted call to an aborted attempt with no entry', () => {
+    expect(boundaryAttemptOf({ status: 'aborted' }, null)).toEqual({
+      outcome: 'aborted',
+      endEntryId: null,
+      outputTokens: null,
+    })
   })
 })
 
