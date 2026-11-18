@@ -99,6 +99,12 @@ type ArmProps = ChapterPopoverProps & { number: number }
 
 type AfterDismissRef = RefObject<(() => void) | null>
 
+function runHeld(ref: AfterDismissRef): void {
+  const run = ref.current
+  ref.current = null
+  run?.()
+}
+
 /** Popover on desktop and tablet, a medium bottom Sheet on phone, each opened from its own chip. */
 export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   const isPhone = useTier() === 'phone'
@@ -107,10 +113,7 @@ export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   // held goes when the tier leaves phone.
   const afterDismissRef = useRef<(() => void) | null>(null)
   useEffect(() => {
-    if (isPhone) return
-    const run = afterDismissRef.current
-    afterDismissRef.current = null
-    run?.()
+    if (!isPhone) runHeld(afterDismissRef)
   }, [isPhone])
   return isPhone ? (
     <SheetArm {...props} number={number} afterDismissRef={afterDismissRef} />
@@ -258,11 +261,6 @@ function SheetArm({
     afterDismissRef.current = run
     change(false)
   }
-  const runAfterDismiss = () => {
-    const run = afterDismissRef.current
-    afterDismissRef.current = null
-    run?.()
-  }
 
   useImperativeHandle(ref, () => ({ open: () => {}, close }))
 
@@ -271,7 +269,7 @@ function SheetArm({
       <SheetTrigger asChild>
         <ChapterChip number={content.number} expanded={open} />
       </SheetTrigger>
-      <SheetContent size="medium" onDismissed={runAfterDismiss}>
+      <SheetContent size="medium" onDismissed={() => runHeld(afterDismissRef)}>
         <OverlayBody {...content} arm={SHEET_ARM} close={close} closeThen={closeThen} />
       </SheetContent>
     </Sheet>
