@@ -732,13 +732,34 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   `ABOVE_SHEETS_PORTAL_HOST`, so opened from the Actions Sheet it never
   draws under that Sheet as it closes; the popover's action runs from
   its Sheet's dismiss.
-- **Boundary's system half gained a sentence in review.** "The chapter
-  ends with the turn you pick and the next chapter opens with the turn
-  after it, so where a listed turn opens on a new scene or after a time
-  skip, end on the listed turn before it; if none is listed before it,
-  choose among the others." The picked turn closes the chapter, so a
-  turn that opens a new scene isn't the pick. The boundary probe's
-  cut-off run 5 spent its reasoning deliberating that rule.
+- **Boundary's system half lost its review sentence, and its length
+  line was reworded (developer decision, 2026-11-18, "Q4b: drop,
+  reword").** The sentence was "The chapter ends with the turn you pick
+  and the next chapter opens with the turn after it, so where a listed
+  turn opens on a new scene or after a time skip, end on the listed turn
+  before it; if none is listed before it, choose among the others."
+  Cut-off run 5 spent its 8,000 tokens deliberating that rule. The user
+  half's old line, with the region's total beside the target, was:
+
+  ```text
+  {{ boundaryRegionTokens }} tokens so far; a chapter runs about {{ boundaryThreshold }} tokens.
+  ```
+
+  A threshold close always fires with the total near the target, and run
+  2's reasoning took the line as an order to end now and the last
+  candidate. It now states the range the end may fall in:
+
+  ```text
+  Each turn listed would end this chapter between {{ boundaryLengthFrom }} and {{ boundaryLengthTo }} tokens long, all good lengths for a chapter, so choose by the story alone.
+  ```
+
+  The bounds are the candidate window's, half a threshold rounded up to
+  one and a half rounded down, from `closeCandidateWindow`, which
+  `closeCandidates` uses too. The candidates' own span was passed over:
+  its top is the region's current total, which would bring the "end now"
+  reading back. `boundaryRegionTokens` and `boundaryThreshold` are gone,
+  so `requestChapterBoundary` no longer takes the series.
+
 - **`firstLastSentences` is tougher than its first cut.** It merges
   letterless pieces (French `»`, a bare ellipsis) into the sentence
   before, takes `“` and `«` as closers, uses a lookbehind against
