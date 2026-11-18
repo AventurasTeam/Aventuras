@@ -1,8 +1,9 @@
-import { canEndChapter, fallbackChapterEnd } from '@/lib/chapters'
+import { canEndChapter, closeCandidates, fallbackChapterEnd } from '@/lib/chapters'
 import { openRegionSeries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
+import { readBoundaryInputs, requestChapterBoundary } from './chapter-close-boundary-call'
 import { setCloseRange } from './close-intermediates'
 import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -26,8 +27,9 @@ function parkRange(ctx: PhaseContext, startEntryId: string, endEntryId: string):
 }
 
 /**
- * C2 → boundary: the branch's manual pick, else the no-model fallback (chapter-close.md → Phase 1),
- * into the run's range. The run holds the gate here, so this is the check that counts.
+ * C2 → boundary: the branch's manual pick, else the model's pick among Phase 1's candidates, else
+ * the no-model fallback (chapter-close.md → Phase 1), into the run's range. The run holds the gate
+ * here, so this is the check that counts.
  */
 export async function* closeBoundaryPhase(
   ctx: PhaseContext,
@@ -49,9 +51,24 @@ export async function* closeBoundaryPhase(
       )
     return parkRange(ctx, series[0].id, end.id)
   }
-  // closeOwed owes no close to a region with no reply (C10), so this refusal is a backstop.
-  const end = fallbackChapterEnd(series)
-  if (!end)
-    return refuse(`chapter-close: branch ${ctx.branchId} has no open-region reply to end on`)
-  return parkRange(ctx, series[0].id, end.id)
+  const inputs = readBoundaryInputs(ctx)
+  if ('status' in inputs) return inputs
+  const candidates = closeCandidates(series, inputs.threshold)
+  if (candidates.length === 0) {
+    // closeOwed owes no close to a region with no reply (C10), so this refusal is a backstop.
+    const end = fallbackChapterEnd(series)
+    if (!end)
+      return refuse(`chapter-close: branch ${ctx.branchId} has no open-region reply to end on`)
+    return parkRange(ctx, series[0].id, end.id)
+  }
+  const call = yield* requestChapterBoundary(ctx, series, candidates, inputs)
+  switch (call.status) {
+    case 'picked':
+    case 'unusable':
+      return parkRange(ctx, series[0].id, call.endEntryId)
+    case 'failed':
+      return { status: 'failed', error: call.error }
+    case 'aborted':
+      return { status: 'aborted' }
+  }
 }

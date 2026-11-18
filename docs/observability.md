@@ -288,6 +288,12 @@ convention, and the expectation that subsystems route through
   sent to the embedder and those revalidated, those left without a
   vector, and the clusters found), `close_retrieval_reset` (the `retrieval_count`
   reset's group: its rows, its status and the round trip in `ms`),
+  `close_boundary_picked` (debug: Phase 1's model pick, with the
+  `endEntryId`, its `turn` handle, the model's one-sentence `rationale`,
+  which nothing stores, and the count of `candidates` it was offered),
+  `close_boundary_fallback` (warn: a boundary reply that was unusable, a
+  parse failure after the retry or a cut-off, with its `tier` and the
+  `endEntryId` of the latest candidate the chapter ends on instead),
   `close_reason_unkeyed` (warn: a ledger reason that isn't a
   `CLOSE_REASON_KEYS` member, recorded as `other`, with the raw
   `reason`, its call's `task` and `tool`, under the close's `actionId`),
