@@ -39,8 +39,7 @@ describe('bundled chapter-boundary template', () => {
     expect(system).toContain('Give one sentence on why the chapter ends there.')
   })
 
-  // The scene-opener guard is one fact; the old step-by-step rule (end on the turn before, else choose
-  // among the others) cost a run its whole budget, so it stays out.
+  // A procedure here sends the floor model into deliberation that can spend its whole output.
   it('states a scene-opening turn begins the next chapter in one sentence, with no procedure', () => {
     const { system } = renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT)
     expect(system).toContain(
