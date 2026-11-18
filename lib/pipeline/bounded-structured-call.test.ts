@@ -55,7 +55,10 @@ const PARSE_RETRY: CallRetryError = {
 }
 const NETWORK_RETRY: CallRetryError = { tier: 'provider', reason: 'network' }
 
-async function run(signal: AbortSignal = new AbortController().signal): Promise<{
+async function run(
+  signal: AbortSignal = new AbortController().signal,
+  options: { actionId: string; defaultMaxOutput?: number } = OPTIONS,
+): Promise<{
   events: PhaseEmittedEvent[]
   outcome: BoundedStructuredOutcome<{ answer: string }>
 }> {
@@ -66,7 +69,7 @@ async function run(signal: AbortSignal = new AbortController().signal): Promise<
     schema,
     config: CONFIG,
     signal,
-    options: OPTIONS,
+    options,
   })
   const events: PhaseEmittedEvent[] = []
   for (;;) {
@@ -124,6 +127,22 @@ describe('boundedStructuredCall', () => {
     expect(options).toEqual({ actionId: 'act_1', defaultMaxOutput: 8_000 })
     expect(signal).not.toBe(outer)
     expect(signal.aborted).toBe(false)
+  })
+
+  it('sends only the action and the max output, an absent max output left absent', async () => {
+    generateStructuredMock.mockResolvedValue({
+      status: 'ok',
+      value: { answer: 't2' },
+      recoverable: [],
+    })
+    const none = { named: [], unnamed: [] }
+    const stray = { actionId: 'act_1', sections: { halves: { system: none, user: none } } }
+    // An upcast drops what the options type knows: the sections ride along unseen.
+    const options: { actionId: string } = stray
+
+    await run(undefined, options)
+
+    expect(generateStructuredMock.mock.calls[0]![5]).toStrictEqual({ actionId: 'act_1' })
   })
 
   it('returns the value and the attempts it recovered from, one event per retried attempt', async () => {
@@ -272,6 +291,19 @@ describe('boundedStructuredCall options (checked by tsc)', () => {
         // @ts-expect-error the outcome drops promptSections, so the sections would go uncounted
         options: { ...OPTIONS, sections },
       })
+    const withSections = { ...OPTIONS, sections }
+    const callWithVariable = () =>
+      boundedStructuredCall({
+        target: 'lore-mgmt',
+        phaseName: 'boundary',
+        prompt: PROMPT,
+        schema,
+        config: CONFIG,
+        signal: new AbortController().signal,
+        // @ts-expect-error a variable takes no excess-property check, so only the type refuses it
+        options: withSections,
+      })
     expect(call).toBeTypeOf('function')
+    expect(callWithVariable).toBeTypeOf('function')
   })
 })
