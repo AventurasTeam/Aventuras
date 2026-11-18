@@ -28,8 +28,8 @@ function parkRange(ctx: PhaseContext, startEntryId: string, endEntryId: string):
 
 /**
  * C2 → boundary: the branch's manual pick, else the model's pick among Phase 1's candidates, else
- * the no-model fallback (chapter-close.md → Phase 1), into the run's range. The run holds the gate
- * here, so this is the check that counts.
+ * the no-model fallback (chapter-close.md → Phase 1), into the run's range. The gate is held here,
+ * so this is the check that counts.
  */
 export async function* closeBoundaryPhase(
   ctx: PhaseContext,

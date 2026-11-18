@@ -1,16 +1,17 @@
 import { oneLine } from './one-line'
 
-/** The most code points each sentence `firstLastSentences` returns may hold, before its ellipsis. */
+/** The most code points each `firstLastSentences` sentence may hold, before its ellipsis. */
 export const SENTENCE_EXCERPT_MAX = 240
 
 // A Latin mark ends a sentence only before a space or the end, so "3.5" holds; a CJK mark needs
 // none. Closing quotes and brackets after the mark stay with the sentence it ends. The lookbehind
-// starts a match only at a run's first mark; without it a long run of marks backtracks quadratically.
+// starts a match only at a run's first mark; else a long run of marks backtracks quadratically.
 const SENTENCE_END = /(?<![.!?])[.!?]+["'”’»“«)\]]*(?=\s|$)|[。！？]+["'”’」』)）]*/gu
 
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
 
-// A piece with no letter or digit (a French closer, an ellipsis, a scene break) joins the sentence before it.
+// A piece with no letter or digit (a French closer, an ellipsis, a scene break) joins the sentence
+// before it.
 function addPiece(sentences: string[], piece: string): void {
   if (sentences.length > 0 && !LETTER_OR_DIGIT.test(piece)) {
     sentences[sentences.length - 1] += ` ${piece}`

@@ -4,10 +4,9 @@ import type { Pipeline, PipelineError, PreflightSnapshot } from '../types'
 
 type ConfigResolverError = Extract<PipelineError, { kind: 'config-resolver' }>
 
-// Validates every declared resolver input against the snapshot, in phase order
-// (and, within a parallel node, declared branch order). An input that `requires`
-// a capability also fails when its resolved model is flagged off for it; an
-// unknown flag passes. Returns the first failure or null.
+// Validates every resolver input against the snapshot, in phase order (declared order within a
+// parallel node). A `requires` input also fails when its model is flagged off for it; unknown
+// passes. Returns the first failure or null.
 export function runPreflight(
   pipeline: Pipeline,
   snapshot: PreflightSnapshot,

@@ -26,7 +26,7 @@ import { closeRangeOf } from './close-intermediates'
 import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext } from '../types'
 
-// The provider is the only fake: the real call, bound, retry and parse run between it and the phase.
+// The provider is the only fake: the real call, bound, retry and parse run between it and phase.
 vi.mock('@/lib/ai/model', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getModel: vi.fn(),
@@ -389,9 +389,8 @@ describe('closeBoundaryPhase with no pick', () => {
   })
 })
 
-// Threshold 400, so candidates hold 200–600 tokens. Running totals: e3 240, e5 400, e7 580, e9 700,
-// e11 800. Candidates: e3 (t1), e5 (t2), e7 (t3). e9 is past the upper bound and e11 is the newest
-// reply. The latest candidate is e7, where fallbackChapterEnd would end on e9.
+// Threshold 400, window 200–600. Totals: e3 240, e5 400, e7 580, e9 700, e11 800. Candidates e3, e5,
+// e7 (t1-t3): e9 is past the bound, e11 the newest. fallbackChapterEnd would end on e9, not e7.
 const THRESHOLD = 400
 
 function sized(id: string, position: number, kind: StoryEntry['kind'], tokens: number): StoryEntry {
@@ -609,7 +608,7 @@ describe('closeBoundaryPhase — the newest reply', () => {
 })
 
 describe('refineBoundaryReply', () => {
-  // AC3: the mock matches a request by its rendered schema block, which the refinement must not move.
+  // AC3: the mock matches a request by its rendered schema block, which refinement must not move.
   it("renders the plain schema's JSON Schema", () => {
     expect(z.toJSONSchema(refineBoundaryReply(new Set(['t1', 't2', 't3'])))).toEqual(
       z.toJSONSchema(chapterBoundarySchema),

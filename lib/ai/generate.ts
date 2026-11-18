@@ -495,9 +495,8 @@ export async function generateStructured<T>(
   // Cut-off replies → The cause: a cut names this figure, never the body's max_tokens.
   const maxOutput = resolved.params.maxOutput ?? options.defaultMaxOutput
 
-  // z.toJSONSchema throws on an unrepresentable schema (a transform; a refinement renders as its
-  // plain schema): surface it as a typed failure rather than a raw rejection past the caller's
-  // runAction wrapper.
+  // toJSONSchema throws on a transform (a refinement renders as its plain schema): return a typed
+  // failure, not a raw rejection past the caller's runAction wrapper.
   let jsonSchema: JsonSchema
   try {
     jsonSchema = z.toJSONSchema(schema) as JsonSchema

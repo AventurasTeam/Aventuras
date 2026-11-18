@@ -933,9 +933,8 @@ describe('generateStructured', () => {
     })
   })
 
-  // C2's per-call bound on output: a caller's default bounds a call the settings leave unbounded,
-  // and a cut names the figure the settings set, else that default (generation-pipeline.md →
-  // Cut-off replies).
+  // C2: a caller's default bounds a call the settings leave unbounded; a cut names the settings'
+  // figure, else that default (generation-pipeline.md → Cut-off replies).
   describe('a default max output', () => {
     let warn: MockInstance<Logger['warn']>
 

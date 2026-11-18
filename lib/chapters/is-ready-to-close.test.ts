@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { isReadyToClose } from './is-ready-to-close'
 
-// chapter-close.md → Manual user-triggered close: auto-close off, the threshold met, a reply to end on.
+// chapter-close.md → Manual user-triggered close.
 describe('isReadyToClose', () => {
   it.each([
     { autoClose: false, tokens: 1000, canClose: true, ready: true },

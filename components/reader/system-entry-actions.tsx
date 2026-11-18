@@ -210,7 +210,7 @@ export function describeTurnFailure(error: PipelineError | undefined): {
     }
   }
   if (error?.kind === 'config-resolver') {
-    // Only a close's pre-flight raises 'tool-calling-off', so a turn's entry never words it.
+    // A turn's entry never words 'tool-calling-off'; only a close's pre-flight raises it.
     const key =
       error.failure === 'tool-calling-off'
         ? 'reader:systemEntry.failureMessage'
