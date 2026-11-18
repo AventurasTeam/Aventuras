@@ -1,6 +1,13 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ChevronDown, ChevronUp } from 'lucide-react-native'
-import { useRef, useState, type CSSProperties, type ReactElement, type ReactNode } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { FlatList, Platform, Pressable, View, type ViewStyle } from 'react-native'
 
 import { ReasonButton } from '@/components/compounds/reason-button'
@@ -8,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -86,12 +94,19 @@ function EntryLine({
         {row.ref}
       </Text>
       {tag != null ? (
-        <Tag tone="soft" className="shrink-0">
-          {tag}
+        <Tag tone="soft" className="min-w-0 shrink">
+          <Text size="xs" numberOfLines={1} className="min-w-0 shrink">
+            {tag}
+          </Text>
         </Tag>
       ) : null}
       {/* w-0: a nowrap excerpt's min-content is its full width, which would widen the dialog past the window. */}
-      <Text size="sm" variant="secondary" numberOfLines={1} className="w-0 min-w-0 flex-1 italic">
+      <Text
+        size="sm"
+        variant="secondary"
+        numberOfLines={1}
+        className="w-0 min-w-[32px] flex-1 italic"
+      >
         {row.excerpt}
       </Text>
       {row.time != null ? (
@@ -234,10 +249,13 @@ function CloseModalBody({
   onCancel,
 }: CloseChapterModalViewProps) {
   const [panelOpen, setPanelOpen] = useState(false)
+  const triggerRef = useRef<View>(null)
   const selected = replies.find((row) => row.id === selectedId) ?? null
   const pick = (entryId: string) => {
     onSelect(entryId)
     setPanelOpen(false)
+    // The picked option unmounts with the panel; focus would fall to the dialog, not the trigger.
+    if (Platform.OS === 'web') triggerRef.current?.focus()
   }
   const panelProps: PanelProps = { replies, latestId, selectedId, onPick: pick }
   return (
@@ -246,9 +264,9 @@ function CloseModalBody({
         <DialogTitle>{t('chapters:closeModal.title')}</DialogTitle>
       </DialogHeader>
       {start != null ? (
-        <Text size="sm" variant="secondary">
+        <DialogDescription className="text-fg-secondary">
           {t('chapters:closeModal.framing', { start: start.ref })}
-        </Text>
+        </DialogDescription>
       ) : null}
       {start != null ? (
         <View className="gap-1.5">
@@ -269,8 +287,11 @@ function CloseModalBody({
         <SectionLabel>{t('chapters:closeModal.endHeading')}</SectionLabel>
         {selected != null ? (
           <Pressable
+            ref={triggerRef}
             testID="close-chapter-picker"
             role="button"
+            // aria-haspopup is a web-only DOM attribute; RN's prop types don't model it.
+            {...(Platform.OS === 'web' ? ({ 'aria-haspopup': 'listbox' } as object) : null)}
             aria-expanded={panelOpen}
             onPress={() => setPanelOpen((was) => !was)}
             className={cn(
@@ -326,7 +347,18 @@ function CloseModalBody({
  * selection is the caller's; the panel's open state is the view's own.
  */
 export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactElement {
-  const { open, onCancel } = props
+  const { open, onCancel, disabledReason } = props
+  const contentRef = useRef<View>(null)
+  const gated = disabledReason != null
+  // Chromium blurs a button the moment it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !open || !gated) return
+    // The ref lands on the styled View inside Radix's focusable role=dialog element.
+    const dialog = (contentRef.current as unknown as HTMLElement | null)?.closest<HTMLElement>(
+      '[role="dialog"]',
+    )
+    if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
+  }, [open, gated])
   return (
     <Dialog
       open={open}
@@ -334,8 +366,9 @@ export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactE
         if (!next) onCancel()
       }}
     >
-      {/* The Actions Sheet starts it as the Sheet animates out; the default host draws under it. */}
+      {/* Opened from a Sheet still animating out, it must draw above that Sheet. */}
       <DialogContent
+        ref={contentRef}
         portalHost={ABOVE_SHEETS_PORTAL_HOST}
         scrollable={false}
         className="sm:max-w-[480px]"
