@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { changeAbove, composeHeld, type SliceFields } from './slice-hold'
+import { changeAbove, composeHeld, sliceFieldsOf, type SliceFields } from './slice-hold'
 
 type Row = { id: string; content: string }
 
@@ -14,6 +14,7 @@ function slice(from: number, to: number, extra: Partial<SliceFields<Row>> = {}):
     rows: rows(from, to),
     worldTimeDecorations: {},
     chapterBreaks: {},
+    closeHereEntryIds: {},
     hasOlder: true,
     hasNewer: false,
     sliceKey: 3,
@@ -100,6 +101,15 @@ describe('composeHeld', () => {
     expect(held.chapterBreaks.e11).toEqual({ number: 2 })
   })
 
+  it('keeps the close-here marks of held rows the incoming slice dropped, the rest from it', () => {
+    const shown = slice(10, 30, { closeHereEntryIds: { e11: true, e13: true, e29: true } })
+    // e13 left the open region (a close settled) though the incoming slice still holds it.
+    const incoming = slice(12, 40, { closeHereEntryIds: { e15: true, e29: true, e35: true } })
+    const held = composeHeld(shown, incoming, 'e20')
+    expect(ids(held).slice(0, 2)).toEqual(['e10', 'e11'])
+    expect(held.closeHereEntryIds).toEqual({ e11: true, e15: true, e29: true, e35: true })
+  })
+
   it('holds a break mounted above the anchor and shows one mounted below it', () => {
     const held = composeHeld(
       slice(10, 30),
@@ -112,5 +122,13 @@ describe('composeHeld', () => {
   it('keeps the shown top skeleton and key', () => {
     const held = composeHeld(slice(10, 30), slice(1, 30, { hasOlder: false, sliceKey: 9 }), 'e20')
     expect(held).toMatchObject({ hasOlder: true, sliceKey: 3 })
+  })
+})
+
+describe('sliceFieldsOf', () => {
+  it('holds the whole shown slice, its close-here marks included', () => {
+    const shown = slice(10, 30, { closeHereEntryIds: { e11: true } })
+    const props = { ...shown, branchKey: 'br_1' }
+    expect(sliceFieldsOf(props)).toEqual(shown)
   })
 })

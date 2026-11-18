@@ -8,6 +8,7 @@ export type SliceFields<Row extends { id: string }> = {
   rows: Row[]
   worldTimeDecorations: Record<string, WorldTimeDecoration>
   chapterBreaks: ChapterBreaks
+  closeHereEntryIds: Record<string, true>
   hasOlder: boolean
   hasNewer: boolean
   sliceKey: number
@@ -43,9 +44,9 @@ export function changeAbove<Row extends { id: string }>(
 
 /**
  * The slice rendered while a change above the anchor waits for scroll rest: the shown rows above
- * the anchor (with their latest content, and their own decorations and breaks where the incoming
- * slice dropped them), then the incoming slice from the anchor down. The top skeleton and the key
- * stay the shown ones. `anchorId` must be in both slices.
+ * the anchor (with their latest content, and their own decorations, breaks and close-here marks
+ * where the incoming slice dropped them), then the incoming slice from the anchor down. The top
+ * skeleton and the key stay the shown ones. `anchorId` must be in both slices.
  */
 export function composeHeld<Row extends { id: string }>(
   shown: SliceFields<Row>,
@@ -66,10 +67,18 @@ export function composeHeld<Row extends { id: string }>(
     const live = incoming.chapterBreaks[row.id]
     if (live != null) chapterBreaks[row.id] = live
   }
+  // A mark the incoming slice dropped from a row it still holds is the row leaving the open region.
+  const closeHereEntryIds = { ...incoming.closeHereEntryIds }
+  for (const row of above) {
+    if (!incomingById.has(row.id) && shown.closeHereEntryIds[row.id] === true) {
+      closeHereEntryIds[row.id] = true
+    }
+  }
   return {
     rows: [...above, ...below],
     worldTimeDecorations: { ...shown.worldTimeDecorations, ...incoming.worldTimeDecorations },
     chapterBreaks,
+    closeHereEntryIds,
     hasOlder: shown.hasOlder,
     hasNewer: incoming.hasNewer,
     sliceKey: shown.sliceKey,
@@ -84,6 +93,7 @@ export function sliceFieldsOf<Row extends { id: string }>(
     rows: props.rows,
     worldTimeDecorations: props.worldTimeDecorations,
     chapterBreaks: props.chapterBreaks,
+    closeHereEntryIds: props.closeHereEntryIds,
     hasOlder: props.hasOlder,
     hasNewer: props.hasNewer,
     sliceKey: props.sliceKey,
