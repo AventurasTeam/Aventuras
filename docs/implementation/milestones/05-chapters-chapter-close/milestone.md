@@ -960,6 +960,14 @@ main, so neither flips.
   5.5b's per-step count is measured on desktop, with the Fold release
   run as its merge gate
   ([5.5b's Per-step count measure](./slices/05b-identity-threads.md#per-step-count-measure)).
+  5.10's full group is measured on the Fold's release build
+  ([5.10's Reversal measure](./slices/10-two-starts.md#reversal-measure)):
+  CTRL-Z and redo stall the JS thread at most 399 ms, under the 500 ms
+  bar. Its close on the 60-chapter window grown to its first chapter
+  stalls it 1.1 to 1.3 s
+  ([5.10's Grown-window close measure](./slices/10-two-starts.md#grown-window-close-measure)),
+  a miss the developer accepted, carried in
+  [`followups.md` → UX](../../../followups.md#ux).
 - **Report size.** 5.5b's run measured it
   ([5.5b's Close-task measure](./slices/05b-identity-threads.md#close-task-measure)):
   the largest value 226 characters and the largest report 18,243 bytes,
