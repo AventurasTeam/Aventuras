@@ -39,13 +39,15 @@ describe('bundled chapter-boundary template', () => {
     expect(system).toContain('Give one sentence on why the chapter ends there.')
   })
 
-  // The system half asks only for a natural ending: no rule on where the next chapter opens.
-  it('describes the natural ending alone, with no rule on where the next chapter opens', () => {
+  // The scene-opener guard is one fact; the old step-by-step rule (end on the turn before, else choose
+  // among the others) cost a run its whole budget, so it stays out.
+  it('states a scene-opening turn begins the next chapter in one sentence, with no procedure', () => {
     const { system } = renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT)
     expect(system).toContain(
-      'Pick the turn where the story comes to a natural ending: a scene changes, time skips ahead, a beat of its arc resolves, or the narrative pauses. The active threads, when listed, help tell where an arc beat resolves.',
+      "Pick the turn where the story comes to a natural ending: a scene changes, time skips ahead, a beat of its arc resolves, or the narrative pauses. A turn that opens on a new scene or after a time skip begins the next chapter, so it can't end this one. The active threads, when listed, help tell where an arc beat resolves.",
     )
     expect(system).not.toContain('the next chapter opens')
+    expect(system).not.toContain('end on the listed turn before it')
   })
 
   it('shows the length range, the active threads, and each candidate by turn id, position and sentences', () => {
