@@ -2,9 +2,7 @@ import { resolveModel, resolveModelCapabilities, type ResolveModelConfig } from 
 import type { StorySettings } from '@/lib/db'
 import { appSettingsStore } from '@/lib/stores'
 
-import type { Pipeline, PipelineError, PreflightSnapshot } from '../types'
-
-type ConfigResolverError = Extract<PipelineError, { kind: 'config-resolver' }>
+import type { ConfigResolverError, Pipeline, PreflightSnapshot } from '../types'
 
 // One snapshot for a run's pre-flight and a click's, so the two agree.
 export function preflightSnapshot(storySettings: StorySettings | undefined): PreflightSnapshot {

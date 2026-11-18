@@ -2402,16 +2402,17 @@ type PipelineError =
       constraintViolated?: string // 'UNIQUE' | 'CHECK' | 'FK' | etc.
     }
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
-  | {
+  | ({
       kind: 'config-resolver'
-      // resolver could not produce a usable model config, or pre-flight found the model flagged off
-      // for a capability its phase requires (Config pre-flight validation)
-      failure: ResolveFailureKind | 'tool-calling-off'
       target: ResolveTarget
       phaseName: string
       detail?: string
-      modelId?: string // the resolved model, set with 'tool-calling-off' so the copy names it
-    }
+    } & (
+      | { failure: ResolveFailureKind } // resolver could not produce a usable model config
+      // pre-flight found the model flagged off for a capability its phase requires (Config
+      // pre-flight validation); the resolved model rides along so the copy names it
+      | { failure: 'tool-calling-off'; modelId: string }
+    ))
   | {
       kind: 'embedder'
       reason: EmbedderErrorKind // 'init' | 'call'
