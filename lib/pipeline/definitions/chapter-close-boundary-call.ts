@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
-import { TOOL_STEP_MAX_OUTPUT_DEFAULT, type ResolveModelConfig } from '@/lib/ai'
+import type { ResolveModelConfig } from '@/lib/ai'
 import type { CloseCandidate } from '@/lib/chapters'
 import { storyEntries, type OpenRegionRow } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
@@ -14,6 +14,9 @@ import { storesHoldBranch } from './stores-hold-branch'
 import { boundedStructuredCall } from '../bounded-structured-call'
 import type { StructuredCallFailure } from '../call-error'
 import type { PhaseContext, PhaseEmittedEvent, PhaseFailure, PipelineError } from '../types'
+
+// chapter-close.md → Phase 1: the boundary reply's output bound when the settings set none.
+const BOUNDARY_MAX_OUTPUT_DEFAULT = 8_000
 
 export type BoundaryCallContext = Pick<
   PhaseContext,
@@ -128,7 +131,7 @@ export async function* requestChapterBoundary(
     schema: refineBoundaryReply(new Set(byTurn.keys())),
     config: inputs.modelConfig,
     signal: ctx.abortSignal,
-    options: { actionId: ctx.actionId, defaultMaxOutput: TOOL_STEP_MAX_OUTPUT_DEFAULT },
+    options: { actionId: ctx.actionId, defaultMaxOutput: BOUNDARY_MAX_OUTPUT_DEFAULT },
   })
   if (call.status === 'aborted' || ctx.abortSignal.aborted) return { status: 'aborted' }
   const latest = candidates[candidates.length - 1]!

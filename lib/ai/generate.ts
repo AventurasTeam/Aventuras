@@ -435,7 +435,7 @@ export type StructuredCallOptions = {
   actionId: string | null
   /** The prompt by section: counted before the request, its user half primed for the check. */
   sections?: PromptSectionsInput
-  /** Sent as the max output when the resolved settings set none; a cut-off reports what was sent. */
+  /** Sent as the max output when the resolved settings set none; a cut-off reports this figure. */
   defaultMaxOutput?: number
 }
 

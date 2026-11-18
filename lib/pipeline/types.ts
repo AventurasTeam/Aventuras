@@ -12,7 +12,7 @@ import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } from '@/lib/stores'
 
-/** The chain's own failures, and pre-flight's refusal of a model flagged off for tool calling. */
+/** The resolver's failures, and pre-flight's refusal of a model flagged off for tool calling. */
 export type ConfigFailureKind = ResolveFailureKind | 'tool-calling-off'
 
 export type PipelineError =
