@@ -67,35 +67,46 @@ export function composeHeld<Row extends { id: string }>(
     const live = incoming.chapterBreaks[row.id]
     if (live != null) chapterBreaks[row.id] = live
   }
-  // A mark the incoming slice dropped from a row it still holds is the row leaving the open region.
-  const closeHereEntryIds = { ...incoming.closeHereEntryIds }
-  for (const row of above) {
-    if (!incomingById.has(row.id) && shown.closeHereEntryIds[row.id] === true) {
-      closeHereEntryIds[row.id] = true
-    }
-  }
   return {
     rows: [...above, ...below],
     worldTimeDecorations: { ...shown.worldTimeDecorations, ...incoming.worldTimeDecorations },
     chapterBreaks,
-    closeHereEntryIds,
+    closeHereEntryIds: heldCloseHereMarks(above, shown, incoming),
     hasOlder: shown.hasOlder,
     hasNewer: incoming.hasNewer,
     sliceKey: shown.sliceKey,
   }
 }
 
-/** The whole shown slice, held while the incoming one has lost the anchor. */
+/**
+ * The whole shown slice, held while the incoming one has lost the anchor; its close-here marks
+ * follow the incoming slice except on rows that slice no longer holds.
+ */
 export function sliceFieldsOf<Row extends { id: string }>(
-  props: SliceFields<Row>,
+  shown: SliceFields<Row>,
+  incoming: SliceFields<Row>,
 ): SliceFields<Row> {
   return {
-    rows: props.rows,
-    worldTimeDecorations: props.worldTimeDecorations,
-    chapterBreaks: props.chapterBreaks,
-    closeHereEntryIds: props.closeHereEntryIds,
-    hasOlder: props.hasOlder,
-    hasNewer: props.hasNewer,
-    sliceKey: props.sliceKey,
+    rows: shown.rows,
+    worldTimeDecorations: shown.worldTimeDecorations,
+    chapterBreaks: shown.chapterBreaks,
+    closeHereEntryIds: heldCloseHereMarks(shown.rows, shown, incoming),
+    hasOlder: shown.hasOlder,
+    hasNewer: shown.hasNewer,
+    sliceKey: shown.sliceKey,
   }
+}
+
+// A mark the incoming slice dropped from a row it still holds is the row leaving the open region.
+function heldCloseHereMarks<Row extends { id: string }>(
+  heldRows: readonly Row[],
+  shown: SliceFields<Row>,
+  incoming: SliceFields<Row>,
+): Record<string, true> {
+  const incomingIds = new Set(incoming.rows.map((row) => row.id))
+  const marks = { ...incoming.closeHereEntryIds }
+  for (const row of heldRows) {
+    if (!incomingIds.has(row.id) && shown.closeHereEntryIds[row.id] === true) marks[row.id] = true
+  }
+  return marks
 }

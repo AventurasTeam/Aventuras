@@ -710,7 +710,7 @@ export function ReaderSurface({
     setShown({
       ...incoming,
       ...(change === 'anchorGone'
-        ? sliceFieldsOf(current)
+        ? sliceFieldsOf(current, incoming)
         : composeHeld(current, incoming, anchorId)),
     })
   }, [incoming, midGesture, armRest, recordAnchor])

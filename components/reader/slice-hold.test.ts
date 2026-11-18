@@ -126,9 +126,24 @@ describe('composeHeld', () => {
 })
 
 describe('sliceFieldsOf', () => {
-  it('holds the whole shown slice, its close-here marks included', () => {
-    const shown = slice(10, 30, { closeHereEntryIds: { e11: true } })
+  it('holds the whole shown slice', () => {
+    const shown = slice(10, 30, {
+      worldTimeDecorations: { e11: { label: 'Day 1', raw: 1 } },
+      chapterBreaks: { e11: { number: 2 } },
+      closeHereEntryIds: { e11: true },
+    })
     const props = { ...shown, branchKey: 'br_1' }
-    expect(sliceFieldsOf(props)).toEqual(shown)
+    expect(sliceFieldsOf(props, slice(31, 60, { sliceKey: 4, hasNewer: true }))).toEqual(shown)
+  })
+
+  it('takes the incoming close-here marks, a shown one only for a row the incoming slice lost', () => {
+    const shown = slice(10, 30, { closeHereEntryIds: { e11: true, e25: true } })
+    // e25 left the open region (a close settled) though the incoming slice still holds it.
+    const incoming = slice(21, 50, { closeHereEntryIds: { e27: true, e45: true } })
+    expect(sliceFieldsOf(shown, incoming).closeHereEntryIds).toEqual({
+      e11: true,
+      e27: true,
+      e45: true,
+    })
   })
 })
