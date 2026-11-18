@@ -130,7 +130,8 @@ and the catalog bullet below drops out.
   the user half (C3), so it takes no exemption in
   `system-half-stability.test.ts`. Variables, in `templateContextMap.ts`:
   each candidate's handle, position, and opening and closing sentences; the
-  region's token total; the threshold; the branch's active threads.
+  region's token total; the threshold (replaced by the window's bounds, the
+  2026-11-18 decision below); the branch's active threads.
 - `firstLastSentences(text)` in `lib/text`, over `promptProse`, as the
   pass's window reads prose. Nothing in `lib` splits sentences today. It
   takes CJK sentence marks and a character cap, so a reply with no sentence
@@ -157,7 +158,8 @@ and the catalog bullet below drops out.
 
 - Output bound. `StructuredCallOptions` gains a default max output, unless
   [Slice 5.2](./02-first-chapter.md) added one for metadata, and boundary
-  passes [Slice 5.4](./04-tool-step.md)'s 8k, reported to `replyCutOff` as a
+  passes [Slice 5.4](./04-tool-step.md)'s 8k (16,384 after the 2026-11-18
+  decision below), reported to `replyCutOff` as a
   step reports it. A profile's value wins. A reasoning spiral then costs one
   bounded reply and a fallback, not a timeout that fails the close.
 
@@ -403,8 +405,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
    non-candidate twice completes the phase on `fallbackChapterEnd`'s entry after
    two calls; a reply cut off falls back after one call; a provider failure returns
    `{ status: 'failed' }` and writes no range; an abort returns
-   `{ status: 'aborted' }`; with no profile max output the call sends 8000, and
-   a profile's value replaces it.
+   `{ status: 'aborted' }`; with no profile max output the call sends 8000 (16,384 after the
+   2026-11-18 decision below), and a profile's value replaces it.
 3. The same file: `z.toJSONSchema` of the refined schema equals the plain one's,
    so a change to the wrapper fails here before the mock's match does.
 4. `scripts/mock-llm/shapes.test.ts` and `scripts/mock-llm/state.test.ts` pass
@@ -667,27 +669,34 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   doesnt loop. This is mostly inherent to the model itself when given a
   substantial amount of work." Three budgets rise. The step output
   default `TOOL_STEP_MAX_OUTPUT_DEFAULT`, 8,000 to 16,384: the largest
-  step reply that finished was 7,710 tokens, 8 of 350 steps cut off at
-  8,000 and each one retry finished in 522 to 7,710, and the largest
-  prompt any step sent was 42,754 tokens, so 42,754 plus 16,384 is 59,138,
-  inside the dev model's 65,536-token window, where a larger cap lets a
-  long reply run into the window and stop as `window`. 16,384 is also the
-  most OpenAI's 4o models accept, and openai-compatible sends
+  step reply that finished was 7,710 tokens, 342 steps finished and 8
+  attempts were cut off at 8,000 (a cut reply is not a step), and each
+  one's retry finished in 522 to 7,710. The largest prompt any step sent
+  was 42,754 tokens, so 42,754 plus 16,384 is 59,138, inside the dev
+  model's 65,536-token window, but that was measured under 24 steps.
+  Upkeep's prompt starts near 31,600 and grows about 274 to 439 tokens a
+  step, so a step near the 57th to 64th reaches about 47k to 59k, where a
+  reply past roughly 6k to 18k tokens overruns the window and stops as
+  `window`; the rerun records each task's largest prompt. 16,384 is also
+  the most OpenAI's 4o models accept, and openai-compatible sends
   `max_tokens` unchanged, so a model with a lower output cap needs its
   profile's max output set (not verified live against a provider). The
   boundary default `BOUNDARY_MAX_OUTPUT_DEFAULT`, 8,000 to 16,384, for the
   same provider cap: picks spent 4,237 to 5,608 output tokens on a
   2,492-token prompt, and 3 of 10 ran past 8,000. The per-task step
-  budget `CLOSE_TASK_STEP_BUDGET`, 24 to 64: Upkeep's prompt listed 45 to
-  52 rows, 36 with no keywords, and the runs that sent one call per step
-  spent 8 to 15 steps on `search_world` first, so writing each bare row
-  once plus a few conditions ends near 57 steps. The cost: a task that
-  loops now runs up to 64 steps per part, as run 7's Upkeep did on an
-  invented `update_item` id until its 24th. 5.5b's bar is unchanged, so a
-  stopped task still misses; its output-bound clause reads the step
-  default and judges at 16,384. Canon says so in `chapter-close.md`,
-  `generation-pipeline.md`, `data-model.md`, `testing.md` and
-  `followups.md`.
+  budget `CLOSE_TASK_STEP_BUDGET`, 24 to 64: Upkeep's prompt listed 43
+  rows in every run (12 characters, 16 places, 14 items, 1 faction), 36
+  of them with no keywords. The three runs stopped at the budget spent
+  10, 8 and 11 leading steps on `search_world` (15 in all in run 7); the
+  serial runs that finished (5 and 8) spent 1 and 4 and ended in 20 and
+  17 steps. Near 57 steps is a worst-case estimate (36 bare rows, a few
+  conditions, about 15 searches, the finishing reply), not a measured
+  run. The cost: a task that loops now runs up to 64 steps per part, as
+  run 7's Upkeep did on an invented `update_item` id until its 24th.
+  5.5b's bar is unchanged, so a stopped task still misses; its
+  output-bound clause reads the step default and judges at 16,384. Canon
+  says so in `chapter-close.md`, `generation-pipeline.md`,
+  `data-model.md`, `testing.md` and `followups.md`.
 - **A stale pick settles on Retry as nothing left to close (developer
   decision, 2026-11-18).** A failed click's entry whose pick can no
   longer end a chapter, closed into one or deleted, settles on Retry as
@@ -739,26 +748,27 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   turn opens on a new scene or after a time skip, end on the listed turn
   before it; if none is listed before it, choose among the others."
   Cut-off run 5 spent its 8,000 tokens deliberating that rule. The user
-  half's old line, with the region's total beside the target, was:
-
-  ```text
-  {{ boundaryRegionTokens }} tokens so far; a chapter runs about {{ boundaryThreshold }} tokens.
-  ```
-
-  A threshold close always fires with the total near the target, and run
-  2's reasoning took the line as an order to end now and the last
-  candidate. It now states the range the end may fall in:
-
-  ```text
-  Each turn listed would end this chapter between {{ boundaryLengthFrom }} and {{ boundaryLengthTo }} tokens long, all good lengths for a chapter, so choose by the story alone.
-  ```
+  half's old line, with the region's total beside the target, was
+  "{{ boundaryRegionTokens }} tokens so far; a chapter runs about
+  {{ boundaryThreshold }} tokens." A threshold close usually fires with
+  the total near the target (a late auto-close or a lowered threshold
+  doesn't), and run 2's reasoning took the line as an order to end now
+  and the last candidate. It now states the range the end may fall in:
+  "Each turn listed would end this chapter between
+  {{ boundaryLengthFrom }} and {{ boundaryLengthTo }} tokens long, all
+  good lengths for a chapter, so choose by the story alone."
 
   The bounds are the candidate window's, half a threshold rounded up to
   one and a half rounded down, from `closeCandidateWindow`, which
   `closeCandidates` uses too. The candidates' own span was passed over:
-  its top is the region's current total, which would bring the "end now"
-  reading back. `boundaryRegionTokens` and `boundaryThreshold` are gone,
-  so `requestChapterBoundary` no longer takes the series.
+  its top sits at the running total before the newest reply, near the
+  current total, which would bring the "end now" reading back.
+  `boundaryRegionTokens` and `boundaryThreshold` are gone, so
+  `requestChapterBoundary` no longer takes the series. Dropping the rule
+  reopens a risk: a candidate shown by an opening sentence like "Three
+  days later…" invites the pick, which puts the new scene's first turn
+  in the closing chapter. The boundary rerun reads each picked turn's
+  opening to check.
 
 - **`firstLastSentences` is tougher than its first cut.** It merges
   letterless pieces (French `»`, a bare ellipsis) into the sentence
@@ -829,10 +839,10 @@ Saved at `~/.cache/aventuras-measure/m5-10/probe-20261118T061707Z`.
 
 The transcripts, read by hand:
 
-- Upkeep's three budget stops come from the 24-step budget against about
-  40 rows when the model emits one call per step: 6 of 10 runs went
-  serial, and the batched runs finished in 3 steps. Runs 4 and 6 landed
-  13 writes before the stop.
+- Upkeep's three budget stops come from the 24-step budget against 43
+  rows when the model emits one call per step: five runs (4, 5, 6, 7, 8)
+  sent one call per step throughout, and the batched runs finished in 3
+  steps. Runs 4 and 6 landed 13 writes before the stop.
 - Run 7's Upkeep looped `update_item` on an invented id.
 - Run 3's Lore sent `turns: [true]`, was rejected and gave up. Its
   Upkeep wrote its calls as text, with no tool calls.
@@ -842,7 +852,7 @@ The bar code fails a task with a recorded stop even after landed writes.
 Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
 The merge decision on this miss is the developer's, pending at writing.
 
-Rerun on the raised budgets: pending.
+Rerun on the raised budgets (and, for the boundary, the reworded prompt): pending.
 
 ### Boundary measure
 
@@ -870,7 +880,7 @@ Run 2's reasoning reads "23,907 tokens so far; a chapter runs about
 spent its 8,000 deliberating the end-on-the-turn-before rule. The merge
 decision on this miss is the developer's, pending at writing.
 
-Rerun on the raised budgets: pending.
+Rerun on the raised budgets (and, for the boundary, the reworded prompt): pending.
 
 ### Reversal measure
 

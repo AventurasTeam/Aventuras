@@ -240,12 +240,12 @@ the exception and skips whole ([3e](#3e--happenings-consolidation)).
 ### When a task stops
 
 A task's budget is 64 steps per part, raised from 24 after the dev model
-went one call per step through Upkeep's 40 rows. Each step's output
-is bounded by the max output of the profile or the story's override,
-else 16,384 tokens, raised from 8,000 after 8 of 350 steps of a seven-task
-measure were cut there; a model
-can reason through its whole limit and never reply. Each call is bounded
-as a pass's is
+went one call per step through Upkeep's 43 rows. Each step's output is
+bounded by the max output of the profile or the story's override, else
+16,384 tokens, raised from 8,000 after a seven-task measure's 342
+finished steps and 8 attempts cut off there (a cut reply is not a step);
+a model can reason through its whole limit and never reply. Each call is
+bounded as a pass's is
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
 and a step's one retry after a cut-off or a filter stop is bounded
 afresh: the cut attempt is the one most likely to have spent the first
@@ -355,9 +355,9 @@ and the close, still owed, follows it.
 **Auto mode only.** Manual user-triggered chapter close skips this
 phase; the user-supplied entry is the boundary.
 
-The boundary selection agent reads the open region's entries and
-picks a natural ending — scene transition, time skip, arc-beat
-resolution, or narrative pause.
+The boundary selection agent reads the candidates' first and last
+sentences and the active threads, and picks a natural ending — scene
+transition, time skip, arc-beat resolution, or narrative pause.
 
 **Candidates.** Code offers the turns where the chapter would hold
 between half and one and a half thresholds, never the newest reply. The

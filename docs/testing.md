@@ -765,19 +765,19 @@ close that failed misses every task. A task with no start, no model
 step, call or stop of its own, holds as `no-start`: Happenings when the
 range embed finds no cluster, as on MiniLM. A task that started holds
 when it ended on a reply with no tool call and no budget, window or
-cut-off stop, and no step's reply reached the step output default (16,384 tokens); Identity,
-Threads, Lore and Upkeep must also land at least one write, while
-Happenings, Lifecycle and Awareness can be right writing nothing, so
-their calls are reported, not required. A step cut off at that bound, or
-stopped by a filter, whose one retry succeeds still holds; a task whose
-retry is cut off too is stopped, and misses. The output-bound clause judges each
-step by its final attempt, so a cut attempt's output never counts toward
-it. It also prints each run's cut-offs (task, step and output tokens;
-`cutOffs` in each tally of `bar.json`), each step's
-`provider.input_ratio`, a cut attempt's output tokens beside its retry,
-the run's input and output tokens over its calls, the largest value the
-report recorded, measured before its bound, and the report's size in
-bytes. The overlay adds the coverage counts: Identity calls whose list
+cut-off stop, and no step's reply reached the step output default
+(16,384 tokens); Identity, Threads, Lore and Upkeep must also land at
+least one write, while Happenings, Lifecycle and Awareness can be right
+writing nothing, so their calls are reported, not required. A step cut
+off at that bound, or stopped by a filter, whose one retry succeeds
+still holds; a task whose retry is cut off too is stopped, and misses.
+The output-bound clause judges each step by its final attempt, so a cut
+attempt's output never counts toward it. It also prints each run's
+cut-offs (task, step and output tokens; `cutOffs` in each tally of
+`bar.json`), each step's `provider.input_ratio`, a cut attempt's output
+tokens beside its retry, the run's input and output tokens over its
+calls, the largest value the report recorded, measured before its bound,
+and the report's size in bytes. The overlay adds the coverage counts: Identity calls whose list
 on an overlay row at or over its cap reached the cap check, landed or
 refused, and `merge_threads` calls, each with its hits. After the runs
 it prints the bar: met when there are 8 runs of 10 in which every task
