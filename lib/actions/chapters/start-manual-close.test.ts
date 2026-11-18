@@ -14,7 +14,7 @@ import {
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
-  type PipelineError,
+  type ConfigResolverError,
   type PipelineEvent,
   type PreflightFailedStart,
   type RejectedStart,
@@ -154,7 +154,7 @@ function overrideLoreModel(modelId: string): void {
   })
 }
 
-const TOOLS_OFF = (modelId: string): PipelineError => ({
+const TOOLS_OFF = (modelId: string): ConfigResolverError => ({
   kind: 'config-resolver',
   failure: 'tool-calling-off',
   target: 'lore-mgmt',
@@ -699,7 +699,7 @@ describe('startCloseChain', () => {
   it('never pre-flights a start a refusal ends', async () => {
     ensurePerTurnPipelineRegistered()
     holdStoryWithTurn()
-    const preflight = vi.fn<(open: OpenStory) => PipelineError | null>(() => null)
+    const preflight = vi.fn<(open: OpenStory) => ConfigResolverError | null>(() => null)
 
     expect(await startCloseChain(f.branchId, f.ctx, { preflight })).toEqual({
       outcome: 'rejected',

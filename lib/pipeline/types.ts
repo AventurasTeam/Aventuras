@@ -221,4 +221,4 @@ export type TxResult =
 export type RejectedStart = { outcome: 'rejected'; blockedBy: string }
 
 /** A start its own pre-flight refused before any run reserved: like a rejection, no run exists. */
-export type PreflightFailedStart = { outcome: 'preflight-failed'; error: PipelineError }
+export type PreflightFailedStart = { outcome: 'preflight-failed'; error: ConfigResolverError }

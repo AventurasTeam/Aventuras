@@ -10,7 +10,7 @@ import {
   startChain,
   unprocessedEntryCount,
   type ChainEnd,
-  type PipelineError,
+  type ConfigResolverError,
   type PreflightFailedStart,
   type RejectedStart,
 } from '@/lib/pipeline'
@@ -49,7 +49,7 @@ export async function startCloseChain(
     /** Runs after the held check, before the unprocessed count; a refusal ends the start. */
     validate?: () => Promise<RejectedStart | null>
     /** Runs in the synchronous section before the reserve; a failure starts nothing. */
-    preflight?: (open: OpenStory) => PipelineError | null
+    preflight?: (open: OpenStory) => ConfigResolverError | null
     onReserved?: () => void
   },
 ): Promise<ChainEnd | RejectedStart | PreflightFailedStart> {
