@@ -45,7 +45,8 @@ type CloseChainOpts = {
   onReserved?: () => void
 }
 
-type PreflightedOpts = CloseChainOpts & Required<Pick<CloseChainOpts, 'preflight'>>
+// A variable takes no excess-property check, so only an explicit `undefined` keeps a pre-flight out.
+type UnpreflightedOpts = Omit<CloseChainOpts, 'preflight'> & { preflight?: undefined }
 
 /**
  * Starts the pass (entries unprocessed) or the close; resolves with the chain's end, the refusal,
@@ -55,13 +56,13 @@ type PreflightedOpts = CloseChainOpts & Required<Pick<CloseChainOpts, 'preflight
 export function startCloseChain(
   branchId: string,
   ctx: DbCtx,
-  opts: PreflightedOpts,
-): Promise<ChainEnd | RejectedStart | PreflightFailedStart>
+  opts?: UnpreflightedOpts,
+): Promise<ChainEnd | RejectedStart>
 export function startCloseChain(
   branchId: string,
   ctx: DbCtx,
-  opts?: Omit<CloseChainOpts, 'preflight'>,
-): Promise<ChainEnd | RejectedStart>
+  opts: CloseChainOpts,
+): Promise<ChainEnd | RejectedStart | PreflightFailedStart>
 export async function startCloseChain(
   branchId: string,
   ctx: DbCtx,

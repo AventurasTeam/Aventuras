@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { generateStructured } from '@/lib/ai'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -14,6 +14,7 @@ import {
   PER_TURN_KIND,
   pipelineEventBus,
   startPipeline,
+  type ChainEnd,
   type ConfigResolverError,
   type PipelineEvent,
   type PreflightFailedStart,
@@ -735,5 +736,19 @@ describe('startCloseChain', () => {
       blockedBy: MANUAL_CLOSE_REFUSAL.busy,
     })
     expect(preflight).not.toHaveBeenCalled()
+  })
+
+  it('types a pre-flight failure into any start whose options may carry a pre-flight', () => {
+    type MaybePreflighted = {
+      validate?: () => Promise<RejectedStart | null>
+      preflight?: (open: OpenStory) => ConfigResolverError | null
+    }
+    const maybePreflighted = (opts: MaybePreflighted) => startCloseChain(f.branchId, f.ctx, opts)
+    const unpreflighted = () => startCloseChain(f.branchId, f.ctx, { validate: async () => null })
+
+    expectTypeOf(maybePreflighted).returns.resolves.toEqualTypeOf<
+      ChainEnd | RejectedStart | PreflightFailedStart
+    >()
+    expectTypeOf(unpreflighted).returns.resolves.toEqualTypeOf<ChainEnd | RejectedStart>()
   })
 })
