@@ -39,7 +39,9 @@ type UnusableTier = Extract<BoundaryCallOutcome, { status: 'unusable' }>['tier']
  * Synchronous: the threshold, the branch's active threads and lore-mgmt's config, while the check
  * holds. An open publishing during a later await replaces the stores with another branch's rows.
  */
-export function readBoundaryInputs(ctx: PhaseContext): BoundaryCallInputs | PhaseFailure {
+export function readBoundaryInputs(
+  ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,
+): BoundaryCallInputs | PhaseFailure {
   const open = currentStoryStore.getCurrentStory()
   if (!storesHoldBranch(open, ctx))
     return {

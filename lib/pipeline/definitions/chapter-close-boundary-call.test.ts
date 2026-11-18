@@ -331,6 +331,23 @@ describe('requestChapterBoundary — the call', () => {
     expect(user).not.toContain('The lost map')
     expect(system).not.toContain('Find the heir')
   })
+
+  // Entry ids are unique per branch only, so a fork can hold a candidate's id with its own prose.
+  it("reads its own branch's prose for a candidate id another branch shares", async () => {
+    phaseDb.sqlite
+      .prepare(
+        `INSERT INTO story_entries
+           (id, branch_id, position, kind, content, content_tokens, chapter_id, metadata, created_at)
+         VALUES ('e5', 'b2', 5, 'ai_reply', 'The fork rewrote this turn entirely.', 140, NULL, NULL, 5)`,
+      )
+      .run()
+    answer('t2')
+    await drain()
+
+    const { user } = generateStructuredMock.mock.calls[0]![1]
+    expect(user).toContain('The guard lifts his lantern to the seal.')
+    expect(user).not.toContain('The fork rewrote this turn')
+  })
 })
 
 describe('requestChapterBoundary — outcomes', () => {
@@ -379,6 +396,33 @@ describe('requestChapterBoundary — outcomes', () => {
   ])('$name', async ({ result, outcome }) => {
     generateStructuredMock.mockResolvedValue(result as never)
     expect((await drain()).outcome).toEqual(outcome)
+  })
+
+  // An expiry aborts the call as a cancel does, but it is the provider's fault: no fallback.
+  it('fails a call that outlives its bound as a provider timeout', async () => {
+    generateStructuredMock.mockImplementation(
+      (...args: unknown[]) =>
+        new Promise((resolve) => {
+          const signal = args[4] as AbortSignal
+          signal.addEventListener('abort', () => resolve({ status: 'aborted', recoverable: [] }))
+        }) as never,
+    )
+    vi.useFakeTimers()
+    try {
+      const pending = drain()
+      // Past the ten-minute default bound, so a wrong bound still expires and the detail names it.
+      await vi.advanceTimersByTimeAsync(1_000_000)
+      expect((await pending).outcome).toEqual({
+        status: 'failed',
+        error: {
+          kind: 'provider',
+          reason: 'timeout',
+          detail: 'lore-mgmt: timeout after 600000ms',
+        },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('returns aborted for a cancel', async () => {
