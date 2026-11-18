@@ -23,25 +23,30 @@ export const closeChapter = {
   modal,
   pickerTrigger,
 
-  // Opens the panel, scrolls the row into the virtualized window, picks it; the panel collapses.
+  // Opens the panel, pages it from the top until the row renders in the virtualized window, picks
+  // it; the panel collapses. The testID sits on the scrolling element itself (web).
   pickReply: async (page: Page, entryRef: string): Promise<void> => {
     if (!(await panel(page).isVisible())) await pickerTrigger(page).click()
     await expect(panel(page)).toBeVisible()
     const row = panel(page).getByText(entryRef, { exact: true })
+    await panel(page).evaluate((scroller) => {
+      scroller.scrollTop = 0
+    })
     await expect(async () => {
       if ((await row.count()) > 0) return
-      // The testID may sit on the scroller or on a wrapper around it.
-      await panel(page).evaluate((root) => {
-        const scroller = [root, ...Array.from(root.querySelectorAll('*'))].find(
-          (node) => node.scrollHeight > node.clientHeight,
-        )
-        if (scroller !== undefined) scroller.scrollBy(0, Math.max(scroller.clientHeight / 2, 40))
+      // A page per attempt: the rows rendered ahead of the window cover the overlap. Past the
+      // bottom, back to the top, so a row above the first window is still reached.
+      await panel(page).evaluate((scroller) => {
+        const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+        if (atBottom) scroller.scrollTop = 0
+        else scroller.scrollBy(0, scroller.clientHeight)
       })
       throw new Error(`${entryRef} is not among the panel's rendered rows yet`)
-    }).toPass({ timeout: 10_000 })
+    }).toPass({ timeout: 10_000, intervals: [100] })
     await row.click()
     await expect(panel(page)).toBeHidden()
-    await expect(pickerTrigger(page)).toContainText(entryRef)
+    // Exact: `entry #6` must not match a trigger showing `entry #61`.
+    await expect(pickerTrigger(page).getByText(entryRef, { exact: true })).toBeVisible()
   },
 
   // Built per call: a module-level pattern would throw at import for every spec if the copy moved.
@@ -73,6 +78,7 @@ export const closeChapter = {
       .inProgressCard(page)
       .getByRole('button', { name: t('chapters:inProgress.close'), exact: true }),
 
+  /** Waits for the gate to open: a disabled action renames itself to its reason. */
   closeHere: async (page: Page, entryId: string): Promise<Locator> => {
     const action = reader
       .row(page, entryId)

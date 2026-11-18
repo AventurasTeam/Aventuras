@@ -137,9 +137,12 @@ test.describe('first chapter — a close from Close chapter here', () => {
           .toBe(0)
         await (await closeChapter.closeHere(page, endId)).click()
         // The entry's button opens the modal with its end already picked.
-        await expect(closeChapter.pickerTrigger(page)).toContainText(
-          t('entryRef', { n: END_POSITION }),
-        )
+        await expect(
+          closeChapter
+            .pickerTrigger(page)
+            .getByText(t('entryRef', { n: END_POSITION }), { exact: true }),
+        ).toBeVisible()
+        // Only after the trigger shows the pick: the count reads 0 while the series loads.
         const shown = copyNumber(
           copyPattern('chapters:closeModal.tokensInRange', { numbers: ['count'] }).exec(
             (await closeChapter.tokensInRange(page).innerText()).trim(),
