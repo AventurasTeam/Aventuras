@@ -244,7 +244,16 @@ went one call per step through Upkeep's 43 rows. Each step's output is
 bounded by the max output of the profile or the story's override, else
 16,384 tokens, raised from 8,000 after a seven-task measure's 342
 finished steps and 8 attempts cut off there (a cut reply is not a step);
-a model can reason through its whole limit and never reply. Each call is
+a model can reason through its whole limit and never reply. The default
+goes out as it is, and so does
+[the boundary call's](#phase-1--boundary-selection): a model whose output
+cap sits below it gets a 4xx on every call, which reads as an unknown
+failure and isn't retried, and a server that counts `max_tokens` against
+the window refuses a call whose prompt plus it exceeds the window, which
+fails the close as an overflow. The remedy for both is the profile's max
+output, or the story's override, set to what the model and server accept
+([`model-settings.md`](../ui/patterns/model-settings.md)); clamping a
+default to the window is [parked](../parked.md#clamp-a-default-max-output-to-the-window). Each call is
 bounded as a pass's is
 ([`classifier.md → Failure policy`](./classifier.md#failure-policy)),
 and a step's one retry after a cut-off or a filter stop is bounded

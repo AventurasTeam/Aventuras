@@ -696,7 +696,13 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
   5.5b's bar is unchanged, so a stopped task still misses; its
   output-bound clause reads the step default and judges at 16,384. Canon
   says so in `chapter-close.md`, `generation-pipeline.md`,
-  `data-model.md`, `testing.md` and `followups.md`.
+  `data-model.md`, `testing.md` and `followups.md`. The review of the
+  raise found two provider cases: a model whose output cap sits between
+  8,000 and 16,383 gets a 4xx, and a server that counts `max_tokens`
+  against the window refuses a long prompt. Developer decision, "Q5: A /
+  I'd park B, not a followup", keeps the values, records both in canon
+  with the profile's max output as the remedy, and
+  [parks the clamp](../../../../parked.md#clamp-a-default-max-output-to-the-window).
 - **A stale pick settles on Retry as nothing left to close (developer
   decision, 2026-11-18).** A failed click's entry whose pick can no
   longer end a chapter, closed into one or deleted, settles on Retry as
