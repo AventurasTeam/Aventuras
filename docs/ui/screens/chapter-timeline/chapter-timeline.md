@@ -393,10 +393,18 @@ button. Same modal, same shape — uniform UX.
 
 Both the start-of-chapter row and the **picker trigger** (the
 always-visible button representing the current end pick) use the
-same single-line shape:
+same shape: one line on tablet and desktop, two lines on phone.
 
 ```
 [entry-num] [optional tag] [snippet — truncates with …]    [time]  [▾]
+```
+
+On phone the same fields stack, so the tag and the snippet each keep
+a readable width:
+
+```
+[entry-num] [optional tag]                                      [▾]
+[snippet — truncates with …]                               [time]
 ```
 
 Fields, left-to-right:
@@ -406,11 +414,12 @@ Fields, left-to-right:
   (`Chapter <N> ended here` on the start row; `latest` on the
   picker trigger when the latest reply is selected).
 - **Snippet** — first ~80 chars of `story_entries.content`,
-  italicized. Single line; trailing ellipsis when truncated.
+  italicized. Single line; trailing ellipsis when truncated. On
+  phone it takes the second line, beside the time.
 - **Time** — right-aligned. Formatted via the active calendar
   formatter (same formatter the reader's time chip uses).
 - **Chevron** — picker trigger only. Rotates 180° when the panel
-  is open.
+  is open. On phone it sits at the right of the first line.
 
 Both rows render with the same border + padding so the start row
 and picker trigger read as visually paired cards (start above,
@@ -631,9 +640,13 @@ end-entry picker in-flow inside it.
   Sheet on phone, the confirm-from-inside case
   [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking)
   allows.
-- **Entry-row anatomy** (start row, picker trigger, dropdown
-  items) unchanged on phone. Single-line `text-overflow: ellipsis`
-  handles narrow widths; time chip right-aligned.
+- **Entry-row anatomy**: the start row and picker trigger take two
+  lines on phone (entry number and tag, with the chevron at the
+  right, then the snippet with its time right-aligned), so the tag
+  keeps its whole label and the snippet a readable width; the
+  snippet still truncates with `text-overflow: ellipsis`. Dropdown
+  items are unchanged: their head row and two-line snippet already
+  fit.
 - **Empty state** (`Chapters · 0 closed + 1 in progress`) renders
   identically; only the in-progress card surfaces.
 - **Stack-aware Return** binds chrome `←`, Android `BackHandler`,
