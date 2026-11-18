@@ -272,7 +272,9 @@ function scriptTasks(mock: MockLlm, starts: SeededCloseStarts, plan: ClosePlan):
       call('set_pin', {
         id: handleIn(
           request,
-          new RegExp(`- (aw\\d+): ${character} \\(c\\d+\\), pin ${starts.awareness.pin}`),
+          new RegExp(
+            `- (aw\\d+): ${character} \\(c\\d+\\), pin ${escapeRegExp(String(starts.awareness.pin))}`,
+          ),
         ),
         value: PIN,
         turns: turns('awareness'),
