@@ -27,7 +27,7 @@ export const CHAPTER = {
 
 type Hero = { readonly app: LaunchedApp; readonly mock: MockLlm }
 type Row = { id: string; position: number; kind: string }
-export type Pick = { id: string; position: number; ref: string }
+export type StartPick = { id: string; position: number; ref: string }
 
 // No embedder: the hero's open region anchors one happening (entry 59), so the range embed has
 // nothing to cluster. An embedder error on close means a second one: `installEmbedderModel` here.
@@ -73,7 +73,7 @@ export async function openRegion(page: Page, branchId: string): Promise<Row[]> {
 }
 
 // The modal defaults to the latest reply, so the one before it is a pick the user made.
-export function pickBeforeLatest(region: readonly Row[]): Pick {
+export function pickBeforeLatest(region: readonly Row[]): StartPick {
   const replies = region.filter((row) => row.kind === 'ai_reply')
   const pick = replies.at(-2)
   if (pick === undefined) {
@@ -94,13 +94,13 @@ export async function openFromMenu(page: Page): Promise<void> {
   await closeChapter.storyToolsEntry(page).click()
 }
 
-export async function pickFromMenu(page: Page, pick: Pick): Promise<void> {
+export async function pickFromMenu(page: Page, pick: StartPick): Promise<void> {
   await openFromMenu(page)
   await expect(closeChapter.modal(page)).toBeVisible()
   await closeChapter.pickReply(page, pick.ref)
 }
 
-export type Start = { from: string; open: (page: Page, pick: Pick) => Promise<void> }
+export type Start = { from: string; open: (page: Page, pick: StartPick) => Promise<void> }
 
 // milestone.md → Definition of done, Manual close: one fixture per start; the open region is too
 // short for eight closes in a row.
