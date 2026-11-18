@@ -88,7 +88,7 @@ vi.mock('./close-chapter-modal-view', async () => {
   }
 })
 
-// The open region after chapter 2: an action, then two turns; running totals 420, 720, 1000.
+// The open region after chapter 2: three turns; running totals 420, 720, 1000.
 const SERIES: readonly OpenRegionRow[] = [
   { id: 'entry_59', kind: 'user_action', position: 59, tokens: 120 },
   { id: 'entry_60', kind: 'ai_reply', position: 60, tokens: 300 },
