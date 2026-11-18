@@ -469,10 +469,15 @@ convention, and the expectation that subsystems route through
   their debug level are on (`components/reader/use-reader-undo.tsx`):
   `undo_measured` and `redo_measured`, each with `wallMs`, the undo's or
   redo's own wait and never the confirm before it, `longestGapMs`, the
-  longest JS-thread stall `startStallMeter` saw in it, and the reversed
-  group's `actionId`. The meter (`lib/diagnostics/stall-meter.ts`) ticks
-  every 16 ms and counts its start and stop as ticks, so a stall no tick
-  interrupts still measures. A refused or failed reversal logs neither.
+  longest JS-thread stall `startStallMeter` saw in it, `tailGapMs`, the
+  same meter's longest gap over the 250 ms after the reversal resolves
+  (the default-lane React work it schedules, logged then), and the
+  reversed group's `actionId`. The meter (`lib/diagnostics/stall-meter.ts`)
+  ticks every 16 ms and counts its start and stop as ticks, so a stall no
+  tick interrupts still measures. A gap is late timer delivery: on Android
+  timers fire from a UI-thread Choreographer callback, so a UI-thread
+  frame stall shows too, and a gap over the bar is not automatically a
+  JS-thread stall. A refused or failed reversal logs neither.
 
 Kinds grow organically as subsystems land.
 

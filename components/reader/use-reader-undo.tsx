@@ -9,6 +9,7 @@ import {
   type DbCtx,
   type RedoGroup,
   type UndoRejectionCode,
+  type UndoResult,
 } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
 import {
@@ -65,22 +66,33 @@ function redoNames(group: RedoGroup): UndoNames {
   return undoNames(firstRowOf(liveUndoRow, snapshotRowsOf(group.snapshots)))
 }
 
+// Default-lane React work a reversal schedules (effects' setState, refetches keyed on its settle)
+// runs after its promise resolves, so a second window follows it.
+const TAIL_MS = 250
+
 // Timed only while its debug entry would land. A close's undo waits on a confirm first, the
-// user's wait and not the reversal's, so only the reversal's own await is in the window.
-async function timedReversal<T extends { status: string }>(
+// user's wait and not the reversal's, so only the reversal's own await is in the window. The
+// entry lands after the tail, and the caller never waits for it.
+async function timedReversal(
   kind: 'reader.undo_measured' | 'reader.redo_measured',
   actionId: string,
-  reverse: () => Promise<T>,
-): Promise<T> {
+  reverse: () => Promise<UndoResult>,
+): Promise<UndoResult> {
   if (!isDiagnosticsEnabled() || !isDiagnosticsDebugEnabled()) return reverse()
   const meter = startStallMeter()
-  let result: T | undefined
+  let result: UndoResult | undefined
   try {
     result = await reverse()
     return result
   } finally {
     const { wallMs, longestGapMs } = meter.stop()
-    if (result?.status === 'ok') logger.debug(kind, { wallMs, longestGapMs, actionId })
+    if (result?.status === 'ok') {
+      const tail = startStallMeter()
+      setTimeout(() => {
+        const { longestGapMs: tailGapMs } = tail.stop()
+        logger.debug(kind, { wallMs, longestGapMs, tailGapMs, actionId })
+      }, TAIL_MS)
+    }
   }
 }
 

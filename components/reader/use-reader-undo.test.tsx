@@ -533,8 +533,7 @@ describe('useReaderUndo — the reversal meter', () => {
   beforeEach(() => {
     clearBuffers()
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
-    // Only Date: settle()'s timeout and the meter's ticks stay real, and the clock moves when told.
-    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.useFakeTimers()
     vi.setSystemTime(1_000_000)
   })
   afterEach(() => {
@@ -542,6 +541,10 @@ describe('useReaderUndo — the reversal meter', () => {
     vi.restoreAllMocks()
     __resetDiagnosticsGate()
   })
+
+  // The fake clock stands in for settle()'s real timeout; past the tail, the entry has landed.
+  const settle = () => act(() => vi.advanceTimersByTimeAsync(0))
+  const pastTail = () => act(() => vi.advanceTimersByTimeAsync(1_000))
 
   const measured = () =>
     getDiagnosticsSnapshot()
@@ -563,11 +566,12 @@ describe('useReaderUndo — the reversal meter', () => {
     vi.setSystemTime(Date.now() + 5_000)
     act(() => r.result.current.confirm?.props.onConfirm())
     await settle()
+    await pastTail()
 
     expect(measured()).toEqual([
       {
         kind: 'reader.undo_measured',
-        fields: { wallMs: 700, longestGapMs: 700, actionId: 'act_save' },
+        fields: { wallMs: 700, longestGapMs: 700, tailGapMs: 16, actionId: 'act_save' },
       },
     ])
   })
@@ -582,17 +586,19 @@ describe('useReaderUndo — the reversal meter', () => {
     const r = render()
     act(() => r.result.current.undo('keyboard'))
     await settle()
+    await pastTail()
     act(() => toasts[0].action?.onPress())
     await settle()
+    await pastTail()
 
     expect(measured()).toEqual([
       {
         kind: 'reader.undo_measured',
-        fields: { wallMs: 0, longestGapMs: 0, actionId: 'act_turn' },
+        fields: { wallMs: 0, longestGapMs: 0, tailGapMs: 16, actionId: 'act_turn' },
       },
       {
         kind: 'reader.redo_measured',
-        fields: { wallMs: 640, longestGapMs: 640, actionId: 'act_turn' },
+        fields: { wallMs: 640, longestGapMs: 640, tailGapMs: 16, actionId: 'act_turn' },
       },
     ])
   })
@@ -607,6 +613,7 @@ describe('useReaderUndo — the reversal meter', () => {
     const r = render()
     act(() => r.result.current.undo('keyboard'))
     await settle()
+    await pastTail()
 
     expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
     expect(measured()).toEqual([])
@@ -625,6 +632,21 @@ describe('useReaderUndo — the reversal meter', () => {
     expect(ticks).not.toHaveBeenCalled()
   })
 
+  it('starts no meter while diagnostics are off, whatever the debug level', async () => {
+    configureDiagnosticsGate({ isEnabled: () => false, isDebugEnabled: () => true })
+    const ticks = vi.spyOn(globalThis, 'setInterval')
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    await pastTail()
+
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+    expect(ticks).not.toHaveBeenCalled()
+    expect(measured()).toEqual([])
+  })
+
   it('starts the meter with the gate on', async () => {
     const ticks = vi.spyOn(globalThis, 'setInterval')
     actions.readUndoTarget.mockResolvedValue(TURN)
@@ -634,5 +656,51 @@ describe('useReaderUndo — the reversal meter', () => {
     await settle()
 
     expect(ticks).toHaveBeenCalledWith(expect.any(Function), 16)
+  })
+
+  it("reports a stall after the reversal resolves as tailGapMs, not in the reversal's own gap", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(measured()).toEqual([])
+    vi.setSystemTime(Date.now() + 400)
+    await pastTail()
+
+    expect(measured()).toEqual([
+      {
+        kind: 'reader.undo_measured',
+        fields: { wallMs: 0, longestGapMs: 0, tailGapMs: 416, actionId: 'act_turn' },
+      },
+    ])
+  })
+
+  it('logs the tail after an unmount, and leaves no timer behind', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    r.unmount()
+    await pastTail()
+
+    expect(measured()).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('clears the meter when the reversal throws, and logs nothing', async () => {
+    const ticks = vi.spyOn(globalThis, 'setInterval')
+    const cleared = vi.spyOn(globalThis, 'clearInterval')
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockRejectedValue(new Error('boom'))
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    await pastTail()
+
+    expect(ticks).toHaveBeenCalledTimes(1)
+    expect(cleared).toHaveBeenCalledWith(ticks.mock.results[0].value)
+    expect(measured()).toEqual([])
   })
 })
