@@ -12,6 +12,12 @@ import {
   type UndoTargetRead,
 } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
+import {
+  __resetDiagnosticsGate,
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+} from '@/lib/diagnostics'
 import { makeLore } from '@/lib/list-modules/__tests__/fixtures'
 import {
   entitiesStore,
@@ -520,5 +526,113 @@ describe('useReaderUndo — review fixes', () => {
 
     expect(r.result.current.confirmOpen).toBe(true)
     expect(r.result.current.confirm?.props.lines).toEqual(['and 1 more'])
+  })
+})
+
+describe('useReaderUndo — the reversal meter', () => {
+  beforeEach(() => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    // Only Date: settle()'s timeout and the meter's ticks stay real, and the clock moves when told.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(1_000_000)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    __resetDiagnosticsGate()
+  })
+
+  const measured = () =>
+    getDiagnosticsSnapshot()
+      .logEntries.filter(
+        ({ kind }) => kind === 'reader.undo_measured' || kind === 'reader.redo_measured',
+      )
+      .map(({ kind, fields }) => ({ kind, fields }))
+
+  it("times the undo's own wait, never the confirm before it", async () => {
+    actions.readUndoTarget.mockResolvedValue(LORE_SAVE)
+    actions.undoLastAction.mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 700)
+      return OK
+    })
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    // The user reads the confirm for five seconds.
+    vi.setSystemTime(Date.now() + 5_000)
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    expect(measured()).toEqual([
+      {
+        kind: 'reader.undo_measured',
+        fields: { wallMs: 700, longestGapMs: 700, actionId: 'act_save' },
+      },
+    ])
+  })
+
+  it("times a redo the notice's Redo starts", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    actions.redoLastAction.mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 640)
+      return OK
+    })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => toasts[0].action?.onPress())
+    await settle()
+
+    expect(measured()).toEqual([
+      {
+        kind: 'reader.undo_measured',
+        fields: { wallMs: 0, longestGapMs: 0, actionId: 'act_turn' },
+      },
+      {
+        kind: 'reader.redo_measured',
+        fields: { wallMs: 640, longestGapMs: 640, actionId: 'act_turn' },
+      },
+    ])
+  })
+
+  it('logs nothing for a refused undo', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockResolvedValue({
+      status: 'rejected',
+      code: 'target-moved',
+      reason: 'moved',
+    })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+    expect(measured()).toEqual([])
+  })
+
+  it('starts no meter while the debug level is off, and still undoes', async () => {
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => false })
+    const ticks = vi.spyOn(globalThis, 'setInterval')
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    expect(actions.undoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
+    expect(ticks).not.toHaveBeenCalled()
+  })
+
+  it('starts the meter with the gate on', async () => {
+    const ticks = vi.spyOn(globalThis, 'setInterval')
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    expect(ticks).toHaveBeenCalledWith(expect.any(Function), 16)
   })
 })

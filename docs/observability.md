@@ -460,7 +460,15 @@ convention, and the expectation that subsystems route through
   a reader document that had painted booted again, a reload or a
   renderer kill), and loading older entries adds `load_older_failed`
   (warn, `components/reader/use-load-older-entries.ts`: the read above
-  the window threw, and the boundary shimmer stays for the next scroll)
+  the window threw, and the boundary shimmer stays for the next scroll).
+  A reversal's cost adds two at debug, timed only while diagnostics and
+  their debug level are on (`components/reader/use-reader-undo.tsx`):
+  `undo_measured` and `redo_measured`, each with `wallMs`, the undo's or
+  redo's own wait and never the confirm before it, `longestGapMs`, the
+  longest JS-thread stall `startStallMeter` saw in it, and the reversed
+  group's `actionId`. The meter (`lib/diagnostics/stall-meter.ts`) ticks
+  every 16 ms and counts its start and stop as ticks, so a stall no tick
+  interrupts still measures. A refused or failed reversal logs neither.
 
 Kinds grow organically as subsystems land.
 

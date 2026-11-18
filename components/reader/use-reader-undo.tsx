@@ -11,7 +11,12 @@ import {
   type UndoRejectionCode,
 } from '@/lib/actions'
 import type { Delta } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+import {
+  isDiagnosticsDebugEnabled,
+  isDiagnosticsEnabled,
+  logger,
+  startStallMeter,
+} from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { generationStore, undoRedoStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
@@ -58,6 +63,25 @@ const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rer
 
 function redoNames(group: RedoGroup): UndoNames {
   return undoNames(firstRowOf(liveUndoRow, snapshotRowsOf(group.snapshots)))
+}
+
+// Timed only while its debug entry would land. A close's undo waits on a confirm first, the
+// user's wait and not the reversal's, so only the reversal's own await is in the window.
+async function timedReversal<T extends { status: string }>(
+  kind: 'reader.undo_measured' | 'reader.redo_measured',
+  actionId: string,
+  reverse: () => Promise<T>,
+): Promise<T> {
+  if (!isDiagnosticsEnabled() || !isDiagnosticsDebugEnabled()) return reverse()
+  const meter = startStallMeter()
+  let result: T | undefined
+  try {
+    result = await reverse()
+    return result
+  } finally {
+    const { wallMs, longestGapMs } = meter.stop()
+    if (result?.status === 'ok') logger.debug(kind, { wallMs, longestGapMs, actionId })
+  }
 }
 
 /**
@@ -164,9 +188,10 @@ export function useReaderUndo({
       }
       // Read before the redo lands: a redone delete takes the row its name came from.
       const notice = undoTargetText(describeRedoTarget(group), redoNames(group), 'redoNotice')
-      const result = await redoLastAction(branchId, ctx, {
-        expectedActionId: expectedActionId ?? group.actionId,
-      })
+      const actionId = expectedActionId ?? group.actionId
+      const result = await timedReversal('reader.redo_measured', actionId, () =>
+        redoLastAction(branchId, ctx, { expectedActionId: actionId }),
+      )
       if (result.status === 'rejected') report('redo', result, origin)
       else announce(notice)
     },
@@ -191,7 +216,9 @@ export function useReaderUndo({
     async (target: Target, origin: Origin) => {
       // Names resolve against the stores, so read them before an undo removes a created row.
       const notice = undoTargetText(target.description, target.names, 'notice')
-      const result = await undoLastAction(branchId, ctx, { expectedActionId: target.actionId })
+      const result = await timedReversal('reader.undo_measured', target.actionId, () =>
+        undoLastAction(branchId, ctx, { expectedActionId: target.actionId }),
+      )
       showMenuTarget(null)
       if (result.status === 'rejected') {
         report('undo', result, origin)

@@ -17,5 +17,6 @@ export {
   isDiagnosticsEnabled,
 } from './core/gate'
 export { turnCaptureSink } from './sinks/turn-capture-sink'
+export { startStallMeter } from './stall-meter'
 export type { LogKind, LogSubsystem } from './kinds'
 export type { HttpCall, LogEntry, LogLevel, PhaseEvent, TurnCapture } from './types'
