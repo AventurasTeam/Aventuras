@@ -146,9 +146,8 @@ function readRegion(dbPath: string): RegionRow[] {
   }
 }
 
-// chapter-close.md → Phase 1: a reply whose running total sits within half a threshold either side
-// of one, never the newest. The crossing turn's reply is the newest, so no seeded reply is dropped
-// as the newest; the window alone decides.
+// chapter-close.md → Phase 1's window, without its never-the-newest rule: the crossing turn's reply
+// is the newest, so no seeded reply is ever it.
 function candidatesOf(region: readonly RegionRow[], threshold: number): RegionRow[] {
   const kept: RegionRow[] = []
   let total = 0
