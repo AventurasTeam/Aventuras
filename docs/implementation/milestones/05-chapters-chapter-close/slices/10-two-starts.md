@@ -870,7 +870,51 @@ Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
 The developer's call on this miss is the 2026-11-18 budget-raise
 decision above: tune, then rerun.
 
-Rerun on the raised budgets (and, for the boundary, the reworded prompt): pending.
+#### Seven-task rerun on the raised budgets
+
+`PROBE_RUNS=10 PROBE_OVERLAY=1 pnpm probe:close` at `ee9b39acf` (a step's
+default max output 16,384, a task's step budget 64) on
+`Gemma4-26B-A4B-QAT-MTP` (window 65,536), from 06:53 to 08:41 UTC on
+2026-11-18. Saved at
+`~/.cache/aventuras-measure/m5-10/probe-20261118T085624Z/close-out-2`.
+
+| Run | Happenings | Lore             | Identity                 | Threads | Upkeep | Lifecycle | Awareness | Steps                     | Tokens in / out    | Wall time | Report size  |
+| --- | ---------- | ---------------- | ------------------------ | ------- | ------ | --------- | --------- | ------------------------- | ------------------ | --------- | ------------ |
+| 1   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 5 / 3 / 4 / 3 / 7     | 738,607 / 47,197   | 675.5 s   | 38,148 bytes |
+| 2   | no-start   | missed: no write | missed: stopped (window) | held    | held   | held      | held      | 1 / 2 / 10 / 3 / 10 / 1   | 910,976 / 65,682   | 743.6 s   | 15,609 bytes |
+| 3   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 2 / 2 / 5 / 2 / 5     | 530,924 / 38,994   | 567.6 s   | 26,731 bytes |
+| 4   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 3 / 2 / 29 / 2 / 3    | 1,447,081 / 37,542 | 531.8 s   | 15,324 bytes |
+| 5   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 10 / 8 / 2 / 8 / 3    | 1,145,193 / 56,325 | 721.4 s   | 16,598 bytes |
+| 6   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 30 / 2 / 44 / 5 / 3   | 3,825,250 / 71,086 | 878.8 s   | 21,340 bytes |
+| 7   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 13 / 10 / 26 / 2 / 15 | 2,398,697 / 49,609 | 722.8 s   | 21,339 bytes |
+| 8   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 3 / 2 / 19 / 8 / 15   | 1,651,821 / 60,874 | 789.8 s   | 13,193 bytes |
+| 9   | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 4 / 7 / 3 / 3 / 4     | 749,966 / 53,657   | 676.2 s   | 25,892 bytes |
+| 10  | no-start   | held             | held                     | held    | held   | held      | held      | 2 / 24 / 2 / 18 / 3 / 4   | 1,810,290 / 35,406 | 542.6 s   | 18,049 bytes |
+
+Steps list the model steps of Lore, Identity, Threads, Upkeep, Lifecycle
+and Awareness in that order; Happenings had no start in any run.
+
+Verdict: `bar: 9 of 10 runs passed; a cap reached in 9 runs, merge_threads
+called in 10: met`; the source's sha256 is unchanged. Six replies were cut
+off, all at 16,384 tokens, and each recovered on its retry: run 2 twice,
+runs 5, 6, 8 and 9 once each. The largest finished reply is 13,593 tokens
+(run 6, Identity step 1), which the old 8,000 would have cut. The largest
+prompt is 57,153 tokens (run 6, Identity step 30). Upkeep took up to 44
+steps (run 6) and Identity 30, past the old 24, and both held.
+
+Run 2's two misses:
+
+- Lore replied "No lore was established in this chapter." and made no call.
+- Identity's step 1 cut off at 16,384, and its retry (8,756 output tokens)
+  sent nine `update_character` calls, one with `turns` padded by 1,324
+  `true` entries. The SDK answers an invalid call itself, and its answer,
+  the whole value plus one issue per bad entry, came back as a 238,990
+  character tool result. Step 2's prompt was then 116,118 tokens, and
+  llama.cpp refused it as over the 65,536 window, which stops a later step
+  as `window`. Under the old 8,000 cap that retry would have been cut too,
+  a `cut-off` stop and still a miss.
+
+The developer's ruling on the `window` stop: pending at writing.
 
 ### Boundary measure
 
@@ -899,7 +943,43 @@ spent its 8,000 deliberating the end-on-the-turn-before rule. The
 developer's call on this miss is the 2026-11-18 budget-raise decision
 above: tune, then rerun.
 
-Rerun on the raised budgets (and, for the boundary, the reworded prompt): pending.
+#### Boundary rerun on the raised budgets
+
+`PROBE_RUNS=10 PROBE_BOUNDARY=1 pnpm probe:close` at `ebd11334c` (the
+16,384 boundary default and the reworded prompt) on the same model: 34
+candidates at the 24,000 threshold, a prompt of 2,454 tokens. Saved at
+`~/.cache/aventuras-measure/m5-10/probe-20261118T085624Z/boundary-out-2`.
+
+| Run | Outcome | Ends on (position, turn) | Latest candidate (position) | Largest reply (output tokens) | Wall time | Tokens in / out |
+| --- | ------- | ------------------------ | --------------------------- | ----------------------------- | --------- | --------------- |
+| 1   | picked  | 95, t16                  | 131                         | 3,701                         | 45.4 s    | 2,454 / 3,701   |
+| 2   | picked  | 91, t14                  | 131                         | 2,529                         | 30.6 s    | 2,454 / 2,529   |
+| 3   | picked  | 131, t34                 | 131                         | 4,949                         | 58.9 s    | 2,454 / 4,949   |
+| 4   | picked  | 117, t27                 | 131                         | 7,032                         | 82.3 s    | 2,454 / 7,032   |
+| 5   | picked  | 131, t34                 | 131                         | 7,503                         | 92.8 s    | 2,454 / 7,503   |
+| 6   | picked  | 91, t14                  | 131                         | 4,688                         | 57.9 s    | 2,454 / 4,688   |
+| 7   | picked  | 117, t27                 | 131                         | 8,338                         | 99.2 s    | 2,454 / 8,338   |
+| 8   | picked  | 95, t16                  | 131                         | 5,991                         | 73.3 s    | 2,454 / 5,991   |
+| 9   | picked  | 91, t14                  | 131                         | 6,200                         | 76.1 s    | 2,454 / 6,200   |
+| 10  | picked  | 131, t34                 | 131                         | 7,417                         | 92.9 s    | 2,454 / 7,417   |
+
+Verdict: `boundary: 10 of 10 runs picked a candidate, 0 cut off: held`; the
+source is unchanged. Run 7's 8,338-token reply would have been cut at the
+old 8,000.
+
+The picks spread over four turns, where the first run took the latest
+candidate in 5 of its 7 picks:
+
+- t14 (3 runs) ends on the squire's "not one of us must breathe a word of
+  what we've found", where the novel's Part One ends.
+- t27 (2 runs) ends "before they should go aboard the schooner on a visit
+  of inspection", the end of the Spy-glass chapter.
+- t34 (3 runs) is the latest candidate, a quiet pause ("Hands will want
+  supper.").
+- t16 (2 runs) opens on a dated letter ("Old Anchor Inn, Bristol, March
+  1"), a new scene, so those two runs put the scene's first turn in the
+  closing chapter: the mis-pick the dropped sentence guarded against (see
+  the Q4b note).
 
 ### Reversal measure
 
