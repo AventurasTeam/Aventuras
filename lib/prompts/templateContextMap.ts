@@ -748,7 +748,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'number',
       category: 'Story Config',
       description:
-        "The fewest tokens a chapter ending on a listed turn would hold: half the story's chapter threshold, rounded up. Only boundary selection's render sets it.",
+        "The low bound, inclusive, of the length a chapter ending on a listed turn would have: half the story's chapter threshold, rounded up. Only boundary selection's render sets it.",
       required: false,
     },
     {
@@ -756,7 +756,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'number',
       category: 'Story Config',
       description:
-        "The most tokens a chapter ending on a listed turn would hold: one and a half of the story's chapter thresholds, rounded down. Only boundary selection's render sets it.",
+        "The high bound, inclusive, of the length a chapter ending on a listed turn would have: one and a half times the story's chapter threshold, rounded down. Only boundary selection's render sets it.",
       required: false,
     },
     {

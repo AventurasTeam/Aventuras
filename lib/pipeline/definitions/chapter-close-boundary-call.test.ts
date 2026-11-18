@@ -60,9 +60,10 @@ const PROVIDER = {
   favoriteModelIds: [] as string[],
 }
 
-// Threshold 400: candidates hold 200–600 tokens. Running totals: e3 240, e5 400, e7 580, e9 700,
-// e11 800. e9 is past the bound and e11 is the newest reply, so the candidates are e3, e5 and e7.
-const THRESHOLD = 400
+// Threshold 401 (odd, so the window 201–601 differs from a bare half and one and a half): running
+// totals e3 240, e5 400, e7 580, e9 700, e11 800. e9 is past the bound and e11 is the newest
+// reply, so the candidates are e3, e5 and e7.
+const THRESHOLD = 401
 const SERIES: readonly OpenRegionRow[] = [
   { id: 'e1', kind: 'opening', position: 1, tokens: 100 },
   { id: 'e2', kind: 'user_action', position: 2, tokens: 20 },
@@ -228,7 +229,7 @@ describe('readBoundaryInputs', () => {
   it("reads the threshold, the branch's active threads and lore-mgmt's config", () => {
     const settings = appSettingsStore.getAppSettings()
     expect(readBoundaryInputs(phaseCtx())).toEqual({
-      threshold: 400,
+      threshold: THRESHOLD,
       activeThreads: [{ title: 'Find the\nheir' }],
       modelConfig: {
         providers: settings.providers,
@@ -322,9 +323,7 @@ describe('requestChapterBoundary — the call', () => {
     await drain()
 
     const { system, user } = generateStructuredMock.mock.calls[0]![1]
-    expect(user).toContain(
-      `between ${THRESHOLD / 2} and ${THRESHOLD * 1.5} tokens long, all good lengths for a chapter`,
-    )
+    expect(user).toContain('between 201 and 601 tokens long, all good lengths for a chapter')
     expect(user).not.toContain('800')
     expect(user).not.toContain('tokens so far')
     expect(user).toContain('Find the heir')

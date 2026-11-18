@@ -133,8 +133,8 @@ function stepOf(reply: StepReply, finishReason: ToolStep['finishReason']): ToolS
   }
 }
 
-// Anthropic's adapter adds the thinking budget and clamps to the model's cap; openai-compatible's
-// body is a string, and its max_tokens is maxOutput unchanged.
+// Anthropic's adapter adds the thinking budget and clamps to the cap of the model ids its table
+// knows; openai-compatible's body is a string, and its max_tokens is maxOutput unchanged.
 function sentMaxOutput(reply: StepReply, maxOutput: number): number {
   const { body } = reply.request
   return typeof body === 'object' &&

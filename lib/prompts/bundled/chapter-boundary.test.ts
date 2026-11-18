@@ -39,8 +39,7 @@ describe('bundled chapter-boundary template', () => {
     expect(system).toContain('Give one sentence on why the chapter ends there.')
   })
 
-  // A running total beside the target read as "end now" on the dev model, so the system half
-  // carries no end-or-begin rule and the user half states a range alone.
+  // The system half asks only for a natural ending: no rule on where the next chapter opens.
   it('describes the natural ending alone, with no rule on where the next chapter opens', () => {
     const { system } = renderTemplate(TEMPLATE_IDS.chapterBoundary, CONTEXT)
     expect(system).toContain(
