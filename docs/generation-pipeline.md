@@ -1870,6 +1870,21 @@ stack, since a later edit's snapshot there can hold the re-run's
 values
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
+**Restored rows always stamp the executing branch's `branch_id`.**
+Because branch fork copies `deltas.undo_payload` (`op='delete'` target
+rows and captured children) and `reversal_journals.journal` (before-image
+domain rows and deltas) verbatim without rewriting JSON-embedded
+`branch_id` strings
+([`data-model.md → Branch model`](./data-model.md#branch-model)),
+reverse-replay (`undoDelete`, captured children) and journal write-back
+always overwrite `branch_id` with the target/executing branch on every
+re-inserted row and delta, and scope every `deltas` `UPDATE` / `DELETE`
+by `(branch_id, id)`. Branch fork reuses the same planner (`planReversal`
+parameterized with `targetBranchId: newBranchId`) to plan on the frozen
+parent and execute on the new branch inside one atomic transaction,
+omitting delta/journal deletes and vector sweeps that the fork's
+pre-filtered copy and post-rewind vector copy handle directly.
+
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
 is **delete-op-only**: the forward `delete` and the redo of a `delete`

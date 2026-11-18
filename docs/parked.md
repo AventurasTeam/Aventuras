@@ -916,10 +916,11 @@ runtime registry and throws `unknown target_table` when it misses, so
 an orphan written by a build that carried a domain the running build
 does not is unreversible by any retry. For a pass's orphan, boot then
 leaves its branch `running` indefinitely
-(`resetStuckClassifierRunState`), so it takes no turns: every Send
-fails with the recovery error
+(`resetStuckClassifierRunState`), so it takes no turns and cannot be
+forked: every Send fails with the recovery error
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
-and only a branch from an entry before the orphan continues. Reaching it requires running a build older than its own
+and fork refuses a held branch
+([`data-model.md → Branch model`](./data-model.md#branch-model)). Reaching it requires running a build older than its own
 data — a downgrade, or a domain renamed without a migration. Not
 corruption, and not otherwise reachable. Of the other reversal
 failures, only the

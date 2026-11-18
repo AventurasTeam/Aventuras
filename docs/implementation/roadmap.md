@@ -173,7 +173,7 @@ per
 populates so branch comparisons are fast.
 
 **Why now.** Branches touch every domain table (delta-log
-filtering, branch-copy semantics, FK rewriting) so they need the full
+filtering, branch-copy semantics, composite `(branch_id, id)` keys) so they need the full
 data layer in place — present since M1.5, and exercised by the feature
 milestones in between. Diff cache is bespoke compute caching;
 building it after the rest of the substrate stabilizes avoids
@@ -181,13 +181,13 @@ churn.
 
 **Likely slices.**
 
-- M6.1 — Branch-copy at fork time + FK rewriting (the `branches` table,
+- M6.1 — Branch-copy at fork time (the `branches` table,
   incl. `classifier_status`, landed in M1.5; this slice is the fork
-  orchestration), including the survival-anchor partition of post-fork
-  deltas (copy lagging `periodic_classifier` or `chapter_close` facts
-  about kept entries instead of rewinding them, unless they name a row
-  the rewind
-  removes) per
+  orchestration): plan-on-parent, execute-on-child in one atomic
+  transaction via rollback's shared `resolveSweep` + `planReversal`
+  (source-blind survival-anchor predicate + closure, surviving-only
+  `deltas` and `reversal_journals` copy, post-rewind `*_vec` copy,
+  `branch_id` re-stamping on restore) per
   [`data-model.md → Branch model`](../data-model.md#branch-model).
 - M6.2 — Delta-log branch filtering (reads scope to current
   branch's lineage).
@@ -236,16 +236,28 @@ verified against the code first. Resolve with the slice each names.
   branch fork, replace the structural scan with the both-sides
   behavioral test** the slice AC originally described. Surfaced by the
   Slice 3.5 Task 14 review (2026-08-09).
-- **M6.1 — Fork carries a close re-run's journal with its group.** Slice
-  5.13's `reversal_journals` row is the undo half of a re-run's delta
-  group, so a fork that copies the group must copy its journal, and one
-  that doesn't must not
-  ([`data-model.md → Branch model`](../data-model.md#branch-model), the
-  branch-copy manifest). Re-running a close on a fork, which keeps turns
-  the re-run's shortcut would roll back, is parked for the same
-  milestone
-  ([`parked.md → Re-running a close on a fork`](../parked.md#re-running-a-close-on-a-fork)).
-  Raised 2026-11-13 by the re-run design.
+- **M6.1 — Schema and action-layer prerequisites for verbatim branch
+  copy.** Designed 2026-11-19
+  ([exploration](../explorations/2026-11-19-fork-partition-and-copy-invariants.md)):
+  - Migrate `deltas` from single-column `id` PK (`lib/db/system/system.table.ts`)
+    to composite `(branch_id, id)` PK matching `data-model.md`, and
+    audit every `deltas` `UPDATE` / `DELETE` site (including
+    `lib/actions/delta/reverse-replay.ts`) to scope by `(branch_id, id)`.
+  - Overwrite `branchId` with the executing/target branch in
+    `undoDelete` (target + captured children) and `reversal_journals`
+    write-back so verbatim-copied JSON payloads never write into the
+    parent branch.
+  - Stamp `entryId: entryId` on `user_action` creates in
+    `lib/actions/turns/submit-turn.ts` to match `ai_reply` and canon
+    (`resolveRollbackWindow` stays anchor-agnostic so historical
+    `entry_id = null` rows need no migration).
+  - Verify whether `sqlite-vec` accepts self-referencing
+    `INSERT INTO <vec> SELECT ... FROM <vec>` for step 5's post-rewind
+    vector copy; if not, fall back to pre-reading surviving parent
+    vectors or staging via a temp table inside the transaction.
+  - Re-running a close on a fork, which keeps turns the re-run's
+    shortcut would roll back, is tracked separately
+    ([`parked.md → Re-running a close on a fork`](../parked.md#re-running-a-close-on-a-fork)).
 - **M6.1 — A branch switch to a fork whose chapter rows copy the same ids
   keeps the review window open.** `chapterOverlaysStore`'s `review` holds
   only `chapterId`, and `overlayChapter` compares the store row's branch,
@@ -253,25 +265,6 @@ verified against the code first. Resolve with the slice each names.
   other branch. Unreachable today, since no fork action exists; **fix it
   when M6.1 lands fork**, e.g. the store records the open branch at
   `openReviewWindow`. Raised in 5.11's review.
-- **M6.1 — steps 2 and 3 of the fork partition use different predicates,
-  so a foreground edit about a kept entry falls between them.** Step 2
-  copies deltas below `L` plus, above `L`, only background
-  (`periodic_classifier` or `chapter_close`) deltas anchored to a kept
-  entry; step 3 reverse-applies everything above
-  `L` except `entry_id IS NULL OR position(entry_id) >= position(N+1)` —
-  by anchor, whatever the source. A `user_edit` delta anchored at or below
-  `N` therefore matches neither: not copied, not rewound, just dropped.
-  State stays correct, since step 1 copies current rows and a rollback on
-  the new branch deletes the entry the edit sits on anyway, so this is a
-  history-fidelity gap against step 2's own claim that the fork "carries
-  the complete history up to the fork point." Reachable today in spec
-  terms via `metadata` edits (`updateStoryEntryMetadata`), and wider since
-  `story_entries.content` became delta-logged — a content edit on a kept
-  entry falls through the same crack. **Settle which predicate is
-  authoritative when M6.1 writes the partition** — most likely step 2
-  widening to any delta anchored to a kept entry, since step 3's
-  exclusion is already source-blind. Surfaced reviewing the content-edit
-  invalidation scope (2026-09-05).
 - **M6.1 — The register tests seed one branch, so a lost branch
   condition stays green.** Rows key on branch and id, so a fork's copies
   repeat every id. Each `lib/actions/*/register.test.ts` seeds a single
@@ -298,18 +291,6 @@ verified against the code first. Resolve with the slice each names.
   reads develop against hand-seeded rows, so **rebuild the seed's fork as
   a real branch copy once M6.1's copy core exists.** No UI opens it
   before M6.3. Routed from triage 2026-11-07.
-- **M6.1 — A turn's user-action create carries no anchor.** Canon anchors
-  a foreground turn's entry create to that entry (the `deltas` table's
-  `entry_id`, [`data-model.md → Diagram`](../data-model.md#diagram)),
-  and the reply's create is anchored on itself, but `submitTurn` writes
-  the user action's create with `entryId: null`
-  (`lib/actions/turns/submit-turn.ts`). Both reverse with the turn today,
-  since a turn's creates sit in its own suffix, and
-  `lib/actions/story-entries/pre-entry-locations.ts`, which keys on the
-  anchor, falls back when it is null. The fork partition reads anchors
-  too: **settle the user action's anchor when M6.1 writes the
-  partition**, the code or the canon line. Raised in the 2026-11-07
-  triage pass, verified by reading.
 - **M6.3 — The composer draft will carry across an in-reader branch
   switch.** `Composer` (`app/reader-composer/[branchId].tsx`) takes no
   `key={branchId}`, and the branch-change effect in the same file clears
@@ -340,12 +321,14 @@ verified against the code first. Resolve with the slice each names.
   allows (ten minutes by default), then apply, and longer while a
   reconcile embed hangs, which nothing bounds yet (M7.1's embed-timeout
   item below). Routed from triage 2026-09-27.
-- **M6.3 — A branch delete drops the branch's close records.** M5 keeps
-  `deferred`, `pendingClose` and, from Slice 5.13, `pendingRerun` in
-  `generationStore`'s `TxState`, keyed by branch. Nothing deletes a
-  branch yet. The action that does clears all three, so no record
-  outlives its branch. Raised 2026-11-01 by the M5
-  promotion.
+- **M6.3 — A branch delete drops the branch's close records and clears
+  child `parent_branch_id` refs.** M5 keeps `deferred`, `pendingClose`
+  and, from Slice 5.13, `pendingRerun` in `generationStore`'s `TxState`,
+  keyed by branch. Nothing deletes a branch yet. The action that does
+  clears all three, so no record outlives its branch, and handles
+  `branches.parent_branch_id`'s bare FK (`lib/db/stories/stories.table.ts:44`,
+  no `ON DELETE SET NULL`) before deleting a non-root parent branch.
+  Raised 2026-11-01 by the M5 promotion; FK note added 2026-11-19.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in

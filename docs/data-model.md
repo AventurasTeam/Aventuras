@@ -267,7 +267,7 @@ erDiagram
 
     deltas {
         text id PK
-        text branch_id FK
+        text branch_id FK "composite PK with id; forks with branches"
         text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn: its entry's create → that entry, the fold's state writes → null (they sit in the turn's own suffix, so either anchor reverses them); periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; chapter close → the chapter's end entry; user edit → the entry it edits, or null when it edits no entry; null (entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
@@ -288,7 +288,7 @@ erDiagram
         json journal "before-images of every row and delta row the re-run's reversal touched: whole row, or absent. Written in the reversal's transaction, written back when the re-run's group reverses, if still exact. See generation-pipeline.md → Reverse-replay"
         integer created_at
     }
-    %% Not delta-logged: the undo half of one delta group. Goes with the group: a rollback or delete taking the group drops it, and so does a sweep from below the group that spares it; a later re-run's journal holds it as a before-image. Fork carrying it with its group is M6.1's.
+    %% Not delta-logged: the undo half of one delta group. Goes with the group: a rollback or delete taking the group drops it, and so does a sweep from below the group that spares it; a later re-run's journal holds it as a before-image. Copies on fork per the Branch-copy manifest (Branch model).
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -464,54 +464,94 @@ rejected it: that would re-introduce checkpoint-style gatekeeping we went
 out of our way to drop).
 
 Branching is a **hard fork** — the new branch is fully standalone,
-including its change history. On creation from entry N (where
-`L = min(log_position)` among entry (N+1)'s deltas, or the head if N is
-the latest entry):
+including its change history. Semantically, forking `parent` from a
+non-system entry `N` produces the exact state, delta log, and journal
+set of **snapshotting `parent` (minus `probe_captures` and any
+`kind='system'` tail entry) and rolling back to `N`**, leaving `parent`
+and the in-memory redo stack untouched.
 
-1. Copy parent's CURRENT rows for every branch-scoped table per the
-   manifest below into the new branch.
-2. Copy parent's deltas with `log_position < L` into the new branch —
-   plus any background (`periodic_classifier` or `chapter_close`) delta
-   with `log_position >= L` whose survival anchor is a kept entry
-   (`position(entry_id) <= position(N)`). A lagging fact about an entry
-   ≤ N that committed late would otherwise be rewound away in step 3,
-   silently dropping facts about kept turns (see
-   [Entry mutability & rollback → Survival anchor](#survival-anchor)).
-   The new branch thus carries the complete history up to the fork point
-   and rollback on the new branch can reach any entry 1..N. A lagging
-   fact that names a row step 3 removes is the exception: the reversal's
-   closure moves it to step 3, so the fork never holds a link to a row
-   that exists nowhere
+**Pre-conditions (refused before any write):** generation on `parent` is
+idle
+([`branch-navigator.md → During generation`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)),
+`parent.classifier_status.state !== 'running'` (a branch held by an
+unrecovered orphan pass cannot be forked, or resetting status on the
+child would bake uncommitted orphan deltas into it with no recovery
+marker), no embedder swap is pending on the story, and `N` exists on
+`parent` with `N.kind !== 'system'` (UI exposes fork on `opening` and
+`ai_reply`). Fork runs under `parent`'s exclusive branch write lock.
+
+**Single-transaction execution (plan-on-parent, execute-on-child).**
+Let `B` be the earliest non-system entry on `parent` with
+`position > position(N)` and `L` its create-delta `log_position` (or no
+`B` when `N` is the narrative tail).
+
+1. **Plan (read-only on frozen `parent`).** If `B` exists, run
+   rollback's shared sweep and reversal planner (`resolveSweep` →
+   `planReversal`, scoped to emit ops for `newBranchId`) over the single
+   source-blind
+   [survival-anchor predicate](#survival-anchor)
+   `log_position >= L AND (entry_id IS NULL OR position(entry_id) >= position(B))`
+   plus the reversal closure
    ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-3. Reverse-apply parent's deltas with `log_position >= L` **except those
-   copied in step 2** (i.e. `entry_id IS NULL OR position(entry_id) >=
-position(N+1)`) onto the new branch's copied rows. These rewind the
-   copies from "parent's current state" to "state as of entry N." The
-   post-fork deltas themselves are NOT copied — their only purpose was to
-   rewind, and keeping them would contradict the rewound state.
+   Any post-`L` delta anchored on a kept entry `≤ N` — `user_edit`
+   (prose or metadata), `periodic_classifier`, `chapter_close`, or
+   `translation` — survives with its delta unless the closure pulls it
+   in. A `ReversalIntegrityError` aborts before any SQL runs. When `B`
+   does not exist, the plan is empty.
+2. **Copy + rewind in one atomic transaction.** Inside one
+   `runInTransaction` batch:
+   - Insert the `branches` row (`parent_branch_id = parent`,
+     `fork_entry_id = N`, idle `classifier_status` with clamped
+     `processedThrough` below).
+   - Copy domain tables per the manifest below (excluding
+     `kind='system'` entries and `probe_captures`).
+   - Copy only **surviving** `deltas` (all rows when `B` does not exist;
+     otherwise excluding the plan's full prune set
+     `(set.rows \ reowned) ∪ prunedHolders ∪ strandedWrites`, so
+     re-owned machine creates copy and receive their update) and only
+     **surviving** `reversal_journals`.
+   - Run the plan's row mutations, `refClears`, surviving-delta
+     prior-value rewrites, held-delete payload patches, and kept-create
+     re-owns on `newBranchId` (omitting `DELETE FROM deltas`,
+     `DELETE FROM reversal_journals`, and `vecSweepIdsOps`).
+   - Copy `*_vec` **last**, synthesizing
+     `pk = <newBranchId>:<id>:<model_id>` and filtering to rows still
+     present in `newBranchId`'s source tables — removed rows' vectors
+     are never written or scanned, and rows whose embedded fields
+     changed already carry `embedding_stale = 1` from the rewind step.
+
+**`reversal_journals` across fork.** Sharing rollback's sweep planner
+gives journals four exact cases:
+
+| Fork case (`B` = first non-system entry `> N`, `L = create_lp(B)`)                                                          | Re-run group (`anchor = E`, first `lp = P_first`) | Journal on fork                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1. `N` is narrative tail (no `B`)                                                                                           | Spared                                            | **Copied**                                                                                       |
+| 2. Chapter ends after `N` (`position(E) > position(N)`)                                                                     | Swept                                             | **Dropped**                                                                                      |
+| 3. Chapter ends `≤ N`, re-run committed before `B` (`P_first < L`)                                                          | Spared; sweep starts above `P_first`              | **Copied** (any foreign spared delta above `P_first` is caught by the standard write-back check) |
+| 4. Chapter ends `≤ N`, re-run committed after `B` (`P_first ≥ L`, e.g. manual close + re-run while open-region turns stood) | Spared; sweep runs from below `P_first`           | **Dropped** (rewinding `B..head` changed state under what the journal snapshotted)               |
 
 **Branch-copy manifest.** Every branch-scoped table behaves the same
 way at fork unless flagged otherwise:
 
-| Table                     | Behavior           | Notes                                                                                                                                                                                                                                                                                                                       |
-| ------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `story_entries`           | Copy 1..N          | Entries N+1..head are not in the fork (the new branch reaches them via the reverse-replay step on the post-fork deltas, which themselves don't copy).                                                                                                                                                                       |
-| `entities`                | Copy current rows  | Per-branch state after step-3 rewind reflects state at entry N.                                                                                                                                                                                                                                                             |
-| `lore`                    | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `threads`                 | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `happenings`              | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `happening_involvements`  | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `happening_awareness`     | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `character_relationships` | Copy current rows  | Branch-scoped per the schema.                                                                                                                                                                                                                                                                                               |
-| `chapters`                | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `branch_era_flips`        | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `translations`            | Copy current rows  | Composite PK includes `branch_id`; translations fork with branches.                                                                                                                                                                                                                                                         |
-| `entry_assets`            | Copy rows 1..N     | Tiny rows; point at the same `assets[id]` on disk (share-by-reference).                                                                                                                                                                                                                                                     |
-| `assets`                  | Share by reference | Hard-fork for narrative data; shared-by-reference for binary media. See [Cleanup on delete — trash-can pattern](#assets-images--future-media).                                                                                                                                                                              |
-| `*_vec` (embeddings)      | Copy current rows  | vec0 tables partition by `branch_id`; new branch needs its own vectors so post-fork edits stay branch-local. Cost is 2x storage at fork moment; per-branch re-embed on edits stays clean. Storage-optimization followup parked.                                                                                             |
-| `probe_captures`          | **Not copied**     | The only branch-scoped table the fork skips. A capture is meaningful only against the candidate pool that existed when it was written, and a fork immediately diverges that pool; the new branch starts empty. See [probe.md → Branch fork and capture portability](./memory/probe.md#branch-fork-and-capture-portability). |
-| `deltas`                  | Per step 2 above   | Special case — pre-fork log copies (step 2), post-fork deltas reverse-apply onto copies then are NOT copied (step 3). Not a "current rows" copy.                                                                                                                                                                            |
-| `reversal_journals`       | With its group     | A close re-run's journal is copied when step 2 copies that re-run's group, and not otherwise. M6.1 pins it.                                                                                                                                                                                                                 |
+| Table                     | Behavior                | Notes                                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `story_entries`           | Copy non-system, rewind | Copy `kind != 'system'` rows (a parent's tail system error card never copies); the rewind removes `B..head`.                                                                                                                                                                                                                |
+| `entities`                | Copy current rows       | Per-branch state after rewind reflects state at entry N.                                                                                                                                                                                                                                                                    |
+| `lore`                    | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `threads`                 | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `happenings`              | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `happening_involvements`  | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `happening_awareness`     | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `character_relationships` | Copy current rows       | Branch-scoped per the schema.                                                                                                                                                                                                                                                                                               |
+| `chapters`                | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `branch_era_flips`        | Copy current rows       | —                                                                                                                                                                                                                                                                                                                           |
+| `translations`            | Copy current rows       | Composite PK includes `branch_id`; translations fork with branches.                                                                                                                                                                                                                                                         |
+| `entry_assets`            | Copy current, rewind    | Rewind removes rows for `B..head`; surviving rows point at the same `assets[id]` on disk (share-by-reference).                                                                                                                                                                                                              |
+| `assets`                  | Share by reference      | Hard-fork for narrative data; shared-by-reference for binary media. See [Cleanup on delete — trash-can pattern](#assets-images--future-media).                                                                                                                                                                              |
+| `*_vec` (embeddings)      | Copy post-rewind        | Copied last inside the same transaction with synthesized `pk = <newBranchId>:<id>:<model_id>`, filtered to surviving rows on the new branch so removed rows' vectors are never written or scanned. Storage-optimization followup parked.                                                                                    |
+| `probe_captures`          | **Not copied**          | The only branch-scoped table the fork skips. A capture is meaningful only against the candidate pool that existed when it was written, and a fork immediately diverges that pool; the new branch starts empty. See [probe.md → Branch fork and capture portability](./memory/probe.md#branch-fork-and-capture-portability). |
+| `deltas`                  | Copy survivors          | Surviving deltas only (source-blind survival-anchor predicate minus the reversal plan's full prune set), then surviving-delta updates (prior-value rewrites, held-delete payload patches, re-owned creates) apply on the new branch. Composite PK `(branch_id, id)` keeps delta IDs verbatim.                               |
+| `reversal_journals`       | Copy survivors          | Copied only when the re-run's group survives and no rewind sweeps from below its first `log_position` (four-case table above).                                                                                                                                                                                              |
 
 If a branch-scoped table is added to the schema later, it MUST get a
 row here in the same commit. New branch-scoped table without a
@@ -520,22 +560,31 @@ manifest row is a bug.
 **`branches.classifier_status` at fork.** Not a manifest row — it is a
 column, not a branch-scoped table. The new branch initializes
 `processedThrough = min(parent.processedThrough, position(N))` (it cannot
-have processed turns it does not contain, and step 2 already copied facts
-about kept entries up to that point); the rest of the status resets to
-idle, so a fresh branch does not inherit a parent's failed pass. See
-[classifier.md → Persistence](./memory/classifier.md#persistence).
+have processed turns it does not contain, and surviving deltas already
+carry facts about kept entries up to that point); the rest of the status
+resets to idle, so a fresh branch does not inherit a parent's failed
+pass. See [classifier.md → Persistence](./memory/classifier.md#persistence).
 
 Reads on the new branch are always fast because state is pre-materialized
 — no lineage walk, no copy-on-write. Branch creation cost is linear in
-rows + post-fork delta count; both are modest.
+rows + post-fork reversal size; pre-filtering `deltas` / `reversal_journals`
+and copying `*_vec` post-rewind avoid copy-then-delete churn on the two
+largest tables.
 
-**Primary keys on all branch-scoped tables are composite `(branch_id, id)`.**
+**Primary keys on all branch-scoped tables are composite `(branch_id, id)`**
+(including `deltas`; `reversal_journals` uses `(branch_id, action_id)`).
 The `id` is a UUID generated once at row creation and never regenerated.
-On branch copy, `INSERT ... SELECT` flips branch_id and leaves everything
-else (including id and all internal references) verbatim. Cross-references
-— FK columns AND id-references buried inside `entities.state` JSON
-(`parent_location_id`, `current_location_id`, `equipped_items`, etc.) — stay
-valid because they all resolve within the new branch's scope automatically.
+On branch copy, `INSERT ... SELECT` flips `branch_id` and leaves everything
+else (including `id`, all internal references, and serialized JSON payloads
+such as `deltas.undo_payload` and `reversal_journals.journal`) verbatim.
+Cross-references — FK columns AND id-references buried inside `entities.state`
+JSON (`parent_location_id`, `current_location_id`, `equipped_items`, etc.)
+— stay valid because they all resolve within the new branch's scope
+automatically. For serialized rows inside `deltas.undo_payload` (`op='delete'`,
+including captured children) and `reversal_journals.journal`, reverse-replay
+and journal write-back always overwrite `branch_id` with the executing/target
+branch on restore instead of rewriting JSON at fork time
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 The alternative (single-column UUID PK + generate-fresh-on-copy) would
 require walking every reference site including state JSON to rewrite IDs
 during copy; that's where bugs would hide forever. Composite PK sidesteps
@@ -3231,8 +3280,8 @@ row that exists nowhere
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 A `state` reference the reversal registers is cleared instead: a place
 whose parent the reversal removes stays and becomes unplaced, and a
-character whose faction it removes stays with none. The same predicate drives the
-[fork reverse-apply partition](#branch-model), and is orthogonal to the
+character whose faction it removes stays with none. The same predicate drives
+[branch fork's rewind](#branch-model), and is orthogonal to the
 [interrupt](./generation-pipeline.md#prose-reversals-and-the-interrupt),
 which cancels an in-flight pass or close, not committed deltas.
 
