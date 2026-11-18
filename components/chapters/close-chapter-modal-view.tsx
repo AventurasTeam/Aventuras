@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
   type ReactElement,
   type ReactNode,
@@ -263,6 +264,10 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     if (from == null || replies[from]!.id !== downOn) return
     onPick(downOn)
   }
+  // A release outside the panel never reaches onKeyUp, so a stale press would pick on a later release.
+  const onBlur = (event: FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) spaceDownOn.current = null
+  }
   return (
     <div
       ref={scrollRef}
@@ -273,6 +278,7 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
       style={PANEL_WEB_STYLE}
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
+      onBlur={onBlur}
     >
       <div style={trackStyle(virtualizer.getTotalSize())}>
         {virtualizer.getVirtualItems().map((slot) => {
