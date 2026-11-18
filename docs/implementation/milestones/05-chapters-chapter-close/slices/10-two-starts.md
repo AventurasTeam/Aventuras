@@ -855,7 +855,8 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
     about 3 s, with no editor.
   - The `Fix profile` route for `'tool-calling-off'`: the copy names the
     working remedies, as designed.
-  - The grown-window measure: pending on the Fold.
+  - The grown-window measure: the JS-stall bar missed on the Fold
+    ([Grown-window close measure](#grown-window-close-measure)).
 - **A confirmed pick that fails its check drops the owed one (developer
   decision, slice review).** The click's failed pre-flight, or its
   entry's `Retry` failing again, clears the branch's `pendingClose`, so
@@ -1043,16 +1044,29 @@ CTRL-Z and for redo of the full close group; wall time is reported. On
 the dataset branch, its seed's close, timed by `startStallMeter` around
 `undoLastAction` and `redoLastAction` alone, never the confirm.
 
-| Platform, build                                                            | CTRL-Z wall / longest stall (2 runs)       | Redo wall / longest stall (2 runs)          |
-| -------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------- |
-| Desktop production bundle, Linux x86_64, kernel 7.2.6-arch2-1, `f0c98545c` | 387 / 98 ms and 332 / 92 ms (tails 54, 29) | 191 / 101 ms and 177 / 98 ms (tails 35, 29) |
+| Platform, build                                                                                    | CTRL-Z wall / longest stall (2 runs)                     | Redo wall / longest stall (2 runs)                       |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
+| Desktop production bundle, Linux x86_64, kernel 7.2.6-arch2-1, `f0c98545c`                         | 387 / 98 ms and 332 / 92 ms (tails 54, 29)               | 191 / 101 ms and 177 / 98 ms (tails 35, 29)              |
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, `470e8956b` and temporary marks | 399.2 / 399.2 ms and 348.8 / 348.8 ms (tails 49.3, 29.7) | 238.3 / 238.3 ms and 181.1 / 181.1 ms (tails 33.4, 27.2) |
 
 The group was the dataset seed's close: "1 lore row removed, 35 other
 changes reversed". A tail is `tailGapMs`, the longest gap in the 250 ms
 after the reversal resolves.
 
-Fold release build. Pending: runs on PR 2 before merge, and its bar
-decides the merge.
+On the Fold the bar holds, at 399.2 ms for the longest stall, about
+100 ms under it. There the longest stall equals the wall time in every run:
+no 16 ms tick lands while the reversal runs, so it holds the JS thread
+for all of it, where desktop's ticks broke it into gaps of about 100 ms.
+The tails show the meter ticking. The build was one release APK for this
+measure and the grown-window one, so it carried that measure's temporary
+marks, which run only in a manual close and in the reader document. The
+numbers come from the logger's console mirror in logcat
+(`adb logcat -s ReactNativeJS`, where a release build writes debug
+entries too), since the Diagnostics Hub's Logs tab is still a
+placeholder. Run 1's redo came
+from Actions → `Redo chapter 1's close`, since its notice had dismissed
+before the press; that runs the same `runRedo` and window as the
+notice's `Redo`, which run 2 used.
 
 ### Grown-window close measure
 
@@ -1062,4 +1076,35 @@ reader document's paints over 500 ms over one close on
 first chapter, on the Fold's release build. The branch's open region
 holds 14 entries and no entities.
 
-Pending: runs on PR 2 before merge, and its bar decides the merge.
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, `470e8956b` and temporary marks | Close wall | Longest JS-thread stall | Longest document paint gap |
+| -------------------------------------------------------------------------------------------------- | ---------- | ----------------------- | -------------------------- |
+| Run 1                                                                                              | 1,799.0 ms | 1,290.5 ms (miss)       | 77 ms                      |
+| Run 2                                                                                              | 1,436.3 ms | 1,133.8 ms (miss)       | 50 ms                      |
+
+The temporary marks, never committed: a stall meter around
+`runManualClose`'s `startManualClose`, which awaits the chain to its
+end, logged as `app.manual_close_measured` and read from logcat as the
+reversal measure's were, and a readout of the longest gap between the
+reader document's frames since a tap on it. Each run started from a
+freshly pushed fixture, grew the reader through the chapter chip's Sheet
+to chapter 1 (it landed on the opening), reset the readout, and closed
+through Actions → `Close chapter…` at the modal's default end, entry
+7935, on `pnpm mock`: one `chapter-metadata` call and one Lore tool
+step, and the close completed as "The Bell Under the Water".
+
+The JS-stall bar is missed in both runs; the paint-gap bar holds, and
+the document painted through the stall. Logcat places each stall between
+the metadata call's reply and the agent's first tool call (1.29 s and
+1.13 s), where the metadata phase writes the chapter row and its stamps
+as one group: about one store change on this window, as the entry's
+estimate put it, not 133. For scale only, since its fixture differs,
+5.5a's one-group close of 133 stamps under a 50-row reader stalled 161
+to 229 ms
+([5.5a's Write-burst measure](./05a-task-runner.md#write-burst-measure)).
+Not run: the same
+close on a fresh window, which would split this stall between the window
+and the close itself. Developer decision (2026-11-18, "Q15: A"): the
+miss is recorded with no fix in this slice, and the entry, "A store
+change's host cost grows with the loaded window", moved from `parked.md`
+to [`followups.md → UX`](../../../../followups.md#ux) with these
+numbers. Merging stays the developer's.

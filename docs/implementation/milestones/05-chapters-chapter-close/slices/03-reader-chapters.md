@@ -714,12 +714,13 @@ is the host's read. The paint-gap rows cover the streamed text. Each
 reply then ends with two host pauses, the saved row replacing the
 stream card and the update after it, in which nothing is emitted; they
 grow with the window (about 0.2 s each on a fresh window at 60
-chapters) and are
-[parked](../../../../parked.md#a-store-changes-host-cost-grows-with-the-loaded-window)
-(developer decision, 2026-11-16). Over about 40 extensions and trims at
-60 chapters the renderer ranged from 195 to 282 MB and fell back after
-a collection, with no upward trend, and stayed the same process from a
-cold open to the session's end.
+chapters) and are an
+[active followup](../../../../followups.md#ux)
+(parked by developer decision, 2026-11-16; active since 5.10's
+grown-window close measure missed its bar, 2026-11-18). Over about 40
+extensions and trims at 60 chapters the renderer ranged from 195 to
+282 MB and fell back after a collection, with no upward trend, and
+stayed the same process from a cold open to the session's end.
 
 Not run: a History link back, since the long fixture has no entities,
 happenings or deltas to link from; and a close's stamp burst on a grown
