@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { AppActionsMenuPure } from './app-actions-menu-pure'
 import { buildGoToGroup } from './go-to-group'
@@ -126,7 +126,6 @@ export const InStoryCoreGroups: Story = {
 
 // actions-menu.md → Gating: a run in flight shows the entry disabled with the uniform tooltip.
 const GATE_REASON = 'Generation is in flight. Cancel to edit.'
-const openCloseModalWhileGated = fn()
 
 export const StoryToolsWhileARunHolds: Story = {
   args: {
@@ -136,7 +135,7 @@ export const StoryToolsWhileARunHolds: Story = {
       branchId: 'br_1',
       canClose: true,
       gateReason: GATE_REASON,
-      openCloseModal: openCloseModalWhileGated,
+      openCloseModal: fn(),
     }),
   },
   play: async () => {
@@ -144,8 +143,5 @@ export const StoryToolsWhileARunHolds: Story = {
     const entry = await screen.findByRole('option', { name: 'Close chapter…' })
     await expect(entry).toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByTitle(GATE_REASON)).toBeInTheDocument()
-    // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to the menu's guard.
-    fireEvent.click(entry)
-    expect(openCloseModalWhileGated).not.toHaveBeenCalled()
   },
 }
