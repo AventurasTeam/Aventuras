@@ -120,7 +120,6 @@ export function CloseChapterModal({
       open
       start={start}
       replies={replies}
-      latestId={latestId}
       selectedId={selectedId}
       tokensInRange={
         series == null || selectedId == null ? 0 : (tokensThrough(series, selectedId) ?? 0)

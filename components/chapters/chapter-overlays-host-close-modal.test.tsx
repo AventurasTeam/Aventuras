@@ -306,7 +306,6 @@ describe('ChapterOverlaysHost — the close modal', () => {
       },
       { id: 'entry_60', ref: 'entry #60', excerpt: EXCERPTS.entry_60, time: null },
     ])
-    expect(props.latestId).toBe('entry_64')
     expect(props.selectedId).toBe('entry_64')
     expect(props.tokensInRange).toBe(1000)
     expect(props.disabledReason).toBeUndefined()

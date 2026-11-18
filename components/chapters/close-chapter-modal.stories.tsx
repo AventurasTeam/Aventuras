@@ -189,7 +189,6 @@ const meta = {
     open: true,
     start: START,
     replies: REPLIES,
-    latestId: 'entry_71',
     initialSelectedId: 'entry_71',
     onSelect: fn(),
     onConfirm: fn(),
@@ -233,13 +232,11 @@ function expectReachable(element: HTMLElement) {
 type RowsArgs = {
   start: NonNullable<CloseChapterModalViewProps['start']>
   replies: CloseModalRow[]
-  latestId: string
 }
 
 const PHONE_ARGS = {
   start: { ...START, endedChapterNumber: 12 },
   replies: manyReplies(40, { time: 'Day 9 · 22:18' }),
-  latestId: 'entry_81',
   initialSelectedId: 'entry_81',
 } satisfies RowsArgs & { initialSelectedId: string }
 
@@ -252,7 +249,6 @@ const FOUR_DIGIT_ARGS = {
     endedChapterNumber: 12,
   },
   replies: manyReplies(40, { time: 'Day 113 · 22:18', offset: 1000 }),
-  latestId: 'entry_1081',
   initialSelectedId: 'entry_1081',
 } satisfies RowsArgs & { initialSelectedId: string }
 
@@ -265,7 +261,6 @@ const NARROWEST_ARGS = {
     endedChapterNumber: 123,
   },
   replies: manyReplies(40, { time: 'Day 113 · 22:18', offset: 5000 }),
-  latestId: 'entry_5081',
   initialSelectedId: 'entry_5081',
 } satisfies RowsArgs & { initialSelectedId: string }
 
@@ -325,12 +320,12 @@ async function expectLatestOptionWhole(row: CloseModalRow) {
 }
 
 async function expectRowsLegible(
-  { start, replies, latestId }: RowsArgs,
+  { start, replies }: RowsArgs,
   layout: 'two-line' | 'one-line',
   minSnippet: number,
 ) {
   await dialog()
-  const selected = replies.find((row) => row.id === latestId)!
+  const selected = replies[0]!
   const startTag = t('chapters:closeModal.chapterEndedHere', { number: start.endedChapterNumber! })
   await waitFor(() =>
     expectRowLegible(startRow(), { row: start, tag: startTag, layout, minSnippet }),
@@ -425,7 +420,7 @@ export const KeyboardPickReturnsFocus: Story = {
 // The listbox's own keys: the oldest reply starts virtualized out, so End scrolls it in to focus
 // it.
 export const ArrowKeysMoveBetweenReplies: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async ({ args }) => {
     await dialog()
     await userEvent.click(trigger())
@@ -455,7 +450,7 @@ export const ArrowKeysMoveBetweenReplies: Story = {
 // End on a virtualized-out reply only requests its focus; leaving the list before it mounts
 // cancels the request.
 export const EndRequestDroppedOnLeavingTheList: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -476,7 +471,7 @@ export const EndRequestDroppedOnLeavingTheList: Story = {
 // A request for a virtualized-out reply that is already pending when focus moves to the trigger
 // must not pull focus back once the reply mounts, even if the list never saw a blur.
 export const EndRequestDroppedWhenFocusMovedWithoutABlur: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -497,7 +492,7 @@ export const EndRequestDroppedWhenFocusMovedWithoutABlur: Story = {
 // End targets the oldest reply by id: a reply prepended before it mounts shifts every position.
 export const EndFollowsItsReplyWhenOneIsPrepended: Story = {
   render: (args) => <PrependHarness {...args} />,
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -588,7 +583,7 @@ export const SpaceRepeatAfterFocusLossPicksNothing: Story = {
 // A press armed on a reply that virtualizes out goes stale: its release never reaches the list, and
 // a remounted reply is a new node that a later release must not pick.
 export const SpaceArmedOnVirtualizedOutReplyPicksNothing: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async ({ args }) => {
     await dialog()
     await userEvent.click(trigger())
@@ -679,7 +674,7 @@ export const EscapeCancels: Story = {
 
 // A region with auto-close off has no upper bound, so the panel virtualizes.
 export const LongRegionVirtualizes: Story = {
-  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_401' },
   play: async () => {
     await dialog()
     await userEvent.click(trigger())
@@ -759,7 +754,7 @@ export const Tablet640: Story = {
 // A short window: the panel gives up height so the foot stays on screen.
 export const ShortWindow: Story = {
   globals: { viewport: { value: 'phoneShort' } },
-  args: { replies: manyReplies(40), latestId: 'entry_81', initialSelectedId: 'entry_81' },
+  args: { replies: manyReplies(40), initialSelectedId: 'entry_81' },
   play: async () => {
     const shown = await dialog()
     await userEvent.click(trigger())

@@ -42,9 +42,8 @@ export type CloseModalRow = {
 export type CloseChapterModalViewProps = {
   open: boolean
   start: (CloseModalRow & { endedChapterNumber: number | null }) | null
-  /** Rows passing canEndChapter, newest first. */
+  /** Rows passing canEndChapter, newest first: the first is the one tagged latest. */
   replies: readonly CloseModalRow[]
-  latestId: string | null
   selectedId: string | null
   tokensInRange: number
   /** Set while the gate holds: Close chapter disables with it. */
@@ -346,7 +345,6 @@ function ReplyPanelNative({ replies, latestId, selectedId, onPick }: PanelProps)
 function CloseModalBody({
   start,
   replies,
-  latestId,
   selectedId,
   tokensInRange,
   disabledReason,
@@ -356,6 +354,7 @@ function CloseModalBody({
 }: CloseChapterModalViewProps) {
   const [panelOpen, setPanelOpen] = useState(false)
   const triggerRef = useRef<View>(null)
+  const latestId = replies[0]?.id ?? null
   const selected = replies.find((row) => row.id === selectedId) ?? null
   const pick = (entryId: string) => {
     onSelect(entryId)
