@@ -118,12 +118,22 @@ async function systemEntries(page: Page, branchId: string): Promise<unknown[][]>
   )
 }
 
+// A system entry's id changes with every rewrite (writeSystemEntry), so it tells a Retry ran.
+async function systemEntryIds(page: Page, branchId: string): Promise<{ id: string }[]> {
+  const rows = await queryApp(
+    page,
+    `SELECT id FROM story_entries WHERE branch_id = ? AND kind = 'system'`,
+    [branchId],
+  )
+  return rows.map(([id]) => ({ id: id as string }))
+}
+
 // generation-pipeline.md → Config pre-flight validation: the confirm pre-flights, so a close whose
 // lore-mgmt model is flagged off for tool calling starts nothing and leaves the can't-call-tools entry.
 test.describe('a close whose model is flagged unable to call tools', () => {
   const hero = launchesHero((dbPath) => setToolCalling(dbPath, SEEDED_MODEL, false))
 
-  test('the confirm sends nothing, adds no chapter and writes the system entry', async () => {
+  test('the confirm sends nothing, writes the system entry and its Retry keeps the pick', async () => {
     const page = hero().app.window
     await openStory(page, HERO_TITLE)
     const branchId = await currentBranchId(page, HERO_STORY)
@@ -159,6 +169,34 @@ test.describe('a close whose model is flagged unable to call tools', () => {
     // raiseSystemEntry patched the loaded branch: the reader shows the entry without a reload.
     await expect(reader.retrySystemEntry(page)).toBeVisible()
     expect(hero().mock.requests.length, 'the confirm reached no provider').toBe(sent)
+    expect(await chapterCount(page, branchId)).toBe(chaptersBefore)
+
+    // The Retry restarts the click's pick, not an owed close (there is none: "Nothing left to
+    // close"), so with the flag still off it fails the same pre-flight into a fresh entry that
+    // keeps the pick.
+    const [{ id: firstEntryId }] = await systemEntryIds(page, branchId)
+    await reader.retrySystemEntry(page).click()
+    await expect
+      .poll(
+        async () => {
+          const [entry] = await systemEntryIds(page, branchId)
+          return entry?.id !== firstEntryId
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true)
+    expect(await systemEntries(page, branchId), 'the Retry kept the pick and the failure').toEqual([
+      [
+        'config-resolver',
+        'tool-calling-off',
+        'lore-mgmt',
+        'failed',
+        pick.id,
+        t('reader:systemEntry.failure.closeToolCallingOff', { model: SEEDED_MODEL }),
+      ],
+    ])
+    expect(await closeRuns(page), 'the Retry started no close run').toEqual([])
+    expect(hero().mock.requests.length, 'the Retry reached no provider').toBe(sent)
     expect(await chapterCount(page, branchId)).toBe(chaptersBefore)
   })
 })
