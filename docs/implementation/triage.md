@@ -87,14 +87,6 @@ slice-planning gate forces its resolution before that slice is planned.
   lands in between (any patching writer, `raiseSystemEntry` included) is
   overwritten by the older snapshot. Whether a write during an open is
   reachable is unchecked. Raised in 5.10's PR 1 review.
-- **The threshold-met test has two copies.** `isReadyToClose`
-  (`lib/chapters/is-ready-to-close.ts`) and `closeOwed`
-  (`lib/pipeline/definitions/memory-chain.ts`) each write
-  `tokens >= threshold && canClose`. `autoClose` keeps them apart today,
-  but a change to one alone (say `>`) would make the auto close and the
-  `Ready to close` label disagree at the same count. One shared predicate
-  would hold it, as `canEndChapter` does for the end rule. Raised in
-  5.10's PR 1 review.
 - **Boundary's candidate lines split badly on some prose.**
   `firstLastSentences` (`lib/text/first-last-sentences.ts`) splits after
   a title's period ("Mr. Smith arrived." opens with "Mr."), starts the
