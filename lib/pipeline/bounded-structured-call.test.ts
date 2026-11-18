@@ -55,10 +55,7 @@ const PARSE_RETRY: CallRetryError = {
 }
 const NETWORK_RETRY: CallRetryError = { tier: 'provider', reason: 'network' }
 
-async function run(
-  signal: AbortSignal = new AbortController().signal,
-  timeoutMs?: number,
-): Promise<{
+async function run(signal: AbortSignal = new AbortController().signal): Promise<{
   events: PhaseEmittedEvent[]
   outcome: BoundedStructuredOutcome<{ answer: string }>
 }> {
@@ -70,7 +67,6 @@ async function run(
     config: CONFIG,
     signal,
     options: OPTIONS,
-    ...(timeoutMs === undefined ? {} : { timeoutMs }),
   })
   const events: PhaseEmittedEvent[] = []
   for (;;) {
@@ -178,21 +174,6 @@ describe('boundedStructuredCall', () => {
         lastError: 'timeout after 45000ms',
         cause: { status: 'aborted', recoverable: [] },
       },
-    })
-  })
-
-  it("holds a bound it is given over the agent's own", async () => {
-    vi.useFakeTimers()
-    const elapsed = hangUntilAborted()
-
-    const pending = run(new AbortController().signal, 5_000)
-    await vi.advanceTimersByTimeAsync(1_000_000)
-
-    expect(await elapsed).toBe(5_000)
-    expect((await pending).outcome).toMatchObject({
-      status: 'failed',
-      error: { kind: 'provider', reason: 'timeout', detail: 'lore-mgmt: timeout after 5000ms' },
-      lastError: 'timeout after 5000ms',
     })
   })
 

@@ -25,8 +25,8 @@ export type BoundedStructuredOutcome<T> =
   | { status: 'failed'; error: PipelineError; lastError: string; cause: StructuredCallFailure }
 
 /**
- * One structured call under its bound (the agent's unless `timeoutMs` is given): a cancel is
- * `aborted`, an expiry a provider timeout.
+ * One structured call under its agent's bound (callTimeoutMs): a cancel is `aborted`, an expiry a
+ * provider timeout.
  */
 export async function* boundedStructuredCall<T>(call: {
   target: ResolveTarget
@@ -36,10 +36,8 @@ export async function* boundedStructuredCall<T>(call: {
   config: ResolveModelConfig
   signal: AbortSignal
   options: Pick<StructuredCallOptions, 'actionId' | 'defaultMaxOutput'>
-  /** Defaults to callTimeoutMs(target, config). */
-  timeoutMs?: number
 }): AsyncGenerator<PhaseEmittedEvent, BoundedStructuredOutcome<T>> {
-  const timeoutMs = call.timeoutMs ?? callTimeoutMs(call.target, call.config)
+  const timeoutMs = callTimeoutMs(call.target, call.config)
   const bounded = boundedSignal(call.signal, timeoutMs)
   let result: GenerateStructuredResult<T>
   try {
