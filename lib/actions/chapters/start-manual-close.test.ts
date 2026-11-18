@@ -548,6 +548,31 @@ describe('startManualClose pre-flight', () => {
     expect(generateStructured).not.toHaveBeenCalled()
   })
 
+  it('refuses a resolver failure that is not tool calling before the pass too', async () => {
+    const settings = appSettingsStore.getAppSettings()
+    const unassigned = { ...settings, assignments: { classifier: 'prof_close_classifier' } }
+    expect(await hydrateAppSettings(async () => unassigned)).toEqual({ status: 'ok' })
+    registerStandInPass({ anchorEntryId: null })
+    await leaveTheTailUnprocessed()
+    const completes = recordCompletes()
+
+    const result = await within(startManualClose(f.branchId, lastReply(), f.ctx), 'the start')
+
+    expect(result).toEqual({
+      outcome: 'preflight-failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'no-profile-assigned',
+        target: 'lore-mgmt',
+        phaseName: 'boundary',
+      },
+    })
+    expect(pickOn()).toBeUndefined()
+    expect(completes).toEqual([])
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(await f.ctx.db.select().from(pipelineRuns)).toEqual([])
+  })
+
   it('leaves a pick an earlier close left as it stood', async () => {
     generationStore.setPendingClose(f.branchId, { endEntryId: f.replyIds[0]! })
     await flagToolCalling('lore-model', false)
