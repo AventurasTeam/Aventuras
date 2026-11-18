@@ -24,6 +24,7 @@ import { Icon } from '@/components/ui/icon'
 import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -78,7 +79,10 @@ function SectionLabel({ children }: { children: string }) {
   )
 }
 
-/** chapter-timeline.md → Entry-row anatomy: the start row's and the picker trigger's one line. */
+/**
+ * chapter-timeline.md → Entry-row anatomy: the start row's and the picker trigger's line. Phone
+ * stacks ref and tag over snippet and time; wider tiers keep one line.
+ */
 function EntryLine({
   row,
   tag,
@@ -88,32 +92,52 @@ function EntryLine({
   tag: string | null
   trailing?: ReactNode
 }) {
+  const phone = useTier() === 'phone'
+  const ref = (
+    <Text size="xs" variant="muted" className="shrink-0 font-mono">
+      {row.ref}
+    </Text>
+  )
+  const tagChip =
+    tag != null ? (
+      <Tag tone="soft" className="shrink-0">
+        {tag}
+      </Tag>
+    ) : null
+  // w-0: a nowrap snippet's min-content is its full width, which would widen the dialog past the window.
+  const snippet = (
+    <Text size="sm" variant="secondary" numberOfLines={1} className="w-0 min-w-0 flex-1 italic">
+      {row.excerpt}
+    </Text>
+  )
+  const time =
+    row.time != null ? (
+      <Text size="xs" variant="muted" className="shrink-0">
+        {row.time}
+      </Text>
+    ) : null
+  if (phone) {
+    return (
+      <View className="gap-1">
+        <View className="flex-row items-center gap-2">
+          {ref}
+          {tagChip}
+          <View className="flex-1" />
+          {trailing}
+        </View>
+        <View className="flex-row items-center gap-2">
+          {snippet}
+          {time}
+        </View>
+      </View>
+    )
+  }
   return (
     <View className="flex-row items-center gap-2">
-      <Text size="xs" variant="muted" className="shrink-0 font-mono">
-        {row.ref}
-      </Text>
-      {tag != null ? (
-        <Tag tone="soft" className="min-w-0 shrink">
-          <Text size="xs" numberOfLines={1} className="min-w-0 shrink">
-            {tag}
-          </Text>
-        </Tag>
-      ) : null}
-      {/* w-0: a nowrap excerpt's min-content is its full width, which would widen the dialog past the window. */}
-      <Text
-        size="sm"
-        variant="secondary"
-        numberOfLines={1}
-        className="w-0 min-w-[32px] flex-1 italic"
-      >
-        {row.excerpt}
-      </Text>
-      {row.time != null ? (
-        <Text size="xs" variant="muted" className="shrink-0">
-          {row.time}
-        </Text>
-      ) : null}
+      {ref}
+      {tagChip}
+      {snippet}
+      {time}
       {trailing}
     </View>
   )
@@ -290,8 +314,7 @@ function CloseModalBody({
             ref={triggerRef}
             testID="close-chapter-picker"
             role="button"
-            // aria-haspopup is a web-only DOM attribute; RN's prop types don't model it.
-            {...(Platform.OS === 'web' ? ({ 'aria-haspopup': 'listbox' } as object) : null)}
+            aria-haspopup="listbox"
             aria-expanded={panelOpen}
             onPress={() => setPanelOpen((was) => !was)}
             className={cn(

@@ -70,14 +70,17 @@ const TOKENS_THROUGH: Record<string, number> = {
   entry_61: 6_300,
 }
 
-function manyReplies(count: number): CloseModalRow[] {
+function manyReplies(
+  count: number,
+  { time = null, offset = 0 }: { time?: string | null; offset?: number } = {},
+): CloseModalRow[] {
   return Array.from({ length: count }, (_, i) => {
-    const position = 2 * (count - i) + 1
+    const position = offset + 2 * (count - i) + 1
     return {
       id: `entry_${position}`,
       ref: formatEntryRef(position),
       excerpt: `Reply ${position}: the road goes on through the reeds, and the lantern holds.`,
-      time: null,
+      time,
     }
   })
 }
@@ -138,6 +141,11 @@ const meta = {
           styles: { width: '360px', height: '800px' },
           type: 'mobile',
         },
+        tablet640: {
+          name: 'Tablet 640',
+          styles: { width: '640px', height: '900px' },
+          type: 'tablet',
+        },
         phoneShort: {
           name: 'Phone 390, short',
           styles: { width: '390px', height: '700px' },
@@ -191,29 +199,93 @@ function expectReachable(element: HTMLElement) {
   expect(element === top || element.contains(top)).toBe(true)
 }
 
-// One line at narrow widths: every item of the row stays inside its card and the excerpt keeps a
-// readable width (chapter-timeline.md → Mobile expression).
-function expectOneLine(card: HTMLElement, excerpt: string) {
-  const edge = card.getBoundingClientRect().right
-  const row = card.firstElementChild!
-  for (const item of Array.from(row.children)) {
-    expect(item.getBoundingClientRect().right).toBeLessThanOrEqual(edge + 1)
-  }
-  expect(within(card).getByText(excerpt).getBoundingClientRect().width).toBeGreaterThan(24)
+type RowsArgs = {
+  start: NonNullable<CloseChapterModalViewProps['start']>
+  replies: CloseModalRow[]
+  latestId: string
 }
 
 const PHONE_ARGS = {
   start: { ...START, endedChapterNumber: 12 },
-  replies: manyReplies(40),
+  replies: manyReplies(40, { time: 'Day 9 · 22:18' }),
   latestId: 'entry_81',
   initialSelectedId: 'entry_81',
+} satisfies RowsArgs & { initialSelectedId: string }
+
+// The longest labels a row meets: a 4-digit ref, the long tag, and a time chip on both rows.
+const FOUR_DIGIT_ARGS = {
+  start: {
+    ...START,
+    id: 'entry_1059',
+    ref: formatEntryRef(1059),
+    endedChapterNumber: 12,
+  },
+  replies: manyReplies(40, { time: 'Day 9 · 22:18', offset: 1000 }),
+  latestId: 'entry_1081',
+  initialSelectedId: 'entry_1081',
+} satisfies RowsArgs & { initialSelectedId: string }
+
+// chapter-timeline.md → Mobile expression: a row's labels stay whole inside its card, and the
+// snippet keeps a readable width. Phone stacks ref and tag over snippet and time; wider tiers
+// keep one line.
+function expectRowLegible(
+  card: HTMLElement,
+  {
+    row,
+    tag,
+    layout,
+    minSnippet,
+  }: { row: CloseModalRow; tag: string; layout: 'two-line' | 'one-line'; minSnippet: number },
+) {
+  const box = card.getBoundingClientRect()
+  for (const element of Array.from(card.querySelectorAll('*'))) {
+    const rect = element.getBoundingClientRect()
+    expect(rect.right).toBeLessThanOrEqual(box.right + 1)
+    expect(rect.left).toBeGreaterThanOrEqual(box.left - 1)
+  }
+  const ref = within(card).getByText(row.ref, { exact: true })
+  const label = within(card).getByText(tag, { exact: true })
+  expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth)
+  const lineHeight = parseFloat(getComputedStyle(label).lineHeight)
+  expect(label.getBoundingClientRect().height).toBeLessThan(lineHeight * 1.5)
+  const snippet = within(card).getByText(row.excerpt, { exact: true })
+  expect(snippet.getBoundingClientRect().width).toBeGreaterThanOrEqual(minSnippet)
+  const time = within(card).getByText(row.time!, { exact: true })
+  // Right-aligned: padding and border only, plus the trigger's chevron when the row is one line.
+  expect(box.right - time.getBoundingClientRect().right).toBeLessThanOrEqual(
+    layout === 'two-line' ? 24 : 40,
+  )
+  if (layout === 'two-line') {
+    expect(snippet.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      ref.getBoundingClientRect().bottom - 1,
+    )
+  } else {
+    expect(snippet.getBoundingClientRect().top).toBeLessThan(ref.getBoundingClientRect().bottom)
+  }
 }
 
-async function expectRowsOnOneLine() {
+async function expectRowsLegible(
+  { start, replies, latestId }: RowsArgs,
+  layout: 'two-line' | 'one-line',
+  minSnippet: number,
+) {
   await dialog()
-  await waitFor(() => expectOneLine(startRow(), START.excerpt))
-  await waitFor(() => expectOneLine(trigger(), manyReplies(40)[0]!.excerpt))
+  const selected = replies.find((row) => row.id === latestId)!
+  const startTag = t('chapters:closeModal.chapterEndedHere', { number: start.endedChapterNumber! })
+  await waitFor(() =>
+    expectRowLegible(startRow(), { row: start, tag: startTag, layout, minSnippet }),
+  )
+  await waitFor(() =>
+    expectRowLegible(trigger(), {
+      row: selected,
+      tag: t('chapters:closeModal.latest'),
+      layout,
+      minSnippet,
+    }),
+  )
 }
+
+const PHONE_SNIPPET_MIN = 120
 
 export const Default: Story = {
   play: async ({ args }) => {
@@ -381,7 +453,7 @@ export const Phone390: Story = {
     await waitFor(() =>
       expect(shown.getBoundingClientRect().width).toBeLessThanOrEqual(window.innerWidth),
     )
-    await expectRowsOnOneLine()
+    await expectRowsLegible(PHONE_ARGS, 'two-line', PHONE_SNIPPET_MIN)
     await userEvent.click(trigger())
     const list = await screen.findByTestId('close-chapter-panel')
     expect(shown).toContainElement(list)
@@ -404,7 +476,24 @@ export const Phone360: Story = {
     await waitFor(() =>
       expect(shown.getBoundingClientRect().width).toBeLessThanOrEqual(window.innerWidth),
     )
-    await expectRowsOnOneLine()
+    await expectRowsLegible(PHONE_ARGS, 'two-line', PHONE_SNIPPET_MIN)
+  },
+}
+
+export const Phone360FourDigitRefs: Story = {
+  globals: { viewport: { value: 'phone360' } },
+  args: FOUR_DIGIT_ARGS,
+  play: async () => {
+    await expectRowsLegible(FOUR_DIGIT_ARGS, 'two-line', PHONE_SNIPPET_MIN)
+  },
+}
+
+// The narrowest tablet window: the dialog is still its 480 px cap, and the rows keep one line.
+export const Tablet640: Story = {
+  globals: { viewport: { value: 'tablet640' } },
+  args: PHONE_ARGS,
+  play: async () => {
+    await expectRowsLegible(PHONE_ARGS, 'one-line', 60)
   },
 }
 
