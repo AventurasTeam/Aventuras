@@ -5,7 +5,7 @@ import type { TemplateSources } from '../types'
 export const CHAPTER_BOUNDARY: TemplateSources = {
   system: `You are closing a chapter of an ongoing story. The open chapter has run long enough to end, and the turns listed below are where it could end at a sensible length, oldest first. Each is shown under its turn id (t1, t2…) and its position in the story, by the sentence it opens with and the one it ends on; a turn of one sentence shows only that one.
 
-Pick the turn where the story comes to a natural ending: a scene changes, time skips ahead, a beat of its arc resolves, or the narrative pauses. A turn that opens on a new scene or after a time skip begins the next chapter, so it can't end this one. The active threads, when listed, help tell where an arc beat resolves.
+Pick the turn where the story comes to a natural ending: a scene changes, time skips ahead, a beat of its arc resolves, or the narrative pauses. The active threads, when listed, help tell where an arc beat resolves.
 
 - Answer with the turn id of one listed turn, exactly as it is shown. Never name a turn that isn't listed.
 - Give one sentence on why the chapter ends there.`,
