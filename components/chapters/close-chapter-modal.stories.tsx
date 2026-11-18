@@ -470,6 +470,34 @@ export const SpaceHeldAcrossFocusLossPicksNothing: Story = {
   },
 }
 
+// A key held across a focus loss keeps repeating on the reply it returns to; a repeat is no press.
+export const SpaceRepeatAfterFocusLossPicksNothing: Story = {
+  play: async ({ args }) => {
+    await dialog()
+    await userEvent.click(trigger())
+    const option = await screen.findByTestId('close-chapter-reply-entry_71')
+    const user = userEvent.setup()
+    option.focus()
+    await user.keyboard('[Space>]')
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    await expect(trigger()).toHaveFocus()
+    await user.keyboard('{Tab}')
+    await expect(option).toHaveFocus()
+    // user-event's held-key repeats carry no `repeat` flag, so dispatch the way a browser does.
+    option.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: ' ',
+        code: 'Space',
+        repeat: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+    await user.keyboard('[/Space]')
+    expect(args.onSelect).not.toHaveBeenCalled()
+  },
+}
+
 // Close chapter here hands its entry over as the pick.
 export const EndEntryPicked: Story = {
   args: { initialSelectedId: 'entry_65' },

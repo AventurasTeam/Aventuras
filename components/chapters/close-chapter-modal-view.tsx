@@ -246,7 +246,8 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     // does: picking on press hands its repeats to the trigger, whose Space press reopens the panel.
     if (event.key === ' ') {
       event.preventDefault()
-      spaceDownOn.current = replies[from]!.id
+      // A repeat after a focus loss is no press: recording it would pick on a release that began elsewhere.
+      if (!event.repeat) spaceDownOn.current = replies[from]!.id
       return
     }
     const to = stepIndex(event.key, from, replies.length)
