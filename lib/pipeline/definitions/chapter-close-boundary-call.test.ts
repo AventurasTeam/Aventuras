@@ -327,6 +327,16 @@ describe('requestChapterBoundary — the call', () => {
     for (const sentence of shown) expect(system).not.toContain(sentence)
   })
 
+  it("heads each candidate with its turn and its entry's position, not its index", async () => {
+    answer('t2')
+    await drain()
+
+    const { user } = generateStructuredMock.mock.calls[0]![1]
+    expect(user).toContain('## t1 (position 3)')
+    expect(user).toContain('## t2 (position 5)')
+    expect(user).toContain('## t3 (position 7)')
+  })
+
   it("prompts with the candidates' length range, not the region's total, and the active threads on one line", async () => {
     answer('t2')
     await drain()
