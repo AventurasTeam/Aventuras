@@ -109,11 +109,7 @@ export function CloseChapterModal({
   const listed = (id: string | null | undefined): id is string =>
     id != null && replies.some((row) => row.id === id)
   const latestId = replies[0]?.id ?? null
-  const selectedId = listed(picked)
-    ? picked
-    : listed(request.endEntryId)
-      ? request.endEntryId
-      : latestId
+  const selectedId = [picked, request.endEntryId].find(listed) ?? latestId
 
   return (
     <CloseChapterModalView
