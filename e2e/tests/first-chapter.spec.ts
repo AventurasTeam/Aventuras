@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { vecTableName } from '@/lib/db'
 
+import { goToPlot, goToReader, openStory } from '../flows/navigation'
 import { takeTurn } from '../flows/turn'
 import {
   branchStaleTotal,
@@ -11,17 +12,18 @@ import {
   OPEN_REGION_FROM,
 } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
-import { t } from '../harness/i18n'
+import { copyNumber, copyPattern, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { promptOf, startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
-import { devChapterClose } from '../locators/dev-chapter-close'
+import { closeChapter } from '../locators/close-chapter'
 import { memoryBanner } from '../locators/memory-banner'
 import { plot } from '../locators/plot'
 import { reader } from '../locators/reader'
 import { reviewWindow } from '../locators/review-window'
 
 const HERO_STORY = 'story_hero'
+const HERO_TITLE = 'The Veilstone Courier'
 const PACT = 'Vorne’s pact'
 // A reply past the pact's anchor (entry 59), with open entries left after it.
 const END_POSITION = 63
@@ -41,10 +43,7 @@ type OpenRow = [id: string, position: number, kind: string]
 // One total order for both sides of the reset comparison.
 const byBinary = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
-// Reached by URL (docs/testing.md → Harness structure): no in-app path leads here under E2E, as
-// Settings renders its /dev link only under __DEV__ (app/settings/index.tsx), false in both launch
-// modes; the route is the close's only start until the real starts replace it (Slice 5.10).
-test.describe('first chapter — a close from the dev route', () => {
+test.describe('first chapter — a close from Close chapter here', () => {
   let app: LaunchedApp
   let mock: MockLlm
   let userDataDir: string | undefined
@@ -72,6 +71,7 @@ test.describe('first chapter — a close from the dev route', () => {
     // The drain embeds every seeded stale row of the branch before the chapter's vector is asserted.
     test.setTimeout(300_000)
     const page = app.window
+    await openStory(page, HERO_TITLE)
     const branchId = await currentBranchId(page, HERO_STORY)
     const openRows = (await queryApp(
       page,
@@ -126,15 +126,8 @@ test.describe('first chapter — a close from the dev route', () => {
       'no character holds stackables, so normalization writes nothing',
     ).toBe(0)
 
-    const { actionId, chapterId } =
-      await test.step('the dev route closes at the reply', async () => {
-        await page.goto(
-          new URL(
-            `/dev/chapter-close?branchId=${encodeURIComponent(branchId)}`,
-            page.url(),
-          ).toString(),
-        )
-        await expect(devChapterClose.closeAt(page, END_POSITION)).toBeVisible({ timeout: 30_000 })
+    const { actionId, chapterId, tokensShown } =
+      await test.step('Close chapter here closes at the reply', async () => {
         // The drain re-runs on run_complete only when idle, so a close during a pass is never embedded.
         await expect
           .poll(() => branchStaleTotal(page, branchId), {
@@ -142,7 +135,18 @@ test.describe('first chapter — a close from the dev route', () => {
             message: 'the open-time drain never went quiet',
           })
           .toBe(0)
-        await devChapterClose.closeAt(page, END_POSITION).click()
+        await (await closeChapter.closeHere(page, endId)).click()
+        // The entry's button opens the modal with its end already picked.
+        await expect(closeChapter.pickerTrigger(page)).toContainText(
+          t('entryRef', { n: END_POSITION }),
+        )
+        const shown = copyNumber(
+          copyPattern('chapters:closeModal.tokensInRange', { numbers: ['count'] }).exec(
+            (await closeChapter.tokensInRange(page).innerText()).trim(),
+          ),
+          'count',
+        )
+        await closeChapter.confirm(page)
         await expect
           .poll(
             async () =>
@@ -156,7 +160,6 @@ test.describe('first chapter — a close from the dev route', () => {
             { timeout: 30_000, message: 'the close run did not complete' },
           )
           .toEqual(['completed'])
-        await expect(devChapterClose.result(page)).toContainText('completed')
         const runs = (await queryApp(
           page,
           `SELECT action_id FROM pipeline_runs WHERE kind = 'chapter-close' AND story_id = ?`,
@@ -168,7 +171,7 @@ test.describe('first chapter — a close from the dev route', () => {
           [branchId, chaptersBefore + 1],
         )) as [string][]
         expect(rows, 'one chapter numbered after the seeded ones').toHaveLength(1)
-        return { actionId: runs[0]![0], chapterId: rows[0]![0] }
+        return { actionId: runs[0]![0], chapterId: rows[0]![0], tokensShown: shown }
       })
 
     await test.step('the row, its stamps and one action’s deltas land (DB first)', async () => {
@@ -202,6 +205,7 @@ test.describe('first chapter — a close from the dev route', () => {
           [branchId, chapterId],
         ),
       )
+      expect(tokenCount, 'the modal showed the count the close stored').toBe(tokensShown)
 
       const stamps = await queryApp(
         page,
@@ -259,11 +263,14 @@ test.describe('first chapter — a close from the dev route', () => {
         mock.requests.filter((request) => request.agent === 'chapter-metadata'),
         'one metadata call, served by its own shape',
       ).toHaveLength(1)
+      expect(
+        mock.requests.filter((request) => request.agent === 'chapter-boundary'),
+        'a picked end makes no boundary call',
+      ).toHaveLength(0)
     })
 
     await test.step('Plot files the pact under Earlier chapters', async () => {
-      await devChapterClose.openPlot(page).click()
-      await page.waitForURL(/\/plot\//)
+      await goToPlot(page)
       await plot.segmentCell(page, 'happening').click()
       const earlier = plot.tierHeader(page, t('plot:buckets.earlier'))
       await expect(earlier).toHaveAttribute('aria-expanded', 'false')
@@ -292,9 +299,8 @@ test.describe('first chapter — a close from the dev route', () => {
     })
 
     await test.step('the banner holds the close, and its Review opens the window', async () => {
-      // Back to the dev route, the screen Plot was pushed from.
-      await page.goBack()
-      await devChapterClose.openReader(page).click()
+      // GO TO pops back to the reader Plot was pushed from.
+      await goToReader(page)
       await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
       // No task called a tool and none stopped, so the done state is the info one.
       await expect(memoryBanner.closed(page, CHAPTER.title)).toBeVisible()

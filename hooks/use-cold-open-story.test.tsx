@@ -29,11 +29,6 @@ function Probe({ branchId }: { branchId: string }) {
   return null
 }
 
-function DevProbe({ branchId }: { branchId: string }) {
-  useColdOpenStory(branchId, 'dev_chapter_close')
-  return null
-}
-
 function TimelineProbe({ branchId }: { branchId: string }) {
   useColdOpenStory(branchId, 'chapter_timeline')
   return null
@@ -83,16 +78,6 @@ describe('useColdOpenStory', () => {
     expect(mocks.leave).toHaveBeenCalledOnce()
     expect(mocks.load).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalledWith('app.plot_story_not_found', { branchId: '' })
-  })
-
-  it('logs the dev route under its snake_case surface', async () => {
-    const warn = vi.spyOn(logger, 'warn')
-    mocks.load.mockResolvedValue({ status: 'no-story' })
-    render(<DevProbe branchId="br_gone" />)
-    await waitFor(() => expect(mocks.leave).toHaveBeenCalledOnce())
-    expect(warn).toHaveBeenCalledWith('app.dev_chapter_close_story_not_found', {
-      branchId: 'br_gone',
-    })
   })
 
   it('logs the Chapter Timeline under a surface the event-name check accepts', async () => {
