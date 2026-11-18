@@ -583,19 +583,48 @@ describe('startManualClose pre-flight', () => {
     expect(pickOn()).toEqual({ endEntryId: f.replyIds[0] })
   })
 
-  it('refuses any resolver failure the same way, at its first phase', async () => {
-    const settings = appSettingsStore.getAppSettings()
-    const unassigned = { ...settings, assignments: { classifier: 'prof_close_classifier' } }
-    expect(await hydrateAppSettings(async () => unassigned)).toEqual({ status: 'ok' })
+  it.each([
+    {
+      failure: 'profile-missing',
+      arrange: async () => {
+        const settings = appSettingsStore.getAppSettings()
+        const assignments = { ...settings.assignments, 'lore-mgmt': 'prof_deleted' }
+        expect(await hydrateAppSettings(async () => ({ ...settings, assignments }))).toEqual({
+          status: 'ok',
+        })
+      },
+    },
+    {
+      failure: 'provider-missing',
+      arrange: async () => {
+        const settings = appSettingsStore.getAppSettings()
+        const profiles = settings.profiles.map((p) =>
+          p.id === 'prof_close_lore'
+            ? { ...p, modelRef: { providerId: 'prov_deleted', modelId: 'lore-model' } }
+            : p,
+        )
+        expect(await hydrateAppSettings(async () => ({ ...settings, profiles }))).toEqual({
+          status: 'ok',
+        })
+      },
+    },
+    {
+      failure: 'override-provider-missing',
+      arrange: async () => {
+        const open = currentStoryStore.getCurrentStory()!
+        const lore = { providerId: 'prov_deleted', modelId: 'lore-model' }
+        currentStoryStore.set({
+          ...open,
+          settings: { ...open.settings, models: { ...open.settings.models, 'lore-mgmt': lore } },
+        })
+      },
+    },
+  ] as const)('refuses $failure the same way, at its first phase', async ({ failure, arrange }) => {
+    await arrange()
 
     expect(await startManualClose(f.branchId, lastReply(), f.ctx)).toEqual({
       outcome: 'preflight-failed',
-      error: {
-        kind: 'config-resolver',
-        failure: 'no-profile-assigned',
-        target: 'lore-mgmt',
-        phaseName: 'boundary',
-      },
+      error: { kind: 'config-resolver', failure, target: 'lore-mgmt', phaseName: 'boundary' },
     })
     expect(pickOn()).toBeUndefined()
     expect(closeRuns()).toBe(0)
