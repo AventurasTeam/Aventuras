@@ -22,7 +22,7 @@ export type CloseResult = {
 
 export type ChapterOverlaysState = {
   review: { chapterId: string } | null
-  /** No reader yet: the close modal's host (M5.10). */
+  /** The close modal's request; the host drops one whose branch isn't the open one. */
   closeModal: CloseModalRequest | null
   closeResult: CloseResult | null
 }

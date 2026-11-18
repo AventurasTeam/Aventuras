@@ -334,7 +334,12 @@ convention, and the expectation that subsystems route through
   `close_review_read_failed` (error,
   `components/chapters/chapter-overlays-host.tsx`: the review window's
   read failed, with `branchId`, `chapterId` and `error`; the window
-  shows `failed`), `close_result_read_failed` (warn,
+  shows `failed`), `close_modal_read_failed` (warn,
+  `components/chapters/close-chapter-modal.tsx`: the close modal's read
+  of the open region's rows or world times failed, with `branchId`,
+  `read` (`series` or `times`) and `error`; with no rows the modal
+  offers no reply to end on, and with no times its rows show none),
+  `close_result_read_failed` (warn,
   `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),

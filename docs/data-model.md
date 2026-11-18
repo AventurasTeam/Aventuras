@@ -2187,6 +2187,7 @@ story_entries.metadata: {
     }
     promptSections?: PromptSections // a turn's context-window failure only: the refused narrative prompt by section
     close?: 'failed' | 'resolved'   // a close-failure entry, as `pass` below; a close has no held state
+    closePick?: string              // a close-failure entry a manual close's click raised when its pre-flight failed: the end entry the user picked, so the entry's Retry restarts that pick through the manual start, pre-flighting it again
     pass?: 'failed' | 'held' | 'resolved'  // a pass-failure entry: its Retry runs the pass alone; held has no Retry; resolved is what a committed Retry leaves when the composer couldn't take the submission back, a notice holding it with no Retry
   }
 }

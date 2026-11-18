@@ -32,8 +32,10 @@ import {
   type StoreChapter,
 } from '@/lib/stores'
 
+import { CloseChapterModal } from './close-chapter-modal'
 import { reviewRowHref, type ReviewRowLiveness } from './review-row-href'
 import { ReviewWindow, type ReviewWindowState } from './review-window'
+import { runManualClose } from './run-manual-close'
 
 type ReviewSources = {
   report: CloseReport
@@ -79,11 +81,12 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
 }
 
 /**
- * C7's root host (the close modal joins in M5.10): a row press closes the window, then runs the
- * guard, so a dirty pane is never bypassed.
+ * C7's root host, for the review window and the close modal. A row press closes the window, then
+ * runs the guard, so a dirty pane is never bypassed.
  */
 export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
+  const closeModal = chapterOverlaysStore.useOverlays((s) => s.closeModal)
   const closeResult = chapterOverlaysStore.useOverlays((s) => s.closeResult)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
   const openSeq = currentStoryStore.useOpenSeq()
@@ -101,9 +104,31 @@ export function ChapterOverlaysHost(): ReactElement | null {
   useEffect(() => {
     if (closeResult != null && !resultHolds) chapterOverlaysStore.clearCloseResult()
   }, [closeResult, resultHolds])
+  // C7: a request for a branch the open story no longer shows is dropped, never shown later.
+  const closeHolds = closeModal != null && closeModal.branchId === openBranchId
+  useEffect(() => {
+    if (closeModal != null && !closeHolds) chapterOverlaysStore.closeCloseModal()
+  }, [closeModal, closeHolds])
 
-  if (reviewChapter == null) return null
-  return <ReviewHost key={reviewChapter.id} chapter={reviewChapter} />
+  // The modal shuts at once, since the close runs under the banner; the start outlives the body.
+  const confirmClose = useCallback((branchId: string, endEntryId: string) => {
+    chapterOverlaysStore.closeCloseModal()
+    void runManualClose(branchId, endEntryId)
+  }, [])
+
+  if (reviewChapter == null && !closeHolds) return null
+  return (
+    <>
+      {reviewChapter != null ? <ReviewHost key={reviewChapter.id} chapter={reviewChapter} /> : null}
+      {closeHolds ? (
+        <CloseChapterModal
+          key={`${closeModal.branchId}:${closeModal.endEntryId ?? ''}`}
+          request={closeModal}
+          onConfirm={confirmClose}
+        />
+      ) : null}
+    </>
+  )
 }
 
 /** Every read the window shows, resolved here: a gorhom Sheet's content sees no outer provider. */
