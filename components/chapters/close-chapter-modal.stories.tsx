@@ -689,13 +689,16 @@ export const NoClosedChapter: Story = {
   },
 }
 
-// Nothing to close at: the reads are loading or failed, so there is no end entry to confirm.
+// Replies but none selected, which the connected modal never hands over (it selects the latest
+// whenever it lists one): the view's own guard still keeps Close chapter from confirming nothing.
 export const NoSelection: Story = {
   args: { initialSelectedId: null },
   play: async ({ args }) => {
     await dialog()
     await expect(confirm()).toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByTestId('close-chapter-picker')).toBeNull()
+    // React DOM drops a click on a disabled <button> before any press handler: this pins the
+    // disabled button, not the Pressable's press guard.
     await userEvent.click(confirm(), { pointerEventsCheck: 0 })
     expect(args.onConfirm).not.toHaveBeenCalled()
   },
@@ -707,6 +710,7 @@ export const Disabled: Story = {
     await dialog()
     await expect(confirm()).toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByTitle(t('generationGate.inFlight'))).toContainElement(confirm())
+    // As in NoSelection: this pins the disabled button, not the Pressable's press guard.
     await userEvent.click(confirm(), { pointerEventsCheck: 0 })
     expect(args.onConfirm).not.toHaveBeenCalled()
   },
