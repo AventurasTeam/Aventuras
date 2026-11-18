@@ -874,7 +874,7 @@ decision above: tune, then rerun.
 
 `PROBE_RUNS=10 PROBE_OVERLAY=1 pnpm probe:close` at `ee9b39acf` (a step's
 default max output 16,384, a task's step budget 64) on
-`Gemma4-26B-A4B-QAT-MTP` (window 65,536), from 06:53 to 08:41 UTC on
+`Gemma4-26B-A4B-QAT-MTP` (window 65,536), from 06:47 to 08:41 UTC on
 2026-11-18. Saved at
 `~/.cache/aventuras-measure/m5-10/probe-20261118T085624Z/close-out-2`.
 
