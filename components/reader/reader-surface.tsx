@@ -175,6 +175,9 @@ type ReaderRowProps = {
   onCancelEdit: () => void
   onRequestRollback: (entryId: string) => Promise<void>
   onRegenerate: (entryId: string) => Promise<void>
+  /** This row is in the host's C10 table; a flag rather than the table keeps the memo holding. */
+  closeHere: boolean
+  onCloseChapterHere: (entryId: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
   onFixCutOff: () => Promise<void>
   onRetrySystemEntry?: () => Promise<void>
@@ -216,6 +219,8 @@ const ReaderRow = memo(function ReaderRow({
   onCancelEdit,
   onRequestRollback,
   onRegenerate,
+  closeHere,
+  onCloseChapterHere,
   onFixSystemEntry,
   onFixCutOff,
   onRetrySystemEntry,
@@ -271,6 +276,7 @@ const ReaderRow = memo(function ReaderRow({
       editDirty={editing && editContent !== row.content}
       onEdit={isSystem ? undefined : () => onStartEdit(row)}
       onRegen={row.kind === 'ai_reply' ? () => void onRegenerate(row.id) : undefined}
+      onCloseChapterHere={closeHere ? () => void onCloseChapterHere(row.id) : undefined}
       onContentChange={onContentChange}
       onCommitEdit={() => void onCommitEdit()}
       onCommitEditAndRegen={
@@ -355,6 +361,7 @@ export function ReaderSurface({
     rows,
     worldTimeDecorations,
     chapterBreaks,
+    closeHereEntryIds,
     worldTimeFrame,
     streaming,
     branchKey,
@@ -376,6 +383,7 @@ export function ReaderSurface({
     onEditScene,
     onRequestEditScene,
     onRegenerate,
+    onCloseChapterHere,
     onRetrySystemEntry,
     onDismissSystemEntry,
     onCopySystemText,
@@ -1228,6 +1236,8 @@ export function ReaderSurface({
                   onCancelEdit={cancelEdit}
                   onRequestRollback={onRequestRollback}
                   onRegenerate={onRegenerate}
+                  closeHere={closeHereEntryIds[row.id] === true}
+                  onCloseChapterHere={onCloseChapterHere}
                   onFixSystemEntry={onFixSystemEntry}
                   onFixCutOff={onFixCutOff}
                   onRetrySystemEntry={onRetrySystemEntry}

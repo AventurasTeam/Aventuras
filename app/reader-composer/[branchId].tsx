@@ -10,6 +10,7 @@ import { heldControl } from '@/components/compounds/entry-card-hold'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
+import { closeHereEntryIds } from '@/components/reader/close-here-entries'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import {
@@ -175,6 +176,7 @@ import {
   appSettingsStore,
   awaitRunTerminal,
   blockingOverlaysStore,
+  chapterOverlaysStore,
   chaptersStore,
   currentStoryStore,
   entitiesStore,
@@ -379,6 +381,9 @@ export default function ReaderComposerRoute() {
       ),
     [slice.rows, worldTimeDecorations],
   )
+  // Over the slice the document renders, keyed on its identity so the surface sees no change
+  // between renders that keep it.
+  const closeHereIds = useMemo(() => closeHereEntryIds(slice.rows), [slice.rows])
 
   // Same snapshot-stability contract as `rows` above: select the raw map, derive
   // the array with useMemo. The whole branch, unwindowed — the panel resolves ids
@@ -1766,6 +1771,13 @@ export default function ReaderComposerRoute() {
   // One read for whichever rail mounts: the column and peek drawer, or the phone chip's Sheet.
   const railData = useRailData(branchId)
 
+  // C7: the modal opens through the registered inline-edit guard, with the entry picked.
+  const handleCloseChapterHere = useCallback(
+    async (entryId: string) =>
+      chapterOverlaysStore.openCloseModal({ branchId, endEntryId: entryId }),
+    [branchId],
+  )
+
   const placeholder = readerPlaceholder({
     hydrationSucceeded,
     isEmpty: entries.length === 0,
@@ -1774,6 +1786,7 @@ export default function ReaderComposerRoute() {
   const surfaceProps = {
     rows: slice.rows,
     worldTimeDecorations: sliceDecorations,
+    closeHereEntryIds: closeHereIds,
     chapterBreaks,
     worldTimeFrame,
     streaming: streamingPayload,
@@ -1801,6 +1814,7 @@ export default function ReaderComposerRoute() {
     onEditScene: editScene,
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
+    onCloseChapterHere: handleCloseChapterHere,
     // Undefined for a held pass entry: its branch can't run a pass.
     onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
