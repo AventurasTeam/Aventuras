@@ -72,7 +72,8 @@
     "endHeading": "End of chapter",
     "chapterEndedHere": "Chapter {{number}} ended here",
     "latest": "latest",
-    "tokensInRange": "{{count, number}} tokens in range",
+    "tokensInRange": "{{count, number}} token in range",
+    "tokensInRange_other": "{{count, number}} tokens in range",
     "cancel": "Cancel",
     "confirm": "Close chapter",
     "toast": {

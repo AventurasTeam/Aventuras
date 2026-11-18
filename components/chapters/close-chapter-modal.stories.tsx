@@ -670,6 +670,16 @@ export const EndEntryPicked: Story = {
   },
 }
 
+export const OneTokenInRange: Story = {
+  render: ({ initialSelectedId, ...args }) => (
+    <CloseChapterModalView {...args} selectedId={initialSelectedId} tokensInRange={1} />
+  ),
+  play: async () => {
+    await dialog()
+    await expect(tokens()).toHaveTextContent(/^1 token in range$/)
+  },
+}
+
 export const NoClosedChapter: Story = {
   args: { start: { ...START, id: 'entry_1', ref: formatEntryRef(1), endedChapterNumber: null } },
   play: async () => {
