@@ -396,6 +396,47 @@ export const KeyboardPickReturnsFocus: Story = {
   },
 }
 
+// The listbox's own keys: the oldest reply starts virtualized out, so End scrolls it in to focus it.
+export const ArrowKeysMoveBetweenReplies: Story = {
+  args: { replies: manyReplies(200), latestId: 'entry_401', initialSelectedId: 'entry_401' },
+  play: async ({ args }) => {
+    await dialog()
+    await userEvent.click(trigger())
+    const reply = (id: string) => screen.getByTestId(`close-chapter-reply-${id}`)
+    ;(await screen.findByTestId('close-chapter-reply-entry_401')).focus()
+    await userEvent.keyboard('{ArrowDown}')
+    await waitFor(() => expect(reply('entry_399')).toHaveFocus())
+    await userEvent.keyboard('{ArrowUp}')
+    await waitFor(() => expect(reply('entry_401')).toHaveFocus())
+    await userEvent.keyboard('{ArrowUp}')
+    await expect(reply('entry_401')).toHaveFocus()
+    expect(screen.queryByTestId('close-chapter-reply-entry_3')).toBeNull()
+    await userEvent.keyboard('{End}')
+    await waitFor(() => expect(reply('entry_3')).toHaveFocus())
+    await userEvent.keyboard('{ArrowDown}')
+    await expect(reply('entry_3')).toHaveFocus()
+    await userEvent.keyboard('{Home}')
+    await waitFor(() => expect(reply('entry_401')).toHaveFocus())
+    await userEvent.keyboard('{End}')
+    await waitFor(() => expect(reply('entry_3')).toHaveFocus())
+    await userEvent.keyboard('{Enter}')
+    await expect(args.onSelect).toHaveBeenCalledWith('entry_3')
+    await waitFor(() => expect(panel()).toBeNull())
+  },
+}
+
+export const SpacePicksAReply: Story = {
+  play: async ({ args }) => {
+    await dialog()
+    await userEvent.click(trigger())
+    ;(await screen.findByTestId('close-chapter-reply-entry_69')).focus()
+    await userEvent.keyboard(' ')
+    await expect(args.onSelect).toHaveBeenCalledWith('entry_69')
+    await waitFor(() => expect(panel()).toBeNull())
+    await expect(trigger()).toHaveFocus()
+  },
+}
+
 // Close chapter here hands its entry over as the pick.
 export const EndEntryPicked: Story = {
   args: { initialSelectedId: 'entry_65' },

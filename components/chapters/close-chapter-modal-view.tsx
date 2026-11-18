@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type ReactElement,
   type ReactNode,
 } from 'react'
@@ -194,6 +195,21 @@ type PanelProps = {
   onPick: (entryId: string) => void
 }
 
+function stepIndex(key: string, from: number, count: number): number | null {
+  switch (key) {
+    case 'ArrowDown':
+      return Math.min(from + 1, count - 1)
+    case 'ArrowUp':
+      return Math.max(from - 1, 0)
+    case 'Home':
+      return 0
+    case 'End':
+      return count - 1
+    default:
+      return null
+  }
+}
+
 function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
   // TanStack Virtual's instance mutates in place; compiled memos keyed on it would go stale.
   'use no memo'
@@ -204,6 +220,36 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     estimateSize: () => REPLY_ROW_ESTIMATE,
     overscan: 6,
   })
+  // A key can target an option virtualized out: it takes focus once the scroll has mounted it.
+  const pendingFocus = useRef<number | null>(null)
+  const focusPending = () => {
+    const index = pendingFocus.current
+    if (index == null) return
+    const option = scrollRef.current?.querySelector<HTMLElement>(
+      `[data-index="${index}"] [role="option"]`,
+    )
+    if (option == null) return
+    pendingFocus.current = null
+    option.focus()
+  }
+  useEffect(focusPending)
+  // RN-Web presses an option on Enter only; Space is a press on button roles alone.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const slot = (event.target as HTMLElement).closest<HTMLElement>('[data-index]')
+    if (slot == null) return
+    const from = Number(slot.dataset.index)
+    if (event.key === ' ') {
+      event.preventDefault()
+      onPick(replies[from]!.id)
+      return
+    }
+    const to = stepIndex(event.key, from, replies.length)
+    if (to == null) return
+    event.preventDefault()
+    virtualizer.scrollToIndex(to, { align: 'auto' })
+    pendingFocus.current = to
+    focusPending()
+  }
   return (
     <div
       ref={scrollRef}
@@ -212,6 +258,7 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
       data-testid="close-chapter-panel"
       className="min-h-0 shrink overflow-y-auto overflow-x-hidden rounded-md border border-border"
       style={PANEL_WEB_STYLE}
+      onKeyDown={onKeyDown}
     >
       <div style={trackStyle(virtualizer.getTotalSize())}>
         {virtualizer.getVirtualItems().map((slot) => {
