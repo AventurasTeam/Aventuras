@@ -46,6 +46,11 @@ export {
   chapterPartSummarySchema,
   type ChapterMetadata,
 } from './definitions/chapter-metadata-schema'
+export {
+  chapterBoundarySchema,
+  refineBoundaryReply,
+  type ChapterBoundaryReply,
+} from './definitions/chapter-boundary-schema'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'
 export { emitDeltaGroup } from './runtime/emit-group'
@@ -66,6 +71,7 @@ export {
   type RunCtxFor,
 } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
+export { preflightSnapshot, runPreflight } from './runtime/preflight'
 export type {
   BootRecoveryReport,
   RecoveredRun,
@@ -74,6 +80,7 @@ export type {
 } from './runtime/recovery'
 export type {
   ConcurrencyPolicy,
+  ConfigFailureKind,
   PhaseContext,
   PhaseEmittedEvent,
   PhaseFn,
@@ -82,6 +89,7 @@ export type {
   Pipeline,
   PipelineError,
   PipelineEvent,
+  PreflightFailedStart,
   PreflightSnapshot,
   RejectedStart,
   ResolverInput,

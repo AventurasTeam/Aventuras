@@ -53,3 +53,46 @@ export async function writeSystemEntry(
   ])
   return id
 }
+
+// writeSystemEntry keeps one system row per branch, so the first found is the standing one.
+async function standingSubmission(
+  branchId: string,
+  ctx: DbCtx,
+): Promise<SystemFailureMeta['submission']> {
+  const [standing] = await ctx.db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.kind, 'system')))
+    .limit(1)
+  return standing?.metadata?.systemFailure?.submission
+}
+
+/**
+ * `writeSystemEntry` for a writer with no route to reload: the standing entry's held text carries
+ * across (reader-composer.md → Custody of the turn's text), and the reader's store takes the new
+ * row in place of the old when it holds the branch.
+ */
+export async function raiseSystemEntry(
+  args: {
+    branchId: string
+    content: string
+    /** Built from the standing system entry's submission, which carries across. */
+    failure: (standing: SystemFailureMeta['submission']) => SystemFailureMeta
+  },
+  ctx: DbCtx,
+): Promise<string> {
+  const failure = args.failure(await standingSubmission(args.branchId, ctx))
+  const id = await writeSystemEntry(
+    { branchId: args.branchId, content: args.content, failure },
+    ctx,
+  )
+  if (entriesStore.getLoadedBranch() !== args.branchId) return id
+  const [row] = await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id))
+  if (row === undefined) return id
+  // A reload during the read may already hold the new row; patch() skips a branch no longer held.
+  for (const held of entriesStore.getEntries().values())
+    if (held.kind === 'system' && held.id !== id)
+      entriesStore.patch(args.branchId, { op: 'delete', id: held.id })
+  entriesStore.patch(args.branchId, { op: 'create', id, row })
+  return id
+}

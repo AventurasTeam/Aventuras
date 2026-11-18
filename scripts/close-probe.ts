@@ -50,6 +50,7 @@ import {
   type PhaseEmittedEvent,
   type PhaseResult,
   type PipelineError,
+  type PreflightFailedStart,
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
@@ -410,12 +411,16 @@ function failedWhere(): string {
 
 function printRun(
   k: number,
-  result: TxResult | RejectedStart,
+  result: TxResult | RejectedStart | PreflightFailedStart,
   ms: number,
   report: CloseReport | null,
 ): void {
   if (result.outcome === 'rejected') {
     console.log(`[probe:close] run ${k}: refused at start (${result.blockedBy})`)
+    return
+  }
+  if (result.outcome === 'preflight-failed') {
+    console.log(`[probe:close] run ${k}: refused at pre-flight (${errorLine(result.error)})`)
     return
   }
   console.log(

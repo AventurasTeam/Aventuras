@@ -1,12 +1,19 @@
-import { resolveModel, type ResolveModelConfig } from '@/lib/ai'
+import { resolveModel, resolveModelCapabilities, type ResolveModelConfig } from '@/lib/ai'
+import type { StorySettings } from '@/lib/db'
+import { appSettingsStore } from '@/lib/stores'
 
 import type { Pipeline, PipelineError, PreflightSnapshot } from '../types'
 
 type ConfigResolverError = Extract<PipelineError, { kind: 'config-resolver' }>
 
-// Validates every declared resolver input against the snapshot, in phase order
-// (and, within a parallel node, declared branch order). Returns the first
-// failure or null.
+// One snapshot for a run's pre-flight and a click's, so the two agree.
+export function preflightSnapshot(storySettings: StorySettings | undefined): PreflightSnapshot {
+  return { appSettings: appSettingsStore.getAppSettings(), storySettings }
+}
+
+// Validates every resolver input against the snapshot, in phase order (declared order within a
+// parallel node). A `requires` input also fails when its model is flagged off for it; unknown
+// passes. Returns the first failure or null.
 export function runPreflight(
   pipeline: Pipeline,
   snapshot: PreflightSnapshot,
@@ -34,6 +41,17 @@ export function runPreflight(
             failure: result.kind,
             target: input.target,
             phaseName: branch.name,
+          }
+        }
+        if (input.requires === undefined) continue
+        const capabilities = resolveModelCapabilities(result.providerId, result.modelId, providers)
+        if (capabilities?.[input.requires] === false) {
+          return {
+            kind: 'config-resolver',
+            failure: 'tool-calling-off',
+            target: input.target,
+            phaseName: branch.name,
+            modelId: result.modelId,
           }
         }
       }

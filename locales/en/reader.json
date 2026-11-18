@@ -279,6 +279,7 @@
       "closeProfileMissing": "Chapter close failed: the lore management agent's assigned profile is missing.",
       "closeProviderMissing": "Chapter close failed: the lore management model's provider is missing.",
       "closeOverrideProviderMissing": "Chapter close failed: this story's lore management model override names a provider that no longer exists.",
+      "closeToolCallingOff": "Chapter close can't run: its model, {{model}}, is marked as unable to call tools, which the close needs. Pick another model for chapter close, or set this story's own on its Models tab.",
       "emptyReply": "The model returned no text. Nothing was committed; Retry resends your turn.",
       "replyCutOff": {
         "maxOutput": "The reply was cut off at the narrative profile's {{limit, number}}-token max output before any story text. Raise the max output, then Retry.",

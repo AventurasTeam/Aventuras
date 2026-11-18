@@ -337,7 +337,12 @@ describe('bracketProseReversal — a manual pick', () => {
     generationStore.setPendingClose('b1', { endEntryId: 'e_r1' })
     const remove = (id: string) =>
       db.delete(storyEntries).where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, id)))
-    return { ctx, remove }
+    const stamp = (id: string) =>
+      db
+        .update(storyEntries)
+        .set({ chapterId: 'chap_1' })
+        .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, id)))
+    return { ctx, remove, stamp }
   }
 
   it('drops a pick whose end entry the body removed, before the barrier lowers', async () => {
@@ -366,6 +371,36 @@ describe('bracketProseReversal — a manual pick', () => {
     })
 
     expect(pick()).toEqual({ endEntryId: 'e_r1' })
+  })
+
+  // A redo that stamps the entry again restores the chapter the pick would close.
+  it('drops a pick whose end entry the body closed into a chapter', async () => {
+    const { ctx, stamp } = await withPick()
+
+    await bracketProseReversal('b1', ctx, async () => {
+      await stamp('e_r1')
+    })
+
+    expect(pick()).toBeUndefined()
+  })
+
+  it('keeps a pick whose end entry stays open while the body stamps another', async () => {
+    const { ctx, stamp } = await withPick()
+
+    await bracketProseReversal('b1', ctx, async () => {
+      await stamp('e_u1')
+    })
+
+    expect(pick()).toEqual({ endEntryId: 'e_r1' })
+  })
+
+  it('drops a pick whose end entry no chapter may end on', async () => {
+    const { ctx } = await withPick()
+    generationStore.setPendingClose('b1', { endEntryId: 'e_u1' })
+
+    await bracketProseReversal('b1', ctx, async () => {})
+
+    expect(pick()).toBeUndefined()
   })
 
   it('drops the pick when the body throws after removing its entry, and rethrows', async () => {

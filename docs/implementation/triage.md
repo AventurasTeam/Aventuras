@@ -60,3 +60,40 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **`architecture.md` describes an Anthropic catalog adapter that doesn't
+  exist.** [`architecture.md → The window figure`](../architecture.md#the-window-figure)
+  says "Anthropic's typed catalog adapter
+  reads `max_input_tokens` the same way", but nothing under `lib/` reads
+  `max_input_tokens`, and `lib/ai/catalog.ts` has no Anthropic adapter.
+  Either the sentence goes or it gains "(not built yet)". Raised in
+  5.10's PR 1 review.
+- **Pre-flight's failure log drops what failed.**
+  `pipeline.preflight_failed` (`lib/pipeline/runtime/orchestrator.ts`,
+  `driveRun`) logs only `errorKind` and `errorDetail`. A
+  `config-resolver` refusal carries no `detail`, so its `failure`,
+  `target`, `phaseName` and `modelId` never reach diagnostics: a close
+  refused for tool calling logs the same line as a missing profile.
+  Raised in 5.10's PR 1 review.
+- **A run off the open story pre-flights without the story's override.**
+  `driveRun` passes `storySettings` only when the run's story and branch
+  are the open ones (`ownStory`), so a run on another story checks the
+  profile's model, not the override's. 5.10's tool-calling check inherits
+  this. Whether such a run is reachable today is unchecked. Raised in
+  5.10's PR 1 review.
+- **A store patch can be lost while a story opens.** `loadAndPublish`
+  (`lib/actions/stories/operational.ts`) reads the entries, makes about
+  nine more awaited reads, then hydrates; an `entriesStore` patch that
+  lands in between (any patching writer, `raiseSystemEntry` included) is
+  overwritten by the older snapshot. Whether a write during an open is
+  reachable is unchecked. Raised in 5.10's PR 1 review.
+- **Boundary's candidate lines split badly on some prose.**
+  `firstLastSentences` (`lib/text/first-last-sentences.ts`) splits after
+  a title's period ("Mr. Smith arrived." opens with "Mr."), starts the
+  next sentence with a French closer that stands mid-text ("» Il
+  partit."), gives "..." as the first sentence of a text that opens
+  with one, and doesn't split on markdown emphasis or Japanese
+  half-width marks. Each degrades a candidate's `Opens:` or `Ends:` line
+  rather than breaking the call; worth a look once the probe or a real
+  story shows boundary picking worse for it. Raised in 5.10's PR 1
+  review.

@@ -1,6 +1,6 @@
 import { and, eq, gt, ne, sql } from 'drizzle-orm'
 
-import { CHAPTER_CLOSE_KIND, chapterProgressOf } from '@/lib/chapters'
+import { CHAPTER_CLOSE_KIND, chapterProgressOf, thresholdMet } from '@/lib/chapters'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND, shouldCadenceFire } from '@/lib/classifier'
 import {
   branches,
@@ -107,7 +107,7 @@ export async function closeOwed(
     await openRegionSeries(story.branchId, ctx),
     story.settings.chapterTokenThreshold,
   )
-  return progress.tokens >= progress.threshold && progress.canClose
+  return thresholdMet(progress)
 }
 
 // The run's story while it is open on the run's branch: whose settings every chain read uses.

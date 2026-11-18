@@ -2111,7 +2111,7 @@ type CarriedCapabilities = Readonly<Record<CapabilityHint['capability'], boolean
 type CapabilityHint = // matched: the keyword that matched, for the copy
   | { capability: 'structuredOutput'; matched: 'response_format' | 'json_schema' }
   | { capability: 'reasoning'; matched: 'budget_tokens' | 'thinking' | 'reasoning' }
-  | { capability: 'toolCalling'; matched: 'tools' | 'tool_choice' }
+  | { capability: 'toolCalling'; matched: 'tool_choice' | 'tool choice' | 'tools' | 'tool use' }
 
 type ContextWindowFailure = {
   detectedBy: 'check' | 'provider' // the pre-send check, or a recognized provider rejection
@@ -2395,10 +2395,13 @@ type PipelineError =
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
   | {
       kind: 'config-resolver'
-      failure: ResolveFailureKind // resolver could not produce a usable model config
+      // resolver could not produce a usable model config, or pre-flight found the model flagged off
+      // for a capability its phase requires (Config pre-flight validation)
+      failure: ResolveFailureKind | 'tool-calling-off'
       target: ResolveTarget
       phaseName: string
       detail?: string
+      modelId?: string // the resolved model, set with 'tool-calling-off' so the copy names it
     }
   | {
       kind: 'embedder'
@@ -2450,8 +2453,10 @@ banner / dialog for persistent.
 `classifyProviderError` matches a 4xx body against words naming the
 three capabilities a request can carry: `thinking`, `reasoning` and
 `budget_tokens` for **reasoning**, `response_format` and `json_schema`
-for **structured output**, `tools` and `tool_choice` for **tool
-calling**. Only the words of a capability the request
+for **structured output**, `tool_choice`, `tool choice`, `tools` and
+`tool use` for **tool calling**, the spaced pair being vLLM's 400 and
+OpenRouter's 404 wording for a server or model that takes no tools.
+Only the words of a capability the request
 as sent carried are matched, a profile's `customJson` keys included.
 Reasoning is carried when a thinking setting went out: an Anthropic
 call with a thinking budget, since a disabled setting sends no field.

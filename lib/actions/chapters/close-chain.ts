@@ -10,9 +10,11 @@ import {
   startChain,
   unprocessedEntryCount,
   type ChainEnd,
+  type PipelineError,
+  type PreflightFailedStart,
   type RejectedStart,
 } from '@/lib/pipeline'
-import { currentStoryStore, generationStore, isStoryBusy } from '@/lib/stores'
+import { currentStoryStore, generationStore, isStoryBusy, type OpenStory } from '@/lib/stores'
 
 import { BRANCH_NOT_OPEN } from '../refusal-codes'
 import type { DbCtx } from '../types'
@@ -36,8 +38,9 @@ export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD):
 })
 
 /**
- * Starts the pass (entries unprocessed) or the close; resolves with the chain's end or the refusal.
- * Rejects when the origin throws, as `startChain` does: a caller must handle it.
+ * Starts the pass (entries unprocessed) or the close; resolves with the chain's end, the refusal,
+ * or the failed pre-flight. Rejects when the origin or the pre-flight throws, as `startChain` does:
+ * a caller must handle it.
  */
 export async function startCloseChain(
   branchId: string,
@@ -45,9 +48,11 @@ export async function startCloseChain(
   opts?: {
     /** Runs after the held check, before the unprocessed count; a refusal ends the start. */
     validate?: () => Promise<RejectedStart | null>
+    /** Runs in the synchronous section before the reserve; a failure starts nothing. */
+    preflight?: (open: OpenStory) => PipelineError | null
     onReserved?: () => void
   },
-): Promise<ChainEnd | RejectedStart> {
+): Promise<ChainEnd | RejectedStart | PreflightFailedStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
     return refused(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   ensurePeriodicClassifierPipelineRegistered()
@@ -67,6 +72,8 @@ export async function startCloseChain(
   if (isStoryBusy(generationStore.getTxState(), open.storyId, branchId))
     return refused(MANUAL_CLOSE_REFUSAL.busy)
   if (generationStore.getSettleCount() !== settled) return refused(MANUAL_CLOSE_REFUSAL.busy)
+  const failed = opts?.preflight?.(open)
+  if (failed) return { outcome: 'preflight-failed', error: failed }
   const kind = unprocessed ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
   const ran = await startChain(kind, {
     storyId: open.storyId,

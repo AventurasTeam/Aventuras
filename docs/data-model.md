@@ -1750,8 +1750,8 @@ app_settings.providers: Array<{
     capabilities?: {
       reasoning?: boolean
       structuredOutput?: boolean
-      toolCalling?: boolean                  // model takes native tool calls; chapter close's agent refuses a model flagged off and runs on an unknown one. Detected where a catalog publishes it; user-overridable like every capability flag. See docs/memory/chapter-close.md → Tool calling
-      embedding?: boolean                    // model serves the provider's embedding endpoint; drives the Providers-tab Embedding models split and the Memory-tab embedder picker. Detected from /models metadata where reported; user-overridable like every capability flag
+      toolCalling?: boolean                  // model takes native tool calls; chapter close's agent refuses a model flagged off and runs on an unknown one. Detected where a catalog publishes it (OpenRouter's supported_parameters, Mistral's capabilities.function_calling): a fresh value replaces it, false included, a fetch without one keeps it. See docs/architecture.md → Detection and docs/memory/chapter-close.md → Tool calling
+      embedding?: boolean                    // model serves the provider's embedding endpoint; drives the Providers-tab Embedding models split and the Memory-tab embedder picker. Detected from /models metadata where reported; user-overridable
       embeddingDim?: number                  // positive native output dimension, persisted from a successful native-dimension probe when this model is selected
       matryoshkaSupported?: boolean          // NEW: model supports Matryoshka representation truncation. See docs/memory/retrieval.md → Matryoshka effective dim
       matryoshkaDims?: number[]              // NEW: curated dim ladder declared by the model card (e.g., [256, 512, 1024, 1536, 2048, 3072]). Picker surfaces these first; Custom… accepts any N up to native.

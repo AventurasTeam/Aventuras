@@ -1,16 +1,87 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { APICallError } from 'ai'
+import { MockLanguageModelV3 } from 'ai/test'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
+import { getModel } from '@/lib/ai/model'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import type { StoryEntry } from '@/lib/db'
+import { STORY_SETTINGS_DEFAULTS, type StoryEntry, type StorySettings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
-import { generationStore, resetAllStores, type RunState } from '@/lib/stores'
+import { spyLogger } from '@/lib/diagnostics/__tests__/spy-logger'
+import {
+  currentStoryStore,
+  entitiesStore,
+  generationStore,
+  hydrateAppSettings,
+  resetAllStores,
+  threadsStore,
+  type RunState,
+} from '@/lib/stores'
 
 import { openCloseFixture } from './__tests__/close-fixture'
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { chapterBoundarySchema, refineBoundaryReply } from './chapter-boundary-schema'
 import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeRangeOf } from './close-intermediates'
 import { CLOSE_PHASE } from './intermediates'
 import type { PhaseContext } from '../types'
+
+// The provider is the only fake: the real call, bound, retry and parse run between it and phase.
+vi.mock('@/lib/ai/model', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getModel: vi.fn(),
+}))
+
+const DEFINITION = {
+  mode: 'adventure' as const,
+  leadEntityId: null,
+  narration: 'second' as const,
+  genre: { label: 'Fantasy', promptBody: '' },
+  tone: { label: 'Wry', promptBody: '' },
+  setting: 'A river country under a new toll.',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+}
+
+const PROVIDER = {
+  id: 'prov-1',
+  type: 'openai-compatible' as const,
+  displayName: 'Local',
+  apiKey: 'k',
+  endpoint: 'http://x/v1',
+  favoriteModelIds: [] as string[],
+}
+
+async function wireLore(profile: { maxOutput?: number } = {}): Promise<void> {
+  const result = await hydrateAppSettings(async () => ({
+    providers: [PROVIDER],
+    profiles: [
+      {
+        id: 'prof-lore',
+        kind: 'agent' as const,
+        name: 'Lore',
+        modelRef: { providerId: PROVIDER.id, modelId: 'm' },
+        ...profile,
+      },
+    ],
+    assignments: { 'lore-mgmt': 'prof-lore' },
+    defaultProviderId: PROVIDER.id,
+    diagnostics: { enabled: false, debug_level_enabled: false },
+  }))
+  expect(result).toEqual({ status: 'ok' })
+}
+
+// What readBoundaryInputs needs: the open story on b1, and the working-set stores holding it.
+function openBranch(settings: Partial<StorySettings> = {}): void {
+  currentStoryStore.set({
+    storyId: 's1',
+    branchId: 'b1',
+    definition: DEFINITION,
+    settings: { ...STORY_SETTINGS_DEFAULTS, ...settings },
+  })
+  entitiesStore.hydrate('b1', [])
+  threadsStore.hydrate('b1', [])
+}
 
 let phaseDb: PhaseDb
 
@@ -18,9 +89,12 @@ beforeAll(async () => {
   phaseDb = await createPhaseDb()
 })
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.mocked(getModel).mockReset()
   resetPhaseDb(phaseDb)
   resetAllStores()
+  await wireLore()
+  openBranch()
 })
 
 function row(
@@ -155,6 +229,13 @@ describe('closeBoundaryPhase with a pick', () => {
     await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId })
   })
 
+  it('reads no store input, so it ends on a pick with no story open', async () => {
+    hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
+    currentStoryStore.clear()
+    generationStore.setPendingClose('b1', { endEntryId: 'e3' })
+    await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId: 'e3' })
+  })
+
   it('writes nothing, and leaves the pick for the commit to drop', async () => {
     hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
     generationStore.setPendingClose('b1', { endEntryId: 'e5' })
@@ -249,10 +330,28 @@ describe('closeBoundaryPhase with a pick', () => {
 })
 
 describe('closeBoundaryPhase with no pick', () => {
-  it('ends on the latest reply before the head', async () => {
+  // The region counts no tokens, so no row reaches half a threshold: no candidate, no call.
+  it('ends on the latest reply before the head, with no model call', async () => {
     hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
     await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId: 'e5' })
     expect(chapterRows()).toBe(0)
+    expect(getModel).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { name: 'no story is open', unload: () => currentStoryStore.clear() },
+    { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
+  ])('fails when $name, since it reads the threshold there', async ({ unload }) => {
+    hydrateEntries(phaseDb, 'b1', FIRST_CHAPTER_OPEN)
+    unload()
+    const ctx = phaseCtx()
+    const { events, result } = await drain(ctx)
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
+    })
+    expect(events).toEqual([])
+    expect(ctx.intermediates).toEqual({})
   })
 
   // A failed Send's system entry sits at the tail when the next Send runs the owed close.
@@ -287,5 +386,232 @@ describe('closeBoundaryPhase with no pick', () => {
     const f = await openCloseFixture()
     const ctx = phaseCtx({ db: f.ctx.db, storyId: f.storyId, branchId: f.branchId })
     await expectEndsOn(ctx, { startEntryId: f.entries[0]!.id, endEntryId: f.replyIds.at(-2)! })
+  })
+})
+
+// Threshold 400, window 200–600. Totals: e3 240, e5 400, e7 580, e9 700, e11 800. Candidates e3, e5,
+// e7 (t1-t3): e9 is past the bound, e11 the newest. fallbackChapterEnd would end on e9, not e7.
+const THRESHOLD = 400
+
+function sized(id: string, position: number, kind: StoryEntry['kind'], tokens: number): StoryEntry {
+  return { ...row(id, position, kind), contentTokens: tokens }
+}
+
+const CANDIDATE_REGION = [
+  sized('e1', 1, 'opening', 100),
+  sized('e2', 2, 'user_action', 20),
+  sized('e3', 3, 'ai_reply', 120),
+  sized('e4', 4, 'user_action', 20),
+  sized('e5', 5, 'ai_reply', 140),
+  sized('e6', 6, 'user_action', 20),
+  sized('e7', 7, 'ai_reply', 160),
+  sized('e8', 8, 'user_action', 20),
+  sized('e9', 9, 'ai_reply', 100),
+  sized('e10', 10, 'user_action', 20),
+  sized('e11', 11, 'ai_reply', 80),
+]
+
+// e5 reaches the threshold exactly but is the newest reply, so e3 is the only candidate.
+const NEWEST_IN_RANGE = [
+  sized('e1', 1, 'opening', 100),
+  sized('e2', 2, 'user_action', 20),
+  sized('e3', 3, 'ai_reply', 120),
+  sized('e4', 4, 'user_action', 20),
+  { ...sized('e5', 5, 'ai_reply', 140), content: 'The newest reply ends at the toll house.' },
+]
+
+const USAGE = {
+  inputTokens: {
+    total: undefined,
+    noCache: undefined,
+    cacheRead: undefined,
+    cacheWrite: undefined,
+  },
+  outputTokens: { total: 24, text: 24, reasoning: undefined },
+}
+
+type Scripted = { text: string; cutOff?: true } | { error: unknown }
+
+// Answers each call with the next scripted reply; a call past the script fails the test.
+function scriptModel(replies: Scripted[]): MockLanguageModelV3 {
+  const model = new MockLanguageModelV3({
+    doGenerate: async () => {
+      const next = replies.shift()
+      if (next == null) throw new Error('boundary test: the model was called past its script')
+      if ('error' in next) throw next.error
+      return {
+        content: [{ type: 'text' as const, text: next.text }],
+        finishReason:
+          next.cutOff === true
+            ? { unified: 'length' as const, raw: 'length' }
+            : { unified: 'stop' as const, raw: 'stop' },
+        usage: USAGE,
+        warnings: [],
+      }
+    },
+  })
+  vi.mocked(getModel).mockReturnValue(model as never)
+  return model
+}
+
+const RATIONALE = 'The guard waving her through closes the crossing.'
+const reply = (turn: string): string => JSON.stringify({ end_entry_id: turn, rationale: RATIONALE })
+
+// The text of the request's last user message, the prompt's user half with the reply contract.
+function sentUser(model: MockLanguageModelV3): string {
+  const message = model.doGenerateCalls[0]?.prompt.filter((m) => m.role === 'user').at(-1)
+  if (message?.role !== 'user') throw new Error('the request carried no user message')
+  return message.content.map((part) => (part.type === 'text' ? part.text : '')).join('')
+}
+
+describe('closeBoundaryPhase over candidates', () => {
+  beforeEach(() => {
+    openBranch({ chapterTokenThreshold: THRESHOLD })
+    hydrateEntries(phaseDb, 'b1', CANDIDATE_REGION)
+  })
+
+  it('ends on a standing pick with no model call', async () => {
+    scriptModel([])
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    await expectEndsOn(phaseCtx(), { startEntryId: 'e1', endEntryId: 'e9' })
+    expect(getModel).not.toHaveBeenCalled()
+  })
+
+  it("ends on the model's pick, after one call, and logs it", async () => {
+    const model = scriptModel([{ text: reply('t2') }])
+    const log = spyLogger()
+    await expectEndsOn(phaseCtx({ log }), { startEntryId: 'e1', endEntryId: 'e5' })
+    expect(model.doGenerateCalls).toHaveLength(1)
+    expect(log.debug).toHaveBeenCalledWith('memory.close_boundary_picked', {
+      endEntryId: 'e5',
+      turn: 't2',
+      rationale: RATIONALE,
+      candidates: 3,
+    })
+    expect(log.warn).not.toHaveBeenCalled()
+  })
+
+  it('ends on the latest candidate after a reply naming a non-candidate twice', async () => {
+    const model = scriptModel([{ text: reply('t9') }, { text: reply('t9') }])
+    const log = spyLogger()
+    const ctx = phaseCtx({ log })
+    const { events, result } = await drain(ctx)
+    expect(result).toEqual({ status: 'completed' })
+    expect(closeRangeOf(ctx.intermediates)).toMatchObject({ startEntryId: 'e1', endEntryId: 'e7' })
+    expect(model.doGenerateCalls).toHaveLength(2)
+    // The first attempt's parse failure, retried on the same prompt.
+    expect(events).toEqual([
+      { type: 'recoverable_error', error: { kind: 'phase-logic', detail: expect.any(String) } },
+    ])
+    expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
+      tier: 'parse',
+      endEntryId: 'e7',
+    })
+  })
+
+  it('ends on the latest candidate after one cut-off reply', async () => {
+    const model = scriptModel([
+      { text: '{"end_entry_id": "t2", "rationale": "The gua', cutOff: true },
+    ])
+    const log = spyLogger()
+    const ctx = phaseCtx({ log })
+    const { events, result } = await drain(ctx)
+    expect(result).toEqual({ status: 'completed' })
+    expect(closeRangeOf(ctx.intermediates)).toMatchObject({ startEntryId: 'e1', endEntryId: 'e7' })
+    expect(model.doGenerateCalls).toHaveLength(1)
+    expect(events).toEqual([])
+    expect(log.warn).toHaveBeenCalledWith('memory.close_boundary_fallback', {
+      tier: 'reply-cut-off',
+      endEntryId: 'e7',
+    })
+  })
+
+  it('fails on a provider failure and parks no range', async () => {
+    const model = scriptModel([
+      {
+        error: new APICallError({
+          message: 'unauthorized',
+          url: 'http://x/v1/chat/completions',
+          requestBodyValues: {},
+          statusCode: 401,
+        }),
+      },
+    ])
+    const ctx = phaseCtx()
+    const { result } = await drain(ctx)
+    expect(result).toMatchObject({ status: 'failed', error: { kind: 'provider', reason: 'auth' } })
+    expect(ctx.intermediates).toEqual({})
+    expect(model.doGenerateCalls).toHaveLength(1)
+  })
+
+  it('returns aborted for a cancelled run, sending nothing and parking no range', async () => {
+    const model = scriptModel([{ text: reply('t2') }])
+    const controller = new AbortController()
+    controller.abort()
+    const ctx = phaseCtx({ abortSignal: controller.signal })
+    const { result } = await drain(ctx)
+    expect(result).toEqual({ status: 'aborted' })
+    expect(ctx.intermediates).toEqual({})
+    expect(model.doGenerateCalls).toHaveLength(0)
+  })
+
+  it.each([
+    {
+      name: 'sends 8000 when neither the profile nor an override sets a max output',
+      profile: {},
+      override: undefined,
+      sent: 8000,
+    },
+    {
+      name: "sends the profile's max output",
+      profile: { maxOutput: 3000 },
+      override: undefined,
+      sent: 3000,
+    },
+    {
+      name: "sends the story override's max output",
+      profile: { maxOutput: 3000 },
+      override: { providerId: PROVIDER.id, modelId: 'big', maxOutput: 2500 },
+      sent: 2500,
+    },
+    {
+      name: 'sends 8000 under an override that sets none, though the profile does',
+      profile: { maxOutput: 3000 },
+      override: { providerId: PROVIDER.id, modelId: 'big' },
+      sent: 8000,
+    },
+  ])('$name', async ({ profile, override, sent }) => {
+    await wireLore(profile)
+    openBranch({
+      chapterTokenThreshold: THRESHOLD,
+      ...(override === undefined ? {} : { models: { 'lore-mgmt': override } }),
+    })
+    const model = scriptModel([{ text: reply('t2') }])
+    await drain(phaseCtx())
+    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(sent)
+  })
+})
+
+describe('closeBoundaryPhase — the newest reply', () => {
+  it('never offers it, though it sits inside the bounds', async () => {
+    openBranch({ chapterTokenThreshold: THRESHOLD })
+    hydrateEntries(phaseDb, 'b1', NEWEST_IN_RANGE)
+    const model = scriptModel([{ text: reply('t1') }])
+    const log = spyLogger()
+    await expectEndsOn(phaseCtx({ log }), { startEntryId: 'e1', endEntryId: 'e3' })
+    expect(log.debug).toHaveBeenCalledWith(
+      'memory.close_boundary_picked',
+      expect.objectContaining({ endEntryId: 'e3', candidates: 1 }),
+    )
+    expect(sentUser(model)).not.toContain('The newest reply ends at the toll house.')
+  })
+})
+
+describe('refineBoundaryReply', () => {
+  // AC3: the mock matches a request by its rendered schema block, which refinement must not move.
+  it("renders the plain schema's JSON Schema", () => {
+    expect(z.toJSONSchema(refineBoundaryReply(new Set(['t1', 't2', 't3'])))).toEqual(
+      z.toJSONSchema(chapterBoundarySchema),
+    )
   })
 })

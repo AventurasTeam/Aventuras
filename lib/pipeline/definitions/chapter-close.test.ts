@@ -30,7 +30,11 @@ import {
   openCloseFixture,
   type CloseFixture,
 } from './__tests__/close-fixture'
-import { CHAPTER_CLOSE_RESOLVES, ensureChapterClosePipelineRegistered } from './chapter-close'
+import {
+  CHAPTER_CLOSE_AGENT_RESOLVES,
+  CHAPTER_CLOSE_RESOLVES,
+  ensureChapterClosePipelineRegistered,
+} from './chapter-close'
 import { closeAgentPhase } from './chapter-close-agent'
 import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
@@ -231,16 +235,18 @@ function abortsOnSignal(): void {
 }
 
 describe('the chapter-close declaration', () => {
-  it('pins C2: four phases in order, lore-mgmt on all but report, and every field', () => {
+  it('pins C2: four phases in order, lore-mgmt on all but report, tool calling at the agent, and every field', () => {
     const pipeline = getPipeline(CHAPTER_CLOSE_KIND)
     const lore = [{ target: 'lore-mgmt' }]
+    const loreWithTools = [{ target: 'lore-mgmt', requires: 'toolCalling' }]
 
     expect(CHAPTER_CLOSE_RESOLVES).toEqual(lore)
+    expect(CHAPTER_CLOSE_AGENT_RESOLVES).toEqual(loreWithTools)
     expect(pipeline.kind).toBe('chapter-close')
     expect(pipeline.phases).toEqual([
       { name: 'boundary', run: closeBoundaryPhase, resolves: lore },
       { name: 'metadata', run: closeMetadataPhase, resolves: lore },
-      { name: 'agent', run: closeAgentPhase, resolves: lore },
+      { name: 'agent', run: closeAgentPhase, resolves: loreWithTools },
       { name: 'report', run: closeReportPhase },
     ])
     expect(pipeline.phases[3]).not.toHaveProperty('resolves')

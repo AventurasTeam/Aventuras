@@ -32,6 +32,10 @@ export function describeSuggestionFailure(error: PipelineError | null | undefine
   }
   if (error?.kind === 'context-window') return suggestionWindowCopy(error)
   if (error?.kind === 'provider') return t('reader:suggestions.failure.llmCall')
-  if (error?.kind === 'config-resolver') return t(SUGGESTION_RESOLVER_COPY[error.failure])
+  // Only a close's pre-flight raises 'tool-calling-off', so the strip never words it.
+  if (error?.kind === 'config-resolver')
+    return error.failure === 'tool-calling-off'
+      ? t('reader:suggestions.errorBody')
+      : t(SUGGESTION_RESOLVER_COPY[error.failure])
   return t('reader:suggestions.errorBody')
 }

@@ -229,7 +229,11 @@ chips. Click toggles the user override; visual state distinguishes
 detected-on (filled), user-overridden-on (filled, marked), and
 off (outline). `toolCalling` has a fourth, unknown (dashed outline), since
 a close runs on an unknown model and refuses one flagged off; most models
-sit there until a catalog publishes the capability or the user sets it.
+sit there until a catalog publishes the capability or the user sets it. A
+catalog's fresh value replaces a stored one, so the user's `toolCalling`
+setting lives beside the detected value, as `contextWindowOverrides` does,
+or a refresh replaces it (M7.1 builds it;
+[Detection](../../../architecture.md#detection)).
 
 | Category         | Badge | Capability                                                                                                                                                                   |
 | ---------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -295,8 +299,8 @@ If a request later fails for what looks like a capability mismatch,
 the provider-error mapper does best-effort keyword matching against the
 response body for the three capabilities a request carries — `thinking`,
 `reasoning` or `budget_tokens` for reasoning, `response_format` or
-`json_schema` for structured output, `tools` or `tool_choice` for tool
-calling — and, when the request as sent
+`json_schema` for structured output, `tool_choice`, `tool choice`,
+`tools` or `tool use` for tool calling — and, when the request as sent
 carried the capability named, threads the capability and the matched
 word through
 `PipelineError.provider.possibleCapabilityMismatch` (see

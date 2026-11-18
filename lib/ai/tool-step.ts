@@ -153,7 +153,7 @@ export async function generateToolStep(
   request: ToolStepRequest,
   config: ResolveModelConfig,
   signal: AbortSignal,
-  options: StructuredCallOptions,
+  options: Pick<StructuredCallOptions, 'actionId' | 'cacheSystemPrefix'>,
 ): Promise<ToolStepResult> {
   const resolved = prepareGeneration(target, config, options.actionId ?? undefined)
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }

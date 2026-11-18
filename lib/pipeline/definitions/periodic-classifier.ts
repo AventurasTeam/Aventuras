@@ -1,12 +1,6 @@
 import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
-import { boundedSignal } from '@/lib/abort'
-import {
-  CALL_TIMEOUT_DEFAULT_MS,
-  callTimeoutMs,
-  generateStructured,
-  type ResolveModelConfig,
-} from '@/lib/ai'
+import { CALL_TIMEOUT_DEFAULT_MS, callTimeoutMs, type ResolveModelConfig } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   buildClassifierActions,
@@ -63,7 +57,8 @@ import { PER_TURN_KIND } from './per-turn'
 import { storesHoldBranch } from './stores-hold-branch'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import { pipelineErrorDetail, retriedAttemptEvents, structuredCallFailure } from '../call-error'
+import { boundedStructuredCall } from '../bounded-structured-call'
+import { pipelineErrorDetail } from '../call-error'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, ResolverInput } from '../types'
 
 export { PERIODIC_CLASSIFIER_KIND }
@@ -273,40 +268,27 @@ export async function* periodicClassifierPhase(
   // Read by the status block; left behind by a crash, it holds the branch until a boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))
 
-  const bounded = boundedSignal(ctx.abortSignal, timeoutMs)
-  let result
-  try {
-    result = await generateStructured(
-      'classifier',
-      prompt,
-      classifierReplySchema(mentionedPlaces),
-      modelConfig,
-      bounded.signal,
-      { actionId: ctx.actionId },
-    )
-  } finally {
-    bounded.dispose()
-  }
-  const retried = result.status === 'not-configured' ? [] : result.recoverable
-  yield* retriedAttemptEvents(result, 'classifier')
+  const call = yield* boundedStructuredCall({
+    target: 'classifier',
+    phaseName: CLASSIFY_PHASE,
+    prompt,
+    schema: classifierReplySchema(mentionedPlaces),
+    config: modelConfig,
+    signal: ctx.abortSignal,
+    options: { actionId: ctx.actionId },
+    timeoutMs,
+  })
   // An interrupt leaves the watermark; onInterrupt restores the pre-run status.
-  if (result.status === 'aborted' && !bounded.expired()) return { status: 'aborted' }
-  if (result.status !== 'ok') {
-    // An expiry aborts the call as a cancel does, but it is a provider fault: it fails the pass,
-    // leaving the watermark, so the next Send owes the pass (classifier.md → Failure policy).
-    const failure = structuredCallFailure(result, {
-      target: 'classifier',
-      phaseName: CLASSIFY_PHASE,
-      timeoutMs,
-    })
-    await writeStatus(
-      ctx,
-      nextStatusOnFailure(status, { error: failure.lastError, at: Date.now() }),
-    )
-    return { status: 'failed', error: failure.error }
+  if (call.status === 'aborted') return { status: 'aborted' }
+  if (call.status === 'failed') {
+    // An expiry fails the pass as any provider fault does, leaving the watermark, so the next Send
+    // owes the pass (classifier.md → Failure policy).
+    await writeStatus(ctx, nextStatusOnFailure(status, { error: call.lastError, at: Date.now() }))
+    return { status: 'failed', error: call.error }
   }
+  const retried = call.recoverable
 
-  const { reply, malformed } = readClassifierReply(result.value)
+  const { reply, malformed } = readClassifierReply(call.value)
   for (const drop of malformed) ctx.log.warn('classifier.entry_malformed', drop)
   // classifier.md → ID handling: a placeholder in prose would name another row in a later call.
   const extraction = nameIdsInProse(reply, idNames(idMap, { entities, happenings, threads }, reply))

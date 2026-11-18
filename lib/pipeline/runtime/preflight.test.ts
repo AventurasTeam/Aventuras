@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS } from '@/lib/db'
+import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type ProviderCapabilities } from '@/lib/db'
 
 import type { PhaseFn, Pipeline, PreflightSnapshot, ResolverInput } from '../types'
 import { runPreflight } from './preflight'
@@ -209,5 +209,145 @@ describe('runPreflight', () => {
       failure: 'override-provider-missing',
       target: 'classifier',
     })
+  })
+})
+
+// lore-mgmt on the agent profile's model `m`, cached with the capabilities a case gives it.
+function closeSnapshot(capabilities?: ProviderCapabilities): PreflightSnapshot {
+  const snap = wiredSnapshot()
+  snap.appSettings.assignments = { ...snap.appSettings.assignments, 'lore-mgmt': 'ap' }
+  snap.appSettings.providers = snap.appSettings.providers.map((p) => ({
+    ...p,
+    cachedModels: [capabilities === undefined ? { id: 'm' } : { id: 'm', capabilities }],
+  }))
+  return snap
+}
+
+// The close's declaration (milestone C2): lore-mgmt at each model phase, tool calling at the agent.
+const closeShaped = pipelineOf([
+  { name: 'boundary', resolves: [{ target: 'lore-mgmt' }] },
+  { name: 'metadata', resolves: [{ target: 'lore-mgmt' }] },
+  { name: 'agent', resolves: [{ target: 'lore-mgmt', requires: 'toolCalling' }] },
+  { name: 'report' },
+])
+
+// generation-pipeline.md → Config pre-flight validation: a chapter close's tool calling.
+describe('runPreflight — a required capability', () => {
+  it('refuses a model flagged off at the phase that requires it, naming the model', () => {
+    expect(runPreflight(closeShaped, closeSnapshot({ toolCalling: false }))).toEqual({
+      kind: 'config-resolver',
+      failure: 'tool-calling-off',
+      target: 'lore-mgmt',
+      phaseName: 'agent',
+      modelId: 'm',
+    })
+  })
+
+  it.each([
+    ['flagged on', { toolCalling: true }],
+    ['with the flag absent', { reasoning: true }],
+    ['with an empty capabilities object', {}],
+  ] as const)('passes a model %s', (_label, capabilities) => {
+    expect(runPreflight(closeShaped, closeSnapshot(capabilities))).toBeNull()
+  })
+
+  it('passes a cached model with no capabilities object', () => {
+    expect(runPreflight(closeShaped, closeSnapshot())).toBeNull()
+  })
+
+  it('passes a model the catalog never listed', () => {
+    const snap = closeSnapshot({ toolCalling: false })
+    snap.appSettings.providers = snap.appSettings.providers.map((p) => ({ ...p, cachedModels: [] }))
+    expect(runPreflight(closeShaped, snap)).toBeNull()
+  })
+
+  it('passes a custom model id beside a cached model flagged off', () => {
+    const snap = closeSnapshot({ toolCalling: false })
+    snap.appSettings.providers = snap.appSettings.providers.map((p) => ({
+      ...p,
+      customModelIds: ['my-finetune'],
+    }))
+    snap.appSettings.profiles = snap.appSettings.profiles.map((p) =>
+      p.id === 'ap' ? { ...p, modelRef: { providerId: 'prov-1', modelId: 'my-finetune' } } : p,
+    )
+    expect(runPreflight(closeShaped, snap)).toBeNull()
+  })
+
+  it("reads the story override's model, not the profile's", () => {
+    const snap = closeSnapshot({ toolCalling: false })
+    snap.appSettings.providers = snap.appSettings.providers.map((p) => ({
+      ...p,
+      cachedModels: [
+        ...(p.cachedModels ?? []),
+        { id: 'm-tools', capabilities: { toolCalling: true } },
+        { id: 'm-plain', capabilities: { toolCalling: false } },
+      ],
+    }))
+    snap.storySettings = {
+      ...STORY_SETTINGS_DEFAULTS,
+      models: { 'lore-mgmt': { providerId: 'prov-1', modelId: 'm-tools' } },
+    }
+    expect(runPreflight(closeShaped, snap)).toBeNull()
+
+    snap.storySettings = {
+      ...STORY_SETTINGS_DEFAULTS,
+      models: { 'lore-mgmt': { providerId: 'prov-1', modelId: 'm-plain' } },
+    }
+    expect(runPreflight(closeShaped, snap)).toEqual({
+      kind: 'config-resolver',
+      failure: 'tool-calling-off',
+      target: 'lore-mgmt',
+      phaseName: 'agent',
+      modelId: 'm-plain',
+    })
+  })
+
+  it('reports an unassigned lore-mgmt at its first phase, before the capability', () => {
+    const snap = closeSnapshot({ toolCalling: false })
+    snap.appSettings.assignments = { retrieval: 'ap', classifier: 'ap' }
+    expect(runPreflight(closeShaped, snap)).toEqual({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      target: 'lore-mgmt',
+      phaseName: 'boundary',
+    })
+  })
+
+  it("reports a requiring input's own resolve failure, not the capability", () => {
+    const snap = closeSnapshot({ toolCalling: false })
+    snap.appSettings.assignments = { ...snap.appSettings.assignments, 'lore-mgmt': 'gone' }
+    const pipeline = pipelineOf([
+      { name: 'agent', resolves: [{ target: 'lore-mgmt', requires: 'toolCalling' }] },
+    ])
+    expect(runPreflight(pipeline, snap)).toEqual({
+      kind: 'config-resolver',
+      failure: 'profile-missing',
+      target: 'lore-mgmt',
+      phaseName: 'agent',
+    })
+  })
+
+  it('reports whichever failure comes first in phase order', () => {
+    const snap = closeSnapshot({ toolCalling: false })
+    snap.appSettings.assignments = { ...snap.appSettings.assignments, classifier: 'gone' }
+    const classify = { name: 'classify', resolves: [{ target: 'classifier' }] } as const
+    const agent = {
+      name: 'agent',
+      resolves: [{ target: 'lore-mgmt', requires: 'toolCalling' }],
+    } as const
+
+    expect(runPreflight(pipelineOf([classify, agent]), snap)).toMatchObject({
+      failure: 'profile-missing',
+      phaseName: 'classify',
+    })
+    expect(runPreflight(pipelineOf([agent, classify]), snap)).toMatchObject({
+      failure: 'tool-calling-off',
+      phaseName: 'agent',
+    })
+  })
+
+  it('lets an input that requires nothing through on a model flagged off', () => {
+    const pipeline = pipelineOf([{ name: 'metadata', resolves: [{ target: 'lore-mgmt' }] }])
+    expect(runPreflight(pipeline, closeSnapshot({ toolCalling: false }))).toBeNull()
   })
 })

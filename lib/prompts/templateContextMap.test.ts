@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { TEMPLATE_IDS } from './ids'
 import {
+  BOUNDARY_ONLY_CHAPTER_VARIABLES,
   CLOSE_ONLY_CHAPTER_VARIABLES,
   DISPLAY_GROUPS,
   MERGE_ONLY_CHAPTER_VARIABLES,
@@ -50,7 +51,7 @@ describe('templateContextMap', () => {
     expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterMetadataMerge]).toBe('chapter')
   })
 
-  it("defines the chapter group's variables: the metadata builders' and a close task's own", () => {
+  it("defines the chapter group's variables: the metadata builders', a close task's and boundary's", () => {
     expect(VARIABLES.chapter.map((v) => v.name)).toEqual([
       'entries',
       'previousChapterSummary',
@@ -72,6 +73,10 @@ describe('templateContextMap', () => {
       'closeAwarenessRows',
       'closeChapterSummary',
       'closeChapterTurns',
+      'boundaryCandidates',
+      'boundaryRegionTokens',
+      'boundaryThreshold',
+      'boundaryActiveThreads',
     ])
   })
 
@@ -125,6 +130,29 @@ describe('templateContextMap', () => {
       required: false,
     })
     expect(DISPLAY_GROUPS.Story).toContain('partSummaries')
+  })
+
+  // Only boundary selection's render sets them (chapter-close.md → Phase 1).
+  it('lists the boundary-only chapter variables, none required, each under its display group', () => {
+    expect(BOUNDARY_ONLY_CHAPTER_VARIABLES).toEqual([
+      'boundaryCandidates',
+      'boundaryRegionTokens',
+      'boundaryThreshold',
+      'boundaryActiveThreads',
+    ])
+    const boundaryOnly: readonly string[] = BOUNDARY_ONLY_CHAPTER_VARIABLES
+    const defs = VARIABLES.chapter.filter((v) => boundaryOnly.includes(v.name))
+    expect(defs.map((v) => [v.name, v.category, v.required])).toEqual([
+      ['boundaryCandidates', 'Story', false],
+      ['boundaryRegionTokens', 'Story', false],
+      ['boundaryThreshold', 'Story Config', false],
+      ['boundaryActiveThreads', 'Plot', false],
+    ])
+    for (const def of defs) expect(DISPLAY_GROUPS[def.category], def.name).toContain(def.name)
+  })
+
+  it('maps the boundary template to the chapter group', () => {
+    expect(TEMPLATE_GROUPS[TEMPLATE_IDS.chapterBoundary]).toBe('chapter')
   })
 
   it("maps the close's task templates to the chapter group", () => {

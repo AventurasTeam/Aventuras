@@ -125,6 +125,41 @@ function closeKinds(fx: CloseFixture): PipelineAction['kind'][] {
   return ['createChapter', ...Array.from({ length: stamps }, () => 'stampEntryChapter' as const)]
 }
 
+// A redo that stamps a pick's end entry again restores the chapter that pick would close.
+describe('a pick the redo of a close stamps', () => {
+  it('drops a pick on the end entry once redo closes it into the chapter again', async () => {
+    const fx = await openCloseFixture()
+    const end = fx.replyIds[END_REPLY]
+    expect(expectRan(await startManualClose(fx.branchId, end, fx.ctx)).outcome).toBe('completed')
+    expect(await undoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
+    generationStore.setPendingClose(fx.branchId, { endEntryId: end })
+
+    expect(await redoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
+
+    const [closed] = await chapterRows(fx)
+    expect((await entryRows(fx)).find((e) => e.id === end)?.chapterId).toBe(closed?.id)
+    expect(generationStore.getTxState().pendingClose.has(fx.branchId)).toBe(false)
+  })
+
+  it('keeps a pick past the closed range once redo closes the chapter again', async () => {
+    const fx = await openCloseFixture()
+    const later = fx.replyIds[END_REPLY + 1]
+    expect(
+      expectRan(await startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx)).outcome,
+    ).toBe('completed')
+    expect(await undoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
+    generationStore.setPendingClose(fx.branchId, { endEntryId: later })
+
+    expect(await redoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
+
+    expect(await chapterRows(fx)).toHaveLength(1)
+    expect((await entryRows(fx)).find((e) => e.id === later)?.chapterId).toBeNull()
+    expect(generationStore.getTxState().pendingClose.get(fx.branchId)).toEqual({
+      endEntryId: later,
+    })
+  })
+})
+
 describe('reversing a close that ran', () => {
   it('takes the row, the report and every stamp in one CTRL-Z, then the turn; redo gives each back whole', async () => {
     const fx = await openCloseFixture()

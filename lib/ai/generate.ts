@@ -435,6 +435,8 @@ export type StructuredCallOptions = {
   actionId: string | null
   /** The prompt by section: counted before the request, its user half primed for the check. */
   sections?: PromptSectionsInput
+  /** Sent as the max output when the resolved settings set none; a cut-off reports this figure. */
+  defaultMaxOutput?: number
 }
 
 // A reply without them (a fake returning only text) reads as finished, with no counts.
@@ -490,10 +492,11 @@ export async function generateStructured<T>(
   if (!resolved.ok) return { status: 'not-configured', kind: resolved.kind }
   const { providerId, modelId, providerType } = resolved
   const attribution = options.actionId === null ? undefined : { actionId: options.actionId }
+  // Cut-off replies → The cause: a cut names this figure, never the body's max_tokens.
+  const maxOutput = resolved.params.maxOutput ?? options.defaultMaxOutput
 
-  // z.toJSONSchema throws on unrepresentable schemas (transforms, refinements);
-  // surface it as a typed failure rather than a raw rejection past the caller's
-  // runAction wrapper.
+  // toJSONSchema throws on a transform (a refinement renders as its plain schema): return a typed
+  // failure, not a raw rejection past the caller's runAction wrapper.
   let jsonSchema: JsonSchema
   try {
     jsonSchema = z.toJSONSchema(schema) as JsonSchema
@@ -563,7 +566,7 @@ export async function generateStructured<T>(
     if (!isCutOff(reply.finishReason)) return parseStructured(reply.text, schema)
     const failure = replyCutOff({
       usage: reply.usage,
-      maxOutput: resolved.params.maxOutput,
+      maxOutput,
       window: check.window.tokens,
       promptEstimate: check.estimate(),
       providerId,
@@ -603,6 +606,7 @@ export async function generateStructured<T>(
           ...promptParams(prompt),
           abortSignal: bounded?.signal ?? sig,
           ...resolved.callSettings,
+          ...(maxOutput === undefined ? {} : { maxOutputTokens: maxOutput }),
         })
         checkInputTokens({
           usage: call.usage,

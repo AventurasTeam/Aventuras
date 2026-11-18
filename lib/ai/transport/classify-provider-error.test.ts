@@ -77,6 +77,24 @@ const errorBody = (message: string): string =>
 const CARRIED_ALL = { reasoning: true, structuredOutput: true, toolCalling: true } as const
 const CARRIED_NONE = { reasoning: false, structuredOutput: false, toolCalling: false } as const
 
+// vLLM's 400 for a step's `tool_choice: 'auto'` on a server started without a tool parser.
+const VLLM_TOOL_CHOICE_BODY = JSON.stringify({
+  object: 'error',
+  message: '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser to be set',
+  type: 'BadRequestError',
+  param: null,
+  code: 400,
+})
+
+// OpenRouter's 404 when no provider serving the model takes a tool list.
+const OPENROUTER_NO_TOOLS_BODY = JSON.stringify({
+  error: {
+    message:
+      'No endpoints found that support tool use. To learn more about provider routing, visit: https://openrouter.ai/docs/provider-routing',
+    code: 404,
+  },
+})
+
 describe('classifyProviderError', () => {
   it('maps a ProviderTimeoutError to a retryable timeout', () => {
     expect(classifyProviderError(new ProviderTimeoutError())).toEqual({
@@ -577,7 +595,9 @@ describe('capabilityHintOf', () => {
     ['thinking is not enabled for this model', 'reasoning', 'thinking'],
     ['reasoning_effort is not supported', 'reasoning', 'reasoning'],
     ['tool_choice is not supported by this model', 'toolCalling', 'tool_choice'],
+    ['auto tool choice is not enabled', 'toolCalling', 'tool choice'],
     ['tools are not supported by this model', 'toolCalling', 'tools'],
+    ['no endpoints support tool use', 'toolCalling', 'tool use'],
   ] as const)('reads %j as a %s hint', (message, capability, matched) => {
     expect(capabilityHintOf(rejection(400, errorBody(message)), CARRIED_ALL)).toEqual({
       capability,
@@ -629,6 +649,42 @@ describe('capabilityHintOf', () => {
     expect(hintOf('tool_choice requires tools')).toEqual({
       capability: 'toolCalling',
       matched: 'tool_choice',
+    })
+    expect(hintOf('auto tool choice requires tools')).toEqual({
+      capability: 'toolCalling',
+      matched: 'tool choice',
+    })
+    expect(hintOf('tools are not supported for tool use')).toEqual({
+      capability: 'toolCalling',
+      matched: 'tools',
+    })
+  })
+
+  it.each([
+    ['vLLM', 400, VLLM_TOOL_CHOICE_BODY, 'tool choice'],
+    ['OpenRouter', 404, OPENROUTER_NO_TOOLS_BODY, 'tool use'],
+  ] as const)(
+    "reads %s's refusal of a tool list only when the request carried one",
+    (_server, status, body, matched) => {
+      const error = rejection(status, body)
+      expect(capabilityHintOf(error, { ...CARRIED_NONE, toolCalling: true })).toEqual({
+        capability: 'toolCalling',
+        matched,
+      })
+      expect(capabilityHintOf(error, { ...CARRIED_ALL, toolCalling: false })).toBeUndefined()
+    },
+  )
+
+  it("keeps the hint on OpenRouter's 404, an unknown failure it doesn't retry", () => {
+    const result = classifyProviderError(rejection(404, OPENROUTER_NO_TOOLS_BODY), {
+      ...CARRIED_NONE,
+      toolCalling: true,
+    })
+    expect(result.retryable).toBe(false)
+    expect(result.error).toMatchObject({
+      tier: 'provider',
+      reason: 'unknown',
+      possibleCapabilityMismatch: { capability: 'toolCalling', matched: 'tool use' },
     })
   })
 

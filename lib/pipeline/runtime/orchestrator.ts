@@ -4,7 +4,7 @@ import type { GroupOutcome, MutationResult } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink, type LogKind } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { appSettingsStore, currentStoryStore, generationStore, type RunState } from '@/lib/stores'
+import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import { pipelineErrorDetail } from '../call-error'
@@ -30,7 +30,7 @@ import {
 } from './action-port'
 import { checkConcurrencyContract } from './concurrency'
 import { pipelineEventBus } from './event-bus'
-import { runPreflight } from './preflight'
+import { preflightSnapshot, runPreflight } from './preflight'
 
 class ActionLayerError extends Error {
   readonly detail: string
@@ -583,10 +583,10 @@ async function driveRun(
   const ownStory = open?.storyId === run.storyId && open.branchId === run.branchId
   let preflightError: PipelineError | null
   try {
-    preflightError = runPreflight(getPipeline(run.kind), {
-      appSettings: appSettingsStore.getAppSettings(),
-      storySettings: ownStory ? open.settings : undefined,
-    })
+    preflightError = runPreflight(
+      getPipeline(run.kind),
+      preflightSnapshot(ownStory ? open.settings : undefined),
+    )
   } catch (e) {
     preflightError = { kind: 'orchestrator', detail: messageOf(e) }
   }

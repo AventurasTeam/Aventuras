@@ -107,6 +107,22 @@ describe('providerInstanceSchema — context window keys', () => {
   })
 })
 
+describe('providerInstanceSchema — tool calling', () => {
+  const withToolCalling = (toolCalling: unknown) => ({
+    ...VALID_PROVIDER,
+    cachedModels: [{ id: 'qwen', capabilities: { toolCalling } }],
+  })
+
+  it.each([true, false])('keeps a toolCalling of %s on a cached model through a parse', (flag) => {
+    const parsed = providerInstanceSchema.parse(withToolCalling(flag))
+    expect(parsed.cachedModels?.[0].capabilities).toStrictEqual({ toolCalling: flag })
+  })
+
+  it('rejects a toolCalling that is not a boolean', () => {
+    expect(providerInstanceSchema.safeParse(withToolCalling('yes')).success).toBe(false)
+  })
+})
+
 describe('modelProfileSchema', () => {
   it('accepts a minimal narrative profile', () => {
     expect(modelProfileSchema.safeParse(VALID_PROFILE).success).toBe(true)
