@@ -118,11 +118,11 @@ describe('AppActionsMenu STORY TOOLS', () => {
     chapterOverlaysStore.__reset()
   })
 
-  it('builds Close chapter… for the story branch, opening the close modal', () => {
+  it('opens the close modal on the branch canClose was read for, not the story prop', () => {
     render(
       <AppActionsMenu
         story={STORY}
-        closeChapter={{ canClose: true, gateReason: undefined }}
+        closeChapter={{ branchId: 'br_open', canClose: true, gateReason: undefined }}
         beforeLeaveStory={leaveAtOnce}
       />,
     )
@@ -131,7 +131,7 @@ describe('AppActionsMenu STORY TOOLS', () => {
     expect(close?.disabled).toBe(false)
     expect(chapterOverlaysStore.getState().closeModal).toBeNull()
     close?.onActivate()
-    expect(chapterOverlaysStore.getState().closeModal).toEqual({ branchId: 'br_1' })
+    expect(chapterOverlaysStore.getState().closeModal).toEqual({ branchId: 'br_open' })
   })
 
   it('hands the route gate reason to a disabled entry', () => {
@@ -139,7 +139,7 @@ describe('AppActionsMenu STORY TOOLS', () => {
     render(
       <AppActionsMenu
         story={STORY}
-        closeChapter={{ canClose: true, gateReason: reason }}
+        closeChapter={{ branchId: 'br_1', canClose: true, gateReason: reason }}
         beforeLeaveStory={leaveAtOnce}
       />,
     )
@@ -151,7 +151,7 @@ describe('AppActionsMenu STORY TOOLS', () => {
   it('omits STORY TOOLS off-story, without closeChapter, and with nothing to close', () => {
     render(
       <AppActionsMenu
-        closeChapter={{ canClose: true, gateReason: undefined }}
+        closeChapter={{ branchId: 'br_1', canClose: true, gateReason: undefined }}
         beforeLeaveStory={null}
       />,
     )
@@ -169,7 +169,7 @@ describe('AppActionsMenu STORY TOOLS', () => {
     render(
       <AppActionsMenu
         story={STORY}
-        closeChapter={{ canClose: false, gateReason: undefined }}
+        closeChapter={{ branchId: 'br_1', canClose: false, gateReason: undefined }}
         beforeLeaveStory={leaveAtOnce}
       />,
     )
