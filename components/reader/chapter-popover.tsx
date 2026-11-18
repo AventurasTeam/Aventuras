@@ -294,7 +294,7 @@ function SheetUnlockWatcher({ onUnlocked }: { onUnlocked: () => void }) {
 type OverlayBodyProps = Omit<ArmProps, 'onOpenChange' | 'ref'> & {
   arm: Arm
   close: () => void
-  /** Closes the overlay and runs `run` once nothing of it is left on screen. */
+  /** Closes the overlay, then runs `run`: at once on the Popover, after its exit on the Sheet. */
   closeThen: (run: () => void) => void
   /** The last pressable row, which takes focus on open. */
   lastRow?: Ref<View>

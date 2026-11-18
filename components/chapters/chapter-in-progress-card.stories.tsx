@@ -201,7 +201,7 @@ export const CloseHeldByTheGate: Story = {
     const close = closeButton()
     await expect(close).toHaveAttribute('aria-disabled', 'true')
     await expect(screen.getByTitle(GATE_REASON)).toContainElement(close)
-    // RN-Web blocks a disabled Pressable's pointer; fireEvent goes past that to its guard.
+    // Pins the native disabled attribute: React DOM drops a click on a disabled <button>.
     fireEvent.click(close)
     await expect(args.onCloseChapter).not.toHaveBeenCalled()
   },
