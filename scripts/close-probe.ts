@@ -827,7 +827,7 @@ async function boundaryRun(k: number, ctx: DbCtx): Promise<BoundaryAttempt> {
     )
   const started = Date.now()
   // Driven here, not by the orchestrator, so its retried attempts come off the generator.
-  const call = requestChapterBoundary(phase, series, candidates, inputs)
+  const call = requestChapterBoundary(phase, candidates, inputs)
   let next = await call.next()
   while (!next.done) {
     if (next.value.type === 'recoverable_error')

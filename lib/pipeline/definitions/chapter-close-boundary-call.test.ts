@@ -76,7 +76,6 @@ const SERIES: readonly OpenRegionRow[] = [
   { id: 'e10', kind: 'user_action', position: 10, tokens: 20 },
   { id: 'e11', kind: 'ai_reply', position: 11, tokens: 80 },
 ]
-const REGION_TOKENS = 800
 
 const CANDIDATES: readonly CloseCandidate<OpenRegionRow>[] = [
   { ...SERIES[2]!, tokensThrough: 240 },
@@ -169,7 +168,7 @@ function inputs(): BoundaryCallInputs {
 }
 
 async function drain(ctx: PhaseContext = phaseCtx()) {
-  const gen = requestChapterBoundary(ctx, SERIES, CANDIDATES, inputs())
+  const gen = requestChapterBoundary(ctx, CANDIDATES, inputs())
   const events: PhaseEmittedEvent[] = []
   for (;;) {
     const next = await gen.next()
@@ -318,13 +317,16 @@ describe('requestChapterBoundary — the call', () => {
     for (const sentence of shown) expect(system).not.toContain(sentence)
   })
 
-  it("prompts with the whole region's tokens, the threshold and the active threads on one line", async () => {
+  it("prompts with the candidates' length range, not the region's total, and the active threads on one line", async () => {
     answer('t2')
     await drain()
 
     const { system, user } = generateStructuredMock.mock.calls[0]![1]
-    expect(user).toContain(String(REGION_TOKENS))
-    expect(user).toContain(String(THRESHOLD))
+    expect(user).toContain(
+      `between ${THRESHOLD / 2} and ${THRESHOLD * 1.5} tokens long, all good lengths for a chapter`,
+    )
+    expect(user).not.toContain('800')
+    expect(user).not.toContain('tokens so far')
     expect(user).toContain('Find the heir')
     expect(user).not.toContain('Find the\nheir')
     expect(user).not.toContain('The ford crossing')

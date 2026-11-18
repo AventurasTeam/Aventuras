@@ -61,7 +61,7 @@ export async function* closeBoundaryPhase(
       return refuse(`chapter-close: branch ${ctx.branchId} has no open-region reply to end on`)
     return parkRange(ctx, series[0].id, end.id)
   }
-  const call = yield* requestChapterBoundary(ctx, series, candidates, inputs)
+  const call = yield* requestChapterBoundary(ctx, candidates, inputs)
   switch (call.status) {
     case 'picked':
     case 'unusable':
