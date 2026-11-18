@@ -38,7 +38,7 @@ import { runProviderCall } from './transport/provider-call'
 import { checkInputTokens } from './truncation-check'
 
 /** memory/chapter-close.md → When a task stops: a step's output when the profile sets none. */
-export const TOOL_STEP_MAX_OUTPUT_DEFAULT = 8_000
+export const TOOL_STEP_MAX_OUTPUT_DEFAULT = 16_384
 
 /** No `execute`: the SDK would run the calls itself, in parallel, where a phase can't yield. */
 export type ToolStepTool = { description: string; inputSchema: z.ZodObject; execute?: never }

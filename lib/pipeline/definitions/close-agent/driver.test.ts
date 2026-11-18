@@ -731,13 +731,13 @@ describe('runCloseTask', () => {
     expect(await description()).toBe('A courier. first')
   })
 
-  it('stops at the budget of 24 steps and records the stop', async () => {
+  it('stops at the budget of 64 steps and records the stop', async () => {
     vi.mocked(generateToolStep).mockResolvedValue(okStep([peekCall('k')]))
 
     const { end } = await drive(taskDef(), runContext(phaseContext()))
 
-    expect(CLOSE_TASK_STEP_BUDGET).toBe(24)
-    expect(generateToolStep).toHaveBeenCalledTimes(24)
+    expect(CLOSE_TASK_STEP_BUDGET).toBe(64)
+    expect(generateToolStep).toHaveBeenCalledTimes(64)
     expect(end).toEqual({ status: 'stopped', reason: 'budget' })
     expect(ledger.stopped).toEqual([{ task: 'identity', part: 1, reason: 'budget' }])
   })

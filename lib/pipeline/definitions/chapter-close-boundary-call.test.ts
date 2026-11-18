@@ -114,9 +114,9 @@ const PARSE_LAST = { ...PARSE_FIRST, attempt: 1 } satisfies CallRetryError
 const CUT_OFF = {
   tier: 'reply-cut-off',
   cause: 'max-output',
-  outputTokens: 8000,
+  outputTokens: 16384,
   reasoningTokens: null,
-  maxOutput: 8000,
+  maxOutput: 16384,
   window: null,
   providerId: PROVIDER.id,
   modelId: 'm',
@@ -274,14 +274,14 @@ describe('readBoundaryInputs', () => {
 })
 
 describe('requestChapterBoundary — the call', () => {
-  it('asks lore-mgmt once, under the 8k default, with a schema refusing any turn but a candidate', async () => {
+  it('asks lore-mgmt once, under the 16k default, with a schema refusing any turn but a candidate', async () => {
     answer('t2')
     await drain()
 
     expect(generateStructuredMock).toHaveBeenCalledOnce()
     const [target, , schema, config, , options] = generateStructuredMock.mock.calls[0]!
     expect(target).toBe('lore-mgmt')
-    expect(options).toEqual({ actionId: 'act_close', defaultMaxOutput: 8000 })
+    expect(options).toEqual({ actionId: 'act_close', defaultMaxOutput: 16384 })
     expect(config).toMatchObject({ assignments: { 'lore-mgmt': 'prof-lore' }, storyModels: {} })
     // AC3: the block the mock matches on is the plain schema's.
     expect(z.toJSONSchema(schema)).toEqual(z.toJSONSchema(chapterBoundarySchema))

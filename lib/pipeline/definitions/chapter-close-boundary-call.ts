@@ -16,7 +16,7 @@ import type { StructuredCallFailure } from '../call-error'
 import type { PhaseContext, PhaseEmittedEvent, PhaseFailure, PipelineError } from '../types'
 
 // chapter-close.md → Phase 1: the boundary reply's output bound when the settings set none.
-const BOUNDARY_MAX_OUTPUT_DEFAULT = 8_000
+const BOUNDARY_MAX_OUTPUT_DEFAULT = 16_384
 
 export type BoundaryCallContext = Pick<
   PhaseContext,

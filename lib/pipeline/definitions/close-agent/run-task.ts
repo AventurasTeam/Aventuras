@@ -16,8 +16,8 @@ import { CLOSE_TARGET, CLOSE_PHASE } from '../intermediates'
 
 const TARGET = CLOSE_TARGET
 
-/** chapter-close.md → When a task stops: the steps a task gets per part, tuned in play. */
-export const CLOSE_TASK_STEP_BUDGET = 24
+/** chapter-close.md → When a task stops: the steps a task gets per part. */
+export const CLOSE_TASK_STEP_BUDGET = 64
 
 export type TaskEnd =
   | { status: 'finished' }

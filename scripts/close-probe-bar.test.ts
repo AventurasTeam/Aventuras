@@ -259,26 +259,28 @@ describe('tallyRun', () => {
     ])
   })
 
-  it("misses a task whose final attempt's reply reached 8,000 output tokens, written or not", () => {
-    const tallied = run({ attempts: [attempt('threads', 2, 8_000)] })
+  it("misses a task whose final attempt's reply reached 16,384 output tokens, written or not", () => {
+    const tallied = run({ attempts: [attempt('threads', 2, 16_384)] })
     expect(holdFor(tallied, 'threads')).toEqual({
       task: 'threads',
       held: false,
-      why: "a step's reply reached 8000 output tokens",
+      why: "a step's reply reached 16384 output tokens",
     })
     expect(holdFor(tallied, 'identity')).toEqual({ task: 'identity', held: true, why: 'held' })
-    expect(holdFor(run({ attempts: [attempt('lifecycle', 1, 8_000)] }), 'lifecycle')).toEqual({
+    expect(holdFor(run({ attempts: [attempt('lifecycle', 1, 16_384)] }), 'lifecycle')).toEqual({
       task: 'lifecycle',
       held: false,
-      why: "a step's reply reached 8000 output tokens",
+      why: "a step's reply reached 16384 output tokens",
     })
-    expect(holdFor(run({ attempts: [attempt('identity', 1, 7_999)] }), 'identity')?.held).toBe(true)
+    expect(holdFor(run({ attempts: [attempt('identity', 1, 16_383)] }), 'identity')?.held).toBe(
+      true,
+    )
   })
 
   it("leaves a cut attempt's output out of the task's largest step output", () => {
     const attempts = [
-      attempt('threads', 1, 8_000, true),
-      attempt('threads', 1, 7_999),
+      attempt('threads', 1, 16_384, true),
+      attempt('threads', 1, 16_383),
       attempt('identity', 2, 5_000),
     ]
     expect(run({ attempts }).holds.every(({ held }) => held)).toBe(true)

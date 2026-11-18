@@ -519,16 +519,16 @@ describe('generateToolStep: the calls', () => {
   })
 })
 
-// memory/chapter-close.md → When a task stops: the profile's max output, else 8k.
+// memory/chapter-close.md → When a task stops: the profile's max output, else 16k.
 describe('generateToolStep: the output limit', () => {
-  it('is 8000 tokens', () => {
-    expect(TOOL_STEP_MAX_OUTPUT_DEFAULT).toBe(8000)
+  it('is 16384 tokens', () => {
+    expect(TOOL_STEP_MAX_OUTPUT_DEFAULT).toBe(16384)
   })
 
   it.each([
-    ['no profile max output', {}, 8000],
+    ['no profile max output', {}, 16384],
     ["the profile's max output", { profile: { maxOutput: 2048 } }, 2048],
-    ['a story override that sets none', { override: true, profile: { maxOutput: 2048 } }, 8000],
+    ['a story override that sets none', { override: true, profile: { maxOutput: 2048 } }, 16384],
     [
       "a story override's own max output",
       { override: { maxOutput: 1024 }, profile: { maxOutput: 2048 } },
@@ -746,15 +746,15 @@ describe('generateToolStep: the chain', () => {
 
 // Whole calls the server stopped at its limit: never run, never returned.
 const CUT_CALLS: WireCall[] = [{ id: 'call_cut', name: 'lookup', arguments: '{"query":"the cut"}' }]
-const AT_DEFAULT = { prompt_tokens: 120, completion_tokens: 8000 }
+const AT_DEFAULT = { prompt_tokens: 120, completion_tokens: 16384 }
 const cutReply = (usage = AT_DEFAULT) => openaiReply({ calls: CUT_CALLS, finish: 'length', usage })
 const DONE = openaiReply({ content: 'Done.' })
 
 const CUT_AT_DEFAULT = {
   cause: 'max-output',
-  outputTokens: 8000,
+  outputTokens: 16384,
   reasoningTokens: 0,
-  maxOutput: 8000,
+  maxOutput: 16384,
   window: null,
   providerId: 'prov',
   modelId: 'm',
@@ -835,11 +835,11 @@ describe('generateToolStep: a reply cut off', () => {
       useProvider('anthropic', { profile: { thinking: 16_000 }, window: 200_000 }),
     )
 
-    expect(bodies[0]!.max_tokens).toBe(24_000)
+    expect(bodies[0]!.max_tokens).toBe(32_384)
     expect(result).toMatchObject({
       status: 'stopped',
       reason: 'cut-off',
-      failure: { cause: 'window', outputTokens: 12_000, maxOutput: 24_000, window: 200_000 },
+      failure: { cause: 'window', outputTokens: 12_000, maxOutput: 32_384, window: 200_000 },
     })
   })
 
