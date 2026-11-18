@@ -1,8 +1,15 @@
 import { resolveModel, resolveModelCapabilities, type ResolveModelConfig } from '@/lib/ai'
+import type { StorySettings } from '@/lib/db'
+import { appSettingsStore } from '@/lib/stores'
 
 import type { Pipeline, PipelineError, PreflightSnapshot } from '../types'
 
 type ConfigResolverError = Extract<PipelineError, { kind: 'config-resolver' }>
+
+// One snapshot for a run's pre-flight and a click's, so the two agree.
+export function preflightSnapshot(storySettings: StorySettings | undefined): PreflightSnapshot {
+  return { appSettings: appSettingsStore.getAppSettings(), storySettings }
+}
 
 // Validates every resolver input against the snapshot, in phase order (declared order within a
 // parallel node). A `requires` input also fails when its model is flagged off for it; unknown

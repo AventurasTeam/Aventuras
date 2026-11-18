@@ -71,7 +71,7 @@ export {
   type RunCtxFor,
 } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
-export { runPreflight } from './runtime/preflight'
+export { preflightSnapshot, runPreflight } from './runtime/preflight'
 export type {
   BootRecoveryReport,
   RecoveredRun,
