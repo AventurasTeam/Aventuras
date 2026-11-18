@@ -136,6 +136,11 @@ const meta = {
           styles: { width: '390px', height: '844px' },
           type: 'mobile',
         },
+        phone320: {
+          name: 'Phone 320',
+          styles: { width: '320px', height: '700px' },
+          type: 'mobile',
+        },
         phone360: {
           name: 'Phone 360',
           styles: { width: '360px', height: '800px' },
@@ -220,14 +225,27 @@ const FOUR_DIGIT_ARGS = {
     ref: formatEntryRef(1059),
     endedChapterNumber: 12,
   },
-  replies: manyReplies(40, { time: 'Day 9 · 22:18', offset: 1000 }),
+  replies: manyReplies(40, { time: 'Day 113 · 22:18', offset: 1000 }),
   latestId: 'entry_1081',
   initialSelectedId: 'entry_1081',
 } satisfies RowsArgs & { initialSelectedId: string }
 
+// Canon's narrowest window (responsive.md): the start row's ref and tag no longer share a line.
+const NARROWEST_ARGS = {
+  start: {
+    ...START,
+    id: 'entry_5123',
+    ref: formatEntryRef(5123),
+    endedChapterNumber: 123,
+  },
+  replies: manyReplies(40, { time: 'Day 113 · 22:18', offset: 5000 }),
+  latestId: 'entry_5081',
+  initialSelectedId: 'entry_5081',
+} satisfies RowsArgs & { initialSelectedId: string }
+
 // chapter-timeline.md → Mobile expression: a row's labels stay whole inside its card, and the
-// snippet keeps a readable width. Phone stacks ref and tag over snippet and time; wider tiers
-// keep one line.
+// snippet keeps a readable width. Phone puts ref and tag (wrapping whole if they don't fit) over
+// snippet and time; wider tiers keep one line.
 function expectRowLegible(
   card: HTMLElement,
   {
@@ -243,11 +261,9 @@ function expectRowLegible(
     expect(rect.right).toBeLessThanOrEqual(box.right + 1)
     expect(rect.left).toBeGreaterThanOrEqual(box.left - 1)
   }
-  const ref = within(card).getByText(row.ref, { exact: true })
   const label = within(card).getByText(tag, { exact: true })
   expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth)
-  const lineHeight = parseFloat(getComputedStyle(label).lineHeight)
-  expect(label.getBoundingClientRect().height).toBeLessThan(lineHeight * 1.5)
+  expectOneLineLabel(label)
   const snippet = within(card).getByText(row.excerpt, { exact: true })
   expect(snippet.getBoundingClientRect().width).toBeGreaterThanOrEqual(minSnippet)
   const time = within(card).getByText(row.time!, { exact: true })
@@ -256,12 +272,31 @@ function expectRowLegible(
     layout === 'two-line' ? 24 : 40,
   )
   if (layout === 'two-line') {
-    expect(snippet.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-      ref.getBoundingClientRect().bottom - 1,
-    )
+    // Below every label of the first line, wherever the tag wrapped to.
+    for (const first of [within(card).getByText(row.ref, { exact: true }), label]) {
+      expect(snippet.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        first.getBoundingClientRect().bottom - 1,
+      )
+    }
   } else {
-    expect(snippet.getBoundingClientRect().top).toBeLessThan(ref.getBoundingClientRect().bottom)
+    expect(snippet.getBoundingClientRect().top).toBeLessThan(
+      within(card).getByText(row.ref, { exact: true }).getBoundingClientRect().bottom,
+    )
   }
+}
+
+function expectOneLineLabel(label: HTMLElement) {
+  const lineHeight = parseFloat(getComputedStyle(label).lineHeight)
+  expect(label.getBoundingClientRect().height).toBeLessThan(lineHeight * 1.5)
+}
+
+// The panel's head wraps whole at the narrowest widths: no label splits, nothing leaves the option.
+async function expectLatestOptionWhole(row: CloseModalRow) {
+  await userEvent.click(trigger())
+  const option = await screen.findByTestId(`close-chapter-reply-${row.id}`)
+  expectOneLineLabel(within(option).getByText(row.ref, { exact: true }))
+  expectOneLineLabel(within(option).getByText(row.time!, { exact: true }))
+  expect(option.scrollWidth).toBeLessThanOrEqual(option.clientWidth)
 }
 
 async function expectRowsLegible(
@@ -286,6 +321,7 @@ async function expectRowsLegible(
 }
 
 const PHONE_SNIPPET_MIN = 120
+const PHONE_SNIPPET_MIN_NARROWEST = 80
 
 export const Default: Story = {
   play: async ({ args }) => {
@@ -485,6 +521,16 @@ export const Phone360FourDigitRefs: Story = {
   args: FOUR_DIGIT_ARGS,
   play: async () => {
     await expectRowsLegible(FOUR_DIGIT_ARGS, 'two-line', PHONE_SNIPPET_MIN)
+    await expectLatestOptionWhole(FOUR_DIGIT_ARGS.replies[0]!)
+  },
+}
+
+export const Phone320: Story = {
+  globals: { viewport: { value: 'phone320' } },
+  args: NARROWEST_ARGS,
+  play: async () => {
+    await expectRowsLegible(NARROWEST_ARGS, 'two-line', PHONE_SNIPPET_MIN_NARROWEST)
+    await expectLatestOptionWhole(NARROWEST_ARGS.replies[0]!)
   },
 }
 

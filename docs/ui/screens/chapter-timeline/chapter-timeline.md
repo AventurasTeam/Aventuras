@@ -643,10 +643,12 @@ end-entry picker in-flow inside it.
 - **Entry-row anatomy**: the start row and picker trigger take two
   lines on phone (entry number and tag, with the chevron at the
   right, then the snippet with its time right-aligned), so the tag
-  keeps its whole label and the snippet a readable width; the
-  snippet still truncates with `text-overflow: ellipsis`. Dropdown
-  items are unchanged: their head row and two-line snippet already
-  fit.
+  keeps its whole label and the snippet a readable width. At the
+  narrowest widths the tag drops whole below the entry number
+  rather than spill past the card; the snippet still truncates with
+  `text-overflow: ellipsis`. Dropdown items keep their anatomy, and
+  their head wraps whole at the narrowest widths rather than
+  splitting a label.
 - **Empty state** (`Chapters · 0 closed + 1 in progress`) renders
   identically; only the in-progress card surfaces.
 - **Stack-aware Return** binds chrome `←`, Android `BackHandler`,

@@ -119,7 +119,7 @@ function EntryLine({
   if (phone) {
     return (
       <View className="gap-1">
-        <View className="flex-row items-center gap-2">
+        <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
           {ref}
           {tagChip}
           <View className="flex-1" />
@@ -167,14 +167,14 @@ function ReplyRow({
         selected && 'bg-bg-sunken',
       )}
     >
-      <View className="flex-row items-center gap-2">
-        <Text size="xs" variant="muted" className="font-mono">
+      <View className="flex-row flex-wrap items-center gap-x-2 gap-y-1">
+        <Text size="xs" variant="muted" className="shrink-0 font-mono">
           {row.ref}
         </Text>
         {latest ? <Tag tone="soft">{t('chapters:closeModal.latest')}</Tag> : null}
-        <View className="flex-1" />
+        {/* ml-auto keeps the time at the right, on its own line when the head wraps. */}
         {row.time != null ? (
-          <Text size="xs" variant="muted">
+          <Text size="xs" variant="muted" className="ml-auto shrink-0">
             {row.time}
           </Text>
         ) : null}
