@@ -130,8 +130,8 @@ and the catalog bullet below drops out.
   the user half (C3), so it takes no exemption in
   `system-half-stability.test.ts`. Variables, in `templateContextMap.ts`:
   each candidate's handle, position, and opening and closing sentences; the
-  region's token total; the threshold (replaced by the window's bounds, the
-  2026-11-18 decision below); the branch's active threads.
+  region's token total and the threshold (both replaced by the window's
+  bounds, the 2026-11-18 decision below); the branch's active threads.
 - `firstLastSentences(text)` in `lib/text`, over `promptProse`, as the
   pass's window reads prose. Nothing in `lib` splits sentences today. It
   takes CJK sentence marks and a character cap, so a reply with no sentence
@@ -144,7 +144,8 @@ and the catalog bullet below drops out.
   its same-prompt retry, yielding `recoverable_error` per retried attempt:
   - `ok`: the handle's entry.
   - `failed`, tier `parse` or `reply-cut-off`: `fallbackChapterEnd`, as
-    `lib/pipeline/definitions/suggestion-refresh.ts:156-159` branches.
+    `lib/pipeline/definitions/suggestion-refresh.ts:156-159` branches
+    (the latest candidate after the output-bound decision below).
     Logged, with the event added to
     [`observability.md → Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory).
     The cut-off half follows [Open questions](#open-questions).
@@ -178,7 +179,8 @@ and the catalog bullet below drops out.
 - If a catalog publishes it: `CatalogEntry` gains `toolCalling?`,
   `readToolCalling(raw)` sits beside `readContextWindow`, and
   `normalizeModelCatalog` layers it under the stored capability, so a stored
-  value wins, as every user-overridable flag does (`lib/ai/catalog.ts:53-57`).
+  value wins, as every user-overridable flag does (`lib/ai/catalog.ts:53-57`;
+  a published value replaces it after the detection decision below).
 - `ResolverInput` gains `requires?: 'toolCalling'`
   (`ResolverInput` in `lib/pipeline/types.ts`), and the `agent` phase's `lore-mgmt`
   input sets it. C2's three `resolves` stay as pinned.
@@ -402,8 +404,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 2. `lib/pipeline/definitions/chapter-close-boundary.test.ts`: a standing
    `pendingClose` and a region with no candidate each make no model call; a
    valid handle sets the range's `endEntryId` to that candidate; a reply naming a
-   non-candidate twice completes the phase on `fallbackChapterEnd`'s entry after
-   two calls; a reply cut off falls back after one call; a provider failure returns
+   non-candidate twice completes the phase on `fallbackChapterEnd`'s entry (the
+   latest candidate's, after the output-bound decision below) after two calls; a
+   reply cut off falls back after one call; a provider failure returns
    `{ status: 'failed' }` and writes no range; an abort returns
    `{ status: 'aborted' }`; with no profile max output the call sends
    8000 (16,384 after the 2026-11-18 decision below), and a profile's
@@ -425,7 +428,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
    story override's model is the one read; a `no-profile-assigned` still comes
    first.
 7. `lib/ai/catalog.test.ts`, if a catalog publishes the field: a published value
-   lands, a stored value beats it, an absent one stays undefined.
+   lands, a stored value beats it (a published value replaces it, after the
+   detection decision below), an absent one stays undefined.
    `lib/db/app-settings/app-settings-schema.test.ts` keeps the flag through a
    parse either way.
 8. `components/reader/resolver-failure-copy.test.tsx` covers
@@ -841,8 +845,9 @@ runs`: the deferral toast tells the user, and CTRL-Z of the turn a
     jump button.
   - The dirty-and-busy trace: didn't fire, in the guard specs and the
     desktop smoke.
-  - Two closes in one turn: didn't fire. `chapter-close-auto` sees one
-    `chapter-close` run.
+  - Two closes in one turn: not run. Its signal needs auto-close
+    turned on late, and `chapter-close-auto` seeds it on, so its one
+    `chapter-close` run can't show the case.
   - The native guard's round trip: not measured with an editor open.
     The Android smoke opened the modal after the Sheet dismissed, in
     about 3 s, with no editor.
@@ -895,7 +900,8 @@ The transcripts, read by hand:
 - Run 7's Identity sent arrays as JSON strings seven times.
 
 The bar code fails a task with a recorded stop even after landed writes.
-Read that way, runs 4 and 6 would pass, and the count would be 8 of 10.
+Read by its landed writes instead, runs 4 and 6 would pass, and the count
+would be 8 of 10.
 The developer's call on this miss is the 2026-11-18 budget-raise
 decision above: tune, then rerun.
 
