@@ -175,7 +175,9 @@
   body[data-modal="review-rerun"] #rerun-backdrop { display: flex; }
   /* The re-run confirm stacks over the review window it was opened from (layout.md → Stacking). */
   #rerun-backdrop { z-index: 7; }
-  body[data-rerun-turns="none"] .rerun-rollback { display: none; }
+  body[data-rerun-turns="none"] .rerun-rollback,
+  body[data-rerun-turns="none"] .rerun-turns-only { display: none; }
+  body[data-rerun-turns="some"] .rerun-no-turns-only { display: none; }
   /* The delete confirm's line after the list, by what follows a delete; the divider line shows
      only when a close runs before the next turn (chapter-timeline.md → Delete a chapter). */
   body:not([data-delete-after="closes"]) .delete-after-closes,
@@ -690,8 +692,8 @@
 </div>
 
 <!-- re-run confirm — chapter-timeline.md → Re-run a close. An AlertDialog: an outside click does
-     nothing. Primary, not destructive: CTRL-Z after it brings the close back, until a turn,
-     an edit or a rollback comes between. -->
+     nothing. Two buttons (Re-run close primary) when no turns followed; three buttons (Roll back &
+     re-run destructive, Re-run on new branch primary) when turns followed. -->
 <div class="modal-backdrop" id="rerun-backdrop">
   <div class="modal">
     <div class="modal-head">
@@ -703,21 +705,23 @@
         <li>2 lore rows removed, your edits included</li>
         <li>31 other changes reversed</li>
       </ul>
-      <!-- Shown only when turns followed the close: the re-run rolls them back first. -->
+      <!-- Shown only when turns followed the close: user picks fork (primary) or in-place rollback (destructive). -->
       <div class="rerun-rollback">
-        <p class="modal-context">3 turns since the close are removed first:</p>
+        <p class="modal-context">3 turns followed this close:</p>
         <ul class="delete-impact">
           <li>6 entries (91&ndash;96)</li>
           <li>12 world-state changes</li>
         </ul>
-        <p class="modal-context">They go for good, even if the re-run fails or you cancel it.</p>
+        <p class="modal-context">Re-run on new branch keeps them on main and branches from entry 90 as &ldquo;Ch. 2 re-run&rdquo;. Roll back &amp; re-run removes them for good, even if the re-run fails or you cancel it.</p>
       </div>
       <p class="modal-context">A close is the costliest call the app makes: this one reads 24,310 tokens of story.</p>
       <p class="modal-context">CTRL-Z brings this close back until your next turn, edit or rollback.</p>
     </div>
     <div class="modal-foot">
       <button class="btn" id="rerun-cancel">Cancel</button>
-      <button class="btn primary" id="rerun-confirm">Re-run close</button>
+      <button class="btn primary rerun-no-turns-only" id="rerun-confirm">Re-run close</button>
+      <button class="btn danger rerun-turns-only" id="rerun-rollback">Roll back &amp; re-run</button>
+      <button class="btn primary rerun-turns-only" id="rerun-fork">Re-run on new branch</button>
     </div>
   </div>
 </div>
@@ -1030,7 +1034,9 @@
   // Cancel returns to the review the confirm was opened from; confirming closes both.
   document.getElementById('rerun-cancel').addEventListener('click', () =>
     setModal(body.dataset.modal === 'review-rerun' ? 'review' : 'hidden'));
-  document.getElementById('rerun-confirm').addEventListener('click', () => setModal('hidden'));
+  ['rerun-confirm', 'rerun-rollback', 'rerun-fork'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => setModal('hidden'));
+  });
   ['modal-backdrop', 'review-backdrop'].forEach(id => {
     document.getElementById(id).addEventListener('click', (e) => {
       if (e.target.id === id) setModal('hidden');

@@ -255,9 +255,6 @@ verified against the code first. Resolve with the slice each names.
     `INSERT INTO <vec> SELECT ... FROM <vec>` for step 5's post-rewind
     vector copy; if not, fall back to pre-reading surviving parent
     vectors or staging via a temp table inside the transaction.
-  - Re-running a close on a fork, which keeps turns the re-run's
-    shortcut would roll back, is tracked separately
-    ([`parked.md → Re-running a close on a fork`](../parked.md#re-running-a-close-on-a-fork)).
 - **M6.1 — A branch switch to a fork whose chapter rows copy the same ids
   keeps the review window open.** `chapterOverlaysStore`'s `review` holds
   only `chapterId`, and `overlayChapter` compares the store row's branch,
@@ -291,6 +288,20 @@ verified against the code first. Resolve with the slice each names.
   reads develop against hand-seeded rows, so **rebuild the seed's fork as
   a real branch copy once M6.1's copy core exists.** No UI opens it
   before M6.3. Routed from triage 2026-11-07.
+- **M6.3 — Build `Re-run on new branch` for chapter closes.** Designed
+  2026-11-19
+  ([exploration](../explorations/2026-11-19-rerun-close-on-fork.md)):
+  when turns followed a chapter's latest close or re-run, the re-run
+  confirm expands to three buttons (`Cancel`, `Roll back & re-run`
+  destructive, `Re-run on new branch` primary); `Re-run on new branch`
+  forks at the non-system entry immediately before the first post-close
+  turn (`Ch. <seq> re-run`), switches `stories.current_branch_id`,
+  closes the review window if open, routes to
+  `reader-composer/[newBranchId]` replacing the in-story stack, and
+  starts the zero-post-close-turns re-run there per
+  [`chapter-close.md → Re-running a close`](../memory/chapter-close.md#re-running-a-close)
+  and
+  [`chapter-timeline.md → Re-run a close`](../ui/screens/chapter-timeline/chapter-timeline.md#re-run-a-close).
 - **M6.3 — The composer draft will carry across an in-reader branch
   switch.** `Composer` (`app/reader-composer/[branchId].tsx`) takes no
   `key={branchId}`, and the branch-change effect in the same file clears

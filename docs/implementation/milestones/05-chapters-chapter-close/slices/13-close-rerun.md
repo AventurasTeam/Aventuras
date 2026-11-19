@@ -675,8 +675,8 @@ component tests, the E2E and the Android measure, as
   [`Steering a re-run`](../../../../parked.md#steering-a-re-run),
   [`Comparing close runs and trading one back later`](../../../../parked.md#comparing-close-runs-and-trading-one-back-later)).
 - Re-running on a fork, and a fork carrying `reversal_journals` with its
-  group: M6.1
-  ([`parked.md → Re-running a close on a fork`](../../../../parked.md#re-running-a-close-on-a-fork)).
+  group: M6
+  ([`chapter-close.md → Re-running a close`](../../../../memory/chapter-close.md#re-running-a-close)).
 - A branch delete dropping `pendingRerun` with `deferred` and
   `pendingClose`: M6.3, as the roadmap's item says. A re-run's chain clears
   its own record.

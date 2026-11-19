@@ -2095,17 +2095,6 @@ their undo has touched what it covers.
 Parked 2026-11-13; the signal is users wanting to compare runs, or to
 trade one back after playing on.
 
-#### Re-running a close on a fork
-
-When turns followed a close, its re-run rolls them back first, and
-they can't be recovered
-([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
-Re-running on a new branch from the close point would leave the played
-turns on the old one. It needs fork to carry a close's deltas and its
-re-runs' journals, which is M6.1's.
-
-Parked 2026-11-13 for M6.1; the signal is the fork landing.
-
 #### An unattributed pass fact can be lost to a reversal
 
 A pass fact whose reply named no source turn falls back to the window

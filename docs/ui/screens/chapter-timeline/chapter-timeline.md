@@ -108,8 +108,9 @@ already-expanded card → collapse.
 The full editor. **One card expanded at a time** — expanding
 another card with the current one dirty fires the
 [navigate-away guard](../../patterns/save-sessions.md#navigate-away-guard--global-intercept)
-(Save / Discard / Cancel), and so do collapsing the dirty card and its
-`Delete…`, since a draft on a chapter about to go has nowhere to land.
+(Save / Discard / Cancel), and so do collapsing the dirty card,
+`Re-run close…` / Review's `Re-run…`, and `Delete…`, since unsaved edits
+must settle before a delete removes the chapter or a re-run forks off it.
 
 Editable fields (zod-validated; types per
 [data-model → chapters](../../../data-model.md)):
@@ -253,7 +254,10 @@ Runs the latest chapter's lore work again, and CTRL-Z after it brings
 the close back, until a turn, an edit or a rollback comes between
 ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)).
 Opened from the card's `Re-run close…` or the review window's
-`Re-run…`, both disabled while a close is owed. An
+`Re-run…`, both disabled while a close is owed and gated through the
+Timeline's save-session guard before opening the confirm (matching
+`Delete…`, so unsaved card edits settle before preview counts are read
+and never stack a dialog on top of the confirm). An
 [AlertDialog](../../patterns/alert-dialog.md), disabled while a
 generation pipeline is in flight:
 
@@ -267,11 +271,14 @@ generation pipeline is in flight:
 │  • 2 lore rows removed, your edits included      │
 │  • 31 other changes reversed                     │
 │                                                  │
-│  3 turns since the close are removed first:      │
+│  3 turns followed this close:                    │
 │  • 6 entries (91–96)                             │
 │  • 12 world-state changes                        │
-│  They go for good, even if the re-run fails or   │
-│  you cancel it.                                  │
+│                                                  │
+│  Re-run on new branch keeps them on <branch> and │
+│  branches from entry 90 as "Ch. 5 re-run".       │
+│  Roll back & re-run removes them for good, even  │
+│  if the re-run fails or you cancel it.           │
 │                                                  │
 │  A close is the costliest call the app makes:    │
 │  this one reads 24,310 tokens of story.          │
@@ -279,30 +286,52 @@ generation pipeline is in flight:
 │  CTRL-Z brings this close back until your next   │
 │  turn, edit or rollback.                         │
 │                                                  │
-│               [ Cancel ]  [ Re-run close ]       │
+│  [ Cancel ]  [ Roll back & re-run ]              │
+│                       [ Re-run on new branch ]   │
 └──────────────────────────────────────────────────┘
 ```
 
 - **Counts** read as [the delete's](#delete-a-chapter). When the close
   changed nothing in the world, the list is one line,
   `The close changed nothing in the world.`
-- **Turns since the close.** When turns followed the chapter's latest
-  close or re-run, the re-run removes them first, and the block counts
-  them as the [rollback confirm](../reader-composer/rollback-confirm/rollback-confirm.md#counts)
-  does. It's omitted when none did. The rollback can't be undone: CTRL-Z
-  after the re-run brings the close back, not those turns.
+- **Zero turns vs. turns followed.** When no turns followed the close,
+  the turns-followed block is omitted and the footer is two buttons:
+  `Cancel` and `Re-run close` (primary, not destructive, since CTRL-Z
+  reverses the re-run while it is the latest action). When turns
+  followed, the block counts them as the
+  [rollback confirm](../reader-composer/rollback-confirm/rollback-confirm.md#counts)
+  does, names the fork point (`position(N)`, the entry immediately
+  before the counted range) and auto-name `"Ch. <seq> re-run"`, and the
+  footer expands to three buttons (the same deliberate departure from
+  [`alert-dialog.md`](../../patterns/alert-dialog.md) as
+  [Delete a chapter](#delete-a-chapter)): `Cancel`, `Roll back & re-run`
+  (destructive — those turns go for good even on cancel or failure, and
+  CTRL-Z brings the close back, not the turns), and
+  `Re-run on new branch` (primary — keeps the turns on the current
+  branch and runs the re-run on the new fork). All buttons disable while
+  the rollback or fork is committing.
+- **After `Re-run on new branch`.** Closes the review window (if opened
+  from it) and navigates to `reader-composer/[newBranchId]`, replacing
+  the in-story stack so `← Back` returns to the Story List rather than
+  the parent branch's reader. On the new branch's reader, the top-bar
+  branch chip appears or increments (`⎇ N+1`), the view sits at entry
+  `N`, `MemoryRunBanner` shows live re-run progress, and an info toast
+  confirms:
+  `Branched "Ch. <seq> re-run" from entry <pos> — re-running chapter <seq>'s close.`
+  If the fork commits and starting the re-run fails unexpectedly, the
+  reader still opens on the new branch with a warning toast:
+  `Branched "Ch. <seq> re-run" from entry <pos>, but couldn't start the re-run. Retry from Chapter Timeline.`
+  If the re-run is cancelled or fails mid-run, the new branch stays at
+  entry `N` with its copied prior close restored.
 - **Cost.** The framing names the model the re-run uses, and the line
   after the list the chapter's token count. No money estimate: the app
   holds no pricing.
-- **`Re-run close`** is primary, not destructive, since CTRL-Z reverses
-  the re-run while it is the latest action. After a turn or an edit,
-  CTRL-Z reaches it only through them.
 - **Counts stay true while it is open,** as the rollback modal's do
   ([`rollback-confirm.md → Counts`](../reader-composer/rollback-confirm/rollback-confirm.md#counts)):
   they recount as runs settle, and the start refuses `counts-changed`
   with the fresh counts. If a close landed while it was open, the re-run
   is refused with a toast, as the delete is. Every refusal comes before
-  the turns go.
+  the turns go or any branch is created.
 
 While it runs, the reader's banner shows a close's progress, and its
 commit banner and toasts are

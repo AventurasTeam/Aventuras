@@ -1187,18 +1187,45 @@ The surface is
 
 **Before the next turn.** A re-run runs on a chapter no turn has
 followed since its latest close or re-run, and never while a close is
-owed. When turns have followed, it first rolls them back: every turn
-with an entry written after that close, from the first such turn, a
-reply regenerated since taking its player's action with it. That
-rollback is the reader's, with its counts, and can't be undone, so the
-turns stay gone even if the re-run then fails or is cancelled. Every
-refusal is checked before it commits, the manual close's start refusals
-first: the pre-flight, the chapter still
-the latest with a close, the counts, and a close owed on the region the
-rollback leaves. Then the rollback commits and the re-run starts, two
-actions. With no turn after it, nothing the reversal yields to comes
-from a turn, and the re-run reads the turns past the chapter's end as
-its close did.
+owed. When turns have followed, the user picks between two paths before
+the re-run starts:
+
+- **Re-run on new branch (non-destructive).** Keeps the played turns on
+  the current branch (`parent`), forks `parent` at `N` — the
+  highest-position non-system entry strictly before `B`, the earliest
+  turn with an entry written after that close (a reply regenerated since
+  taking its player's action with it) — auto-named `Ch. <seq> re-run`,
+  switches `stories.current_branch_id` to the new branch, and starts the
+  re-run there for the same `chapterId`. For an auto-close or head
+  manual close `N` is `chapter.end_entry_id`; for an earlier manual
+  close with pre-close open-region turns before `B`, `N` is the last
+  pre-close open-region entry, so the fork's state matches what in-place
+  rollback leaves and any prior re-run's journal sits below `L(B)` and
+  survives intact (Case 3 of
+  [`data-model.md → Branch model`](../data-model.md#branch-model)).
+  Every start refusal — pre-flight, chapter still the latest with a
+  close, counts, no close owed on the post-fork region, plus fork's own
+  pre-conditions (idle gate, `classifier_status.state !== 'running'`, no
+  pending embedder swap) — is checked on `parent` before the fork
+  commits. Fork+switch and re-run are two actions: if the re-run is
+  cancelled, fails, or crashes, the new branch stays with its copied
+  prior close restored via the journal, ready to retry with zero turns
+  after it or be deleted later. If step 1 (fork+switch) commits and
+  step 2 (re-hydrating or starting the re-run) then fails unexpectedly,
+  the UI still routes onto the new branch's reader so route and
+  `stories.current_branch_id` stay in sync, and toasts a retry prompt.
+- **Roll back & re-run (in place, destructive).** Rolls the post-close
+  turns back first: every turn from `B` onward, using the reader's
+  rollback with its counts. That rollback can't be undone, so the turns
+  stay gone even if the re-run then fails or is cancelled. Every refusal
+  is checked before it commits — the manual close's start refusals
+  first: pre-flight, the chapter still the latest with a close, the
+  counts, and a close owed on the region the rollback leaves. Then the
+  rollback commits and the re-run starts, two actions.
+
+Under either path, no turn sits after the close once the re-run begins:
+nothing the reversal yields to comes from a turn, and the re-run reads
+the turns past the chapter's end as its close did.
 
 **One group, journaled.** The re-run reverses the chapter's lore work,
 then writes its own under one group. The lore work is every delta
@@ -1263,7 +1290,6 @@ edit, never a turn; Cancel stops it.
 
 On the same model a re-run is mostly a reroll.
 [Steering a re-run](../parked.md#steering-a-re-run),
-[re-running one task](../parked.md#re-running-one-close-task),
-[comparing runs or trading one back later](../parked.md#comparing-close-runs-and-trading-one-back-later)
-and [re-running on a fork](../parked.md#re-running-a-close-on-a-fork)
+[re-running one task](../parked.md#re-running-one-close-task)
+and [comparing runs or trading one back later](../parked.md#comparing-close-runs-and-trading-one-back-later)
 are parked.
