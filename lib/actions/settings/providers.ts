@@ -72,9 +72,11 @@ function upsertCachedModelCapabilities(
 ): SQL {
   const patch = { capabilities: { embedding: true, embeddingDim } }
   const cached = sql`COALESCE(json_extract(prov.value, '$.cachedModels'), '[]')`
+  // json() around the subquery: SQLite 3.54 drops the JSON subtype across a scalar
+  // subquery, and json_set would then store the array as a quoted string.
   return sql`(SELECT json_group_array(
     CASE WHEN json_extract(prov.value, '$.id') = ${providerId}
-      THEN json_set(prov.value, '$.cachedModels', (
+      THEN json_set(prov.value, '$.cachedModels', json((
         SELECT json_group_array(json(merged)) FROM (
           SELECT CASE WHEN json_extract(model.value, '$.id') = ${modelId}
                       THEN json_patch(model.value, ${jsonArg(patch)})
@@ -84,7 +86,7 @@ function upsertCachedModelCapabilities(
           SELECT ${jsonArg({ id: modelId, ...patch })}
           WHERE NOT EXISTS (
             SELECT 1 FROM json_each(${cached}) probe
-            WHERE json_extract(probe.value, '$.id') = ${modelId}))))
+            WHERE json_extract(probe.value, '$.id') = ${modelId})))))
       ELSE prov.value END)
     FROM json_each(${appSettings.providers}) prov)`
 }

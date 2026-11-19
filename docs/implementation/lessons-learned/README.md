@@ -192,6 +192,11 @@ slice plans when relevant.
   a "the SQL would fail" gate test proves nothing; assert store/DB
   equality instead.
 
+- [A JSON value that crosses a scalar subquery needs `json()`](./sqlite-json-subtype-lost-across-subquery.md)
+  — SQLite 3.54 drops the JSON subtype there, so `json_set` stores the
+  array as a string; unit tests run the developer Node's SQLite, not
+  the one Electron or expo-sqlite ships, so compare versions on a bump.
+
 ### Desktop / Electron
 
 - [Running ONNX inside Electron main](./onnx-in-electron-main.md)
