@@ -79,8 +79,8 @@ export const reader = {
   // Each entry renders in a `data-entry-row` div (components/reader/reader-surface.tsx),
   // a stable DOM scope anchor — no component change needed.
   row: (page: Page, entryId: string): Locator => page.locator(`[data-entry-row="${entryId}"]`),
-  // The rows' scroll container, the parent every `data-entry-row` shares.
-  scroller: (page: Page): Locator => page.locator('[data-entry-row]').first().locator('..'),
+  // The rows' scroll container (components/reader/reader-surface.tsx).
+  scroller: (page: Page): Locator => page.locator('[data-reader-scroller]'),
   // The reader's floating button, inside the document; the Actions menu's entry shows only open.
   jumpToBottom: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:jumpToBottom'), exact: true }),
