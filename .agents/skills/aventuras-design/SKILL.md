@@ -35,7 +35,7 @@ Track as tasks; complete in order:
 10. **Integration plan** — exact files / sections / followups / wireframes affected.
 11. **User reviews doc + plan.**
 12. **Apply canonical-doc edits + wireframe changes.** Stage them with `git add` but do NOT commit yet.
-13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings. If they are extensive (>~5 non-trivial) or include a judgment call, surface them to the user before applying any; otherwise the orchestrator applies the mechanical fixes inline.
+13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings. If they are extensive (>~5 non-trivial) or include a judgment call, surface them to the user before applying any, and apply only the fixes the user approves; a finding the user keeps as intentional stays. Otherwise the orchestrator applies the mechanical fixes inline. If the user wants to revise the design instead, restore the canonical docs the plan touched (`git restore --staged --worktree -- <those paths>`) and go back to the exploration doc, so the next apply starts from the revised plan and nothing it drops stays staged.
 14. **Commit.** Single focused commit including drift-pass fixes. `pnpm lint:docs` already ran via the pre-commit hook.
 
 ## Process
@@ -62,7 +62,6 @@ digraph design_flow {
   "Apply drift fixes inline" [shape=box];
   "Extensive, or a judgment call?" [shape=diamond];
   "Surface to user before fixing" [shape=box];
-  "User: fix or revise?" [shape=diamond];
   "Commit (single focused commit)" [shape=doublecircle];
 
   "Orient (synthesis)" -> "User picked target?";
@@ -87,9 +86,7 @@ digraph design_flow {
   "Drift pass (subagent)" -> "Extensive, or a judgment call?";
   "Extensive, or a judgment call?" -> "Surface to user before fixing" [label="yes"];
   "Extensive, or a judgment call?" -> "Apply drift fixes inline" [label="no, mechanical only"];
-  "Surface to user before fixing" -> "User: fix or revise?";
-  "User: fix or revise?" -> "Apply drift fixes inline" [label="fix"];
-  "User: fix or revise?" -> "Write exploration doc\n(+ wireframe if UI)" [label="revise"];
+  "Surface to user before fixing" -> "Apply drift fixes inline" [label="the fixes the user approves"];
   "Apply drift fixes inline" -> "Commit (single focused commit)";
 }
 ```
