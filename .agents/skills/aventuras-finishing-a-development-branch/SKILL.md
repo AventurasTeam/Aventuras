@@ -207,7 +207,7 @@ Report: "Keeping branch <name>. Worktree preserved at <path>."
 
 ```bash
 git -C "<WORKTREE_PATH>" ls-files --others --ignored --exclude-standard --directory \
-  | grep -v -E '^(node_modules|\.expo|dist|android|ios|release|storybook-static|test-results|electron/dist)/'
+  | grep -v -E '^(node_modules|\.expo|dist|release|storybook-static|test-results|electron/dist)/'
 ```
 
 The filter drops dependency and build output, which regenerates. If anything is left, show your human partner the list and ask which to move into the main repo root first. Then, from the main repo root:
@@ -235,7 +235,7 @@ Worktree removal refused — these files were never committed:
 Which?
 ```
 
-Carry out the choice. A tracked file you moved or deleted now shows as deleted in the worktree, so restore it there first (`git -C "<WORKTREE_PATH>" restore --source=HEAD --staged --worktree -- <file>`); untracked files need nothing. Then remove the worktree.
+Carry out the choice. A tracked file you moved or deleted now shows as deleted in the worktree, so restore it there first (`git -C "<WORKTREE_PATH>" restore --source=HEAD --staged --worktree -- <file>`); untracked files need nothing. If you chose 1, run the test command on the merged result again. Then remove the worktree.
 
 **Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 

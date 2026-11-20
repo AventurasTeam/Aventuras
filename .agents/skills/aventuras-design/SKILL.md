@@ -12,7 +12,7 @@ This is for **analysis and design work**, not implementation. The output is docu
 The skill opens with an **orient** that surfaces recent activity, open followups, the user's scratchpad, and proposed focus candidates — then waits for the user to pick a target. Once a target is chosen, the design workflow runs (scope check → clarifying questions → approaches → sectioned design → adversarial pass → spec → integration). If the user only wanted to look around, the session ends cleanly after orient.
 
 <HARD-GATE>
-Do NOT modify canonical docs (`architecture.md`, `data-model.md`, `calendar-systems.md`, `ui/**`) until (1) a written design exists, (2) it has been through adversarial analysis, (3) the user has approved both the design and the integration plan. Drafting under `docs/explorations/` during the session is fine; touching canonical docs is the gated step. After approval, integration applies edits → runs the **Drift pass** subagent against the staged diff → applies any drift fixes → commits. No second user confirmation between approval and commit.
+Do NOT modify canonical docs (`architecture.md`, `data-model.md`, `calendar-systems.md`, `ui/**`) until (1) a written design exists, (2) it has been through adversarial analysis, (3) the user has approved both the design and the integration plan. Drafting under `docs/explorations/` during the session is fine; touching canonical docs is the gated step. After approval, integration applies edits → runs the **Drift pass** subagent against the staged diff → applies any drift fixes → commits. No second user confirmation between approval and commit, except when the drift pass reports extensive findings or a judgment call: those go to the user before any fix.
 </HARD-GATE>
 
 ## Anti-pattern: "this is too small for a design"
@@ -35,7 +35,7 @@ Track as tasks; complete in order:
 10. **Integration plan** — exact files / sections / followups / wireframes affected.
 11. **User reviews doc + plan.**
 12. **Apply canonical-doc edits + wireframe changes.** Stage them with `git add` but do NOT commit yet.
-13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings. If they are extensive (>~5 non-trivial), surface them to the user before applying any; otherwise the orchestrator interprets them and applies fixes inline.
+13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings. If they are extensive (>~5 non-trivial) or include a judgment call, surface them to the user before applying any; otherwise the orchestrator applies the mechanical fixes inline.
 14. **Commit.** Single focused commit including drift-pass fixes. `pnpm lint:docs` already ran via the pre-commit hook.
 
 ## Process
@@ -60,8 +60,9 @@ digraph design_flow {
   "Apply canonical-doc edits\n(staged, not committed)" [shape=box];
   "Drift pass (subagent)" [shape=box];
   "Apply drift fixes inline" [shape=box];
-  "Findings extensive?" [shape=diamond];
+  "Extensive, or a judgment call?" [shape=diamond];
   "Surface to user before fixing" [shape=box];
+  "User: fix or revise?" [shape=diamond];
   "Commit (single focused commit)" [shape=doublecircle];
 
   "Orient (synthesis)" -> "User picked target?";
@@ -83,10 +84,12 @@ digraph design_flow {
   "User approves both?" -> "Write exploration doc\n(+ wireframe if UI)" [label="changes"];
   "User approves both?" -> "Apply canonical-doc edits\n(staged, not committed)" [label="approved"];
   "Apply canonical-doc edits\n(staged, not committed)" -> "Drift pass (subagent)";
-  "Drift pass (subagent)" -> "Findings extensive?";
-  "Findings extensive?" -> "Surface to user before fixing" [label="yes (>~5)"];
-  "Findings extensive?" -> "Apply drift fixes inline" [label="no"];
-  "Surface to user before fixing" -> "Apply drift fixes inline";
+  "Drift pass (subagent)" -> "Extensive, or a judgment call?";
+  "Extensive, or a judgment call?" -> "Surface to user before fixing" [label="yes"];
+  "Extensive, or a judgment call?" -> "Apply drift fixes inline" [label="no, mechanical only"];
+  "Surface to user before fixing" -> "User: fix or revise?";
+  "User: fix or revise?" -> "Apply drift fixes inline" [label="fix"];
+  "User: fix or revise?" -> "Write exploration doc\n(+ wireframe if UI)" [label="revise"];
   "Apply drift fixes inline" -> "Commit (single focused commit)";
 }
 ```
@@ -173,7 +176,7 @@ Draft before requesting review. The plan doubles as the input brief for the drif
 
 > "Design written to `<path>`, integration plan above. Please review both before I touch the canonical docs."
 
-Wait. If changes requested, revise and re-self-review. Only proceed once both doc AND integration plan are approved. After approval, the flow runs apply → drift pass → fix-if-needed → commit without a second confirmation, **unless** the drift pass surfaces extensive findings — in which case the orchestrator pauses and shows the findings before fixing any of them.
+Wait. If changes requested, revise and re-self-review. Only proceed once both doc AND integration plan are approved. After approval, the flow runs apply → drift pass → fix-if-needed → commit without a second confirmation, **unless** the drift pass surfaces extensive findings or a judgment call — in which case the orchestrator pauses and shows the findings before fixing any of them.
 
 ## Integrating
 
@@ -206,4 +209,4 @@ A UI topic isn't automatically a visual question. "What does 'lead character' me
 - Does not modify canonical docs before approval. Stays in `docs/explorations/` until sign-off.
 - Does not duplicate the docs working rules. Trust `.claude/rules/docs.md` to auto-load on `docs/**` reads.
 - Does not run `pnpm lint:docs` proactively. Only after canonical edits exist to validate.
-- Does not ask for a second confirmation before committing once the design + integration plan have been approved.
+- Does not ask for a second confirmation before committing once the design + integration plan have been approved, unless the drift pass reports extensive findings or a judgment call.
