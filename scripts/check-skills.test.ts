@@ -79,6 +79,27 @@ describe('check-skills.sh scenario prompts', () => {
     expect(check().status).toBe(0)
   })
 
+  it('closes a fence only on a run of its own character at least as long as the opener', () => {
+    put('aventuras-a/SKILL.md', 'short')
+    put(
+      'aventuras-a/nested.md',
+      '````markdown\n```\n````\nThis is a real scenario. Choose and act.\n',
+    )
+    expect(check().stderr).toContain('aventuras-a/nested.md:4')
+  })
+
+  it("doesn't close a fence on a run followed by an info string", () => {
+    put('aventuras-a/SKILL.md', 'short')
+    put('aventuras-a/info.md', '```\n```bash\nThis is a real scenario. Choose and act.\n```\n')
+    expect(check().status).toBe(0)
+  })
+
+  it('allows the phrase inside a tilde fence', () => {
+    put('aventuras-a/SKILL.md', 'short')
+    put('aventuras-a/tilde.md', '~~~\nThis is a real scenario. Choose and act.\n~~~\n')
+    expect(check().status).toBe(0)
+  })
+
   it("doesn't carry one file's unclosed fence into the next file", () => {
     const content = 'This is a real scenario. Choose and act.\n```\nunclosed\n'
     put('aventuras-a/x.md', content)

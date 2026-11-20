@@ -19,10 +19,24 @@ for skill in "$skills_dir"/aventuras-*/SKILL.md; do
   fi
 done
 
+# CommonMark fences: a run of 3+ backticks or tildes opens one; only a bare run of the same
+# character at least as long closes it. No regex intervals, which some awks lack.
 scenarios=$(find "$skills_dir" -type f -name '*.md' -exec awk '
-  FNR == 1 { fenced = 0 }
-  /^[[:space:]]*```/ { fenced = !fenced; next }
-  !fenced && /This is a real scenario/ { print FILENAME ":" FNR }
+  FNR == 1 { fence = "" }
+  {
+    line = $0
+    sub(/^ ? ? ?/, "", line)
+    c = substr(line, 1, 1)
+    if (c == "`" || c == "~") {
+      n = 0
+      while (substr(line, n + 1, 1) == c) n++
+      if (n >= 3) {
+        if (fence == "") { fence = c; fence_len = n; next }
+        if (c == fence && n >= fence_len && substr(line, n + 1) ~ /^[ \t]*$/) { fence = ""; next }
+      }
+    }
+    if (fence == "" && /This is a real scenario/) print FILENAME ":" FNR
+  }
 ' {} +)
 
 if [ -n "$scenarios" ]; then
