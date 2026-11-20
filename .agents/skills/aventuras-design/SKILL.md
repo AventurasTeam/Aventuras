@@ -61,7 +61,7 @@ digraph design_flow {
   "Drift pass (subagent)" [shape=box];
   "Apply drift fixes inline" [shape=box];
   "Findings extensive?" [shape=diamond];
-  "Surface to user before commit" [shape=box];
+  "Surface to user before fixing" [shape=box];
   "Commit (single focused commit)" [shape=doublecircle];
 
   "Orient (synthesis)" -> "User picked target?";
@@ -173,7 +173,7 @@ Draft before requesting review. The plan doubles as the input brief for the drif
 
 > "Design written to `<path>`, integration plan above. Please review both before I touch the canonical docs."
 
-Wait. If changes requested, revise and re-self-review. Only proceed once both doc AND integration plan are approved. After approval, the flow runs apply → drift pass → fix-if-needed → commit without a second confirmation, **unless** the drift pass surfaces extensive findings — in which case the orchestrator pauses and shows the findings before committing.
+Wait. If changes requested, revise and re-self-review. Only proceed once both doc AND integration plan are approved. After approval, the flow runs apply → drift pass → fix-if-needed → commit without a second confirmation, **unless** the drift pass surfaces extensive findings — in which case the orchestrator pauses and shows the findings before fixing any of them.
 
 ## Integrating
 

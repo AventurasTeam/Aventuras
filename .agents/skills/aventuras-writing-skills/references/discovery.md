@@ -8,7 +8,7 @@ describe and size a skill so agents find it and read it.
 **Frontmatter (YAML):**
 - Two required fields: `name` and `description` (see [agentskills.io/specification](https://agentskills.io/specification) for all supported fields)
 - Max 1024 characters total
-- `name`: lowercase letters, numbers, and hyphens only, matching the skill's directory name; project skills use the `aventuras-` prefix
+- `name`: 1–64 lowercase letters, numbers, and hyphens, with no leading, trailing or doubled hyphen, matching the skill's directory name; project skills use the `aventuras-` prefix
 - `description`: Third-person, describes ONLY when to use (NOT what it does)
   - Start with "Use when..." to focus on triggering conditions
   - Include specific symptoms, situations, and contexts

@@ -164,7 +164,7 @@ git merge <feature-branch>
 # Only after merge succeeds: cleanup worktree (Step 6), then delete branch
 ```
 
-Then: Cleanup worktree (Step 6), then delete branch:
+Then: Cleanup worktree (Step 6), then delete the branch. If Step 6 left the worktree in place, keep the branch too: git refuses to delete a branch a worktree has checked out.
 
 ```bash
 git branch -d <feature-branch>

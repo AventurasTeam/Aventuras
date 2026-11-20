@@ -91,8 +91,8 @@ When agents return:
 
 - Read each summary
 - Verify fixes don't conflict
-- Run full test suite
 - Integrate all changes
+- Run the full test suite on the integrated tree
 
 ## Agent Prompt Structure
 
