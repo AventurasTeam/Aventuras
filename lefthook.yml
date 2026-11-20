@@ -24,6 +24,9 @@ pre-commit:
     remark:
       glob: '*.md'
       run: node_modules/.bin/remark --quiet --frail --silently-ignore {staged_files}
+    skills:
+      glob: '.agents/skills/*'
+      run: sh scripts/check-skills.sh
 
 commit-msg:
   commands:
