@@ -83,14 +83,16 @@ subagent: "Fix tool-approval-race-conditions.test.ts failures"
 // All three run concurrently
 ```
 
+Agents that edit files or run tests each need their own worktree (`isolation: "worktree"` where the harness offers it). Without separate worktrees, only one agent writes, and no test runs while it does: a run that reads half-edited files reports nonsense, even when the agents touch different files.
+
 ### 4. Review and Integrate
 
 When agents return:
 
 - Read each summary
 - Verify fixes don't conflict
-- Run full test suite
 - Integrate all changes
+- Run the full test suite on the integrated tree
 
 ## Agent Prompt Structure
 
@@ -172,13 +174,6 @@ Agent 3 → Fix tool-approval-race-conditions.test.ts
 
 **Time saved:** 3 problems solved in parallel vs sequentially
 
-## Key Benefits
-
-1. **Parallelization** - Multiple investigations happen simultaneously
-2. **Focus** - Each agent has narrow scope, less context to track
-3. **Independence** - Agents don't interfere with each other
-4. **Speed** - 3 problems solved in time of 1
-
 ## Verification
 
 After agents return:
@@ -187,13 +182,3 @@ After agents return:
 2. **Check for conflicts** - Did agents edit same code?
 3. **Run full suite** - Verify all fixes work together
 4. **Spot check** - Agents can make systematic errors
-
-## Real-World Impact
-
-From debugging session (2025-10-03):
-
-- 6 failures across 3 files
-- 3 agents dispatched in parallel
-- All investigations completed concurrently
-- All fixes integrated successfully
-- Zero conflicts between agent changes

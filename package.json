@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint:docs": "remark . --quiet --frail",
+    "lint:skills": "sh scripts/check-skills.sh",
     "typecheck": "tsc --noEmit",
     "test": "vitest --project unit --project storybook",
     "test:run": "vitest run --project unit --project storybook",

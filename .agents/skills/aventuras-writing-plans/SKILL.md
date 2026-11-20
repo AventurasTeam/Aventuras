@@ -27,7 +27,7 @@ For code work, read [`docs/code-conventions.md`](../../../docs/code-conventions.
 
 ## Input
 
-The input is one slice doc plus the open questions resolved in `aventuras-plan-slice`. Read the slice doc, its parent milestone, and the decisions carried over from brainstorming.
+The input is one slice doc plus the open questions resolved in `aventuras-plan-slice`. Read the slice doc, its parent milestone, and the decisions file `aventuras-plan-slice` wrote (`.impl-plans/<plan-stem>.decisions.md`).
 
 ## Scope Check
 
@@ -264,7 +264,7 @@ Then present the options with the recommendation:
 
 **1. Subagent-Driven** — a fresh subagent per task, two-stage review on review-tier tasks, fast iteration.
 
-**2. Inline Execution** — tasks executed in this session, batched with review checkpoints.
+**2. Inline Execution** — this session implements every task itself, with no per-task review; it stops to ask when blocked.
 
 **3. Hand off to a worker** — this session stops here; the plan runs unattended in another session that dispatches a worker.
 

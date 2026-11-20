@@ -38,6 +38,9 @@ jobs:
       - name: Lint docs (remark)
         run: pnpm lint:docs
 
+      - name: Check agent skills (size, scenario prompts)
+        run: pnpm lint:skills
+
       - name: Check migration consistency (drizzle-kit)
         run: pnpm db:check
 
