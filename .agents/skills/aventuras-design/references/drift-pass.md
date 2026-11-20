@@ -30,7 +30,7 @@ Tell it explicitly: **"Report drift findings only. Do not re-evaluate the design
 2. **Pattern adoption.** If the diff adds a citation like `[xxx pattern](../../patterns/<pattern>.md)` from a per-screen doc that wasn't already in that pattern's `Used by` list, report. The pattern doc's Used-by list is the canonical surface→pattern map; a new adoption that doesn't update it leaves the pattern stale.
 
 3. **Followups in / out.** Two questions:
-   - **Resolved any parked decision?** Grep `followups.md` for keywords matching changed canonical content (field names, feature names from the integration plan). If a followup entry references something the diff just resolved, report — entry should be removed.
+   - **Resolved any parked decision?** Grep `followups.md` for keywords matching changed canonical content (field names, feature names from the integration plan). If a followup entry references something the diff just resolved, report — remove the entry when everything it tracks is resolved; otherwise trim it to what stays open.
    - **Deferred anything new?** If the diff prose contains "deferred", "TBD", "pending design pass", or similar, AND the diff doesn't add a `followups.md` entry covering it, report — the deferral should be parked.
 
 4. **Boilerplate detection.** If the diff writes prose into a per-screen doc that closely matches prose already in another per-screen doc, report. Heuristic: 2+ matching sentences = candidate; 4+ = strong signal. Cross-cutting prose belongs in `principles.md` or `patterns/`, not duplicated. (Soft check — orchestrator weighs surface-specific deviations against generic boilerplate.)

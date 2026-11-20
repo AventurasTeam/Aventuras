@@ -35,7 +35,7 @@ Track as tasks; complete in order:
 10. **Integration plan** — exact files / sections / followups / wireframes affected.
 11. **User reviews doc + plan.**
 12. **Apply canonical-doc edits + wireframe changes.** Stage them with `git add` but do NOT commit yet.
-13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings; orchestrator interprets and applies fixes inline. If findings are extensive (>~5 non-trivial), surface to the user before commit.
+13. **Drift pass** (subagent). Hand a fresh subagent the staged diff, the integration plan, and the four drift checks (rename impact / pattern adoption / followups in-out / boilerplate detection — see _Drift pass_ below). Subagent reports findings. If they are extensive (>~5 non-trivial), surface them to the user before applying any; otherwise the orchestrator interprets them and applies fixes inline.
 14. **Commit.** Single focused commit including drift-pass fixes. `pnpm lint:docs` already ran via the pre-commit hook.
 
 ## Process
@@ -83,11 +83,11 @@ digraph design_flow {
   "User approves both?" -> "Write exploration doc\n(+ wireframe if UI)" [label="changes"];
   "User approves both?" -> "Apply canonical-doc edits\n(staged, not committed)" [label="approved"];
   "Apply canonical-doc edits\n(staged, not committed)" -> "Drift pass (subagent)";
-  "Drift pass (subagent)" -> "Apply drift fixes inline";
-  "Apply drift fixes inline" -> "Findings extensive?";
-  "Findings extensive?" -> "Surface to user before commit" [label="yes (>~5)"];
-  "Findings extensive?" -> "Commit (single focused commit)" [label="no"];
-  "Surface to user before commit" -> "Commit (single focused commit)";
+  "Drift pass (subagent)" -> "Findings extensive?";
+  "Findings extensive?" -> "Surface to user before fixing" [label="yes (>~5)"];
+  "Findings extensive?" -> "Apply drift fixes inline" [label="no"];
+  "Surface to user before fixing" -> "Apply drift fixes inline";
+  "Apply drift fixes inline" -> "Commit (single focused commit)";
 }
 ```
 

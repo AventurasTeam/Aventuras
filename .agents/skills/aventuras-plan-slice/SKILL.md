@@ -109,7 +109,7 @@ Use the taxonomy from `docs/implementation/conventions.md` → Slice planning. T
 - Ask one question at a time. Don't overwhelm with a long interrogation.
 - Prefer multiple choice. When a question has more than one viable resolution, present the options with trade-offs and lead with your recommendation and reasoning.
 - Be flexible — go back and re-read if an answer doesn't fit what the docs say.
-- Process choices are yours, not questions: saving to `.impl-plans/`, filing to triage, dispatching research. Do them and say what you did. Only slice or milestone amendments and canon changes go to the developer.
+- Process choices are yours, not questions: saving to `.impl-plans/`, filing to triage, dispatching research. Do them and say what you did. Developer-decisions, slice or milestone amendments, and canon changes still go to the developer.
 
 **Checking slice size and scope:**
 
@@ -134,4 +134,4 @@ Once every developer-decision question is resolved:
 - Invoke aventuras-writing-plans with the path to the decisions file. It consumes the slice doc and those decisions, and writes the execution plan to `.impl-plans/`.
 - Do NOT invoke any other skill. aventuras-writing-plans is the next step.
 
-**The decisions file** is `.impl-plans/<milestone>-<slice-stem>.decisions.md`, next to where the plan will go. Write each decision there as it's made: the question, its class, the answer, and the reason. Pass writing-plans the path, not a restatement: a long handoff in the skill's arguments is cut off when the conversation compacts, and the file survives. aventuras-writing-plans owns the plan itself.
+**The decisions file** is `.impl-plans/<milestone>-<slice-stem>.decisions.md`, next to where the plan will go. Create it when you start classifying, and write each decision there as it's made: the question, its class, the answer, and the reason. If nothing needs deciding, the file says so; writing-plans reads it either way. Pass writing-plans the path, not a restatement: a long handoff in the skill's arguments is cut off when the conversation compacts, and the file survives. aventuras-writing-plans owns the plan itself.

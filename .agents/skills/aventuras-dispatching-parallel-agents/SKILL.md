@@ -83,7 +83,7 @@ subagent: "Fix tool-approval-race-conditions.test.ts failures"
 // All three run concurrently
 ```
 
-Agents that edit files or run tests each need their own worktree (`isolation: "worktree"` where the harness offers it), or only one of them writes. Two agents changing and testing one working tree corrupt each other's runs, even when they touch different files.
+Agents that edit files or run tests each need their own worktree (`isolation: "worktree"` where the harness offers it). Without separate worktrees, only one agent writes, and no test runs while it does: a run that reads half-edited files reports nonsense, even when the agents touch different files.
 
 ### 4. Review and Integrate
 
