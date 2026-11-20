@@ -94,6 +94,12 @@ describe('check-skills.sh scenario prompts', () => {
     expect(check().status).toBe(0)
   })
 
+  it('treats a backtick run whose info string holds a backtick as inline code, not a fence', () => {
+    put('aventuras-a/SKILL.md', 'short')
+    put('aventuras-a/inline.md', '```example```\n\nThis is a real scenario. Choose and act.\n')
+    expect(check().stderr).toContain('aventuras-a/inline.md:3')
+  })
+
   it('allows the phrase inside a tilde fence', () => {
     put('aventuras-a/SKILL.md', 'short')
     put('aventuras-a/tilde.md', '~~~\nThis is a real scenario. Choose and act.\n~~~\n')
