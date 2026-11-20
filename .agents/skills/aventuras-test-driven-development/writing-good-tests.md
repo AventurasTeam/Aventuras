@@ -211,7 +211,8 @@ change's behavior:
   `git checkout --`: a killed chain leaves the stash unpopped, and a
   checkout restores HEAD, discarding your uncommitted fix along with
   the mutation. Mutate, run and restore in one command, with the restore
-  in a `trap '…' EXIT`, so an interrupted run still puts the file back;
+  in a `trap '…' EXIT`, so an interrupted run still puts the file back
+  (for an E2E check, the trap rebuilds the app after restoring);
   if a session dies mid-check anyway, restore from the copy first.
 - Run the test's file: `pnpm exec vitest run --project unit <file>`, or
   `--project storybook` for a story.

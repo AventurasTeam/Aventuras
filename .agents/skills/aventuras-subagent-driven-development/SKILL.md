@@ -92,7 +92,7 @@ digraph process {
 }
 ```
 
-**Read one task at a time.** At the start, read the plan's header, Execution gate and Decisions, and its task list (each task's heading, tiers and Files block): that is the context you curate each dispatch from. Read a task's full text when you reach it and paste it into the dispatch. Plans written in batches run to twice the old length, and holding every task's text from the start fills your context before the first task.
+**Read one task at a time.** At the start, read the plan's header, Execution gate, Decisions, Global Constraints and Review Focus, and its task list (each task's heading, tiers and Files block): that is the context you curate each dispatch from. Read a task's full text when you reach it and paste it into the dispatch. Plans written in batches run to twice the old length, and holding every task's text from the start fills your context before the first task.
 
 ## Per-task verification tier
 
