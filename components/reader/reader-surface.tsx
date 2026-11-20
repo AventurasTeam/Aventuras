@@ -144,6 +144,17 @@ function focusedInRowEditor(el: HTMLElement): HTMLTextAreaElement | null {
     : null
 }
 
+// `event.touches` spans the whole document; count only touches started inside this scroller.
+function readerTouchCount(event: ReactTouchEvent<HTMLDivElement>): number {
+  const el = event.currentTarget
+  let count = 0
+  for (let i = 0; i < event.touches.length; i += 1) {
+    const target = event.touches[i]?.target
+    if (target instanceof Node && el.contains(target)) count += 1
+  }
+  return count
+}
+
 type ReaderRowProps = {
   row: StoryEntry
   tier: Tier
@@ -538,6 +549,15 @@ export function ReaderSurface({
     setEditDraft('')
   }, [branchKey])
 
+  // Live observed content height (kept current by ResizeObserver on contentRef, pre-adoption
+  // sampling, and the final post-commit effect) so chapter breaks read the exact pre-break height.
+  const liveContentHeightRef = useRef<number | null>(null)
+  const syncLiveContentHeight = useCallback(() => {
+    const el = scrollRef.current
+    liveContentHeightRef.current =
+      el != null && el.getClientRects().length > 0 ? el.scrollHeight : null
+  }, [])
+
   // The anchor rule's hold loop; every other writer that moves the reader stops it.
   const anchorHoldActiveRef = useRef(false)
   const anchorMemoRef = useRef<AnchorMemo | null>(null)
@@ -556,9 +576,10 @@ export function ReaderSurface({
     if (!heldRef.current) return false
     heldRef.current = false
     sourceRef.current = incomingRef.current
+    syncLiveContentHeight()
     setShown(incomingRef.current)
     return true
-  }, [])
+  }, [syncLiveContentHeight])
 
   // Bottom pin: late layout (font swaps, image decode) can still grow content
   // after a scrollTop write, so re-assert per frame until the scroll height
@@ -580,6 +601,12 @@ export function ReaderSurface({
     let lastHeight = -1
     const assertBottom = () => {
       if (!arbiterRef.current.bottomPinActive) return
+      if (arbiterRef.current.contactActive || el.getClientRects().length === 0) {
+        stableFrames = 0
+        lastHeight = -1
+        pinRafRef.current = requestAnimationFrame(assertBottom)
+        return
+      }
       writeScrollTop(el, el.scrollHeight, 'bottomPin')
       stableFrames = el.scrollHeight === lastHeight ? stableFrames + 1 : 0
       lastHeight = el.scrollHeight
@@ -733,9 +760,6 @@ export function ReaderSurface({
     return stopBottomPin
   }, [branchKey, hasRows, startBottomPin, stopBottomPin])
 
-  // Live observed content height (kept current by ResizeObserver on contentRef and the final
-  // post-commit effect). This effect runs before both, reading the exact pre-break height.
-  const liveContentHeightRef = useRef<number | null>(null)
   const lastCommitRowIdsRef = useRef<ReadonlySet<string>>(new Set())
   const lastCommitBreakIdsRef = useRef<ReadonlySet<string>>(new Set())
   const breakKeys = Object.keys(chapterBreaks).join('\n')
@@ -794,6 +818,10 @@ export function ReaderSurface({
         let totalFrames = 0
         const hold = () => {
           if (!anchorHoldActiveRef.current || !anchorEl.isConnected) return
+          if (arbiterRef.current.contactActive) {
+            anchorHoldRafRef.current = requestAnimationFrame(hold)
+            return
+          }
           // scrollTop writes round: without the 1px floor, sub-pixel drift spins this to the cap.
           const drift = anchorEl.getBoundingClientRect().top - targetTop
           if (Math.abs(drift) >= 1) {
@@ -827,8 +855,9 @@ export function ReaderSurface({
     }
     sourceRef.current = incoming
     heldRef.current = false
-    // The row the reader is on, before the change moves anything.
+    // The row the reader is on and its live content height, before the change moves anything.
     recordAnchor()
+    syncLiveContentHeight()
     const current = shownRef.current
     const landing = landingRef.current
     const pendingBottom = pendingBottomRef.current
@@ -858,7 +887,7 @@ export function ReaderSurface({
         ? sliceFieldsOf(current, incoming)
         : composeHeld(current, incoming, anchorId)),
     })
-  }, [incoming, armRest, recordAnchor])
+  }, [incoming, armRest, recordAnchor, syncLiveContentHeight])
 
   const landAtBottom = useCallback(() => {
     startBottomPin()
@@ -1130,11 +1159,11 @@ export function ReaderSurface({
   }, [stopBottomPin, stopLanding])
 
   const handleTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
-    arbiterRef.current.onTouchStart(event.touches.length)
+    arbiterRef.current.onTouchStart(readerTouchCount(event))
   }, [])
   const handleTouchMove = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
-      const outcome = arbiterRef.current.onTouchMove(event.touches.length)
+      const outcome = arbiterRef.current.onTouchMove(readerTouchCount(event))
       if (outcome.stopBottomPin) stopBottomPin()
       if (outcome.stopLanding) stopLanding()
       if (outcome.stopAnchorHold) anchorHoldActiveRef.current = false
@@ -1144,7 +1173,7 @@ export function ReaderSurface({
   const handleTouchEnd = useCallback(
     (event: ReactTouchEvent<HTMLDivElement>) => {
       // Momentum scroll events re-arm rest; a still-finger release needs this kick.
-      if (arbiterRef.current.onTouchEnd(event.touches.length).armRest) armRest()
+      if (arbiterRef.current.onTouchEnd(readerTouchCount(event)).armRest) armRest()
     },
     [armRest],
   )

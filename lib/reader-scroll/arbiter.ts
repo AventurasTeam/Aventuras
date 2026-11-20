@@ -450,7 +450,7 @@ export function createScrollArbiter(): ScrollArbiter {
       }
       if (hasNewer || distanceBeforePx > NEAR_BOTTOM_THRESHOLD_PX) return 'none'
       if (isMidGesture()) {
-        pendingRepin = { scrollTopAtTrigger: scrollTop }
+        if (!pendingRepin?.unconditional) pendingRepin = { scrollTopAtTrigger: scrollTop }
         return 'none'
       }
       return 'startBottomPin'
@@ -461,7 +461,7 @@ export function createScrollArbiter(): ScrollArbiter {
         return 'none'
       }
       if (isMidGesture()) {
-        pendingRepin = { scrollTopAtTrigger: scrollTop }
+        if (!pendingRepin?.unconditional) pendingRepin = { scrollTopAtTrigger: scrollTop }
         return 'none'
       }
       return 'startBottomPin'

@@ -355,6 +355,50 @@ describe('createScrollArbiter', () => {
       })
     })
 
+    it('preserves an unconditional smooth-jump re-pin across later mid-gesture shrink or break', () => {
+      for (const trigger of [
+        (a: ReturnType<typeof createScrollArbiter>) =>
+          a.onViewportShrink({
+            hasFocusedEditor: false,
+            hasNewer: false,
+            distanceBeforePx: 10,
+            scrollTop: 600,
+          }),
+        (a: ReturnType<typeof createScrollArbiter>) =>
+          a.onChapterBreakMounted({
+            hasNewer: false,
+            preBreakDistancePx: 10,
+            scrollTop: 600,
+          }),
+      ]) {
+        const a = createScrollArbiter()
+        a.onStreamUpdate({
+          streaming: true,
+          hasNewer: false,
+          reachedTail: false,
+          leftTail: false,
+          now: 100,
+          scrollTop: 1_000,
+        })
+        a.onSmoothJumpToBottom({ now: 200 })
+        a.onScroll({ scrollTop: 600, distanceFromBottomPx: 400 })
+        a.onStreamUpdate({
+          streaming: false,
+          hasNewer: false,
+          reachedTail: false,
+          leftTail: false,
+          now: 250,
+          scrollTop: 600,
+        })
+        expect(trigger(a)).toBe('none')
+        a.onScrollQuiesced()
+        // Smooth scroll moved past trigger and stopped > 20 px from new bottom: still pins.
+        expect(a.planRestFlush(restContext({ scrollTop: 960, distanceFromBottomPx: 45 }))).toEqual({
+          kind: 'startBottomPin',
+        })
+      }
+    })
+
     it('evaluates deferred bottom re-pins by stationary hold or near-bottom finish', () => {
       // Stationary thumb release -> re-pins at rest.
       const stationary = createScrollArbiter()
@@ -432,6 +476,14 @@ describe('createScrollArbiter', () => {
       a.onTouchStart(1)
       expect(
         a.onViewportShrink({
+          hasFocusedEditor: false,
+          hasNewer: false,
+          distanceBeforePx: 0,
+          scrollTop: 1_000,
+        }),
+      ).toBe('none')
+      expect(
+        a.onViewportShrink({
           hasFocusedEditor: true,
           hasNewer: false,
           distanceBeforePx: 0,
@@ -441,6 +493,11 @@ describe('createScrollArbiter', () => {
       a.onTouchEnd(0)
       expect(a.planRestFlush(restContext({ hasFocusedEditor: true }))).toEqual({
         kind: 'editorReveal',
+      })
+      // The cleared bottom re-pin must not fire once editor focus later leaves.
+      expect(a.planRestFlush(restContext({ hasFocusedEditor: false }))).toEqual({
+        kind: 'proceed',
+        catchUpAutoscroll: false,
       })
     })
   })

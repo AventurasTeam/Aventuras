@@ -1963,25 +1963,22 @@ function JumpHarness({
   ...props
 }: ComponentProps<typeof ReaderSurface> & { slowCommitMs?: number }) {
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
-  const stallNextRenderRef = useRef(false)
   const [rows, setRows] = useState(props.rows)
   const [branchKey, setBranchKey] = useState(props.branchKey)
   const [hasOlder, setHasOlder] = useState(props.hasOlder)
   const [chunks, setChunks] = useState(0)
-  if (stallNextRenderRef.current && slowCommitMs > 0) {
-    stallNextRenderRef.current = false
-    const start = performance.now()
-    while (performance.now() - start < slowCommitMs) {
-      // Simulate a synchronous commit outlasting WHEEL_CHAIN_GAP_MS before layout effects run.
-    }
-  }
   const content = Array.from({ length: chunks }, () => REPLY_TEXT).join('\n\n')
   const actions = {
     Jump: () => surfaceRef.current?.jumpToEntry(JUMP_TARGET, 0),
     'Jump to tail': () => surfaceRef.current?.jumpToEntry('o14', 0),
     'Bottom button': () => surfaceRef.current?.jumpToBottom(0),
     'Load all rows': () => {
-      if (slowCommitMs > 0) stallNextRenderRef.current = true
+      if (slowCommitMs > 0) {
+        const start = performance.now()
+        while (performance.now() - start < slowCommitMs) {
+          // Simulate a synchronous commit outlasting WHEEL_CHAIN_GAP_MS before layout effects run.
+        }
+      }
       setRows(OVERFLOW_ROWS)
     },
     'Prepend and grow': () =>
@@ -4504,5 +4501,54 @@ export const LateContentGrowthRaisesJumpButtonAndUpdatesBreakBaseline: Story = {
     await pressCommit()
     await scrollSettled(scroller)
     expect(scroller.scrollTop).toBe(scrollTop)
+  },
+}
+
+/** A finger resting outside the scroller must not strand reader contact when the inside finger lifts. */
+export const OutsideTouchDoesNotStrandReaderContact: Story = {
+  render: (args) => <JumpHarness {...args} />,
+  args: { rows: OVERFLOW_ROWS },
+  play: async () => {
+    const scroller = scrollerOf('o1')
+    await settleLanding(scroller)
+    const inside = new Touch({ identifier: 1, target: scroller, clientX: 0, clientY: 0 })
+    const outside = new Touch({ identifier: 2, target: document.body, clientX: 0, clientY: 0 })
+    scroller.dispatchEvent(
+      new TouchEvent('touchstart', {
+        bubbles: true,
+        cancelable: true,
+        touches: [inside],
+        targetTouches: [inside],
+        changedTouches: [inside],
+      }),
+    )
+    press('Jump')
+    scroller.dispatchEvent(
+      new TouchEvent('touchend', {
+        bubbles: true,
+        cancelable: true,
+        touches: [outside],
+        targetTouches: [],
+        changedTouches: [inside],
+      }),
+    )
+    await landedOn(JUMP_TARGET, scroller)
+  },
+}
+
+/** Priority 1: a resting finger pauses an active bottom pin until release, then resumes settling. */
+export const BottomPinPausesWhileFingerIsDownAndResumesOnRelease: Story = {
+  render: (args) => <StreamEndHarness {...args} />,
+  play: async () => {
+    const scroller = readerScroller()
+    await settleLanding(scroller)
+    await endStream()
+    dispatchTouch(scroller, 'touchstart')
+    const scrollTop = scroller.scrollTop
+    await replyGrown()
+    expect(scroller.scrollTop).toBe(scrollTop)
+    expect(distanceFromBottom(scroller)).toBeGreaterThan(20)
+    dispatchTouch(scroller, 'touchend')
+    await waitFor(() => expect(distanceFromBottom(scroller)).toBeLessThanOrEqual(1))
   },
 }
