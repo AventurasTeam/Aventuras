@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { createLandingMachine, type LandingFrame, type LandingStep } from './landing'
+import {
+  createLandingMachine,
+  JUMP_LANDING_GAP_PX,
+  type LandingFrame,
+  type LandingStep,
+} from './landing'
 
-const HEIGHT = 5_000
+const TARGET_TOP = 1_000
+const LANDED_TOP = TARGET_TOP - JUMP_LANDING_GAP_PX
 
 function frame(overrides: Partial<LandingFrame> = {}): LandingFrame {
   return {
@@ -11,7 +17,8 @@ function frame(overrides: Partial<LandingFrame> = {}): LandingFrame {
     rowConnected: true,
     laidOut: true,
     fingerDown: false,
-    scrollTop: 0,
+    scrollTop: LANDED_TOP,
+    targetContentTop: TARGET_TOP,
     ...overrides,
   }
 }
@@ -21,14 +28,16 @@ function asFrame(step: LandingStep) {
   return step
 }
 
-/** Runs one frame in which the reader sits still at `scrollTop`. */
+/** Runs one frame in which the reader sits still at `scrollTop` (or lands on `targetScrollTop`). */
 function still(
   machine: ReturnType<typeof createLandingMachine>,
   overrides: Partial<LandingFrame> = {},
-  scrollHeight = HEIGHT,
+  afterOverride?: number,
 ) {
-  const step = asFrame(machine.plan(frame(overrides)))
-  const settle = machine.settle({ after: overrides.scrollTop ?? 0, scrollHeight })
+  const input = frame(overrides)
+  const step = asFrame(machine.plan(input))
+  const after = afterOverride ?? (step.land ? step.targetScrollTop : input.scrollTop)
+  const settle = machine.settle({ after, targetContentTop: input.targetContentTop })
   return { step, settle }
 }
 
@@ -47,7 +56,7 @@ describe('createLandingMachine', () => {
     expect(still(machine).step.land).toBe(true)
   })
 
-  it('writes nothing under a finger', () => {
+  it('writes nothing under active contact', () => {
     const machine = createLandingMachine()
     still(machine)
     for (let i = 0; i < 5; i += 1)
@@ -72,9 +81,9 @@ describe('createLandingMachine', () => {
   it('lets go of a wheel chain held for 3 s', () => {
     const machine = createLandingMachine()
     expect(machine.plan(frame({ wheelChainLive: true, now: 1_000 })).kind).toBe('frame')
-    machine.settle({ after: 0, scrollHeight: HEIGHT })
+    machine.settle({ after: LANDED_TOP, targetContentTop: TARGET_TOP })
     expect(machine.plan(frame({ wheelChainLive: true, now: 3_999 })).kind).toBe('frame')
-    machine.settle({ after: 0, scrollHeight: HEIGHT })
+    machine.settle({ after: LANDED_TOP, targetContentTop: TARGET_TOP })
     expect(machine.plan(frame({ wheelChainLive: true, now: 4_000 })).kind).toBe('stop')
   })
 
@@ -89,7 +98,10 @@ describe('createLandingMachine', () => {
     // A fling moves the reader every frame; the first frame has nothing to compare against.
     const flung = (scrollTop: number) => {
       const step = asFrame(machine.plan(frame({ scrollTop })))
-      return { step, settle: machine.settle({ after: scrollTop, scrollHeight: HEIGHT }) }
+      return {
+        step,
+        settle: machine.settle({ after: scrollTop, targetContentTop: TARGET_TOP }),
+      }
     }
     expect(flung(0).settle.haltOverflow).toBe(false)
     expect(flung(40).settle.haltOverflow).toBe(false)
@@ -115,25 +127,79 @@ describe('createLandingMachine', () => {
     expect(still(machine).settle.done).toBe(true)
   })
 
-  it('restarts the settle count when the content height changes', () => {
+  it('locks the clamped gap on the first landed frame and ignores growth below', () => {
+    const machine = createLandingMachine()
+    const clampedScrollTop = 1_500
+    const tailTargetTop = 1_800
+    // Frame 0 observes from above.
+    const f0 = asFrame(machine.plan(frame({ scrollTop: 900, targetContentTop: tailTargetTop })))
+    expect(f0.land).toBe(false)
+    machine.settle({ after: 900, targetContentTop: tailTargetTop })
+    // Frame 1 lands: requests 1800 - 12 = 1788, browser clamps to 1500 -> locks desiredGap = 300.
+    const f1 = asFrame(machine.plan(frame({ scrollTop: 900, targetContentTop: tailTargetTop })))
+    expect(f1).toMatchObject({ land: true, highlight: true, targetScrollTop: 1_788 })
+    expect(machine.settle({ after: clampedScrollTop, targetContentTop: tailTargetTop }).done).toBe(
+      false,
+    )
+    // Subsequent frames target 1500 (never 1788 even if a stream below opens room) and settle in 10.
+    for (let i = 1; i < 10; i += 1) {
+      const step = asFrame(
+        machine.plan(frame({ scrollTop: clampedScrollTop, targetContentTop: tailTargetTop })),
+      )
+      expect(step.targetScrollTop).toBe(clampedScrollTop)
+      expect(
+        machine.settle({ after: clampedScrollTop, targetContentTop: tailTargetTop }).done,
+      ).toBe(false)
+    }
+    const finalStep = asFrame(
+      machine.plan(frame({ scrollTop: clampedScrollTop, targetContentTop: tailTargetTop })),
+    )
+    expect(finalStep.targetScrollTop).toBe(clampedScrollTop)
+    expect(machine.settle({ after: clampedScrollTop, targetContentTop: tailTargetTop }).done).toBe(
+      true,
+    )
+  })
+
+  it('locks gap to 0 at branch top', () => {
+    const machine = createLandingMachine()
+    still(machine, { scrollTop: 300, targetContentTop: 0 }, 300)
+    const landed = still(machine, { scrollTop: 300, targetContentTop: 0 }, 0)
+    expect(landed.step).toMatchObject({ land: true, highlight: true, targetScrollTop: 0 })
+    const next = still(machine, { scrollTop: 0, targetContentTop: 0 }, 0)
+    expect(next.step.targetScrollTop).toBe(0)
+  })
+
+  it('restarts the settle count and tracks pixel-for-pixel when layout shifts above the target', () => {
     const machine = createLandingMachine()
     still(machine)
     for (let i = 0; i < 5; i += 1) still(machine)
-    // Late layout below the row: the count starts over at the new height.
-    expect(still(machine, {}, HEIGHT + 30).settle.done).toBe(false)
-    for (let i = 1; i < 10; i += 1) expect(still(machine, {}, HEIGHT + 30).settle.done).toBe(false)
-    expect(still(machine, {}, HEIGHT + 30).settle.done).toBe(true)
+    // Growth above moves targetContentTop +40 px: targets LANDED_TOP + 40 and resets settle count.
+    const shifted = still(
+      machine,
+      { scrollTop: LANDED_TOP, targetContentTop: TARGET_TOP + 40 },
+      LANDED_TOP + 40,
+    )
+    expect(shifted.step.targetScrollTop).toBe(LANDED_TOP + 40)
+    expect(shifted.settle.done).toBe(false)
+    for (let i = 1; i < 10; i += 1)
+      expect(
+        still(machine, { scrollTop: LANDED_TOP + 40, targetContentTop: TARGET_TOP + 40 }).settle
+          .done,
+      ).toBe(false)
+    expect(
+      still(machine, { scrollTop: LANDED_TOP + 40, targetContentTop: TARGET_TOP + 40 }).settle.done,
+    ).toBe(true)
   })
 
   it('does not count a frame whose write moved the reader as settled', () => {
     const machine = createLandingMachine()
-    still(machine)
-    // Late layout above the row keeps it moving, so every frame's write moves the reader 12 px,
-    // and the next frame reads back where that write put it.
+    still(machine, { scrollTop: 0, targetContentTop: JUMP_LANDING_GAP_PX }, 0)
     for (let i = 0; i < 20; i += 1) {
-      const step = asFrame(machine.plan(frame({ scrollTop: i * 12 })))
+      const targetContentTop = (i + 1) * 12 + JUMP_LANDING_GAP_PX
+      const step = asFrame(machine.plan(frame({ scrollTop: i * 12, targetContentTop })))
       expect(step.land).toBe(true)
-      expect(machine.settle({ after: (i + 1) * 12, scrollHeight: HEIGHT }).done).toBe(false)
+      expect(step.targetScrollTop).toBe((i + 1) * 12)
+      expect(machine.settle({ after: (i + 1) * 12, targetContentTop }).done).toBe(false)
     }
   })
 

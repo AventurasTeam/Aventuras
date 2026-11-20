@@ -1,6 +1,7 @@
 // lib/reader-scroll/landing.ts
 // A trackpad's momentum arrives as wheel events about a frame apart; a longer gap is a new gesture.
 export const WHEEL_CHAIN_GAP_MS = 100
+export const JUMP_LANDING_GAP_PX = 12
 // Trackpad momentum runs 1-3 s; a chain held longer is the user's own scrolling through the press.
 const WHEEL_HOLD_MAX_MS = 3_000
 const LANDING_SETTLED_FRAMES = 10
@@ -14,8 +15,11 @@ export type LandingFrame = {
   rowConnected: boolean
   /** The scroller has a box: a reader under another screen isn't laid out. */
   laidOut: boolean
+  /** Active user contact (touches > 0 or scrollbar drag), not scroll momentum. */
   fingerDown: boolean
   scrollTop: number
+  /** Scroll-independent content offset of the target (`contentTop(scroller, landingElement)`). */
+  targetContentTop: number
 }
 
 export type LandingStep =
@@ -26,7 +30,9 @@ export type LandingStep =
       overflowY: 'hidden' | ''
       /** Write the row into place this frame. */
       land: boolean
-      /** The first landed frame: start the row's tint. */
+      /** Target `scrollTop` to write when `land` is true. */
+      targetScrollTop: number
+      /** The first landed frame: start the row's tint and lock the clamped gap. */
       highlight: boolean
     }
 
@@ -42,22 +48,29 @@ export type LandingSettle = {
  */
 export type LandingMachine = {
   plan(frame: LandingFrame): LandingStep
-  settle(reading: { after: number; scrollHeight: number }): LandingSettle
+  settle(reading: { after: number; targetContentTop: number }): LandingSettle
 }
 
 const STOP = { kind: 'stop' } as const
 
-export function createLandingMachine(): LandingMachine {
+export function createLandingMachine(gapPx = JUMP_LANDING_GAP_PX): LandingMachine {
   let highlighted = false
+  let desiredGap: number | null = null
   let stableFrames = 0
   let totalFrames = 0
-  let lastHeight = -1
+  let lastTargetContentTop: number | null = null
   let lastScrollTop: number | null = null
   let movingFrames = 0
   let halting = false
   let halted = false
   let wheelHoldStartedAt: number | null = null
-  let current = { wheelChainLive: false, writable: false, land: false, before: 0 }
+  let current = {
+    wheelChainLive: false,
+    writable: false,
+    land: false,
+    highlight: false,
+    before: 0,
+  }
 
   return {
     plan(frame) {
@@ -68,10 +81,10 @@ export function createLandingMachine(): LandingMachine {
         frame.now - (wheelHoldStartedAt ?? frame.now) >= WHEEL_HOLD_MAX_MS
       )
         return STOP
-      // A reload can drop the row, and a detached row's rect would read as a huge delta.
+      // A reload can drop the row, and a detached row's offset reads stale.
       if (!frame.rowConnected) return STOP
-      // Nothing lands in a reader not laid out, under a finger, or into a fling, which a write
-      // doesn't stop: the position must rest a frame or the fling be halted.
+      // Nothing lands in a reader not laid out, under active contact, or into a fling, which a
+      // write doesn't stop: the position must rest a frame or the fling be halted.
       const writable = frame.laidOut && !frame.fingerDown
       const atRest = lastScrollTop != null && Math.abs(frame.scrollTop - lastScrollTop) < 1
       // The reader's own writes move the scroll on one frame; a fling moves it on every frame.
@@ -79,24 +92,41 @@ export function createLandingMachine(): LandingMachine {
       const land = writable && atRest && !halting
       const highlight = land && !highlighted
       if (highlight) highlighted = true
-      current = { wheelChainLive: frame.wheelChainLive, writable, land, before: frame.scrollTop }
-      return { kind: 'frame', overflowY: frame.wheelChainLive ? 'hidden' : '', land, highlight }
+      const gap = desiredGap ?? gapPx
+      const targetScrollTop = Math.max(0, frame.targetContentTop - gap)
+      current = {
+        wheelChainLive: frame.wheelChainLive,
+        writable,
+        land,
+        highlight,
+        before: frame.scrollTop,
+      }
+      return {
+        kind: 'frame',
+        overflowY: frame.wheelChainLive ? 'hidden' : '',
+        land,
+        targetScrollTop,
+        highlight,
+      }
     },
-    settle({ after, scrollHeight }) {
+    settle({ after, targetContentTop }) {
+      // Lock the realized gap after the first landed write so growth below never pulls a
+      // bottom-clamped target upward while shifts above still track pixel-for-pixel.
+      if (current.highlight && desiredGap == null) desiredGap = targetContentTop - after
       lastScrollTop = current.writable ? after : null
       // One halt: should a fling outlive it, the loop waits for rest rather than fight it.
       halting = current.writable && !halted && movingFrames >= 2
       if (halting) halted = true
-      // A frame that didn't land never settles, or the loop would end without having landed. Nor
-      // has one the loop had to correct (a fling's sub-pixel tail reads as rest), or one inside a
-      // chain, whose next wheel would scroll the reader once the loop let go.
+      // A frame that didn't land never settles, nor one the loop had to correct, nor one inside a
+      // wheel chain whose next event would scroll once the loop let go.
       const settled =
         current.land &&
         !current.wheelChainLive &&
         Math.abs(after - current.before) < 1 &&
-        scrollHeight === lastHeight
+        lastTargetContentTop != null &&
+        Math.abs(targetContentTop - lastTargetContentTop) < 1
       stableFrames = settled ? stableFrames + 1 : 0
-      lastHeight = scrollHeight
+      lastTargetContentTop = current.writable ? targetContentTop : null
       totalFrames += 1
       return {
         haltOverflow: halting,
