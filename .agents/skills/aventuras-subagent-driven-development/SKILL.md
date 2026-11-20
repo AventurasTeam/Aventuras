@@ -120,7 +120,7 @@ digraph process {
 - the final review's lines (`references/final-review.md`)
 - review-round entries (aventuras-receiving-code-review) and the PR URL
 
-**At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete; one whose last line is a fix round with findings open resumes the loop at the next round, or goes to the cap after round 5; one whose last round left none open is complete. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
+**At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete; one whose last line is a fix round with findings open resumes the loop at the next round, or goes to the cap after round 5; one whose last round left none open, with no dispute awaiting its answer, is complete. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
 
 **A dispatched worker sweeps the plan before Task 1:** read [references/preflight.md](references/preflight.md) and run it.
 

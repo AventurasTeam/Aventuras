@@ -16,3 +16,5 @@ Part of aventuras-subagent-driven-development. The implementer's short status na
 **Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
 
 **Failing tests the implementer didn't cause** (its report's Failing tests field): one an earlier task on this branch caused reopens that task as a finding; anything else goes to `docs/implementation/triage.md` with the test's name and the first failing assertion, and is ledgered. Neither holds the current task.
+
+**Failing tests the task's own change caused** are the task's to fix before it completes: send them back to the implementer as findings. On a `review` task they join the review's findings in the fix loop; on an `automated` task they are a fix round before you run its named commands.
