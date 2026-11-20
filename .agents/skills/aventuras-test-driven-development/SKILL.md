@@ -128,7 +128,7 @@ Vague name, tests mock not code
 **MANDATORY. Never skip.**
 
 ```bash
-pnpm test:run path/to/test.test.ts
+pnpm exec vitest run --project unit path/to/test.test.ts
 ```
 
 Confirm:
@@ -183,7 +183,7 @@ Don't add features, refactor other code, or "improve" beyond the test.
 **MANDATORY.**
 
 ```bash
-pnpm test:run path/to/test.test.ts
+pnpm exec vitest run --project unit path/to/test.test.ts
 ```
 
 Confirm:
@@ -193,7 +193,18 @@ Confirm:
 
 **Test fails?** Fix code, not test.
 
-**Other tests fail?** Fix now.
+**Other tests fail?** Fix what your change broke. Report every other failure by name for triage: a failure you didn't cause is not this task's to fix.
+
+**"Other tests" means the project's suite, not just your file.** A
+green run of the test you wrote is not a green suite. Before each task
+commit, run `pnpm exec vitest run --project unit`, adding
+`--project storybook` when stories or components changed, even when
+your task named only one test file; a PR's last task runs the plan's
+full local gates, the CI-parity set. A scope statement in your task
+bounds the deliverable, not your verification. Any failure that run
+shows — including one you didn't cause — goes in your report by name;
+a red test you watched scroll past and didn't mention is a report
+falsified by omission.
 
 ### REFACTOR - Clean Up
 
@@ -215,6 +226,12 @@ Next failing test for next feature.
 | **Minimal** | One thing. "and" in name? Split it. | `test('validates email and domain and whitespace')` |
 | **Clear** | Name describes behavior | `test('test1')` |
 | **Shows intent** | Demonstrates desired API | Obscures what code should do |
+
+When writing or changing any test, read [writing-good-tests.md](writing-good-tests.md) for the rules that keep tests honest:
+- Name the production change that would make the test fail — before writing it
+- Assert on real behavior, never on mock behavior
+- Keep test-only code in test utilities, out of production classes
+- Understand a dependency's side effects before mocking it
 
 ## Why Order Matters
 
@@ -366,13 +383,6 @@ Can't check all boxes? You skipped TDD. Start over.
 Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
 
 Never fix bugs without a test.
-
-## Testing Anti-Patterns
-
-When adding mocks or test utilities, read @testing-anti-patterns.md to avoid common pitfalls:
-- Testing mock behavior instead of real behavior
-- Adding test-only methods to production classes
-- Mocking without understanding dependencies
 
 ## Final Rule
 
