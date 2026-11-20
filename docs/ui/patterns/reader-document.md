@@ -59,10 +59,33 @@ Why not a JS virtualizer: its estimate corrections write scroll
 position mid-gesture — imperceptible on wheel input, visible
 stutter on touch flings (device-verified). The same rule governs
 the whole surface: **no programmatic scroll write may land
-mid-gesture.** One exception: an explicit jump (a chapter press or
-an `entry` link) halts the momentum of a touch fling or a trackpad
-and lands at once. A finger on the glass still wins, and every
-write the user didn't ask for still waits for scroll rest.
+mid-gesture.** Gesture state separates into two levels under one
+shared scroll arbiter (`lib/reader-scroll/`):
+
+- **Active contact** — touch contact (tracked by active touch count
+  `touches.length > 0`, never a boolean cleared on the first lifted
+  finger) or an active primary-button, non-touch scrollbar drag
+  (ended by `scrollend`, `window` `pointerup`/`pointercancel`/
+  `mouseup`, `window` `pointermove`/`mousemove` with `buttons === 0`,
+  or `window` `blur`). Active contact beats **every** write, explicit
+  jumps included.
+- **Mid-gesture** — active contact _or_ non-programmatic scroll
+  momentum (within `REST_MS` of the last non-programmatic `scroll`
+  event). Every write the user didn't ask for waits for scroll rest
+  (`!mid-gesture`): autoscroll chunk writes, stream-end settle,
+  viewport-shrink and chapter-break re-pins, held above-viewport
+  changes, and boundary extensions or trims.
+
+Every reader-owned `scrollTop` write routes through one helper that
+records its read-back `scrollTop` when the write moved the scroller;
+a matching `scroll` echo (`< 1 px`) never counts as user movement
+and never trips scroll momentum. One precedence order governs all
+writers: **active contact > explicit jump > unsolicited
+bottom-following (tail only, at rest) > anchor preservation >
+background slice maintenance (at rest)**. The one exception to
+waiting for scroll rest is an explicit jump (a chapter press or an
+`entry` link), which halts the momentum of a touch fling or a
+trackpad and lands at once while still waiting out active contact.
 
 DOM residency is bounded by the
 [loaded-set window's slice](../screens/reader-composer/reader-composer.md#loaded-set-model),
@@ -118,6 +141,18 @@ late layout lands a one-shot write short of the true bottom. The
 user's first gesture breaks the pin: a wheel, a touch drag, a
 scrollbar press or an upward scroll key
 ([`reader-composer.md → Autoscroll`](../screens/reader-composer/reader-composer.md#autoscroll)).
+
+**Live bottom geometry uses dual observers.** The scroller's flow
+children sit inside a single static-positioned `flow-root` content
+wrapper (not an `offsetParent`, so `offsetTop` math stays unchanged,
+and no margin collapse across its boundary). `ResizeObserver` watches
+both the scroller viewport and that content wrapper so
+jump-to-bottom visibility and the pre-break content height stay live
+across commit swaps, late layout (fonts, shadow-root images, metadata
+wraps, disclosures), and viewport resizes — rather than reading
+geometry only at scroll or React commit boundaries. Button-visibility
+sync pauses while a running landing or bottom pin owns scroll and
+flushes once it ends, preventing single-frame flicker.
 
 ## Native hosting
 
@@ -271,9 +306,18 @@ scrollbar press or scroll key
 drops it, and so does a `branchKey` change. A wheel that continues a
 chain already running at the jump (a trackpad's momentum) doesn't:
 the landing halts the chain, for up to about 3 s, past which the
-chain is the user's own scrolling and the landing lets go. A wheel
-after a pause or in the other direction is a new gesture and drops
-it.
+chain is the user's own scrolling and the landing lets go. Wheel-chain
+liveness is held by an event-loop quiescence timer (`100 ms`), not
+wall-clock subtraction across a blocking commit, and re-armed for one
+grace window when the landing starts — so a slice commit outlasting
+`100 ms` still holds overflow hidden from frame 1 before queued
+momentum wheels arrive. A wheel after a pause or in the other
+direction is a new gesture and drops it. On its first landed write,
+the landing locks the target's clamped viewport gap and settles once
+the target's own content offset holds steady — never waiting on
+total `scrollHeight`, so growth below the target (such as a streaming
+reply) neither keeps the landing alive nor drags a clamped target
+upward.
 
 **Readiness handshake.** Prop emissions into a document that isn't
 listening yet are lost. The document calls `onReady` once its

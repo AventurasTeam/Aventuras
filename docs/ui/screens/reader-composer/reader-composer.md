@@ -1433,7 +1433,11 @@ bookkeeping across windows.
 **Where a jump lands.** The row's top sits just under the viewport's
 top. With a chapter break directly above the row the break lands
 there instead, so a chapter jump opens under its heading. A row too
-near the tail stops at the bottom. The scroll has no animation; the landed
+near the tail stops at the bottom, locking that clamped viewport
+offset on its first landed frame: the landing settles once the target's
+own offset above it holds steady and never chases growth below (so a
+reply streaming below a near-tail target leaves the landed row still
+instead of dragging it upward). The scroll has no animation; the landed
 row's card background tints with `--selection-bg` and fades back to its
 own background over about 1.5 s from the first frame it lands on. At
 full strength the tint reads as a selected card in dark themes, so there
@@ -1454,9 +1458,11 @@ during the read isn't seen and the landing still moves the view; while
 it shows, it takes the touches. With the veil down and the row in the
 slice, a user gesture drops the jump. A jump made while the reader is
 still moving from a touch fling or a trackpad's momentum halts it and
-lands at once; a wheel after a pause or in the other direction is a
+lands at once — even if the slice commit bringing the row outlasts the
+momentum gap; a wheel after a pause or in the other direction is a
 new gesture and drops the jump
-([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout),
+[`Bridge contract`](../../patterns/reader-document.md#bridge-contract)).
 
 **"Branch top" semantics.** First entry of the **current branch**,
 the row with nothing above it. A fork copies entries 1..N
@@ -1510,9 +1516,11 @@ The ~80px tolerance is generous because the suggestion-panel +
 composer chrome sits below the entries.
 
 **Disengage.** Any user-initiated scroll upward during a stream →
-disengaged for the rest of the stream. Detection: track `scrollTop`
-set by autoscroll programmatically; if a `scroll` event reports a
-different value, it's user-initiated. A move inside the ~80px band
+disengaged for the rest of the stream. Detection: every reader-owned
+write routes through the document's shared programmatic-write helper
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)),
+so a `scroll` event outside `< 1 px` of its recorded read-back
+`scrollTop` is user-initiated. A move inside the ~80px band
 would be re-pinned by the next chunk before it could leave it, so an
 upward gesture disengages at once: a wheel up, a touch drag, a press
 on the reader's scrollbar, or an upward scroll key (Arrow Up, Page
@@ -1527,8 +1535,9 @@ scrollbar (macOS's default), which takes none, isn't one
 **Re-engage (auto).** User scrolls back to within ~80px of bottom
 while still in the same stream → autoscroll re-engages. Viewport
 pins back to streaming entry's bottom once the scroll rests: a
-reader still under a finger, a fling or a scrollbar drag isn't
-written to.
+reader still under a finger (even after dragging back into the band
+or with a second finger down), a fling, or a scrollbar drag receives
+no chunk writes and catches up at scroll rest if still engaged.
 
 **Stream end.** Engaged / disengaged state resets. Next stream
 re-evaluates the engage condition fresh. An engaged end holds the
@@ -1536,7 +1545,9 @@ bottom while the reply settles: the committed row replaces the
 streaming card and lays out taller (its footer arrives with it), so
 the viewport re-asserts the bottom each frame until the content
 height holds, and any of those gestures, or a wheel down, hands
-control back. A disengaged end moves nothing.
+control back. If the stream ends mid-gesture, the settle latches as
+a deferred re-pin below rather than writing under the gesture. A
+disengaged end moves nothing.
 
 **Layout shifts during a stream.**
 
@@ -1555,10 +1566,15 @@ height while the user sits within ~20px of the bottom (the
 re-pins to the bottom, with or without a stream. Like every write the
 user didn't ask for, it
 [waits for scroll rest](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout):
-under a finger, a fling's momentum or a scrollbar drag, it reads the
-distance again once the scroll rests, so a reader the gesture carried
-away keeps their place. It skips a reader with a jump pending or
-landing. The motivating trigger is the
+when a shrink qualifies mid-gesture (under a finger, a fling's
+momentum, or a scrollbar drag), it latches a deferred re-pin at the
+pre-shrink `scrollTop` rather than writing immediately. Any upward
+interruption or explicit jump clears the latch; at scroll rest, it
+re-pins if the user stayed stationary since the trigger (such as a
+thumb resting on screen when the banner mounted) or scrolled into the
+~20px near-bottom band, and drops otherwise so a reader carried away
+by a fling or drag keeps their place. It skips a reader with a jump
+pending or landing. The motivating trigger is the
 [memory banner](../../principles.md#affordance-loci) mounting below
 the top bar as a pass starts, right after a reply commits. The
 stream-end settle above leaves the reader at the bottom, and holds
@@ -1571,8 +1587,10 @@ focus doesn't re-pin: on Android the keyboard opening under it
 shrinks the viewport, and pinning the bottom then would push the
 editor up under the top bar. The reader instead scrolls just far
 enough to bring the editor's row, Save and Cancel included, back
-into view, since Android's WebView never scrolls a focused field into
-view itself; an editor already in view holds its position.
+into view (waiting for scroll rest if mid-gesture, and skipping while
+a jump is pending or landing), since Android's WebView never scrolls
+a focused field into view itself; an editor already in view holds
+its position.
 
 **A chapter break mounting at the bottom.** A close's break mounts
 below its end row, and when that row is the tail it adds height under
@@ -1580,11 +1598,14 @@ a reader sitting at the bottom, with no scroll event to raise the
 [jump button](#jump-buttons) and the reply's last lines hidden. So a
 break that mounts while the reader sits within ~20px of the bottom
 re-pins it, as the viewport shrink above does; the distance is read
-against the previous commit's height, since the new commit already
-holds the break. It waits for scroll rest as the viewport shrink
-does, and skips a reader with a jump pending or landing, and one that
-isn't laid out. Further up, the anchor rule compensates the break's
-height, as it does any change above the viewport
+against the
+[live observed content height](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)
+from just before the break commit (absorbing any late layout since
+the prior commit), since the new commit already holds the break. It
+latches and waits for scroll rest by the same rule as the viewport
+shrink above, and skips a reader with a jump pending or landing, and
+one that isn't laid out. Further up, the anchor rule compensates the
+break's height, as it does any change above the viewport
 ([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout)).
 
 **A system entry's opened block.** Opening a system entry's
@@ -1616,7 +1637,13 @@ chapter 1".
 the user is not near its bottom (~20px tolerance — the
 button appears as soon as the user leaves the live edge;
 deliberately decoupled from the auto-load boundary's
-~viewport-height tolerance). Slides in / out on threshold cross.
+~viewport-height tolerance). Visibility tracks live viewport and
+content geometry
+([`reader-document.md → Entry list`](../../patterns/reader-document.md#entry-list-fully-rendered-flow-layout))
+as well as scroll events, so commit swaps, late layout, metadata or
+footer growth, and viewport resizes update it without waiting for a
+scroll; updates pause while a landing or bottom pin owns scroll and
+flush when it ends. Slides in / out on threshold cross.
 Hidden near the bottom of a slice at the tail.
 `app_settings.appearance.showJumpToBottom`
 (default true) hides the button entirely; DB-only until the M7.1
@@ -1628,7 +1655,9 @@ last 50 and lands at the bottom without animation, since nothing
 between is rendered (see [Loaded-set model](#loaded-set-model)); the
 window already holds the tail, so nothing is read. Either way it
 re-engages autoscroll if a stream is in flight and the user lands
-at-bottom.
+at-bottom (latching rest catch-up across an uninterrupted smooth
+scroll so a fast stream cannot outgrow the smooth-scroll target
+mid-animation).
 
 **Keyboard shortcut:** `End` — jump-to-bottom.
 
