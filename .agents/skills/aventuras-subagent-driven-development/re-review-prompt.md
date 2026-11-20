@@ -67,11 +67,9 @@ Dispatch the aventuras-task-reviewer agent with:
     ### Finding Verdicts
 
     For each finding in The Findings Under Verification, in order:
-    - **[finding one-liner]** — ADDRESSED | NOT ADDRESSED | WITHDRAWN, with
-      file:line evidence. "Attempted" is not addressed: the specific defect
-      must no longer exist. WITHDRAWN only when the implementer's fix report
-      argues the finding was wrong and you have checked its evidence and
-      agree: say what you checked.
+    - **[finding one-liner]** — ADDRESSED | NOT ADDRESSED, with file:line
+      evidence. "Attempted" is not addressed: the specific defect must no
+      longer exist.
 
     ### New Breakage in the Fix Diff
 
@@ -100,4 +98,4 @@ Dispatch the aventuras-task-reviewer agent with:
 - `[FIX_BASE_SHA]` — the head the previous review saw
 - `[HEAD_SHA]` — current commit
 
-**Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED / WITHDRAWN), new breakage in the fix diff, out-of-scope observations, and a round verdict.
+**Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED), new breakage in the fix diff, out-of-scope observations, and a round verdict.

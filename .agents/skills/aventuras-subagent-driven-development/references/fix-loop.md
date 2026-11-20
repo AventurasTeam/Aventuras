@@ -16,6 +16,8 @@ Everything else enters the loop, spec and quality findings together: one fix rou
 
 **Every round, either way:** the implementer fixes, re-runs the tests covering the amended code, appends its fix report to the same report file, and replies with the short status. Before re-dispatching the reviewer, confirm the fix report contains the covering tests, the command run, and the output; dispatch the re-review once all three are present. Name the covering test files in the fix message — a one-line fix does not need the whole suite.
 
+**A disputed finding** is one the implementer answers with evidence instead of a fix: its short status says `DISPUTED`, and the report file holds the evidence. Don't send it to the re-review and don't rule on it. Take it to your human partner now, through the channel when you are a dispatched worker: the finding verbatim, the implementer's evidence, and whether it is load-bearing. Ledger `Task <N>: disputed — <finding one-liner> — asked <id>`. The round's other findings go on through the loop; a dispatched worker holds only the tasks that build on a load-bearing dispute, as at the cap. The answer withdraws the finding (ledger it with the answer's label) or keeps it, and a kept finding re-enters the loop at the next round.
+
 **The re-review is scoped.** Dispatch [re-review-prompt.md](../re-review-prompt.md) with the findings list, the task's text, the report file, and the fix range (FIX_BASE = the head the previous review saw). The re-reviewer verdicts each finding ADDRESSED or NOT ADDRESSED and flags new breakage in the fix diff only. New Critical/Important breakage in the fix diff joins the open findings list. Out-of-scope observations go to the ledger as deferred minors, or to triage when marked `pre-existing` — they never extend the loop.
 
 **After each round,** append to the ledger:
@@ -28,4 +30,4 @@ Never fix findings yourself in the controller session — your context stays cle
 - The task is `complete (<K> open at the cap)`. A dispatched worker carries on with the tasks that don't build on a load-bearing finding and ledgers the rest `held:`, as SKILL.md → Dispatched worker describes for any open question.
 - When the answer comes, act on it: a fix is a fresh implementer at the round 4-5 tier plus one scoped re-review; anything else is recorded with the answer and its label.
 
-Never rule on a finding before the cap to end the loop: that is pre-judging with a different name. A finding you doubt goes back to the implementer with the rest, and the re-review settles it. A silent discard is forbidden.
+Never rule on a finding before the cap to end the loop: that is pre-judging with a different name. A finding you doubt goes back to the implementer with the rest; only the implementer's evidence makes it a dispute, and only your human partner settles one. A silent discard is forbidden.

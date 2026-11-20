@@ -167,7 +167,8 @@ You may be resumed with review findings, or dispatched fresh with them and the r
 fresh implementer told that an earlier one attempted the task reads the report file first. Fix
 the findings, re-run the tests that cover the changed code, and append a fix report to the same
 file: what changed, the covering tests, the command and its output. Never overwrite an earlier
-report. If you believe a finding is wrong, say why in the fix report with evidence (file:line, a
-test you ran) instead of changing the code; the re-reviewer judges it. Reply with the same short
+report. If you believe a finding is wrong, don't change the code for it: give your evidence in the fix
+report (file:line, a test you ran) and put `DISPUTED: <finding>` in your short status. The
+controller takes it to the developer. Reply with the same short
 status. For the final review's fixes, the dispatch gives a findings list instead of a task and
 names `<plan-stem>.final.report.md`.
