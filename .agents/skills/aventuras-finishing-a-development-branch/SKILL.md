@@ -203,13 +203,14 @@ Report: "Keeping branch <name>. Worktree preserved at <path>."
 
 **If an orchestrator manages the worktree** (Orca lists it in `orca worktree list`; its worktrees also live under `.worktrees/`): never `git worktree remove` it, or the orchestrator keeps a record of a worktree that's gone. Remove it through the orchestrator (`orca worktree rm --worktree <id>`, which also deletes its branch) once the merge has landed, or leave it and tell the developer. Done.
 
-**If the worktree path is under `.worktrees/` or `worktrees/`:** this workflow created the worktree, so we own cleanup. First check for git-ignored work that removal would delete without asking: `git worktree remove` refuses over untracked files but silently deletes ignored ones.
+**If the worktree path is under `.worktrees/` or `worktrees/`:** this workflow created the worktree, so we own cleanup. First check for git-ignored work that removal would delete without asking: `git worktree remove` refuses over untracked files but silently deletes ignored ones, such as `_tmp/` media, `.impl-plans/` plans, `*.local` files and notes.
 
 ```bash
-git -C "<WORKTREE_PATH>" ls-files --others --ignored --exclude-standard -- _tmp .impl-plans
+git -C "<WORKTREE_PATH>" ls-files --others --ignored --exclude-standard --directory \
+  | grep -v -E '^(node_modules|\.expo|dist|android|ios|release|storybook-static|test-results|electron/dist)/'
 ```
 
-If that lists anything, show your human partner the files and ask whether to move them into the main repo root first. Then, from the main repo root:
+The filter drops dependency and build output, which regenerates. If anything is left, show your human partner the list and ask which to move into the main repo root first. Then, from the main repo root:
 
 ```bash
 git worktree remove "<WORKTREE_PATH>"
@@ -227,14 +228,14 @@ Worktree removal refused — these files were never committed:
 
 <file list>
 
-1. Commit them to <branch> before cleanup
+1. Commit them to <branch> and merge it into <base-branch> again before cleanup
 2. Move them into <main repo root>
 3. Delete them (unrecoverable)
 
 Which?
 ```
 
-Carry out the choice, then remove the worktree.
+Carry out the choice. A tracked file you moved or deleted now shows as deleted in the worktree, so restore it there first (`git -C "<WORKTREE_PATH>" restore --source=HEAD --staged --worktree -- <file>`); untracked files need nothing. Then remove the worktree.
 
 **Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 
