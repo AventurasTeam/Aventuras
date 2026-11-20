@@ -34,7 +34,7 @@ WHEN receiving code review feedback:
 
 **NEVER:**
 
-- "You're absolutely right!" (explicit CLAUDE.md violation)
+- "You're absolutely right!" (performative agreement)
 - "Great point!" / "Excellent feedback!" (performative)
 - "Let me implement that now" (before verification)
 
@@ -139,7 +139,7 @@ Push back when:
 - Reference working tests/code
 - Involve your human partner if architectural
 
-**Signal if uncomfortable pushing back out loud:** "Strange things are afoot at the Circle K"
+**If you're uncomfortable pushing back out loud:** Name that tension, then tell your partner about the issue you've seen. They'll appreciate your honesty.
 
 ## Acknowledging Correct Feedback
 
@@ -237,11 +237,3 @@ Fix and push the clear ones first, then ask once for everything left in this rou
 ## GitHub Thread Replies
 
 When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment.
-
-## The Bottom Line
-
-**External feedback = suggestions to evaluate, not orders to follow.**
-
-Verify. Question. Then implement.
-
-No performative agreement. Technical rigor always.

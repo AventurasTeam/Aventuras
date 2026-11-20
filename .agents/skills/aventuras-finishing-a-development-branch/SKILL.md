@@ -95,7 +95,13 @@ Skip the step entirely when the branch is a doc-only or config-only change.
 ```bash
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
 GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
+# Capture now, while still inside the workspace — Step 5 changes directory
+# before cleanup (Step 6) needs this value
+WORKTREE_PATH=$(git rev-parse --show-toplevel)
+echo "GIT_DIR=$GIT_DIR GIT_COMMON=$GIT_COMMON WORKTREE_PATH=$WORKTREE_PATH"
 ```
+
+Note the three printed values. Step 6 uses them as written: a shell variable may not survive to a later command, and recomputing them after Step 5 has changed directory describes the main repo instead.
 
 This determines which menu to show and how cleanup works:
 
@@ -107,12 +113,7 @@ This determines which menu to show and how cleanup works:
 
 ### Step 3: Determine Base Branch
 
-```bash
-# Try common base branches
-git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
-```
-
-Or ask: "This branch split from main - is that correct?"
+If the plan or the conversation doesn't already name it, ask: "This branch split from main - is that correct?"
 
 The base is `main`, the v2 trunk. GitHub's default branch is `master` (legacy v1), so every `gh pr create` below passes `--base <base-branch>` explicitly; without it the PR targets `master`, where CI never runs.
 
@@ -196,26 +197,44 @@ Report: "Keeping branch <name>. Worktree preserved at <path>."
 
 ### Step 6: Cleanup Workspace
 
-**Only runs for Option 1.** Options 2 and 3 always preserve the worktree.
-
-```bash
-GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
-GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
-WORKTREE_PATH=$(git rev-parse --show-toplevel)
-```
+**Only runs for Option 1.** Options 2 and 3 always preserve the worktree. Option 1 has already changed directory to the main repo root, so use the `GIT_DIR`, `GIT_COMMON` and `WORKTREE_PATH` values Step 2 printed. Don't recompute them here.
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
 **If an orchestrator manages the worktree** (Orca lists it in `orca worktree list`; its worktrees also live under `.worktrees/`): never `git worktree remove` it, or the orchestrator keeps a record of a worktree that's gone. Remove it through the orchestrator (`orca worktree rm --worktree <id>`, which also deletes its branch) once the merge has landed, or leave it and tell the developer. Done.
 
-**If worktree path is under `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`:** Superpowers created this worktree — we own cleanup.
+**If the worktree path is under `.worktrees/` or `worktrees/`:** this workflow created the worktree, so we own cleanup. First check for git-ignored work that removal would delete without asking: `git worktree remove` refuses over untracked files but silently deletes ignored ones.
 
 ```bash
-MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
-cd "$MAIN_ROOT"
-git worktree remove "$WORKTREE_PATH"
+git -C "<WORKTREE_PATH>" ls-files --others --ignored --exclude-standard -- _tmp .impl-plans
+```
+
+If that lists anything, show your human partner the files and ask whether to move them into the main repo root first. Then, from the main repo root:
+
+```bash
+git worktree remove "<WORKTREE_PATH>"
 git worktree prune  # Self-healing: clean up any stale registrations
 ```
+
+**If removal is refused** (`contains modified or untracked files`): the worktree holds files that exist nowhere else — uncommitted plans, notes, or scratch work. Never `--force` on your own initiative. Show your human partner what is at stake and ask:
+
+```bash
+git -C "<WORKTREE_PATH>" status --porcelain -uall
+```
+
+```
+Worktree removal refused — these files were never committed:
+
+<file list>
+
+1. Commit them to <branch> before cleanup
+2. Move them into <main repo root>
+3. Delete them (unrecoverable)
+
+Which?
+```
+
+Carry out the choice, then remove the worktree.
 
 **Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 
@@ -294,7 +313,7 @@ When the plan's Execution gate splits the slice into stacked PRs (CodeRabbit rev
 **Cleaning up harness-owned worktrees**
 
 - **Problem:** Removing a worktree the harness created causes phantom state
-- **Fix:** Only clean up worktrees under `.worktrees/`, `worktrees/`, or `~/.config/superpowers/worktrees/`, and remove an orchestrator's worktrees through the orchestrator
+- **Fix:** Only clean up worktrees under `.worktrees/` or `worktrees/`, and remove an orchestrator's worktrees through the orchestrator
 
 ## Red Flags
 
@@ -307,6 +326,7 @@ When the plan's Execution gate splits the slice into stacked PRs (CodeRabbit rev
 - Remove a worktree before confirming merge success
 - Clean up worktrees you didn't create (provenance check)
 - Run `git worktree remove` from inside the worktree
+- `--force` a worktree removal git refused: the refusal means files exist only in that worktree
 
 **Always:**
 

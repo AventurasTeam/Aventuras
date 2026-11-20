@@ -109,10 +109,10 @@ pnpm test:run 2>&1 | grep 'DEBUG git init'
 
 If something appears during tests but you don't know which test:
 
-Use the bisection script `find-polluter.sh` in this directory:
+Use the bisection script `find-polluter.sh` in this directory. Run it from the repo root, by path, with a target no test run starts with:
 
 ```bash
-./find-polluter.sh '.git' 'src/**/*.test.ts'
+.agents/skills/aventuras-systematic-debugging/find-polluter.sh 'lib/db/stray.db' 'lib/**/*.test.ts'
 ```
 
 Runs tests one-by-one, stops at first polluter. See script for usage.
