@@ -93,8 +93,8 @@ Every task carries two tiers the executor honors. Assign them now — you see al
 
 **Verification** — how the task's acceptance is confirmed:
 
-- `automated` — fully covered by deterministic gates (typecheck, lint, existing tests, a completeness grep). The executor runs the named commands and reports the evidence; the implementer's self-review covers spec-compliance. No reviewer subagents. Eligible only when no behavioral judgment is needed — and any runtime-only risk (a change that passes the gates but could behave differently at runtime, e.g. platform variants or timing) is named as a smoke / monitor, not waved through.
-- `review` — anything with new logic, behavioral assertions, or an ambiguous spec. Gets the full two-stage review (spec compliance, then code quality) in the subagent skill.
+- `automated` — fully covered by deterministic gates (typecheck, lint, existing tests, a completeness grep). The executor runs the named commands and reports the evidence; the implementer's self-review covers spec-compliance. No task reviewer. Eligible only when no behavioral judgment is needed — and any runtime-only risk (a change that passes the gates but could behave differently at runtime, e.g. platform variants or timing) is named as a smoke / monitor, not waved through.
+- `review` — anything with new logic, behavioral assertions, or an ambiguous spec. Gets the task review in the subagent skill: one reviewer returning a spec-compliance verdict and a task-quality verdict.
 
 When unsure, pick `review` and `standard` — over-verifying is cheaper than a silent miss. The developer sees both tiers in the plan and can push any task up before execution starts.
 
@@ -239,7 +239,7 @@ Then present the options with the recommendation:
 
 **"Plan complete and saved to `<absolute path to the plan>`. Execution options:**
 
-**1. Subagent-Driven** — a fresh subagent per task, two-stage review on review-tier tasks, fast iteration.
+**1. Subagent-Driven** — a fresh subagent implements each task and, on review-tier tasks, a fresh reviewer checks it before the next one starts, then a whole-branch review at the end.
 
 **2. Inline Execution** — this session implements every task itself, with no per-task review; it stops to ask when blocked.
 

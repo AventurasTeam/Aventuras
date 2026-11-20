@@ -1,6 +1,6 @@
 # Implementer Dispatch Template
 
-Use this template when dispatching an implementer subagent. The role (checking the task against canon before coding, test-first, when to ask, the report format) is the `aventuras-implementer` agent's definition, `.claude/agents/aventuras-implementer.md`; this template is the per-task part.
+Use this template when dispatching an implementer subagent. The role (checking the task against canon before coding, test-first, when to ask, the report and its short reply) is the `aventuras-implementer` agent's definition, `.claude/agents/aventuras-implementer.md`; this template is the per-task part. Fix rounds and the final review's fix dispatch the same agent as `references/fix-loop.md` and `references/final-review.md` describe.
 
 ```
 Dispatch the aventuras-implementer agent with:
@@ -21,7 +21,13 @@ Dispatch the aventuras-implementer agent with:
 
     [The plan's Global Constraints section, verbatim; omit when the plan has none]
 
+    ## Report
+
+    Write your full report to: [absolute path of <plan-stem>.task-N.report.md, next to the plan file]
+
     Work from: [directory]
 ```
 
 The definition sets effort `high`. Haiku has no effort setting, so a `cheap` task runs without one.
+
+The report file is the task's record: the task reviewer reads it, and every fix round appends to it. The implementer replies to you with only the short status its definition gives.

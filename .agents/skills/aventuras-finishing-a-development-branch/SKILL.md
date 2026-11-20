@@ -187,6 +187,8 @@ EOF
 )"
 ```
 
+If the branch has an aventuras-subagent-driven-development ledger (`<plan-stem>.worker.md`), the body adds its `settled:` entries and residual review findings after Summary, as the Dispatched worker section's template shows.
+
 **Do NOT clean up worktree** — user needs it alive to iterate on PR feedback.
 
 #### Option 3: Keep As-Is
@@ -245,14 +247,18 @@ When your task prompt makes you a dispatched worker (aventuras-subagent-driven-d
 
 1. **Step 1.5 draws on your worker ledger too.** Every `DEVELOPER:` answer goes into Implementation notes; every `PROVISIONAL:` answer goes in marked provisional. An answer that changes what a canon doc says (`docs/data-model.md`, a contract) also updates that doc on this branch.
 2. **Comment audit: run it whenever the finder reports candidate blocks.** Don't offer it; commit it as Step 1.6 says.
-3. **The PR is the only option.** Never merge, never keep. Before pushing, merge `origin/main` in with a new commit if the branch conflicts with it, and if `git diff --name-only origin/main...HEAD | grep -vc '^docs/'` is over 100 (CodeRabbit's cap, which counts non-docs files only), ask through the channel about splitting. Then push and create the PR (Option 2). Its body adds, after Summary, one section per non-empty label from the ledger:
+3. **The PR is the only option.** Never merge, never keep. Before pushing, merge `origin/main` in with a new commit if the branch conflicts with it, and if `git diff --name-only origin/main...HEAD | grep -vc '^docs/'` is over 100 (CodeRabbit's cap, which counts non-docs files only), ask through the channel about splitting. Then push and create the PR (Option 2). Its body adds, after Summary, each section the ledger has entries for:
 
    ```markdown
    ## Decisions pending
    - [ ] <question> → <provisional choice> (alternative: <…>)
+   - [ ] <residual final-review finding> → left as is (fix: <…>)
 
    ## Decided during the run
    - <question> → <developer's decision>
+
+   ## Settled during the run
+   - <what> — <why> — cost if wrong: <…>
    ```
 
    Record the PR URL in the ledger.
