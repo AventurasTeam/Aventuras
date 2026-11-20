@@ -6,7 +6,7 @@ open-source software-development skill set:
 - Source: <https://github.com/obra/superpowers>
 - Author: Jesse Vincent and Prime Radiant
 - License: MIT
-- Version: ported from Superpowers v5.1.0 on 2026-05-22. `aventuras-writing-skills` was re-ported from v7.0.2 on 2026-11-20; the other skills carry selected v7.0.2 changes as surgical edits.
+- Version: ported from Superpowers v5.1.0 on 2026-05-22 and resynced to v7.0.2 on 2026-11-20 (#762, #763, #764). `aventuras-writing-skills` was re-ported whole; the other skills carry selected v7.0.2 changes as surgical edits. Upstream's lean plans (v6.4.2) were evaluated and not adopted.
 
 ## Derived skills
 
