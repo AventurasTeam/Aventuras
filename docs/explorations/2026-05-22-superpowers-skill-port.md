@@ -118,3 +118,36 @@ design; a slice that needs a spec decision is handed back to
 
 - Pilot slice: Slice 1.1 is process-heavy and low-code; Slice 1.2 is
   the first real code, migration, and cross-platform stress test.
+
+## Resync to v7.0.2 (2026-11-20)
+
+Upstream had reached v7.0.2. Its lessons came over in three PRs, as
+surgical edits to the port above:
+
+- #762: bug fixes (worktree cleanup, `find-polluter.sh`, a secret the
+  debugging example echoed), every `SKILL.md` under the 20,000-character
+  compaction cut, and the `pnpm lint:skills` gate.
+  `aventuras-writing-skills` was re-ported whole.
+- #763: Global Constraints and Review Focus in plans, task right-sizing,
+  no builds or tests while a plan is written, `writing-good-tests.md`
+  in place of `testing-anti-patterns.md`, and implementers run the unit
+  project before committing.
+- #764: one task reviewer per task in place of the spec and
+  code-quality pair, a fix loop capped at five rounds with scoped
+  re-reviews, disputed findings taken to the developer, a ledger kept
+  in every run with `settled:` entries, implementer reports in files,
+  and no agent dispatches subagents.
+
+Two upstream changes were evaluated in blind runs and settled
+differently, with the evidence in the PR descriptions:
+
+- Lean plans (v6.4.2), which leave function bodies to the implementer,
+  were not adopted: they lost two of ten prevented defects on the M4.2b
+  replay and cost more to write (#763).
+- The merged task reviewer was adopted although its defect score came
+  in 1.3 points under the pair's against a 1-point bar: the gap is
+  inside run-to-run noise, and it costs 34% less per task (#764).
+
+Kept on purpose, where upstream differs: complete code in plans, the
+reviewers' mutation check, the optional independent plan review, and
+TDD's "Why Order Matters".
