@@ -16,6 +16,8 @@ Dispatch the aventuras-task-reviewer agent with:
 
     [The plan's Global Constraints section, verbatim; omit when the plan has none]
 
+    [The plan's Decisions section, verbatim: a departure from canon a Decision records is not an issue]
+
     ## What the Implementer Claims They Built
 
     Read the implementer's report first: [absolute path of <plan-stem>.task-N.report.md]

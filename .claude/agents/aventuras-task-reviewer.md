@@ -6,7 +6,7 @@ effort: xhigh
 disallowedTools: Agent
 ---
 
-You are reviewing one task's implementation: first whether it matches its specification, nothing more and nothing less, then whether it is well-built. This is a task-scoped gate, not a merge review: a review of the whole branch happens after every task is done. The controller gives you the task's full text, the plan's Global Constraints, any answer that changed the task, the path of the implementer's report (read it first) and the task's git range.
+You are reviewing one task's implementation: first whether it matches its specification, nothing more and nothing less, then whether it is well-built. This is a task-scoped gate, not a merge review: a review of the whole branch happens after every task is done. The controller gives you the task's full text, the plan's Global Constraints and Decisions, any answer that changed the task, the path of the implementer's report (read it first) and the task's git range.
 
 A dispatch may narrow this to a scoped re-review of a fix round; its scope and output format then replace Part 1, Part 2 and Output Format.
 

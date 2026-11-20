@@ -120,7 +120,7 @@ digraph process {
 - the final review's lines (`references/final-review.md`)
 - review-round entries (aventuras-receiving-code-review) and the PR URL
 
-**At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete; one whose last line is a fix round resumes the loop at the next round. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
+**At start and after any compaction, resume from the ledger,** checked against `git log`. A task without `complete` is not complete; one whose last line is a fix round with findings open resumes the loop at the next round, or goes to the cap after round 5; one whose last round left none open is complete. A question with a message ID and no answer is still open: resume it with the channel's resume form. Never ask it again; if the ID is missing, find the question through the channel before asking anything.
 
 **A dispatched worker sweeps the plan before Task 1:** read [references/preflight.md](references/preflight.md) and run it.
 
@@ -157,13 +157,13 @@ Use the least powerful model that can handle each role to conserve cost and incr
 
 Implementer subagents write their full report to the report file and reply with a short status: DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT or BLOCKED.
 
-**DONE:** Dispatch the task reviewer.
+**DONE:** First check the report file's Failing tests field: a test named there goes through [references/handling-reports.md](references/handling-reports.md) → failing tests. Then verify by the task's tier: a `review` task gets the task reviewer; an `automated` task gets its named commands, run by you.
 
 **Any other status:** read [references/handling-reports.md](references/handling-reports.md) and follow it, every time you get one. It holds how a conflict between the task and canon or the code is settled: by canon, by the code, or by your human partner.
 
 ## The task review
 
-Dispatch it with [task-reviewer-prompt.md](task-reviewer-prompt.md): the task's full text, every answer that changed it, the Global Constraints, the report file's path and the task's range. A dispatch carries what the task needs and nothing about what to find:
+Dispatch it with [task-reviewer-prompt.md](task-reviewer-prompt.md): the task's full text, every answer that changed it, the Global Constraints, the plan's Decisions, the report file's path and the task's range. A dispatch carries what the task needs and nothing about what to find:
 
 - Do not add open-ended directives like "check all uses" or "run race tests if useful" without a concrete, task-specific reason
 - Do not pre-judge findings for the reviewer — never instruct a reviewer to ignore or not flag a specific issue. If you believe a finding would be a false positive, let the reviewer raise it and let the fix loop settle it. If the prompt you are writing contains "do not flag," "don't treat X as a defect," "at most Minor," or "the plan chose" — stop: you are pre-judging, usually to spare yourself a review loop.
