@@ -5,7 +5,7 @@
 # Example:
 #   .agents/skills/aventuras-systematic-debugging/find-polluter.sh 'lib/db/stray.db' 'lib/**/*.test.ts'
 
-set -e
+set -eo pipefail
 
 if [ $# -ne 2 ]; then
   echo "Usage: $0 <file_to_check> <test_pattern>"
@@ -49,8 +49,12 @@ for TEST_FILE in $TEST_FILES; do
 
   echo "[$COUNT/$TOTAL] Testing: $TEST_FILE"
 
-  # Run the test
-  pnpm exec vitest run --project unit "${TEST_FILE#./}" > /dev/null 2>&1 || true
+  # Stories run only in the storybook project; everything else in unit.
+  case "$TEST_FILE" in
+    *.stories.*) PROJECT=storybook ;;
+    *) PROJECT=unit ;;
+  esac
+  pnpm exec vitest run --project "$PROJECT" "${TEST_FILE#./}" > /dev/null 2>&1 || true
 
   # Check if pollution appeared
   if [ -e "$POLLUTION_CHECK" ]; then
@@ -63,7 +67,7 @@ for TEST_FILE in $TEST_FILES; do
     ls -la "$POLLUTION_CHECK"
     echo ""
     echo "To investigate:"
-    echo "  pnpm exec vitest run --project unit ${TEST_FILE#./}    # Run just this test"
+    echo "  pnpm exec vitest run --project $PROJECT ${TEST_FILE#./}    # Run just this test"
     echo "  cat $TEST_FILE         # Review test code"
     exit 1
   fi
