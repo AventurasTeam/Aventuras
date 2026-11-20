@@ -32,48 +32,6 @@ for the placement rule.
   by Slice 5.1, moved here 2026-11-02 by its closing review, which added
   the tap and CJK numbers.
 
-- **Build the unified reader scroll, rest, and landing contract.**
-  Designed 2026-11-20
-  ([exploration](./explorations/2026-11-20-reader-scroll-rest-landing-contract.md)),
-  consolidating five earlier UX items on `components/reader/reader-surface.tsx`
-  and `lib/reader-scroll/`: wheel hold starting a frame late after a
-  slow commit, landings failing to settle during streaming, missing
-  scroll-rest / multi-touch / scrollbar-drag guards, viewport shrink
-  pulling a landing to bottom, and stale bottom geometry. Canon is now
-  settled in
-  [`reader-document.md → Entry list`](./ui/patterns/reader-document.md#entry-list-fully-rendered-flow-layout),
-  [`reader-document.md → Bridge contract`](./ui/patterns/reader-document.md#bridge-contract),
-  and [`reader-composer.md → Scroll behavior`](./ui/screens/reader-composer/reader-composer.md#scroll-behavior).
-  Build checklist:
-  - Extract a pure scroll arbiter and rest machine under
-    `lib/reader-scroll/` separating `contactActive` (`touches.length > 0`
-    or primary-button non-touch scrollbar drag) from `midGesture`
-    (`contactActive || !scrollQuiescent`), with unified programmatic
-    `writeScrollTop` echo suppression, the 5-level write-priority
-    order (blocking viewport-shrink re-pin while a jump is pending or
-    landing), paused mid-gesture autoscroll catch-up (including across
-    an uninterrupted smooth `jumpToBottom`), and latched deferred
-    bottom re-pins (`scrollTopAtTrigger`).
-  - Probe real Chromium/Electron on a 0-px stationary click-release
-    over a native scrollbar track; if neither `pointerup` nor
-    `scrollend` fires there, add the bounded quiet-release fallback.
-  - Drive `startLanding`'s wheel hold from an event-loop quiescence
-    timer (`WHEEL_CHAIN_GAP_MS`) with post-commit grace, and update
-    `JumpPendingHaltsWheelMomentumOnceItsRowArrives`
-    (`components/reader/reader-surface.stories.tsx`) to drop its
-    `commitOutlastedChain` allowance and expect zero unheld frames
-    under a commit forced past 100 ms.
-  - Switch `createLandingMachine` (`lib/reader-scroll/landing.ts`)
-    from `scrollHeight` to locked `desiredGap` + `targetContentTop`
-    settlement so growth below never drags or delays a landing, and
-    update `JumpButtonRisesAsAStreamOutgrowsALandingOnTheTail` to
-    assert the clamped target stays stationary while the button rises.
-  - Wrap scroller children in a static `flow-root` inner container
-    observed alongside `scrollRef` by `ResizeObserver` to keep
-    `liveContentHeight` (pre-break baseline) and `showJumpToBottom`
-    live across commits, late layout, and resizes; locate the scroller
-    in `reader-surface.stories.tsx` via `data-reader-scroller`.
-
 - **TalkBack can't reach the reader document on Android.** On the
   Fold's release build with Samsung TalkBack, swiping skips from the
   reader's top bar to the composer, and touching the story text plays
