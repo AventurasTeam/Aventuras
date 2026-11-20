@@ -1,6 +1,6 @@
 ---
 name: aventuras-executing-plans
-description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
+description: Use when you have a written implementation plan to execute inline in the current session, without a subagent per task
 ---
 
 <!-- Adapted from Superpowers (https://github.com/obra/superpowers), MIT-licensed. See .agents/skills/NOTICE-superpowers.md. -->

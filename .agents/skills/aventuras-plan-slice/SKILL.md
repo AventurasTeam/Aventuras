@@ -32,7 +32,7 @@ You MUST create a task for each of these items and complete them in order:
 3. **Surface open questions** — the slice doc's Open questions section, plus any underspecified seam you find while reading
 4. **Decide E2E coverage** — does the slice change a cross-subsystem seam or user-facing flow? If so, the plan must carry an E2E test + its run as a verification command (see Deciding E2E coverage)
 5. **Classify each question** — developer-decision, implementer-choice, monitor-during-work, or blocker
-6. **Resolve developer-decisions** — one question at a time, with the developer
+6. **Resolve developer-decisions** — one question at a time, with the developer, writing each decision to the decisions file as it's made
 7. **Check slice size and scope** — if the slice is too large for one PR, or its scope is wrong, stop and recommend an amendment
 8. **Transition to planning** — invoke aventuras-writing-plans
 
@@ -78,6 +78,7 @@ digraph planning {
 - Read the parent milestone doc for the dependency graph and any slice contracts.
 - Open every Required-reading anchor at its named section. The slice doc paraphrases for orientation; the canonical doc is authoritative — read the canonical section, not just the paraphrase.
 - Note dependency slices. If the slice depends on unmerged work, surface that to the developer.
+- Read the shipped code the slice extends: the modules its Scope names and the seams it touches. Brief any research subagent with an explicit model and have it check its claims against that code. Never ask the developer what canon or the code already answers.
 
 **Surfacing open questions:**
 
@@ -99,7 +100,7 @@ When it warrants one, the plan MUST carry an E2E task (write the spec against th
 Use the taxonomy from `docs/implementation/conventions.md` → Slice planning. That doc is the source of truth; follow it if it changes.
 
 - **Developer-decision** — a choice the slice cannot safely make alone. MUST be answered before handoff.
-- **Implementer-choice** — the implementer may decide; record the sensible default so it is not silently reinterpreted later.
+- **Implementer-choice** — the implementer may decide. State the sensible default and its reason to the developer as a proposal they can correct, then record it so it is not silently reinterpreted later.
 - **Monitor-during-work** — a known risk with no decision yet; the plan flags it for attention during implementation.
 - **Blocker** — planning cannot finish until something external is resolved.
 
@@ -108,6 +109,7 @@ Use the taxonomy from `docs/implementation/conventions.md` → Slice planning. T
 - Ask one question at a time. Don't overwhelm with a long interrogation.
 - Prefer multiple choice. When a question has more than one viable resolution, present the options with trade-offs and lead with your recommendation and reasoning.
 - Be flexible — go back and re-read if an answer doesn't fit what the docs say.
+- Process choices are yours, not questions: saving to `.impl-plans/`, filing to triage, dispatching research. Do them and say what you did. Only slice or milestone amendments and canon changes go to the developer.
 
 **Checking slice size and scope:**
 
@@ -129,16 +131,7 @@ Wait for the developer's answer. Do NOT invoke aventuras-design yourself — the
 Once every developer-decision question is resolved:
 
 - Confirm with the developer that the open questions are settled.
-- Invoke aventuras-writing-plans. It consumes the slice doc and the decisions resolved here, and writes the execution plan to `.impl-plans/`.
+- Invoke aventuras-writing-plans with the path to the decisions file. It consumes the slice doc and those decisions, and writes the execution plan to `.impl-plans/`.
 - Do NOT invoke any other skill. aventuras-writing-plans is the next step.
 
-This skill writes no file of its own. The resolved decisions flow into aventuras-writing-plans, which owns the durable artifact.
-
-## Key Principles
-
-- **One question at a time** — don't overwhelm with multiple questions
-- **Multiple choice preferred** — easier to answer than open-ended when possible
-- **The slice doc is the contract** — resolve what it leaves open; don't redesign what it already settles
-- **Don't silently decide** — a developer-decision question guessed is a wrong implementation
-- **Canonical specs are gated** — a spec change is an aventuras-design offer, never a silent edit
-- **Be flexible** — go back and re-read when an answer doesn't fit
+**The decisions file** is `.impl-plans/<milestone>-<slice-stem>.decisions.md`, next to where the plan will go. Write each decision there as it's made: the question, its class, the answer, and the reason. Pass writing-plans the path, not a restatement: a long handoff in the skill's arguments is cut off when the conversation compacts, and the file survives. aventuras-writing-plans owns the plan itself.
