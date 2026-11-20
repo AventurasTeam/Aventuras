@@ -44,7 +44,7 @@ After the task list, add a **Writer batches** line: about four consecutive tasks
 
 **4. Assembly.** Handle each report the way aventuras-receiving-code-review handles review feedback: check it against the code and canon before acting. In the M4.2b evaluation about four reports in ten were not real problems.
 
-- A real interface problem: fix the skeleton entry, and rerun every batch whose tasks use that interface.
+- A real interface problem: fix the skeleton entry, then rerun the batch that owns it and every batch whose tasks use it.
 - A writer's correction of its own task's scope: keep it if it holds, and tell the developer.
 - An open cross-task question: settle it, and fix the tasks it touches, by a small edit or by rerunning the batch.
 

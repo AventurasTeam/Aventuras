@@ -182,7 +182,7 @@ Each subagent role is a Claude Code agent definition in `.claude/agents/`, which
 
 - `aventuras-implementer` with `./implementer-prompt.md` - implementer
 - `aventuras-spec-reviewer` with `./spec-reviewer-prompt.md` - spec compliance reviewer
-- `aventuras-code-reviewer` with `./code-quality-reviewer-prompt.md` - code quality reviewer; the final whole-implementation review uses the same agent with aventuras-requesting-code-review's template
+- `aventuras-code-reviewer` with `./code-quality-reviewer-prompt.md` - code quality reviewer; the final whole-implementation review uses the same agent with aventuras-requesting-code-review's template, with the plan's Review Focus section in its requirements
 
 Without Claude Code agent definitions (another harness), dispatch a general subagent whose prompt is the definition file's body followed by the per-dispatch prompt; its model and effort then follow that harness's controls.
 

@@ -19,6 +19,8 @@ Dispatch the aventuras-implementer agent with:
 
     [Every answer that changed the task, quoted with its label]
 
+    [The plan's Global Constraints section, verbatim; omit when the plan has none]
+
     Work from: [directory]
 ```
 

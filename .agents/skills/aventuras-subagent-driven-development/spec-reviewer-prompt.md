@@ -14,6 +14,8 @@ Dispatch the aventuras-spec-reviewer agent with:
 
     [Every answer that changed the task, quoted with its label]
 
+    [The plan's Global Constraints section, verbatim; omit when the plan has none]
+
     ## What Implementer Claims They Built
 
     [The implementer's report, whole: its Red runs and Conflicts and departures fields included]
