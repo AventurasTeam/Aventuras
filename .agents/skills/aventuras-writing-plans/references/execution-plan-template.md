@@ -2,7 +2,7 @@
 
 Copy the fenced block below into `.impl-plans/<milestone>-<slice-file-stem>.md` — the slice's path identifier from `docs/implementation/conventions.md` with the `/` flattened to `-`. For slice `M01/02-drizzle-schema` the file is `.impl-plans/M01-02-drizzle-schema.md`.
 
-The fenced block is the plan's full structure — its sections and their order. `SKILL.md` is the craft guidance for filling it in: file decomposition, task granularity, the per-task format, and no placeholders.
+The fenced block is the plan's full structure — its sections and their order. `SKILL.md` is the craft guidance for filling it in: file decomposition, task right-sizing, the per-task format, and no placeholders.
 
 ```markdown
 # [Slice name] Implementation Plan
@@ -43,6 +43,14 @@ notes when the branch is finished (this plan is git-ignored).
 
 - **Risk:** … **Signal:** … **Response:** …
 
+## Global Constraints
+
+[The requirements from canon and the slice doc that bind every task — version floors, dependency limits, naming and copy rules, platform requirements, exact values — one line each, copied verbatim with the doc they come from. Every task's requirements implicitly include this section; the executor pastes it into every implementer and task-reviewer dispatch. `none` if there are none.]
+
+## Review Focus
+
+[The five input classes or failure modes the slice doc and canon imply but no task's tests exercise that are most likely to bite a person using this software — one line each, naming the input or condition and the behavior a reasonable person would expect, most likely first. The slice doc says what the software must do, not everything it will meet, and its silence on an input is not permission for that input to break the program. Write the list here, once, with the slice doc in front of you (at the skeleton stage in a batched plan). Then, for each line, add the test that pins it to the task that owns the code: to its Scope in a skeleton entry, to its steps otherwise. The executor passes this section to the final review and to aventuras-slice-review. An empty section means you checked and found none.]
+
 ---
 
 ### Task 1: [Component name]
@@ -51,7 +59,7 @@ notes when the branch is finished (this plan is git-ignored).
 **Verification:** automated | review — <why>
 **Canon:** [`docs/<area>/<doc>.md → <Section>`](../docs/<area>/<doc>.md#<section>) — <what this task implements from it>
 
-[One `### Task N` per task — the Model, Verification and Canon lines, a Files block, then bite-sized steps, exactly as the Task Structure section of SKILL.md specifies. Repeat for every task. A plan of more than five tasks holds skeleton entries here first, then the Writer batches line (SKILL.md → Batched writing).]
+[One `### Task N` per task — the Model, Verification, Canon and Depends on lines, a Files block, an Interface block, then the steps, exactly as the Task Structure section of SKILL.md specifies. Repeat for every task. A plan of more than five tasks holds skeleton entries here first, then the Writer batches line (SKILL.md → Batched writing).]
 
 ---
 

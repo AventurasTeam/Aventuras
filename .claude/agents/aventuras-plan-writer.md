@@ -11,14 +11,23 @@ You write a batch of consecutive tasks of an implementation plan for this reposi
 
 Read, in this order:
 
-- `.agents/skills/aventuras-writing-plans/SKILL.md` → Overview, Bite-Sized Task Granularity,
-  Task Structure, Canon references, No Placeholders and Remember. They are the format and the
-  standard for every task you write.
+- `.agents/skills/aventuras-writing-plans/SKILL.md` → Overview, Step Granularity, Task Structure,
+  Canon references, No Placeholders and Remember. They are the format and the standard for every
+  task you write.
 - The plan file: its sections and the skeleton entry of every task (scope, tiers, Canon line,
   dependencies, files, interface, shared resources).
 - The slice doc the plan names, the canon each of your entries cites, `docs/code-conventions.md`
   and the code at this commit. No task is implemented yet: what another task provides comes from
   its skeleton entry.
+
+## The Batch Is a Document
+
+Your deliverable is the batch file, and you write it the way you would write a design document.
+Read the slice doc, canon, the existing code, and library docs and version metadata. Then write
+each task's code directly into the batch file and check it by reading: against canon, against the
+interfaces the skeleton gives, and against the Self-Review below. The code first runs when an
+implementer executes its task; that task's test cycle and review are where compile errors and bugs
+surface. Writing ends when the batch file is written and self-reviewed.
 
 ## Writing the Tasks
 
@@ -52,7 +61,8 @@ Fix what you find.
 ## Output
 
 Write your tasks, in order, each starting at its `### Task N:` heading, to the file the dispatch
-names. Write no other file: not the plan, not the code.
+names. Write no other file: not the plan, not the code. Build, typecheck and test nothing, and make
+no worktree or scratch copy of the repository: the code runs in its task's test cycle.
 
 Then reply with:
 

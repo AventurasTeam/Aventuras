@@ -92,7 +92,7 @@ digraph process {
 }
 ```
 
-**Read one task at a time.** At the start, read the plan's header, Execution gate and Decisions, and its task list (each task's heading, tiers and Files block): that is the context you curate each dispatch from. Read a task's full text when you reach it and paste it into the dispatch. Plans written in batches run to twice the old length, and holding every task's text from the start fills your context before the first task.
+**Read one task at a time.** At the start, read the plan's header, Execution gate, Decisions, Global Constraints and Review Focus, and its task list (each task's heading, tiers and Files block): that is the context you curate each dispatch from. Read a task's full text when you reach it and paste it into the dispatch. Plans written in batches run to twice the old length, and holding every task's text from the start fills your context before the first task.
 
 ## Per-task verification tier
 
@@ -182,7 +182,7 @@ Each subagent role is a Claude Code agent definition in `.claude/agents/`, which
 
 - `aventuras-implementer` with `./implementer-prompt.md` - implementer
 - `aventuras-spec-reviewer` with `./spec-reviewer-prompt.md` - spec compliance reviewer
-- `aventuras-code-reviewer` with `./code-quality-reviewer-prompt.md` - code quality reviewer; the final whole-implementation review uses the same agent with aventuras-requesting-code-review's template
+- `aventuras-code-reviewer` with `./code-quality-reviewer-prompt.md` - code quality reviewer; the final whole-implementation review uses the same agent with aventuras-requesting-code-review's template, with the plan's Review Focus section in its requirements
 
 Without Claude Code agent definitions (another harness), dispatch a general subagent whose prompt is the definition file's body followed by the per-dispatch prompt; its model and effort then follow that harness's controls.
 
