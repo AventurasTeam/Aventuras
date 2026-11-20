@@ -129,6 +129,7 @@ Vague name, tests mock not code
 
 ```bash
 pnpm exec vitest run --project unit path/to/test.test.ts
+# a story: pnpm exec vitest run --project storybook path/to/thing.stories.tsx
 ```
 
 Confirm:
@@ -184,6 +185,7 @@ Don't add features, refactor other code, or "improve" beyond the test.
 
 ```bash
 pnpm exec vitest run --project unit path/to/test.test.ts
+# a story: pnpm exec vitest run --project storybook path/to/thing.stories.tsx
 ```
 
 Confirm:

@@ -108,7 +108,9 @@ BEFORE writing the test body:
 **The mock earns no assertions.** A mock assertion passes when the mock
 is present and fails when it is absent — it says nothing about the
 component. Assert the real component's behavior; if the mock is what you
-are checking, unmock it or delete the assertion.
+are checking, unmock it or delete the assertion. Asserting the calls a
+double receives is a different thing, and often required: see Make
+doubles specific.
 
 ```typescript
 // ✅ Real behavior
@@ -208,7 +210,9 @@ change's behavior:
   it, run, and restore it from that copy with `cp`. Never `git stash` or
   `git checkout --`: a killed chain leaves the stash unpopped, and a
   checkout restores HEAD, discarding your uncommitted fix along with
-  the mutation.
+  the mutation. Mutate, run and restore in one command, with the restore
+  in a `trap '…' EXIT`, so an interrupted run still puts the file back;
+  if a session dies mid-check anyway, restore from the copy first.
 - Run the test's file: `pnpm exec vitest run --project unit <file>`, or
   `--project storybook` for a story.
 - Confirm the run happened before believing a mutation survived: the
@@ -220,7 +224,9 @@ change's behavior:
   instead: a scratch worktree at the base commit, outside the repo tree,
   with `node_modules` symlinked in and the test added. Run it with
   `npx vitest run --project unit <file>`: pnpm refuses to run over a
-  symlinked `node_modules`.
+  symlinked `node_modules`. An E2E spec needs that worktree's app built
+  before it can run red; how the harness builds and runs is in
+  `docs/testing.md`.
 - An E2E test runs the built app: rebuild after mutating and again after
   restoring (`pnpm build:web`, or `pnpm electron:compile` for
   `electron/`).
