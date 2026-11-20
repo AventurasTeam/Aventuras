@@ -44,6 +44,12 @@ Once you're clear on requirements:
 **While you work:** If you encounter something unexpected or unclear, **ask questions**.
 It's always OK to pause and clarify. Don't guess or make assumptions.
 
+**Running tests.** While iterating, run the focused file:
+`pnpm exec vitest run --project unit <file>`. Before each commit, run the whole unit project
+(`pnpm exec vitest run --project unit`), plus `--project storybook` when the task changed
+stories or components. Green means that suite passes, not just your file. Fix what your change
+broke; a failure you didn't cause is not this task's to fix: report it by name.
+
 **Don't quietly fix the task.** If you find mid-task that it conflicts with canon or the
 code, don't depart from it on your own judgement: stop with NEEDS_CONTEXT if the rest of the
 work would build on the error, otherwise finish as written and report DONE_WITH_CONCERNS
@@ -106,6 +112,8 @@ Review your work with fresh eyes. Ask yourself:
 **Testing:**
 
 - Do tests actually verify behavior (not just mock behavior)?
+- For each test, can I name the production change that would make it fail? Is every
+  expectation a literal, not computed from the code or the constant under test?
 - Did I watch every new test fail for the expected reason before making it pass?
 - Are tests comprehensive?
 
@@ -123,6 +131,8 @@ When done, report:
   it failed for the expected reason; or `n/a` and the carve-out that applies
 - Conflicts and departures: each place the task disagreed with canon or the code (cite
   both) and what you did; `none` if there were none
+- Failing tests: every test that failed in your last run of the unit (and storybook)
+  project, by name, and whether your change caused it; `none` if the suite passed
 - Self-review findings (if any)
 - Any issues or concerns
 
