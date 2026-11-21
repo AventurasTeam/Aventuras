@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+
 import { OverflowMenu, type OverflowMenuEntry } from './overflow-menu'
 
 const ENTRIES: OverflowMenuEntry[] = [
@@ -240,5 +242,45 @@ export const OpensSheetRunsAtOnceDesktop: Story = {
     await waitFor(() => expect(review).toBeVisible())
     await userEvent.click(review)
     await waitFor(() => expect(args.entries[0].onPress).toHaveBeenCalledTimes(1))
+  },
+}
+
+function MenuOpensDialog() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <OverflowMenu
+        label="More actions"
+        entries={[
+          { key: 'delete', label: 'Delete…', destructive: true, onPress: () => setOpen(true) },
+        ]}
+      />
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogTitle>Delete this row?</DialogTitle>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+/** overlays.md → Close focus: the Sheet row is gone by the time the dialog closes; `⋯` takes focus. */
+export const DialogFromThePhoneSheetReturnsToItsTrigger: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <MenuOpensDialog />,
+  play: async () => {
+    await waitFor(() => expect(screen.queryByTitle('More actions')).toBeNull())
+    const trigger = screen.getByRole('button', { name: 'More actions' })
+    await userEvent.click(trigger)
+    const entry = await waitFor(() => screen.getByRole('menuitem', { name: 'Delete…' }))
+    await waitFor(() => expect(entry).toBeVisible())
+    await userEvent.click(entry)
+    await screen.findByRole('dialog', { name: 'Delete this row?' })
+    await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Delete…' })).toBeNull())
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Delete this row?' })).toBeNull(),
+    )
+    await waitFor(() => expect(trigger).toHaveFocus())
   },
 }

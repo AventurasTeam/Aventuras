@@ -382,15 +382,7 @@ function SceneEditDialog({
         busy={saving}
         hideCloseButton={saving}
         scrollable={false}
-        // Radix returns focus to whatever DialogTrigger registered, and this Dialog is
-        // controlled from the card rather than triggered, so it would drop the keyboard
-        // on <body> instead of the pencil that opened it.
-        onCloseAutoFocus={(event) => {
-          const trigger = returnFocusTo.current as { focus?: () => void } | null
-          if (typeof trigger?.focus !== 'function') return
-          event.preventDefault()
-          trigger.focus()
-        }}
+        returnFocusTo={returnFocusTo}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
           ;(event.currentTarget as HTMLElement | null)?.focus()

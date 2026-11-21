@@ -60,19 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **A Dialog opened without a trigger returns focus to `<body>` on
-  close.** Radix's modal `DialogContent` focuses only its
-  `DialogTrigger` when it closes (`@radix-ui/react-dialog`,
-  `onCloseAutoFocus`), and 28 of the app's 30 Dialog and AlertDialog
-  consumers open from state with no trigger, so focus falls to
-  `<body>` and the next Tab starts at the top of the page. Seen on the
-  close modal opened from the reader popover, the Actions menu and
-  `Close chapter here` (desktop dev build). Where the opener unmounts as
-  the dialog opens (a popover row, a menu option), returning to it isn't
-  enough, so a fix needs a return target per opener;
-  [`overlays.md`](../ui/patterns/overlays.md) has a close-focus rule for
-  Sheet and Popover but none for Dialog, and
-  [`import-dialog.md → Accessibility`](../ui/patterns/import-dialog.md#accessibility)
-  says the primitive returns focus to the trigger, which holds only
-  with one. Raised in 5.10's slice review, 2026-11-18.

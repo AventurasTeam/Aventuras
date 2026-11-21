@@ -44,6 +44,7 @@ import { useAnimatedReaction } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { scheduleOnRN } from 'react-native-worklets'
 
+import { FocusOrigin } from '@/components/ui/focus-return'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
@@ -1377,6 +1378,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
       )}
       style={popoverStyle}
     >
+      <FocusOrigin />
       {body}
     </PopoverPrimitive.Content>
   )

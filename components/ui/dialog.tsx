@@ -1,10 +1,18 @@
 import * as DialogPrimitive from '@rn-primitives/dialog'
 import { X } from 'lucide-react-native'
-import { Fragment, useEffect, useRef, type ComponentProps, type ReactNode } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  type ComponentProps,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Platform, ScrollView, useWindowDimensions, View, type ViewProps } from 'react-native'
 import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
+import { FocusOrigin, useDialogFocusReturn } from '@/components/ui/focus-return'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { useScrimClass } from '@/components/ui/scrim'
@@ -64,11 +72,16 @@ function DialogContent({
   hideCloseButton,
   scrollable = true,
   busy = false,
+  returnFocusTo,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   style,
   children,
   ...props
 }: Omit<ComponentProps<typeof DialogPrimitive.Content>, 'ref'> & {
   portalHost?: string
+  /** Where focus goes as it closes, ahead of what held focus when it opened (overlays.md → Close focus). */
+  returnFocusTo?: RefObject<unknown>
   /** Hosts whose every state carries an explicit affordance can drop the ×. */
   hideCloseButton?: boolean
   /**
@@ -85,6 +98,7 @@ function DialogContent({
   const { open } = DialogPrimitive.useRootContext()
   useRegisteredOverlay(open)
   const contentRef = useRef<View>(null)
+  const focusReturn = useDialogFocusReturn({ returnFocusTo, onOpenAutoFocus, onCloseAutoFocus })
   // Chromium blurs a button the moment it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
   useEffect(() => {
     if (Platform.OS !== 'web' || !open || !busy) return
@@ -110,6 +124,7 @@ function DialogContent({
           )}
           style={[{ maxHeight: height * MAX_HEIGHT_RATIO }, style]}
           {...props}
+          {...focusReturn}
           // The primitive claims the JS responder for every touch inside the
           // dialog (its guard against a close-on-press overlay). Our native
           // overlay is an Animated.View slot that ignores onPress, so the
@@ -118,6 +133,7 @@ function DialogContent({
           // start. Drop it.
           onStartShouldSetResponder={undefined}
         >
+          <FocusOrigin />
           {scrollable ? (
             <ScrollView
               keyboardShouldPersistTaps="handled"

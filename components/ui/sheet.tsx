@@ -37,6 +37,7 @@ import { FadeIn, FadeOut, SlideInRight, SlideOutRight } from 'react-native-reani
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
+import { FocusOrigin, OVERLAY_CLOSING } from '@/components/ui/focus-return'
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { SCRIM_OPACITY, useScrimClass } from '@/components/ui/scrim'
@@ -430,9 +431,16 @@ function BottomSheetContent({
 
   // gorhom forwards no aria-labelledby to its container, so on web the dialog is our content
   // View, where both names reach the DOM.
+  // A closing sheet's rows stay mounted through its exit; the closing mark keeps a dialog from
+  // handing focus back into them (overlays.md → Close focus).
   const webDialog =
     Platform.OS === 'web'
-      ? ({ role: 'dialog', 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy } as object)
+      ? ({
+          role: 'dialog',
+          'aria-label': ariaLabel,
+          'aria-labelledby': ariaLabelledBy,
+          dataSet: open ? undefined : { [OVERLAY_CLOSING]: 'true' },
+        } as object)
       : null
 
   return (
@@ -475,6 +483,7 @@ function BottomSheetContent({
       }}
     >
       <TextClassContext.Provider value="text-fg-primary">
+        <FocusOrigin />
         {/* Swap Input's underlying TextInput with gorhom's keyboard-aware variant
             so focusing an Input inside a sheet triggers gorhom's translate-up
             behavior. Plain TextInput isn't tracked by the sheet's keyboard system. */}
