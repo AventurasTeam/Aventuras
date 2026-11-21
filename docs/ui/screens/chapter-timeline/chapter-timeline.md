@@ -292,7 +292,8 @@ generation pipeline is in flight:
 └──────────────────────────────────────────────────┘
 ```
 
-- **Counts** read as [the delete's](#delete-a-chapter). When the close
+- **Counts** read as [the delete's](#delete-a-chapter), taken as after
+  the rollback shortcut when turns followed. When the close
   changed nothing in the world, the list is one line,
   `The close changed nothing in the world.`
 - **Zero turns vs. turns followed.** When no turns followed the close,
