@@ -9,6 +9,7 @@ import {
   type NewEntity,
   type StoryEntry,
 } from '@/lib/db'
+import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { entitiesStore, loreStore, resetAllStores, threadsStore, undoRedoStore } from '@/lib/stores'
 
 import { redoLastAction, undoLastAction } from './undo'
@@ -116,6 +117,11 @@ async function rerun(c: ClosedChapter): Promise<BeforeRerun> {
 }
 
 const journalRows = (c: ClosedChapter) => c.fx.ctx.db.select().from(reversalJournals)
+
+const undoneLogLevels = (): string[] =>
+  getDiagnosticsSnapshot()
+    .logEntries.filter((e) => e.kind === 'action_layer.rerun_close_undone')
+    .map((e) => e.level)
 
 const MIRA: Omit<NewEntity, 'branchId'> = {
   id: 'char_mira',
@@ -282,6 +288,40 @@ describe('CTRL-Z of a re-run', () => {
       (await logRows(c.fx)).filter((d) => d.actionId === c.actionId || d.actionId === RERUN),
     ).toEqual([])
     expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoneLogLevels()).toEqual(['warn'])
+  })
+
+  it('logs the close undone when only the store sync after the commit throws', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await rerun(c)
+    await c.fx.ctx.db.delete(reversalJournals)
+    vi.spyOn(loreStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    await expect(undoLastAction(c.fx.branchId, c.fx.ctx)).rejects.toBeInstanceOf(DeltaReplayError)
+
+    expect(await chapterRows(c.fx)).toEqual([])
+    expect(undoneLogLevels()).toEqual(['warn'])
+  })
+
+  it('logs no close undone when the undo never commits', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await rerun(c)
+    await c.fx.ctx.db.delete(reversalJournals)
+    const locked = {
+      ...c.fx.ctx,
+      runInTransaction: async () => {
+        throw new Error('database is locked')
+      },
+    }
+
+    await expect(undoLastAction(c.fx.branchId, locked)).rejects.toBeInstanceOf(DeltaReplayError)
+
+    expect(await chapterRows(c.fx)).toHaveLength(1)
+    expect(undoneLogLevels()).toEqual([])
   })
 
   // Review Focus 4: nothing the write-back needs lives in memory.

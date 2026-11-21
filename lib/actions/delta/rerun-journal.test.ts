@@ -692,10 +692,10 @@ async function reverseWithWriteBack(
   return writeBack
 }
 
-const undoneLogLevels = (): string[] =>
+const undoneLogs = () =>
   getDiagnosticsSnapshot()
     .logEntries.filter((e) => e.kind === 'action_layer.rerun_close_undone')
-    .map((e) => e.level)
+    .map(({ level, fields, actionId }) => ({ level, fields, actionId }))
 
 describe('rerunWriteBack', () => {
   it('restores every row and delta row the re-run’s reversal touched, positions included', async () => {
@@ -790,7 +790,12 @@ describe('rerunWriteBack', () => {
     })
 
     const result = await reverseWithWriteBack(c.fx, RERUN)
-    expect(result).toMatchObject({ outcome: 'undone', chapterNumber: c.chapter.sequenceNumber })
+    expect(result).toMatchObject({
+      outcome: 'undone',
+      chapterId: c.chapter.id,
+      chapterNumber: c.chapter.sequenceNumber,
+      journal: 'not-whole',
+    })
     // The caller holds the group itself, so the seed is the chapter's other close groups only.
     expect(result.outcome === 'undone' ? result.seed.map((d) => d.actionId) : []).not.toContain(
       RERUN,
@@ -800,7 +805,8 @@ describe('rerunWriteBack', () => {
     expect((await entryRows(c.fx)).map((e) => e.chapterId)).toEqual(c.fx.entries.map(() => null))
     expect(await deltasOf(c.fx, c.actionId)).toEqual([])
     expect(await journalRows(c.fx)).toEqual([])
-    expect(undoneLogLevels()).toEqual(['warn'])
+    // Deciding undoes nothing: the caller logs once its reversal commits.
+    expect(undoneLogs()).toEqual([])
   })
 
   it('undoes the close when the group’s positions skip one', async () => {
@@ -867,7 +873,9 @@ describe('rerunWriteBack', () => {
       outcome: 'undone',
       seed: [],
       ops: [expect.anything()],
+      chapterId: c.chapter.id,
       chapterNumber: c.chapter.sequenceNumber,
+      journal: 'not-whole',
     })
 
     expect(await deltasOf(c.fx, RERUN)).toEqual([])
@@ -911,11 +919,12 @@ describe('rerunWriteBack', () => {
       outcome: 'undone',
       seed: [],
       ops: [],
+      chapterId: c.chapter.id,
       chapterNumber: null,
+      journal: 'missing',
     })
 
     expect(await deltasOf(c.fx, RERUN)).toEqual([])
-    expect(undoneLogLevels()).toEqual(['warn'])
   })
 
   it('reads a close’s own group, a user’s edit and a pass on the end entry as no re-run', async () => {
@@ -1096,6 +1105,17 @@ describe('reverseRunGroup', () => {
 
     expect(await chapterRows(c.fx)).toEqual([])
     expect(await journalRows(c.fx)).toEqual([])
+    expect(undoneLogs()).toEqual([
+      {
+        level: 'warn',
+        fields: {
+          chapterId: c.chapter.id,
+          chapterNumber: c.chapter.sequenceNumber,
+          journal: 'not-whole',
+        },
+        actionId: RERUN,
+      },
+    ])
   })
 
   it('reverses a group that is no re-run as reverseReplayDeltas does', async () => {
@@ -1207,6 +1227,7 @@ describe('reverseRunGroup', () => {
       chapterNumber: c.chapter.sequenceNumber,
     })
     expect(await chapterRows(c.fx)).toEqual([])
+    expect(undoneLogs().map((log) => log.level)).toEqual(['warn'])
   })
 
   // A rolled-back write-back or undo must read as uncommitted: abortRun leaves it to recovery.
@@ -1262,5 +1283,6 @@ describe('reverseRunGroup', () => {
     })
     expect(await fullState(c.fx)).toEqual(held)
     expect(await journalRows(c.fx)).toHaveLength(1)
+    expect(undoneLogs()).toEqual([])
   })
 })

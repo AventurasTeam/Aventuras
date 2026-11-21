@@ -10,7 +10,12 @@ import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
 import { logReversalRefused } from '../delta/commit-new-action'
 import { applyRedo, prepareUndo, type RedoSnapshot } from '../delta/redo'
-import { rerunWriteBack, withCloseGroups, type RerunWriteBack } from '../delta/rerun-journal'
+import {
+  logCloseUndone,
+  rerunWriteBack,
+  withCloseGroups,
+  type RerunWriteBack,
+} from '../delta/rerun-journal'
 import {
   DeltaReplayError,
   ReversalIntegrityError,
@@ -168,7 +173,8 @@ async function undoBracketed(
 
   if (target.kind === 'group') {
     const writeBack = await rerunWriteBack({ actionId: target.actionId, branchId, group }, ctx)
-    if (writeBack.outcome !== 'none') return undoRerun(branchId, group, writeBack, ctx)
+    if (writeBack.outcome !== 'none')
+      return undoRerun({ branchId, actionId: target.actionId, group }, writeBack, ctx)
   }
 
   let set: ReversalSet
@@ -205,8 +211,7 @@ async function undoBracketed(
 // generation-pipeline.md → Reverse-replay: a re-run's undo takes no redo snapshot and clears the
 // stack, since a later edit's snapshot there can hold the re-run's values.
 async function undoRerun(
-  branchId: string,
-  group: readonly Delta[],
+  { branchId, actionId, group }: { branchId: string; actionId: string; group: readonly Delta[] },
   writeBack: Exclude<RerunWriteBack, { outcome: 'none' }>,
   ctx: DbCtx,
 ): Promise<UndoResult> {
@@ -225,10 +230,14 @@ async function undoRerun(
     )
   } catch (e) {
     // Committed: only the store sync failed, so the re-run is undone all the same.
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear()
+    if (e instanceof DeltaReplayError && e.committed) {
+      undoRedoStore.clear()
+      logCloseUndone(actionId, writeBack)
+    }
     throw e
   }
   undoRedoStore.clear()
+  logCloseUndone(actionId, writeBack)
   return writeBack.outcome === 'undone' && writeBack.chapterNumber !== null
     ? { status: 'ok', closeUndone: { chapterNumber: writeBack.chapterNumber } }
     : { status: 'ok' }

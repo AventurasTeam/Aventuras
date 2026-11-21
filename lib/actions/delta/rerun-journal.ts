@@ -153,7 +153,10 @@ export type RerunWriteBack =
       seed: readonly Delta[]
       /** The journal row's delete, when one exists. */
       ops: readonly SqlOp[]
+      chapterId: string
       chapterNumber: number | null
+      /** Why no write-back: the group is no longer whole, or no journal holds it. */
+      journal: 'not-whole' | 'missing'
     }
 
 type UndoneClose = Extract<RerunWriteBack, { outcome: 'undone' }>
@@ -308,14 +311,7 @@ async function shapedChapterId(
 
 async function undoneClose(
   ctx: DbCtx,
-  undone: {
-    actionId: string
-    chapterId: string
-    branchId: string | null
-    chapterNumber: number | null
-    ops: readonly SqlOp[]
-    journal: 'not-whole' | 'missing'
-  },
+  undone: Omit<UndoneClose, 'outcome' | 'seed'> & { actionId: string; branchId: string | null },
 ): Promise<UndoneClose> {
   // The caller already holds the group: seeded twice, a create would enter the closure twice.
   const seed =
@@ -324,12 +320,19 @@ async function undoneClose(
       : (await readChapterCloseGroups(undone.branchId, undone.chapterId, ctx)).filter(
           (delta) => delta.actionId !== undone.actionId,
         )
+  const { chapterId, chapterNumber, ops, journal } = undone
+  return { outcome: 'undone', seed, ops, chapterId, chapterNumber, journal }
+}
+
+/** Call once the reversal committed: a refused or rolled-back one undid no close. */
+export function logCloseUndone(actionId: string, writeBack: RerunWriteBack): void {
+  if (writeBack.outcome !== 'undone') return
+  const { chapterId, chapterNumber, journal } = writeBack
   logger.warn(
     'action_layer.rerun_close_undone',
-    { chapterId: undone.chapterId, chapterNumber: undone.chapterNumber, journal: undone.journal },
-    { actionId: undone.actionId },
+    { chapterId, chapterNumber, journal },
+    { actionId },
   )
-  return { outcome: 'undone', seed, ops: undone.ops, chapterNumber: undone.chapterNumber }
 }
 
 /**
@@ -444,8 +447,9 @@ export async function reverseRunGroup(
   } catch (e) {
     throw replayFailure(e, actionId)
   }
+  let reversed: number
   try {
-    const reversed = await reverseAndPruneDeltaRows(
+    reversed = await reverseAndPruneDeltaRows(
       set,
       ctx,
       { keepRedoExact: false },
@@ -453,17 +457,18 @@ export async function reverseRunGroup(
       undefined,
       writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
     )
-    return { deltas: reversed, journal, chapterNumber }
   } catch (e) {
+    if (!(e instanceof DeltaReplayError && e.committed)) throw e
+    logCloseUndone(actionId, writeBack)
     // The outcome rides the error, so an undone close never reads as restored.
-    if (e instanceof DeltaReplayError && e.committed)
-      throw new DeltaReplayError(e.message, {
-        cause: e.cause,
-        actionId,
-        stage: 'store-sync',
-        journal,
-        chapterNumber,
-      })
-    throw e
+    throw new DeltaReplayError(e.message, {
+      cause: e.cause,
+      actionId,
+      stage: 'store-sync',
+      journal,
+      chapterNumber,
+    })
   }
+  logCloseUndone(actionId, writeBack)
+  return { deltas: reversed, journal, chapterNumber }
 }
