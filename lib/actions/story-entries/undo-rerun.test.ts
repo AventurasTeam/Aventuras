@@ -324,7 +324,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(undoneLogLevels()).toEqual([])
   })
 
-  // Review Focus 4: nothing the write-back needs lives in memory.
+  // Nothing the write-back needs lives in memory.
   it('restores from the database alone after a restart between the commit and the undo', async () => {
     const c = await openClosed()
     await writeCloseWork(c)

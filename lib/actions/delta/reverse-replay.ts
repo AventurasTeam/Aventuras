@@ -865,7 +865,7 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
   return keeping.reduce((oldest, e) => (e.logPosition < oldest.logPosition ? e : oldest))
 }
 
-/** What a caller adds to a reversal's own transaction; undefined, the reversal runs as before. */
+/** What a caller adds to a reversal's own transaction; undefined adds nothing. */
 export type ReverseCommitHooks = {
   /** Read inside the key locks after planning; its ops lead the transaction. */
   opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>

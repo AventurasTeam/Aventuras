@@ -130,7 +130,7 @@ export async function readCurrentRow(
   row: Pick<Delta, 'branchId' | 'targetId'>,
 ): Promise<Record<string, unknown> | null> {
   const entry = resolveByTable(table)
-  if (!entry) throw new Error(`redo snapshot: unknown target_table ${table}`)
+  if (!entry) throw new Error(`readCurrentRow: unknown target_table ${table}`)
   const found = (await ctx.db
     .select()
     .from(entry.descriptor.table)

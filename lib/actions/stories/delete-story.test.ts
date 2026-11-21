@@ -254,7 +254,7 @@ describe('deleteStory', () => {
       entryAssets,
     ]) {
       const rows = await db.select().from(t)
-      // None belonged to the victim branch; survivor's (none seeded) remain absent.
+      // Only the survivor's rows remain, the seeded journal among them.
       expect(rows.every((r) => !('branchId' in r) || r.branchId !== 'br_victim')).toBe(true)
     }
   })

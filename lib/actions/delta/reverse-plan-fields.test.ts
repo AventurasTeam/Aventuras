@@ -402,7 +402,7 @@ describe('the commit hooks', () => {
     it('throws on a table no domain registers', async () => {
       await expect(
         readCurrentRow(ctx, 'no_such_table', { branchId: 'b1', targetId: 'x' }),
-      ).rejects.toThrow('unknown target_table no_such_table')
+      ).rejects.toThrow('readCurrentRow: unknown target_table no_such_table')
     })
   })
 })
