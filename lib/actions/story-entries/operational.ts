@@ -226,6 +226,12 @@ export type CountsChangedRejection = {
   counts: RollbackCounts
 }
 
+const targetNotFound = (branchId: string, targetId: string): StoryEntryRejection => ({
+  status: 'rejected',
+  reason: `target ${branchId}:${targetId} not found`,
+  code: STORY_ENTRY_REJECTION.notFound,
+})
+
 async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
@@ -235,12 +241,7 @@ async function resolveRollbackWindow(
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, targetId)))
-  if (!target)
-    return {
-      status: 'rejected',
-      reason: `target ${branchId}:${targetId} not found`,
-      code: STORY_ENTRY_REJECTION.notFound,
-    }
+  if (!target) return targetNotFound(branchId, targetId)
   if (target.kind === 'opening')
     return {
       status: 'rejected',
@@ -458,17 +459,17 @@ export async function sweepToEntry(
   return { status: 'ok', counts }
 }
 
-// What the re-run hold reads; a missing row reads unstamped and is left to the sweep to refuse.
+// What the re-run hold reads; null for a missing row.
 async function entryChapterOf(
   branchId: string,
   id: string,
   ctx: Pick<DbCtx, 'db'>,
-): Promise<{ chapterId: string | null }> {
+): Promise<{ chapterId: string | null } | null> {
   const [row] = await ctx.db
     .select({ chapterId: storyEntries.chapterId })
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
-  return { chapterId: row?.chapterId ?? null }
+  return row ?? null
 }
 
 export async function rollbackToEntry(
@@ -482,6 +483,8 @@ export async function rollbackToEntry(
   // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
   if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
   const target = await entryChapterOf(branchId, targetId, ctx)
+  // Refused before the bracket: a missing row reads unstamped, so it would interrupt a re-run.
+  if (!target) return targetNotFound(branchId, targetId)
   // Past the read, synchronously with the bracket's entry: a turn reserved during it refuses, and
   // a re-run holds a rollback into its chapter until it ends.
   if (

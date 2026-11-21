@@ -101,6 +101,28 @@ describe('head reversals during a re-run (AC 23)', () => {
     })
   })
 
+  it('refuses a rollback to a missing entry as not-found, the re-run running and the log as it was', async () => {
+    const { h, hold, ending, log } = await heldRerun()
+    const counts = await shownCounts(h.fx.branchId, h.fx.entries[1]!.id, h.fx.ctx)
+
+    const result = await rollbackToEntry(h.fx.branchId, 'entry_gone', h.fx.ctx, {
+      expectedCounts: counts,
+    })
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: `target ${h.fx.branchId}:entry_gone not found`,
+      code: 'not-found',
+    })
+    expect(rerunRunning(h)).toBe(true)
+    expect(await branchLog(h.fx)).toEqual(log)
+    hold.release()
+    expect(await within(ending, 'the re-run')).toMatchObject({
+      kind: CHAPTER_CLOSE_KIND,
+      result: { outcome: 'completed' },
+    })
+  })
+
   it('holds a regenerate of the end reply after a manual close on the latest reply', async () => {
     // Rolled back past E first, so the close ends on the latest reply.
     const { h, hold, ending, log } = await heldRerun((h) => h.rollBack(afterEnd(h).id))
