@@ -74,26 +74,6 @@ slice-planning gate forces its resolution before that slice is planned.
   profile's model, not the override's. 5.10's tool-calling check inherits
   this. Whether such a run is reachable today is unchecked. Raised in
   5.10's PR 1 review.
-- **Boundary's candidate lines split badly on some prose.**
-  `firstLastSentences` (`lib/text/first-last-sentences.ts`) splits after
-  a title's period ("Mr. Smith arrived." opens with "Mr."), starts the
-  next sentence with a French closer that stands mid-text ("» Il
-  partit."), gives "..." as the first sentence of a text that opens
-  with one, and doesn't split on markdown emphasis or Japanese
-  half-width marks. It also splits a `!”` or `?”` before a lowercase
-  dialogue tag, so `Ends:` shows only the tag ("reiterated Pew, striking
-  with his stick upon the road."), and it cuts a closing sentence over
-  240 code points from its start, dropping the words that show where the
-  turn stops. Each degrades a candidate's `Opens:` or `Ends:` line
-  rather than breaking the call. In the boundary rerun's own prompt
-  (Slice 5.10's measure, 34 candidates from Treasure Island) titles
-  alone damaged 11 lines across 10 candidates, and two closing lines
-  lost their ends. No pick is shown worse for it yet; candidate display
-  is the lever
-  [`followups.md` → Boundary mis-picks at scene breaks](../followups.md#tuning-and-play-testing)
-  names. Raised in 5.10's PR 1 review; cases and measure counts added
-  by its slice review.
-
 - **One builder for `ResolveModelConfig`.** Every structured and tool
   caller builds `{ providers, profiles, assignments, storyModels }`
   inline from `appSettingsStore` and the open story: ten sites in
