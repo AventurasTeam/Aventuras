@@ -17,6 +17,13 @@ export {
   type ChapterDeleteRefusal,
   type ChapterDeleteRefusalCode,
 } from './chapters/chapter-delete-set'
+export {
+  CLOSE_RERUN_REFUSAL,
+  getCloseRerunPreview,
+  type CloseRerunPreview,
+  type CloseRerunReadRefusal,
+  type CloseRerunRefusalCode,
+} from './chapters/close-rerun'
 export { runPickedClose } from './chapters/picked-close'
 export { removeChapter, type RemoveChapterResult } from './chapters/remove-chapter'
 export { runOwedClose, type OwedCloseRun } from './chapters/run-owed-close'
