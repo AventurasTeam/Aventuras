@@ -6,6 +6,9 @@ import type { CloseTask } from '@/lib/db'
 export type DeferredWork = { readonly pass?: true; readonly close?: true }
 export type DeferredWorkKind = keyof DeferredWork
 
+/** A run's slot: the deferral it records, or `rerun`, a close's re-run, which records none. */
+export type RunSlot = DeferredWorkKind | 'rerun'
+
 /** C6: the agent task a close last started; `index` from 1, `part` as C4's (0 chapter-wide). */
 export type CloseProgress = Readonly<{
   task: CloseTask
@@ -19,10 +22,11 @@ export type RunState = {
   kind: string
   gateBehavior: 'hard-gate' | 'no-gate'
   /**
-   * Copied from the pipeline at reserve: the slot a head reversal or Cancel ends and defers this
-   * run in; null for a run never deferred.
+   * Copied from the pipeline at reserve (its `runSlot`, else `interruptible`): the slot a head
+   * reversal or Cancel ends and defers this run in, `rerun` deferring none; null for a run never
+   * deferred.
    */
-  interruptible: DeferredWorkKind | null
+  interruptible: RunSlot | null
   /** Owed work before a Send's turn, every run of its chain (classifier.md → Failure policy). */
   beforeTurn: boolean
   actionId: string
@@ -48,6 +52,9 @@ export type PendingTurn = { readonly branchId: string }
 /** A manual close's pick (C14). A close owed by the threshold keeps no record. */
 export type PendingClose = { readonly endEntryId: string }
 
+/** A close's re-run, held for its chain's life (generation-pipeline.md → Multi-run txState). */
+export type PendingRerun = { readonly chapterId: string }
+
 // reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
 // user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
 // ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
@@ -59,6 +66,8 @@ export type TxState = {
   deferred: ReadonlyMap<string, DeferredWork>
   /** In memory only. */
   pendingClose: ReadonlyMap<string, PendingClose>
+  /** In memory only; cleared in the update that ends the re-run's chain. */
+  pendingRerun: ReadonlyMap<string, PendingRerun>
 }
 
 // A pending turn counts: it is about to raise the hard gate, and a reversal opened in the gap
@@ -115,6 +124,12 @@ function withoutBranch<V>(map: ReadonlyMap<string, V>, branchId: string): Readon
   return next
 }
 
+// A re-run records and clears no deferral: the close it replaces stands.
+function deferralSlotOf(run: RunState | undefined): DeferredWorkKind | null {
+  const slot = run?.interruptible
+  return slot && slot !== 'rerun' ? slot : null
+}
+
 type GenerationState = {
   txState: TxState
   // Each bracketPendingTurn body, from its mark until it settles, past the mark's end at
@@ -131,20 +146,24 @@ type GenerationState = {
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
   /**
-   * Removes the run and swaps in `successor` atomically; a pass or close clears its deferral, and
-   * a close its branch's pending close.
+   * Removes the run and swaps in `successor` atomically; a pass or close clears its deferral, a
+   * close its branch's pending close, and one handing on no successor its branch's pending re-run.
    */
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
    * branch; `'failed'` and `'unwound'` leave the record as it was: of a run's own ends, only a
-   * commit clears it. A pending close stays on every outcome. Returns the slot this call newly
-   * recorded, or null.
+   * commit clears it. A re-run records nothing. A pending close stays on every outcome; any end of
+   * a pass or close, a re-run's included, clears its branch's pending re-run. Returns the slot
+   * this call newly recorded, or null.
    */
   abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   /** Writes the branch's owed close, replacing any. */
   setPendingClose: (branchId: string, record: PendingClose) => void
   clearPendingClose: (branchId: string) => void
+  /** Writes the branch's re-run, replacing any. */
+  setPendingRerun: (branchId: string, record: PendingRerun) => void
+  clearPendingRerun: (branchId: string) => void
   /** Removes only `deferred.close`; a deferred pass stays. */
   clearDeferredClose: (branchId: string) => void
   /** Drops both records in one update, so no subscriber sees one without the other. */
@@ -166,6 +185,7 @@ const emptyTxState = (): TxState => ({
   pendingTurns: new Set(),
   deferred: new Map(),
   pendingClose: new Map(),
+  pendingRerun: new Map(),
 })
 
 const store = createStore<GenerationState>()((set) => ({
@@ -198,15 +218,21 @@ const store = createStore<GenerationState>()((set) => ({
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
       if (successor) runs.set(successor.runId, successor)
-      const deferred = run?.interruptible
-        ? withDeferral(s.txState.deferred, run.branchId, run.interruptible, false)
-        : s.txState.deferred
+      const slot = deferralSlotOf(run)
+      const deferred =
+        run && slot
+          ? withDeferral(s.txState.deferred, run.branchId, slot, false)
+          : s.txState.deferred
       const pendingClose =
         run?.interruptible === 'close'
           ? withoutBranch(s.txState.pendingClose, run.branchId)
           : s.txState.pendingClose
+      const pendingRerun =
+        run?.interruptible && !successor
+          ? withoutBranch(s.txState.pendingRerun, run.branchId)
+          : s.txState.pendingRerun
       return {
-        txState: { ...s.txState, runs, deferred, pendingClose },
+        txState: { ...s.txState, runs, deferred, pendingClose, pendingRerun },
         settleCount: s.settleCount + 1,
       }
     }),
@@ -216,13 +242,19 @@ const store = createStore<GenerationState>()((set) => ({
       const run = s.txState.runs.get(runId)
       const runs = new Map(s.txState.runs)
       runs.delete(runId)
-      const key = run?.interruptible
+      const key = deferralSlotOf(run)
       let deferred = s.txState.deferred
       if (run && key && outcome === 'aborted') {
         if (deferred.get(run.branchId)?.[key] !== true) recorded = key
         deferred = withDeferral(deferred, run.branchId, key, true)
       }
-      return { txState: { ...s.txState, runs, deferred }, settleCount: s.settleCount + 1 }
+      const pendingRerun = run?.interruptible
+        ? withoutBranch(s.txState.pendingRerun, run.branchId)
+        : s.txState.pendingRerun
+      return {
+        txState: { ...s.txState, runs, deferred, pendingRerun },
+        settleCount: s.settleCount + 1,
+      }
     })
     return recorded
   },
@@ -238,6 +270,19 @@ const store = createStore<GenerationState>()((set) => ({
       return pendingClose === s.txState.pendingClose
         ? s
         : { txState: { ...s.txState, pendingClose } }
+    }),
+  setPendingRerun: (branchId, record) =>
+    set((s) => {
+      const pendingRerun = new Map(s.txState.pendingRerun)
+      pendingRerun.set(branchId, { chapterId: record.chapterId })
+      return { txState: { ...s.txState, pendingRerun } }
+    }),
+  clearPendingRerun: (branchId) =>
+    set((s) => {
+      const pendingRerun = withoutBranch(s.txState.pendingRerun, branchId)
+      return pendingRerun === s.txState.pendingRerun
+        ? s
+        : { txState: { ...s.txState, pendingRerun } }
     }),
   clearDeferredClose: (branchId) =>
     set((s) => {
@@ -333,6 +378,8 @@ export const generationStore = {
   abortRun: api.abortRun,
   setPendingClose: api.setPendingClose,
   clearPendingClose: api.clearPendingClose,
+  setPendingRerun: api.setPendingRerun,
+  clearPendingRerun: api.clearPendingRerun,
   clearDeferredClose: api.clearDeferredClose,
   dropBranchRecords: api.dropBranchRecords,
   setCloseProgress: api.setCloseProgress,

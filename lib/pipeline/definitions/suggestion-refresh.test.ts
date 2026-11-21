@@ -236,6 +236,7 @@ describe('suggestion-refresh declaration', () => {
       pendingTurns: new Set(),
       deferred: new Map(),
       pendingClose: new Map(),
+      pendingRerun: new Map(),
     }
     expect(isUserEditBlocked(running)).toBe(true)
   })

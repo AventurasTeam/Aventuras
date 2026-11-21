@@ -1,5 +1,6 @@
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { generationStore } from '@/lib/stores'
 
 import { closeAgentPhase } from './chapter-close-agent'
 import { closeBoundaryPhase } from './chapter-close-boundary'
@@ -36,6 +37,8 @@ export function ensureChapterClosePipelineRegistered(): void {
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
       interruptible: 'close',
+      runSlot: (branchId) =>
+        generationStore.getTxState().pendingRerun.has(branchId) ? 'rerun' : null,
       concurrencyPolicy: {
         blockedBy: [
           PER_TURN_KIND,

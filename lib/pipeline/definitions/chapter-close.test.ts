@@ -262,6 +262,18 @@ describe('the chapter-close declaration', () => {
     expect(pipeline.onInterrupt).toBeUndefined()
   })
 
+  // generation-pipeline.md → Multi-run txState: a close started while a re-run holds its branch
+  // runs as that chapter's re-run.
+  it("reserves a close in the 'rerun' slot while a re-run holds its branch, else in its own", () => {
+    const { runSlot } = getPipeline(CHAPTER_CLOSE_KIND)
+    expect(runSlot?.(f.branchId)).toBeNull()
+
+    generationStore.setPendingRerun(f.branchId, { chapterId: 'chap_held' })
+
+    expect(runSlot?.(f.branchId)).toBe('rerun')
+    expect(runSlot?.('br_other')).toBeNull()
+  })
+
   it('registers once, however often it is ensured', () => {
     const first = getPipeline(CHAPTER_CLOSE_KIND)
 

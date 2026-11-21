@@ -47,6 +47,7 @@ function tx(runs: RunState[], over: Partial<TxState> = {}): TxState {
     pendingTurns: new Set(),
     deferred: new Map(),
     pendingClose: new Map(),
+    pendingRerun: new Map(),
     ...over,
   }
 }
@@ -430,6 +431,114 @@ describe("a close's records", () => {
     generationStore.startRun(closeRun('run_fresh', { branchId: 'b2' }))
     generationStore.abortRun('run_fresh', outcome)
     expect(recordsOn('b2')).toEqual({ pick: undefined, deferred: undefined })
+  })
+})
+
+// A close's re-run on b1, as the orchestrator reserves one under pendingRerun.
+function rerunRun(id: string, over: Partial<RunState> = {}): RunState {
+  return closeRun(id, { interruptible: 'rerun', ...over })
+}
+
+const rerunOn = (branchId: string) => generationStore.getTxState().pendingRerun.get(branchId)
+
+// generation-pipeline.md → Multi-run txState: held for the chain's life, cleared as it ends.
+describe('pendingRerun', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+  })
+
+  it('starts empty, writes a record per branch, clears one, and __reset empties it', () => {
+    expect(generationStore.getTxState().pendingRerun.size).toBe(0)
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    generationStore.setPendingRerun('b2', { chapterId: 'chap_7' })
+    expect(rerunOn('b1')).toEqual({ chapterId: 'chap_1' })
+
+    generationStore.clearPendingRerun('b1')
+    expect(generationStore.getTxState().pendingRerun.has('b1')).toBe(false)
+    expect(rerunOn('b2')).toEqual({ chapterId: 'chap_7' })
+
+    generationStore.__reset()
+    expect(generationStore.getTxState().pendingRerun.size).toBe(0)
+  })
+
+  it('leaves the state as it was when clearing a branch with no record, and settles nothing', () => {
+    generationStore.setPendingRerun('b2', { chapterId: 'chap_7' })
+    const before = generationStore.getTxState()
+    generationStore.clearPendingRerun('b1')
+    expect(generationStore.getTxState()).toBe(before)
+    expect(generationStore.getSettleCount()).toBe(0)
+  })
+
+  // The close it replaces stands, so a re-run's end leaves nothing owed.
+  it.each(['aborted', 'failed', 'unwound'] as const)(
+    "records no deferral for a re-run ending %s, and leaves the branch's records",
+    (outcome) => {
+      deferOn('b1', 'pass')
+      generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+      generationStore.startRun(rerunRun('run_rerun'))
+      expect(generationStore.abortRun('run_rerun', outcome)).toBeNull()
+      expect(recordsOn('b1')).toEqual({ pick: { endEntryId: 'e9' }, deferred: { pass: true } })
+    },
+  )
+
+  it('clears no deferral and keeps the pick when a re-run commits', () => {
+    deferOn('b1', 'close')
+    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
+    generationStore.startRun(rerunRun('run_rerun'))
+    generationStore.finishRun('run_rerun')
+    expect(recordsOn('b1')).toEqual({ pick: { endEntryId: 'e9' }, deferred: { close: true } })
+  })
+
+  it.each<[string, (runId: string) => unknown]>([
+    ['commits', (runId) => generationStore.finishRun(runId)],
+    ['is aborted', (runId) => generationStore.abortRun(runId, 'aborted')],
+    ['fails', (runId) => generationStore.abortRun(runId, 'failed')],
+  ])("clears the branch's record when the re-run %s, in the update that removes it", (_l, end) => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    generationStore.startRun(rerunRun('run_rerun'))
+    const seen: { registered: boolean; held: boolean }[] = []
+    const off = generationStore.subscribe(() => {
+      const state = generationStore.getTxState()
+      seen.push({ registered: state.runs.has('run_rerun'), held: state.pendingRerun.has('b1') })
+    })
+    try {
+      end('run_rerun')
+    } finally {
+      off()
+    }
+    expect(seen).toEqual([{ registered: false, held: false }])
+  })
+
+  it('clears the record when a catch-up pass ends the chain, the pass deferring as any pass', () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    generationStore.startRun(pass('run_pass'))
+    expect(generationStore.abortRun('run_pass', 'aborted')).toBe('pass')
+    expect(rerunOn('b1')).toBeUndefined()
+    expect(deferredOn('b1')).toEqual({ pass: true })
+  })
+
+  it('keeps the record while the catch-up pass hands the chain to the re-run', () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    generationStore.startRun(pass('run_pass'))
+    generationStore.finishRun('run_pass', rerunRun('run_rerun'))
+    expect(rerunOn('b1')).toEqual({ chapterId: 'chap_1' })
+  })
+
+  it("leaves the record when a run outside the chain ends: another branch's, or a refresh", () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    generationStore.startRun(rerunRun('run_b2', { branchId: 'b2' }))
+    generationStore.finishRun('run_b2')
+    generationStore.startRun(run('run_refresh', 'suggestion-refresh'))
+    generationStore.abortRun('run_refresh', 'aborted')
+    expect(rerunOn('b1')).toEqual({ chapterId: 'chap_1' })
+  })
+
+  it('leaves the record when a run that is never deferred commits', () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    generationStore.startRun(run('run_turn', 'per-turn'))
+    expect(generationStore.getTxState().runs.get('run_turn')?.interruptible).toBeNull()
+    generationStore.finishRun('run_turn')
+    expect(rerunOn('b1')).toEqual({ chapterId: 'chap_1' })
   })
 })
 
