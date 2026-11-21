@@ -21,11 +21,8 @@ export type RunState = {
   runId: string
   kind: string
   gateBehavior: 'hard-gate' | 'no-gate'
-  /**
-   * Copied from the pipeline at reserve (its `runSlot`, else `interruptible`): the slot a head
-   * reversal or Cancel ends and defers this run in, `rerun` deferring none; null for a run never
-   * deferred.
-   */
+  /** From the pipeline at reserve (`runSlot`, else `interruptible`): the slot a head reversal or
+   * Cancel defers this run in (`rerun` defers none); null if never deferred. */
   interruptible: RunSlot | null
   /** Owed work before a Send's turn, every run of its chain (classifier.md → Failure policy). */
   beforeTurn: boolean
@@ -89,9 +86,8 @@ export function runBlocksHeadReversal(run: RunState, branchId: string): boolean 
   return run.gateBehavior === 'hard-gate' && !(run.interruptible && run.branchId === branchId)
 }
 
-// A turn pending on the branch and a reversal hold no run yet (a regenerate's mark spans its
-// sweep), so leaving the story must wait for them too. A start holding the branch's mark itself
-// (`ignorePendingTurns`) waits only on the rest.
+// Pending turns and reversals hold no run yet, so leaving the story waits on them too; a start
+// holding the branch's own mark (`ignorePendingTurns`) waits only on the rest.
 export function isStoryBusy(
   txState: TxState,
   storyId: string,
@@ -152,17 +148,13 @@ type GenerationState = {
     phase: string,
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
-  /**
-   * Removes the run and swaps in `successor` atomically; a pass or close clears its deferral, a
-   * close its branch's pending close, and one handing on no successor its branch's pending re-run.
-   */
+  /** Removes the run, swapping in `successor` atomically; clears its deferral, a close's pending
+   * close, and (no successor) the pending re-run. */
   finishRun: (runId: string, successor?: RunState) => void
   /**
-   * Removes the run. For an interruptible pass or close, `'aborted'` records it deferred on its
-   * branch; `'failed'` and `'unwound'` leave the record as it was: of a run's own ends, only a
-   * commit clears it. A re-run records nothing. A pending close stays on every outcome; any end of
-   * a pass or close, a re-run's included, clears its branch's pending re-run. Returns the slot
-   * this call newly recorded, or null.
+   * Removes the run. `'aborted'` defers an interruptible pass or close; `'failed'`/`'unwound'`
+   * leave the record (only a commit clears it); a re-run records none. A pending close stays; any
+   * pass or close end clears the pending re-run. Returns the slot newly recorded, or null.
    */
   abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
   /** Writes the branch's owed close, replacing any. */

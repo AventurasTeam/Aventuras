@@ -13,9 +13,8 @@ function reportFields(report: unknown): ReportFields {
 }
 
 /**
- * C4: the report stays out of chaptersStore, which keeps only whether a row has one and the action
- * that wrote it. A patch without `closeReport` leaves both: an update's as stored, a store-shaped
- * create's its own.
+ * C4: the report stays out of chaptersStore, which keeps only whether a row has one and its
+ * action. A patch without `closeReport` leaves both: an update's as stored, a create's its own.
  */
 export function projectChapterPatch(p: StorePatch): StorePatch {
   switch (p.op) {

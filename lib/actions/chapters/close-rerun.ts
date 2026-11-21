@@ -132,11 +132,7 @@ function latestGroupStart(groups: readonly Delta[]): number {
   return start
 }
 
-/**
- * The first turn since the latest close group: the earliest non-system entry created above
- * `from`, whole, so a reply regenerated since takes its player's action, whose create can sit
- * below the group.
- */
+/** Earliest non-system entry created above `from`; a regenerated reply takes its action too. */
 async function firstTurnSince(
   branchId: string,
   from: number,
@@ -220,10 +216,7 @@ async function shortcutTo(
   }
 }
 
-/**
- * C10 on the open region the shortcut leaves: a pick whose end entry stands there, or auto-close
- * with that region at the threshold and a reply. A pick the shortcut removes is dropped with it.
- */
+/** C10 on the region the shortcut leaves: a pick standing there, or auto-close at threshold. */
 async function closeOwedAfter(
   branchId: string,
   shortcutFrom: number | null,
@@ -250,9 +243,8 @@ function loreModelOf(settings: StorySettings): string | null {
 }
 
 /**
- * The re-run confirm's lines (chapter-timeline.md → Re-run a close): the reversal's counts, the
- * shortcut's when turns followed the latest close group, and the cost. Writes nothing; held
- * shared, so no reversal lands between its reads.
+ * The re-run confirm's lines (chapter-timeline.md → Re-run a close): reversal counts, the
+ * shortcut's when turns followed, and the cost. Writes nothing; held shared across its reads.
  */
 export async function getCloseRerunPreview(
   branchId: string,
@@ -360,10 +352,9 @@ type RerunStartArgs = {
 }
 
 /**
- * chapter-close.md → Re-running a close, Roll back & re-run: every refusal comes before the turns
- * go. A pending mark spans the preview, the rollback shortcut and the chain's reserve, so no Send
- * or start lands between them. Rejects when the shortcut's sweep or the chain's origin throws.
- * `story` is not read: the settings come from the store's open story, as pre-flight's do.
+ * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
+ * A pending mark spans preview, shortcut and the chain's reserve. Rejects when the sweep or the
+ * chain's origin throws. `story` is unread: settings come from the store's open story.
  */
 export async function startCloseRerun(
   branchId: string,
@@ -437,8 +428,7 @@ async function startUnderMark(
       },
     })
   } finally {
-    // The store clears it at the chain's end; a chain the orchestrator refused has no end. A
-    // record a later start wrote stays.
+    // The store clears it at the chain's end; a refused chain has none. A later start's stays.
     if (generationStore.getTxState().pendingRerun.get(branchId) === record)
       generationStore.clearPendingRerun(branchId)
   }

@@ -73,11 +73,10 @@ export async function ownEntryTokens(
 }
 
 /**
- * The delete confirm's impact lines over any reversal set: the lore its close groups created that
- * it removes, edits included, and every other change it reverses. The reader's undo of a close, a
- * re-run or kept close work counts its own set with it (reader-composer.md → Undo and redo).
- * `reversedFirst` are deltas another line of the same confirm reverses before this set: they count
- * there, and this set's lines read as after them.
+ * The delete confirm's impact lines over any reversal set: the created lore it removes, edits
+ * included, and every other change it reverses. The reader's undo counts its own set with it
+ * (reader-composer.md → Undo and redo). `reversedFirst`: deltas another line reverses before this
+ * set; they count there, and this set's lines read as after them.
  */
 export async function reversalImpactOf(
   branchId: string,

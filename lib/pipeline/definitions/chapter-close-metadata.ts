@@ -76,10 +76,8 @@ function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): 
   return null
 }
 
-/**
- * chapter-close.md → Re-running a close, Run order step 3: the chapter's own entries, stamped,
- * cut for the current model. The row and its metadata stay, so nothing is called or written.
- */
+// chapter-close.md → Re-running a close, Run order step 3: cut the chapter's stamped entries for
+// the current model; the row and metadata stay, so nothing is called or written.
 async function cutRerunParts(
   ctx: PhaseContext,
   range: CloseRange,
@@ -109,9 +107,8 @@ async function cutRerunParts(
 }
 
 /**
- * chapter-close.md → Phase 2: the range cut into parts (Parts), the metadata call, then the row and
- * a stamp per entry through the end as one group, in C1's order, every delta anchored on the end
- * entry. A re-run only cuts its chapter's parts.
+ * chapter-close.md → Phase 2: cut parts, call for metadata, then the row and a stamp per entry as
+ * one group in C1's order, anchored on the end entry. A re-run only cuts its parts.
  */
 export async function* closeMetadataPhase(
   ctx: PhaseContext,

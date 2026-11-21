@@ -583,7 +583,7 @@ async function seedClosedChapter(db: Db): Promise<void> {
 describe('unprocessedThroughChapter', () => {
   it("counts classifiable entries past the watermark through the chapter's end only", async () => {
     const { db, ctx } = await makeHarness()
-    // b2 holds an entry named like the chapter's end, seeded first and far past it, and one within range.
+    // b2 holds an entry id-matching the chapter's end (far past it), and one within range.
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'other', createdAt: 1 })
     for (const [id, position] of [
       ['e5', 99],
@@ -604,7 +604,7 @@ describe('unprocessedThroughChapter', () => {
     expect(await unprocessedThroughChapter('b1', 'chap_1', 5, ctx)).toBe(0)
     expect(await unprocessedThroughChapter('b1', 'chap_1', 7, ctx)).toBe(0)
     expect(await unprocessedThroughChapter('b1', 'chap_unknown', null, ctx)).toBe(0)
-    // The chapter is read on the branch asked for, never by id alone: b2 has entries, not the chapter.
+    // Chapter is read on the asked branch, never by id alone: b2 has entries, not the chapter.
     expect(await unprocessedThroughChapter('b2', 'chap_1', null, ctx)).toBe(0)
   })
 })

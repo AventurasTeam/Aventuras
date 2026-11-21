@@ -10,8 +10,8 @@ import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 /**
  * C2 → reversal (chapter-close.md → Re-running a close, Run order step 2): a re-run reverses the
- * chapter's lore work, journaled, with the branch held exclusive so no preview's reads straddle
- * it (generation-pipeline.md → Branch write lock). A close passes through.
+ * chapter's lore work, journaled, under an exclusive branch hold so no preview read straddles it
+ * (generation-pipeline.md → Branch write lock). A close passes through.
  */
 export async function* closeReversalPhase(
   ctx: PhaseContext,

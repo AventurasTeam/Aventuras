@@ -332,7 +332,7 @@ describe('chapters CRUD arms', () => {
   })
 })
 
-// Milestone C4: the store row is the DB row less `closeReport`, plus its flag and its action.
+// C4: the store row is the DB row less `closeReport`, plus its flag and its action.
 describe('chapters store projection', () => {
   async function expectStoreMirrors(
     db: Awaited<ReturnType<typeof setup>>['db'],

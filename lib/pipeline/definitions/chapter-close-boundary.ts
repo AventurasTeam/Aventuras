@@ -32,10 +32,7 @@ function parkRange(ctx: PhaseContext, startEntryId: string, endEntryId: string):
   return { status: 'completed' }
 }
 
-/**
- * chapter-close.md → Re-running a close: the chapter's own range, from its row. Only the latest
- * chapter re-runs, and only one a close wrote.
- */
+// chapter-close.md → Re-running a close: the chapter's own range; latest, close-written only.
 async function parkRerunRange(ctx: PhaseContext, chapterId: string): Promise<PhaseResult> {
   const [chapter] = await ctx.db
     .select({
@@ -79,9 +76,8 @@ async function parkRerunRange(ctx: PhaseContext, chapterId: string): Promise<Pha
 }
 
 /**
- * C2 → boundary: under a re-run, the chapter's own range; else the branch's manual pick, else the
- * model's pick among Phase 1's candidates, else the no-model fallback (chapter-close.md → Phase 1),
- * into the run's range. The gate is held here, so this is the check that counts.
+ * C2 → boundary: the re-run's chapter range, else the manual pick, else the model's pick among
+ * Phase 1's candidates, else the no-model fallback (chapter-close.md → Phase 1). Gate held here.
  */
 export async function* closeBoundaryPhase(
   ctx: PhaseContext,
