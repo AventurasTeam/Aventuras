@@ -558,7 +558,7 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
   })
 })
 
-describe('startCloseRerun holds the gate from its preview to the re-run (Review Focus 3)', () => {
+describe('startCloseRerun holds the gate from its preview to the re-run', () => {
   it('keeps the gate shut from the shortcut until the re-run reserves, so a start in between is refused', async () => {
     const c = await closed()
     const { action } = await turnSince(c.h)
