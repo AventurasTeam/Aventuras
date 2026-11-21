@@ -60,3 +60,28 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **Reads of a delta group by `action_id` scan the log.** `deltas` has
+  no index on `action_id`, so every group read by action walks the
+  branch's log, or the whole table where the read has no branch filter:
+  `reverseReplayDeltas`'s group read (no branch filter, every abort and
+  recovery), `refuseWriteBack`'s group read, and the planner's
+  journal-group read when a reversal takes from a re-run's group. Raised
+  by Slice 5.13's reviews (2026-11-21), which narrowed the planner's read
+  to the groups a set takes from; an index, or a branch filter on the
+  abort read, is the fix. Worth measuring on a long branch before
+  choosing.
+- **A reversal's error names the newest delta's action, not the
+  reversed one.** `reverseAndPruneDeltaRows` labels its
+  `DeltaReplayError` with `set.rows[0]?.actionId ?? 'rollback'`, so a
+  failed CTRL-Z of a group whose set holds a later user edit names that
+  edit, and a set with no rows names `'rollback'`. Diagnostics only:
+  callers read `detail` and `committed`. Raised by Slice 5.13's reviews
+  (2026-11-21).
+- **A committed undo whose store sync fails says to try again.** The
+  reader's undo handler shows `Couldn't undo. Please try again.`
+  (`locales/en/reader.json`, `useReaderUndo`'s guard) for any thrown
+  undo, including a `DeltaReplayError` at `store-sync`, where the
+  database change landed. Trying again undoes the next group back; after
+  a re-run's CTRL-Z that is the close it just restored. Pre-existing for
+  every undo; raised by Slice 5.13's reviews (2026-11-21).
