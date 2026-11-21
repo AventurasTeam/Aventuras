@@ -105,6 +105,11 @@
     "failed": "Couldn't delete the chapter.",
     "resyncFailed": "The chapter was deleted, but the Timeline couldn't refresh. Reopen the story."
   },
+  "rerunConfirm": {
+    "notLatest": "This is no longer the latest chapter.",
+    "closeOwed": "Close the open chapter first.",
+    "readFailed": "Couldn't read what a re-run would change."
+  },
   "review": {
     "title": "Review — Chapter {{number}}: {{title}}",
     "done": "Done",
