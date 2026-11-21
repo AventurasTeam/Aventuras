@@ -1190,4 +1190,59 @@ describe('reverseRunGroup', () => {
     })
     expect(await chapterRows(c.fx)).toEqual([])
   })
+
+  // A rolled-back write-back or undo must read as uncommitted: abortRun leaves it to recovery.
+  const lockedCtx = (fx: CloseFixture): CloseFixture['ctx'] => ({
+    ...fx.ctx,
+    runInTransaction: async () => {
+      throw new Error('database is locked')
+    },
+  })
+
+  it('reports a restore whose transaction never committed as uncommitted, with no journal', async () => {
+    const c = await workedClose()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    const held = await fullState(c.fx)
+    expect(held).not.toEqual(before)
+
+    const error: unknown = await reverseRunGroup(
+      { actionId: RERUN, branchId: c.fx.branchId },
+      lockedCtx(c.fx),
+    ).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: database is locked',
+      committed: false,
+      refusal: null,
+    })
+    expect(await fullState(c.fx)).toEqual(held)
+    expect(await journalRows(c.fx)).toHaveLength(1)
+  })
+
+  it('reports an undo of the close whose transaction never committed as uncommitted, with no journal', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+    const held = await fullState(c.fx)
+    expect(held.chapters).toHaveLength(1)
+
+    const error: unknown = await reverseRunGroup(
+      { actionId: RERUN, branchId: c.fx.branchId },
+      lockedCtx(c.fx),
+    ).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: database is locked',
+      committed: false,
+      refusal: null,
+    })
+    expect(await fullState(c.fx)).toEqual(held)
+    expect(await journalRows(c.fx)).toHaveLength(1)
+  })
 })

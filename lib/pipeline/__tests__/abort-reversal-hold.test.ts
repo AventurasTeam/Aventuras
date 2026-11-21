@@ -316,4 +316,33 @@ describe("an abort's journal outcome", () => {
     expect(result).toMatchObject({ outcome: 'failed' })
     expect(result).not.toHaveProperty('closeUndone')
   })
+
+  it.each([
+    ['a restored journal', { journal: 'restored' }],
+    ['no journal', {}],
+    ['an undone close with no chapter left', { journal: 'undone', chapterNumber: null }],
+  ] as const)(
+    'leaves a failed run unmarked when only the store sync failed after %s',
+    async (_name, payload) => {
+      const result = await abortWith(({ actionId }) =>
+        Promise.reject(
+          new DeltaReplayError('Post-commit patch sync failed', {
+            cause: new Error('store sync boom'),
+            actionId,
+            stage: 'store-sync',
+            ...payload,
+          }),
+        ),
+      )
+
+      expect(result).toMatchObject({
+        outcome: 'failed',
+        error: {
+          kind: 'orchestrator',
+          detail: 'post-commit store sync failed: Error: store sync boom',
+        },
+      })
+      expect(result).not.toHaveProperty('closeUndone')
+    },
+  )
 })
