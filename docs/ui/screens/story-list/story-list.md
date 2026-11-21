@@ -119,8 +119,8 @@ viewport.
     Settings → About for fast metadata edits. The first ← Return
     is [stack-aware](../../principles.md#stack-aware-return) and
     goes back to the library.
-  - **Duplicate** — clone the story row + current branch's
-    entries + entities/lore snapshot. Other branches don't copy.
+  - **Duplicate** — opens the
+    [Duplicate story dialog](#duplicate-a-story). Absent on drafts.
   - **Export** — per-story JSON export (distinct from full
     backup, per data-model decision)
   - **Delete** — destructive, confirmation required, shown last
@@ -246,6 +246,71 @@ path with its own dialog and design pass — see
 See [patterns → Import counterparts](../../patterns/data.md#import-counterparts--file-based--vault)
 for the cross-cutting contract (versioning, zod validation, Vault
 parallelism).
+
+## Duplicate a story
+
+The card's `⋯` → **Duplicate**, on active and archived stories
+(drafts don't offer it), opens a `Duplicate story` dialog. The copy
+is a new story with no link to the source except shared images; what
+it copies is settled in
+[`data-model.md → Story duplicate`](../../../data-model.md#story-duplicate).
+
+```
+┌──── Duplicate story ─────────────── × ─┐
+│                                          │
+│   Name *                                 │
+│   [ Aria's Descent (copy)            ]   │
+│                                          │
+│   Branch                                 │
+│   [ main · current                 ▾ ]   │
+│                                          │
+│              [ Cancel ]  [ Duplicate ]   │
+└──────────────────────────────────────────┘
+```
+
+- **Width** ~360px, the
+  [branch creation modal's](../reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal)
+  size. A Modal on every tier per
+  [layout.md → Modal](../../foundations/mobile/layout.md#modal).
+- **Name** — an [Input](../../patterns/forms.md#input-primitive),
+  required, prefilled `<title> (copy)`, focused with the text
+  selected. `Duplicate` is disabled while it's empty or whitespace.
+  Titles needn't be unique.
+- **Branch** — a [Select](../../patterns/forms.md#select-primitive)
+  in `dropdown` mode, since branch names are the user's and any
+  length, shown only when the story has more than one branch: the
+  current branch first, marked `current`, then the rest in creation
+  order, as the
+  [branch navigator](../reader-composer/branch-navigator/branch-navigator.md#sort-order)
+  sorts them; `All branches (N)` last. Defaults to the current
+  branch. A single branch becomes the copy's only branch; the
+  all-branches option copies the whole tree.
+- `Cancel` and `Duplicate`. Enter in the name confirms; Esc and the
+  backdrop cancel.
+
+**Refused.** The dialog checks on open whether the story can be
+copied: a pending embedder change, a branch being copied held by an
+unrecovered memory update, or a run still going. A refusal disables `Duplicate`
+and shows its reason as a line above the buttons. The action checks
+again when it runs, and a refusal there shows the same line.
+
+**Copying.** `Duplicate` shows a spinner; the fields and `Cancel`
+disable, and Esc and the backdrop don't close the dialog: the copy
+is one transaction and can't stop partway.
+
+**Failed.** Nothing was written. The dialog stays open with an
+inline `Couldn't duplicate the story.`; the user retries or cancels.
+
+**Done.** The dialog closes and the list re-reads. A
+[toast](../../patterns/toast.md), `Duplicated as "<name>"`, carries
+an `Open` action, which opens the copy the ordinary way. The user
+stays on the list, and the copy's card lands where the sort puts
+it: never opened, it sorts last under the default `last-opened`
+sort. It isn't favorited, and it's active even when the source was
+archived, so the `Archived` filter doesn't show it; the toast's
+`Open` reaches it there.
+
+A duplicate is not undoable; deleting the copy is the way back.
 
 ## Banner — AI configuration
 

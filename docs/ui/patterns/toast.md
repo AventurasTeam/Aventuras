@@ -45,6 +45,9 @@ Used by:
   ([`architecture.md → Truncation cross-check`](../../architecture.md#truncation-cross-check))
   — warning severity, once per model per app session, `Set window`
   action opening the model's row in App Settings.
+- [Story list](../screens/story-list/story-list.md#duplicate-a-story)
+  — a story duplicated, info severity, `Duplicated as "<name>"` with
+  an `Open` action opening the copy.
 
 Toasts deliberately do **not** cover:
 

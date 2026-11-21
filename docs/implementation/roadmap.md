@@ -199,11 +199,19 @@ churn.
   [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution).
 - M6.5 — Multi-story branching: story list shows branch count,
   navigation handles the branch-aware URL shape.
-- M6.6 — Story duplicate (overflow menu on story cards): clone
-  story row + current branch's entries + entities / lore
-  snapshot per
-  [`story-list.md → Story card`](../ui/screens/story-list/story-list.md#story-card--text-first).
-  Structurally similar to branch-copy (M6.1) but story-scoped.
+- M6.6 — Story duplicate: the story card's Duplicate dialog (name,
+  one branch or all branches) per
+  [`story-list.md → Duplicate a story`](../ui/screens/story-list/story-list.md#duplicate-a-story),
+  copying per
+  [`data-model.md → Story duplicate`](../data-model.md#story-duplicate):
+  fresh story and branch ids, every branch-scoped table but
+  `probe_captures` as it stands with no rewind, the manifest's
+  Duplicate column. Builds on M6.1's copy
+  core, its composite `deltas` key and its `vec0` self-insert check. The
+  story list's chapter numbers (`hooks/use-story-chapter-numbers.ts`)
+  reread only on a generation settle or a refocus, so the action
+  refetches them with the stories. Designed 2026-11-21
+  ([exploration](../explorations/2026-11-21-story-duplicate.md)).
 
 **Parallel paths.** {M6.1} || {M6.2} — a
 [doc-as-contract](./conventions.md#sequencing-vs-doc-as-contract)
@@ -255,6 +263,12 @@ verified against the code first. Resolve with the slice each names.
     `INSERT INTO <vec> SELECT ... FROM <vec>` for step 5's post-rewind
     vector copy; if not, fall back to pre-reading surviving parent
     vectors or staging via a temp table inside the transaction.
+  - Verify that no other write lands between the statements of one
+    `runInTransaction` batch, on desktop and Android. Fork's execution
+    and story duplicate's whole copy (M6.6) read the source inside that
+    batch as one consistent snapshot; duplicate takes no lock on the
+    strength of it
+    ([`data-model.md → Story duplicate`](../data-model.md#story-duplicate)).
 - **M6.1 — A branch switch to a fork whose chapter rows copy the same ids
   keeps the review window open.** `chapterOverlaysStore`'s `review` holds
   only `chapterId`, and `overlayChapter` compares the store row's branch,
@@ -1610,7 +1624,12 @@ isn't a per-feature concern.
   `stories.cover_asset_id` needs clearing on story delete — not
   just the standalone entry/branch delete arms, or deleting a
   story with attached assets or a cover leaks blobs (surfaced by
-  Slice 2.4; no live impact before stories carry assets).
+  Slice 2.4; no live impact before stories carry assets). The count
+  spans every story, `entry_assets` rows and `cover_asset_id` both,
+  since a story duplicate (M6.6) shares its source's assets: a delete
+  that trashes on its own story's count alone would trash an image the
+  copy still shows
+  ([`data-model.md → Assets`](../data-model.md#assets-images--future-media)).
 - M9.4 — Per-story export `.avts` envelope; per-story import
   `.avts` (story list `[Import story…]` affordance routes through
   the `ImportDialog` compound, built in foundations and first
@@ -1915,7 +1934,7 @@ own.
   (2026-10-08); the developer accepted the gap until this slice.
 - **M9.4 — Importing a story that is still on the machine collides on
   `branches.id`.**
-  [`data-model.md → Backup / export format`](../data-model.md#backup--export-format)
+  [`data-model.md → Backup & export format`](../data-model.md#backup--export-format)
   imports story-internal ids verbatim, `branch_id` included, but
   `branches.id` is a single-column primary key across every story
   (`lib/db/stories/stories.table.ts:39`). Re-importing your own export
