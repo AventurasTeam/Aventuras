@@ -777,6 +777,43 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(shown().open).toBe(true)
   })
 
+  it('a window reopened after a held exit, then closed before it presents, leaves no exit to wait for', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+    // The held reopen opens as the exit ends, but its Sheet never gets to present.
+    view.presents = false
+    act(() => shown().onExited?.())
+    expect(shown().open).toBe(true)
+
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    expect(view.mounted).toBe(false)
+
+    openWindow()
+    expect(shown().open).toBe(true)
+  })
+
+  it("a chapter presented before another's window replaced it is not taken for presented when asked for again", async () => {
+    view.phone = true
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    view.presents = false
+    openWindow('chap_2')
+    openWindow('chap_1')
+
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    expect(view.mounted).toBe(false)
+
+    openWindow('chap_1')
+    expect(shown().open).toBe(true)
+  })
+
   it('above phone, a reopen opens at once: the window exits as it closes', async () => {
     const props = await openReady()
     act(() => props.onOpenChange(false))

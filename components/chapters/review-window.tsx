@@ -139,9 +139,9 @@ export function ReviewWindow({
 
 // gorhom mounts a modal's children only once it presents, and a presented sheet reports its exit.
 function PresentedSignal({ onPresented }: { onPresented?: () => void }): null {
-  const latest = useRef(onPresented)
+  const onPresentedAtMount = useRef(onPresented)
   useEffect(() => {
-    latest.current?.()
+    onPresentedAtMount.current?.()
   }, [])
   return null
 }
