@@ -95,3 +95,11 @@ slice-planning gate forces its resolution before that slice is planned.
   database on the next load. Pre-existing for every orphan kind; raised by
   Slice 5.13's PR review (2026-11-21), which only added the close-undone
   line to this failure.
+- **A throwing `onReserved` leaves its run registered.** The
+  orchestrator calls `reserveRun`, and the caller's `onReserved` inside
+  it, outside `driveOrigin`'s try and unwind
+  (`lib/pipeline/runtime/orchestrator.ts`), so a callback that throws
+  after the run registers leaves a hard-gate run no path removes until a
+  restart. No caller throws today; `startCloseRerun` is the first to pass
+  a host-supplied callback through it. Raised by Slice 5.13's Task 17
+  review (2026-11-21).
