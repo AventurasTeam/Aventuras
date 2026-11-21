@@ -16,20 +16,73 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
 const TITLE = /(?:^|[^\p{L}])(?:Mr|Mrs|Ms|Dr|St|Mt|Capt|Col|Lt|Sgt|Prof|Rev)$/u
 const TITLE_WINDOW = 5
 
-// A lone capital is an initial only beside a name or another initial ("J. R. Tolkien", "John F.",
-// "J. T."), not a plan's letter ("plan B."); "I." always ends a sentence.
+// A lone capital is a name's initial ("J. Smith", "John F. Kennedy", "J. R. Tolkien") unless the
+// next word opens a new sentence: a common opener ("plan B. The door…"), a quote, or nothing. A
+// wrong merge still shows both ends of the turn; a wrong split shows "J.". "I." always ends one.
 const LONE_CAPITAL = /(?:^|[^\p{L}])(?!I)\p{Lu}$/u
-const INITIAL_NEXT = /\s+\p{Lu}\./uy
-const WORD_BEFORE = /(\S+)\s+\S$/u
-const CAPITALIZED = /^\P{L}*\p{Lu}/u
-const WORD_BEFORE_WINDOW = 40
+const NEXT_WORD = /\s+(\p{Lu}\.|\p{Lu}[\p{L}'’]*)/uy
+const SENTENCE_OPENERS = new Set([
+  'A',
+  'After',
+  'All',
+  'An',
+  'And',
+  'As',
+  'At',
+  'Before',
+  'But',
+  'Even',
+  'Everyone',
+  'He',
+  'Her',
+  'His',
+  'How',
+  'I',
+  'If',
+  'In',
+  'It',
+  'Its',
+  'My',
+  'No',
+  'Nobody',
+  'Not',
+  'Nothing',
+  'Now',
+  'On',
+  'Once',
+  'One',
+  'Only',
+  'Or',
+  'Our',
+  'She',
+  'So',
+  'Some',
+  'Still',
+  'That',
+  'The',
+  'Their',
+  'Then',
+  'There',
+  'These',
+  'They',
+  'This',
+  'Those',
+  'We',
+  'What',
+  'When',
+  'Where',
+  'While',
+  'Who',
+  'Why',
+  'Yet',
+  'You',
+  'Your',
+])
 
-function isInitial(flat: string, sentenceStart: number, period: number): boolean {
-  INITIAL_NEXT.lastIndex = period + 1
-  if (INITIAL_NEXT.test(flat)) return true
-  const window = flat.slice(Math.max(sentenceStart, period - WORD_BEFORE_WINDOW), period)
-  const before = WORD_BEFORE.exec(window)
-  return before != null && CAPITALIZED.test(before[1]!)
+function isInitial(flat: string, period: number): boolean {
+  NEXT_WORD.lastIndex = period + 1
+  const next = NEXT_WORD.exec(flat)
+  return next != null && !SENTENCE_OPENERS.has(next[1]!)
 }
 
 // A Latin mark before a lowercase word ends no sentence: a dialogue tag (`!” said Jim`, `! » dit-elle`
@@ -46,7 +99,7 @@ function endsSentence(flat: string, sentenceStart: number, match: RegExpExecArra
   if (match[0] !== '.') return true
   const before = flat.slice(Math.max(sentenceStart, match.index - TITLE_WINDOW), match.index)
   if (TITLE.test(before)) return false
-  return !LONE_CAPITAL.test(before) || !isInitial(flat, sentenceStart, match.index)
+  return !LONE_CAPITAL.test(before) || !isInitial(flat, match.index)
 }
 
 type Pieces = { sentences: string[]; opening: string }

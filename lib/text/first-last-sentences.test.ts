@@ -90,6 +90,32 @@ describe('firstLastSentences', () => {
     })
   })
 
+  it('keeps a single initial with the surname after it', () => {
+    expect(firstLastSentences('J. Smith arrived. They listened.')).toEqual({
+      first: 'J. Smith arrived.',
+      last: 'They listened.',
+    })
+    expect(firstLastSentences('It was written by J. Smith in 1990. It sold.')).toEqual({
+      first: 'It was written by J. Smith in 1990.',
+      last: 'It sold.',
+    })
+  })
+
+  it('ends a sentence at a lone capital a new sentence or quote follows', () => {
+    expect(firstLastSentences('Take vitamin C. It helps.')).toEqual({
+      first: 'Take vitamin C.',
+      last: 'It helps.',
+    })
+    expect(firstLastSentences('Vitamin C. It helps.')).toEqual({
+      first: 'Vitamin C.',
+      last: 'It helps.',
+    })
+    expect(firstLastSentences('He chose B. “Fine,” she said.')).toEqual({
+      first: 'He chose B.',
+      last: '“Fine,” she said.',
+    })
+  })
+
   it('keeps a middle initial inside the name, quoted or not', () => {
     expect(firstLastSentences('John F. Kennedy spoke. They listened.')).toEqual({
       first: 'John F. Kennedy spoke.',
