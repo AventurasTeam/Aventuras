@@ -291,7 +291,11 @@ named keys work.** `setViewport` honours a key present in
 `{...MINIMAL_VIEWPORTS, ...options}`, so the `'{width}-{height}'` form
 that appears in Storybook's own type declarations silently falls back
 to the default rather than failing — measured: `'320-480'` yields
-1200x900, `'mobile1'` yields 320x568.
+1200x900, `'mobile1'` yields 320x568. Beside the built-ins,
+`.storybook/preview.tsx` adds `phone390` (390x844) for every story; a
+width one file needs alone stays in that file's meta, as the close
+modal's do. Preview spreads `MINIMAL_VIEWPORTS` back into its options,
+since options set there replace the toolbar's built-ins.
 
 An inline-width wrapper is **not** a substitute for a component that
 reads `useTier()`, which measures the window rather than the

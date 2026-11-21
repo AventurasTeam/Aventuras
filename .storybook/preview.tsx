@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Dimensions } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { MINIMAL_VIEWPORTS } from 'storybook/viewport'
 
 import { tierForWidth } from '@/hooks/use-tier'
 import { createQueryClient } from '@/lib/cache'
@@ -84,6 +85,18 @@ const preview: Preview = {
   beforeEach: syncDimensionsToViewport,
   parameters: {
     controls: { matchers: { color: /(background|color)$/i, date: /Date$/i } },
+    // No built-in key is 390 px wide, and an unknown key silently falls back to desktop. The
+    // built-ins are spread back in: options set here replace the toolbar's defaults, not add to them.
+    viewport: {
+      options: {
+        ...MINIMAL_VIEWPORTS,
+        phone390: {
+          name: 'Phone 390',
+          styles: { width: '390px', height: '844px' },
+          type: 'mobile',
+        },
+      },
+    },
     a11y: {
       test: 'todo',
       // Suppress axe rule that flags `aria-autocomplete="none"` on

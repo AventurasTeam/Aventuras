@@ -47,16 +47,6 @@ const meta = {
   component: ChapterInProgressCard,
   parameters: {
     layout: 'fullscreen',
-    // No built-in viewport is 390 px wide, and an unknown key silently falls back to desktop.
-    viewport: {
-      options: {
-        phone390: {
-          name: 'Phone 390',
-          styles: { width: '390px', height: '844px' },
-          type: 'mobile',
-        },
-      },
-    },
   },
   args: {
     progress: progress(70, 'success'),

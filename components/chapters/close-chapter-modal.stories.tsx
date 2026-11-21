@@ -165,14 +165,9 @@ const meta = {
   component: ModalHarness,
   parameters: {
     layout: 'fullscreen',
-    // No built-in key is 390 px wide, and an unknown key silently falls back to desktop.
+    // Widths no built-in key has; an unknown key silently falls back to desktop.
     viewport: {
       options: {
-        phone390: {
-          name: 'Phone 390',
-          styles: { width: '390px', height: '844px' },
-          type: 'mobile',
-        },
         phone320: {
           name: 'Phone 320',
           styles: { width: '320px', height: '700px' },

@@ -67,10 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   profile's model, not the override's. 5.10's tool-calling check inherits
   this. Whether such a run is reachable today is unchecked. Raised in
   5.10's PR 1 review.
-- **Story viewport presets are copied per file.** `phone390` is defined
-  in each of `chapter-in-progress-card`, `review-window`, `chapter-card`
-  and `close-chapter-modal` stories; one preset in
-  `.storybook/preview.tsx` would hold it. Raised in 5.10's PR 2 review.
 - **`reader.retrySystemEntry` isn't scoped to entry rows**
   (`e2e/locators/reader.ts`), unlike `dismissSystemEntry`, whose comment
   notes a toast shares the name; a toast with a Retry action would trip

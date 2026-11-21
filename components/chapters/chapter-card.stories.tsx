@@ -177,16 +177,6 @@ const meta: Meta<typeof CardHarness> = {
   component: CardHarness,
   parameters: {
     layout: 'padded',
-    // No built-in key is 390 px wide, and an unknown key falls back to desktop.
-    viewport: {
-      options: {
-        phone390: {
-          name: 'Phone 390',
-          styles: { width: '390px', height: '844px' },
-          type: 'mobile',
-        },
-      },
-    },
   },
   args: {
     data: LATEST,
