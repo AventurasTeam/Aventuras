@@ -294,10 +294,40 @@ const MOVED: readonly (readonly [string, (shown: CloseRerunExpected) => CloseRer
   ],
   ['the shortcut itself', (shown) => ({ ...shown, shortcut: null })],
   [
+    "the shortcut's target alone",
+    (shown) => ({
+      ...shown,
+      shortcut: shown.shortcut && { ...shown.shortcut, targetEntryId: 'entry_elsewhere' },
+    }),
+  ],
+  [
     "the reversal's counts",
     (shown) => ({
       ...shown,
       reversal: { ...shown.reversal, otherChanges: shown.reversal.otherChanges + 1 },
+    }),
+  ],
+  [
+    "the reversal's created lore",
+    (shown) => ({
+      ...shown,
+      reversal: {
+        ...shown.reversal,
+        createdLore: { ...shown.reversal.createdLore, count: shown.reversal.createdLore.count + 1 },
+      },
+    }),
+  ],
+  [
+    "the created lore's user edit",
+    (shown) => ({
+      ...shown,
+      reversal: {
+        ...shown.reversal,
+        createdLore: {
+          ...shown.reversal.createdLore,
+          userEdited: !shown.reversal.createdLore.userEdited,
+        },
+      },
     }),
   ],
 ]
@@ -443,8 +473,10 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
       const fresh = await previewOf(c)
       const before = await snapshot(c.h)
       const onStarted = vi.fn()
+      const moved = move(expectedOf(fresh))
+      expect(moved, 'the row moved nothing').not.toEqual(expectedOf(fresh))
 
-      expect(await start(c, move(expectedOf(fresh)), { onStarted })).toEqual({
+      expect(await start(c, moved, { onStarted })).toEqual({
         status: 'rejected',
         code: 'counts-changed',
         reason: expect.any(String),
