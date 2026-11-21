@@ -198,6 +198,34 @@ describe('failure copy', () => {
       }
   })
 
+  // generation-pipeline.md → Recovery modal: the reversal committed and only the store sync failed.
+  it('adds the fallback line after a failure whose reversal committed with the close undone', () => {
+    const undone: RecoveryFailure = { ...failed('chapter-close', 'story_1'), closeUndone: true }
+    expect(formatRecoveryReport(failureReport(undone), { story_1: 'Mornstone' })).toBe(
+      "An interrupted background update in Mornstone could not be undone. Your story content is intact, and restarting the app retries automatically. The chapter's earlier close couldn't be restored, so its close was undone.",
+    )
+    expect(formatRecoveryReport(failureReport({ ...undone, storyId: null }), {})).toBe(
+      "An interrupted background update could not be undone. Your story content is intact, and restarting the app retries automatically. The chapter's earlier close couldn't be restored, so its close was undone.",
+    )
+  })
+
+  it('adds no fallback line to a failure that undid no close', () => {
+    expect(
+      formatRecoveryReport(failureReport(failed('chapter-close', 'story_1')), {
+        story_1: 'Mornstone',
+      }),
+    ).toBe(
+      'An interrupted background update in Mornstone could not be undone. Your story content is intact, and restarting the app retries automatically.',
+    )
+    expect(
+      formatRecoveryReport(failureReport(failed('chapter-close', 'story_1', 'write-back')), {
+        story_1: 'Mornstone',
+      }),
+    ).toBe(
+      'An interrupted background update in Mornstone could not be undone without breaking later changes. Your story content is intact.',
+    )
+  })
+
   it('keeps the hold for a classifier refusal, and its story name', () => {
     expect(
       formatRecoveryReport(failureReport(failed('periodic-classifier', 'story_1', 'write-back')), {
