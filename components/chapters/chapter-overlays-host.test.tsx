@@ -134,6 +134,7 @@ const view = vi.hoisted(() => ({
   mounted: false,
   mounts: 0,
   phone: false,
+  presents: true,
 }))
 vi.mock('@/hooks/use-tier', () => ({ useTier: () => (view.phone ? 'phone' : 'desktop') }))
 vi.mock('./review-window', async () => {
@@ -143,10 +144,14 @@ vi.mock('./review-window', async () => {
       view.props = props
       view.renders += 1
       // The real window: above phone its exit ends as it closes; on phone the Sheet reports it.
-      const { open, onExited } = props
+      const { open, onExited, onPresented } = props
       useEffect(() => {
         if (!open && !view.phone) onExited?.()
       }, [open, onExited])
+      // A phone Sheet's children mount once it presents; a close before that leaves no exit.
+      useEffect(() => {
+        if (open && view.phone && view.presents) onPresented?.()
+      }, [open, onPresented])
       useEffect(() => {
         view.mounted = true
         view.mounts += 1
@@ -468,6 +473,7 @@ beforeEach(() => {
   view.mounted = false
   view.mounts = 0
   view.phone = false
+  view.presents = true
   confirmView.props = null
   confirmView.mounted = false
   actions.preview.mockReset().mockResolvedValue(PREVIEW)
@@ -735,7 +741,7 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(view.mounts).toBe(1)
   })
 
-  it("a Sheet's late dismiss during the held reopen doesn't close the reopened window", async () => {
+  it("a direct close while the window is closed doesn't drop the reopen held behind it", async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
@@ -758,6 +764,17 @@ describe('ChapterOverlaysHost — the review', () => {
     act(() => shown().onExited?.())
 
     expect(view.mounted).toBe(false)
+  })
+
+  it('a phone window closed before its Sheet presented leaves no exit to wait for', async () => {
+    view.phone = true
+    view.presents = false
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    expect(view.mounted).toBe(false)
+
+    openWindow()
+    expect(shown().open).toBe(true)
   })
 
   it('above phone, a reopen opens at once: the window exits as it closes', async () => {

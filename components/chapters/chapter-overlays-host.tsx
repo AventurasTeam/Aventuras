@@ -171,6 +171,7 @@ export function ChapterOverlaysHost(): ReactElement | null {
           open={presence.open}
           onOpenChange={presence.onOpenChange}
           onExited={presence.onExited}
+          onPresented={() => presence.onPresented(shown.id)}
         />
       ) : null}
       {closeHolds ? (
@@ -196,11 +197,13 @@ function ReviewHost({
   open,
   onOpenChange,
   onExited,
+  onPresented,
 }: {
   chapter: StoreChapter
   open: boolean
   onOpenChange: (open: boolean) => void
   onExited: () => void
+  onPresented: () => void
 }): ReactElement {
   const { branchId, id: chapterId } = chapter
   const navigate = useSurfaceNavigate()
@@ -321,6 +324,7 @@ function ReviewHost({
       open={open}
       onOpenChange={onOpenChange}
       onExited={onExited}
+      onPresented={onPresented}
       onRerun={latest ? rerun : undefined}
       rerunDisabledReason={rerunReason}
       title={t('chapters:review.title', { number: chapter.sequenceNumber, title: chapter.title })}

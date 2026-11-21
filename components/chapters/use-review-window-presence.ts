@@ -7,7 +7,8 @@ import type { StoreChapter } from '@/lib/stores'
 /**
  * The review window's mount, apart from its request: the last window held open stays mounted,
  * closed, until its exit ends, so the phone Sheet can slide out. A request that returns during the
- * exit is held until it ends: a Sheet presented while still dismissing never appears.
+ * exit is held until it ends: a Sheet presented while still dismissing never appears. A phone
+ * window closed before its Sheet presented has no exit to wait for, so it unmounts at once.
  */
 export function useReviewWindowPresence({
   requested,
@@ -20,16 +21,28 @@ export function useReviewWindowPresence({
   isRequestedNow: () => boolean
   onClose: () => void
 }) {
-  const afterExit = useHeldUntilDismissed(useTier() === 'phone')
+  const isPhone = useTier() === 'phone'
+  const afterExit = useHeldUntilDismissed(isPhone)
   const [shown, setShown] = useState<StoreChapter | null>(null)
   // The window whose exit is running, until `onExited`.
   const [exitingId, setExitingId] = useState<string | null>(null)
+  // The phone window whose Sheet has presented: only its dismissal reports an exit.
+  const [presentedId, setPresentedId] = useState<string | null>(null)
   if (requested != null && requested !== shown) {
     setShown(requested)
     // Another chapter's window mounts fresh; the old one's exit never reports.
-    if (shown?.id !== requested.id) setExitingId(null)
+    if (shown?.id !== requested.id) {
+      setExitingId(null)
+      setPresentedId(null)
+    }
   }
-  if (requested == null && shown != null && exitingId !== shown.id) setExitingId(shown.id)
+  if (requested == null && shown != null) {
+    if (!isPhone || presentedId === shown.id) {
+      if (exitingId !== shown.id) setExitingId(shown.id)
+    } else {
+      setShown(null)
+    }
+  }
 
   const reopenHeld = requested != null && requested.id === exitingId
   const latest = useRef({ afterExit, isRequestedNow })
@@ -44,6 +57,7 @@ export function useReviewWindowPresence({
 
   const onExited = useCallback(() => {
     const { afterExit: held, isRequestedNow: requestedNow } = latest.current
+    setPresentedId(null)
     if (requestedNow()) {
       held.runHeld()
       return
@@ -51,10 +65,12 @@ export function useReviewWindowPresence({
     setShown(null)
     setExitingId(null)
   }, [])
-  // A close while already closed (a Sheet's late dismiss) must not drop a reopen held behind it.
+  const onPresented = useCallback((id: string) => setPresentedId(id), [])
   const open = requested != null && requested.id !== exitingId
+  // Guards a direct `onOpenChange(false)` on a window that is already closed, so it can't drop a
+  // reopen held behind it.
   const onOpenChange = (next: boolean) => {
     if (!next && open) onClose()
   }
-  return { shown, open, onOpenChange, onExited }
+  return { shown, open, onOpenChange, onExited, onPresented }
 }

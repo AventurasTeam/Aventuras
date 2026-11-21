@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
@@ -258,7 +258,14 @@ const REOPEN_AFTER_MS = 80
  * The host's mount for the window, with its `Re-run…` then the confirm's `Cancel`: the request
  * clears, and comes back while the Sheet is still sliding out.
  */
-function ReopenHarness({ onExited }: { onExited: () => void }) {
+function ReopenHarness({
+  onExited,
+  closeBeforePresent = false,
+}: {
+  onExited: () => void
+  /** Closes the window in its first effect, before the Sheet presents, then asks for it again. */
+  closeBeforePresent?: boolean
+}) {
   const { height } = useWindowDimensions()
   const [requested, setRequested] = useState<StoreChapter | null>(REQUESTED)
   const requestedNow = useRef(requested != null)
@@ -271,6 +278,14 @@ function ReopenHarness({ onExited }: { onExited: () => void }) {
     isRequestedNow: () => requestedNow.current,
     onClose: () => markRequested(null),
   })
+  useEffect(() => {
+    if (!closeBeforePresent) return
+    markRequested(null)
+    const timer = setTimeout(() => markRequested(REQUESTED), REOPEN_AFTER_MS)
+    return () => clearTimeout(timer)
+    // Once, at mount: the close lands before the Sheet's deferred present.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   return (
     <View style={{ height }}>
       {presence.shown == null ? null : (
@@ -281,6 +296,7 @@ function ReopenHarness({ onExited }: { onExited: () => void }) {
             presence.onExited()
             onExited()
           }}
+          onPresented={() => presence.onPresented(presence.shown!.id)}
           onRerun={() => {
             markRequested(null)
             setTimeout(() => markRequested(REQUESTED), REOPEN_AFTER_MS)
@@ -700,5 +716,18 @@ export const Phone390ReopensDuringSlideOut: Story = {
     const top = await settledTop(within(reopened).getByRole('heading', { name: TITLE, level: 2 }))
     expect(top).toBeLessThan(window.innerHeight * 0.2)
     expect(within(reopened).getByRole('button', { name: 'Done' })).toBeVisible()
+  },
+}
+
+/** Phone: a window closed before its Sheet presents leaves no exit to wait for; asking again opens it. */
+export const Phone390ClosedBeforePresent: Story = {
+  globals: PHONE,
+  render: (args) => <ReopenHarness onExited={args.onExited} closeBeforePresent />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const top = await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
+    expect(top).toBeLessThan(window.innerHeight * 0.2)
+    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeVisible()
+    expect(args.onExited).not.toHaveBeenCalled()
   },
 }

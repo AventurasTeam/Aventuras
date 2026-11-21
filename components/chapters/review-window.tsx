@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react-native'
-import { useEffect, type ReactElement } from 'react'
+import { useEffect, useRef, type ReactElement } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { DeltaLogRow, type Delta, type DeltaOp } from '@/components/compounds/delta-log-row'
@@ -45,6 +45,8 @@ export type ReviewWindowProps = {
   onOpenChange: (open: boolean) => void
   /** Runs once a close has finished: after the phone Sheet's slide-out, at once above phone. */
   onExited?: () => void
+  /** Phone only: the Sheet has presented, so its dismissal will report `onExited`. */
+  onPresented?: () => void
   /** `Re-run…` in the footer; absent, no button (the host gives it on the latest chapter's window). */
   onRerun?: () => void
   /** Why `Re-run…` is disabled: the gate's reason in flight, else a close owed. */
@@ -64,6 +66,7 @@ export function ReviewWindow({
   open,
   onOpenChange,
   onExited,
+  onPresented,
   onRerun,
   rerunDisabledReason,
   title,
@@ -107,6 +110,7 @@ export function ReviewWindow({
     return (
       <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={title}>
         <SheetContent size="tall" className="gap-4" onDismissed={onExited}>
+          <PresentedSignal onPresented={onPresented} />
           <Heading level={2}>{title}</Heading>
           {list}
           {rerun}
@@ -131,6 +135,15 @@ export function ReviewWindow({
       </DialogContent>
     </Dialog>
   )
+}
+
+// gorhom mounts a modal's children only once it presents, and a presented sheet reports its exit.
+function PresentedSignal({ onPresented }: { onPresented?: () => void }): null {
+  const latest = useRef(onPresented)
+  useEffect(() => {
+    latest.current?.()
+  }, [])
+  return null
 }
 
 function ReviewBody({ state, ...rows }: RowCallbacks & { state: ReviewWindowState }): ReactElement {
