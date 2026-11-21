@@ -1239,8 +1239,8 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunConfirm.notLatest'))
   })
 
-  it('an in-flight refusal keeps the confirm open, its actions disabled until a run settles', async () => {
-    const show = vi.spyOn(toastStore, 'show')
+  it('an in-flight refusal toasts and keeps the confirm open, its actions disabled until a run settles', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
     actions.start.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })
     renderHost()
     openRerun()
@@ -1251,7 +1251,8 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     )
     expect(confirmView.props?.pending).toBe(false)
     expect(confirmView.mounted).toBe(true)
-    expect(show).not.toHaveBeenCalled()
+    expect(chapterOverlaysStore.getState().rerunConfirm).not.toBeNull()
+    expect(error).toHaveBeenCalledExactlyOnceWith('Unavailable while generating.')
 
     settleRun()
     await waitFor(() => expect(confirmView.props?.blockedReason).toBeUndefined())

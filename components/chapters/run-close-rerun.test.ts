@@ -221,10 +221,10 @@ describe('rerunStartOutcome', () => {
       "the shortcut's in-flight refusal",
       { status: 'rejected', code: STORY_ENTRY_REJECTION.inFlight, reason: 'x' },
     ],
-  ] as const)('keeps the confirm open for %s, saying nothing', (_name, start) => {
+  ] as const)('keeps the confirm open for %s, saying a run is in flight', (_name, start) => {
     expect(rerunStartOutcome(start, 2)).toStrictEqual({
       step: { step: 'keep-open' },
-      notice: null,
+      notice: { severity: 'error', message: 'Unavailable while generating.' },
       logCode: null,
     })
   })

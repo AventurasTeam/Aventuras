@@ -68,7 +68,12 @@ const startFailed = (logCode: string): Outcome => ({
   logCode,
 })
 
-const stay = (step: RerunStartStep): Outcome => ({ step, notice: null, logCode: null })
+// As the delete and rollback confirms: it stays open, held by the gate, and says why nothing ran.
+const keepOpen = (): Outcome => ({
+  step: { step: 'keep-open' },
+  notice: { severity: 'error', message: t('reader:actions.blockedWhileGenerating') },
+  logCode: null,
+})
 
 /** chapter-timeline.md → Re-run a close: what each result of `startCloseRerun` does to the confirm. */
 export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number): Outcome {
@@ -81,9 +86,7 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
         notice: { severity: 'warning', message: describeCloseFailure(start.error).content },
         logCode: 'preflight-failed',
       }
-    return keepsConfirmOpen(start.blockedBy)
-      ? stay({ step: 'keep-open' })
-      : startFailed(start.blockedBy)
+    return keepsConfirmOpen(start.blockedBy) ? keepOpen() : startFailed(start.blockedBy)
   }
   // The start reads the preview again under its mark, so this one shape carries the fresh lines.
   if (start.code === STORY_ENTRY_REJECTION.countsChanged)
@@ -92,7 +95,7 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
       notice: { severity: 'error', message: t('chapters:rerunNotice.countsChanged') },
       logCode: null,
     }
-  if (keepsConfirmOpen(start.code)) return stay({ step: 'keep-open' })
+  if (keepsConfirmOpen(start.code)) return keepOpen()
   // The documented race (a close landed while the confirm was open) has its own copy, unlogged.
   if (start.code === CLOSE_RERUN_REFUSAL.notLatest)
     return {
