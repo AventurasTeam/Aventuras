@@ -97,16 +97,13 @@
   .branch-row.renaming .rename-input:focus { border-color: var(--ink); }
   .branch-row .rename-input { display: none; }
 
-  /* inline delete confirm state */
-  .branch-row.confirming { background: var(--warn-bg); cursor: default; flex-direction: column; align-items: stretch; padding: 10px 16px; gap: 6px; }
-  .branch-row.confirming:hover { background: var(--warn-bg); }
-  .branch-row.confirming .marker, .branch-row.confirming .row-actions { display: none; }
-  .branch-row.confirming .name { font-size: 13px; color: var(--ink); }
-  .branch-row .confirm-ctrls { display: none; align-items: center; gap: 8px; }
-  .branch-row.confirming .confirm-ctrls { display: flex; }
-  .confirm-ctrls .confirm-msg { font-size: 12px; color: #7a5820; flex: 1; }
-  .confirm-ctrls .btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg-region); color: var(--ink); font-size: 12px; cursor: pointer; font-family: inherit; }
-  .confirm-ctrls .btn.danger { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
+  /* delete confirm — an AlertDialog over the navigator (branch-navigator.md → Delete confirm);
+     a branch delete can't be undone and takes the branch's line, so it isn't the inline strip */
+  .delete-backdrop { z-index: 7; }
+  .modal-body .impact { font-size: 13px; color: var(--ink); margin: 0 0 8px; }
+  .modal-body .impact strong { font-weight: 600; }
+  .modal-body .undone { font-size: 12px; color: var(--ink-muted); margin: 0; }
+  .modal-foot .btn.danger { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
 
   /* drawer (mobile) */
   .drawer-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 4; display: none; }
@@ -141,6 +138,8 @@
   .in-flight .gen-banner { display: block; }
   .in-flight .branch-row { opacity: 0.45; pointer-events: none; }
   .in-flight .branch-row .row-icon.delete { display: none; }
+  /* Embedder swap pending on the story: delete waits (the swap embeds across the story's branches); switching stays live. */
+  .swap-pending .branch-row .row-icon.delete { display: none; }
   /* Rename is a metadata-only write — remains interactive during in-flight. */
   .in-flight .branch-row .row-icon.rename { pointer-events: auto; opacity: 1; cursor: pointer; }
 
@@ -182,12 +181,27 @@
     <button class="rb-btn active" data-row-state="default">default (muted)</button>
     <button class="rb-btn" data-row-state="hover">row hover (icons brightened)</button>
     <button class="rb-btn" data-row-state="renaming">renaming</button>
-    <button class="rb-btn" data-row-state="confirming">delete confirm</button>
+    <button class="rb-btn" data-row-state="confirming">delete confirm (AlertDialog)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">only on branch:</span>
+    <button class="rb-btn active" data-only-count="38">38 entries</button>
+    <button class="rb-btn" data-only-count="0">none</button>
   </div>
   <div class="rb-group">
     <span class="gl">gen:</span>
     <button class="rb-btn active" data-gen-state="idle">idle</button>
     <button class="rb-btn" data-gen-state="in-flight">in-flight (paused)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">swap:</span>
+    <button class="rb-btn active" data-swap-state="none">none</button>
+    <button class="rb-btn" data-swap-state="pending">embedder swap pending (delete hidden)</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">current:</span>
+    <button class="rb-btn active" data-current="b1">main (the root)</button>
+    <button class="rb-btn" data-current="b2">alt-ending-2 (root deletable)</button>
   </div>
   <span class="rb-note">flip controls to inspect each state</span>
 </div>
@@ -280,6 +294,24 @@
     </div>
   </div>
 
+  <!-- Delete confirm: AlertDialog over the navigator (Popover or Sheet). Esc / hardware back = Cancel;
+       an outside click does nothing (alert-dialog.md → Copy contract). -->
+  <div class="modal-backdrop delete-backdrop" id="delete-backdrop">
+    <div class="modal" role="alertdialog" aria-labelledby="delete-title" aria-describedby="delete-desc">
+      <div class="modal-head">
+        <span class="modal-title" id="delete-title">Delete alt-ending-2?</span>
+      </div>
+      <div class="modal-body" id="delete-desc">
+        <p class="impact" id="delete-count"><strong>38 entries</strong> exist only on this branch.</p>
+        <p class="undone">Its world, plot and chapter changes go with it. This can't be undone.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="delete-cancel">Cancel</button>
+        <button class="btn danger" id="delete-confirm">Delete branch</button>
+      </div>
+    </div>
+  </div>
+
 </div>
 
     </div><!-- /.viewport -->
@@ -320,15 +352,17 @@
 
   // --- branch data for state simulation ---
   const branches = [
-    { id: 'b1', name: 'main', current: true, isRoot: true },
-    { id: 'b2', name: 'alt-ending-2', current: false, isRoot: false },
-    { id: 'b3', name: 'the-trap', current: false, isRoot: false },
+    { id: 'b1', name: 'main', current: true },
+    { id: 'b2', name: 'alt-ending-2', current: false },
+    { id: 'b3', name: 'the-trap', current: false },
   ];
 
   let currentSurface = 'popover';      // 'popover' | 'drawer' | 'modal'
   let rowState = 'default';            // 'default' | 'menu' | 'renaming' | 'confirming'
   let stateRowId = 'b2';               // which row carries the current rowState (for non-default)
   let genState = 'idle';               // 'idle' | 'in-flight' (paused)
+  let swapState = 'none';              // 'none' | 'pending' (embedder swap; delete hidden)
+  let onlyCount = '38';                // entries whose id no other branch holds
 
   function renderRows(targetEl) {
     targetEl.innerHTML = '';
@@ -338,7 +372,6 @@
       if (b.current) row.classList.add('current');
       if (b.id === stateRowId && rowState !== 'default' && rowState !== 'menu') {
         if (rowState === 'renaming') row.classList.add('renaming');
-        if (rowState === 'confirming') row.classList.add('confirming');
       }
 
       const marker = document.createElement('span');
@@ -357,7 +390,8 @@
       renameInput.value = b.name;
       row.appendChild(renameInput);
 
-      // inline action icons (rename + delete; delete hidden on root + current)
+      // inline action icons (rename + delete; delete hidden on the current branch only —
+      // the root is a label under the hard fork, so it deletes like any other)
       const actions = document.createElement('div');
       actions.className = 'row-actions';
       const renameIcon = document.createElement('span');
@@ -365,31 +399,20 @@
       renameIcon.textContent = '✎';
       renameIcon.title = 'Rename';
       actions.appendChild(renameIcon);
-      if (!b.isRoot && !b.current) {
+      if (!b.current) {
         const deleteIcon = document.createElement('span');
         deleteIcon.className = 'row-icon delete';
         deleteIcon.textContent = '×';
         deleteIcon.title = 'Delete';
+        deleteIcon.addEventListener('click', e => {
+          e.stopPropagation();
+          stateRowId = b.id;
+          setRowState('confirming');
+        });
         actions.appendChild(deleteIcon);
       }
       row.appendChild(actions);
 
-      // confirm controls (used in confirming state)
-      const confirmCtrls = document.createElement('div');
-      confirmCtrls.className = 'confirm-ctrls';
-      const msg = document.createElement('span');
-      msg.className = 'confirm-msg';
-      msg.textContent = 'Delete this branch?';
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'btn';
-      cancelBtn.textContent = 'Cancel';
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn danger';
-      deleteBtn.textContent = 'Delete';
-      confirmCtrls.appendChild(msg);
-      confirmCtrls.appendChild(cancelBtn);
-      confirmCtrls.appendChild(deleteBtn);
-      row.appendChild(confirmCtrls);
 
       // 'hover' review state — force-brighten icons on this row (and mark row as hovered visually)
       if (b.id === stateRowId && rowState === 'hover') {
@@ -411,6 +434,20 @@
     drawer.classList.toggle('show', currentSurface === 'drawer');
     modalBackdrop.classList.toggle('show', currentSurface === 'modal');
 
+    // delete confirm: AlertDialog over whichever navigator surface is showing
+    const target = branches.find(x => x.id === stateRowId);
+    // the × is hidden in flight and while a swap is pending, so the confirm can't open then
+    const deleteReachable = genState !== 'in-flight' && swapState !== 'pending';
+    const showDelete = rowState === 'confirming' && currentSurface !== 'modal' && target && !target.current && deleteReachable;
+    // header and chip counts follow the branch list (the chip updates when the navigator closes)
+    document.querySelectorAll('.popover-count').forEach(el => { el.textContent = '· ' + branches.length; });
+    document.getElementById('chip-count').textContent = String(branches.length);
+    document.getElementById('delete-backdrop').classList.toggle('show', !!showDelete);
+    if (target) document.getElementById('delete-title').textContent = 'Delete ' + target.name + '?';
+    document.getElementById('delete-count').innerHTML = onlyCount === '0'
+      ? 'No entries exist only on this branch.'
+      : '<strong>' + onlyCount + ' entries</strong> exist only on this branch.';
+
     // pick the right row state — "menu" only makes sense on a non-default row,
     // and "renaming"/"confirming" target b2 by default for the demo
     const desktopBody = document.getElementById('popover-body-desktop');
@@ -425,6 +462,8 @@
     const inFlight = genState === 'in-flight';
     popoverPane.classList.toggle('in-flight', inFlight);
     drawerPane.classList.toggle('in-flight', inFlight);
+    popoverPane.classList.toggle('swap-pending', swapState === 'pending');
+    drawerPane.classList.toggle('swap-pending', swapState === 'pending');
   }
 
   // --- review controls ---
@@ -435,17 +474,55 @@
     applySurface();
   }));
 
+  function setRowState(state) {
+    rowState = state;
+    document.querySelectorAll('.rb-btn[data-row-state]').forEach(x => x.classList.toggle('active', x.dataset.rowState === state));
+    applySurface();
+  }
   document.querySelectorAll('.rb-btn[data-row-state]').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.rb-btn[data-row-state]').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    rowState = b.dataset.rowState;
+    const target = branches.find(x => x.id === stateRowId);
+    if (b.dataset.rowState !== 'default' && (!target || target.current)) {
+      const other = branches.find(x => !x.current);
+      if (other) stateRowId = other.id;
+    }
+    setRowState(b.dataset.rowState);
+  }));
+  document.querySelectorAll('.rb-btn[data-only-count]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-only-count]').forEach(x => x.classList.toggle('active', x === b));
+    onlyCount = b.dataset.onlyCount;
     applySurface();
   }));
+  document.getElementById('delete-cancel').addEventListener('click', () => setRowState('default'));
+  document.getElementById('delete-confirm').addEventListener('click', () => {
+    const i = branches.findIndex(x => x.id === stateRowId);
+    if (i >= 0 && !branches[i].current) branches.splice(i, 1);
+    setRowState('default');
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && rowState === 'confirming') setRowState('default');
+  });
 
   document.querySelectorAll('.rb-btn[data-gen-state]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('.rb-btn[data-gen-state]').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
     genState = b.dataset.genState;
+    applySurface();
+  }));
+
+  document.querySelectorAll('.rb-btn[data-swap-state]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-swap-state]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    swapState = b.dataset.swapState;
+    applySurface();
+  }));
+
+  // current branch: the current row sorts first and hides its delete
+  document.querySelectorAll('.rb-btn[data-current]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-current]').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    branches.forEach(x => { x.current = x.id === b.dataset.current; });
+    branches.sort((x, y) => (y.current - x.current) || x.id.localeCompare(y.id));
+    stateRowId = branches.find(x => !x.current && x.id !== 'b1') ? branches.find(x => !x.current && x.id !== 'b1').id : 'b3';
     applySurface();
   }));
 

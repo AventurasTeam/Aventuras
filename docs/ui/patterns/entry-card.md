@@ -693,7 +693,7 @@ edit triggers.
 **Both commit buttons gate on a dirty draft.** An untouched draft has nothing
 to save, and saving it anyway is not free: on the head turn the write reverses
 the entry's classifier facts and spends a pass rebuilding them identically, and
-on any row it clears the global redo stack for nothing. `Save & regenerate`
+on any row it clears its branch's redo stack for nothing. `Save & regenerate`
 disables alongside `Save` rather than degrading into a bare regenerate — that
 path is the reply's own `↻`, behind its
 [cascade confirm](../screens/reader-composer/reader-composer.md#regenerate-confirmation),

@@ -143,16 +143,16 @@ not reader-contextual.
 
 ### Contextual zone
 
-| Surface                                                             | `ON THIS SCREEN` entries                            |
-| ------------------------------------------------------------------- | --------------------------------------------------- |
-| [Reader / composer](../screens/reader-composer/reader-composer.md)  | `Undo <target>` · `Redo <target>` · Jump to bottom  |
-| [World](../screens/world/world.md)                                  | Add entity… · Add lore…                             |
-| [Plot](../screens/plot/plot.md)                                     | Add thread… · Add happening…                        |
-| [Story List](../screens/story-list/story-list.md)                   | New story… · Import story…                          |
-| [Chapter Timeline](../screens/chapter-timeline/chapter-timeline.md) | _(empty — zone omitted)_                            |
-| [Story Settings](../screens/story-settings/story-settings.md)       | _(empty — all actions are per-tab edits / per-row)_ |
-| [App Settings](../screens/app-settings/app-settings.md)             | _(empty for v1 — see below)_                        |
-| [Diagnostics](../screens/diagnostics/diagnostics.md)                | _(empty — all actions are view-state / per-row)_    |
+| Surface                                                             | `ON THIS SCREEN` entries                                              |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [Reader / composer](../screens/reader-composer/reader-composer.md)  | `Undo <target>` · `Redo <target>` · Jump to bottom · Browse branches… |
+| [World](../screens/world/world.md)                                  | Add entity… · Add lore…                                               |
+| [Plot](../screens/plot/plot.md)                                     | Add thread… · Add happening…                                          |
+| [Story List](../screens/story-list/story-list.md)                   | New story… · Import story…                                            |
+| [Chapter Timeline](../screens/chapter-timeline/chapter-timeline.md) | _(empty — zone omitted)_                                              |
+| [Story Settings](../screens/story-settings/story-settings.md)       | _(empty — all actions are per-tab edits / per-row)_                   |
+| [App Settings](../screens/app-settings/app-settings.md)             | _(empty for v1 — see below)_                                          |
+| [Diagnostics](../screens/diagnostics/diagnostics.md)                | _(empty — all actions are view-state / per-row)_                      |
 
 App Settings' `Full backup` / `Restore` / `Export all` pass the
 inclusion test, but Actions-menu surfacing of backup/export is
@@ -169,8 +169,8 @@ CTRL-Shift-Z (keyboard remains the desktop fast path). Each names
 its target, and an unseen target's Undo ends in `…`, since it opens a
 confirm
 ([`reader-composer.md → Undo and redo`](../screens/reader-composer/reader-composer.md#undo-and-redo)).
-Redo is absent — not disabled — when the redo stack is empty
-(store-derived, cheap). Undo stays present because its availability
+Redo is absent — not disabled — when the reader branch's redo stack
+is empty (store-derived, cheap). Undo stays present because its availability
 needs a delta-log query, and a rejected activation surfaces a
 "Nothing to undo" toast instead. Redo disables while any run holds the
 reader's edit gate. Undo disables only while a head reversal is held,
@@ -179,6 +179,17 @@ since undoing a turn passes through a pass or a close
 Both disable while an entry's inline editor is open
 ([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session));
 `Jump to bottom` is absent on an empty entry list.
+
+`Browse branches…` opens the
+[branch navigator](../screens/reader-composer/branch-navigator/branch-navigator.md).
+It is always present in the reader, a single-branch story included,
+where the top bar's branch chip is hidden and this entry is the way in
+([`branch-navigator.md → Single-branch state`](../screens/reader-composer/branch-navigator/branch-navigator.md#single-branch-state)).
+It sits in the reader's zone, not `STORY TOOLS`, since branch
+navigation is the reader's alone
+([`principles.md → Top-bar design rule`](../principles.md#top-bar-design-rule)).
+Never in-flight-gated: it only opens the navigator, which pauses
+switching and hides delete itself.
 
 ## Surface coverage
 

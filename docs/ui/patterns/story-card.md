@@ -79,11 +79,11 @@ never flashes `Chapter 1`.
 
 ## Per-state rendering
 
-| State                              | Visual                                                       | Behavioral effect                                                                                                                                               |
-| ---------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Default                            | full opacity, mode-accented strip plus overline              | all actions enabled                                                                                                                                             |
-| Archived (`status === 'archived'`) | `opacity-55` on the entire card; `Archived` Chip after title | card body click still opens story; overflow menu's Archive becomes Unarchive                                                                                    |
-| Draft (`status === 'draft'`)       | `Draft` Chip after title; meta row drops chapter             | card body click resumes the wizard or opens the draft; overflow menu's Edit info points to wizard or Story Settings (host concern); overflow menu hides Archive |
+| State                              | Visual                                                       | Behavioral effect                                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default                            | full opacity, mode-accented strip plus overline              | all actions enabled                                                                                                                                                                                              |
+| Archived (`status === 'archived'`) | `opacity-55` on the entire card; `Archived` Chip after title | card body click still opens story; overflow menu's Archive becomes Unarchive                                                                                                                                     |
+| Draft (`status === 'draft'`)       | `Draft` Chip after title; meta row drops chapter             | card body click resumes the wizard or opens the draft; overflow menu's Edit info points to wizard or Story Settings (host concern); overflow menu hides Archive and Duplicate (the host passes no `onDuplicate`) |
 
 Both states derive from the row's `status`; an archived draft never
 co-exists (a single column), so the card renders at most one status
