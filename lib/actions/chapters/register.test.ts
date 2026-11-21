@@ -332,7 +332,7 @@ describe('chapters CRUD arms', () => {
   })
 })
 
-// Milestone C4: the store row is the DB row less `closeReport`, plus `hasCloseReport`.
+// Milestone C4: the store row is the DB row less `closeReport`, plus its flag and its action.
 describe('chapters store projection', () => {
   async function expectStoreMirrors(
     db: Awaited<ReturnType<typeof setup>>['db'],
@@ -340,10 +340,11 @@ describe('chapters store projection', () => {
   ) {
     const stored = chaptersStore.getById('chap_1')
     expect(stored).toBeDefined()
-    const { hasCloseReport: flag, ...storeRest } = stored!
-    const { closeReport: _closeReport, ...dbRest } = await rowFor(db, 'chap_1')
+    const { hasCloseReport: flag, closeReportActionId, ...storeRest } = stored!
+    const { closeReport, ...dbRest } = await rowFor(db, 'chap_1')
     expect(storeRest).toEqual(dbRest)
     expect(flag).toBe(hasCloseReport)
+    expect(closeReportActionId).toBe(closeReport?.actionId ?? null)
   }
 
   async function createWith(ctx: Awaited<ReturnType<typeof setup>>['ctx'], entry: NewChapter) {

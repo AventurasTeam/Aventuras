@@ -106,6 +106,7 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: true,
+    closeReportActionId: 'act_close_2',
     ...over,
   }
 }
@@ -398,6 +399,7 @@ describe('useMemoryRunBanner — an older close result beside a newer close', ()
         sequenceNumber: 2,
         title: 'New Chapter',
         hasCloseReport: false,
+        closeReportActionId: null,
       }),
     })
   }

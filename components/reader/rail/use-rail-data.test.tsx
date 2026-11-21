@@ -122,6 +122,7 @@ function chapter(id: string, branchId: string): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: false,
+    closeReportActionId: null,
   }
 }
 

@@ -317,17 +317,18 @@ describe('loadOpenStory', () => {
       branchId: 'br_1',
     })
 
-    for (const [id, hasCloseReport] of [
-      ['chap_1', true],
-      ['chap_2', false],
+    for (const [id, hasCloseReport, actionId] of [
+      ['chap_1', true, 'act_1'],
+      ['chap_2', false, null],
     ] as const) {
       const stored = chaptersStore.getById(id)
       expect(stored).toBeDefined()
-      const { hasCloseReport: flag, ...storeRest } = stored!
+      const { hasCloseReport: flag, closeReportActionId, ...storeRest } = stored!
       const [row] = await db.select().from(chapters).where(eq(chapters.id, id))
       const { closeReport: _closeReport, ...dbRest } = row!
       expect(storeRest).toEqual(dbRest)
       expect(flag).toBe(hasCloseReport)
+      expect(closeReportActionId).toBe(actionId)
     }
   })
 

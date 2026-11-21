@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { chapters, type CloseReport } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
@@ -11,8 +12,9 @@ import {
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { __setCloseAgentSlots, NO_CLOSE_TASKS } from '@/lib/pipeline/definitions/close-agent/slots'
-import { chaptersStore, type StoreChapter } from '@/lib/stores'
+import { chaptersStore, generationStore, type StoreChapter } from '@/lib/stores'
 
+import { startCloseChain } from './close-chain'
 import { startManualClose } from './start-manual-close'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { loadOpenStory } from '../stories/operational'
@@ -60,6 +62,12 @@ function expectFlag({ patched, hydrated }: Reading, flag: boolean): void {
   expect(patched?.hasCloseReport).toBe(flag)
   // The whole row, so a 0/1 flag from the hydrate or a column the projection lost shows here.
   expect(patched).toEqual(hydrated)
+}
+
+// C4: the action beside the flag, on the patched row; expectFlag holds the hydrate to the same row.
+function expectReport(reading: Reading, actionId: string): void {
+  expectFlag(reading, true)
+  expect(reading.patched?.closeReportActionId).toBe(actionId)
 }
 
 describe('close_report through chaptersStore (C4)', () => {
@@ -161,5 +169,53 @@ describe('close_report through chaptersStore (C4)', () => {
     const [row] = await fx.ctx.db.select().from(chapters).where(eq(chapters.id, id))
     expect(row.closeReport).toEqual(report)
     expectFlag(await readBoth(fx, id), true)
+  })
+
+  it("follows the report's action through a re-run's commit, its CTRL-Z, a title save and its undo", async () => {
+    const fx = await openCloseFixture()
+    const close = expectRan(await startManualClose(fx.branchId, fx.replyIds[2], fx.ctx))
+    expect(close.outcome).toBe('completed')
+    const [chapter] = await fx.ctx.db
+      .select()
+      .from(chapters)
+      .where(eq(chapters.branchId, fx.branchId))
+    expectReport(await readBoth(fx, chapter.id), close.actionId)
+
+    generationStore.setPendingRerun(fx.branchId, { chapterId: chapter.id })
+    const end = await startCloseChain(fx.branchId, fx.ctx)
+    if ('outcome' in end) throw new Error(`the re-run was refused: ${end.blockedBy}`)
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    const rerun = end.result.actionId
+    expect(rerun).not.toBe(close.actionId)
+    const committed = await readBoth(fx, chapter.id)
+    expectReport(committed, rerun)
+    // The story-open hydrate reads it off the column, not a patch.
+    expect(committed.hydrated?.closeReportActionId).toBe(rerun)
+
+    expect(await undoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
+    expectReport(await readBoth(fx, chapter.id), close.actionId)
+
+    const save = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'user_edit',
+          payload: {
+            branchId: fx.branchId,
+            id: chapter.id,
+            patch: { title: `${chapter.title} (revised)` },
+          },
+        },
+        actionId: generateId('act'),
+        branchId: fx.branchId,
+        entryId: null,
+      },
+      fx.ctx,
+    )
+    expect(save.status).toBe('ok')
+    expectReport(await readBoth(fx, chapter.id), close.actionId)
+
+    expect(await undoLastAction(fx.branchId, fx.ctx)).toEqual({ status: 'ok' })
+    expectReport(await readBoth(fx, chapter.id), close.actionId)
   })
 })

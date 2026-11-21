@@ -154,6 +154,7 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: true,
+    closeReportActionId: 'act_close_2',
     ...over,
   }
 }

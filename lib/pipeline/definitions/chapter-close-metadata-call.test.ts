@@ -226,6 +226,7 @@ function chapter(sequenceNumber: number, summary: string): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: false,
+    closeReportActionId: null,
   }
 }
 

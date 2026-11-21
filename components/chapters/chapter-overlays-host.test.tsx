@@ -214,6 +214,7 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: true,
+    closeReportActionId: 'act_close_2',
     ...over,
   }
 }
@@ -351,9 +352,18 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(props.title).toBe('Review — Chapter 2: The Keep Leans Closer')
     expect(props.state).toEqual({ status: 'ready', review: REVIEW })
     expect(reads.report).toHaveBeenCalledWith({}, 'br_1', 'chap_2')
-    expect(reads.deltas).toHaveBeenCalledWith({}, 'br_1', 'chap_2', 'act_close_2')
+    // A close's report has no first position: the chapter row's own range bounds the read.
+    expect(reads.deltas).toHaveBeenCalledWith({}, 'br_1', 'chap_2', 'act_close_2', undefined)
     expect(reads.kinds).toHaveBeenCalledWith({}, 'br_1', ['loc_mill'])
     expect(reads.build).toHaveBeenLastCalledWith(REPORT, DELTAS, expect.any(Object))
+  })
+
+  it("bounds a re-run's group by its report's first position", async () => {
+    reads.report.mockResolvedValue({ ...REPORT, actionId: 'act_rerun_2', firstLogPosition: 412 })
+
+    await openReady()
+
+    expect(reads.deltas).toHaveBeenCalledWith({}, 'br_1', 'chap_2', 'act_rerun_2', 412)
   })
 
   it('reads the deleted kinds beside the deltas, not after them', async () => {

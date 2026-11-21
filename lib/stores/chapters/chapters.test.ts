@@ -19,6 +19,7 @@ function chapterRow(id: string, sequenceNumber: number, title: string): StoreCha
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: false,
+    closeReportActionId: null,
   }
 }
 
@@ -47,7 +48,11 @@ describe('chaptersStore', () => {
   it("projects a direct caller's row-shaped create to its report flag, never the report", () => {
     chaptersStore.__reset()
     chaptersStore.hydrate('br_1', [])
-    const { hasCloseReport: _flag, ...row } = chapterRow('chap_3', 3, 'Three')
+    const {
+      hasCloseReport: _flag,
+      closeReportActionId: _action,
+      ...row
+    } = chapterRow('chap_3', 3, 'Three')
     chaptersStore.patch('br_1', {
       op: 'create',
       id: 'chap_3',
@@ -55,18 +60,24 @@ describe('chaptersStore', () => {
     })
     const stored = chaptersStore.getById('chap_3')
     expect(stored?.hasCloseReport).toBe(true)
+    expect(stored?.closeReportActionId).toBe('act_1')
     expect(stored).not.toHaveProperty('closeReport')
   })
 
-  it("keeps a store-shaped create's own report flag", () => {
+  it("keeps a store-shaped create's own report flag and action", () => {
     chaptersStore.__reset()
     chaptersStore.hydrate('br_1', [])
     chaptersStore.patch('br_1', {
       op: 'create',
       id: 'chap_4',
-      row: { ...chapterRow('chap_4', 4, 'Four'), hasCloseReport: true },
+      row: {
+        ...chapterRow('chap_4', 4, 'Four'),
+        hasCloseReport: true,
+        closeReportActionId: 'act_4',
+      },
     })
     expect(chaptersStore.getById('chap_4')?.hasCloseReport).toBe(true)
+    expect(chaptersStore.getById('chap_4')?.closeReportActionId).toBe('act_4')
   })
 
   it('no-ops a patch for a non-held branch', () => {

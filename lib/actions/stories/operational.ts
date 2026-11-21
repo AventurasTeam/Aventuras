@@ -164,12 +164,13 @@ async function loadAndPublish(
     .from(happeningAwareness)
     .where(eq(happeningAwareness.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
-  // C4: the report stays out of chaptersStore, which keeps whether a row has one.
+  // C4: the report stays out of chaptersStore, which keeps whether a row has one and its action.
   const { closeReport: _closeReport, ...chapterColumns } = getTableColumns(chapters)
   const chapterRows = await ctx.db
     .select({
       ...chapterColumns,
       hasCloseReport: sql<boolean>`${chapters.closeReport} IS NOT NULL`.mapWith(Boolean),
+      closeReportActionId: sql<string | null>`json_extract(${chapters.closeReport}, '$.actionId')`,
     })
     .from(chapters)
     .where(eq(chapters.branchId, branchId))

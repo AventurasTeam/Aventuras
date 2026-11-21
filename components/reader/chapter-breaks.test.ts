@@ -21,6 +21,7 @@ const chapter = (sequenceNumber: number, endEntryId: string, branchId = 'br_1'):
   createdAt: 1,
   updatedAt: 1,
   hasCloseReport: false,
+  closeReportActionId: null,
 })
 
 const row = (id: string, branchId = 'br_1') => ({ id, branchId }) as StoryEntry

@@ -57,6 +57,7 @@ function chapter(
     createdAt: CLOSED_AT,
     updatedAt: CLOSED_AT,
     hasCloseReport: false,
+    closeReportActionId: null,
     ...overrides,
   }
 }
@@ -70,6 +71,7 @@ const TRAIL = chapter({
   keywords: ['north road', 'courier'],
   tokenCount: 12_400,
   hasCloseReport: true,
+  closeReportActionId: 'act_close_trail',
 })
 const TAVERN = chapter({
   id: 'chap_tavern',
@@ -78,6 +80,7 @@ const TAVERN = chapter({
   summary: 'A stranger hands Aria a sealed letter.',
   tokenCount: 8_400,
   hasCloseReport: true,
+  closeReportActionId: 'act_close_tavern',
 })
 
 const LATEST: ChapterCardData = {
@@ -289,7 +292,9 @@ export const Earlier: Story = {
 
 /** C16: hidden, not disabled, on a chapter no close wrote. */
 export const NoCloseReport: Story = {
-  args: { data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false } } },
+  args: {
+    data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false, closeReportActionId: null } },
+  },
   play: async () => {
     const card = await findCard()
     await waitForInlineActions(card)
@@ -583,7 +588,9 @@ export const Phone390Delete: Story = {
 /** Phone: no close report, no Review changes behind `⋯` either. */
 export const Phone390NoCloseReport: Story = {
   globals: PHONE,
-  args: { data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false } } },
+  args: {
+    data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false, closeReportActionId: null } },
+  },
   play: async () => {
     const card = await findCard()
     await userEvent.click(await waitForPhoneActions(card))
