@@ -32,7 +32,7 @@ function runLine(kind: string, storyName: string | undefined): string {
 }
 
 // generation-pipeline.md → Recovery modal: a re-run whose journal couldn't be written back says so,
-// a failure whose reversal committed that way included.
+// whether the run reversed cleanly or only its store sync failed.
 const withCloseUndone = (line: string, closeUndone: true | undefined): string =>
   closeUndone ? `${line} ${t('crashRecovery.closeUndone')}` : line
 
@@ -45,7 +45,9 @@ function formatFailure(
   storyName: string | undefined,
   isHeld: (storyId: string | null) => boolean,
 ): string {
-  return withCloseUndone(failureLine(failure, storyName, isHeld), failure.closeUndone)
+  // A closeUndone failure committed its reversal and only the store sync failed: a reversed close.
+  if (failure.closeUndone) return withCloseUndone(runLine(failure.kind, storyName), true)
+  return failureLine(failure, storyName, isHeld)
 }
 
 // A pass failure holds its branch only while the boot left the branch `running` (Send refuses until
