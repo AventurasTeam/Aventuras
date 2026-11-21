@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import { canEndChapter } from '@/lib/chapters'
+import { canEndInOpenRegion } from '@/lib/chapters'
 import { storyEntries, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generationStore, interruptMemoryRuns } from '@/lib/stores'
@@ -51,7 +51,7 @@ async function dropRemovedPick(branchId: string, ctx: Pick<DbCtx, 'db'>): Promis
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, pick.endEntryId)))
     // Boundary's own test: a redo that stamps the entry again restores the chapter the user picked.
-    const endable = row != null && row.chapterId == null && canEndChapter(row)
+    const endable = row != null && canEndInOpenRegion(row)
     // Only the pick checked: a different one standing after the await is not this reversal's.
     if (!endable && generationStore.getTxState().pendingClose.get(branchId) === pick)
       generationStore.clearPendingClose(branchId)

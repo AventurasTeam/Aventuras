@@ -24,6 +24,7 @@ import { runOnUISync, scheduleOnRN } from 'react-native-worklets'
 import { closeChapterReason } from '@/components/chapters/close-chapter-reason'
 import { ChapterProgressBar } from '@/components/compounds/chapter-progress-bar'
 import { chapterProgressLabel } from '@/components/compounds/chapter-progress-label'
+import { ChapterProgressLine } from '@/components/compounds/chapter-progress-line'
 import { ReasonButton } from '@/components/compounds/reason-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -411,18 +412,10 @@ function OverlayBody({
 
       <View className="gap-1">
         <ChapterProgressBar percent={progress.percent} className="h-1.5 rounded-full" />
-        {/* One paragraph: a text-width label beside it would drop its last word on Android. */}
-        <Text size="xs" variant="muted">
-          {chapterProgressLabel(progress)}
-          {isReadyToClose(progress, chapterAutoClose) ? (
-            <>
-              {' · '}
-              <Text size="xs" variant="default" className="font-medium">
-                {t('chapters:readyToClose')}
-              </Text>
-            </>
-          ) : null}
-        </Text>
+        <ChapterProgressLine
+          counts={chapterProgressLabel(progress)}
+          ready={isReadyToClose(progress, chapterAutoClose)}
+        />
       </View>
 
       <View className="gap-1">

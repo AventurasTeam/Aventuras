@@ -5,8 +5,9 @@ import {
   decorateWorldTime,
   type WorldTimeDecoration,
 } from '@/components/reader/worldtime-decoration'
+import { useCalendarFrame } from '@/hooks/use-calendar-frame'
 import { updateEntryWorldTime, type DbCtx } from '@/lib/actions'
-import { getCalendar, resolveCalendar, type CalendarFrame, type TierTuple } from '@/lib/calendar'
+import { getCalendar, type CalendarFrame, type TierTuple } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -38,14 +39,7 @@ export function useWorldTimeEditing(
   origin: TierTuple | undefined,
   ctx: DbCtx,
 ): WorldTimeEditing {
-  // Memoized as a pair so the seam sees one identity, not two nullables.
-  const worldTimeFrame = useMemo(
-    (): CalendarFrame | null =>
-      calendarSystemId == null || origin == null
-        ? null
-        : { calendar: resolveCalendar(calendarSystemId), origin },
-    [calendarSystemId, origin],
-  )
+  const worldTimeFrame = useCalendarFrame(calendarSystemId, origin)
   // One walk per entries-collection identity. A side table leaves row identity
   // untouched, so ReaderRow's memo still short-circuits unchanged rows.
   const worldTimeDecorations = useMemo(

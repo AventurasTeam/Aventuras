@@ -3,6 +3,7 @@ import { View } from 'react-native'
 
 import { ChapterProgressBar } from '@/components/compounds/chapter-progress-bar'
 import { chapterProgressCounts } from '@/components/compounds/chapter-progress-label'
+import { ChapterProgressLine } from '@/components/compounds/chapter-progress-line'
 import { ReasonButton } from '@/components/compounds/reason-button'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
@@ -50,18 +51,10 @@ export function ChapterInProgressCard({
       </Text>
       <View className="gap-1">
         <ChapterProgressBar percent={progress.percent} className="h-1 rounded-full" />
-        {/* One paragraph: a text-width label beside it would drop its last word on Android. */}
-        <Text size="xs" variant="muted">
-          {chapterProgressCounts(progress)}
-          {isReadyToClose(progress, chapterAutoClose) ? (
-            <>
-              {' · '}
-              <Text size="xs" variant="default" className="font-medium">
-                {t('chapters:readyToClose')}
-              </Text>
-            </>
-          ) : null}
-        </Text>
+        <ChapterProgressLine
+          counts={chapterProgressCounts(progress)}
+          ready={isReadyToClose(progress, chapterAutoClose)}
+        />
       </View>
       <Text size="sm" variant="muted" className="italic">
         {t('chapters:inProgress.placeholder')}

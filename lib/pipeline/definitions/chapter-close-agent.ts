@@ -102,9 +102,7 @@ async function* runPlannedEntry(
   // C6: as the task starts, a task with nothing to show included, so the banner names it.
   yield { type: 'close_task_start', task: def.task, part, ...progress }
   const end = yield* runCloseTask(def, { ...agent, part, taskEntryIds })
-  if (end.status === 'aborted') return { status: 'aborted' }
-  if (end.status === 'failed') return { status: 'failed', error: end.error }
-  return null
+  return end.status === 'aborted' || end.status === 'failed' ? end : null
 }
 
 /**

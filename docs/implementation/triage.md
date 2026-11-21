@@ -117,18 +117,3 @@ slice-planning gate forces its resolution before that slice is planned.
   [`parked.md` → A write that commits while a story opens is lost from its stores](../parked.md#a-write-that-commits-while-a-story-opens-is-lost-from-its-stores).
   Routed by 5.10's slice review, 2026-11-18, from that slice's Open
   questions.
-- **Small shared homes Slice 5.10 left as copies.** Its review's
-  simplifier pass skipped four because each needs a home it couldn't
-  create: the open-region test `chapterId == null && canEndChapter(row)`
-  in `components/reader/close-here-entries.ts` and
-  `lib/actions/story-entries/prose-reversal.ts` (a predicate beside
-  `canEndChapter` in `lib/chapters`); the `CalendarFrame` memo in
-  `components/chapters/close-chapter-modal.tsx`,
-  `app/chapter-timeline/[branchId].tsx` and
-  `components/reader/world-time-editing.ts` (a `useCalendarFrame` hook);
-  the `Ready to close` label with its Android note in
-  `chapter-in-progress-card.tsx` and `chapter-popover.tsx` (a small
-  component, with its inventory row); and the metadata phase's re-map of
-  a result `requestChapterMetadata` already narrows
-  (`lib/pipeline/definitions/chapter-close-metadata.ts`). No defect in
-  any; each copy can drift. Raised in 5.10's slice review, 2026-11-18.

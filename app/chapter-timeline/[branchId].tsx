@@ -19,6 +19,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { storyPillPhase, useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
+import { useCalendarFrame } from '@/hooks/use-calendar-frame'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useColdOpenStory } from '@/hooks/use-cold-open-story'
 import { useEntryIndex } from '@/hooks/use-entry-index'
@@ -28,7 +29,6 @@ import { useOverlaySurface } from '@/hooks/use-overlay-surface'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
 import { getChapterDeletePreview, loadOpenStory, removeChapter, saveChapter } from '@/lib/actions'
-import { resolveCalendar, type CalendarFrame } from '@/lib/calendar'
 import type { ChapterDraft, ChapterDraftRow } from '@/lib/chapters'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -60,13 +60,7 @@ export default function ChapterTimelineRoute(): ReactElement {
   const ranges = useTimelineTimeRanges(branchId, focused)
   const calendarSystemId = open?.definition.calendarSystemId
   const origin = open?.definition.worldTimeOrigin
-  const frame = useMemo(
-    (): CalendarFrame | null =>
-      calendarSystemId == null || origin == null
-        ? null
-        : { calendar: resolveCalendar(calendarSystemId), origin },
-    [calendarSystemId, origin],
-  )
+  const frame = useCalendarFrame(calendarSystemId, origin)
   const timeline = useMemo(
     () =>
       chapterTimelineData({
