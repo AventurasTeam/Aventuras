@@ -497,6 +497,7 @@ describe("the planner and a re-run's journal", () => {
     const c = await closeOn(fx, fx.replyIds[END_REPLY])
     await writeCloseWork(c)
     await reverseForRerun(c)
+    expect(await journalRows(fx)).toHaveLength(1)
     await writeUnderAction(c, RERUN, [
       {
         kind: 'updateEntity',
@@ -520,6 +521,7 @@ describe("the planner and a re-run's journal", () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await reverseForRerun(c)
+    expect(await journalRows(c.fx)).toHaveLength(1)
     await rerunWrites(c)
     const rerun = await deltasOf(c.fx, RERUN)
 
@@ -533,6 +535,7 @@ describe("the planner and a re-run's journal", () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await reverseForRerun(c)
+    expect(await journalRows(c.fx)).toHaveLength(1)
     await rerunWrites(c)
 
     // As regenerateTurn's sweepFrom runs it: the resolved sweep straight into the shared reversal.
@@ -547,6 +550,7 @@ describe("the planner and a re-run's journal", () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await reverseForRerun(c)
+    expect(await journalRows(c.fx)).toHaveLength(1)
     await rerunWrites(c)
     const journals = await journalRows(c.fx)
 
@@ -571,6 +575,7 @@ describe("the planner and a re-run's journal", () => {
     expect(rename.logPosition).toBeLessThanOrEqual(await reverseForRerun(c))
     await rerunWrites(c)
     const journals = await journalRows(c.fx)
+    expect(journals).toHaveLength(1)
 
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
       status: 'ok',
