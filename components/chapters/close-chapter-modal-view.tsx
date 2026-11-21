@@ -327,26 +327,40 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
   )
 }
 
+const REPLY_SCROLL_RETRIES = 10
+const REPLY_SCROLL_RETRY_MS = 50
+
 function ReplyPanelNative({ replies, latestId, selectedId, onPick }: PanelProps) {
   const listRef = useRef<FlatList<CloseModalRow>>(null)
   const openedOn = useRef(replies.findIndex((row) => row.id === selectedId))
-  const retried = useRef(false)
+  const attempts = useRef(0)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scrollToOpened = () =>
     listRef.current?.scrollToIndex({ index: openedOn.current, viewPosition: 0.5, animated: false })
-  useEffect(() => {
-    if (openedOn.current > 0) scrollToOpened()
-  }, [])
+  useEffect(
+    () => () => {
+      if (retryTimer.current != null) clearTimeout(retryTimer.current)
+    },
+    [],
+  )
   return (
     <View className="min-h-0 shrink overflow-hidden rounded-md border border-border">
       <FlatList
         ref={listRef}
-        // Rows vary in height, so a target past the measured cells fails: jump to its estimated
-        // offset so the list renders it, then retry once.
+        // It opens on the selection once it has a viewport to center it in.
+        onLayout={() => {
+          if (attempts.current > 0 || openedOn.current <= 0) return
+          attempts.current = 1
+          scrollToOpened()
+        }}
+        // Rows vary in height, so a target past the measured cells fails, at first with no average
+        // to estimate from: jump to the estimate so the list renders it, and retry while cells
+        // measure, as SearchableOverlayList's sheet list does.
         onScrollToIndexFailed={({ index, averageItemLength }) => {
           listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false })
-          if (retried.current) return
-          retried.current = true
-          requestAnimationFrame(scrollToOpened)
+          if (attempts.current >= REPLY_SCROLL_RETRIES) return
+          attempts.current += 1
+          retryTimer.current = setTimeout(scrollToOpened, REPLY_SCROLL_RETRY_MS)
         }}
         testID="close-chapter-panel"
         accessibilityLabel={t('chapters:closeModal.endHeading')}
