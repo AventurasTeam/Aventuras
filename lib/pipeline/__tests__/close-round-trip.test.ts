@@ -444,10 +444,11 @@ async function crashRerunAndRecover(h: CloseHarness, landed: boolean): Promise<v
   const crashed = new Promise<void>((resolve) => {
     crash = resolve
   })
+  let firstGroup: GroupOutcome | undefined
   configureDeltaActionPort({
     ...realDeltaActionPort(),
     applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
-      if (landed) await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+      if (landed) firstGroup = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
       crash()
       return new Promise<never>(() => {})
     },
@@ -455,6 +456,20 @@ async function crashRerunAndRecover(h: CloseHarness, landed: boolean): Promise<v
   void h.rerun(closedChapterId(h))
   await within(crashed, "the re-run's first group")
   const rerun = defined(h.rerunActionId(), 'the re-run never reserved')
+
+  // The port can refuse or no-op a group without throwing: the arm's premise is its own to check.
+  if (landed) {
+    expect(
+      firstGroup?.status === 'ok' && firstGroup.outcomes.some((one) => one.status === 'landed'),
+      "the re-run's first group landed",
+    ).toBe(true)
+    expect(
+      (await deltasOf(h.fx, rerun)).length,
+      "the re-run's own writes before the crash",
+    ).toBeGreaterThan(0)
+  } else {
+    expect(await deltasOf(h.fx, rerun), 'no re-run write before the crash').toEqual([])
+  }
 
   // A restart: memory gone, the real port back.
   resetSingletons()
