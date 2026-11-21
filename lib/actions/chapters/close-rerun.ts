@@ -362,6 +362,7 @@ type RerunStartArgs = {
  * chapter-close.md → Re-running a close, Roll back & re-run: every refusal comes before the turns
  * go. A pending mark spans the preview, the rollback shortcut and the chain's reserve, so no Send
  * or start lands between them. Rejects when the shortcut's sweep or the chain's origin throws.
+ * `story` is not read: the settings come from the store's open story, as pre-flight's do.
  */
 export async function startCloseRerun(
   branchId: string,
@@ -387,7 +388,7 @@ export async function startCloseRerun(
   if (failed) return { outcome: 'preflight-failed', error: failed }
   return generationStore.bracketPendingTurn(branchId, (endMark) =>
     startUnderMark(
-      { branchId, chapterId, expected, story, onStarted: opts?.onStarted },
+      { branchId, chapterId, expected, story: open, onStarted: opts?.onStarted },
       ctx,
       endMark,
     ),

@@ -443,6 +443,24 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     await expectNothingChanged(c.h, before)
   })
 
+  it("refuses close-owed by the open story's auto-close settings, not a stale story it was handed", async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    const stale = openStory()
+    currentStoryStore.set({
+      ...stale,
+      settings: { ...stale.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
+    })
+    const before = await snapshot(c.h)
+
+    expect(await start(c, expected, { story: stale })).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.closeOwed,
+    })
+    await expectNothingChanged(c.h, before)
+  })
+
   it('refuses a lore-mgmt model flagged off for tool calling, before the turns go', async () => {
     const c = await closed()
     await turnSince(c.h)
