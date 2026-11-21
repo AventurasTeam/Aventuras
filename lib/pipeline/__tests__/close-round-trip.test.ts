@@ -1840,7 +1840,9 @@ const ARMS: readonly RoundTripArm[] = [
       await h.close()
       const first = await rerunCommitted(h)
       const second = await rerunCommitted(h)
-      const [held] = await journalsOn(h.fx)
+      const journals = await journalsOn(h.fx)
+      expect(journals, 'one journal on the branch').toHaveLength(1)
+      const [held] = journals
       expect(held?.actionId, "the second re-run's journal").toBe(second.actionId)
       expect(
         (held?.journal as RerunJournal | undefined)?.journals.map((row) => row.actionId),
