@@ -3410,7 +3410,11 @@ describe('periodicClassifierPhase via runPipeline', () => {
         gateBehavior: 'hard-gate',
         concurrencyPolicy: { blockedBy: [PER_TURN_KIND, PERIODIC_CLASSIFIER_KIND] },
       })
-      expect(await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e3', seeded)).toMatchObject({
+      expect(
+        await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e3', seeded, {
+          expectedCounts: undefined,
+        }),
+      ).toMatchObject({
         status: 'ran',
         result: { outcome: 'completed' },
       })

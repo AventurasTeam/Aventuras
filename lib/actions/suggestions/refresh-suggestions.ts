@@ -1,3 +1,4 @@
+import { CHAPTER_CLOSE_RERUN } from '@/lib/chapters'
 import {
   ensureSuggestionRefreshPipelineRegistered,
   runPipeline,
@@ -5,6 +6,7 @@ import {
   type RunCtxFor,
   type SuggestionRefreshInput,
 } from '@/lib/pipeline'
+import { generationStore, refreshHeldByRerun } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -16,6 +18,9 @@ export async function refreshSuggestions(
   input: SuggestionRefreshInput,
   ctx: DbCtx,
 ): ReturnType<typeof runPipeline> {
+  // A chip delta above a re-run's floor would turn its CTRL-Z into an undone close.
+  if (refreshHeldByRerun(generationStore.getTxState(), ids.branchId))
+    return { outcome: 'rejected', blockedBy: CHAPTER_CLOSE_RERUN }
   ensureSuggestionRefreshPipelineRegistered()
 
   // No shared actionId with anything: the re-roll is its own CTRL-Z unit.

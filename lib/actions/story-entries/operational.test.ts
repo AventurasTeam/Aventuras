@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -29,6 +29,7 @@ import {
   __resetBus,
   __resetRegistry as resetPipelineRegistry,
   CHAPTER_CLOSE_KIND,
+  PER_TURN_KIND,
   startPipeline,
   SUGGESTION_REFRESH_KIND,
 } from '@/lib/pipeline'
@@ -40,6 +41,7 @@ import {
   happeningsStore,
   undoRedoStore,
   type DeferredWorkKind,
+  type RunState,
 } from '@/lib/stores'
 
 import { shownCounts } from './__tests__/shown-counts'
@@ -2201,5 +2203,124 @@ describe('rollback counts and chapters', () => {
     const swept = await resolveSweep('b1', 't3', ctx)
     if ('status' in swept) throw new Error(`sweep refused: ${swept.reason}`)
     expect(swept.set.rows.map((d) => d.targetId)).toContain('hap_pass')
+  })
+})
+
+describe('rollback during a re-run', () => {
+  // A run holding b1 with no pipeline behind it; only its slot matters to the hold.
+  function holdB1(kind: string, interruptible: RunState['interruptible']): RunState {
+    const run: RunState = {
+      runId: `run_${kind}`,
+      kind,
+      gateBehavior: 'hard-gate',
+      interruptible,
+      beforeTurn: false,
+      actionId: `act_${kind}`,
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: '',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    }
+    generationStore.startRun(run)
+    return run
+  }
+
+  // As a close stamps them: op and t1 are chapter 1; t2 and t3 are the open region.
+  async function closeOpAndT1(db: Awaited<ReturnType<typeof createTestDb>>['db']): Promise<void> {
+    await db
+      .update(storyEntries)
+      .set({ chapterId: 'chap_1' })
+      .where(and(eq(storyEntries.branchId, 'b1'), inArray(storyEntries.id, ['op', 't1'])))
+  }
+
+  const IN_FLIGHT = { status: 'rejected', reason: 'generation in flight', code: 'in-flight-gated' }
+
+  it('refuses a rollback into the chapter, interrupting nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await closeOpAndT1(db)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts('b1', 't1', ctx)
+    const rerun = holdB1(CHAPTER_CLOSE_KIND, 'rerun')
+    const log = await db.select().from(deltas)
+
+    const result = await rollbackToEntry('b1', 't1', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual(IN_FLIGHT)
+    expect(rerun.abortController.signal.aborted).toBe(false)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+    expect(await db.select().from(deltas)).toEqual(log)
+  })
+
+  it('interrupts the re-run for a rollback that spares its chapter, then rolls back', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    await closeOpAndT1(db)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts('b1', 't2', ctx)
+    const rerun = holdB1(CHAPTER_CLOSE_KIND, 'rerun')
+
+    const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
+
+    expect(result).toEqual({ status: 'ok', counts: shown })
+    expect(rerun.abortController.signal.aborted).toBe(true)
+    expect(await entryIds(db)).toEqual(['op', 't1'])
+  })
+
+  it('re-checks past its read: a re-run reserving during it holds the rollback', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedBranchWithTurns(db, { db, runInTransaction })
+    await closeOpAndT1(db)
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts('b1', 't1', { db, runInTransaction })
+    let rerun: RunState | undefined
+    const watched = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && rerun === undefined) rerun = holdB1(CHAPTER_CLOSE_KIND, 'rerun')
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    const result = await rollbackToEntry(
+      'b1',
+      't1',
+      { db: watched, runInTransaction },
+      { expectedCounts: shown },
+    )
+
+    expect(rerun).toBeDefined()
+    expect(result).toEqual(IN_FLIGHT)
+    expect(rerun!.abortController.signal.aborted).toBe(false)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
+  })
+
+  it('re-checks the gate past its read: a turn reserving during it refuses the rollback', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedBranchWithTurns(db, { db, runInTransaction })
+    entriesStore.hydrate('b1', [])
+    const shown = await shownCounts('b1', 't2', { db, runInTransaction })
+    let turn: RunState | undefined
+    const watched = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && turn === undefined) turn = holdB1(PER_TURN_KIND, null)
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+
+    const result = await rollbackToEntry(
+      'b1',
+      't2',
+      { db: watched, runInTransaction },
+      { expectedCounts: shown },
+    )
+
+    expect(turn).toBeDefined()
+    expect(result).toEqual(IN_FLIGHT)
+    expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
   })
 })

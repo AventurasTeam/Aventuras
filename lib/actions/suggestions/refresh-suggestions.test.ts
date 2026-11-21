@@ -2,15 +2,24 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
+import { CHAPTER_CLOSE_RERUN } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
   entryMetadataSchema,
+  pipelineRuns,
   storyEntries,
   STORY_SETTINGS_DEFAULTS,
   type StorySettings,
 } from '@/lib/db'
-import { runPipeline, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import {
+  CHAPTER_CLOSE_KIND,
+  ensureChapterClosePipelineRegistered,
+  ensurePeriodicClassifierPipelineRegistered,
+  runPipeline,
+  SUGGESTION_REFRESH_KIND,
+} from '@/lib/pipeline'
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
   appSettingsStore,
@@ -19,6 +28,7 @@ import {
   entitiesStore,
   entriesStore,
   generationStore,
+  type RunState,
 } from '@/lib/stores'
 
 import { refreshSuggestions } from './refresh-suggestions'
@@ -346,5 +356,80 @@ describe('refreshSuggestions', () => {
     })
     expect(generateStructuredMock).not.toHaveBeenCalled()
     expect(await db.select().from(deltas)).toEqual([])
+  })
+})
+
+describe('refreshSuggestions during a re-run (AC 24)', () => {
+  // A memory run on b1 with no pipeline behind it, in the slot its chain gives it.
+  function holdMemoryRun(kind: string, interruptible: RunState['interruptible']): void {
+    generationStore.startRun({
+      runId: `run_${kind}`,
+      kind,
+      gateBehavior: 'hard-gate',
+      interruptible,
+      beforeTurn: false,
+      actionId: `act_${kind}`,
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: '',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+  }
+
+  // Ready to refresh: the run beside it reads as a registered kind, so only the hold refuses.
+  async function refreshable() {
+    const { db, ctx } = await makeHarness()
+    await seed(db)
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] },
+    })
+    ensureChapterClosePipelineRegistered()
+    ensurePeriodicClassifierPipelineRegistered()
+    return { db, ctx }
+  }
+
+  const refresh = (ctx: DbCtx) =>
+    refreshSuggestions({ storyId: 's1', branchId: 'b1' }, { refreshGuidance: '' }, ctx)
+
+  it.each([
+    { name: 'the re-run', kind: CHAPTER_CLOSE_KIND, slot: 'rerun' as const },
+    { name: "the re-run's catch-up pass", kind: PERIODIC_CLASSIFIER_KIND, slot: 'pass' as const },
+  ])('refuses during $name, starting no run and logging nothing', async ({ kind, slot }) => {
+    const { db, ctx } = await refreshable()
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    holdMemoryRun(kind, slot)
+
+    const result = await refresh(ctx)
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: CHAPTER_CLOSE_RERUN })
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+    expect(generationStore.getTxState().runs.size).toBe(1)
+    expect(await db.select().from(pipelineRuns)).toEqual([])
+    expect(await db.select().from(deltas)).toEqual([])
+  })
+
+  it('starts beside a plain close', async () => {
+    const { ctx } = await refreshable()
+    holdMemoryRun(CHAPTER_CLOSE_KIND, 'close')
+
+    const result = await refresh(ctx)
+
+    expect(result.outcome).toBe('completed')
+    expect(generateStructuredMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("starts while only another branch's re-run holds", async () => {
+    const { ctx } = await refreshable()
+    generationStore.setPendingRerun('b2', { chapterId: 'chap_1' })
+
+    const result = await refresh(ctx)
+
+    expect(result.outcome).toBe('completed')
   })
 })

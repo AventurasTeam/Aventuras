@@ -5,7 +5,7 @@ import { chapters, chunked, deltas, entryMetadataSchema, storyEntries } from '@/
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { isRetrievalBumpOnly } from '@/lib/row-signals'
-import { entriesStore, generationStore, selectMemoryRun } from '@/lib/stores'
+import { entriesStore, generationStore, rerunHoldsReversal, selectMemoryRun } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
@@ -426,6 +426,19 @@ export async function getRollbackCounts(
   })
 }
 
+// What the re-run hold reads; a missing row reads unstamped and is left to the sweep to refuse.
+async function entryChapterOf(
+  branchId: string,
+  id: string,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<{ chapterId: string | null }> {
+  const [row] = await ctx.db
+    .select({ chapterId: storyEntries.chapterId })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
+  return { chapterId: row?.chapterId ?? null }
+}
+
 export async function rollbackToEntry(
   branchId: string,
   targetId: string,
@@ -436,6 +449,14 @@ export async function rollbackToEntry(
 > {
   // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
   if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
+  const target = await entryChapterOf(branchId, targetId, ctx)
+  // Past the read, synchronously with the bracket's entry: a turn reserved during it refuses, and
+  // a re-run holds a rollback into its chapter until it ends.
+  if (
+    generationStore.isHeadReversalBlocked(branchId) ||
+    rerunHoldsReversal(generationStore.getTxState(), branchId, target)
+  )
+    return inFlightRejection()
 
   return bracketProseReversal(branchId, ctx, async () => {
     const swept = await resolveSweep(branchId, targetId, ctx)

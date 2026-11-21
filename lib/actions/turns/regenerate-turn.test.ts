@@ -203,7 +203,9 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
@@ -247,7 +249,9 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r1', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r1', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
@@ -274,7 +278,9 @@ describe('regenerateTurn', () => {
       }),
     )
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
@@ -320,7 +326,9 @@ describe('regenerateTurn', () => {
       }) as unknown as typeof fetch,
     )
 
-    const regen = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
     await started
     await awaitRunTerminal(PER_TURN_KIND, 'b1', 'cancel')
     const settled = await regen
@@ -347,7 +355,10 @@ describe('regenerateTurn', () => {
 
     const regen = await withSweepHook(
       () => order.push(runningPass('b1') ? 'swept beside the pass' : 'swept'),
-      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      () =>
+        regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+          expectedCounts: undefined,
+        }),
     )
 
     expect(regen.status).toBe('ran')
@@ -375,7 +386,9 @@ describe('regenerateTurn', () => {
     const held = await pass.nextHeld()
     registerStoreOnlyRun(SUGGESTION_REFRESH_KIND, 'b1')
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen).toEqual({
       status: 'rejected',
@@ -405,7 +418,9 @@ describe('regenerateTurn', () => {
       return select(...args)
     }) as unknown as typeof ctx.db.select)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
     spy.mockRestore()
     const gateResults = gate.mock.results.map((r) => r.value)
     gate.mockRestore()
@@ -434,7 +449,7 @@ describe('regenerateTurn', () => {
     const swept = vi.fn()
 
     const regen = await withSweepHook(swept, () =>
-      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, { expectedCounts: undefined }),
     )
 
     expect(regen).toEqual({
@@ -462,7 +477,7 @@ describe('regenerateTurn', () => {
     const swept = vi.fn()
 
     const regen = await withSweepHook(swept, () =>
-      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, { expectedCounts: undefined }),
     )
 
     expect(await start.origin).toMatchObject({ outcome: 'failed', actionId: held.actionId })
@@ -501,7 +516,7 @@ describe('regenerateTurn', () => {
     const swept = vi.fn()
 
     const regen = await withSweepHook(swept, () =>
-      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx),
+      regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx, { expectedCounts: undefined }),
     )
 
     expect(regen).toMatchObject({ status: 'rejected', code: 'not-an-ai-reply' })
@@ -531,7 +546,9 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen).toEqual({
       status: 'rejected',
@@ -548,7 +565,9 @@ describe('regenerateTurn', () => {
     await hydrateAppSettings(async () => WORKING_CONFIG)
     generationStore.setReversalInProgress(true)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     generationStore.setReversalInProgress(false)
     expect(regen).toEqual({
@@ -577,7 +596,9 @@ describe('regenerateTurn', () => {
       if (!registered)
         seen.push({ reversal: tx.reversalInProgress, blocked: generationStore.isUserEditBlocked() })
     })
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
     unsubscribe()
 
     expect(regen.status).toBe('ran')
@@ -601,7 +622,9 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
@@ -623,7 +646,9 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_orphan', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_orphan', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen).toEqual({
       status: 'rejected',
@@ -646,7 +671,9 @@ describe('regenerateTurn', () => {
       { content: 'I ford the river.', composerMode: 'free' },
       ctx,
     )
-    const regenerated = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regenerated = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
     await Promise.all([submitted, regenerated])
 
     const rows = (await ctx.db.select().from(storyEntries)).sort((a, b) => a.position - b.position)
@@ -670,7 +697,9 @@ describe('regenerateTurn', () => {
       settings: { ...open.settings, embedding_swap_target: 'bge-m3' },
     })
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen).toEqual({ status: 'rejected', code: 'embedder-swap', reason: 'embedder-swap' })
     expect(entriesStore.getById('e_r2')).toBeDefined()
@@ -684,7 +713,9 @@ describe('regenerateTurn', () => {
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
     expect(undoRedoStore.hasRedo()).toBe(true)
 
-    await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
@@ -715,7 +746,10 @@ describe('regenerateTurn', () => {
           stage: committed ? 'store-sync' : 'transaction',
         })
       },
-      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      () =>
+        regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+          expectedCounts: undefined,
+        }),
     )
 
     await expect(regen).rejects.toBeInstanceOf(DeltaReplayError)
@@ -741,7 +775,9 @@ describe('regenerateTurn', () => {
     )
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
@@ -754,7 +790,9 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     const undo = await undoLastAction('b1', ctx)
 
@@ -784,7 +822,10 @@ describe('regenerateTurn', () => {
         attempted.push(isFollowUpSweep(rows))
         if (isFollowUpSweep(rows)) throw error
       },
-      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      () =>
+        regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+          expectedCounts: undefined,
+        }),
     )
     return { attempted, regen }
   }
@@ -835,7 +876,10 @@ describe('regenerateTurn', () => {
         if (!isFollowUpSweep(rows))
           void ctx.db.delete(deltas).where(eq(deltas.targetId, 'e_u2')).run()
       },
-      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      () =>
+        regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+          expectedCounts: undefined,
+        }),
     )
 
     expect(regen.status).toBe('ran')
@@ -884,7 +928,9 @@ describe('regenerateTurn', () => {
     undoRedoStore.pushRedoGroup(__redoGroupForTest())
     const before = await ctx.db.select().from(deltas)
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen).toEqual({
       status: 'rejected',
@@ -913,7 +959,10 @@ describe('regenerateTurn', () => {
           'act_t2',
         )
       },
-      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+      () =>
+        regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+          expectedCounts: undefined,
+        }),
     )
 
     expect(regen).toEqual({
@@ -998,7 +1047,9 @@ describe('regenerateTurn', () => {
       expect.objectContaining({ op: 'update', actionId: 'act_u' }),
     ])
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r1', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r1', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     expect(await db.select().from(characterRelationships)).toEqual([])
@@ -1036,7 +1087,9 @@ describe('regenerateTurn', () => {
     await createPlace('loc_varn', null, 'e_r2')
     await createPlace('loc_docks', 'loc_varn', 'e_r1')
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
 
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
@@ -1266,5 +1319,62 @@ describe('regenerateTurn', () => {
     expect(entriesStore.getById('e_r2')).toBeDefined()
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     expect(generationStore.isUserEditBlocked()).toBe(false)
+  })
+})
+
+describe('regenerateTurn during a re-run (AC 23)', () => {
+  beforeEach(() => {
+    resetSingletons()
+  })
+  afterEach(() => {
+    sweepHook.onSweep = null
+    resetSingletons()
+  })
+
+  it("holds a regenerate of the chapter's end reply, sweeping and interrupting nothing", async () => {
+    const { ctx } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    // A manual close on the latest reply stamped every entry through it.
+    await ctx.db
+      .update(storyEntries)
+      .set({ chapterId: 'chap_1' })
+      .where(eq(storyEntries.branchId, 'b1'))
+    const rerun: RunState = {
+      runId: 'run_rerun',
+      kind: CHAPTER_CLOSE_KIND,
+      gateBehavior: 'hard-gate',
+      interruptible: 'rerun',
+      beforeTurn: false,
+      actionId: 'act_rerun',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController: new AbortController(),
+      currentPhase: 'agent',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    }
+    generationStore.startRun(rerun)
+    const log = await ctx.db.select().from(deltas)
+    const swept: string[] = []
+
+    const regen = await withSweepHook(
+      (rows) => {
+        swept.push(...rows.map((row) => row.id))
+      },
+      () =>
+        regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+          expectedCounts: undefined,
+        }),
+    )
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'generation-in-flight',
+      reason: 'generation in flight',
+    })
+    expect(swept).toEqual([])
+    expect(rerun.abortController.signal.aborted).toBe(false)
+    expect(await ctx.db.select().from(deltas)).toEqual(log)
   })
 })
