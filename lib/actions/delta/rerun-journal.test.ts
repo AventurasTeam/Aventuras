@@ -4,20 +4,31 @@ import { describe, expect, it, vi } from 'vitest'
 import type { generateStructured } from '@/lib/ai'
 import { chapterDraftFrom } from '@/lib/chapters'
 import {
+  characterRelationships,
+  deltas,
   happeningInvolvements,
   happenings,
+  packFloat32,
   parseRerunJournal,
   pipelineRuns,
   reversalJournals,
+  SOURCE_TABLES,
+  sourceHash,
+  vecRowPk,
+  vecTableName,
   type Delta,
   type NewEntity,
   type RerunJournal,
+  type SqlOp,
 } from '@/lib/db'
-import type { CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
+import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
+import { queryAllOn, type CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
+import { happeningsStore, loreStore } from '@/lib/stores'
 
 import { DeltaReplayError } from './replay-errors'
-import { reverseCloseForRerun } from './rerun-journal'
+import { rerunWriteBack, reverseCloseForRerun, type RerunWriteBack } from './rerun-journal'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { selectReversalSet } from './row-closure'
 import {
   ASKED,
   ASKED_CAST,
@@ -36,6 +47,7 @@ import {
   logRows,
   loreCreate,
   MERGED_DESCRIPTION,
+  MERGED_HAPPENING,
   mergeCopyId,
   openClosed,
   openSeeded,
@@ -575,5 +587,402 @@ describe("the planner and a re-run's journal", () => {
 
     expect(await deltasOf(c.fx, RERUN)).toEqual([])
     expect(await journalRows(c.fx)).toEqual([])
+  })
+})
+
+/** Every table a re-run's round trip touches, as a deep-equal snapshot of the branch. */
+async function fullState(fx: CloseFixture) {
+  const { db } = fx.ctx
+  return {
+    world: await worldRows(fx),
+    happenings: await happeningRows(fx),
+    involvements: await db
+      .select()
+      .from(happeningInvolvements)
+      .where(eq(happeningInvolvements.branchId, fx.branchId))
+      .orderBy(asc(happeningInvolvements.id)),
+    pairs: await db
+      .select()
+      .from(characterRelationships)
+      .where(eq(characterRelationships.branchId, fx.branchId))
+      .orderBy(asc(characterRelationships.id)),
+    chapters: await chapterRows(fx),
+    entries: await entryRows(fx),
+    log: await logRows(fx),
+  }
+}
+
+// Every embedded row's flag as the drain leaves it (lesson: staleness flags are cleared by the drain).
+async function drainByHand(fx: CloseFixture): Promise<void> {
+  await fx.ctx.runInTransaction(
+    Object.values(SOURCE_TABLES).map((table) => ({
+      sql: `UPDATE ${table} SET embedding_stale = 0 WHERE branch_id = ?`,
+      params: [fx.branchId],
+    })),
+  )
+}
+
+const VEC_DIM = 384 // the dim family the migrations create
+const VEC_MODEL = 'test-embed-model'
+
+// A happening's stored vector, as the close's range embed leaves one it found stale in the chapter.
+function happeningVectorOp(branchId: string, id: string): SqlOp {
+  return {
+    sql: `INSERT INTO ${vecTableName('happening', VEC_DIM)} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+    params: [
+      vecRowPk(branchId, id, VEC_MODEL),
+      branchId,
+      VEC_MODEL,
+      id,
+      sourceHash(id),
+      packFloat32(new Float32Array(VEC_DIM)),
+    ],
+  }
+}
+
+async function happeningVectorIds(fx: CloseFixture): Promise<string[]> {
+  const rows = await queryAllOn(fx.ctx.db)(
+    `SELECT id FROM ${vecTableName('happening', VEC_DIM)} WHERE branch_id = ?`,
+    [fx.branchId],
+  )
+  return rows.map(([id]) => String(id)).sort()
+}
+
+/** `rerunWrites` with the inn pair merged again between them, as a re-run's happenings task can. */
+async function rerunWritesWithMerge(c: ClosedChapter, actionId = RERUN): Promise<void> {
+  await writeUnderAction(c, actionId, [
+    loreCreate(c.fx.branchId, rerunLoreId(actionId), 'The night ferry'),
+  ])
+  await writeHappeningMerge(c.fx, { actionId, entryId: c.endEntryId })
+  await writeCloseReport(c, actionId)
+}
+
+// What each path reversing a re-run's group runs: the group, with the chapter's close groups on the
+// fallback, then the write-back's ops after its prunes and its patches after the group's.
+async function reverseWithWriteBack(
+  fx: CloseFixture,
+  actionId: string,
+  rerunChapterId?: string,
+): Promise<RerunWriteBack> {
+  const group = await deltasOf(fx, actionId)
+  const writeBack = await rerunWriteBack(
+    { actionId, branchId: fx.branchId, group, rerunChapterId },
+    fx.ctx,
+  )
+  const target = new Map(group.map((d) => [d.id, d]))
+  if (writeBack.outcome === 'undone') for (const d of writeBack.seed) target.set(d.id, d)
+  const set = await selectReversalSet(fx.ctx, {
+    branchId: fx.branchId,
+    target: [...target.values()].sort((a, b) => b.logPosition - a.logPosition),
+  })
+  await reverseAndPruneDeltaRows(
+    set,
+    fx.ctx,
+    { keepRedoExact: false },
+    writeBack.outcome === 'none' ? [] : writeBack.ops,
+    undefined,
+    writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
+  )
+  return writeBack
+}
+
+const undoneLogLevels = (): string[] =>
+  getDiagnosticsSnapshot()
+    .logEntries.filter((e) => e.kind === 'action_layer.rerun_close_undone')
+    .map((e) => e.level)
+
+describe('rerunWriteBack', () => {
+  it('restores every row and delta row the re-run’s reversal touched, positions included', async () => {
+    const c = await workedClose()
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    expect(await fullState(c.fx)).toEqual(before)
+    expect(await journalRows(c.fx)).toEqual([])
+  })
+
+  it('puts back the delta rows the reversal edited in place: a held delete and a re-owned create', async () => {
+    const fx = await openSeeded()
+    await seedHappeningPair(fx)
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
+    await writeCloseWork(c)
+    await writeUnderAction(c, c.actionId, [closePairView(fx.branchId)])
+    await writeLater(fx, userPairView(fx.branchId), { actionId: USER_PAIR, entryId: null })
+    await writeLater(fx, deleteKeptThread(fx.branchId), { actionId: USER_DELETE, entryId: null })
+    const before = await fullState(fx)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+
+    expect(await reverseWithWriteBack(fx, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    expect(await fullState(fx)).toEqual(before)
+  })
+
+  it('deletes a row its reversal brought back and sweeps its vectors, before the first own write', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await c.fx.ctx.runInTransaction([happeningVectorOp(c.fx.branchId, ASKED.id)])
+    expect(await happeningVectorIds(c.fx)).toEqual([ASKED.id])
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    expect((await happeningRows(c.fx)).map((row) => row.id)).toEqual([TOLD.id])
+    expect(await happeningVectorIds(c.fx)).toEqual([])
+  })
+
+  it('flags every restored embedded row stale over a drain that ran before the re-run and after it', async () => {
+    const c = await workedClose()
+    // Before the re-run, so its before-images read clean; after its commit, as every run_complete does.
+    await drainByHand(c.fx)
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    await drainByHand(c.fx)
+
+    await reverseWithWriteBack(c.fx, RERUN)
+
+    const world = await worldRows(c.fx)
+    expect({
+      lore: world.lore.find((row) => row.id === CLOSE_LORE_ID)?.embeddingStale,
+      entity: world.entities.find((row) => row.id === TOBIN.id)?.embeddingStale,
+      thread: world.threads.find((row) => row.id === THREAD_KEPT.id)?.embeddingStale,
+      happening: (await happeningRows(c.fx)).find((row) => row.id === TOLD.id)?.embeddingStale,
+      store: loreStore.getById(CLOSE_LORE_ID)?.embeddingStale,
+    }).toEqual({ lore: 1, entity: 1, thread: 1, happening: 1, store: 1 })
+    // No drain runs after the write-back: it would clear the flag this reads.
+  })
+
+  it('emits its patches after the group’s, so a loser merged again ends absent from its store', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
+    const patched = vi.spyOn(happeningsStore, 'patch')
+
+    await reverseWithWriteBack(c.fx, RERUN)
+
+    expect(
+      patched.mock.calls.filter(([, patch]) => patch.id === ASKED.id).map(([, patch]) => patch.op),
+    ).toEqual(['create', 'delete'])
+    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
+    expect(happeningsStore.getById(TOLD.id)?.description).toBe(MERGED_HAPPENING)
+  })
+
+  it('undoes the close altogether when a delta outside the group sits above the floor', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+
+    const result = await reverseWithWriteBack(c.fx, RERUN)
+    expect(result).toMatchObject({ outcome: 'undone', chapterNumber: c.chapter.sequenceNumber })
+    // The caller holds the group itself, so the seed is the chapter's other close groups only.
+    expect(result.outcome === 'undone' ? result.seed.map((d) => d.actionId) : []).not.toContain(
+      RERUN,
+    )
+
+    expect(await chapterRows(c.fx)).toEqual([])
+    expect((await entryRows(c.fx)).map((e) => e.chapterId)).toEqual(c.fx.entries.map(() => null))
+    expect(await deltasOf(c.fx, c.actionId)).toEqual([])
+    expect(await journalRows(c.fx)).toEqual([])
+    expect(undoneLogLevels()).toEqual(['warn'])
+  })
+
+  it('undoes the close when the group’s positions skip one', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    const [report] = await deltasOf(c.fx, RERUN)
+    expect(shapeOf(report)).toBe(`update chapters:${c.chapter.id}`)
+    // A gap no writer leaves: the report moved one position up.
+    await c.fx.ctx.db
+      .update(deltas)
+      .set({ logPosition: report.logPosition + 1 })
+      .where(eq(deltas.id, report.id))
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({
+      outcome: 'undone',
+      chapterNumber: c.chapter.sequenceNumber,
+    })
+
+    expect(await chapterRows(c.fx)).toEqual([])
+  })
+
+  it('restores the first close’s lore after a divider-only removal, with no chapter row', async () => {
+    const c = await workedClose()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    const after = await fullState(c.fx)
+    expect({
+      world: after.world,
+      happenings: after.happenings,
+      involvements: after.involvements,
+    }).toEqual({
+      world: before.world,
+      happenings: before.happenings,
+      involvements: before.involvements,
+    })
+    expect(after.chapters).toEqual([])
+    expect(await deltasOf(c.fx, c.actionId)).toEqual(
+      before.log.filter((d) => d.actionId === c.actionId && !DIVIDER_TABLES.has(d.targetTable)),
+    )
+    expect(await journalRows(c.fx)).toEqual([])
+  })
+
+  it('reports the chapter’s number from the journal on a fallback after a divider-only removal', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toEqual({
+      outcome: 'undone',
+      seed: [],
+      ops: [expect.anything()],
+      chapterNumber: c.chapter.sequenceNumber,
+    })
+
+    expect(await deltasOf(c.fx, RERUN)).toEqual([])
+    expect(await journalRows(c.fx)).toEqual([])
+  })
+
+  it('recognises a re-run by its shape once a sweep dropped its journal, and undoes the close', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+    await rollBackTo(c.fx, actionOf(c.fx, lastReply(c.fx)))
+    expect(await journalRows(c.fx)).toEqual([])
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({
+      outcome: 'undone',
+      ops: [],
+      chapterNumber: c.chapter.sequenceNumber,
+    })
+
+    expect(await chapterRows(c.fx)).toEqual([])
+    expect(await deltasOf(c.fx, c.actionId)).toEqual([])
+  })
+
+  it('reverses the group alone, with no number, when the marker names a chapter whose row and journal are gone', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    // As a sweep from below drops it once the divider is gone.
+    await c.fx.ctx.db.delete(reversalJournals).where(eq(reversalJournals.actionId, RERUN))
+    const group = await deltasOf(c.fx, RERUN)
+    expect(
+      await rerunWriteBack({ actionId: RERUN, branchId: c.fx.branchId, group }, c.fx.ctx),
+    ).toEqual({ outcome: 'none' })
+
+    expect(await reverseWithWriteBack(c.fx, RERUN, c.chapter.id)).toEqual({
+      outcome: 'undone',
+      seed: [],
+      ops: [],
+      chapterNumber: null,
+    })
+
+    expect(await deltasOf(c.fx, RERUN)).toEqual([])
+    expect(undoneLogLevels()).toEqual(['warn'])
+  })
+
+  it('reads a close’s own group and a user’s edit as no re-run', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+
+    for (const actionId of [c.actionId, USER_TOBIN])
+      expect(
+        await rerunWriteBack(
+          { actionId, branchId: c.fx.branchId, group: await deltasOf(c.fx, actionId) },
+          c.fx.ctx,
+        ),
+        actionId,
+      ).toEqual({ outcome: 'none' })
+  })
+
+  it.each([
+    ['before its first own write', async (): Promise<void> => {}],
+    ['after its report', (c: ClosedChapter) => writeCloseReport(c, RERUN)],
+  ] as const)(
+    'restores a close that changed nothing %s, leaving no journal',
+    async (_when, work) => {
+      const c = await openClosed()
+      const before = await fullState(c.fx)
+      await reverseForRerun(c)
+      await work(c)
+
+      expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({ outcome: 'restored' })
+
+      expect(await fullState(c.fx)).toEqual(before)
+      expect(await journalRows(c.fx)).toEqual([])
+    },
+  )
+
+  it('puts back an earlier re-run’s journal it held', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+    const afterFirst = await fullState(c.fx)
+    const journals = await journalRows(c.fx)
+    await reverseForRerun(c, RERUN_2)
+
+    expect(await reverseWithWriteBack(c.fx, RERUN_2)).toMatchObject({ outcome: 'restored' })
+
+    expect(await fullState(c.fx)).toEqual(afterFirst)
+    expect(await journalRows(c.fx)).toEqual(journals)
+  })
+
+  it('stamps the executing branch on every row and delta it puts back, as a fork’s verbatim copy needs', async () => {
+    const c = await workedClose()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    const journal = await journalOf(c.fx, RERUN)
+    // A fork copies a journal verbatim, so its rows and deltas still name the branch it came from.
+    const copied: RerunJournal = {
+      ...journal,
+      rows: journal.rows.map((row) =>
+        row.before === null ? row : { ...row, before: { ...row.before, branchId: 'br_parent' } },
+      ),
+      deltas: journal.deltas.map((delta) => ({ ...delta, branchId: 'br_parent' })),
+    }
+    await c.fx.ctx.db
+      .update(reversalJournals)
+      .set({ journal: copied })
+      .where(eq(reversalJournals.actionId, RERUN))
+
+    expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    expect(await fullState(c.fx)).toEqual(before)
   })
 })
