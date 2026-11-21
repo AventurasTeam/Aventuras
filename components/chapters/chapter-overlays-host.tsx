@@ -47,8 +47,11 @@ import { runCloseRerun } from './run-close-rerun'
 import { runManualClose } from './run-manual-close'
 import { useCloseRerunConfirm } from './use-close-rerun-confirm'
 import { useRerunDisabledReason } from './use-rerun-disabled-reason'
+import { useReviewWindowPresence } from './use-review-window-presence'
 
 const ctx = { db, runInTransaction }
+
+const reviewRequested = () => chapterOverlaysStore.getState().review != null
 
 type ReviewSources = {
   report: CloseReport
@@ -127,9 +130,12 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const rerunHolds = chaptersStore.useChapters(
     (rows) => rerunConfirmChapter(rerunConfirm, rows, openBranchId) != null,
   )
-  // The last window held open stays mounted, closed, until its exit ends: the phone Sheet slides out.
-  const [shown, setShown] = useState<StoreChapter | null>(null)
-  if (reviewChapter != null && reviewChapter !== shown) setShown(reviewChapter)
+  const presence = useReviewWindowPresence({
+    requested: reviewChapter,
+    isRequestedNow: reviewRequested,
+    onClose: chapterOverlaysStore.closeReviewWindow,
+  })
+  const shown = presence.shown
 
   // Pruned, not hidden: a redo restores the same chapter id, and nothing may reopen by itself.
   useEffect(() => {
@@ -154,10 +160,6 @@ export function ChapterOverlaysHost(): ReactElement | null {
     chapterOverlaysStore.closeCloseModal()
     void runManualClose(branchId, endEntryId)
   }, [])
-  const dropExited = useCallback(() => {
-    // A window reopened during its exit stays.
-    if (chapterOverlaysStore.getState().review == null) setShown(null)
-  }, [])
 
   if (shown == null && !closeHolds && !rerunHolds) return null
   return (
@@ -166,8 +168,9 @@ export function ChapterOverlaysHost(): ReactElement | null {
         <ReviewHost
           key={shown.id}
           chapter={shown}
-          open={reviewChapter != null}
-          onExited={dropExited}
+          open={presence.open}
+          onOpenChange={presence.onOpenChange}
+          onExited={presence.onExited}
         />
       ) : null}
       {closeHolds ? (
@@ -191,10 +194,12 @@ export function ChapterOverlaysHost(): ReactElement | null {
 function ReviewHost({
   chapter,
   open,
+  onOpenChange,
   onExited,
 }: {
   chapter: StoreChapter
   open: boolean
+  onOpenChange: (open: boolean) => void
   onExited: () => void
 }): ReactElement {
   const { branchId, id: chapterId } = chapter
@@ -314,9 +319,7 @@ function ReviewHost({
   return (
     <ReviewWindow
       open={open}
-      onOpenChange={(next) => {
-        if (!next) chapterOverlaysStore.closeReviewWindow()
-      }}
+      onOpenChange={onOpenChange}
       onExited={onExited}
       onRerun={latest ? rerun : undefined}
       rerunDisabledReason={rerunReason}

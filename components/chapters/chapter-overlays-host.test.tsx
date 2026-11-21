@@ -133,13 +133,20 @@ const view = vi.hoisted(() => ({
   renders: 0,
   mounted: false,
   mounts: 0,
+  phone: false,
 }))
+vi.mock('@/hooks/use-tier', () => ({ useTier: () => (view.phone ? 'phone' : 'desktop') }))
 vi.mock('./review-window', async () => {
   const { useEffect } = await import('react')
   return {
     ReviewWindow: (props: ReviewWindowProps) => {
       view.props = props
       view.renders += 1
+      // The real window: above phone its exit ends as it closes; on phone the Sheet reports it.
+      const { open, onExited } = props
+      useEffect(() => {
+        if (!open && !view.phone) onExited?.()
+      }, [open, onExited])
       useEffect(() => {
         view.mounted = true
         view.mounts += 1
@@ -460,6 +467,7 @@ beforeEach(() => {
   reads.series.mockReset().mockResolvedValue([])
   view.mounted = false
   view.mounts = 0
+  view.phone = false
   confirmView.props = null
   confirmView.mounted = false
   actions.preview.mockReset().mockResolvedValue(PREVIEW)
@@ -692,6 +700,7 @@ describe('ChapterOverlaysHost — the review', () => {
   })
 
   it('closes on onOpenChange(false), staying mounted until its exit ends', async () => {
+    view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
     expect(chapterOverlaysStore.getState().review).toBeNull()
@@ -704,6 +713,7 @@ describe('ChapterOverlaysHost — the review', () => {
   })
 
   it('reads nothing while it exits', async () => {
+    view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
     settleRun()
@@ -711,15 +721,82 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(reads.report).toHaveBeenCalledTimes(1)
   })
 
-  it('reopened during its exit, opens again without remounting', async () => {
+  it('reopened during a phone exit, waits for the exit, then opens again without remounting', async () => {
+    view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
     openWindow()
-    expect(shown().open).toBe(true)
-    // The earlier exit's end arrives after the reopen: the window stays.
+    // The Sheet is still sliding out: presenting it now would drop the reopen.
+    expect(shown().open).toBe(false)
+    expect(chapterOverlaysStore.getState().review).not.toBeNull()
     act(() => shown().onExited?.())
+    expect(shown().open).toBe(true)
     expect(view.mounted).toBe(true)
     expect(view.mounts).toBe(1)
+  })
+
+  it("a Sheet's late dismiss during the held reopen doesn't close the reopened window", async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+
+    act(() => shown().onOpenChange(false))
+    act(() => shown().onExited?.())
+
+    expect(chapterOverlaysStore.getState().review).not.toBeNull()
+    expect(shown().open).toBe(true)
+  })
+
+  it('a window closed again while the reopen was held stays closed once its exit ends', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+    act(() => chapterOverlaysStore.closeReviewWindow())
+
+    act(() => shown().onExited?.())
+
+    expect(view.mounted).toBe(false)
+  })
+
+  it('above phone, a reopen opens at once: the window exits as it closes', async () => {
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    expect(view.mounted).toBe(false)
+    openWindow()
+    expect(shown().open).toBe(true)
+  })
+
+  it("another chapter's window opened during an exit opens at once", async () => {
+    view.phone = true
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    openWindow('chap_2')
+    expect(shown().open).toBe(true)
+    expect(shown().title).toBe('Review — Chapter 2: The Keep Leans Closer')
+  })
+
+  it('a chapter whose exit was left behind opens at once when its window is asked for again', async () => {
+    view.phone = true
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    openWindow('chap_2')
+    // The first window's exit never reports: its host unmounted with the switch.
+    openWindow('chap_1')
+    expect(shown().open).toBe(true)
   })
 })
 
@@ -1018,6 +1095,22 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
       chapterId: 'chap_2',
       actionId: 'act_close_2',
     })
+    expect(shown().open).toBe(true)
+  })
+
+  it("on phone, the confirm's Cancel during the window's slide-out reopens it after the exit", async () => {
+    view.phone = true
+    const guard = vi.fn<(proceed: () => void) => void>()
+    surfaceWith(guard)
+    await openReady()
+    openRerun({ fromReview: true })
+    act(() => guard.mock.calls[0]![0]())
+    const props = await confirmShown()
+
+    act(() => props.onCancel())
+    expect(chapterOverlaysStore.getState().review).not.toBeNull()
+    expect(shown().open).toBe(false)
+    act(() => shown().onExited?.())
     expect(shown().open).toBe(true)
   })
 

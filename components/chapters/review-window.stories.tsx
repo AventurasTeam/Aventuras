@@ -1,13 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { formatEntryRef } from '@/lib/entry-refs'
 import type { CloseReview, CloseReviewChange, CloseReviewNotApplied } from '@/lib/history'
 import { t } from '@/lib/i18n'
+import type { StoreChapter } from '@/lib/stores'
 
 import { ReviewWindow, type ReviewWindowState } from './review-window'
+import { useReviewWindowPresence } from './use-review-window-presence'
 
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const WAIT = { timeout: 5000 }
@@ -245,6 +247,50 @@ function ExitHarness({ onExited }: { onExited: () => void }) {
         pressOf={() => undefined}
         entryLinkOf={() => undefined}
       />
+    </View>
+  )
+}
+
+const REQUESTED = { id: 'chap_trail', sequenceNumber: 2, title: 'The Trail North' } as StoreChapter
+const REOPEN_AFTER_MS = 80
+
+/**
+ * The host's mount for the window, with its `Re-run…` then the confirm's `Cancel`: the request
+ * clears, and comes back while the Sheet is still sliding out.
+ */
+function ReopenHarness({ onExited }: { onExited: () => void }) {
+  const { height } = useWindowDimensions()
+  const [requested, setRequested] = useState<StoreChapter | null>(REQUESTED)
+  const requestedNow = useRef(requested != null)
+  const markRequested = (next: StoreChapter | null) => {
+    requestedNow.current = next != null
+    setRequested(next)
+  }
+  const presence = useReviewWindowPresence({
+    requested,
+    isRequestedNow: () => requestedNow.current,
+    onClose: () => markRequested(null),
+  })
+  return (
+    <View style={{ height }}>
+      {presence.shown == null ? null : (
+        <ReviewWindow
+          open={presence.open}
+          onOpenChange={presence.onOpenChange}
+          onExited={() => {
+            presence.onExited()
+            onExited()
+          }}
+          onRerun={() => {
+            markRequested(null)
+            setTimeout(() => markRequested(REQUESTED), REOPEN_AFTER_MS)
+          }}
+          title={TITLE}
+          state={{ status: 'ready', review: FULL }}
+          pressOf={() => undefined}
+          entryLinkOf={() => undefined}
+        />
+      )}
     </View>
   )
 }
@@ -636,5 +682,23 @@ export const Phone390Rerun: Story = {
     expectInOrder([rerun, within(dialog).getByRole('button', { name: 'Done' })])
     await userEvent.click(rerun)
     await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** Phone: a reopen during the Sheet's slide-out waits for its exit, then the window comes back. */
+export const Phone390ReopensDuringSlideOut: Story = {
+  globals: PHONE,
+  render: (args) => <ReopenHarness onExited={args.onExited} />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
+    await userEvent.click(within(dialog).getByRole('button', { name: RERUN }))
+
+    // The slide-out ends first; the held reopen then presents the window again.
+    await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+    const reopened = await findWindow()
+    const top = await settledTop(within(reopened).getByRole('heading', { name: TITLE, level: 2 }))
+    expect(top).toBeLessThan(window.innerHeight * 0.2)
+    expect(within(reopened).getByRole('button', { name: 'Done' })).toBeVisible()
   },
 }
