@@ -22,7 +22,10 @@ export function journalsToDrop(args: {
   removed: readonly Delta[]
   /** plan.rewrittenHolders and survivorRewrites' deltas: payloads the plan edits in place. */
   rewritten: readonly Delta[]
-  /** Each head's group, by action id, as it stands before the reversal. */
+  /**
+   * Each head's group, by action id, as it stands before the reversal. A head the set removes no
+   * delta of may be absent: its group cannot empty.
+   */
   groups: ReadonlyMap<string, readonly Delta[]>
 }): readonly JournalHead[] {
   const { heads, removed, rewritten, groups } = args

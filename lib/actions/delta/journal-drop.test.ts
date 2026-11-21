@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { and, desc, eq, inArray } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -483,6 +483,50 @@ describe('the planner drops a journal its reversal would make inexact', () => {
 
     expect(await journalIds()).toEqual([])
     expect(await ctx.db.select().from(lore).where(eq(lore.id, 'lore_t'))).toEqual([])
+  })
+
+  describe("reads a journal's group only for a reversal that takes a delta of it", () => {
+    // The planner's group read, the one statement it runs on deltas.action_id.
+    async function planCountingGroupReads(target: readonly Delta[]) {
+      const set = await selectReversalSet(ctx, { branchId: 'b1', target })
+      const prepare = vi.spyOn(sqlite, 'prepare')
+      try {
+        const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
+        const groupReads = prepare.mock.calls.filter(([sql]) =>
+          sql.includes('"deltas"."action_id" in ('),
+        ).length
+        return { dropped: plan.droppedJournals.map((j) => j.actionId), groupReads }
+      } finally {
+        prepare.mockRestore()
+      }
+    }
+
+    it('reads none for a turn below the floor, still dropping the journal', async () => {
+      await seed()
+
+      expect(await planCountingGroupReads(await deltasOf('act_turn'))).toEqual({
+        dropped: ['act_rerun'],
+        groupReads: 0,
+      })
+    })
+
+    it('reads none for a turn after the re-run, keeping the journal', async () => {
+      await seed()
+
+      expect(await planCountingGroupReads(await deltasOf('act_late'))).toEqual({
+        dropped: [],
+        groupReads: 0,
+      })
+    })
+
+    it('reads it once for a divider-only removal that takes the report', async () => {
+      await seed({ rerunLore: false })
+
+      expect(await planCountingGroupReads(await deltasOf('act_close'))).toEqual({
+        dropped: ['act_rerun'],
+        groupReads: 1,
+      })
+    })
   })
 
   it("drops only the reversing branch's journal", async () => {

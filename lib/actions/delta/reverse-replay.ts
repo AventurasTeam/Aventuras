@@ -140,18 +140,19 @@ async function journalDropsOf(
   touched: { removed: readonly Delta[]; rewritten: readonly Delta[] },
 ): Promise<Pick<ReversePlan, 'droppedJournals' | 'journalOps'>> {
   if (heads.length === 0) return { droppedJournals: [], journalOps: [] }
-  const groupRows = (await ctx.db
-    .select()
-    .from(deltas)
-    .where(
-      and(
-        eq(deltas.branchId, set.branchId),
-        inArray(
-          deltas.actionId,
-          heads.map((head) => head.actionId),
-        ),
-      ),
-    )) as Delta[]
+  // Only a set that removes a delta of a group can empty it; the read has no action_id index.
+  const emptiable = heads
+    .filter((head) => touched.removed.some((d) => d.actionId === head.actionId))
+    .map((head) => head.actionId)
+  const groupRows =
+    emptiable.length === 0
+      ? []
+      : ((await ctx.db
+          .select()
+          .from(deltas)
+          .where(
+            and(eq(deltas.branchId, set.branchId), inArray(deltas.actionId, emptiable)),
+          )) as Delta[])
   const groups = new Map<string, Delta[]>()
   for (const d of groupRows) {
     const group = groups.get(d.actionId)
