@@ -23,12 +23,15 @@ Used by:
 - [Chapter delete](../screens/chapter-timeline/chapter-timeline.md#delete-a-chapter) — `Delete chapter <N>?` with an impact list. It departs from the [copy contract](#copy-contract) on purpose with two actions beside Cancel: `Remove divider only` (`secondary`) and `Delete chapter`. Destructive CTA.
 - [Chapter re-run](../screens/chapter-timeline/chapter-timeline.md#re-run-a-close) — `Re-run chapter <N>'s close?` with an impact list and a cost line, from a Timeline card or over the review window. With zero turns after the close, Default CTA (`Re-run close`), since CTRL-Z reverses the re-run. When turns followed, it departs from the [copy contract](#copy-contract) on purpose with two actions beside Cancel: `Roll back & re-run` (destructive) and `Re-run on new branch` (primary).
 - [Reader undo confirm](../screens/reader-composer/reader-composer.md#undo-and-redo) — `Undo <target>?` for an undo whose target the reader can't show, such as a chapter close or a World save, with what it reverses. Default CTA.
+- [Branch delete](../screens/reader-composer/branch-navigator/branch-navigator.md#delete-confirm) — `Delete <name>?` with a count of the entries only that branch holds, over the navigator's Popover or Sheet. Destructive CTA (`Delete branch`).
 - [Story-leave abort-confirm](../principles.md#affordance-loci) (`StoryLeaveDialog`) — `Generation in flight` with `Stay` / `Cancel & leave`, raised by an exit from the story while it is busy (a run on it, a pending turn on its branch, or a reversal). Its copy is principle-owned and departs from the [copy contract](#copy-contract) on purpose: no `?`, and `Stay` takes Cancel's place. `Cancel & leave` is a plain destructive Button, so the dialog stays up with its spinner until the story is idle. Destructive CTA.
 
-Branch-row and per-row destructive actions inside overlays / panels
-use the lighter [`inline-delete-confirm.md`](./inline-delete-confirm.md)
-pattern instead of AlertDialog — local-scope deletions don't earn
-the ceremonial weight.
+Per-row destructive actions inside overlays / panels whose
+consequence stays with the row use the lighter
+[`inline-delete-confirm.md`](./inline-delete-confirm.md) pattern
+instead of AlertDialog — local-scope deletions don't earn the
+ceremonial weight. A branch delete, which cascades and can't be
+undone, isn't one of them.
 
 ## Modal-on-every-tier
 

@@ -164,13 +164,14 @@ vault shell; during M8 — M9.1 and M9.3.
 
 ### M6 — Branches + diff cache
 
-**Goal.** Branches work: fork creates a new branch with a
-branch-copy of the relevant data per the
-[branch-copy manifest](../data-model.md#branch-model). Reader has
-a branch picker. The diff cache (Zustand + React Query off-label
-per
-[Project · State placement](./conventions.md))
-populates so branch comparisons are fast.
+**Goal.** Branches work. Forking at any entry creates a standalone
+branch per the [branch-copy manifest](../data-model.md#branch-model);
+the reader switches, renames and deletes branches through the
+navigator; a story can be duplicated, one branch or all. Each branch
+keeps its own lead and its own redo stack, and every read scopes to the
+loaded branch. Alongside, the
+[diff cache](../architecture.md#delta-history-diff-resolution) gives
+History its before-and-after prose.
 
 **Why now.** Branches touch every domain table (delta-log
 filtering, branch-copy semantics, composite `(branch_id, id)` keys) so they need the full
@@ -189,29 +190,49 @@ churn.
   `deltas` and `reversal_journals` copy, post-rewind `*_vec` copy,
   `branch_id` re-stamping on restore) per
   [`data-model.md → Branch model`](../data-model.md#branch-model).
-- M6.2 — Delta-log branch filtering (reads scope to current
-  branch's lineage).
+- M6.2 — Branch-scoping hardening: every read correct once a second
+  branch exists — the shared store branch filter, the History tab's
+  lookup by id alone, and two-branch register tests (the items tagged
+  M6.2 below). Develops against hand-seeded two-branch rows. Under the
+  hard fork there is no lineage to read: reads already filter by
+  `branch_id`
+  ([`data-model.md → Branch model`](../data-model.md#branch-model)).
 - M6.3 — Reader branch picker + branch creation flow.
-- M6.4 — Diff cache: query layer, eviction, deps on branch +
-  entry events. Renderer iteration walks `keys(old.<column>)`
-  (not `keys(new.<column>)`), and cache-miss path falls back to
-  an `undo_payload`-keys-only summary per
-  [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution).
-- M6.5 — Multi-story branching: story list shows branch count,
-  navigation handles the branch-aware URL shape.
-- M6.6 — Story duplicate (overflow menu on story cards): clone
-  story row + current branch's entries + entities / lore
-  snapshot per
-  [`story-list.md → Story card`](../ui/screens/story-list/story-list.md#story-card--text-first).
-  Structurally similar to branch-copy (M6.1) but story-scoped.
+- M6.4 — Diff cache. The in-memory cache that resolves an update's new
+  value for History's diff prose, per
+  [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution):
+  the chain walk inside one read transaction, LRU at 2000 entries,
+  invalidated only by a reversal, entries keyed on
+  `(branch_id, delta.id)`. The renderer walks `keys(old.<column>)`, not
+  `keys(new.<column>)`; a miss falls back to the summary of field names
+  from the undo payload. World and Plot History move from M4's
+  field-name-only fallback to the rich prose; the Diagnostics delta log
+  (M7.3) adopts it there.
+- M6.6 — Story duplicate: the story card's Duplicate dialog (name,
+  one branch or all branches) per
+  [`story-list.md → Duplicate a story`](../ui/screens/story-list/story-list.md#duplicate-a-story),
+  copying per
+  [`data-model.md → Story duplicate`](../data-model.md#story-duplicate):
+  fresh story and branch ids, every branch-scoped table but
+  `probe_captures` as it stands with no rewind, the manifest's
+  Duplicate column. Builds on M6.1's copy
+  core, its composite `deltas` key and its `vec0` self-insert check. The
+  story list's chapter numbers (`hooks/use-story-chapter-numbers.ts`)
+  reread only on a generation settle or a refocus, so the action
+  refetches them with the stories. Designed 2026-11-21
+  ([exploration](../explorations/2026-11-21-story-duplicate.md)).
 
-**Parallel paths.** {M6.1} || {M6.2} — a
+**Parallel paths.** {M6.1} || {M6.2} || {M6.4} from day one. M6.1 and
+M6.2 are a
 [doc-as-contract](./conventions.md#sequencing-vs-doc-as-contract)
-pair: the lineage shape both build against is fixed by the
+pair: the row shape both build against is fixed by the
 [branch-copy manifest](../data-model.md#branch-model), so M6.2's
-lineage-scoped reads develop against hand-seeded branch rows before
-fork orchestration exists. {M6.3, M6.4, M6.5} parallel once branch
-reads work; M6.6 follows M6.1.
+hardening develops against hand-seeded two-branch rows before fork
+orchestration exists. M6.4 rests on no branch work. M6.3 follows M6.1
+and M6.2; M6.6 follows M6.1. M6.5 was dropped at the 2026-11-21
+readiness check: the branch-aware URL already shipped, and no canon
+specifies a branch count on the story card; numbering kept for
+planning to settle.
 
 **Slice-authoring notes.** M6.1 and M6.6 share a copy-core — either
 M6.1 owns it and M6.6 sequences after, or authoring extracts the
@@ -255,6 +276,12 @@ verified against the code first. Resolve with the slice each names.
     `INSERT INTO <vec> SELECT ... FROM <vec>` for step 5's post-rewind
     vector copy; if not, fall back to pre-reading surviving parent
     vectors or staging via a temp table inside the transaction.
+  - Verify that no other write lands between the statements of one
+    `runInTransaction` batch, on desktop and Android. Fork's execution
+    and story duplicate's whole copy (M6.6) read the source inside that
+    batch as one consistent snapshot; duplicate takes no lock on the
+    strength of it
+    ([`data-model.md → Story duplicate`](../data-model.md#story-duplicate)).
 - **M6.1 — A branch switch to a fork whose chapter rows copy the same ids
   keeps the review window open.** `chapterOverlaysStore`'s `review` holds
   only `chapterId`, and `overlayChapter` compares the store row's branch,
@@ -262,15 +289,15 @@ verified against the code first. Resolve with the slice each names.
   other branch. Unreachable today, since no fork action exists; **fix it
   when M6.1 lands fork**, e.g. the store records the open branch at
   `openReviewWindow`. Raised in 5.11's review.
-- **M6.1 — The register tests seed one branch, so a lost branch
+- **M6.2 — The register tests seed one branch, so a lost branch
   condition stays green.** Rows key on branch and id, so a fork's copies
   repeat every id. Each `lib/actions/*/register.test.ts` seeds a single
   branch, and its `b2` cases are branch-mismatch refusals: a handler
   whose read or write dropped its `branchId` condition would still pass.
   Story entries alone carry the two-branch shape now, for update,
   delete and stamp (`lib/actions/story-entries/register.test.ts`,
-  `branch scope`). **When M6.1 lands fork, give each register the same
-  pair of tests.** Unverified beyond story entries: the mutation run
+  `branch scope`). **Give each register the same pair of tests,
+  against a hand-seeded second branch.** Unverified beyond story entries: the mutation run
   covered only their handlers. Routed from triage 2026-11-07. The
   chapter delete's reads have the same gap: no test in
   `lib/actions/chapters/remove-chapter.test.ts` or
@@ -284,9 +311,9 @@ verified against the code first. Resolve with the slice each names.
   thread, happening, delta or chapter; its scenes name characters it has
   no rows for. A real fork there would copy the branch's rows and
   `chap_hero_1`, whose anchor (29) survives, per the
-  [branch-copy manifest](../data-model.md#branch-model). M6.2's lineage
-  reads develop against hand-seeded rows, so **rebuild the seed's fork as
-  a real branch copy once M6.1's copy core exists.** No UI opens it
+  [branch-copy manifest](../data-model.md#branch-model). M6.2's
+  hardening develops against hand-seeded rows, so **rebuild the seed's
+  fork as a real branch copy once M6.1's copy core exists.** No UI opens it
   before M6.3. Routed from triage 2026-11-07.
 - **M6.3 — Build `Re-run on new branch` for chapter closes.** Designed
   2026-11-19
@@ -332,15 +359,37 @@ verified against the code first. Resolve with the slice each names.
   allows (ten minutes by default), then apply, and longer while a
   reconcile embed hangs, which nothing bounds yet (M7.1's embed-timeout
   item below). Routed from triage 2026-09-27.
-- **M6.3 — A branch delete drops the branch's close records and clears
-  child `parent_branch_id` refs.** M5 keeps `deferred`, `pendingClose`
-  and, from Slice 5.13, `pendingRerun` in `generationStore`'s `TxState`,
-  keyed by branch. Nothing deletes a branch yet. The action that does
-  clears all three, so no record outlives its branch, and handles
-  `branches.parent_branch_id`'s bare FK (`lib/db/stories/stories.table.ts:44`,
-  no `ON DELETE SET NULL`) before deleting a non-root parent branch.
-  Raised 2026-11-01 by the M5 promotion; FK note added 2026-11-19.
-- **M6.3 — No shared branch filter for store rows.** About twenty call sites
+- **M6.3 — Build branch delete to canon.** Ruled 2026-11-21
+  ([`data-model.md → Branch model`](../data-model.md#branch-model),
+  [`branch-navigator.md → Delete confirm`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#delete-confirm)):
+  any branch but the current one deletes, the story's first included; one
+  transaction of per-table deletes scoped by the branch, reusing
+  `deleteStory`'s table set (`lib/actions/stories/delete-story.ts`,
+  `reversal_journals` and the vec0 rows included), re-parenting the
+  children to the branch's own parent through
+  `branches.parent_branch_id`'s bare FK (`lib/db/stories/stories.table.ts:44`),
+  then the `branches` row. It drops the branch's `deferred`,
+  `pendingClose` and `pendingRerun` (`generationStore.dropBranchRecords`)
+  and its redo stack, waits on the gate, and refuses while an embedder
+  swap is pending on the story. The confirm is an AlertDialog counting
+  the branch's non-system entries whose id no other branch holds. Raised
+  2026-11-01 by the M5 promotion; FK note added 2026-11-19.
+- **M6 — One redo stack per branch.** Ruled 2026-11-21
+  ([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)):
+  `lib/stores/ui/undo-redo.ts` becomes a map from branch to groups, and
+  the reader reads its own branch's top
+  (`components/reader/use-reader-undo.tsx:336` reads the global top
+  today, so a Redo from another branch or story shows and then fails as
+  `integrity` in `redoLastAction`, `lib/actions/story-entries/undo.ts:205`).
+  Each `undoRedoStore.clear()` caller clears the branch it wrote:
+  `lib/actions/delta/apply-delta-action.ts` (two),
+  `lib/actions/story-entries/operational.ts` (two),
+  `lib/actions/turns/regenerate-turn.ts` (two), and the re-run's undo;
+  `lib/actions/stories/set-lead.ts` clears every branch of its story
+  while the lead is story-level, its own branch once the per-branch lead
+  lands. Branch and story deletes drop their stacks. The redo guard on a
+  foreign group stays as a defense.
+- **M6.2 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
   `resolve-collision.ts`, `inBranch` in
@@ -351,9 +400,10 @@ verified against the code first. Resolve with the slice each names.
   `lib/world/merge-links.ts`. The working-set stores hold one branch,
   so each filter means "every row if this is the loaded branch, else
   none", and an accessor can return a stable reference instead of
-  scanning. M6.3 is where a mounted route's branch can first differ
-  from the loaded one. Routed from triage 2026-10-09.
-- **M6.3 — The History tab reads its own row without a branch check.**
+  scanning. M6.3's switching is where a mounted route's branch can
+  first differ from the loaded one, so the accessor lands before it.
+  Routed from triage 2026-10-09.
+- **M6.2 — The History tab reads its own row without a branch check.**
   `components/history/use-history-target.ts` looks the tab's row up in
   the stores by id alone; ids repeat across branches (composite primary
   key), and 4.2c added branch guards to the other-end name lookups and
@@ -1097,6 +1147,15 @@ code before it moved; resolve with the slice it names.
   ships the jump and History's entry link, moved in from here at M5's
   promotion, since three M5 surfaces consume it. M7.3 keeps wiring the
   delta log's rows to it. Surfaced by 4.2b planning (2026-09-28).
+- **M7.3 — The delta log's `All branches` scope repeats every copied
+  delta.** A fork or a story duplicate copies deltas with their ids, so
+  each delta written before a fork shows once per branch under one id
+  ([`diagnostics.md → Tab 5`](../ui/screens/diagnostics/diagnostics.md#tab-5--delta-log)),
+  on rows that don't name their branch. Rows identify by branch and id,
+  as the diff cache's entries do
+  ([`architecture.md → Cache shape and lifecycle`](../architecture.md#cache-shape-and-lifecycle)),
+  and the row shape needs the branch named, or the scope collapses a
+  copied delta's repeats. Raised by the M6 branch rulings (2026-11-21).
 - **M7.1 — A date-time format setting, independent of the UI
   language.** Past a week, History rows and the story card show a date
   and time from `relativeTimeLabel` (`lib/i18n`), in the shape its
@@ -1544,7 +1603,12 @@ isn't a per-feature concern.
   `stories.cover_asset_id` needs clearing on story delete — not
   just the standalone entry/branch delete arms, or deleting a
   story with attached assets or a cover leaks blobs (surfaced by
-  Slice 2.4; no live impact before stories carry assets).
+  Slice 2.4; no live impact before stories carry assets). The count
+  spans every story, `entry_assets` rows and `cover_asset_id` both,
+  since a story duplicate (M6.6) shares its source's assets: a delete
+  that trashes on its own story's count alone would trash an image the
+  copy still shows
+  ([`data-model.md → Assets`](../data-model.md#assets-images--future-media)).
 - M9.4 — Per-story export `.avts` envelope; per-story import
   `.avts` (story list `[Import story…]` affordance routes through
   the `ImportDialog` compound, built in foundations and first
@@ -1847,6 +1911,18 @@ own.
   renderer listener. Not verified: whether Electron shows any UI of its
   own for an interrupted download. Raised by Slice 4.6's review
   (2026-10-08); the developer accepted the gap until this slice.
+- **M9.4 — Importing a story that is still on the machine collides on
+  `branches.id`.**
+  [`data-model.md → Backup & export format`](../data-model.md#backup--export-format)
+  imports story-internal ids verbatim, `branch_id` included, but
+  `branches.id` is a single-column primary key across every story
+  (`lib/db/stories/stories.table.ts:39`). Re-importing your own export
+  while the original exists, or receiving a shared story back, fails on
+  that key. Import has to mint fresh story and branch ids and remap
+  `branch_id` and `parent_branch_id`, the rule story duplicate takes
+  (M6); row ids can stay verbatim under the composite keys. Not
+  verified: whether `stories.id` is meant to import verbatim too, which
+  canon doesn't say. Raised by the M6 readiness check (2026-11-21).
 - **M9.5 — No navigation landmark anywhere.** No `navigation` landmark
   role exists in the app. Breadcrumb is the natural first one, but
   World renders two (the top-bar title and the sub-header), so a role

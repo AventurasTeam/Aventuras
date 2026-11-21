@@ -47,6 +47,9 @@ All branches]` as a semantic two-option pick; dropdown-mode
   "Time range" with preset windows in the Toolbar.Sort slot)
 - [Memory probe](../screens/memory-probe/memory-probe.md)
   (Select primitive — sort and branch dropdowns)
+- [Story list](../screens/story-list/story-list.md#duplicate-a-story)
+  (Input for the Duplicate dialog's name; Select primitive in explicit
+  dropdown mode for its branch pick, with an all-branches option)
 
 ---
 

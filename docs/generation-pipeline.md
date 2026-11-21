@@ -593,7 +593,7 @@ type PendingTurn = { readonly branchId: string } // identity is the token, so a 
 type RunState = {
   runId: string // generated per run start (UUID / nanoid)
   kind: string
-  actionId: string // globally unique; never reused
+  actionId: string // fresh per run, never reused; a fork or a duplicate copies it with its deltas
   storyId: string | null // read by chainsTo + config resolution
   branchId: string
   interruptible: 'pass' | 'close' | 'rerun' | null // copied from the pipeline at reserve, 'rerun' for a close reserved under pendingRerun; a head reversal or Cancel ends the run and defers it in this slot, a 'rerun' in none, and a reversal reaching the re-run's chapter waits for it instead
@@ -1865,8 +1865,8 @@ before any older orphan it journaled. A reversal that takes the group
 otherwise, a rollback into the chapter or a delete, takes the journal
 with it; a divider-only removal leaves the group's lore deltas and so
 its journal; a later re-run's journal holds this one's row as a
-before-image. CTRL-Z of a re-run isn't redoable, and it clears the redo
-stack, since a later edit's snapshot there can hold the re-run's
+before-image. CTRL-Z of a re-run isn't redoable, and it clears its
+branch's redo stack, since a later edit's snapshot there can hold the re-run's
 values
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
@@ -2038,7 +2038,7 @@ cleared, never taken; the closure starts
 from rows whose `create` the set holds; and a `create` a user write
 keeps stays in the log, re-owned. Only periodic-classifier
 groups sit above the group CTRL-Z undoes, every delta-logged write
-clears the redo stack, and no machine writer nulls a relationship view
+clears its branch's redo stack, and no machine writer nulls a relationship view
 or deletes a pair or a character, so neither reversal leaves a pair
 absent that the closure did not take. Refusing keeps a broken
 assumption loud.
@@ -2061,8 +2061,8 @@ removes would stay cleared; that is a guard, since no sweep holds an
 entity create today. The snapshot also takes the payload of each
 surviving delta whose prior value the reversal rewrites on a row the
 snapshot restores, and redo writes each back; a survivor on a sweep's
-row keeps its rewrite, as that row keeps the undo. Every delta-logged write clears the redo stack, so
-redo always meets the state its undo left.
+row keeps its rewrite, as that row keeps the undo. Every delta-logged write clears its branch's redo
+stack, so redo always meets the state its undo left.
 
 Abort is conceptually identical to user CTRL-Z — same
 `undo_payload` primitive, same reverse-replay path, and the replayed
@@ -2888,9 +2888,18 @@ to any of these alongside whatever causes the relaxation.
   Relax only if a future kind genuinely needs concurrent same-kind
   runs (would require explicit `runId` threading through phases,
   breaking the zero-param signature).
-- **`actionId` is globally unique.** Generated per `beginRun`;
-  never reused. Deltas, `pipeline_runs` rows, reverse-replay, and
-  user CTRL-Z grouping all key off it.
+- **`actionId` is minted unique.** Generated per `beginRun`; no run
+  reuses one. Deltas, `pipeline_runs` rows, reverse-replay, and user
+  CTRL-Z grouping all key off it. A fork or a story duplicate copies a
+  branch's deltas with their `action_id`
+  ([`data-model.md → Branch model`](./data-model.md#branch-model)), so a
+  past action's id can name a group on several branches, and a lookup
+  of a past action scopes by branch, as `reversal_journals`'
+  `(branch_id, action_id)` key does. A live or orphaned run's id names
+  deltas on one branch only, since fork and duplicate refuse while a
+  run is registered or a branch is held, so reverse-replay of a run —
+  an abort, a failed turn's own rollback, boot recovery — selects by
+  the id alone.
 - **Chained transitions are synchronous.** Relies on Zustand's
   setState being synchronous; if the state library swaps and the
   property breaks, the no-user-edit-window guarantee breaks too.

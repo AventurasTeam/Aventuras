@@ -121,6 +121,39 @@
   /* draft card variant — no genre, minimal meta */
   .story-card.draft .story-overline { color: var(--ink-faint); font-style: italic; }
 
+  /* duplicate — the copy's card exists only in the "done" state; it sorts last (never opened) */
+  .story-card.dup-copy { display: none; }
+  .viewport.dup-done .story-card.dup-copy { display: flex; }
+
+  /* Duplicate story dialog — Modal on every tier, ~360 px */
+  .viewport { position: relative; }
+  .dup-backdrop { display: none; position: absolute; inset: 0; background: rgba(0,0,0,0.28); align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; z-index: 10; }
+  .dup-backdrop.open { display: flex; }
+  .dup-modal { width: 100%; max-width: 360px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+  .dup-head { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); font-weight: 600; }
+  .dup-head .x { margin-left: auto; color: var(--ink-muted); cursor: pointer; }
+  .dup-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  .dup-field { display: flex; flex-direction: column; gap: 4px; }
+  .dup-field label { font-size: 11px; color: var(--ink-muted); }
+  .dup-input, .dup-select { padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; font: inherit; background: var(--bg-region); color: var(--ink); }
+  .dup-input::selection { background: #cdd8f0; }
+  .dup-reason { display: none; font-size: 12px; color: #7a6020; background: #fbf3dc; border: 1px solid #e8d890; border-radius: 4px; padding: 6px 10px; }
+  .dup-error { display: none; font-size: 12px; color: #862020; background: #fcecec; border: 1px solid #e8b8b8; border-radius: 4px; padding: 6px 10px; }
+  .dup-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; }
+  .dup-btn { padding: 6px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; }
+  .dup-btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
+  .dup-btn[disabled] { opacity: 0.45; cursor: default; }
+  .dup-modal[data-state="single"] .dup-branch-field { display: none; }
+  .dup-modal[data-state="refused"] .dup-reason { display: block; }
+  .dup-modal[data-state="failed"] .dup-error { display: block; }
+  .spinner { display: inline-block; width: 10px; height: 10px; border: 2px solid rgba(255,255,255,0.5); border-top-color: #fff; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+
+  /* toast — top-center on every tier, always-visible × (patterns/toast.md) */
+  .dup-toast { display: none; position: absolute; left: 50%; top: 16px; transform: translateX(-50%); background: #333; color: #fff; border-radius: 6px; padding: 8px 12px; font-size: 12px; gap: 14px; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 11; white-space: nowrap; }
+  .viewport.dup-done .dup-toast { display: flex; }
+  .dup-toast .act { text-decoration: underline; cursor: pointer; font-weight: 600; }
+  .dup-toast .x { cursor: pointer; opacity: 0.8; padding: 0 2px; }
+
   /* empty state */
   .empty-state { display: none; flex-direction: column; align-items: center; text-align: center; padding: 80px 20px; gap: 16px; }
   .stories-view.empty .stories { display: none; }
@@ -192,7 +225,18 @@
     <button class="rb-btn" data-banner="ai-unconfigured">ai-unconfigured</button>
     <button class="rb-btn" data-banner="profile-errors">profile-errors</button>
   </div>
-  <span class="rb-note">click a card to "open" (no-op in wireframe)</span>
+  <div class="rb-group">
+    <span class="gl">duplicate:</span>
+    <button class="rb-btn active" data-dup="off">off</button>
+    <button class="rb-btn" data-dup="branches">branches</button>
+    <button class="rb-btn" data-dup="single">single-branch</button>
+    <button class="rb-btn" data-dup="all">all branches</button>
+    <button class="rb-btn" data-dup="refused">refused</button>
+    <button class="rb-btn" data-dup="copying">copying</button>
+    <button class="rb-btn" data-dup="failed">failed</button>
+    <button class="rb-btn" data-dup="done">done</button>
+  </div>
+  <span class="rb-note">click a card to "open" (no-op in wireframe); a non-draft card's &#8943; opens Duplicate</span>
 </div>
 
 <div class="stage">
@@ -369,6 +413,26 @@
           <div class="story-desc">A calendar-keeper is asked to remove a month. The consequences of a missing season ripple outward through lives that never knew it existed.</div>
         </div>
       </div>
+
+      <!-- Duplicate's copy ("done" state): not favorited, never opened, so the default last-opened sort puts it last -->
+      <div class="story-card adv dup-copy">
+        <div class="story-accent"></div>
+        <span class="story-menu" title="More options">&#8943;</span>
+        <div class="story-body">
+          <div class="story-overline">Dark Fantasy</div>
+          <div class="story-title-row">
+            <span class="story-title"><span class="favorite-star" title="Favorite">&#9734;</span><span class="dup-copy-title">Aria's Descent (copy)</span></span>
+          </div>
+          <div class="story-meta">
+            <span>Adventure</span>
+            <span class="sep">&middot;</span>
+            <span>Chapter 3</span>
+            <span class="sep">&middot;</span>
+            <span>Never</span>
+          </div>
+          <div class="story-desc">A former royal guard hunts the Warden through the undercities of Ironshore, guided by a secret her lineage refused to speak.</div>
+        </div>
+      </div>
     </div>
 
     <!-- Empty state (first launch, no stories) -->
@@ -380,6 +444,43 @@
     </div>
 
   </div>
+</div>
+
+<!-- Duplicate story dialog. data-state: branches | single | all | refused | copying | failed -->
+<div class="dup-backdrop" id="dup-backdrop">
+  <div class="dup-modal" id="dup-modal" data-state="branches" role="dialog" aria-label="Duplicate story">
+    <div class="dup-head">Duplicate story <span class="x" id="dup-x" title="Close">&times;</span></div>
+    <div class="dup-body">
+      <div class="dup-field">
+        <label for="dup-name">Name *</label>
+        <input class="dup-input" id="dup-name" value="Aria's Descent (copy)">
+      </div>
+      <!-- Shown only when the story has more than one branch -->
+      <div class="dup-field dup-branch-field">
+        <label for="dup-branch">Branch</label>
+        <!-- Select forced to dropdown mode: auto mode would render ≤3 user-named options as segments -->
+        <select class="dup-select" id="dup-branch">
+          <option value="main">main &middot; current</option>
+          <option value="alt-ending-2">alt-ending-2</option>
+          <option value="the-trap">the-trap</option>
+          <option value="all">All branches (3)</option>
+        </select>
+      </div>
+      <div class="dup-reason">An embedder change is still indexing this story. Duplicate it once that finishes.</div>
+      <div class="dup-error">Couldn't duplicate the story.</div>
+    </div>
+    <div class="dup-foot">
+      <button class="dup-btn" id="dup-cancel">Cancel</button>
+      <button class="dup-btn primary" id="dup-confirm">Duplicate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Success toast; the dialog has closed and the copy's card sits last -->
+<div class="dup-toast" id="dup-toast">
+  <span>Duplicated as "<span class="dup-toast-name">Aria's Descent (copy)</span>"</span>
+  <span class="act">Open</span>
+  <span class="x" id="dup-toast-x" title="Dismiss">&times;</span>
 </div>
 
     </div><!-- /.viewport -->
@@ -432,7 +533,9 @@
   }
   document.querySelectorAll('[data-state]').forEach(b => b.addEventListener('click', () => setState(b.dataset.state)));
 
+  let currentFilter = 'all';
   function setFilter(f) {
+    currentFilter = f;
     document.querySelectorAll('.story-card').forEach(c => {
       const favorited = c.hasAttribute('data-favorited');
       const archived = c.classList.contains('archived');
@@ -444,9 +547,13 @@
     });
     document.querySelectorAll('#filter-chips .filter-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.chip === f));
     document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === f));
-    // update count
-    const visible = document.querySelectorAll('.story-card:not([style*="display: none"])').length;
-    count.textContent = `${visible} of 6`;
+    // update count — the duplicate's copy counts only once it exists ("done")
+    const done = viewport.classList.contains('dup-done');
+    const visible = Array.prototype.filter.call(
+      document.querySelectorAll('.story-card:not([style*="display: none"])'),
+      c => done || !c.classList.contains('dup-copy')
+    ).length;
+    count.textContent = `${visible} of ${done ? 7 : 6}`;
   }
   document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => setFilter(b.dataset.filter)));
   document.querySelectorAll('#filter-chips .filter-chip').forEach(ch => ch.addEventListener('click', () => setFilter(ch.dataset.chip)));
@@ -472,6 +579,73 @@
   const helpPop = document.getElementById('search-help-popover');
   helpIcon.addEventListener('click', e => { e.stopPropagation(); helpPop.classList.toggle('open'); });
   document.addEventListener('click', e => { if (!helpIcon.contains(e.target)) helpPop.classList.remove('open'); });
+
+  // Duplicate story dialog — review-bar states, plus the ⋯ on non-draft cards.
+  // Drafts get no Duplicate item; the copy lands last (never opened) with a toast.
+  const dupBackdrop = document.getElementById('dup-backdrop');
+  const dupModal = document.getElementById('dup-modal');
+  const dupName = document.getElementById('dup-name');
+  const dupBranch = document.getElementById('dup-branch');
+  const dupConfirm = document.getElementById('dup-confirm');
+  const dupCancel = document.getElementById('dup-cancel');
+  let dupState = 'off';
+  let dupTimer = null;
+
+  function syncConfirm() {
+    const busy = dupState === 'copying';
+    dupConfirm.disabled = busy || dupState === 'refused' || dupName.value.trim() === '';
+  }
+  function setDup(s) {
+    clearTimeout(dupTimer);
+    dupState = s;
+    const open = s !== 'off' && s !== 'done';
+    dupBackdrop.classList.toggle('open', open);
+    viewport.classList.toggle('dup-done', s === 'done');
+    document.getElementById('dup-toast').style.display = '';
+    if (open) {
+      const busy = s === 'copying';
+      dupModal.dataset.state = s;
+      if (s === 'all') dupBranch.value = 'all';
+      else if (s !== 'copying' && s !== 'failed') dupBranch.value = 'main';
+      dupName.disabled = busy;
+      dupBranch.disabled = busy;
+      dupCancel.disabled = busy;
+      dupConfirm.innerHTML = busy ? '<span class="spinner"></span>Duplicating&hellip;' : 'Duplicate';
+      syncConfirm();
+      if (!busy) { dupName.focus(); dupName.select(); }
+    }
+    const name = dupName.value.trim();
+    document.querySelectorAll('.dup-toast-name, .dup-copy-title').forEach(el => { el.textContent = name; });
+    document.querySelectorAll('[data-dup]').forEach(b => b.classList.toggle('active', b.dataset.dup === s));
+    setFilter(currentFilter);
+  }
+  function closeDup() { if (dupState !== 'copying') setDup('off'); }
+
+  document.querySelectorAll('[data-dup]').forEach(b => b.addEventListener('click', () => setDup(b.dataset.dup)));
+  dupName.addEventListener('input', syncConfirm);
+  dupName.addEventListener('keydown', e => { if (e.key === 'Enter' && !dupConfirm.disabled) dupConfirm.click(); });
+  dupConfirm.addEventListener('click', () => {
+    setDup('copying');
+    dupTimer = setTimeout(() => setDup('done'), 1200);
+  });
+  dupCancel.addEventListener('click', closeDup);
+  document.getElementById('dup-toast-x').addEventListener('click', () => {
+    document.getElementById('dup-toast').style.display = 'none';
+  });
+  document.getElementById('dup-x').addEventListener('click', closeDup);
+  dupBackdrop.addEventListener('click', e => { if (e.target === dupBackdrop) closeDup(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && dupBackdrop.classList.contains('open')) closeDup(); });
+
+  document.querySelectorAll('.story-card:not(.draft):not(.dup-copy) .story-menu').forEach(m => {
+    m.addEventListener('click', e => {
+      e.stopPropagation();
+      const titleEl = m.closest('.story-card').querySelector('.story-title');
+      const title = Array.prototype.filter.call(titleEl.childNodes, n => n.nodeType === 3)
+        .map(n => n.textContent).join('').trim();
+      dupName.value = title + ' (copy)';
+      setDup('branches');
+    });
+  });
 
   // set initial count with "all" filter applied (archived hidden)
   setFilter('all');

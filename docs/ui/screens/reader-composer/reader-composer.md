@@ -28,8 +28,11 @@ Cross-cutting principles that govern this screen are in
   window instead, per [Scroll behavior](#scroll-behavior) below)
 - [Actions menu (contextual zone)](../../patterns/actions-menu.md#contextual-zone)
   (Reader contributes `Undo` and `Redo`, each naming its target per
-  [Undo and redo](#undo-and-redo), and `Jump to bottom` to the
-  universal `⚲` directory — the touch-tier path to the CTRL-Z pair)
+  [Undo and redo](#undo-and-redo), `Jump to bottom` and
+  `Browse branches…` to the universal `⚲` directory — the touch-tier
+  path to the CTRL-Z pair and, on a single-branch story, the only way
+  into the
+  [branch navigator](./branch-navigator/branch-navigator.md#single-branch-state))
 - [Generation status pill](../../patterns/generation-status-pill.md)
   (top-bar status surface, click-to-cancel popover, sticky memory
   error variant)
@@ -522,7 +525,8 @@ A writer that doesn't tag its group is unseen by default.
 **The labels.** The menu's Undo reads `Undo <target>` once its target
 resolves as the menu opens, and `Undo last action` until then. An unseen
 target's label ends in `…`, since it opens a confirm. Redo reads
-`Redo <target>`, described from the redo stack's snapshot. With nothing
+`Redo <target>`, described from the snapshot atop the reader branch's
+redo stack ([one per branch](../../../data-model.md#entry-mutability--rollback)). With nothing
 to undo, activation keeps its "Nothing to undo" toast.
 
 **Activation**, from the keyboard or the menu:
@@ -555,7 +559,7 @@ an info toast, `Undid <target>`, with a Redo action when the undo left
 something to redo. A re-run's undo can't be redone
 ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)),
 so its notice has none. A newer undo's notice replaces the older one,
-so the toast's Redo is always the top of the redo stack. An undo that
+so the toast's Redo is always the top of the reader branch's redo stack. An undo that
 raises its own warning, such as a re-run undone with no journal to
 write back, shows that warning instead.
 
