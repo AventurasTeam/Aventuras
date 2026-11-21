@@ -336,6 +336,7 @@
     "searchPlaceholder": "Search models…",
     "favoriteAdd": "Add to favorites",
     "favoriteRemove": "Remove from favorites",
+    "favoritesHeader": "Favorites",
     "selectedModel": "Selected model {{modelId}}",
     "providerMissing": "Provider missing",
     "addCustomExpand": "+ Add custom model…",

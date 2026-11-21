@@ -468,7 +468,12 @@ function ProviderModelPicker({
         })
         .filter((r): r is Row<PickerRowData> => r != null)
       if (favoriteRows.length > 0) {
-        out.push({ id: '__favorites', header: 'Favorites', sticky: true, rows: favoriteRows })
+        out.push({
+          id: '__favorites',
+          header: t('modelPicker.favoritesHeader'),
+          sticky: true,
+          rows: favoriteRows,
+        })
       }
     }
 
