@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import type { ReactNode } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import {
   AlertDialog,
@@ -100,6 +100,14 @@ type Story = StoryObj<typeof ActionsMenu>
 // `Open Reader` is self-omitted by the screen (not present in the array).
 export const Reader: Story = {
   render: () => <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />,
+  // actions-menu.md → Keyboard & ARIA: each section is a group named by its header.
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    const goTo = await screen.findByRole('group', { name: 'Go to' })
+    expect(within(goTo).getByRole('option', { name: 'Open World' })).toBeInTheDocument()
+    expect(within(goTo).queryByRole('option', { name: STORY_TOOLS.entries[0]!.label })).toBeNull()
+    expect(screen.getByRole('group', { name: 'Story tools' })).toBeInTheDocument()
+  },
 }
 
 // Same core, different contextual zone. `Open Reader` returns when not on Reader.

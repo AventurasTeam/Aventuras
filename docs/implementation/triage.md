@@ -106,11 +106,6 @@ slice-planning gate forces its resolution before that slice is planned.
   lifted the call sequence but not the config, would keep them alike.
   Routed from Slice 5.10's planning, 2026-11-17.
 
-- **`SearchableOverlayList` section headers carry no group role.**
-  [`actions-menu.md → Keyboard & ARIA`](../ui/patterns/actions-menu.md#keyboard--aria)
-  asks for `role="group"` with an `aria-label` per section; the headers
-  render as plain text (`components/ui/searchable-overlay-list.tsx`).
-  Raised in 5.10's PR 2 review.
 - **Story viewport presets are copied per file.** `phone390` is defined
   in each of `chapter-in-progress-card`, `review-window`, `chapter-card`
   and `close-chapter-modal` stories; one preset in
