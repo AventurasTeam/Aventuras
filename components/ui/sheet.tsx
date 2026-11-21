@@ -243,7 +243,8 @@ type BottomSheetContentProps = SheetContentShared & {
   onDismissRefused?: () => void
   /**
    * Runs once after a presented sheet's exit animation, whatever closed it, while this content is
-   * still mounted.
+   * still mounted. A host that unmounts the sheet mid-exit on a tier change holds its run with
+   * `useHeldUntilDismissed` instead.
    */
   onDismissed?: () => void
   /**

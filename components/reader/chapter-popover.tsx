@@ -8,7 +8,6 @@ import {
   type ReactElement,
   type ReactNode,
   type Ref,
-  type RefObject,
 } from 'react'
 import {
   Platform,
@@ -35,6 +34,7 @@ import {
 } from '@/components/ui/scroll-component'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
+import { useHeldUntilDismissed, type HeldUntilDismissed } from '@/hooks/use-held-until-dismissed'
 import { useTier } from '@/hooks/use-tier'
 import { isReadyToClose, openChapterNumber, type ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
@@ -97,26 +97,13 @@ const END_HELD_LIST = { scrollEventsHandlersHook: useEndLockedScrollHandlers }
 
 type ArmProps = ChapterPopoverProps & { number: number }
 
-type AfterDismissRef = RefObject<(() => void) | null>
-
-function runHeld(ref: AfterDismissRef): void {
-  const run = ref.current
-  ref.current = null
-  run?.()
-}
-
 /** Popover on desktop and tablet, a medium bottom Sheet on phone, each opened from its own chip. */
 export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   const isPhone = useTier() === 'phone'
   const number = openChapterNumber(props.closed.map((row) => ({ sequenceNumber: row.number })))
-  // Held above the arm switch: a Sheet unmounted mid-exit never fires onDismissed, so the run it
-  // held goes when the tier leaves phone.
-  const afterDismissRef = useRef<(() => void) | null>(null)
-  useEffect(() => {
-    if (!isPhone) runHeld(afterDismissRef)
-  }, [isPhone])
+  const afterDismiss = useHeldUntilDismissed(isPhone)
   return isPhone ? (
-    <SheetArm {...props} number={number} afterDismissRef={afterDismissRef} />
+    <SheetArm {...props} number={number} afterDismiss={afterDismiss} />
   ) : (
     <PopoverArm {...props} number={number} />
   )
@@ -247,18 +234,18 @@ function PopoverArm({ onOpenChange, ref, ...content }: ArmProps) {
 function SheetArm({
   onOpenChange,
   ref,
-  afterDismissRef,
+  afterDismiss,
   ...content
-}: ArmProps & { afterDismissRef: AfterDismissRef }) {
+}: ArmProps & { afterDismiss: HeldUntilDismissed }) {
   const [open, changeOpen] = useReportedOpen(onOpenChange)
   // layout.md → Stacking: the Sheet dismisses before the modal it leads to takes over.
   const change = (next: boolean) => {
-    if (next) afterDismissRef.current = null
+    if (next) afterDismiss.clear()
     changeOpen(next)
   }
   const close = () => change(false)
   const closeThen = (run: () => void) => {
-    afterDismissRef.current = run
+    afterDismiss.hold(run)
     change(false)
   }
 
@@ -269,7 +256,7 @@ function SheetArm({
       <SheetTrigger asChild>
         <ChapterChip number={content.number} expanded={open} />
       </SheetTrigger>
-      <SheetContent size="medium" onDismissed={() => runHeld(afterDismissRef)}>
+      <SheetContent size="medium" onDismissed={afterDismiss.runHeld}>
         <OverlayBody {...content} arm={SHEET_ARM} close={close} closeThen={closeThen} />
       </SheetContent>
     </Sheet>

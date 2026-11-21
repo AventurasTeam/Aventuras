@@ -175,7 +175,11 @@ the other anchor reads fails typecheck rather than doing nothing:
   content is still mounted. A programmatic close is included, where
   `onOpenChange(false)` is silent as `open` was already set false.
   For an action that opens another Sheet: gorhom restores a Sheet that
-  another covered, so the action waits for this one to be gone.
+  another covered, so the action waits for this one to be gone. A host
+  that swaps the Sheet for a Popover on a tier change unmounts it
+  mid-exit, which skips `onDismissed`, so it holds the action above the
+  swap with `useHeldUntilDismissed` (`hooks/`), which also runs it when
+  the tier leaves phone.
 - `keyboardBehavior?: 'interactive' | 'extend'` — bottom only;
   replaces the behavior `size` picks, see
   [Sheet — Keyboard handling](#sheet--keyboard-handling) below.

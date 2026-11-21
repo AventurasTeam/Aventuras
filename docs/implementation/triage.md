@@ -136,19 +136,6 @@ slice-planning gate forces its resolution before that slice is planned.
   output, so if the Q5 remedy is ever applied to the probe profile the
   clause judges at the wrong bound. Raised by Slice 5.10's final review,
   2026-11-18.
-- **`OverflowMenu` drops a picked entry when the tier changes while its
-  phone Sheet exits** (`components/compounds/overflow-menu.tsx`,
-  `SheetMenu`). The entry waits in a ref for `onDismissed`; a tier flip
-  swaps the Sheet for the Popover first, and the Sheet's unmount guard
-  then skips `onDismissed`, so the action never runs. The chapter
-  popover had the same pattern; there the pending run now lives above
-  the arm switch and goes when the tier leaves phone. Found by
-  CodeRabbit on Slice 5.10's PR 2, fixed there for the chapter popover
-  only, 2026-11-18. Both copies work around `components/ui/sheet.tsx`
-  skipping `onDismissed` once the Sheet has unmounted, so with two
-  consumers the fix belongs in the Sheet (a run held there survives the
-  arm swap) rather than in a second per-consumer copy, per
-  [lessons-learned → Adding a new entry](lessons-learned/README.md#adding-a-new-entry).
 - **RN-Web's `PressResponder` presses a button on a held Space's
   repeat.** It starts a press on any Space keydown on a `role="button"`
   element, repeats included (no `event.repeat` check;
