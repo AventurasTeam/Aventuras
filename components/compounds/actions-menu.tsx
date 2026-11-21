@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { t } from '@/lib/i18n'
 import { blockingOverlaysStore } from '@/lib/stores'
 
 import { isActionsMenuInert } from './actions-menu-logic'
@@ -82,10 +83,6 @@ type ActionsMenuProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-const DEFAULT_SEARCH_PLACEHOLDER = 'Search actions…'
-const DEFAULT_EMPTY_LABEL = 'No actions match.'
-const DEFAULT_TRIGGER_LABEL = 'Actions'
-
 // Mac vs Windows / Linux shortcut hint — same heuristic SaveBar uses for ⌘S.
 // Native sees no shortcut at all (the menu opens via tap there).
 function useShortcutHint(): string | null {
@@ -140,9 +137,9 @@ function ActionsTrigger({
 function ActionsMenu({
   contextual,
   coreGroups,
-  searchPlaceholder = DEFAULT_SEARCH_PLACEHOLDER,
-  emptyLabel = DEFAULT_EMPTY_LABEL,
-  triggerLabel = DEFAULT_TRIGGER_LABEL,
+  searchPlaceholder = t('chrome.actionsSearch'),
+  emptyLabel = t('chrome.actionsNoMatch'),
+  triggerLabel = t('chrome.actions'),
   triggerSize,
   blocked,
   hotkeyEnabled = true,

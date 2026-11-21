@@ -134,6 +134,8 @@
     "appSettings": "App Settings",
     "storySettings": "Story Settings",
     "actions": "Actions",
+    "actionsSearch": "Search actions…",
+    "actionsNoMatch": "No actions match.",
     "back": "Back",
     "chapterProgress": "Chapter progress",
     "onThisScreen": "On this screen",
