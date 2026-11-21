@@ -57,6 +57,13 @@ describe('firstLastSentences', () => {
     })
   })
 
+  it('keeps a dialogue tag after a spaced French closer with its line', () => {
+    expect(firstLastSentences('« Oui ! » dit-elle. Elle partit.')).toEqual({
+      first: '« Oui ! » dit-elle.',
+      last: 'Elle partit.',
+    })
+  })
+
   it('does not end a sentence at a title or an initial', () => {
     expect(firstLastSentences('Mr. Smith arrived. Then Dr. Livesey came in.')).toEqual({
       first: 'Mr. Smith arrived.',

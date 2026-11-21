@@ -16,8 +16,9 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
 const ABBREVIATION = /(?:^|[^\p{L}])(?:Mr|Mrs|Ms|Dr|St|Mt|Capt|Col|Lt|Sgt|Prof|Rev|(?!I)\p{Lu})$/u
 const ABBREVIATION_WINDOW = 5
 
-// A Latin mark before a lowercase word ends no sentence: a dialogue tag (`!” said Jim`), "e.g."
-const LOWERCASE_NEXT = /\s+\p{Ll}/uy
+// A Latin mark before a lowercase word ends no sentence: a dialogue tag (`!” said Jim`, `! » dit-elle`
+// past a spaced French closer), "e.g."
+const LOWERCASE_NEXT = /\s+(?:[»”’)\]]+\s+)?\p{Ll}/uy
 
 // A French closer spaced off its mark belongs to the sentence it closes.
 const LEADING_CLOSERS = /^([»”’)\]]+)\s*/u
