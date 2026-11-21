@@ -183,6 +183,7 @@ describe('CTRL-Z of a re-run', () => {
         },
       },
     ])
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     expect(await undoLastAction(branchId, ctx)).toStrictEqual({ status: 'ok' })
 
@@ -190,6 +191,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(await worldRows(c.fx)).toEqual(before.world)
     expect(await chapterRows(c.fx)).toEqual(before.chapters)
     expect(await journalRows(c)).toEqual([])
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
   it('empties the redo stack when only the store sync after the commit throws', async () => {
@@ -264,6 +266,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(c.chapter.sequenceNumber).toBe(1)
     await rerun(c)
     await spoil(c)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest())
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({
       status: 'ok',
