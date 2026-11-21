@@ -11,10 +11,26 @@ const SENTENCE_END = /(?<![.!?])[.!?]+["'”’»“«)\]*_]*(?=\s|$)|[。！？
 
 const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u
 
-// A period after a title or an initial abbreviates; "I." still ends a sentence. Read over the five
-// code units before the period: the longest title and the boundary before it.
-const ABBREVIATION = /(?:^|[^\p{L}])(?:Mr|Mrs|Ms|Dr|St|Mt|Capt|Col|Lt|Sgt|Prof|Rev|(?!I)\p{Lu})$/u
-const ABBREVIATION_WINDOW = 5
+// A period after a title abbreviates. Read over the five code units before the period: the longest
+// title and the boundary before it.
+const TITLE = /(?:^|[^\p{L}])(?:Mr|Mrs|Ms|Dr|St|Mt|Capt|Col|Lt|Sgt|Prof|Rev)$/u
+const TITLE_WINDOW = 5
+
+// A lone capital is an initial only beside a name or another initial ("J. R. Tolkien", "John F.",
+// "J. T."), not a plan's letter ("plan B."); "I." always ends a sentence.
+const LONE_CAPITAL = /(?:^|[^\p{L}])(?!I)\p{Lu}$/u
+const INITIAL_NEXT = /\s+\p{Lu}\./uy
+const WORD_BEFORE = /(\S+)\s+\S$/u
+const CAPITALIZED = /^\P{L}*\p{Lu}/u
+const WORD_BEFORE_WINDOW = 40
+
+function isInitial(flat: string, sentenceStart: number, period: number): boolean {
+  INITIAL_NEXT.lastIndex = period + 1
+  if (INITIAL_NEXT.test(flat)) return true
+  const window = flat.slice(Math.max(sentenceStart, period - WORD_BEFORE_WINDOW), period)
+  const before = WORD_BEFORE.exec(window)
+  return before != null && CAPITALIZED.test(before[1]!)
+}
 
 // A Latin mark before a lowercase word ends no sentence: a dialogue tag (`!” said Jim`, `! » dit-elle`
 // past a spaced French closer), "e.g."
@@ -28,8 +44,9 @@ function endsSentence(flat: string, sentenceStart: number, match: RegExpExecArra
   LOWERCASE_NEXT.lastIndex = match.index + match[0].length
   if (LOWERCASE_NEXT.test(flat)) return false
   if (match[0] !== '.') return true
-  const before = flat.slice(Math.max(sentenceStart, match.index - ABBREVIATION_WINDOW), match.index)
-  return !ABBREVIATION.test(before)
+  const before = flat.slice(Math.max(sentenceStart, match.index - TITLE_WINDOW), match.index)
+  if (TITLE.test(before)) return false
+  return !LONE_CAPITAL.test(before) || !isInitial(flat, sentenceStart, match.index)
 }
 
 type Pieces = { sentences: string[]; opening: string }

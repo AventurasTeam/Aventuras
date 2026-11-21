@@ -79,6 +79,28 @@ describe('firstLastSentences', () => {
     })
   })
 
+  it('ends a sentence at a lone capital no name stands beside', () => {
+    expect(firstLastSentences('They chose plan B. The door closed.')).toEqual({
+      first: 'They chose plan B.',
+      last: 'The door closed.',
+    })
+    expect(firstLastSentences('It was rated grade A. Nobody argued.')).toEqual({
+      first: 'It was rated grade A.',
+      last: 'Nobody argued.',
+    })
+  })
+
+  it('keeps a middle initial inside the name, quoted or not', () => {
+    expect(firstLastSentences('John F. Kennedy spoke. They listened.')).toEqual({
+      first: 'John F. Kennedy spoke.',
+      last: 'They listened.',
+    })
+    expect(firstLastSentences('He read it. “John F. Kennedy,” he said.')).toEqual({
+      first: 'He read it.',
+      last: '“John F. Kennedy,” he said.',
+    })
+  })
+
   it('still ends a sentence at "I."', () => {
     expect(firstLastSentences('Not I. She went alone.')).toEqual({
       first: 'Not I.',
