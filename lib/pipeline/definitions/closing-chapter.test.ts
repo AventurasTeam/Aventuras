@@ -73,4 +73,14 @@ describe('closingChapterId', () => {
     expect(closingChapterId(txState(pass), BRANCH)).toBeNull()
     expect(closingChapterId(txState(), BRANCH)).toBeNull()
   })
+
+  it('is null for a re-run, which writes no new chapter', () => {
+    const rerun = run(CHAPTER_CLOSE_KIND, { interruptible: 'rerun', intermediates: parked() })
+    expect(closingChapterId(txState(rerun), BRANCH)).toBeNull()
+  })
+
+  it('reads the slot, not the kind: a close in its own slot still names its chapter', () => {
+    const close = run(CHAPTER_CLOSE_KIND, { interruptible: 'close', intermediates: parked() })
+    expect(closingChapterId(txState(close), BRANCH)).toBe('chap_new')
+  })
 })

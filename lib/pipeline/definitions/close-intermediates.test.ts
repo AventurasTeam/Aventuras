@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 
 import {
@@ -9,11 +10,13 @@ import {
   closeLedgerOf,
   closePartsOf,
   closeRangeOf,
+  requireCloseModelConfig,
   requireCloseParts,
   requireCloseRange,
   seedCloseLedger,
   setCloseClusters,
   setCloseFloor,
+  setCloseModelConfig,
   setCloseParts,
   setCloseRange,
 } from './close-intermediates'
@@ -136,5 +139,31 @@ describe('the close floor', () => {
     setCloseFloor(intermediates, 40)
     expect(closeFloorOf(intermediates)).toBe(40)
     expect(closeRangeOf(intermediates)).toBeUndefined()
+  })
+})
+
+describe('the close model config', () => {
+  const CONFIG: ResolveModelConfig = {
+    providers: [],
+    profiles: [],
+    assignments: { 'lore-mgmt': 'prof_lore' },
+  }
+
+  it('reads back the config parked on the record, and only under its own key', () => {
+    const intermediates: Record<string, unknown> = {}
+
+    setCloseModelConfig(intermediates, CONFIG)
+
+    expect(requireCloseModelConfig({ intermediates })).toBe(CONFIG)
+    expect(closeRangeOf(intermediates)).toBeUndefined()
+    expect(closePartsOf(intermediates)).toBeUndefined()
+    expect(closeLedgerOf(intermediates)).toBeUndefined()
+  })
+
+  it('gives the failure the agent phase returns when no config is parked', () => {
+    expect(requireCloseModelConfig({ intermediates: {} })).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close model config' },
+    })
   })
 })

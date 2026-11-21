@@ -1,5 +1,7 @@
+import { and, desc, eq } from 'drizzle-orm'
+
 import { canEndChapter, closeCandidates, fallbackChapterEnd } from '@/lib/chapters'
-import { openRegionSeries } from '@/lib/db'
+import { chapters, deltas, openRegionSeries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
@@ -31,13 +33,62 @@ function parkRange(ctx: PhaseContext, startEntryId: string, endEntryId: string):
 }
 
 /**
- * C2 → boundary: the branch's manual pick, else the model's pick among Phase 1's candidates, else
- * the no-model fallback (chapter-close.md → Phase 1), into the run's range. The gate is held here,
- * so this is the check that counts.
+ * chapter-close.md → Re-running a close: the chapter's own range, from its row. Only the latest
+ * chapter re-runs, and only one a close wrote.
+ */
+async function parkRerunRange(ctx: PhaseContext, chapterId: string): Promise<PhaseResult> {
+  const [chapter] = await ctx.db
+    .select({
+      sequenceNumber: chapters.sequenceNumber,
+      startEntryId: chapters.startEntryId,
+      endEntryId: chapters.endEntryId,
+    })
+    .from(chapters)
+    .where(and(eq(chapters.branchId, ctx.branchId), eq(chapters.id, chapterId)))
+  if (!chapter)
+    return refuse(`chapter-close: no chapter ${chapterId} to re-run on branch ${ctx.branchId}`)
+  const [latest] = await ctx.db
+    .select({ sequenceNumber: chapters.sequenceNumber })
+    .from(chapters)
+    .where(eq(chapters.branchId, ctx.branchId))
+    .orderBy(desc(chapters.sequenceNumber))
+    .limit(1)
+  if (latest?.sequenceNumber !== chapter.sequenceNumber)
+    return refuse(
+      `chapter-close: chapter ${chapter.sequenceNumber} is not the latest; ${latest?.sequenceNumber} is`,
+    )
+  const [closed] = await ctx.db
+    .select({ id: deltas.id })
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, ctx.branchId),
+        eq(deltas.targetTable, 'chapters'),
+        eq(deltas.targetId, chapterId),
+        eq(deltas.source, 'chapter_close'),
+      ),
+    )
+    .limit(1)
+  if (!closed) return refuse(`chapter-close: no close wrote chapter ${chapterId}`)
+  setCloseRange(ctx.intermediates, {
+    chapterId,
+    startEntryId: chapter.startEntryId,
+    endEntryId: chapter.endEntryId,
+  })
+  return { status: 'completed' }
+}
+
+/**
+ * C2 → boundary: under a re-run, the chapter's own range; else the branch's manual pick, else the
+ * model's pick among Phase 1's candidates, else the no-model fallback (chapter-close.md → Phase 1),
+ * into the run's range. The gate is held here, so this is the check that counts.
  */
 export async function* closeBoundaryPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+  // The record holds the branch for its chain's life: a close it holds is that chapter's re-run.
+  const rerun = generationStore.getTxState().pendingRerun.get(ctx.branchId)
+  if (rerun !== undefined) return await parkRerunRange(ctx, rerun.chapterId)
   const series = await openRegionSeries(ctx.branchId, ctx)
   // Read past the await, so the pick checked is the pick dropped.
   const pick = generationStore.getTxState().pendingClose.get(ctx.branchId)

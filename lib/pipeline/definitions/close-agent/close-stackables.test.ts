@@ -18,9 +18,14 @@ import { normalizeStackablesStep } from './close-stackables'
 import { CloseIds } from './ids'
 import { __setCloseAgentSlots, type CodeStepContext } from './slots'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../types'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import { openCloseFixture, storeModelConfig, type CloseFixture } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeLedgerOf, setCloseParts, setCloseRange } from '../close-intermediates'
+import {
+  closeLedgerOf,
+  setCloseModelConfig,
+  setCloseParts,
+  setCloseRange,
+} from '../close-intermediates'
 
 const WREN = 'char_00000000-0000-4000-8000-00000000f001'
 const TOBIN = 'char_00000000-0000-4000-8000-00000000f002'
@@ -123,6 +128,7 @@ function phaseFor(fx: CloseFixture, abortSignal = new AbortController().signal):
     tokens: 0,
   }
   setCloseParts(intermediates, [cut])
+  setCloseModelConfig(intermediates, storeModelConfig())
   return {
     actionId: ACTION_ID,
     abortSignal,

@@ -1,13 +1,13 @@
 import { applyDeltaActionGroupWithOutcomes } from '@/lib/actions/delta/apply-delta-action'
 import type { GroupOutcome } from '@/lib/actions/types'
-import type { ToolStepCall, ToolStepResult } from '@/lib/ai'
+import type { ResolveModelConfig, ToolStepCall, ToolStepResult } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 import { makeLogger } from '@/lib/diagnostics'
 
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../../../types'
-import type { CloseFixture } from '../../__tests__/close-fixture'
+import { storeModelConfig, type CloseFixture } from '../../__tests__/close-fixture'
 import { closeAgentPhase } from '../../chapter-close-agent'
-import { setCloseParts, setCloseRange } from '../../close-intermediates'
+import { setCloseModelConfig, setCloseParts, setCloseRange } from '../../close-intermediates'
 import type { CloseRange } from '../../intermediates'
 
 const USAGE = {
@@ -50,7 +50,8 @@ export function stepWith(calls: readonly ToolStepCall[]): ToolStepResult {
 
 /**
  * A close's phase context over `range`. `cuts` are the metadata phase's: one part over the range
- * unless given, none for `null`, as a run whose metadata phase never ran.
+ * unless given, none for `null`, as a run whose metadata phase never ran. `modelConfig` is the one
+ * it parks: the stores' unless given, none for `null`.
  */
 export function closePhaseContext(
   fixture: CloseFixture,
@@ -58,6 +59,7 @@ export function closePhaseContext(
     actionId: string
     range: CloseRange
     cuts?: readonly ChapterPartCut[] | null
+    modelConfig?: ResolveModelConfig | null
     abortSignal?: AbortSignal
   },
 ): PhaseContext {
@@ -67,9 +69,11 @@ export function closePhaseContext(
     opts.cuts === undefined
       ? [{ part: 1, startEntryId: range.startEntryId, endEntryId: range.endEntryId, tokens: 0 }]
       : opts.cuts
+  const modelConfig = opts.modelConfig === undefined ? storeModelConfig() : opts.modelConfig
   const intermediates: Record<string, unknown> = {}
   setCloseRange(intermediates, range)
   if (cuts !== null) setCloseParts(intermediates, cuts)
+  if (modelConfig !== null) setCloseModelConfig(intermediates, modelConfig)
   return {
     actionId,
     abortSignal,

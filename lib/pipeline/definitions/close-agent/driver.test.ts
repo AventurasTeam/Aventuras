@@ -81,7 +81,12 @@ import {
   type CloseFixture,
 } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeIdsOf, closeLedgerOf, seedCloseLedger } from '../close-intermediates'
+import {
+  closeIdsOf,
+  closeLedgerOf,
+  seedCloseLedger,
+  setCloseModelConfig,
+} from '../close-intermediates'
 import type { CloseLedger } from '../intermediates'
 import { closePhaseContext, drainApplying } from './__tests__/agent-loop'
 
@@ -1532,6 +1537,57 @@ describe('closeAgentPhase', () => {
       assignments: settings.assignments,
       storyModels: currentStoryStore.getCurrentStory()!.settings.models,
     })
+  })
+
+  it('runs a task on the config the metadata phase parked, not the settings read now', async () => {
+    let captured: TaskPromptContext | undefined
+    __setCloseAgentSlots({
+      before: [],
+      perPart: [
+        quietTask('identity', [], {
+          seen: (c) => {
+            captured = c
+          },
+        }),
+      ],
+      after: [],
+    })
+    // A config the stores never held, so only the parked one can reach the task.
+    const parked: ResolveModelConfig = {
+      providers: [],
+      profiles: [],
+      assignments: { 'lore-mgmt': 'prof_parked' },
+    }
+    const ctx = phaseCtx()
+    setCloseModelConfig(ctx.intermediates, parked)
+
+    await drain(ctx)
+
+    expect(captured!.config).toBe(parked)
+  })
+
+  it('fails as the other phases do when no model config was parked, before any entry', async () => {
+    const log: string[] = []
+    __setCloseAgentSlots({ before: [quietTask('happenings', log)], perPart: [], after: [] })
+    const ctx = closePhaseContext(fixture, {
+      actionId: 'act_slots',
+      range: {
+        chapterId: 'chap_slots',
+        startEntryId: fixture.entries[0]!.id,
+        endEntryId: fixture.replyIds[2]!,
+      },
+      modelConfig: null,
+      abortSignal: abort.signal,
+    })
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close model config' },
+    })
+    expect(events).toEqual([])
+    expect(log).toEqual([])
   })
 
   it.each<TaskEnd>([
