@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'rea
 
 import { chapterImpactLines } from '@/components/chapters/chapter-impact-lines'
 import {
+  describeDeltaReplayError,
   readUndoImpact,
   readUndoTarget,
   redoLastAction,
@@ -93,6 +94,17 @@ async function timedReversal(
       }, TAIL_MS)
     }
   }
+}
+
+/**
+ * A re-run's undo that committed its close undone, then failed syncing the stores: the close is
+ * gone all the same, so it reads as the undo that landed. Any other failure is not this.
+ */
+function closeUndoneBySyncFailure(e: unknown): UndoResult | null {
+  const failure = describeDeltaReplayError(e)
+  if (failure?.committed !== true || failure.journal !== 'undone' || failure.chapterNumber == null)
+    return null
+  return { status: 'ok', closeUndone: { chapterNumber: failure.chapterNumber } }
 }
 
 /**
@@ -229,7 +241,16 @@ export function useReaderUndo({
       const notice = undoTargetText(target.description, target.names, 'notice')
       const result = await timedReversal('reader.undo_measured', target.actionId, () =>
         undoLastAction(branchId, ctx, { expectedActionId: target.actionId }),
-      )
+      ).catch((e: unknown) => {
+        const undone = closeUndoneBySyncFailure(e)
+        if (undone == null) throw e
+        logger.error('reader.undo_failed', {
+          branchId,
+          committed: true,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        return undone
+      })
       showMenuTarget(null)
       if (result.status === 'rejected') {
         report('undo', result, origin)

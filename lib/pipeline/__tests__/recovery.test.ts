@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { __resetRegistrationGuard, DeltaReplayError, registerAllDomains } from '@/lib/actions'
 import {
   chapterRows,
   CLOSE_LORE_ID,
@@ -28,6 +29,7 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { deltas, pipelineRuns, reversalJournals, storyEntries } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { recoverInFlightRuns } from '@/lib/pipeline'
+import { loreStore } from '@/lib/stores'
 
 import { makeHarness, resetSingletons } from './harness'
 
@@ -341,5 +343,133 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
     expect(await worldRows(c.fx)).toEqual(world)
     expect(await chapterRows(c.fx)).toHaveLength(1)
     expect(await markerOf(c, RERUN_RUN)).toMatchObject({ outcome: 'recovered' })
+  })
+
+  // The reversal committed and only the store sync threw: the marker is settled, so no later boot
+  // reports the run, and this report is the only word of what the failure did.
+  describe('when only the store sync after the reversal commits throws', () => {
+    // Boot registers the domains before it recovers, and their patchers are what sync the stores.
+    const bootWithFailingSync = () => {
+      resetSingletons()
+      __resetRegistrationGuard()
+      registerAllDomains()
+      return vi.spyOn(loreStore, 'patch').mockImplementation(() => {
+        throw new Error('store sync boom')
+      })
+    }
+
+    it('reports the failure closeUndone when the close was undone, and no later boot reports it', async () => {
+      const c = await openClosed()
+      await writeCloseWork(c)
+      await crashedRerun(c)
+      await writeUnderAction(c, RERUN, [
+        loreCreate(c.fx.branchId, 'lore_act_rerun', 'The night ferry'),
+      ])
+      await c.fx.ctx.db.delete(reversalJournals).where(eq(reversalJournals.actionId, RERUN))
+
+      const sync = bootWithFailingSync()
+      const first = await recoverInFlightRuns(c.fx.ctx)
+
+      expect(first.reversed).toEqual([])
+      expect(first.failures).toStrictEqual([
+        {
+          runId: RERUN_RUN,
+          kind: CHAPTER_CLOSE_KIND,
+          actionId: RERUN,
+          storyId: c.fx.storyId,
+          error: expect.any(DeltaReplayError),
+          refusal: null,
+          closeUndone: true,
+        },
+      ])
+      expect(await chapterRows(c.fx)).toEqual([])
+      expect(await markerOf(c, RERUN_RUN)).toMatchObject({ outcome: 'recovered' })
+
+      sync.mockRestore()
+      expect(await recoverInFlightRuns(c.fx.ctx)).toEqual({ reversed: [], failures: [] })
+    })
+
+    // The marker names a chapter that is gone: the group reverses alone, and no line claims a close.
+    it('reports no close undone when the marker names a chapter that is gone', async () => {
+      const c = await openClosed()
+      await writeCloseWork(c)
+      await seedRunMarker(c.fx, { runId: RERUN_RUN, actionId: RERUN, startedAt: CLOSED_AT + 2 })
+      await c.fx.ctx.db
+        .update(pipelineRuns)
+        .set({ rerunChapterId: 'chap_gone' })
+        .where(eq(pipelineRuns.runId, RERUN_RUN))
+      await writeUnderAction(c, RERUN, [
+        loreCreate(c.fx.branchId, 'lore_act_rerun', 'The night ferry'),
+      ])
+
+      bootWithFailingSync()
+      const { reversed, failures } = await recoverInFlightRuns(c.fx.ctx)
+
+      expect(reversed).toEqual([])
+      expect(failures).toStrictEqual([
+        {
+          runId: RERUN_RUN,
+          kind: CHAPTER_CLOSE_KIND,
+          actionId: RERUN,
+          storyId: c.fx.storyId,
+          error: expect.any(DeltaReplayError),
+          refusal: null,
+        },
+      ])
+      expect(await chapterRows(c.fx)).toHaveLength(1)
+      expect(await markerOf(c, RERUN_RUN)).toMatchObject({ outcome: 'recovered' })
+    })
+
+    it('reports a restored journal as the plain failure it was', async () => {
+      const c = await openClosed()
+      await writeCloseWork(c)
+      await crashedRerun(c)
+
+      bootWithFailingSync()
+      const { reversed, failures } = await recoverInFlightRuns(c.fx.ctx)
+
+      expect(reversed).toEqual([])
+      expect(failures).toStrictEqual([
+        {
+          runId: RERUN_RUN,
+          kind: CHAPTER_CLOSE_KIND,
+          actionId: RERUN,
+          storyId: c.fx.storyId,
+          error: expect.any(DeltaReplayError),
+          refusal: null,
+        },
+      ])
+      expect(await chapterRows(c.fx)).toHaveLength(1)
+    })
+  })
+
+  it('reports no close undone for a failure that never committed, and keeps its marker open', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await crashedRerun(c)
+    await c.fx.ctx.db.delete(reversalJournals).where(eq(reversalJournals.actionId, RERUN))
+    const locked = {
+      ...c.fx.ctx,
+      runInTransaction: async () => {
+        throw new Error('database is locked')
+      },
+    }
+
+    resetSingletons()
+    const { reversed, failures } = await recoverInFlightRuns(locked)
+
+    expect(reversed).toEqual([])
+    expect(failures).toStrictEqual([
+      {
+        runId: RERUN_RUN,
+        kind: CHAPTER_CLOSE_KIND,
+        actionId: RERUN,
+        storyId: c.fx.storyId,
+        error: expect.any(DeltaReplayError),
+        refusal: null,
+      },
+    ])
+    expect(await chapterRows(c.fx)).toHaveLength(1)
+    expect(await markerOf(c, RERUN_RUN)).toMatchObject({ finishedAt: null })
   })
 })
