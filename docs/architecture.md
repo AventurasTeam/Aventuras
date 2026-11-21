@@ -1047,8 +1047,9 @@ mean the enforced window on every server known to use them:
 A value that isn't a positive integer is ignored. `context_length` is
 not read: local servers use it for the model's trained maximum, where
 llama.cpp's router reports 262,144 for a model it runs at 65,536, and
-hosted catalogs for the served limit. Anthropic's typed catalog adapter
-reads `max_input_tokens` the same way. Nothing fingerprints a server.
+hosted catalogs for the served limit. Anthropic's catalog publishes
+`max_input_tokens`, which a typed catalog adapter reads the same way,
+not built yet (M7.1). Nothing fingerprints a server.
 
 Ollama, LM Studio, KoboldCpp and text-generation-webui publish no
 usable figure on `/v1/models`, and by default cut an overlong prompt

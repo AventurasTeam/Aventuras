@@ -61,13 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **`architecture.md` describes an Anthropic catalog adapter that doesn't
-  exist.** [`architecture.md → The window figure`](../architecture.md#the-window-figure)
-  says "Anthropic's typed catalog adapter
-  reads `max_input_tokens` the same way", but nothing under `lib/` reads
-  `max_input_tokens`, and `lib/ai/catalog.ts` has no Anthropic adapter.
-  Either the sentence goes or it gains "(not built yet)". Raised in
-  5.10's PR 1 review.
 - **A run off the open story pre-flights without the story's override.**
   `driveRun` passes `storySettings` only when the run's story and branch
   are the open ones (`ownStory`), so a run on another story checks the
