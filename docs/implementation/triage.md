@@ -103,3 +103,13 @@ slice-planning gate forces its resolution before that slice is planned.
   restart. No caller throws today; `startCloseRerun` is the first to pass
   a host-supplied callback through it. Raised by Slice 5.13's Task 17
   review (2026-11-21).
+- **The shared `Sheet` drops a `present()` sent while it is still
+  dismissing.** An `open` that flips back to true within the slide-out
+  (about 0.7 s on web) leaves the sheet open in React and nothing on
+  screen: no scrim, its Escape and Back handlers still swallow presses,
+  and the next close calls `dismiss()` on a dismissed modal
+  (`components/ui/sheet.tsx`, the `open` effect). Slice 5.13 holds its own
+  review-window reopen until `onDismissed`
+  (`use-review-window-presence.ts`); other consumers that reopen a Sheet
+  on a timer or after a cancelled confirm are unchecked. Raised by Slice
+  5.13's Task 26 review (2026-11-21).
