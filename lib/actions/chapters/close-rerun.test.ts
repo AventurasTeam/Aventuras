@@ -650,6 +650,91 @@ describe('getCloseRerunPreview', () => {
       })
     })
 
+    it('reads no clear for a member the turn since created in it, then moved out', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeFaction(h)
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, {
+        kind: 'createEntity',
+        source: 'per_turn_classifier',
+        payload: {
+          entry: {
+            id: 'char_since_14',
+            branchId: b,
+            kind: 'character',
+            name: 'Mara',
+            description: 'A toll-taker on the Harrow landing.',
+            status: 'active',
+            injectionMode: 'auto',
+            state: { ...emptyEntityState('character'), faction_id: GUILD },
+            createdAt: 14,
+            updatedAt: 14,
+          },
+        },
+      })
+      await sinceWrite(h, reply, joinFaction(b, 'char_since_14', null, 'per_turn_classifier'))
+
+      // The shortcut takes Mara away, so her move back into the guild leaves nothing to clear.
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 2 },
+        shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 2 } },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 2,
+      })
+    })
+
+    it('reads no clear for a membership a later write the shortcut leaves moved elsewhere', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeFaction(h)
+      const user = async (actionId: string, action: PipelineAction, entryId?: string) => {
+        const done = await applyDeltaAction({ action, actionId, branchId: b, entryId }, h.fx.ctx)
+        expect(done.status).toBe('ok')
+      }
+      await user('act_user_old', {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: OLD_GUILD,
+            branchId: b,
+            kind: 'faction',
+            name: 'The old guild',
+            description: 'The ferrymen before the Syndicate.',
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 12,
+            updatedAt: 12,
+          },
+        },
+      })
+      await user('act_user_join', joinFaction(b, TOBIN.id, GUILD, 'user_edit'))
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, joinFaction(b, TOBIN.id, null, 'per_turn_classifier'))
+      // Anchored before the shortcut's target, so it outlives the rollback.
+      await user(
+        'act_late_move',
+        joinFaction(b, TOBIN.id, OLD_GUILD, 'per_turn_classifier'),
+        h.fx.replyIds[5]!,
+      )
+
+      // The shortcut's undo of the move out would put Tobin back in the guild; the later write
+      // leaves him in the old one.
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 2 },
+        shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 2,
+      })
+    })
+
     it('reads the clear for a membership the turn since ended, which the shortcut puts back', async () => {
       const { h, chapterId } = await closedStandIn()
       const b = h.fx.branchId
