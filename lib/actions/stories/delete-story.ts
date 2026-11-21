@@ -17,6 +17,7 @@ import {
   lore,
   pipelineRuns,
   probeCaptures,
+  reversalJournals,
   stories,
   storyEntries,
   threads,
@@ -44,6 +45,7 @@ export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   translations,
   probeCaptures,
   deltas,
+  reversalJournals,
   entryAssets,
 ]
 

@@ -51,6 +51,9 @@ export type {
   CloseReportCall,
   CloseTask,
 } from './story-entries/close-report'
+export { parseRerunJournal, rerunJournalSchema } from './system/rerun-journal'
+export type { RerunJournal } from './system/rerun-journal'
+export type { ReversalJournalRow } from './system/system.table'
 export { entryAssetWriteSchema } from './assets/entry-assets-schema'
 export type { EntryAssetWrite } from './assets/entry-assets-schema'
 export { translationWriteSchema } from './translations/translations-schema'
@@ -167,6 +170,7 @@ export {
   lore,
   pipelineRuns,
   probeCaptures,
+  reversalJournals,
   stories,
   storyEntries,
   threads,
