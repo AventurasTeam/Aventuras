@@ -224,6 +224,14 @@ mechanism rather than the hover-preview.
   opens no modal and shows the rollback-failed toast instead. A refusal
   only the commit raises shows the same toast with the modal still open,
   except `counts-changed`, which has its own toast ([Counts](#counts)).
+- **A run starting under an open modal** — the modal's confirm disables
+  while a run holds the gate. If a run starts between its last enabled
+  render and the press, the commit refuses as in flight and the modal
+  stays open, its confirm disabled with `Unavailable while generating.`
+  The Timeline's
+  [delete](../../chapter-timeline/chapter-timeline.md#delete-a-chapter)
+  and [re-run](../../chapter-timeline/chapter-timeline.md#re-run-a-close)
+  confirms do the same.
 - **During generation** — per
   [branch-navigator → during generation](../branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked),
   the per-entry `×` is disabled while any pipeline phase is active, so

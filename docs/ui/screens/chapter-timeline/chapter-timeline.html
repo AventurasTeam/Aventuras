@@ -171,10 +171,9 @@
   body[data-modal="review"] #review-backdrop,
   body[data-modal="delete"] #delete-backdrop,
   body[data-modal="rerun"] #rerun-backdrop,
-  body[data-modal="review-rerun"] #review-backdrop,
   body[data-modal="review-rerun"] #rerun-backdrop { display: flex; }
-  /* The re-run confirm stacks over the review window it was opened from (layout.md → Stacking). */
-  #rerun-backdrop { z-index: 7; }
+  /* Opened from the review window, the window closes first and the re-run confirm opens alone;
+     its Cancel reopens the review (chapter-timeline.md → Review window). */
   body[data-rerun-turns="none"] .rerun-rollback,
   body[data-rerun-turns="none"] .rerun-turns-only { display: none; }
   body[data-rerun-turns="some"] .rerun-no-turns-only { display: none; }
@@ -1031,7 +1030,7 @@
   ['delete-cancel', 'delete-divider', 'delete-confirm'].forEach(id => {
     document.getElementById(id).addEventListener('click', () => setModal('hidden'));
   });
-  // Cancel returns to the review the confirm was opened from; confirming closes both.
+  // Cancel reopens the review the confirm was opened from; confirming leaves it closed.
   document.getElementById('rerun-cancel').addEventListener('click', () =>
     setModal(body.dataset.modal === 'review-rerun' ? 'review' : 'hidden'));
   ['rerun-confirm', 'rerun-rollback', 'rerun-fork'].forEach(id => {

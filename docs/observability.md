@@ -188,6 +188,16 @@ convention, and the expectation that subsystems route through
   for the boundary to refuse),
   `close_rerun_on_started_threw` (warn: a re-run start's host callback
   threw as the chain reserved; the re-run runs on),
+  `rerun_journal_written` (debug,
+  `lib/actions/delta/rerun-journal.ts`: a close's re-run's `reversal`
+  phase committed its journal, with `branchId`, `chapterId`, the `floor`
+  and the counts of journaled `rows`, `deltas` and `journals`, under the
+  run's `actionId`) and `rerun_close_undone` (warn, the same file: a
+  re-run's reversal committed with its chapter's close undone, since the
+  journal couldn't be written back, with `chapterId`, `chapterNumber`
+  and `journal`, `not-whole` or `missing`, under the re-run's
+  `actionId`; the user sees the toast, or after a crash the recovery
+  modal's re-run line),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /
@@ -361,6 +371,16 @@ convention, and the expectation that subsystems route through
   `hooks/use-memory-run-outcomes.ts`: the commit banner's report read
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),
+  `close_rerun_start_refused` (warn,
+  `components/chapters/run-close-rerun.ts`: a confirmed re-run was
+  refused for a reason other than the counts changing, the chapter no
+  longer being the latest, or a run in flight, with `branchId`,
+  `chapterId` and the refusal `code` (`preflight-failed` for a failed
+  pre-flight); the confirm closes with `Couldn't start the re-run.`, or
+  with the close's own pre-flight copy),
+  `close_rerun_start_threw` (error, the same file: `startCloseRerun`
+  threw rather than resolving, with `branchId`, `chapterId` and `error`;
+  the confirm closes with `Couldn't start the re-run.`),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
@@ -402,7 +422,19 @@ convention, and the expectation that subsystems route through
   committed but the store sync after it failed; the branch re-hydrates
   next, with no failure toast) and `chapter_delete_resync_failed` (that
   re-hydration failed too; the user sees
-  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`);
+  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`)
+  and the re-run confirm
+  (`components/chapters/use-close-rerun-confirm.ts`):
+  `close_rerun_preview_threw` (error: the read behind `Re-run close…`
+  threw, with `branchId`, `chapterId` and `error`; the confirm stays shut
+  and the user sees `Couldn't read what a re-run would change.`),
+  `close_rerun_preview_refused` (warn: that read, or a re-read, was
+  refused `no-close` or `not-found`, with `branchId`, `chapterId` and
+  the `code`; the confirm closes with that toast. `not-latest` and
+  `close-owed`, the documented races, toast their own copy unlogged, and
+  `integrity` logs as `action_layer.reversal_refused`) and
+  `close_rerun_recount_failed` (error: a re-read after a run settled
+  threw; the confirm keeps the preview it shows);
   `chapter_delete_threw` and `chapter_delete_sync_failed` log a replay
   failure's cause, not its wrapper's message, `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than

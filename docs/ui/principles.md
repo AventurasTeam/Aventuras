@@ -441,7 +441,13 @@ they can't submit). Hover/focus reveals a uniform tooltip:
 | Suggestion refresh   | `Refreshing suggestions. Cancel to edit.`         |
 
 Suggestion refresh is a hard-gate run too, and may run beside a pass
-or a close. It leaves Send in place rather than swapping it for Cancel,
+or a close, but not beside a close's re-run: while a re-run's chain
+holds the branch, its catch-up pass included, the suggestion strip's ⟳
+disables with the re-run's tooltip, and a refresh started any other way
+is refused. Its suggestions would log above the re-run's floor and turn
+the re-run's CTRL-Z into undoing the close; a chip tap writes nothing,
+so the chips stay live. A refresh leaves Send in place rather than
+swapping it for Cancel,
 so its cancel is the status pill's when it runs alone. Beside a pass or
 a close the pill names and cancels that run, and the refresh's cancel
 is the suggestion strip's ✕.

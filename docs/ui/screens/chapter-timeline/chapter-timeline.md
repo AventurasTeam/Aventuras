@@ -255,7 +255,8 @@ the close back, until a turn, an edit or a rollback comes between
 ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)).
 Opened from the card's `Re-run close…` or the review window's
 `Re-run…`, both disabled while a close is owed and gated through the
-Timeline's save-session guard before opening the confirm (matching
+screen's save-session guard (the Timeline's, from the card) before
+opening the confirm (matching
 `Delete…`, so unsaved card edits settle before preview counts are read
 and never stack a dialog on top of the confirm). An
 [AlertDialog](../../patterns/alert-dialog.md), disabled while a
@@ -604,8 +605,10 @@ close stands.
   replaced, and [`Delete…`](#delete-a-chapter) after that.
 - **`Re-run…`** in the footer, on the latest chapter's window, disabled
   while a run is in flight or a close is owed, with the card's tooltips,
-  opens the [re-run confirm](#re-run-a-close)
-  over the window. `Cancel` returns to the review; confirming closes it.
+  closes the window first, runs the screen's unsaved-changes guard, then
+  opens the [re-run confirm](#re-run-a-close) alone, so no dialog sits
+  over the window. The confirm's `Cancel` reopens the review; the
+  guard's Cancel and confirming leave it closed.
 - **After a re-run** the window shows the re-run's report, its changes
   against the chapter before any close, as a close's are.
 - **If the close reverses while the window is open,** the window closes,
@@ -670,7 +673,7 @@ end-entry picker in-flow inside it.
   yet). `[Close chapter…]` button full-width on phone for
   tap-target clarity. Token-progress bar reflows naturally.
 - **Review window** is a Sheet at phone width, its changes scrolling
-  under a pinned header.
+  under a pinned header, sliding out whenever it closes.
 - **Chapter-close modal** stays Modal at every tier per
   [`mobile/layout.md → Surface bindings`](../../foundations/mobile/layout.md#surface-bindings--existing-app-surfaces).
   Modal width caps at viewport-minus-padding on phone per the modal
@@ -683,10 +686,11 @@ end-entry picker in-flow inside it.
   modal at once, which renders above the Sheet layer, so it opens over
   that Sheet while it dismisses and never under it; the chapter
   popover's opens it once its Sheet has dismissed.
-- **Re-run confirm** opened from the review window stacks over its
-  Sheet on phone, the confirm-from-inside case
-  [`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking)
-  allows.
+- **Re-run confirm** opened from the review window never stacks on its
+  Sheet: `Re-run…` starts the Sheet's slide-out first, the guard and the
+  confirm may open over it while it exits, as the Actions menu's close
+  modal does, and the confirm's `Cancel` brings the Sheet back
+  ([`mobile/layout.md → Stacking`](../../foundations/mobile/layout.md#stacking)).
 - **Entry-row anatomy**: the start row and picker trigger take two
   lines on phone (entry number and tag, with the chevron at the
   right, then the snippet with its time right-aligned), so the tag
