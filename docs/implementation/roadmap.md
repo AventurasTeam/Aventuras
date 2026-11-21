@@ -449,7 +449,10 @@ the underlying configuration surfaces.
   catalogs like OpenRouter 340+, capability badge click-to-
   override, per-section staggered refresh, `Add custom model id`,
   the text models' context-window chip and its editor, Anthropic's
-  typed catalog reading `max_input_tokens` into the detected window,
+  typed catalog reading `max_input_tokens` into the detected window
+  (and sending its own auth: `fetchModelCatalog` sends every key as
+  `Authorization: Bearer`, which only the `openai-compatible` providers
+  the setup form creates today take),
   provider `⋯` menu with deletion-semantics AlertDialog,
   reset-profiles action, and the profile line under max output that
   gives the model's window, per
