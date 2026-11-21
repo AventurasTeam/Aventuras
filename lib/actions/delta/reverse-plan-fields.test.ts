@@ -320,20 +320,31 @@ describe('the commit hooks', () => {
   it('rolls the hook op back with the reversal when a later op fails', async () => {
     const set = await seedVael()
     await ctx.runInTransaction([marker('run_taken')])
+    const attempted: SqlOp[][] = []
+    const spying: DbCtx = {
+      db: ctx.db,
+      runInTransaction: (ops) => {
+        attempted.push(ops)
+        return ctx.runInTransaction(ops)
+      },
+    }
+    const hookOp = marker('run_hook')
+    const opsFromPlan = vi.fn(async (_plan: ReversePlan) => [hookOp])
 
     await expect(
       reverseAndPruneDeltaRows(
         set,
-        ctx,
+        spying,
         { keepRedoExact: false },
         [marker('run_taken')],
         undefined,
-        {
-          opsFromPlan: async () => [marker('run_hook')],
-        },
+        { opsFromPlan },
       ),
     ).rejects.toBeInstanceOf(DeltaReplayError)
 
+    expect(opsFromPlan).toHaveBeenCalledOnce()
+    expect(attempted).toHaveLength(1)
+    expect(attempted[0][0]).toBe(hookOp)
     expect(await runIds()).toEqual(['run_taken'])
     expect(await vael()).toHaveLength(1)
   })
