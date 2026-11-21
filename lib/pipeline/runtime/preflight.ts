@@ -1,4 +1,4 @@
-import { resolveModel, resolveModelCapabilities, type ResolveModelConfig } from '@/lib/ai'
+import { modelConfigOf, resolveModel, resolveModelCapabilities } from '@/lib/ai'
 import type { StorySettings } from '@/lib/db'
 import { appSettingsStore } from '@/lib/stores'
 
@@ -16,16 +16,9 @@ export function runPreflight(
   pipeline: Pipeline,
   snapshot: PreflightSnapshot,
 ): ConfigResolverError | null {
-  const { providers, profiles, assignments } = snapshot.appSettings
-  // Without storyModels, pre-flight always takes the assignments path while the
-  // phase takes the override path — so it both clears runs that fail in-phase
-  // and rejects runs whose story-level override would have resolved.
-  const config: ResolveModelConfig = {
-    providers,
-    profiles,
-    assignments,
-    storyModels: snapshot.storySettings?.models,
-  }
+  // Without the story's overrides, pre-flight would take the assignments path while the phase
+  // takes the override path, clearing runs that fail in-phase and rejecting ones that resolve.
+  const config = modelConfigOf(snapshot.appSettings, snapshot.storySettings)
 
   for (const node of pipeline.phases) {
     const branches = 'parallel' in node ? node.parallel : [node]
@@ -42,7 +35,11 @@ export function runPreflight(
           }
         }
         if (input.requires === undefined) continue
-        const capabilities = resolveModelCapabilities(result.providerId, result.modelId, providers)
+        const capabilities = resolveModelCapabilities(
+          result.providerId,
+          result.modelId,
+          config.providers,
+        )
         if (capabilities?.[input.requires] === false) {
           return {
             kind: 'config-resolver',

@@ -9,6 +9,25 @@ export type ResolveModelConfig = {
   storyModels?: StorySettings['models']
 }
 
+/** The App Settings chain a config resolves through, as an app-settings snapshot carries it. */
+export type ModelChain = Omit<ResolveModelConfig, 'storyModels'>
+
+/**
+ * The config a call resolves through: the App Settings chain under the story's overrides. `story`
+ * is required, so a call outside any story says so with `undefined` rather than dropping them.
+ */
+export function modelConfigOf(
+  app: ModelChain,
+  story: StorySettings | undefined,
+): ResolveModelConfig {
+  return {
+    providers: app.providers,
+    profiles: app.profiles,
+    assignments: app.assignments,
+    storyModels: story?.models,
+  }
+}
+
 /** Breakage in the App Settings chain: assignment → profile → the profile's provider. */
 export type AppChainFailureKind = 'no-profile-assigned' | 'profile-missing' | 'provider-missing'
 

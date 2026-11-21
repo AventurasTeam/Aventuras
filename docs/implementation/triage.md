@@ -67,18 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   profile's model, not the override's. 5.10's tool-calling check inherits
   this. Whether such a run is reachable today is unchecked. Raised in
   5.10's PR 1 review.
-- **One builder for `ResolveModelConfig`.** Every structured and tool
-  caller builds `{ providers, profiles, assignments, storyModels }`
-  inline from `appSettingsStore` and the open story: ten sites in
-  `lib/pipeline`, among them the close's boundary call, agent phase and
-  metadata call, the periodic pass, suggestion refresh, per-turn and
-  pre-flight (`grep -rn "storyModels:" lib components` lists them), and
-  `components/wizard/wizard-assist.ts` passes the app settings as one,
-  with no `storyModels`. A field added to the type can be missed at one of them.
-  A builder in `lib/pipeline` beside `boundedStructuredCall`, which
-  lifted the call sequence but not the config, would keep them alike.
-  Routed from Slice 5.10's planning, 2026-11-17.
-
 - **Story viewport presets are copied per file.** `phone390` is defined
   in each of `chapter-in-progress-card`, `review-window`, `chapter-card`
   and `close-chapter-modal` stories; one preset in

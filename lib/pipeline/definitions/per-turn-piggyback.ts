@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   describeCallRetryError,
   generateStructured,
+  modelConfigOf,
   resolveModel,
   resolveModelCapabilities,
 } from '@/lib/ai'
@@ -510,12 +511,7 @@ export async function* piggybackFallbackClassifierPhase(
   )
 
   const appSettings = appSettingsStore.getAppSettings()
-  const classifierConfig: ResolveModelConfig = {
-    providers: appSettings.providers,
-    profiles: appSettings.profiles,
-    assignments: appSettings.assignments,
-    storyModels: open.settings.models,
-  }
+  const classifierConfig = modelConfigOf(appSettings, open.settings)
   // Only the turn's regular classifier recurs per turn, so only it caches the system prefix;
   // a failed-piggyback recovery doesn't (piggyback.md → Fallback classifier context).
   const callOptions: StructuredCallOptions = {
@@ -759,12 +755,10 @@ export async function* piggybackFallbackClassifierPhase(
 }
 
 function resolveNarrativeCapabilities(snapshot: PreflightSnapshot): ModelCapabilities | undefined {
-  const resolved = resolveModel('narrative', {
-    providers: snapshot.appSettings.providers,
-    profiles: snapshot.appSettings.profiles,
-    assignments: snapshot.appSettings.assignments,
-    storyModels: snapshot.storySettings?.models,
-  })
+  const resolved = resolveModel(
+    'narrative',
+    modelConfigOf(snapshot.appSettings, snapshot.storySettings),
+  )
   if (!resolved.ok) return undefined
   return resolveModelCapabilities(
     resolved.providerId,

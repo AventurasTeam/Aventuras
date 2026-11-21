@@ -4,6 +4,7 @@ import {
   generateStructured,
   resolveModel,
   type GenerateStructuredResult,
+  modelConfigOf,
   type ResolveModelConfig,
 } from '@/lib/ai'
 import { resolveCalendar } from '@/lib/calendar'
@@ -81,7 +82,7 @@ export type WizardAssistDeps = {
 }
 
 function config(deps?: WizardAssistDeps): ResolveModelConfig {
-  return deps?.resolveConfig?.() ?? appSettingsStore.getAppSettings()
+  return deps?.resolveConfig?.() ?? modelConfigOf(appSettingsStore.getAppSettings(), undefined)
 }
 
 export function resolveWizardAssistModelId(deps?: WizardAssistDeps): string | null {

@@ -1,5 +1,5 @@
 import type { GroupOutcome } from '@/lib/actions/types'
-import type { ResolveModelConfig } from '@/lib/ai'
+import { modelConfigOf } from '@/lib/ai'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
@@ -133,12 +133,7 @@ export async function* closeAgentPhase(
     }
   // Read before the first await, while the check above still holds.
   const settings = appSettingsStore.getAppSettings()
-  const config: ResolveModelConfig = {
-    providers: settings.providers,
-    profiles: settings.profiles,
-    assignments: settings.assignments,
-    storyModels: open.settings.models,
-  }
+  const config = modelConfigOf(settings, open.settings)
   const ids = closeIdsOf(ctx.intermediates)
   const ledger = new CloseLedgerWriter(ledgerRecord, (id) => ids.nameOfId(id), ctx.actionId)
   const entries = await readCloseRangeEntries(ctx.db, ctx.branchId, range)

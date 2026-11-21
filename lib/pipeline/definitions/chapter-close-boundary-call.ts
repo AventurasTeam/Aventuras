@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
-import type { ResolveModelConfig } from '@/lib/ai'
+import { modelConfigOf, type ResolveModelConfig } from '@/lib/ai'
 import { closeCandidateWindow, type CloseCandidate } from '@/lib/chapters'
 import { storyEntries, type OpenRegionRow } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
@@ -68,12 +68,7 @@ export function readBoundaryInputs(
     activeThreads: [...threadsStore.getThreads().values()]
       .filter((thread) => thread.branchId === ctx.branchId && thread.status === 'active')
       .map((thread) => ({ title: thread.title })),
-    modelConfig: {
-      providers: settings.providers,
-      profiles: settings.profiles,
-      assignments: settings.assignments,
-      storyModels: open.settings.models,
-    },
+    modelConfig: modelConfigOf(settings, open.settings),
   }
 }
 
