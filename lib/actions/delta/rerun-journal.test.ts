@@ -1116,6 +1116,24 @@ describe('reverseRunGroup', () => {
     expect(await deltasOf(c.fx, 'act_pass')).toEqual([])
   })
 
+  it('reads a group that is no re-run once, by its action id', async () => {
+    const c = await openClosed()
+    await writeLater(
+      c.fx,
+      describeTobin(c.fx.branchId, 'The ferryman, as the pass read him.', 'periodic_classifier'),
+      { actionId: 'act_pass', entryId: c.fx.replyIds[1] },
+    )
+    const prepare = vi.spyOn(c.fx.sqlite, 'prepare')
+
+    expect(await reverseRunGroup({ actionId: 'act_pass', branchId: null }, c.fx.ctx)).toMatchObject(
+      { deltas: 1 },
+    )
+
+    expect(
+      prepare.mock.calls.filter(([sql]) => sql.includes('where "deltas"."action_id" = ?')),
+    ).toHaveLength(1)
+  })
+
   it('tells the settle nothing was reversed for an action that left nothing', async () => {
     const c = await openClosed()
     await seedRunMarker(c.fx, {

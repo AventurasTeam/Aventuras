@@ -18,10 +18,11 @@ import type { DbCtx } from '../types'
 import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { readCurrentRow } from './redo'
 import { resolveByTable, whereForDelta, type TableDescriptor } from './registry'
-import { DeltaReplayError, ReversalIntegrityError } from './replay-errors'
+import { DeltaReplayError } from './replay-errors'
 import {
+  replayFailure,
   reverseAndPruneDeltaRows,
-  reverseReplayDeltas,
+  reverseReplayGroup,
   type PatchEmission,
   type ReversePlan,
 } from './reverse-replay'
@@ -390,13 +391,6 @@ export type RunGroupReversal = {
   chapterNumber: number | null
 }
 
-// A refusal already names what it refused and committed nothing; wrapping would hide it.
-function replayFailure(e: unknown, actionId: string): DeltaReplayError {
-  return e instanceof ReversalIntegrityError
-    ? e
-    : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
-}
-
 // The fallback's set: the group and the chapter's close groups, once each, newest first.
 export function withCloseGroups(group: readonly Delta[], seed: readonly Delta[]): Delta[] {
   const byId = new Map<string, Delta>()
@@ -432,7 +426,7 @@ export async function reverseRunGroup(
     throw replayFailure(e, actionId)
   }
   if (writeBack.outcome === 'none') {
-    const reversed = await reverseReplayDeltas(actionId, ctx, (count) => settleOps(count > 0))
+    const reversed = await reverseReplayGroup(actionId, group, ctx, (count) => settleOps(count > 0))
     return { deltas: reversed, journal: null, chapterNumber: null }
   }
   const journal = writeBack.outcome

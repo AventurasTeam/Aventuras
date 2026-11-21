@@ -921,6 +921,13 @@ export async function reverseAndPruneDeltaRows(
   })
 }
 
+// A refusal already names what it refused and committed nothing; wrapping would hide it.
+export function replayFailure(e: unknown, actionId: string): DeltaReplayError {
+  return e instanceof ReversalIntegrityError
+    ? e
+    : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
+}
+
 /**
  * Reverses and prunes in one transaction, as CTRL-Z does: unpruned rows would read as the undo head
  * (data-model.md → Entry mutability & rollback). `settleOps(deltaCount)` ops join it, even at 0.
@@ -932,22 +939,32 @@ export async function reverseReplayDeltas(
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
-  // A refusal already names what it refused and committed nothing; wrapping would hide it.
-  const fail = (e: unknown): DeltaReplayError =>
-    e instanceof ReversalIntegrityError
-      ? e
-      : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
-  let set: ReversalSet
+  let group: Delta[]
   try {
-    const rows = (await ctx.db
+    group = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    // An empty seed runs no query, so its branch is never read.
-    set = await selectReversalSet(ctx, { branchId: rows[0]?.branchId ?? '', target: rows })
   } catch (e) {
-    throw fail(e)
+    throw replayFailure(e, actionId)
+  }
+  return reverseReplayGroup(actionId, group, ctx, settleOps)
+}
+
+/** `reverseReplayDeltas` over the action's group as the caller read it, newest first. */
+export async function reverseReplayGroup(
+  actionId: string,
+  group: readonly Delta[],
+  ctx: DbCtx,
+  settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
+): Promise<number> {
+  let set: ReversalSet
+  try {
+    // An empty seed runs no query, so its branch is never read.
+    set = await selectReversalSet(ctx, { branchId: group[0]?.branchId ?? '', target: group })
+  } catch (e) {
+    throw replayFailure(e, actionId)
   }
   return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
@@ -959,7 +976,7 @@ export async function reverseReplayDeltas(
       patches = plan.patches
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
     } catch (e) {
-      throw fail(e)
+      throw replayFailure(e, actionId)
     }
     // Action layer owns the patch: invert in the held-branch store after the tx.
     emitCommittedPatches(patches, actionId)
