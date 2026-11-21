@@ -1,32 +1,16 @@
-import type { AssistantModelMessage, ToolCallPart } from 'ai'
-import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { and, asc, eq } from 'drizzle-orm'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { ChapterDeleteMode } from '@/lib/actions/chapters/chapter-delete-set'
 import { removeChapter } from '@/lib/actions/chapters/remove-chapter'
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
-import {
-  applyDeltaAction,
-  applyDeltaActionGroupWithOutcomes,
-} from '@/lib/actions/delta/apply-delta-action'
+import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
-import { shownCounts } from '@/lib/actions/story-entries/__tests__/shown-counts'
-import { rollbackToEntry } from '@/lib/actions/story-entries/operational'
 import { redoLastAction, undoLastAction } from '@/lib/actions/story-entries/undo'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
-import type {
-  GenerateStructuredResult,
-  generateStructured,
-  generateToolStep,
-  ToolStep,
-  ToolStepCall,
-  ToolStepResult,
-} from '@/lib/ai'
-import { cutChapterParts } from '@/lib/chapters'
+import type { generateStructured, generateToolStep } from '@/lib/ai'
 import {
   chapters,
-  characterRelationships,
-  deltas,
   emptyEntityState,
   entities,
   happeningAwareness,
@@ -36,27 +20,37 @@ import {
   storyEntries,
   threads,
   type Delta,
-  type EntityState,
   type HappeningAwareness,
 } from '@/lib/db'
-import {
-  configureDeltaActionPort,
-  pipelineEventBus,
-  type PhaseEmittedEvent,
-  type PhaseResult,
-  type TxResult,
-} from '@/lib/pipeline'
+import { pipelineEventBus, type PhaseEmittedEvent, type PhaseResult } from '@/lib/pipeline'
 import { interruptMemoryRuns } from '@/lib/stores'
 
-import { standInSlots, standInTool } from './close-stand-in'
-import { expectRan, realDeltaActionPort, resetSingletons } from './harness'
 import {
-  metadataReplyResult,
+  branchLog,
+  CHARACTER_ID,
+  defined,
+  deltasOf,
+  END_REPLY,
+  installCloseHarnessHooks,
+  openHarness,
+  script,
+  seedEntity,
+  STAND_IN_INPUT,
+  TOBIN,
+  worldState,
+  type CloseCase,
+  type CloseHarness,
+  type CloseMocks,
+  type SeedEntity,
+  type WorldState,
+} from './close-harness'
+import { standInSlots, standInTool } from './close-stand-in'
+import { expectRan } from './harness'
+import {
   openCloseFixture,
   twoPartWindow,
   type CloseFixture,
 } from '../definitions/__tests__/close-fixture'
-import { chapterPartSummarySchema } from '../definitions/chapter-metadata-schema'
 import { awarenessTask, resetRetrievalStep } from '../definitions/close-agent/close-awareness'
 import { embedRangeStep } from '../definitions/close-agent/close-happenings'
 import { normalizeStackablesStep } from '../definitions/close-agent/close-stackables'
@@ -88,210 +82,12 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
   generateToolStep: generateToolStepMock,
 }))
 
-beforeEach(() => {
-  resetSingletons()
-  generateStructuredMock.mockReset()
-  generateStructuredMock.mockResolvedValue(metadataReplyResult())
-  generateToolStepMock.mockReset()
-})
-
-afterEach(() => {
-  __setCloseAgentSlots(undefined)
-  resetSingletons()
-  vi.restoreAllMocks()
-})
-
-// The third of six replies (position 7): turns lie on both sides of the close.
-const END_REPLY = 2
-
-const CHARACTER_ID = 'char_5b0d2c1e-7f3a-4e8b-9c6d-2a1f0e9b8c7d'
-
-// t3 is position 3, before E: a group anchored on the cited turn would survive the rollback to E.
-const STAND_IN_INPUT = {
-  id: 'c1',
-  description: 'The Harrow ferryman, who poled Wren across the river at night for a courier price.',
-  title: 'The Harrow ferry',
-  body: 'Old Tobin runs the ferry at Harrow when he chooses to, and the Syndicate taxes every crossing.',
-  turns: ['t3'],
-  why: 'Tobin is the ferryman Wren finds at the landing.',
+const MOCKS: CloseMocks = {
+  generateStructured: generateStructuredMock,
+  generateToolStep: generateToolStepMock,
 }
 
-type ScriptedStep = { calls: readonly Omit<ToolStepCall, 'toolCallId'>[] }
-
-const USAGE: ToolStep['usage'] = {
-  inputTokens: 1_000,
-  inputTokenDetails: { noCacheTokens: 1_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  outputTokens: 50,
-  outputTokenDetails: { textTokens: 50, reasoningTokens: 0 },
-  totalTokens: 1_050,
-}
-
-const DONE = 'Nothing more to write.'
-
-function stepResult(step: ScriptedStep, n: number): ToolStepResult {
-  const calls: ToolStepCall[] = step.calls.map((call, i) => ({
-    ...call,
-    toolCallId: `call_${n}_${i + 1}`,
-  }))
-  const message: AssistantModelMessage = {
-    role: 'assistant',
-    content:
-      calls.length === 0
-        ? [{ type: 'text', text: DONE }]
-        : calls.map((call): ToolCallPart => ({ type: 'tool-call', ...call })),
-  }
-  return {
-    status: 'ok',
-    step: {
-      calls,
-      invalidCalls: [],
-      responseMessages: [message],
-      text: calls.length === 0 ? DONE : '',
-      finishReason: calls.length === 0 ? 'stop' : 'tool-calls',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
-// Every step past the script replies with no tool call, which ends the task.
-function script(steps: readonly ScriptedStep[]): void {
-  let sent = 0
-  generateToolStepMock.mockImplementation(async () => {
-    sent += 1
-    return stepResult(steps[sent - 1] ?? { calls: [] }, sent)
-  })
-}
-
-const WORLD_TABLES = [
-  'chapters',
-  'entities',
-  'lore',
-  'threads',
-  'happenings',
-  'happening_involvements',
-  'happening_awareness',
-  'character_relationships',
-] as const
-type WorldTable = (typeof WORLD_TABLES)[number]
-
-const isWorldTable = (table: string): table is WorldTable =>
-  (WORLD_TABLES as readonly string[]).includes(table)
-
-/** Every table a close tool writes, keyed by delta `target_table`, and the entries a chapter stamps. */
-type WorldState = {
-  rows: Record<WorldTable, readonly { id: string }[]>
-  stamped: readonly { id: string; chapterId: string | null }[]
-}
-
-async function worldState(fx: CloseFixture): Promise<WorldState> {
-  const { db } = fx.ctx
-  const b = fx.branchId
-  return {
-    rows: {
-      chapters: await db
-        .select()
-        .from(chapters)
-        .where(eq(chapters.branchId, b))
-        .orderBy(asc(chapters.id)),
-      entities: await db
-        .select()
-        .from(entities)
-        .where(eq(entities.branchId, b))
-        .orderBy(asc(entities.id)),
-      lore: await db.select().from(lore).where(eq(lore.branchId, b)).orderBy(asc(lore.id)),
-      threads: await db
-        .select()
-        .from(threads)
-        .where(eq(threads.branchId, b))
-        .orderBy(asc(threads.id)),
-      happenings: await db
-        .select()
-        .from(happenings)
-        .where(eq(happenings.branchId, b))
-        .orderBy(asc(happenings.id)),
-      happening_involvements: await db
-        .select()
-        .from(happeningInvolvements)
-        .where(eq(happeningInvolvements.branchId, b))
-        .orderBy(asc(happeningInvolvements.id)),
-      happening_awareness: await db
-        .select()
-        .from(happeningAwareness)
-        .where(eq(happeningAwareness.branchId, b))
-        .orderBy(asc(happeningAwareness.id)),
-      character_relationships: await db
-        .select()
-        .from(characterRelationships)
-        .where(eq(characterRelationships.branchId, b))
-        .orderBy(asc(characterRelationships.id)),
-    },
-    stamped: await db
-      .select({ id: storyEntries.id, chapterId: storyEntries.chapterId })
-      .from(storyEntries)
-      .where(and(eq(storyEntries.branchId, b), isNotNull(storyEntries.chapterId)))
-      .orderBy(asc(storyEntries.position)),
-  }
-}
-
-async function branchLog(fx: CloseFixture): Promise<Delta[]> {
-  return (await fx.ctx.db
-    .select()
-    .from(deltas)
-    .where(eq(deltas.branchId, fx.branchId))
-    .orderBy(asc(deltas.logPosition))) as Delta[]
-}
-
-async function deltasOf(fx: CloseFixture, actionId: string): Promise<Delta[]> {
-  return (await fx.ctx.db
-    .select()
-    .from(deltas)
-    .where(and(eq(deltas.branchId, fx.branchId), eq(deltas.actionId, actionId)))
-    .orderBy(desc(deltas.logPosition))) as Delta[]
-}
-
-type SeedEntity = {
-  id: string
-  kind: 'character' | 'location' | 'item' | 'faction'
-  name: string
-  description: string
-  status: 'active' | 'retired'
-  state?: EntityState
-}
-
-const TOBIN: SeedEntity = {
-  id: CHARACTER_ID,
-  kind: 'character',
-  name: 'Tobin',
-  description: 'The ferryman at Harrow.',
-  status: 'active',
-}
-
-// A pass's create anchored on the first reply: both rollbacks below spare it.
-async function seedEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
-  const result = await applyDeltaAction(
-    {
-      action: {
-        kind: 'createEntity',
-        source: 'periodic_classifier',
-        payload: {
-          entry: {
-            ...seed,
-            branchId: fx.branchId,
-            injectionMode: 'auto',
-            createdAt: 1_767_225_700_000,
-            updatedAt: 1_767_225_700_000,
-          },
-        },
-      },
-      actionId: `act_close_seed_${seed.name.toLowerCase()}`,
-      branchId: fx.branchId,
-      entryId: fx.replyIds[0],
-    },
-    fx.ctx,
-  )
-  if (result.status !== 'ok') throw new Error(`round trip: seed refused: ${result.reason}`)
-}
+installCloseHarnessHooks(MOCKS)
 
 // A later turn's create: anchored on the fourth reply (position 9, past E) under that turn's action.
 async function seedLaterEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
@@ -414,139 +210,6 @@ async function seedWorld(fx: CloseFixture): Promise<void> {
   await putInScene(fx, fx.replyIds[1], [TOBIN.id])
 }
 
-type CloseHarness = {
-  readonly fx: CloseFixture
-  /** E: the case's close ends on the third reply of six. */
-  readonly endEntryId: string
-  /** The state before the close ran. */
-  readonly before: WorldState
-  /** The branch's whole delta log before the close ran: other actions' deltas only. */
-  readonly beforeLog: readonly Delta[]
-  /** Runs the close to completion; a case must land at least one group past the metadata's. */
-  close: () => Promise<void>
-  /**
-   * Starts the close and calls `act` once the first group its case's `abortOn` admits lands;
-   * resolves with the run.
-   */
-  closeActingOnToolGroup: (act: () => void) => Promise<TxResult>
-  /** The group `act` ran on, if it ran. */
-  actedOn: () => ToolGroup | undefined
-  /** The close's action, once it started. */
-  actionId: () => string
-  /** The state and the close's own log as the close completed. */
-  closed: () => { state: WorldState; log: Delta[] }
-  /** Rolls the branch back to `targetId`, which goes with every entry after it. */
-  rollBack: (targetId: string) => Promise<void>
-  /** The entry a rollback took the branch back to, if one ran. */
-  rolledBackTo: () => string | undefined
-}
-
-type ToolGroup = { kinds: readonly PipelineAction['kind'][]; landed: boolean }
-
-const landedAny = (outcome: GroupOutcome | undefined): boolean =>
-  outcome?.status === 'ok' && outcome.outcomes.some((one) => one.status === 'landed')
-
-function defined<T>(value: T | undefined, what: string): T {
-  if (value === undefined) throw new Error(`round trip: ${what}`)
-  return value
-}
-
-// A code step's group reads to the bus as a tool's, so a case with one names the kinds to act on.
-const firesAbort = (c: RoundTripCase, group: ToolGroup): boolean =>
-  c.abortOn === undefined || group.kinds.some((kind) => c.abortOn?.includes(kind) === true)
-
-async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
-  const fx = await openCloseFixture(
-    c.partWindow === undefined ? undefined : { loreWindow: c.partWindow },
-  )
-  await seedEntity(fx, TOBIN)
-  await c.seed?.(fx)
-  if (c.partWindow !== undefined) {
-    await expectCutBeforeEnd(fx, c.partWindow)
-    answerPartCalls()
-  }
-  __setCloseAgentSlots(c.slots())
-  script(c.steps)
-  // The bus hears every group the orchestrator dispatched, refused or not; the port has its outcome.
-  let lastOutcome: GroupOutcome | undefined
-  configureDeltaActionPort({
-    ...realDeltaActionPort(),
-    applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
-      lastOutcome = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
-      return lastOutcome
-    },
-  })
-  const toolGroups: ToolGroup[] = []
-  let onToolGroup: (() => void) | undefined
-  let actedOn: ToolGroup | undefined
-  // The metadata group is the one with the create.
-  pipelineEventBus.subscribe('delta_group_emitted', (event) => {
-    const group: ToolGroup = {
-      kinds: event.actions.map((a) => a.kind),
-      landed: landedAny(lastOutcome),
-    }
-    if (group.kinds.includes('createChapter')) return
-    toolGroups.push(group)
-    const act = onToolGroup
-    if (act === undefined || !group.landed || !firesAbort(c, group)) return
-    onToolGroup = undefined
-    actedOn = group
-    act()
-  })
-  const endEntryId = fx.replyIds[END_REPLY]
-  const before = await worldState(fx)
-  const beforeLog = await branchLog(fx)
-  let actionId: string | undefined
-  let closed: { state: WorldState; log: Delta[] } | undefined
-  let rolledBackTo: string | undefined
-  const start = async (): Promise<TxResult> => {
-    const tx = expectRan(await startManualClose(fx.branchId, endEntryId, fx.ctx))
-    actionId = tx.actionId
-    return tx
-  }
-  return {
-    fx,
-    endEntryId,
-    before,
-    beforeLog,
-    close: async () => {
-      const tx = await start()
-      expect(tx).toMatchObject({ outcome: 'completed' })
-      expect(
-        toolGroups.some((group) => group.landed),
-        'the case landed nothing',
-      ).toBe(true)
-      const log = await deltasOf(fx, tx.actionId)
-      if (c.merge)
-        expect(
-          log.some((d) => d.op === 'delete'),
-          'a merge case deletes the row it absorbs',
-        ).toBe(true)
-      // A table the snapshot misses would let a reversal leave rows behind unseen.
-      const unlisted = new Set(
-        log.map((d) => d.targetTable).filter((t) => t !== 'story_entries' && !isWorldTable(t)),
-      )
-      expect([...unlisted], 'close deltas on tables the snapshot misses').toEqual([])
-      closed = { state: await worldState(fx), log }
-    },
-    closeActingOnToolGroup: (act) => {
-      onToolGroup = act
-      return start()
-    },
-    actedOn: () => actedOn,
-    actionId: () => defined(actionId, 'the close has not started'),
-    closed: () => defined(closed, 'the close has not completed'),
-    rollBack: async (targetId) => {
-      const counts = await shownCounts(fx.branchId, targetId, fx.ctx)
-      expect(
-        await rollbackToEntry(fx.branchId, targetId, fx.ctx, { expectedCounts: counts }),
-      ).toEqual({ status: 'ok', counts })
-      rolledBackTo = targetId
-    },
-    rolledBackTo: () => rolledBackTo,
-  }
-}
-
 async function undoClose(h: CloseHarness): Promise<void> {
   // C9: a hold redo can't restore refuses as `integrity`, with `held-in-redo` in its reason.
   expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
@@ -608,17 +271,8 @@ function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState;
   }
 }
 
-type RoundTripCase = {
+type RoundTripCase = CloseCase & {
   name: string
-  slots: () => CloseAgentSlots
-  /** Rows the case's tools need, written before the state the arms compare against. */
-  seed?: (fx: CloseFixture) => Promise<void>
-  steps: ScriptedStep[]
-  merge: boolean
-  /** lore-mgmt's window for this case, so the fixture's range cuts into parts. */
-  partWindow?: number
-  /** Kinds whose landed group the abort arm fires on; absent: any landed non-metadata group. */
-  abortOn?: readonly PipelineAction['kind'][]
   /** An arm's own expected world, in place of the shared before/closed comparison. */
   armExpect?: Partial<Record<string, (h: CloseHarness) => Promise<void>>>
   /** An arm's own expected log of the close, in place of the shared one. */
@@ -712,50 +366,6 @@ const lifecycleSlots = perPartSlots(lifecycleTask)
 
 // E is position 7: part 1 holds t1-t5 and part 2 E's turn, t6-t7, so part-2 calls cite t7.
 const PART_WINDOW = twoPartWindow(7)
-
-const PART_SUMMARY: GenerateStructuredResult<{ summary: string }> = {
-  status: 'ok',
-  value: { summary: 'Wren reaches Harrow and finds the night ferry.' },
-  recoverable: [],
-}
-
-// A part call answers the part shape; the merge, and a one-part close, the metadata.
-function answerPartCalls(): void {
-  generateStructuredMock.mockImplementation(
-    async (_target, _prompt, schema) =>
-      ((schema as unknown) === chapterPartSummarySchema
-        ? PART_SUMMARY
-        : metadataReplyResult()) as never,
-  )
-}
-
-// The case's window comes from the fixture's prose; the cut must agree with the counts it stored.
-async function expectCutBeforeEnd(fx: CloseFixture, window: number): Promise<void> {
-  const endIndex = fx.entries.findIndex((entry) => entry.id === fx.replyIds[END_REPLY])
-  const stored = await fx.ctx.db
-    .select({ id: storyEntries.id, kind: storyEntries.kind, tokens: storyEntries.contentTokens })
-    .from(storyEntries)
-    .where(
-      and(
-        eq(storyEntries.branchId, fx.branchId),
-        lte(storyEntries.position, fx.entries[endIndex]!.position),
-      ),
-    )
-    .orderBy(asc(storyEntries.position))
-  const cuts = cutChapterParts(
-    stored.map(({ id, kind, tokens }) => ({ id, kind, tokens: tokens ?? 0 })),
-    window,
-  )
-  // E's turn (the player's turn before it) goes with E: a part never ends on a player's turn.
-  expect(fx.entries[endIndex - 1]!.kind).toBe('user_action')
-  expect(
-    cuts.map(({ part, startEntryId, endEntryId }) => [part, startEntryId, endEntryId]),
-    "the case window cuts the chapter just before E's turn",
-  ).toEqual([
-    [1, fx.entries[0]!.id, fx.entries[endIndex - 2]!.id],
-    [2, fx.entries[endIndex - 1]!.id, fx.entries[endIndex]!.id],
-  ])
-}
 
 function withoutEntity(state: WorldState, id: string): WorldState {
   return {
@@ -1797,7 +1407,7 @@ const ARMS: readonly RoundTripArm[] = [
 // Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
 describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_name, c) => {
   it.each(ARMS)('$name leaves the database $expect', async (arm) => {
-    const h = await openHarness(c)
+    const h = await openHarness(c, MOCKS)
 
     await arm.run(h)
 
@@ -1819,7 +1429,7 @@ describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_
 
 describe('a chapter delete over a record the close normalized', () => {
   it("keeps a later pass's write to the record whole", async () => {
-    const h = await openHarness(NORMALIZATION_CASE)
+    const h = await openHarness(NORMALIZATION_CASE, MOCKS)
     await h.close()
     const later = { gold: 2, arrow: 1 }
     const written = await applyDeltaAction(
@@ -1849,7 +1459,7 @@ describe('a chapter delete over a record the close normalized', () => {
 
 describe('the stand-in task', () => {
   it('lands its create and its update as one group on E, and the report records the call', async () => {
-    const h = await openHarness(STAND_IN_CASE)
+    const h = await openHarness(STAND_IN_CASE, MOCKS)
     const toolGroups: { kinds: string[]; entryId: string }[] = []
     pipelineEventBus.subscribe('delta_group_emitted', (event) => {
       if (event.actions.some((a) => a.kind === 'createChapter')) return
@@ -1920,7 +1530,7 @@ describe('the stand-in task', () => {
     await seedEntity(fx, faction)
     await seedEntity(fx, TOBIN)
     __setCloseAgentSlots(standInSlots())
-    script(STAND_IN_CASE.steps)
+    script(generateToolStepMock, STAND_IN_CASE.steps)
 
     const tx = expectRan(await startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx))
 
@@ -1959,7 +1569,7 @@ describe('the stand-in task', () => {
 
 describe('a merge of a row this close already wrote', () => {
   it('is refused, deletes nothing, and leaves the earlier update standing', async () => {
-    const h = await openHarness(ABSORBED_WROTE_CASE)
+    const h = await openHarness(ABSORBED_WROTE_CASE, MOCKS)
 
     await h.close()
 
@@ -2047,7 +1657,7 @@ describe('the round trip table', () => {
 // A round trip passes whatever a case wrote: these pin that each case wrote what it is named for.
 describe('each new case lands what it names', () => {
   async function closedHarness(c: RoundTripCase): Promise<CloseHarness> {
-    const h = await openHarness(c)
+    const h = await openHarness(c, MOCKS)
     await h.close()
     return h
   }
@@ -2072,7 +1682,7 @@ describe('each new case lands what it names', () => {
   }
 
   it('normalization, the merge and the reset: the abort acts on the merge’s group, past normalization’s', async () => {
-    const h = await openHarness(CHAPTER_WIDE_CASE)
+    const h = await openHarness(CHAPTER_WIDE_CASE, MOCKS)
 
     const tx = await h.closeActingOnToolGroup(() => {
       void interruptMemoryRuns(h.fx.branchId)
@@ -2085,7 +1695,7 @@ describe('each new case lands what it names', () => {
   })
 
   it('the full order: the abort acts on the reset’s group, after every other group landed', async () => {
-    const h = await openHarness(FULL_ORDER_CASE)
+    const h = await openHarness(FULL_ORDER_CASE, MOCKS)
 
     const tx = await h.closeActingOnToolGroup(() => {
       void interruptMemoryRuns(h.fx.branchId)
@@ -2099,7 +1709,7 @@ describe('each new case lands what it names', () => {
   async function closedWithGroups(
     c: RoundTripCase,
   ): Promise<{ h: CloseHarness; groups: string[][] }> {
-    const h = await openHarness(c)
+    const h = await openHarness(c, MOCKS)
     const groups: string[][] = []
     pipelineEventBus.subscribe('delta_group_emitted', (event) => {
       if (event.actions.some((a) => a.kind === 'createChapter')) return
