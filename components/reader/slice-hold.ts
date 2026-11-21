@@ -69,9 +69,19 @@ export function composeHeld<Row extends { id: string }>(
   }
   return {
     rows: [...above, ...below],
-    worldTimeDecorations: { ...shown.worldTimeDecorations, ...incoming.worldTimeDecorations },
+    worldTimeDecorations: heldRecord(
+      above,
+      shown.worldTimeDecorations,
+      incoming.rows,
+      incoming.worldTimeDecorations,
+    ),
     chapterBreaks,
-    closeHereEntryIds: heldCloseHereMarks(above, shown, incoming),
+    closeHereEntryIds: heldRecord(
+      above,
+      shown.closeHereEntryIds,
+      incoming.rows,
+      incoming.closeHereEntryIds,
+    ),
     hasOlder: shown.hasOlder,
     hasNewer: incoming.hasNewer,
     sliceKey: shown.sliceKey,
@@ -80,7 +90,8 @@ export function composeHeld<Row extends { id: string }>(
 
 /**
  * The whole shown slice, held while the incoming one has lost the anchor; its close-here marks
- * follow the incoming slice except on rows that slice no longer holds.
+ * follow the incoming slice except on rows that slice no longer holds. Its decorations stay the
+ * shown ones, as its rows' content does.
  */
 export function sliceFieldsOf<Row extends { id: string }>(
   shown: SliceFields<Row>,
@@ -90,23 +101,31 @@ export function sliceFieldsOf<Row extends { id: string }>(
     rows: shown.rows,
     worldTimeDecorations: shown.worldTimeDecorations,
     chapterBreaks: shown.chapterBreaks,
-    closeHereEntryIds: heldCloseHereMarks(shown.rows, shown, incoming),
+    closeHereEntryIds: heldRecord(
+      shown.rows,
+      shown.closeHereEntryIds,
+      incoming.rows,
+      incoming.closeHereEntryIds,
+    ),
     hasOlder: shown.hasOlder,
     hasNewer: shown.hasNewer,
     sliceKey: shown.sliceKey,
   }
 }
 
-// A mark the incoming slice dropped from a row it still holds is the row leaving the open region.
-function heldCloseHereMarks<Row extends { id: string }>(
+// The incoming slice's entries, plus a held row's own where that slice no longer holds the row: an
+// entry it dropped from a row it still holds is gone (a mark: the row left the open region).
+function heldRecord<Row extends { id: string }, V>(
   heldRows: readonly Row[],
-  shown: SliceFields<Row>,
-  incoming: SliceFields<Row>,
-): Record<string, true> {
-  const incomingIds = new Set(incoming.rows.map((row) => row.id))
-  const marks = { ...incoming.closeHereEntryIds }
+  shownRecord: Record<string, V>,
+  incomingRows: readonly Row[],
+  incomingRecord: Record<string, V>,
+): Record<string, V> {
+  const incomingIds = new Set(incomingRows.map((row) => row.id))
+  const record = { ...incomingRecord }
   for (const row of heldRows) {
-    if (!incomingIds.has(row.id) && shown.closeHereEntryIds[row.id] === true) marks[row.id] = true
+    const held = shownRecord[row.id]
+    if (!incomingIds.has(row.id) && held !== undefined) record[row.id] = held
   }
-  return marks
+  return record
 }
