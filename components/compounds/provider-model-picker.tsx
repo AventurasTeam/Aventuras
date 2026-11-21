@@ -371,6 +371,7 @@ function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePick
           <div
             id={listId}
             role="listbox"
+            aria-label={t('modelPicker.providerListLabel')}
             className={cn('flex flex-col', INLINE_PANEL_CLASS)}
             style={inlinePanelStyle}
           >

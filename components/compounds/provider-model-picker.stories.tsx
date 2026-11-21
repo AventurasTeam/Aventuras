@@ -219,6 +219,9 @@ export const ManyProvidersComposer: Story = {
     const option = await screen.findByRole('option', { name: MANY_PROVIDERS[11]!.name })
     const owner = option.closest('[role="listbox"]')
     await expect(owner).not.toBeNull()
+    await expect(screen.getByRole('listbox', { name: t('modelPicker.providerListLabel') })).toBe(
+      owner,
+    )
     await expect(under).toHaveAttribute('aria-controls', owner!.id)
     // Twelve providers overflow the panel's cap, so the options scroll inside it.
     await expect(owner!.getBoundingClientRect().height).toBeLessThanOrEqual(181)

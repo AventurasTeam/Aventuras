@@ -347,6 +347,7 @@
     "underLabel": "Under:",
     "add": "Add",
     "providerPlaceholder": "Pick a provider",
+    "providerListLabel": "Providers",
     "noProviders": "No providers configured. Add one in App Settings → Providers.",
     "noMatch": "No models match \"{{query}}\"."
   },
