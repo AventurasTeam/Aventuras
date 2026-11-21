@@ -91,6 +91,7 @@ const USER_LORE = 'act_user_lore'
 const USER_TOBIN = 'act_user_tobin'
 const USER_PAIR = 'act_user_pair'
 const USER_DELETE = 'act_user_delete'
+const PASS_TOBIN = 'act_pass_tobin'
 
 // C1: a close writes no entries, so its deltas there are the chapter row, the report and the stamps.
 const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
@@ -912,15 +913,24 @@ describe('rerunWriteBack', () => {
     expect(undoneLogLevels()).toEqual(['warn'])
   })
 
-  it('reads a close’s own group and a user’s edit as no re-run', async () => {
+  it('reads a close’s own group, a user’s edit and a pass on the end entry as no re-run', async () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
       actionId: USER_TOBIN,
       entryId: null,
     })
+    // Anchored where a re-run anchors, with no chapters create: only its source tells it apart.
+    await writeLater(
+      c.fx,
+      describeTobin(c.fx.branchId, TOBIN_CLOSE_DESCRIPTION, 'per_turn_classifier'),
+      { actionId: PASS_TOBIN, entryId: c.endEntryId },
+    )
+    expect((await deltasOf(c.fx, PASS_TOBIN)).map((d) => [d.source, d.entryId])).toEqual([
+      ['per_turn_classifier', c.endEntryId],
+    ])
 
-    for (const actionId of [c.actionId, USER_TOBIN])
+    for (const actionId of [c.actionId, USER_TOBIN, PASS_TOBIN])
       expect(
         await rerunWriteBack(
           { actionId, branchId: c.fx.branchId, group: await deltasOf(c.fx, actionId) },
