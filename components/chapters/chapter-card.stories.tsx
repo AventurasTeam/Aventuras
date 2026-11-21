@@ -253,6 +253,14 @@ export const Latest: Story = {
     expect(review).not.toHaveAttribute('aria-disabled', 'true')
     // Canon's order: Regenerate summary, Review changes, Delete….
     expectInOrder([regenerate, review, remove])
+    // The wireframe's `.danger` sits at the row's far end, a gap away from Review changes.
+    let row = remove.parentElement
+    while (row != null && !row.contains(review)) row = row.parentElement
+    const { right: rowRight } = (row as HTMLElement).getBoundingClientRect()
+    const rowPad = parseFloat(getComputedStyle(row as HTMLElement).paddingRight)
+    expect(remove.getBoundingClientRect().right).toBeCloseTo(rowRight - rowPad, 0)
+    const gap = remove.getBoundingClientRect().left - review.getBoundingClientRect().right
+    expect(gap).toBeGreaterThan(24)
     await userEvent.click(review)
     await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
     expect(args.onDelete).not.toHaveBeenCalled()

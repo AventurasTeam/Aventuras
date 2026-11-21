@@ -106,13 +106,6 @@ slice-planning gate forces its resolution before that slice is planned.
   lifted the call sequence but not the config, would keep them alike.
   Routed from Slice 5.10's planning, 2026-11-17.
 
-- **A disabled action's reason is web-only in two shared places.** The
-  Actions menu shows a disabled entry's reason only as a web `title`
-  (`components/compounds/actions-menu.tsx`), so on native every gated
-  entry, `Close chapter…` among them, shows disabled with no reason;
-  `ChapterCard` still hand-rolls the native reason line
-  (`components/chapters/chapter-card.tsx`) that `ReasonButton` now
-  covers. Raised in 5.10's PR 2 review.
 - **Listbox keyboard models are thin.** `ProviderInlinePicker`
   (`components/compounds/provider-model-picker.tsx`) makes every option
   its own tab stop, takes no arrow keys, and ignores Space (RN-Web

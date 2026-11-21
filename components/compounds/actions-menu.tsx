@@ -14,6 +14,7 @@ import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { blockingOverlaysStore } from '@/lib/stores'
 
 import { isActionsMenuInert } from './actions-menu-logic'
+import { ActionsMenuRow, type ActionsMenuRowData } from './actions-menu-row'
 
 type ActionEntry = {
   /** Stable id; unique across all entries the menu surfaces this render. */
@@ -22,7 +23,7 @@ type ActionEntry = {
   label: string
   /**
    * When true, the entry renders dimmed and is skipped by keyboard nav. Pair
-   * with `disabledReason` to surface a web title-tooltip explaining why.
+   * with `disabledReason` to explain why: a tooltip on web, a line under it on native.
    */
   disabled?: boolean
   disabledReason?: string
@@ -81,13 +82,6 @@ type ActionsMenuProps = {
   onOpenChange?: (open: boolean) => void
 }
 
-type MenuRowData = {
-  label: string
-  disabled?: boolean
-  disabledReason?: string
-  onActivate: () => void
-}
-
 const DEFAULT_SEARCH_PLACEHOLDER = 'Search actions…'
 const DEFAULT_EMPTY_LABEL = 'No actions match.'
 const DEFAULT_TRIGGER_LABEL = 'Actions'
@@ -108,23 +102,6 @@ function entryMatchesQuery(label: string, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
   return label.toLowerCase().includes(q)
-}
-
-function MenuRow({ row }: { row: Row<MenuRowData> }) {
-  const { label, disabled, disabledReason } = row.data
-  // RN-Web's Pressable doesn't forward `title`; wrap on web so the
-  // disabled-reason tooltip surfaces — same workaround IconAction uses.
-  const labelNode = (
-    <View className="w-full flex-row items-center">
-      <Text size="sm" className={disabled ? 'text-fg-muted' : 'text-fg-primary'} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  )
-  if (disabled && disabledReason && Platform.OS === 'web') {
-    return <div title={disabledReason}>{labelNode}</div>
-  }
-  return labelNode
 }
 
 type ActionsTriggerOwnProps = {
@@ -197,10 +174,10 @@ function ActionsMenu({
     enabled: hotkeyEnabled && !inert,
   })
 
-  const sections = useMemo<Section<MenuRowData>[]>(() => {
-    const out: Section<MenuRowData>[] = []
-    const collectGroup = (g: ActionGroup): Section<MenuRowData> | null => {
-      const rows: Row<MenuRowData>[] = g.entries
+  const sections = useMemo<Section<ActionsMenuRowData>[]>(() => {
+    const out: Section<ActionsMenuRowData>[] = []
+    const collectGroup = (g: ActionGroup): Section<ActionsMenuRowData> | null => {
+      const rows: Row<ActionsMenuRowData>[] = g.entries
         .filter((e) => entryMatchesQuery(e.label, query))
         .map((e) => ({
           id: e.id,
@@ -226,12 +203,12 @@ function ActionsMenu({
     return out
   }, [contextual, coreGroups, query])
 
-  const handleActivate = useCallback((row: Row<MenuRowData>) => {
+  const handleActivate = useCallback((row: Row<ActionsMenuRowData>) => {
     if (row.data.disabled) return
     row.data.onActivate()
   }, [])
 
-  const renderRow = useCallback((row: Row<MenuRowData>) => <MenuRow row={row} />, [])
+  const renderRow = useCallback((row: Row<ActionsMenuRowData>) => <ActionsMenuRow row={row} />, [])
 
   const renderTrigger = useCallback(
     (p: TriggerProps) => (
@@ -258,7 +235,7 @@ function ActionsMenu({
   )
 
   return (
-    <SearchableOverlayList<MenuRowData>
+    <SearchableOverlayList<ActionsMenuRowData>
       searchPlacement="in-overlay"
       open={open}
       onOpenChange={setOpen}

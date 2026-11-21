@@ -6,9 +6,15 @@ import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
 export type ReasonButtonProps = ComponentProps<typeof Button> & {
-  /** 'start' keeps the button label-sized; 'stretch' fills the row. Default 'start'. */
-  layout?: 'start' | 'stretch'
+  /** 'start' and 'end' keep the button label-sized at that end of a row; 'stretch' fills it. Default 'start'. */
+  layout?: 'start' | 'end' | 'stretch'
 }
+
+const LAYOUT_CLASS = {
+  start: 'items-start self-start',
+  end: 'ml-auto items-end self-start',
+  stretch: 'self-stretch',
+} as const
 
 /**
  * A Button whose disabled reason reaches native readers too: web keeps Button's tooltip, and native,
@@ -18,9 +24,7 @@ export function ReasonButton({ layout = 'start', ...props }: ReasonButtonProps):
   const disabled = props.disabled === true || props.loading === true
   const line = Platform.OS !== 'web' && disabled ? props.disabledReason : undefined
   return (
-    <View
-      className={cn('gap-0.5', layout === 'stretch' ? 'self-stretch' : 'items-start self-start')}
-    >
+    <View className={cn('gap-0.5', LAYOUT_CLASS[layout])}>
       <Button {...props} />
       {line != null && line !== '' ? (
         <Text size="xs" variant="muted">

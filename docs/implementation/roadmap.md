@@ -1621,7 +1621,16 @@ own.
   and the Chapter Timeline card's take the gate reason only as a bare
   `accessibilityHint`, with no `ReasonTooltip`, so on web it reaches
   neither a tooltip nor the accessibility tree. Widened from triage
-  2026-11-07, raised by Slice 5.7's doc review.
+  2026-11-07, raised by Slice 5.7's doc review. Four more controls
+  hand-roll a web `title` behind a conditional wrapper, which remounts
+  the control as the reason appears, and give native no reason at all:
+  the toolbar's search `Input` (`components/compounds/toolbar.tsx`),
+  two in `components/compounds/calendar-picker.tsx` (the link-styled
+  `Pressable` and the wrapper around its select), and the import
+  dialog's clipboard `SourceButton`, which takes a reason but doesn't
+  pass it to `Button`. The Actions menu's rows show the native line
+  (`components/compounds/actions-menu-row.tsx`). Widened from triage
+  2026-11-21.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
