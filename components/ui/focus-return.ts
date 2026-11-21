@@ -24,7 +24,8 @@ function canTakeFocus(element: HTMLElement | null | undefined): element is HTMLE
     !element.matches(':disabled') &&
     element.closest('[data-overlay-closing]') == null &&
     // A screen the stack keeps mounted beneath the current one is hidden; focus never goes there.
-    element.checkVisibility?.() !== false
+    // CSS visibility isn't in checkVisibility's default checks, and a hidden element won't focus.
+    element.checkVisibility?.({ visibilityProperty: true }) !== false
   )
 }
 

@@ -268,15 +268,33 @@ export const FocusStaysWhenBusy: Story = {
   },
 }
 
-function OpenedFromState({ named = false }: { named?: boolean }) {
+function OpenedFromState({
+  named = false,
+  hideNamed = false,
+}: {
+  named?: boolean
+  hideNamed?: boolean
+}) {
   const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
   const target = useRef<View>(null)
   return (
     <View className="flex-row gap-2">
-      <Button variant="secondary" onPress={() => setOpen(true)}>
+      <Button
+        variant="secondary"
+        onPress={() => {
+          setOpen(true)
+          setOpened(true)
+        }}
+      >
         <Text>Open from state</Text>
       </Button>
-      <Pressable ref={target} role="button" className="rounded-md border border-border px-3 py-2">
+      <Pressable
+        ref={target}
+        role="button"
+        className="rounded-md border border-border px-3 py-2"
+        style={hideNamed && opened ? { visibility: 'hidden' } : undefined}
+      >
         <Text>Named target</Text>
       </Pressable>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -313,6 +331,17 @@ export const ReturnsFocusToItsNamedTarget: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Open from state' }))
     await closeWithEscape()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Named target' })).toHaveFocus())
+  },
+}
+
+/** A named target that can't take focus (hidden while the dialog was open) yields to the opener. */
+export const ReturnsFocusPastAHiddenTarget: Story = {
+  render: () => <OpenedFromState named hideNamed />,
+  play: async () => {
+    const opener = screen.getByRole('button', { name: 'Open from state' })
+    await userEvent.click(opener)
+    await closeWithEscape()
+    await waitFor(() => expect(opener).toHaveFocus())
   },
 }
 
