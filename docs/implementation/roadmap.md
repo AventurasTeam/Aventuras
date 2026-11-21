@@ -418,6 +418,72 @@ verified against the code first. Resolve with the slice each names.
   (M7.2). Surfaced by
   4.2b planning (2026-09-28); routed from triage 2026-10-04.
 
+**Readiness check (2026-11-21).** Found by the pre-promotion check and
+held for after the story-duplicate design pass. Resolve both groups
+before promoting.
+
+Canon defects, each a short `aventuras-design` ruling:
+
+- **The diff cache keys entries by delta id alone.**
+  [`architecture.md → Cache shape and lifecycle`](../architecture.md#cache-shape-and-lifecycle)
+  calls that safe because a delta id is globally unique, but a fork
+  copies ids verbatim
+  ([`data-model.md → Branch model`](../data-model.md#branch-model)) and
+  its rewind rewrites the prior values of surviving deltas, so one id
+  holds a different old value on each branch, and a fork's History could
+  render the parent's. Key entries, and the TanStack key with them, on
+  `(branch_id, delta.id)`. The `actionId is globally unique` line in
+  [`generation-pipeline.md → Invariants`](../generation-pipeline.md#invariants)
+  is stale the same way: copied deltas keep their `action_id`.
+- **Redo across a branch switch or a fork is unspecified.** Canon says
+  only that a fork leaves the redo stack untouched. The reader labels
+  Redo from the global stack's top with no branch check
+  (`components/reader/use-reader-undo.tsx:336`), and `redoLastAction`
+  refuses another branch's group as `integrity`
+  (`lib/actions/story-entries/undo.ts:205`), so after a fork or a switch
+  the reader offers a Redo that always fails. Read in the code, not run;
+  likely reachable today across stories, since only tests clear the
+  stack. Rule whether a switch clears the stack or Redo shows only for
+  the loaded branch's group.
+- **Branch delete with children, and the cascade.** The root is the
+  branch with `parent_branch_id = null`, and that column is a bare FK
+  (`lib/db/stories/stories.table.ts:44`), so a `SET NULL` on deleting a
+  branch with children turns them into roots and hides their delete.
+  Re-parenting them to the deleted branch's parent keeps them deletable,
+  leaving `fork_entry_id` as provenance only.
+  [`branch-navigator.md → Inline delete confirm`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-delete-confirm)
+  calls deletion a single SQL cascade, but no table declares `onDelete`:
+  the model is `deleteStory`'s per-table deletes
+  (`lib/actions/stories/delete-story.ts`), the vec0 tables and
+  `generationStore.dropBranchRecords` included.
+- **`Browse branches` is missing from the Actions menu pattern.**
+  [`branch-navigator.md → Single-branch state`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#single-branch-state)
+  names it;
+  [`actions-menu.md`](../ui/patterns/actions-menu.md) doesn't list it.
+
+Entry corrections, the developer's rulings at promotion:
+
+- **The goal's "so branch comparisons are fast."** No canon surface
+  compares branches; the diff cache resolves new values for History
+  diff prose
+  ([`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution)).
+- **M6.2 is obsolete as written.** Lineage-scoped reads contradict the
+  hard fork's "no lineage walk", and reads already filter by
+  `branch_id`. Drop it, or redefine it as branch-scoping hardening: the
+  shared store filter, the lookups by id alone and the two-branch
+  register tests carried above.
+- **M6.4's dependency on entry events.** Canon invalidates the cache
+  only on a reversal; a forward write never changes an earlier delta's
+  old and new values.
+- **M6.5 has no canon to build.** No story-card branch count is
+  specified in
+  [`story-list.md → Story card`](../ui/screens/story-list/story-list.md#story-card--text-first),
+  and `app/reader-composer/[branchId].tsx` already carries the branch in
+  the route. Drop it, or design the count first.
+- **The diff cache doesn't depend on branches.** Whether M6.4 stays in
+  M6 or moves to M7 beside its other consumer, the Diagnostics delta
+  log, is a placement call.
+
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
 
@@ -1847,6 +1913,18 @@ own.
   renderer listener. Not verified: whether Electron shows any UI of its
   own for an interrupted download. Raised by Slice 4.6's review
   (2026-10-08); the developer accepted the gap until this slice.
+- **M9.4 — Importing a story that is still on the machine collides on
+  `branches.id`.**
+  [`data-model.md → Backup / export format`](../data-model.md#backup--export-format)
+  imports story-internal ids verbatim, `branch_id` included, but
+  `branches.id` is a single-column primary key across every story
+  (`lib/db/stories/stories.table.ts:39`). Re-importing your own export
+  while the original exists, or receiving a shared story back, fails on
+  that key. Import has to mint fresh story and branch ids and remap
+  `branch_id` and `parent_branch_id`, the rule story duplicate takes
+  (M6); row ids can stay verbatim under the composite keys. Not
+  verified: whether `stories.id` is meant to import verbatim too, which
+  canon doesn't say. Raised by the M6 readiness check (2026-11-21).
 - **M9.5 — No navigation landmark anywhere.** No `navigation` landmark
   role exists in the app. Breadcrumb is the natural first one, but
   World renders two (the top-bar title and the sub-header), so a role
