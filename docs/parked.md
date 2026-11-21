@@ -1538,6 +1538,26 @@ Monitor items, "Two closes in one turn"). **Revisit signal:** seeing it
 in play, or a test that turns auto-close on late. Parked 2026-11-18
 from the slice review (developer).
 
+#### Recovery order after an orphan's failure on a re-run's branch
+
+Boot recovery reverses orphans newest first and carries on past a
+failure
+([`generation-pipeline.md → Crash recovery`](./generation-pipeline.md#crash-recovery-via-pipeline_runs-marker-table)).
+When a newer orphan's reversal fails without committing, two shapes on
+its branch go wrong. An older re-run's write-back then finds the newer
+orphan's delta above its floor, so it takes the fallback: its close is
+undone and its journal deleted, and a later boot can't restore it. And
+when the newer orphan is a re-run whose write-back failed, an older
+pass's work sits in its journal, so the pass's recovery finds no delta
+and deletes its marker; a later boot's write-back then revives that
+pass's finished work with no marker left to reverse it. Both need a
+transient failure on one boot. The fix: after a newer orphan's
+uncommitted failure, defer the older orphans on its branch, or leave
+their zero-delta markers open, until a later boot. It changes canon's
+recovery loop, where one bad orphan can't block the rest. **Revisit
+signal:** a recovery failure report on a re-run's chain. Parked
+2026-11-21 from Slice 5.13's PR review (developer).
+
 ### Memory pipeline (parked)
 
 #### A failed store refresh after a swap hides its marker from the guard
