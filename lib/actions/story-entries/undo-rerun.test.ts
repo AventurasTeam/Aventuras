@@ -39,7 +39,7 @@ import {
 } from '../chapters/__tests__/chapter-delete-fixture'
 import { __redoGroupForTest } from '../delta/redo'
 import { reverseCloseForRerun } from '../delta/rerun-journal'
-import { DeltaReplayError } from '../delta/reverse-replay'
+import { DeltaReplayError, describeDeltaReplayError } from '../delta/reverse-replay'
 import { loadOpenStory } from '../stories/operational'
 
 const { generateStructuredMock } = vi.hoisted(() => ({
@@ -304,6 +304,69 @@ describe('CTRL-Z of a re-run', () => {
 
     expect(await chapterRows(c.fx)).toEqual([])
     expect(undoneLogLevels()).toEqual(['warn'])
+  })
+
+  // reader-composer.md → The notice: the surface needs the outcome to warn instead of failing.
+  it('carries the undone close and its chapter on the error when only the store sync throws', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await rerun(c)
+    await c.fx.ctx.db.delete(reversalJournals)
+    vi.spyOn(loreStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error = await undoLastAction(c.fx.branchId, c.fx.ctx).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(DeltaReplayError)
+    expect(describeDeltaReplayError(error)).toStrictEqual({
+      detail: 'Error: store sync boom',
+      committed: true,
+      refusal: null,
+      journal: 'undone',
+      chapterNumber: 1,
+    })
+    expect(await chapterRows(c.fx)).toEqual([])
+  })
+
+  it('carries the restored journal on the error when only the store sync throws', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await rerun(c)
+    vi.spyOn(loreStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error = await undoLastAction(c.fx.branchId, c.fx.ctx).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toStrictEqual({
+      detail: 'Error: store sync boom',
+      committed: true,
+      refusal: null,
+      journal: 'restored',
+      chapterNumber: null,
+    })
+  })
+
+  it('carries no outcome on an error from an undo that never commits', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await rerun(c)
+    await c.fx.ctx.db.delete(reversalJournals)
+    const locked = {
+      ...c.fx.ctx,
+      runInTransaction: async () => {
+        throw new Error('database is locked')
+      },
+    }
+
+    const error = await undoLastAction(c.fx.branchId, locked).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toStrictEqual({
+      detail: 'Error: database is locked',
+      committed: false,
+      refusal: null,
+    })
   })
 
   it('logs no close undone when the undo never commits', async () => {

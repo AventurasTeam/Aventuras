@@ -332,6 +332,24 @@ export function logCloseUndone(actionId: string, writeBack: RerunWriteBack): voi
 }
 
 /**
+ * A committed store-sync failure of a re-run's reversal, now carrying how its journal ended, so an
+ * undone close never reads as restored. `logCloseUndone` stays the caller's, once per commit.
+ */
+export function withJournalOutcome(
+  e: DeltaReplayError,
+  actionId: string,
+  writeBack: Exclude<RerunWriteBack, { outcome: 'none' }>,
+): DeltaReplayError {
+  return new DeltaReplayError(e.message, {
+    cause: e.cause,
+    actionId,
+    stage: 'store-sync',
+    journal: writeBack.outcome,
+    chapterNumber: writeBack.outcome === 'undone' ? writeBack.chapterNumber : null,
+  })
+}
+
+/**
  * How a re-run's group reverses (generation-pipeline.md → Reverse-replay): journal written back,
  * or, with no journal or a group no longer whole, the close undone. Read before any transaction;
  * the caller runs the ops after its prunes.
@@ -455,14 +473,7 @@ export async function reverseRunGroup(
   } catch (e) {
     if (!(e instanceof DeltaReplayError && e.committed)) throw e
     logCloseUndone(actionId, writeBack)
-    // The outcome rides the error, so an undone close never reads as restored.
-    throw new DeltaReplayError(e.message, {
-      cause: e.cause,
-      actionId,
-      stage: 'store-sync',
-      journal,
-      chapterNumber,
-    })
+    throw withJournalOutcome(e, actionId, writeBack)
   }
   logCloseUndone(actionId, writeBack)
   return { deltas: reversed, journal, chapterNumber }

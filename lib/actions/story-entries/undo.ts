@@ -14,6 +14,7 @@ import {
   logCloseUndone,
   rerunWriteBack,
   withCloseGroups,
+  withJournalOutcome,
   type RerunWriteBack,
 } from '../delta/rerun-journal'
 import {
@@ -229,10 +230,12 @@ async function undoRerun(
       writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
     )
   } catch (e) {
-    // Committed: only the store sync failed, so the re-run is undone all the same.
+    // Committed: only the store sync failed, so the re-run is undone all the same, and the error
+    // says how its journal ended.
     if (e instanceof DeltaReplayError && e.committed) {
       undoRedoStore.clear()
       logCloseUndone(actionId, writeBack)
+      throw withJournalOutcome(e, actionId, writeBack)
     }
     throw e
   }
