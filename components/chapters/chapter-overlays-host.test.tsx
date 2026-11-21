@@ -48,12 +48,14 @@ const reads = vi.hoisted(() => ({
   deltas: vi.fn(),
   kinds: vi.fn(),
   build: vi.fn(),
+  series: vi.fn(),
 }))
 
 // The runtime `db` is a bridge client; the host only passes it to the mocked reads.
 vi.mock('@/lib/db', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   db: {},
+  openRegionSeries: reads.series,
 }))
 
 // The close-failure copy's module also holds a hook on expo-router, which the unit project can't load.
@@ -455,6 +457,7 @@ beforeEach(() => {
   reads.deltas.mockReset().mockResolvedValue(DELTAS)
   reads.kinds.mockReset().mockResolvedValue(new Map([['loc_mill', 'location']]))
   reads.build.mockReset().mockReturnValue(REVIEW)
+  reads.series.mockReset().mockResolvedValue([])
   view.mounted = false
   view.mounts = 0
   confirmView.props = null
@@ -1267,5 +1270,69 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(confirmView.props?.blockedReason).toBe(t('generationGate.inFlight'))
     act(() => generationStore.finishRun(run.runId))
     expect(confirmView.props?.blockedReason).toBeUndefined()
+  })
+})
+
+describe('ChapterOverlaysHost — Re-run… and its reasons', () => {
+  it("offers Re-run… on the latest chapter's window, and none on an earlier one", async () => {
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    expect(shown().onRerun).toBeUndefined()
+
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    openWindow('chap_2')
+    await waitFor(() => expect(shown().onRerun).toBeDefined())
+  })
+
+  it('Re-run… closes the window and holds the request, remembering the window', async () => {
+    await openReady()
+    act(() => shown().onRerun!())
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(chapterOverlaysStore.getState().rerunConfirm).toStrictEqual({
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      reopenReview: true,
+    })
+  })
+
+  it('names the run in flight over a close owed, then the close owed, then nothing', async () => {
+    await openReady()
+    const run = gateRun()
+    act(() => generationStore.setPendingClose('br_1', { endEntryId: 'entry_70' }))
+    act(() => generationStore.startRun(run))
+    expect(shown().rerunDisabledReason).toBe(t('generationGate.inFlight'))
+
+    act(() => generationStore.finishRun(run.runId))
+    await waitFor(() =>
+      expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
+    )
+
+    act(() => generationStore.clearPendingClose('br_1'))
+    expect(shown().rerunDisabledReason).toBeUndefined()
+  })
+
+  it('disables Re-run… while auto-close owes a close on the open region', async () => {
+    // STORY_SETTINGS_DEFAULTS: auto-close on at 24,000 tokens; the region crosses it with a reply.
+    reads.series.mockResolvedValue([
+      { id: 'entry_59', kind: 'user_action', position: 59, tokens: 12_000 },
+      { id: 'entry_60', kind: 'ai_reply', position: 60, tokens: 12_000 },
+    ])
+    await openReady()
+    await waitFor(() =>
+      expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
+    )
+  })
+
+  it("disables the confirm's actions with the same reason while a close is owed", async () => {
+    renderHost()
+    openRerun()
+    await confirmShown()
+    act(() => generationStore.setPendingClose('br_1', { endEntryId: 'entry_70' }))
+    expect(confirmView.props?.blockedReason).toBe(t('chapters:actions.closeOpenFirst'))
   })
 })

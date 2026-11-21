@@ -1,3 +1,5 @@
+import { isCloseOwed } from './close-owed'
+
 /** What follows a chapter delete (chapter-close.md → Deleting a chapter). */
 export type ChapterDeleteAfter = 'closes-next-send' | 'waits' | 'stays-open'
 
@@ -13,7 +15,8 @@ export function closeAfterDelete(args: {
   /** `pendingClose.has(branchId)`: closeOwed owes it whatever the tokens. */
   manualPending: boolean
 }): ChapterDeleteAfter {
-  if (args.manualPending) return 'closes-next-send'
-  if (!args.autoClose) return 'stays-open'
-  return args.tokensAfter >= args.threshold ? 'closes-next-send' : 'waits'
+  // The region after a delete always holds the end reply (C10), so it can close.
+  const progress = { tokens: args.tokensAfter, threshold: args.threshold, canClose: true }
+  if (isCloseOwed(progress, args.autoClose, args.manualPending)) return 'closes-next-send'
+  return args.autoClose ? 'waits' : 'stays-open'
 }

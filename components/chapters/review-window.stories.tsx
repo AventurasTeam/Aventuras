@@ -170,6 +170,10 @@ type HarnessProps = {
   onEntryLink: (key: string) => void
   /** Keys of rows whose target the host found gone. */
   unpressable: readonly string[]
+  /** The host offers `Re-run…` on the latest chapter's window only. */
+  latest: boolean
+  onRerun: () => void
+  rerunDisabledReason?: string
 }
 
 function stateOf(
@@ -192,6 +196,9 @@ function ReviewWindowHarness({
   onRowPress,
   onEntryLink,
   unpressable,
+  latest,
+  onRerun,
+  rerunDisabledReason,
 }: HarnessProps) {
   const { height } = useWindowDimensions()
   // gorhom's container fills its parent, so a detent is a share of this stage's height.
@@ -202,6 +209,8 @@ function ReviewWindowHarness({
         onOpenChange={onOpenChange}
         onExited={onExited}
         title={TITLE}
+        onRerun={latest ? onRerun : undefined}
+        rerunDisabledReason={rerunDisabledReason}
         state={stateOf(status, review, onRetry)}
         pressOf={(row) =>
           row.pressTo == null || unpressable.includes(row.key)
@@ -255,6 +264,8 @@ const meta: Meta<typeof ReviewWindowHarness> = {
     onRowPress: fn(),
     onEntryLink: fn(),
     unpressable: [],
+    latest: true,
+    onRerun: fn(),
   },
 }
 export default meta
@@ -561,5 +572,69 @@ export const Phone390ExitAfterSlideOut: Story = {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
     expect(args.onExited).not.toHaveBeenCalled()
     await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+const RERUN = 'Re-run…'
+
+/** The latest chapter's window: `Re-run…` before Done, live, firing the host's press alone. */
+export const Rerun: Story = {
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    const done = within(dialog).getByRole('button', { name: 'Done' })
+    expect(rerun).not.toHaveAttribute('aria-disabled', 'true')
+    expectInOrder([rerun, done])
+    await userEvent.click(rerun)
+    await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onOpenChange).not.toHaveBeenCalled()
+  },
+}
+
+/** An earlier chapter's window has no `Re-run…`. */
+export const NoRerunOnAnEarlierChapter: Story = {
+  args: { latest: false },
+  play: async () => {
+    const dialog = await findWindow()
+    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeVisible()
+    expect(within(dialog).queryByRole('button', { name: RERUN })).toBeNull()
+  },
+}
+
+/** A run in flight disables `Re-run…` with the gate's reason. */
+export const RerunBlocked: Story = {
+  args: { rerunDisabledReason: t('generationGate.inFlight') },
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    expect(rerun).toHaveAttribute('aria-disabled', 'true')
+    expect(rerun.closest('[title]')).toHaveAttribute('title', t('generationGate.inFlight'))
+    await userEvent.click(rerun, { pointerEventsCheck: 0 })
+    expect(args.onRerun).not.toHaveBeenCalled()
+  },
+}
+
+/** A close owed disables `Re-run…` with the card's tooltip. */
+export const RerunCloseOwed: Story = {
+  args: { rerunDisabledReason: 'Close the open chapter first.' },
+  play: async () => {
+    const dialog = await findWindow()
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    expect(rerun).toHaveAttribute('aria-disabled', 'true')
+    expect(rerun.closest('[title]')).toHaveAttribute('title', 'Close the open chapter first.')
+  },
+}
+
+/** Phone: `Re-run…` sits above Done in the Sheet and fires the host's press. */
+export const Phone390Rerun: Story = {
+  globals: PHONE,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const heading = within(dialog).getByRole('heading', { name: TITLE, level: 2 })
+    await settledTop(heading)
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    expectInOrder([rerun, within(dialog).getByRole('button', { name: 'Done' })])
+    await userEvent.click(rerun)
+    await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
   },
 }

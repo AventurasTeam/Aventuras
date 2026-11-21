@@ -31,6 +31,8 @@ const COPY = {
   regenerateLater: 'Regenerating a summary lands in a later milestone',
   delete: 'Delete…',
   review: 'Review changes',
+  rerun: 'Re-run close…',
+  closeOpenFirst: 'Close the open chapter first.',
   more: 'More chapter actions',
   title: 'Title',
   theme: 'Theme',
@@ -106,6 +108,10 @@ type HarnessProps = {
   onReview: () => void
   /** The latest card's `Delete…`; in the route, its guard and the confirm stand behind it. */
   onDelete: () => void
+  /** The latest card's `Re-run close…`; in the route, `openRerunConfirm` stands behind it. */
+  onRerun: () => void
+  /** Why `Re-run close…` is disabled when no run is toggled on (a close owed). */
+  rerunDisabledReason?: string
   /** The route's focus, forwarded to the in-card bar's Ctrl-S. */
   hotkeysEnabled: boolean
 }
@@ -118,6 +124,8 @@ function CardHarness({
   onJump,
   onReview,
   onDelete,
+  onRerun,
+  rerunDisabledReason,
   hotkeysEnabled,
 }: HarnessProps) {
   const [cell] = useState(() => externalCell(data.row))
@@ -166,6 +174,8 @@ function CardHarness({
         onJump={onJump}
         onReview={onReview}
         onDelete={onDelete}
+        onRerun={onRerun}
+        rerunDisabledReason={blocked ? BLOCKED_REASON : rerunDisabledReason}
       />
       {/* The route's phone bar: a sibling of the scroller, outside every card. */}
       {isPhone ? (
@@ -188,6 +198,7 @@ const meta: Meta<typeof CardHarness> = {
     onJump: fn(),
     onReview: fn(),
     onDelete: fn(),
+    onRerun: fn(),
     hotkeysEnabled: true,
   },
   decorators: [
@@ -227,7 +238,7 @@ function expectInOrder(elements: readonly HTMLElement[]) {
   }
 }
 
-/** The latest card: Jump, Review changes and Delete… live, Regenerate disabled with its reason. */
+/** The latest card: five actions; Jump, Review changes, Re-run close… and Delete… live, Regenerate disabled. */
 export const Latest: Story = {
   play: async ({ args }) => {
     const card = await findCard()
@@ -244,22 +255,25 @@ export const Latest: Story = {
     expect(remove).not.toHaveAttribute('aria-disabled', 'true')
     const review = within(card).getByRole('button', { name: COPY.review })
     expect(review).not.toHaveAttribute('aria-disabled', 'true')
-    // Canon's order: Regenerate summary, Review changes, Delete….
-    expectInOrder([regenerate, review, remove])
-    // The wireframe's `.danger` sits at the row's far end, a gap away from Review changes.
+    const rerun = within(card).getByRole('button', { name: COPY.rerun })
+    expect(rerun).not.toHaveAttribute('aria-disabled', 'true')
+    // Canon's order: Regenerate summary, Review changes, Re-run close…, Delete….
+    expectInOrder([regenerate, review, rerun, remove])
+    // The wireframe's `.danger` sits at the row's far end (the row may wrap with five actions).
     let row = remove.parentElement
     while (row != null && !row.contains(review)) row = row.parentElement
     const { right: rowRight } = (row as HTMLElement).getBoundingClientRect()
     const rowPad = parseFloat(getComputedStyle(row as HTMLElement).paddingRight)
     expect(remove.getBoundingClientRect().right).toBeCloseTo(rowRight - rowPad, 0)
-    const gap = remove.getBoundingClientRect().left - review.getBoundingClientRect().right
-    expect(gap).toBeGreaterThan(24)
     await userEvent.click(review)
     await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
+    await userEvent.click(rerun)
+    await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
     expect(args.onDelete).not.toHaveBeenCalled()
     await userEvent.click(remove)
     await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
     expect(args.onReview).toHaveBeenCalledTimes(1)
+    expect(args.onRerun).toHaveBeenCalledTimes(1)
 
     expect(within(card).getByText('Day 2 → Day 3')).toBeVisible()
     expect(within(card).getByText('12,400 tok')).toBeVisible()
@@ -272,7 +286,7 @@ export const Latest: Story = {
   },
 }
 
-/** An earlier card has no Delete…, keeps Review changes, and shows no fact it has no data for. */
+/** An earlier card: three actions, no Re-run close… or Delete…, and no fact it has no data for. */
 export const Earlier: Story = {
   args: { data: EARLIER },
   play: async () => {
@@ -281,6 +295,7 @@ export const Earlier: Story = {
 
     expect(within(card).getByRole('button', { name: COPY.jump })).toBeVisible()
     expect(within(card).queryByRole('button', { name: COPY.delete })).toBeNull()
+    expect(within(card).queryByRole('button', { name: COPY.rerun })).toBeNull()
     expect(within(card).getByRole('button', { name: COPY.review })).not.toHaveAttribute(
       'aria-disabled',
       'true',
@@ -290,7 +305,7 @@ export const Earlier: Story = {
   },
 }
 
-/** C16: hidden, not disabled, on a chapter no close wrote. */
+/** C16: Review changes and Re-run close… hidden, not disabled, on a chapter no close wrote. */
 export const NoCloseReport: Story = {
   args: {
     data: { ...LATEST, row: { ...TRAIL, hasCloseReport: false, closeReportActionId: null } },
@@ -300,6 +315,26 @@ export const NoCloseReport: Story = {
     await waitForInlineActions(card)
     expect(within(card).queryByRole('button', { name: COPY.review })).toBeNull()
     expect(within(card).queryByText(COPY.review)).toBeNull()
+    expect(within(card).queryByRole('button', { name: COPY.rerun })).toBeNull()
+  },
+}
+
+/** A close owed: Re-run close… disables with its reason, Delete… and Review changes stay live. */
+export const RerunCloseOwed: Story = {
+  args: { rerunDisabledReason: COPY.closeOpenFirst },
+  play: async ({ args }) => {
+    const card = await findCard()
+    await waitForInlineActions(card)
+    const rerun = within(card).getByRole('button', { name: COPY.rerun })
+    expect(rerun).toHaveAttribute('aria-disabled', 'true')
+    expect(rerun.closest('[title]')).toHaveAttribute('title', COPY.closeOpenFirst)
+    // The check would refuse the click itself; the press must be what does nothing.
+    await userEvent.click(rerun, { pointerEventsCheck: 0 })
+    expect(args.onRerun).not.toHaveBeenCalled()
+    expect(within(card).getByRole('button', { name: COPY.delete })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   },
 }
 
@@ -315,6 +350,7 @@ export const Collapsed: Story = {
         onJump={NOOP}
         onReview={NOOP}
         onDelete={NOOP}
+        onRerun={NOOP}
       />
       <ChapterCard
         data={EARLIER}
@@ -324,6 +360,7 @@ export const Collapsed: Story = {
         onJump={NOOP}
         onReview={NOOP}
         onDelete={NOOP}
+        onRerun={NOOP}
       />
     </View>
   ),
@@ -387,6 +424,7 @@ function LaggingFormHarness() {
       onJump={NOOP}
       onReview={NOOP}
       onDelete={NOOP}
+      onRerun={NOOP}
     />
   )
 }
@@ -505,6 +543,9 @@ export const Blocked: Story = {
     const remove = within(card).getByRole('button', { name: COPY.delete })
     expect(remove).toHaveAttribute('aria-disabled', 'true')
     expect(remove.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    const rerun = within(card).getByRole('button', { name: COPY.rerun })
+    expect(rerun).toHaveAttribute('aria-disabled', 'true')
+    expect(rerun.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
 
     expect(within(card).getByRole('button', { name: HEADING })).not.toHaveAttribute(
       'aria-disabled',
@@ -546,6 +587,7 @@ export const Phone390Actions: Story = {
     expect(within(card).queryByRole('button', { name: COPY.regenerate })).toBeNull()
     expect(within(card).queryByRole('button', { name: COPY.delete })).toBeNull()
     expect(within(card).queryByRole('button', { name: COPY.review })).toBeNull()
+    expect(within(card).queryByRole('button', { name: COPY.rerun })).toBeNull()
 
     await userEvent.click(more)
     // The bottom Sheet presents a tick past the click.
@@ -560,7 +602,9 @@ export const Phone390Actions: Story = {
     expect(remove).not.toHaveAttribute('aria-disabled', 'true')
     const review = screen.getByRole('menuitem', { name: COPY.review })
     expect(review).not.toHaveAttribute('aria-disabled', 'true')
-    expectInOrder([regenerate, review, remove])
+    const rerun = screen.getByRole('menuitem', { name: COPY.rerun })
+    expect(rerun).not.toHaveAttribute('aria-disabled', 'true')
+    expectInOrder([regenerate, review, rerun, remove])
 
     await userEvent.click(review)
     // opensSheet: the menu's Sheet goes first, then the review opens.
@@ -585,6 +629,22 @@ export const Phone390Delete: Story = {
   },
 }
 
+/** Phone: `Re-run close…` behind `⋯` runs its press at once, as Delete… does. */
+export const Phone390Rerun: Story = {
+  globals: PHONE,
+  play: async ({ args }) => {
+    const card = await findCard()
+    await userEvent.click(await waitForPhoneActions(card))
+    const rerun = await waitFor(() => screen.getByRole('menuitem', { name: COPY.rerun }), WAIT)
+    await waitFor(() => expect(rerun).toBeVisible(), WAIT)
+
+    await userEvent.click(rerun)
+    await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onDelete).not.toHaveBeenCalled()
+    expect(args.onReview).not.toHaveBeenCalled()
+  },
+}
+
 /** Phone: no close report, no Review changes behind `⋯` either. */
 export const Phone390NoCloseReport: Story = {
   globals: PHONE,
@@ -599,6 +659,7 @@ export const Phone390NoCloseReport: Story = {
       WAIT,
     )
     expect(screen.queryByRole('menuitem', { name: COPY.review })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: COPY.rerun })).toBeNull()
   },
 }
 

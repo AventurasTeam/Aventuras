@@ -57,6 +57,9 @@
     "regenerate": "Regenerate summary",
     "regenerateLandsLater": "Regenerating a summary lands in a later milestone",
     "review": "Review changes",
+    "rerun": "Re-run close…",
+    "rerunFromReview": "Re-run…",
+    "closeOpenFirst": "Close the open chapter first.",
     "delete": "Delete…"
   },
   "inProgress": {

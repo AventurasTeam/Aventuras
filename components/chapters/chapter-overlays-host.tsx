@@ -2,7 +2,6 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 
 import { readerHref } from '@/components/reader/reader-href'
-import { useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import {
@@ -47,6 +46,7 @@ import { ReviewWindow, type ReviewWindowState } from './review-window'
 import { runCloseRerun } from './run-close-rerun'
 import { runManualClose } from './run-manual-close'
 import { useCloseRerunConfirm } from './use-close-rerun-confirm'
+import { useRerunDisabledReason } from './use-rerun-disabled-reason'
 
 const ctx = { db, runInTransaction }
 
@@ -209,6 +209,14 @@ function ReviewHost({
   const threads = threadsStore.useThreads((rows) => rows)
   const happenings = happeningsStore.useHappenings((rows) => rows)
   const awareness = happeningAwarenessStore.useAwareness((rows) => rows)
+  const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
+  const rerunReason = useRerunDisabledReason(storyId, branchId)
+  // Re-run… sits on the latest chapter's window only.
+  const latest = chaptersStore.useChapters(
+    (rows) => chaptersStore.selectLatest(rows)?.id === chapterId,
+  )
+  const rerun = () =>
+    chapterOverlaysStore.openRerunConfirm({ branchId, chapterId, fromReview: true })
 
   const sources = useQuery({
     queryKey: ['close-review', branchId, chapterId, settleCount],
@@ -310,6 +318,8 @@ function ReviewHost({
         if (!next) chapterOverlaysStore.closeReviewWindow()
       }}
       onExited={onExited}
+      onRerun={latest ? rerun : undefined}
+      rerunDisabledReason={rerunReason}
       title={t('chapters:review.title', { number: chapter.sequenceNumber, title: chapter.title })}
       state={state}
       pressOf={pressOf}
@@ -326,7 +336,7 @@ function ReviewHost({
 function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactElement | null {
   const { branchId, chapterId } = request
   const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
-  const { gateReason } = useStoryGenerationGate(storyId, branchId)
+  const rerunReason = useRerunDisabledReason(storyId, branchId)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const {
     target,
@@ -405,7 +415,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
     <CloseRerunConfirm
       open
       preview={preview}
-      blockedReason={gateReason ?? held}
+      blockedReason={rerunReason ?? held}
       pending={pending}
       onCancel={cancel}
       onConfirm={confirm}

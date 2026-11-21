@@ -3,6 +3,7 @@ import { useEffect, type ReactElement } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { DeltaLogRow, type Delta, type DeltaOp } from '@/components/compounds/delta-log-row'
+import { ReasonButton } from '@/components/compounds/reason-button'
 import {
   Accordion,
   AccordionContent,
@@ -44,6 +45,10 @@ export type ReviewWindowProps = {
   onOpenChange: (open: boolean) => void
   /** Runs once a close has finished: after the phone Sheet's slide-out, at once above phone. */
   onExited?: () => void
+  /** `Re-run…` in the footer; absent, no button (the host gives it on the latest chapter's window). */
+  onRerun?: () => void
+  /** Why `Re-run…` is disabled: the gate's reason in flight, else a close owed. */
+  rerunDisabledReason?: string
   /** `Review — Chapter <N>: <title>`, built by the host. */
   title: string
   state: ReviewWindowState
@@ -59,6 +64,8 @@ export function ReviewWindow({
   open,
   onOpenChange,
   onExited,
+  onRerun,
+  rerunDisabledReason,
   title,
   state,
   pressOf,
@@ -84,12 +91,25 @@ export function ReviewWindow({
       <Text>{t('chapters:review.done')}</Text>
     </Button>
   )
+  const rerun =
+    onRerun == null ? null : (
+      <ReasonButton
+        layout={isPhone ? 'stretch' : 'start'}
+        variant="secondary"
+        disabled={rerunDisabledReason != null}
+        disabledReason={rerunDisabledReason}
+        onPress={onRerun}
+      >
+        <Text>{t('chapters:actions.rerunFromReview')}</Text>
+      </ReasonButton>
+    )
   if (isPhone) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={title}>
         <SheetContent size="tall" className="gap-4" onDismissed={onExited}>
           <Heading level={2}>{title}</Heading>
           {list}
+          {rerun}
           {done}
         </SheetContent>
       </Sheet>
@@ -104,7 +124,10 @@ export function ReviewWindow({
           </DialogTitle>
         </DialogHeader>
         {list}
-        <DialogFooter>{done}</DialogFooter>
+        <DialogFooter>
+          {rerun}
+          {done}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
