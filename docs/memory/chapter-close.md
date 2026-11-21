@@ -1243,13 +1243,16 @@ restoring the close, its deltas and report included. CTRL-Z of a re-run
 can't be redone, and clears its branch's redo stack: re-running is the way back.
 The journal is exact only while nothing else touched what it covers, so
 a rollback or regenerate of a turn between the chapter's end and the
-re-run drops it, and so does a check that finds the group broken or a
-foreign delta above its first log position. Without it, reversing the re-run undoes the
+re-run drops it, and so does a sweep that takes a delta of the re-run
+outside `chapters` and `story_entries`, or its last remaining delta,
+or a check that finds the group broken or a foreign delta above the
+floor, the highest position the reversal left. Without it, reversing the re-run undoes the
 chapter's close altogether, as a delete does, and says the close before
 it couldn't be restored. Every delta of the re-run
 anchors on the end entry and is `chapter_close`, so a rollback into the
 chapter takes all of it, and the journal with it; a divider-only
-removal leaves the re-run's lore deltas and their journal.
+removal leaves the re-run's lore deltas and their journal, unless it
+takes the group's last delta, as when the re-run wrote only its report.
 
 **Run order.**
 

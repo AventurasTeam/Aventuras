@@ -226,8 +226,10 @@ mechanism rather than the hover-preview.
   except `counts-changed`, which has its own toast ([Counts](#counts)).
 - **A run starting under an open modal** — the modal's confirm disables
   while a run holds the gate. If a run starts between its last enabled
-  render and the press, the commit refuses as in flight and the modal
-  stays open, its confirm disabled with `Unavailable while generating.`
+  render and the press, the commit refuses as in flight: a toast says
+  `Unavailable while generating.` and the modal stays open, its confirm
+  disabled with the blocking run's tooltip
+  ([`principles.md → Affordance loci`](../../../principles.md#affordance-loci)).
   The Timeline's
   [delete](../../chapter-timeline/chapter-timeline.md#delete-a-chapter)
   and [re-run](../../chapter-timeline/chapter-timeline.md#re-run-a-close)
