@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { modalScrimColor } from '@/components/ui/sheet-scrim-probe'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
+import { cn } from '@/lib/utils'
 
 const meta: Meta<typeof Dialog> = {
   title: 'Primitives/Dialog',
@@ -292,8 +293,10 @@ function OpenedFromState({
       <Pressable
         ref={target}
         role="button"
-        className="rounded-md border border-border px-3 py-2"
-        style={hideNamed && opened ? { visibility: 'hidden' } : undefined}
+        className={cn(
+          'rounded-md border border-border px-3 py-2',
+          hideNamed && opened && 'invisible',
+        )}
       >
         <Text>Named target</Text>
       </Pressable>

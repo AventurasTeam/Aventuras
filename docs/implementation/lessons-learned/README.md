@@ -306,7 +306,8 @@ slice plans when relevant.
 - [A stale typed-routes file fails a local typecheck CI passes](./stale-typed-routes-local-typecheck.md)
   — `.expo/types/router.d.ts` is written only by the dev server; a checkout
   that predates a route fails `pnpm typecheck` on links to it. Regenerate or
-  move it aside, never edit the route code.
+  move it aside, never edit the route code. Its sibling `expo-env.d.ts` does
+  the reverse, typing web-only style props (`visibility`) CI rejects.
 - [`pnpm patch-commit` drops files you added](./pnpm-patch-drops-added-files.md)
   — only edits to existing files land in the `.patch`; verify the
   file list and hand-append new-file hunks.
