@@ -176,6 +176,17 @@ describe('isStoryBusy', () => {
     )
     expect(isStoryBusy(tx([], { reversalInProgress: true }), 's1', 'b1')).toBe(true)
   })
+  // generation-pipeline.md → Gate derivation as a selector: a re-run's start holds its own mark.
+  it("ignores the branch's pending turns for the mark's holder, but never a run or a reversal", () => {
+    const pending = { pendingTurns: new Set([{ branchId: 'b1' }]) }
+    const own = { ignorePendingTurns: true } as const
+    expect(isStoryBusy(tx([], pending), 's1', 'b1')).toBe(true)
+    expect(isStoryBusy(tx([], pending), 's1', 'b1', own)).toBe(false)
+    expect(isStoryBusy(tx([run('run_turn', 'per-turn')], pending), 's1', 'b1', own)).toBe(true)
+    expect(isStoryBusy(tx([], { ...pending, reversalInProgress: true }), 's1', 'b1', own)).toBe(
+      true,
+    )
+  })
 })
 
 describe('deferred work', () => {

@@ -1,9 +1,10 @@
-import { and, eq, gt, ne, sql } from 'drizzle-orm'
+import { and, eq, gt, lte, ne, sql } from 'drizzle-orm'
 
 import { CHAPTER_CLOSE_KIND, chapterProgressOf, thresholdMet } from '@/lib/chapters'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND, shouldCadenceFire } from '@/lib/classifier'
 import {
   branches,
+  chapters,
   openRegionSeries,
   storyEntries,
   type ClassifierStatus,
@@ -38,6 +39,40 @@ export async function unprocessedEntryCount(
       and(
         eq(storyEntries.branchId, branchId),
         gt(storyEntries.position, processedThrough ?? 0),
+        ne(storyEntries.kind, 'system'),
+      ),
+    )
+  return row?.n ?? 0
+}
+
+/**
+ * A re-run's catch-up count (generation-pipeline.md → chainsTo on predecessor): classifiable
+ * entries past the watermark through the chapter's end entry; 0 for a chapter not found.
+ */
+export async function unprocessedThroughChapter(
+  branchId: string,
+  chapterId: string,
+  processedThrough: number | null,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<number> {
+  const [end] = await ctx.db
+    .select({ position: storyEntries.position })
+    .from(chapters)
+    .innerJoin(
+      storyEntries,
+      and(eq(storyEntries.branchId, chapters.branchId), eq(storyEntries.id, chapters.endEntryId)),
+    )
+    // chapters' primary key is (branch_id, id): a fork copies chapter ids.
+    .where(and(eq(chapters.branchId, branchId), eq(chapters.id, chapterId)))
+  if (!end) return 0
+  const [row] = await ctx.db
+    .select({ n: sql<number>`COUNT(*)` })
+    .from(storyEntries)
+    .where(
+      and(
+        eq(storyEntries.branchId, branchId),
+        gt(storyEntries.position, processedThrough ?? 0),
+        lte(storyEntries.position, end.position),
         ne(storyEntries.kind, 'system'),
       ),
     )
@@ -130,6 +165,17 @@ async function memoryRunOn(
   // A pass left `running` holds the branch: nothing builds on its writes until boot resets it.
   // A committing pass wrote its status in its phase, so its own chain never reads `running` here.
   if (status.state === 'running') return null
+  // A re-run catches up through its chapter's end only; none starts while a close is owed.
+  const rerun = generationStore.getTxState().pendingRerun.get(open.branchId)
+  if (rerun) {
+    const behind = await unprocessedThroughChapter(
+      open.branchId,
+      rerun.chapterId,
+      status.processedThrough,
+      ctx,
+    )
+    return behind > 0 ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
+  }
   const unprocessed = await unprocessedEntryCount(open.branchId, status.processedThrough, ctx)
   if (await owesClose()) return unprocessed > 0 ? PERIODIC_CLASSIFIER_KIND : CHAPTER_CLOSE_KIND
   const cadence = open.settings.classifierCadence
@@ -157,10 +203,15 @@ export async function perTurnChainsTo(run: RunState, ctx: DbCtx): Promise<Memory
   return nextMemoryRun(run, ctx)
 }
 
-/** The pass's `chainsTo`: passes chain catch-up passes and the close only while a close is owed. */
+/**
+ * The pass's `chainsTo`: passes chain catch-up passes and the close only while a close is owed or
+ * a re-run holds the branch.
+ */
 export async function passChainsTo(run: RunState, ctx: DbCtx): Promise<MemoryRunKind | null> {
   if (passStartedAlone(run)) return null
   const open = openStoryOf(run)
-  if (open == null || !(await closeOwed(open, ctx))) return null
-  return memoryRunOn(open, ctx, async () => true)
+  if (open == null) return null
+  const catchingUp =
+    generationStore.getTxState().pendingRerun.has(open.branchId) || (await closeOwed(open, ctx))
+  return catchingUp ? memoryRunOn(open, ctx, async () => true) : null
 }

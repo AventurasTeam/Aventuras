@@ -90,10 +90,17 @@ export function runBlocksHeadReversal(run: RunState, branchId: string): boolean 
 }
 
 // A turn pending on the branch and a reversal hold no run yet (a regenerate's mark spans its
-// sweep), so leaving the story must wait for them too.
-export function isStoryBusy(txState: TxState, storyId: string, branchId: string): boolean {
+// sweep), so leaving the story must wait for them too. A start holding the branch's mark itself
+// (`ignorePendingTurns`) waits only on the rest.
+export function isStoryBusy(
+  txState: TxState,
+  storyId: string,
+  branchId: string,
+  opts?: { ignorePendingTurns?: true },
+): boolean {
   if (txState.reversalInProgress) return true
-  for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
+  if (!opts?.ignorePendingTurns)
+    for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
 }
 

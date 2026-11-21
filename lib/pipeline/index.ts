@@ -30,6 +30,7 @@ export {
   owedWorkAtSend,
   readClassifierStatus,
   unprocessedEntryCount,
+  unprocessedThroughChapter,
 } from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {
