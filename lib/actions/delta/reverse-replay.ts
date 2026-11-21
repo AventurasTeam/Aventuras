@@ -832,7 +832,7 @@ async function buildUndoOps(
   }
 }
 
-// The closure takes every other write to a reversed create's row, so these are the ones that kept it.
+// The closure takes every other write to a reversed create's row; these are the ones that kept it.
 function laterUserEdits(walk: UndoWalk, create: Delta): Delta[] {
   return walk.chains.survivors(create).filter((d) => d.source === 'user_edit')
 }

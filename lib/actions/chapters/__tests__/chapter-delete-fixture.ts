@@ -249,7 +249,7 @@ export async function openClosed(): Promise<ClosedChapter> {
   return closeOn(fx, fx.replyIds[END_REPLY])
 }
 
-/** Lands `actions` as one group under `actionId`, anchored on E, as a close's or a re-run's tool does. */
+/** Lands `actions` as one group under `actionId`, anchored on E, as a close's tool does. */
 export async function writeUnderAction(
   c: ClosedChapter,
   actionId: string,
@@ -355,10 +355,7 @@ export async function seedHappeningPair(fx: CloseFixture): Promise<void> {
     })
 }
 
-/**
- * merge_happenings's writes under `at.actionId`, anchored on `at.entryId`: TOLD takes the merged text
- * and Wren, and ASKED goes with its cast in the delete's payload.
- */
+/** merge_happenings's writes: TOLD takes the merged text and Wren; ASKED goes with its cast. */
 export async function writeHappeningMerge(
   fx: CloseFixture,
   at: { actionId: string; entryId: string },

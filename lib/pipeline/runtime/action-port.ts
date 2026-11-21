@@ -44,9 +44,8 @@ export type DeltaActionPort = {
     journal: 'restored' | 'undone' | null
     chapterNumber: number | null
   }>
-  // Undefined for anything but a DeltaReplayError. `committed` means the reversal
-  // landed and only the store sync after it failed; `refusal` names an integrity refusal;
-  // `journal` and `chapterNumber` ride a committed re-run reversal whose store sync failed.
+  // Undefined for anything but a DeltaReplayError. `committed`: the reversal landed, only the store
+  // sync failed (a re-run's then carries `journal`/`chapterNumber`); `refusal`: integrity refusal.
   describeReplayError: (e: unknown) =>
     | {
         detail: string

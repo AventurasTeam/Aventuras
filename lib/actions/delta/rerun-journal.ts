@@ -74,9 +74,8 @@ async function floorAfter(plan: ReversePlan, branchId: string, ctx: DbCtx): Prom
 }
 
 /**
- * Reverses the chapter's lore work and journals its before-images in one transaction (C13).
- * The journal and the run marker's `rerun_chapter_id` lead the transaction. The caller holds the
- * branch exclusive, so the reads before the transaction stand.
+ * Reverses the chapter's lore work and journals its before-images in one transaction (C13); the
+ * journal and the run marker's `rerun_chapter_id` lead it. Caller holds the branch exclusive.
  */
 export async function reverseCloseForRerun(
   args: { branchId: string; chapterId: string; actionId: string },
@@ -333,9 +332,9 @@ export function logCloseUndone(actionId: string, writeBack: RerunWriteBack): voi
 }
 
 /**
- * How a re-run's group reverses (generation-pipeline.md → Reverse-replay): its journal written
- * back after the group's own deltas, or, with no journal or a group no longer whole, the close
- * undone with it. Read before any transaction; the caller runs the ops after its prunes.
+ * How a re-run's group reverses (generation-pipeline.md → Reverse-replay): journal written back,
+ * or, with no journal or a group no longer whole, the close undone. Read before any transaction;
+ * the caller runs the ops after its prunes.
  */
 export async function rerunWriteBack(
   args: {
@@ -399,10 +398,9 @@ export function withCloseGroups(group: readonly Delta[], seed: readonly Delta[])
 }
 
 /**
- * Reverses a run's group as abort and boot recovery do: a group that is no re-run's as
- * `reverseReplayDeltas` does, a re-run's with its journal written back or its close undone
- * (generation-pipeline.md → Reverse-replay). `settleOps(reversed)` joins the transaction, told
- * whether anything was reversed or written back. Callers hold the branch exclusive, or run at boot.
+ * Reverses a run's group as abort and boot recovery do: a re-run's with its journal written back
+ * or close undone, any other as `reverseReplayDeltas` (generation-pipeline.md → Reverse-replay).
+ * `settleOps(reversed)` joins the transaction. Callers hold the branch exclusive, or run at boot.
  */
 export async function reverseRunGroup(
   args: { actionId: string; branchId: string | null; rerunChapterId?: string | null },

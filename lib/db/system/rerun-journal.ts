@@ -32,7 +32,7 @@ export const rerunJournalSchema: z.ZodType<RerunJournal> = z.strictObject({
     }),
   ),
   deltas: z.array(wholeRow),
-  // Strips a dropped row's branch_id: the write-back stamps the executing branch on what it restores.
+  // Strips a dropped row's branch_id: the write-back stamps the executing branch on restore.
   journals: z.array(
     z.object({ actionId: z.string().min(1), journal: z.unknown(), createdAt: z.number().int() }),
   ),

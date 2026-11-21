@@ -307,9 +307,8 @@ describe('the planner drops a journal its reversal would make inexact', () => {
   }
 
   /**
-   * The close (chapter row and stamp), a turn's fact, a card rename, then a re-run (a lore create
-   * unless `rerunLore` is false, and a chapter write standing in for its report), then a later
-   * turn. The journal's floor is the rename's position, the highest a re-run's reversal leaves.
+   * Close, a fact, a card rename, a re-run (lore create unless `rerunLore` is false, plus a chapter
+   * write as its report), a later turn. The journal's floor is the rename's position.
    */
   async function seed({ rerunLore = true } = {}): Promise<number> {
     await act('act_close', {

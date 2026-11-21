@@ -1,7 +1,7 @@
 /** `transaction`: nothing landed. `store-sync`: the DB write landed, the in-memory sync threw. */
 export type ReplayFailureStage = 'transaction' | 'store-sync'
 
-/** How a close's re-run journal ended its group's reversal (generation-pipeline.md → Reverse-replay). */
+/** How a re-run journal ended its group's reversal (generation-pipeline.md → Reverse-replay). */
 export type JournalOutcome = 'restored' | 'undone'
 
 export class DeltaReplayError extends Error {
