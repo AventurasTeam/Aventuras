@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
@@ -163,6 +164,7 @@ type HarnessProps = {
   status: ReviewWindowState['status']
   review: CloseReview
   onOpenChange: (open: boolean) => void
+  onExited: () => void
   onRetry: () => void
   onRowPress: (key: string) => void
   onEntryLink: (key: string) => void
@@ -185,6 +187,7 @@ function ReviewWindowHarness({
   status,
   review,
   onOpenChange,
+  onExited,
   onRetry,
   onRowPress,
   onEntryLink,
@@ -197,6 +200,7 @@ function ReviewWindowHarness({
       <ReviewWindow
         open
         onOpenChange={onOpenChange}
+        onExited={onExited}
         title={TITLE}
         state={stateOf(status, review, onRetry)}
         pressOf={(row) =>
@@ -217,6 +221,25 @@ function ReviewWindowHarness({
   )
 }
 
+/** The host's close: the window's own Done flips `open`, and `onExited` reports its exit's end. */
+function ExitHarness({ onExited }: { onExited: () => void }) {
+  const { height } = useWindowDimensions()
+  const [open, setOpen] = useState(true)
+  return (
+    <View style={{ height }}>
+      <ReviewWindow
+        open={open}
+        onOpenChange={setOpen}
+        onExited={onExited}
+        title={TITLE}
+        state={{ status: 'ready', review: FULL }}
+        pressOf={() => undefined}
+        entryLinkOf={() => undefined}
+      />
+    </View>
+  )
+}
+
 const meta: Meta<typeof ReviewWindowHarness> = {
   title: 'Compounds/Chapters/ReviewWindow',
   component: ReviewWindowHarness,
@@ -227,6 +250,7 @@ const meta: Meta<typeof ReviewWindowHarness> = {
     status: 'ready',
     review: FULL,
     onOpenChange: fn(),
+    onExited: fn(),
     onRetry: fn(),
     onRowPress: fn(),
     onEntryLink: fn(),
@@ -513,5 +537,29 @@ export const Phone390Sheet: Story = {
 
     await userEvent.click(done)
     await waitFor(() => expect(args.onOpenChange).toHaveBeenCalledWith(false), WAIT)
+  },
+}
+
+/** Desktop: the Dialog has no exit animation, so `onExited` runs as it closes. */
+export const ExitEndsAsItCloses: Story = {
+  render: (args) => <ExitHarness onExited={args.onExited} />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+    expect(screen.queryByRole('dialog', { name: TITLE })).toBeNull()
+  },
+}
+
+/** Phone: `onExited` waits for the Sheet's slide-out, so the host keeps the window mounted until then. */
+export const Phone390ExitAfterSlideOut: Story = {
+  globals: PHONE,
+  render: (args) => <ExitHarness onExited={args.onExited} />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
+    expect(args.onExited).not.toHaveBeenCalled()
+    await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
   },
 }

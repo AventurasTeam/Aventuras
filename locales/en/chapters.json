@@ -129,6 +129,14 @@
     "closeOwed": "Close the open chapter first.",
     "readFailed": "Couldn't read what a re-run would change."
   },
+  "rerunNotice": {
+    "cancelled": "Re-run cancelled. Chapter {{number}}'s close is as it was.",
+    "failed": "Re-run failed. Chapter {{number}}'s close is as it was.",
+    "failedWithReason": "Re-run failed ({{reason}}). Chapter {{number}}'s close is as it was.",
+    "undone": "Chapter {{number}}'s earlier close couldn't be restored, so its close was undone.",
+    "countsChanged": "The counts changed while this was open. Check them before confirming.",
+    "startFailed": "Couldn't start the re-run."
+  },
   "review": {
     "title": "Review — Chapter {{number}}: {{title}}",
     "done": "Done",

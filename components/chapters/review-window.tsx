@@ -1,5 +1,5 @@
 import { TriangleAlert } from 'lucide-react-native'
-import type { ReactElement } from 'react'
+import { useEffect, type ReactElement } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { DeltaLogRow, type Delta, type DeltaOp } from '@/components/compounds/delta-log-row'
@@ -42,6 +42,8 @@ export type EntryLink = { label: string; onPress: () => void }
 export type ReviewWindowProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Runs once a close has finished: after the phone Sheet's slide-out, at once above phone. */
+  onExited?: () => void
   /** `Review — Chapter <N>: <title>`, built by the host. */
   title: string
   state: ReviewWindowState
@@ -56,12 +58,17 @@ type RowCallbacks = Pick<ReviewWindowProps, 'pressOf' | 'entryLinkOf'> & { isPho
 export function ReviewWindow({
   open,
   onOpenChange,
+  onExited,
   title,
   state,
   pressOf,
   entryLinkOf,
 }: ReviewWindowProps): ReactElement {
   const isPhone = useTier() === 'phone'
+  // The Dialog has no exit animation, so above phone the exit ends as it closes.
+  useEffect(() => {
+    if (!open && !isPhone) onExited?.()
+  }, [open, isPhone, onExited])
   const list = (
     <ContextScrollView
       testID="review-window-list"
@@ -80,7 +87,7 @@ export function ReviewWindow({
   if (isPhone) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={title}>
-        <SheetContent size="tall" className="gap-4">
+        <SheetContent size="tall" className="gap-4" onDismissed={onExited}>
           <Heading level={2}>{title}</Heading>
           {list}
           {done}

@@ -17,7 +17,13 @@ import { readStoryChapterNumbers, rehydrateStories, storiesStore } from './stori
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
-import { chapterOverlaysStore, closeResultChapter, overlayChapter } from './ui/chapter-overlays'
+import {
+  chapterOverlaysStore,
+  closeResultChapter,
+  overlayChapter,
+  reportChapter,
+  rerunConfirmChapter,
+} from './ui/chapter-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { listCollapseStore } from './ui/list-collapse'
@@ -85,6 +91,8 @@ export {
   recoveryReportStore,
   rehydrateAppSettings,
   rehydrateStories,
+  reportChapter,
+  rerunConfirmChapter,
   storiesStore,
   threadsStore,
   translationsStore,
@@ -132,6 +140,8 @@ export type {
   CloseModalRequest,
   CloseResult,
   OverlaySurface,
+  RerunConfirmRequest,
+  ReviewRequest,
 } from './ui/chapter-overlays'
 export type { StoryCardData } from './stories/view-model'
 export type { StoryFilter, StoryListQuery, StorySort } from './stories/selectors'

@@ -1,10 +1,16 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, type ReactElement } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 
 import { readerHref } from '@/components/reader/reader-href'
+import { useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
-import { db, type CloseReport, type Delta, type EntityKind } from '@/lib/db'
+import {
+  getCloseRerunPreview,
+  type CloseRerunPreview,
+  type CloseRerunReadRefusal,
+} from '@/lib/actions'
+import { db, runInTransaction, type CloseReport, type Delta, type EntityKind } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { formatEntryRef } from '@/lib/entry-refs'
 import {
@@ -27,15 +33,22 @@ import {
   happeningAwarenessStore,
   happeningsStore,
   loreStore,
-  overlayChapter,
+  reportChapter,
+  rerunConfirmChapter,
   threadsStore,
+  type RerunConfirmRequest,
   type StoreChapter,
 } from '@/lib/stores'
 
 import { CloseChapterModal } from './close-chapter-modal'
+import { CloseRerunConfirm } from './close-rerun-confirm'
 import { reviewRowHref, type ReviewRowLiveness } from './review-row-href'
 import { ReviewWindow, type ReviewWindowState } from './review-window'
+import { runCloseRerun } from './run-close-rerun'
 import { runManualClose } from './run-manual-close'
+import { useCloseRerunConfirm } from './use-close-rerun-confirm'
+
+const ctx = { db, runInTransaction }
 
 type ReviewSources = {
   report: CloseReport
@@ -80,22 +93,43 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
   }
 }
 
+// The open story's settings price the preview; a branch no longer open has nothing to read with.
+async function readRerunPreview(
+  branchId: string,
+  chapterId: string,
+): Promise<CloseRerunPreview | CloseRerunReadRefusal> {
+  const open = currentStoryStore.getCurrentStory()
+  if (open?.branchId !== branchId)
+    throw new Error(`no open story on ${branchId} to preview a re-run with`)
+  return getCloseRerunPreview(branchId, chapterId, open, ctx)
+}
+
 /**
- * C7's root host, for the review window and the close modal. A row press closes the window, then
- * runs the guard, so a dirty pane is never bypassed.
+ * C7's root host, for the review window, the close modal and the re-run confirm. A row press or
+ * `Re-run…` closes the window before the guard runs, so a dirty pane is never bypassed and no
+ * dialog sits over the window.
  */
 export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
   const closeModal = chapterOverlaysStore.useOverlays((s) => s.closeModal)
   const closeResult = chapterOverlaysStore.useOverlays((s) => s.closeResult)
+  const rerunConfirm = chapterOverlaysStore.useOverlays((s) => s.rerunConfirm)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
   const openSeq = currentStoryStore.useOpenSeq()
   const reviewChapter = chaptersStore.useChapters((rows) =>
-    overlayChapter(review == null ? undefined : rows.get(review.chapterId), openBranchId),
+    review == null
+      ? null
+      : reportChapter(rows.get(review.chapterId), openBranchId, review.actionId),
   )
   const resultHolds = chaptersStore.useChapters(
     (rows) => closeResultChapter(closeResult, rows, { branchId: openBranchId, openSeq }) != null,
   )
+  const rerunHolds = chaptersStore.useChapters(
+    (rows) => rerunConfirmChapter(rerunConfirm, rows, openBranchId) != null,
+  )
+  // The last window held open stays mounted, closed, until its exit ends: the phone Sheet slides out.
+  const [shown, setShown] = useState<StoreChapter | null>(null)
+  if (reviewChapter != null && reviewChapter !== shown) setShown(reviewChapter)
 
   // Pruned, not hidden: a redo restores the same chapter id, and nothing may reopen by itself.
   useEffect(() => {
@@ -109,17 +143,33 @@ export function ChapterOverlaysHost(): ReactElement | null {
   useEffect(() => {
     if (closeModal != null && !closeHolds) chapterOverlaysStore.closeCloseModal()
   }, [closeModal, closeHolds])
+  // A pruned request's window stays closed: its chapter or branch went, and it may be another's now.
+  useEffect(() => {
+    if (rerunConfirm != null && !rerunHolds)
+      chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+  }, [rerunConfirm, rerunHolds])
 
   // The modal shuts at once, since the close runs under the banner; the start outlives the body.
   const confirmClose = useCallback((branchId: string, endEntryId: string) => {
     chapterOverlaysStore.closeCloseModal()
     void runManualClose(branchId, endEntryId)
   }, [])
+  const dropExited = useCallback(() => {
+    // A window reopened during its exit stays.
+    if (chapterOverlaysStore.getState().review == null) setShown(null)
+  }, [])
 
-  if (reviewChapter == null && !closeHolds) return null
+  if (shown == null && !closeHolds && !rerunHolds) return null
   return (
     <>
-      {reviewChapter != null ? <ReviewHost key={reviewChapter.id} chapter={reviewChapter} /> : null}
+      {shown != null ? (
+        <ReviewHost
+          key={shown.id}
+          chapter={shown}
+          open={reviewChapter != null}
+          onExited={dropExited}
+        />
+      ) : null}
       {closeHolds ? (
         <CloseChapterModal
           key={`${closeModal.branchId}:${closeModal.endEntryId ?? ''}`}
@@ -127,12 +177,26 @@ export function ChapterOverlaysHost(): ReactElement | null {
           onConfirm={confirmClose}
         />
       ) : null}
+      {rerunHolds && rerunConfirm != null ? (
+        <RerunConfirmHost
+          key={`${rerunConfirm.branchId}:${rerunConfirm.chapterId}`}
+          request={rerunConfirm}
+        />
+      ) : null}
     </>
   )
 }
 
 /** Every read the window shows, resolved here: a gorhom Sheet's content sees no outer provider. */
-function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
+function ReviewHost({
+  chapter,
+  open,
+  onExited,
+}: {
+  chapter: StoreChapter
+  open: boolean
+  onExited: () => void
+}): ReactElement {
   const { branchId, id: chapterId } = chapter
   const navigate = useSurfaceNavigate()
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
@@ -149,6 +213,8 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
   const sources = useQuery({
     queryKey: ['close-review', branchId, chapterId, settleCount],
     queryFn: () => readReviewSources(branchId, chapterId),
+    // An exiting window reads nothing: its chapter may already be gone.
+    enabled: open,
     // A settle re-reads under a new key; the window keeps the last review meanwhile.
     placeholderData: keepPreviousData,
   })
@@ -199,7 +265,7 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
 
   const press = useCallback(
     (href: string) => () => {
-      // Drops a second press made before the window unmounts.
+      // Drops a second press made during the window's exit.
       if (chapterOverlaysStore.getState().review == null) return
       // layout.md → Stacking: the window goes first, so the guard's dialog never sits over it.
       chapterOverlaysStore.closeReviewWindow()
@@ -239,14 +305,110 @@ function ReviewHost({ chapter }: { chapter: StoreChapter }): ReactElement {
 
   return (
     <ReviewWindow
-      open
+      open={open}
       onOpenChange={(next) => {
         if (!next) chapterOverlaysStore.closeReviewWindow()
       }}
+      onExited={onExited}
       title={t('chapters:review.title', { number: chapter.sequenceNumber, title: chapter.title })}
       state={state}
       pressOf={pressOf}
       entryLinkOf={entryLinkOf}
+    />
+  )
+}
+
+/**
+ * chapter-timeline.md → Re-run a close, mounted while its request holds. The start outlives it:
+ * once the re-run's chain holds the branch the confirm closes, and `runCloseRerun` speaks for the
+ * chain's end.
+ */
+function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactElement | null {
+  const { branchId, chapterId } = request
+  const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
+  const { gateReason } = useStoryGenerationGate(storyId, branchId)
+  const settleCount = generationStore.useGeneration((s) => s.settleCount)
+  const {
+    target,
+    open: openPreview,
+    replace,
+  } = useCloseRerunConfirm({
+    branchId,
+    active: true,
+    loadPreview: (id) => readRerunPreview(branchId, id),
+  })
+  // Through a ref, so the mount's one read never re-runs on a new callback identity.
+  const openRef = useRef(openPreview)
+  useEffect(() => {
+    openRef.current = openPreview
+  })
+  const [answered, setAnswered] = useState(false)
+  useEffect(() => {
+    let live = true
+    void openRef.current(chapterId).then(() => {
+      if (live) setAnswered(true)
+    })
+    return () => {
+      live = false
+    }
+  }, [chapterId])
+  // A refused or failed first read opens nothing (the hook toasts it); a refused re-read closes it.
+  useEffect(() => {
+    if (answered && target == null) chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+  }, [answered, target])
+
+  // Read synchronously, so a second press returns before it reaches startCloseRerun.
+  const pendingRef = useRef(false)
+  const [pending, setPending] = useState(false)
+  // An in-flight refusal holds the confirm actions until the next settle.
+  const [heldAtSettle, setHeldAtSettle] = useState<number | null>(null)
+
+  if (target == null) return null
+  const { preview } = target
+
+  const confirm = () => {
+    const story = currentStoryStore.getCurrentStory()
+    if (pendingRef.current || story == null || story.branchId !== branchId) return
+    pendingRef.current = true
+    setPending(true)
+    setHeldAtSettle(null)
+    // Once the chain's first run reserves every refusal is past, and the banner speaks.
+    const onStarted = () => {
+      if (chapterOverlaysStore.getState().rerunConfirm === request)
+        chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+    }
+    void runCloseRerun({ branchId, chapterId, preview, story, onStarted }).then((step) => {
+      pendingRef.current = false
+      setPending(false)
+      switch (step.step) {
+        case 'replace':
+          replace(step.preview)
+          return
+        case 'keep-open':
+          setHeldAtSettle(generationStore.getSettleCount())
+          return
+        case 'ended':
+        case 'refused':
+          // A request opened since, or already closed when the chain started, is not this one's.
+          if (chapterOverlaysStore.getState().rerunConfirm === request)
+            chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+      }
+    })
+  }
+
+  const cancel = () => {
+    if (!pendingRef.current) chapterOverlaysStore.closeRerunConfirm({ reopen: true })
+  }
+
+  const held = heldAtSettle === settleCount ? t('reader:actions.blockedWhileGenerating') : undefined
+  return (
+    <CloseRerunConfirm
+      open
+      preview={preview}
+      blockedReason={gateReason ?? held}
+      pending={pending}
+      onCancel={cancel}
+      onConfirm={confirm}
     />
   )
 }

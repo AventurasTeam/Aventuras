@@ -262,7 +262,8 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
     })
 
     expect(result.current.target).toBeNull()
-    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2' })
+    // No chapter row in this test, so the window holds no report.
+    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2', actionId: null })
   })
 
   it('closes when the review window opens over it, and stays closed after the window goes', async () => {

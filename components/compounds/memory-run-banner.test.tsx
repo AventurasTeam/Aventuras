@@ -111,13 +111,18 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
   }
 }
 
-function holdResult(stoppedTasks = 0, branchId = 'branch-1', chapterId = 'chap_2'): void {
+function holdResult(
+  stoppedTasks = 0,
+  branchId = 'branch-1',
+  chapterId = 'chap_2',
+  actionId = 'act_close_2',
+): void {
   const openSeq = currentStoryStore.getOpenSeq()
   chapterOverlaysStore.showCloseResult({
     branchId,
     openSeq,
     chapterId,
-    actionId: 'act_close_2',
+    actionId,
     rerun: false,
     stoppedTasks,
   })
@@ -359,7 +364,10 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
 
     act(() => closedBanner(result.current).onReview())
 
-    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2' })
+    expect(chapterOverlaysStore.getState().review).toEqual({
+      chapterId: 'chap_2',
+      actionId: 'act_close_2',
+    })
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
     expect(result.current).toBeNull()
   })
@@ -459,9 +467,14 @@ describe('useMemoryRunBanner — an older close result beside a newer close', ()
 
   function holdOld(): void {
     chaptersStore.hydrate('branch-1', [
-      chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
+      chapter({
+        id: 'chap_1',
+        sequenceNumber: 1,
+        title: 'Old Chapter',
+        closeReportActionId: 'act_close_1',
+      }),
     ])
-    holdResult(0, 'branch-1', 'chap_1')
+    holdResult(0, 'branch-1', 'chap_1', 'act_close_1')
   }
 
   // The new close's row lands at its metadata phase, before the report that marks it closed.
@@ -500,7 +513,13 @@ describe('useMemoryRunBanner — an older close result beside a newer close', ()
         op: 'update',
         id: 'chap_2',
         columns: {
-          closeReport: { version: 1, actionId: 'a', calls: [], stopped: [], noToolCalls: true },
+          closeReport: {
+            version: 1,
+            actionId: 'act_close_2',
+            calls: [],
+            stopped: [],
+            noToolCalls: true,
+          },
         },
       })
     })
