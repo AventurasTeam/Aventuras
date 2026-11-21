@@ -129,6 +129,8 @@ describe('a re-run that stops (AC 9)', () => {
   it('restores the close when a tool step fails after its first write, and reports the failure', async () => {
     const c = await closed({ ...STAND_IN, rerunSteps: [STAND_IN_STEP, NETWORK_FAILURE] })
     const deferred = recordDeferred()
+    // Fires on a landed group only: a refused first group leaves it unset.
+    c.h.onNextToolGroup(() => {})
     const rerunGroups: string[][] = []
     pipelineEventBus.subscribe('delta_group_emitted', (event) => {
       rerunGroups.push(event.actions.map((a) => a.kind))
@@ -137,6 +139,10 @@ describe('a re-run that stops (AC 9)', () => {
     const end = await within(c.h.rerun(c.chapterId), 'the re-run')
 
     expect(rerunGroups).toEqual([['createLore', 'updateEntity']])
+    expect(c.h.actedOn(), "the re-run's first group landed").toEqual({
+      kinds: ['createLore', 'updateEntity'],
+      landed: true,
+    })
     expect(end).toMatchObject({
       kind: CHAPTER_CLOSE_KIND,
       result: { outcome: 'failed', error: { kind: 'provider', reason: 'network' } },
