@@ -1573,22 +1573,29 @@ type DiffCacheEntry = {
   new: Record<string, unknown>
 }
 
-peek(deltaId: string): DiffCacheEntry | undefined  // sync, render-safe
-populate(delta: Delta): Promise<DiffCacheEntry>    // async; runs the walk
-populateBatch(deltas: Delta[]): Promise<void>      // groups by target
+peek(branchId: string, deltaId: string): DiffCacheEntry | undefined  // sync, render-safe
+populate(delta: Delta): Promise<DiffCacheEntry>    // async; runs the walk; keys on delta.branchId
+populateBatch(deltas: Delta[]): Promise<void>      // groups by branch and target
 ```
 
 LRU eviction, hard cap **2000 entries**. Conservative estimate
 ~500 bytes per entry, ~1 MB at cap. Process lifetime; no
 persistence. Cold every launch by design, and cleared otherwise only
-by a reversal, which evicts the entries of every row whose deltas it
-replays or rewrites: an update's old and new hold until a reversal
-rewrites a surviving delta's prior value
+by a reversal, which evicts its own branch's entries of every row
+whose deltas it replays or rewrites: an update's old and new hold
+until a reversal rewrites a surviving delta's prior value
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
-`delta.id` is a globally-unique kind-prefixed UUID
-([`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)),
-so cross-story and cross-branch sharing in the same cache is
-safe.
+
+**Entries key on `(branch_id, delta.id)`.** A delta's id repeats
+across branches: a fork or a story duplicate copies deltas with their
+ids
+([`data-model.md → Branch model`](./data-model.md#branch-model)), and a
+fork's rewind can rewrite a surviving copy's prior value, so one id can
+hold a different old and new on each branch. Keyed on the id alone, a
+fork's History could show the parent's values. A fork or a duplicate
+evicts nothing, since the copies' branch ids are new, and a deleted
+branch's entries age out of the LRU unread. A list that mixes branches
+identifies a delta row by its branch and id too.
 
 The walk's chain query relies on the
 [`deltas_chain_idx` composite index](./data-model.md#diagram)
@@ -1597,8 +1604,8 @@ on active stories. Without it, every populate degrades to a
 `deltas`-wide scan. `target_table` stays in the query as a
 defensive post-filter, not as an index column — the kind-prefixed
 UUID invariant ([`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout))
-makes `target_id` globally unique, so the three-column form is
-strictly sufficient.
+makes `target_id` unique across tables within a branch, so the
+three-column form is strictly sufficient.
 
 ### Consumer flow
 
@@ -1607,7 +1614,7 @@ Each row's host (per-screen page) renders via:
 1. `delta.op !== 'update'` → format one-liner directly. Cache
    not involved.
 2. `delta.op === 'update'`:
-   - `peek(delta.id)` first.
+   - `peek(delta.branchId, delta.id)` first.
    - **Hit:** format rich `(old, new)` prose, pass as `summary`.
    - **Miss:** kick off `populate(delta)`, fall back to a
      summary derived from `undo_payload` keys alone (e.g.,
@@ -1621,13 +1628,14 @@ post-walk version is richer.
 
 Re-render trigger mechanism is host-determined and not
 load-bearing for the cache contract (TanStack Query keyed on
-`['diff', delta.id]` is the natural fit given the existing
+`['diff', branchId, delta.id]` is the natural fit given the existing
 stack).
 
-`populate` coalesces concurrent calls for the same `delta.id`
+`populate` coalesces concurrent calls for the same branch and
+`delta.id`
 via an internal in-flight promise map; `populateBatch` groups
-by target so a visible window of N deltas across M targets runs
-M walks, not N. Cross-delta-within-target coalescing is
+by branch and target so a visible window of N deltas across M targets
+runs M walks, not N. Cross-delta-within-target coalescing is
 deliberately not implemented — its worst case is one redundant
 SQL query.
 
@@ -1642,7 +1650,7 @@ A reversal is the one invalidation. It deletes the deltas it
 replays and rewrites the prior values of surviving later deltas on
 the rows it touches
 ([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)),
-so it evicts every cached entry on those rows, as
+so it evicts every cached entry on those rows on its branch, as
 [Cache shape and lifecycle](#cache-shape-and-lifecycle) says. An
 entry for a deleted delta needs nothing more: nothing reads it,
 since the delta renders on no surface anymore.

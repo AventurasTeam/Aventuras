@@ -54,8 +54,8 @@ erDiagram
     branches {
         text id PK
         text story_id FK
-        text parent_branch_id FK "null if root"
-        text fork_entry_id "entry in parent branch the fork diverged from"
+        text parent_branch_id FK "null for a branch with no parent (a story's first, or one whose parent chain was deleted)"
+        text fork_entry_id "entry the fork diverged from; the child holds it too, copied with its id"
         text name
         integer created_at
         json classifier_status "per-branch periodic-classifier status: lifecycle state, last-success-at, last-error, and processedThrough (highest entry position fully processed; pass range is (processedThrough, head]). Operational state — branches is not delta-logged, so reversal clamps processedThrough imperatively. See docs/memory/classifier.md → Persistence"
@@ -279,7 +279,7 @@ erDiagram
         integer encoding_version "writer-stamped encoding-contract version; defaults to 1 at v1. Reserved for future apply-time dispatch when delta-logged column shapes or encoding rules change. See Entry mutability & rollback"
         integer created_at
     }
-    %% INDEX deltas_chain_idx (branch_id, target_id, log_position) — chain-walk index for the diff cache walk and future rollback / CTRL-Z chain reads. See architecture.md → Delta history diff resolution. target_table excluded: the kind-prefixed UUID invariant makes target_id globally unique, so target_table stays in the query as a defensive post-filter rather than an index discriminator.
+    %% INDEX deltas_chain_idx (branch_id, target_id, log_position) — chain-walk index for the diff cache walk and future rollback / CTRL-Z chain reads. See architecture.md → Delta history diff resolution. target_table excluded: the kind-prefixed UUID invariant makes target_id unique across tables within a branch, so target_table stays in the query as a defensive post-filter rather than an index discriminator.
     %% UNIQUE INDEX deltas_log_position_uniq (branch_id, log_position) — backstop. The action-layer's MAX+1 assignment is the primary mechanism (see "log_position assignment" below); this index catches buggy writers at insert time. Can't double-up deltas_chain_idx because target_id sits between branch_id and log_position.
 
     reversal_journals {
@@ -468,7 +468,8 @@ including its change history. Semantically, forking `parent` from a
 non-system entry `N` produces the exact state, delta log, and journal
 set of **snapshotting `parent` (minus `probe_captures` and any
 `kind='system'` tail entry) and rolling back to `N`**, leaving `parent`
-and the in-memory redo stack untouched.
+and its in-memory redo stack untouched; the new branch starts with an
+empty one.
 
 **Pre-conditions (refused before any write):** generation on `parent` is
 idle
@@ -601,6 +602,28 @@ its parent's in one transaction, and the schema declares no deferred
 keys; an enforced end would fail that redo. The reversal closure keeps
 ends from dangling instead
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+
+**Deleting a branch.** Any branch but the current one can be deleted,
+the story's first included: under the hard fork no branch depends on
+another, so being first is a label. The delete is one transaction of
+per-table deletes scoped by the branch, the set
+[story deletion](#story-deletion) runs — every branch-scoped table,
+`reversal_journals` included, and the branch's vec0 rows by their
+`branch_id` column — then re-parents the branch's children to its own parent, null
+when it had none, then deletes the `branches` row. No DB-level
+`ON DELETE` cascade exists. A child's `fork_entry_id` stays: the child
+holds that entry itself, copied with its id. The removed
+`entry_assets` rows trash their assets under the cross-story count
+([Assets](#assets-images--future-media)). The branch's in-memory
+records go with it: `generationStore`'s `deferred`, `pendingClose` and
+`pendingRerun`, and its redo stack. The delete waits on the generation
+gate, and refuses while an embedder swap is pending on the story, since
+the swap embeds across the story's branches and would write vectors
+for one that's gone. A held branch (`classifier_status.state` is
+`'running'`) can be deleted: its orphan pass's deltas go with it, and
+boot recovery's unfinished run then reverses nothing. Nothing undoes a
+branch delete; the confirm counts what it loses
+([`branch-navigator.md → Delete confirm`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#delete-confirm)).
 
 Text duplication across branches is acceptable (one data point: a 350k-word
 story exported as JSON is ~2.5MB — branches at 10x are still tiny). The
@@ -2914,7 +2937,7 @@ arbitrary editing.
   beneath it — the pre-edit prose is the payload. Reversing it re-runs the
   same invalidation the forward edit ran (below). Redoing it re-clamps the
   watermark only: the undo already swept the facts, and a pass that logged
-  one since would have cleared the redo stack.
+  one since would have cleared the branch's redo stack.
 - Keystroke-level undo inside the open editor is still the editor's job,
   not the log's: a delta is written per save, not per character.
 - When branching from entry N, the new branch copies entry N's _current_
@@ -3092,8 +3115,8 @@ partitioned), so the assignment lives in the delta-creating
 mutator, not as a column default.
 
 A **redo's** re-insert is the exception: the restored delta takes back
-the slot it held before the undo. Every delta-logged write clears the
-redo stack, and the redo's bracket keeps writers out while it runs, so
+the slot it held before the undo. Every delta-logged write clears its
+branch's redo stack, and the redo's bracket keeps writers out while it runs, so
 nothing can have logged into that slot since the undo freed it. Log
 order so stays the order the writes were first made: a pass on an
 earlier turn that logged above a turn before the undo still sits above
@@ -3287,14 +3310,14 @@ Algorithm:
      reversal's closure takes with it; where one wrote a field, list
      term or count the group wrote, the group's undo yields to it. A
      close's re-run is one such
-     group: after it reverses, its journal is written back and the redo
-     stack clears; when the journal can't be written back exactly, the
+     group: after it reverses, its journal is written back and its
+     branch's redo stack clears; when the journal can't be written back exactly, the
      chapter's other close groups reverse with it, undoing the close as
      a delete does
      ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 3. Reverse the selected deltas newest-to-oldest via their `undo_payload`,
-   move them onto an in-memory redo stack (not persisted), and remove
-   them from the `deltas` table.
+   move them onto the branch's in-memory redo stack (not persisted), and
+   remove them from the `deltas` table.
 
 Redo re-applies from the in-memory stack, including the rows the
 closure took with the group and the prior values the undo rewrote on
@@ -3303,10 +3326,19 @@ inverses; a sweep's rows stay out, since the clamped watermark
 re-derives them. A
 close's re-run has no redo: its undo writes a journal back, which redo
 can't replay, so re-running is the way back, and its undo clears the
-stack, whose snapshots can hold the re-run's values. The stack clears on any
-new action. Redo is runtime-only; no schema
-support needed. If the app restarts, redo history is lost (acceptable
-— this matches editor conventions).
+branch's stack, whose snapshots can hold the re-run's values.
+
+**One redo stack per branch.** A write clears the stacks of the
+branches it can change: a delta-logged write its own branch's, a
+story-level write a redo could contradict every branch of its story's.
+A write on one
+branch can't touch another's rows or log positions, so another
+branch's stack stays exact. Undo on a branch, look at another branch
+or story, and Redo is still waiting on return; a fork leaves the
+parent's stack as it was. Deleting a branch or a story drops its
+stacks. Redo is runtime-only; no schema support needed. If the app
+restarts, redo history is lost (acceptable — this matches editor
+conventions).
 
 This co-exists cleanly with entry-level rollback: CTRL-Z is
 action-granular ("undo my last thing"), rollback is entry-granular

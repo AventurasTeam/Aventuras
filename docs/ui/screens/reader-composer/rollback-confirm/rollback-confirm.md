@@ -80,9 +80,9 @@ the modal carries the consequence in numeric form, not visual:
   bold `This cannot be undone.` line: deletion prunes the delta log
   (it is itself the undo primitive), so no CTRL-Z or redo can restore
   what the modal commits.
-- **Foot** — `Cancel` (secondary) + `Delete entries` (danger
-  primary, warn-coloured per the inline-delete convention in
-  [branch navigator](../branch-navigator/branch-navigator.md#inline-delete-confirm)).
+- **Foot** — `Cancel` (secondary) + `Delete entries` (the
+  `destructive` action per
+  [`alert-dialog.md → Copy contract`](../../../patterns/alert-dialog.md#copy-contract)).
   Esc (web) and hardware back (native) behave as Cancel; an outside
   click does nothing, per
   [`alert-dialog.md → Copy contract`](../../../patterns/alert-dialog.md#copy-contract).

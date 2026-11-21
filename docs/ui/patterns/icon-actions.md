@@ -131,8 +131,8 @@ different defaults:
 
 - **Hidden** is preferred when the affordance is **structurally
   not applicable** to that row (e.g. branch-navigator hides
-  `delete` on the root branch and on the current branch — those
-  rows can't be deleted by definition). Keeps the row visually
+  `delete` on the current branch — that row can't be deleted by
+  definition). Keeps the row visually
   clean.
 - **Disabled (greyed, no hover-brighten, tooltip explains)** is
   preferred when the affordance is **temporarily unavailable**

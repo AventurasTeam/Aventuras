@@ -227,7 +227,7 @@ exist, the sub-section is **hidden entirely** (no header, no body)
 — there's nothing meaningful to surface.
 
 **Delete behavior.** Click `×` → inline confirm in place (matching
-the [branch-navigator inline delete pattern](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-delete-confirm)):
+the [inline delete pattern](../ui/patterns/inline-delete-confirm.md), then the branch navigator's):
 
 ```
    Reiwa · Reiwa 1 · May 1, 2019

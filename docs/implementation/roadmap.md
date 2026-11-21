@@ -193,7 +193,9 @@ churn.
   branch's lineage).
 - M6.3 — Reader branch picker + branch creation flow.
 - M6.4 — Diff cache: query layer, eviction, deps on branch +
-  entry events. Renderer iteration walks `keys(old.<column>)`
+  entry events. Entries key on `(branch_id, delta.id)`, the TanStack key
+  with them, since copies repeat delta ids across branches
+  ([`architecture.md → Cache shape and lifecycle`](../architecture.md#cache-shape-and-lifecycle)). Renderer iteration walks `keys(old.<column>)`
   (not `keys(new.<column>)`), and cache-miss path falls back to
   an `undo_payload`-keys-only summary per
   [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution).
@@ -346,14 +348,36 @@ verified against the code first. Resolve with the slice each names.
   allows (ten minutes by default), then apply, and longer while a
   reconcile embed hangs, which nothing bounds yet (M7.1's embed-timeout
   item below). Routed from triage 2026-09-27.
-- **M6.3 — A branch delete drops the branch's close records and clears
-  child `parent_branch_id` refs.** M5 keeps `deferred`, `pendingClose`
-  and, from Slice 5.13, `pendingRerun` in `generationStore`'s `TxState`,
-  keyed by branch. Nothing deletes a branch yet. The action that does
-  clears all three, so no record outlives its branch, and handles
-  `branches.parent_branch_id`'s bare FK (`lib/db/stories/stories.table.ts:44`,
-  no `ON DELETE SET NULL`) before deleting a non-root parent branch.
-  Raised 2026-11-01 by the M5 promotion; FK note added 2026-11-19.
+- **M6.3 — Build branch delete to canon.** Ruled 2026-11-21
+  ([`data-model.md → Branch model`](../data-model.md#branch-model),
+  [`branch-navigator.md → Delete confirm`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#delete-confirm)):
+  any branch but the current one deletes, the story's first included; one
+  transaction of per-table deletes scoped by the branch, reusing
+  `deleteStory`'s table set (`lib/actions/stories/delete-story.ts`,
+  `reversal_journals` and the vec0 rows included), re-parenting the
+  children to the branch's own parent through
+  `branches.parent_branch_id`'s bare FK (`lib/db/stories/stories.table.ts:44`),
+  then the `branches` row. It drops the branch's `deferred`,
+  `pendingClose` and `pendingRerun` (`generationStore.dropBranchRecords`)
+  and its redo stack, waits on the gate, and refuses while an embedder
+  swap is pending on the story. The confirm is an AlertDialog counting
+  the branch's non-system entries whose id no other branch holds. Raised
+  2026-11-01 by the M5 promotion; FK note added 2026-11-19.
+- **M6 — One redo stack per branch.** Ruled 2026-11-21
+  ([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)):
+  `lib/stores/ui/undo-redo.ts` becomes a map from branch to groups, and
+  the reader reads its own branch's top
+  (`components/reader/use-reader-undo.tsx:336` reads the global top
+  today, so a Redo from another branch or story shows and then fails as
+  `integrity` in `redoLastAction`, `lib/actions/story-entries/undo.ts:205`).
+  Each `undoRedoStore.clear()` caller clears the branch it wrote:
+  `lib/actions/delta/apply-delta-action.ts` (two),
+  `lib/actions/story-entries/operational.ts` (two),
+  `lib/actions/turns/regenerate-turn.ts` (two), and the re-run's undo;
+  `lib/actions/stories/set-lead.ts` clears every branch of its story
+  while the lead is story-level, its own branch once the per-branch lead
+  lands. Branch and story deletes drop their stacks. The redo guard on a
+  foreign group stays as a defense.
 - **M6.3 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
@@ -432,48 +456,12 @@ verified against the code first. Resolve with the slice each names.
   (M7.2). Surfaced by
   4.2b planning (2026-09-28); routed from triage 2026-10-04.
 
-**Readiness check (2026-11-21).** Found by the pre-promotion check and
-held for after the story-duplicate design pass. Resolve both groups
-before promoting.
-
-Canon defects, each a short `aventuras-design` ruling:
-
-- **The diff cache keys entries by delta id alone.**
-  [`architecture.md → Cache shape and lifecycle`](../architecture.md#cache-shape-and-lifecycle)
-  calls that safe because a delta id is globally unique, but a fork
-  copies ids verbatim
-  ([`data-model.md → Branch model`](../data-model.md#branch-model)) and
-  its rewind rewrites the prior values of surviving deltas, so one id
-  holds a different old value on each branch, and a fork's History could
-  render the parent's. Key entries, and the TanStack key with them, on
-  `(branch_id, delta.id)`. The `actionId is globally unique` line in
-  [`generation-pipeline.md → Invariants`](../generation-pipeline.md#invariants)
-  is stale the same way: copied deltas keep their `action_id`.
-- **Redo across a branch switch or a fork is unspecified.** Canon says
-  only that a fork leaves the redo stack untouched. The reader labels
-  Redo from the global stack's top with no branch check
-  (`components/reader/use-reader-undo.tsx:336`), and `redoLastAction`
-  refuses another branch's group as `integrity`
-  (`lib/actions/story-entries/undo.ts:205`), so after a fork or a switch
-  the reader offers a Redo that always fails. Read in the code, not run;
-  likely reachable today across stories, since only tests clear the
-  stack. Rule whether a switch clears the stack or Redo shows only for
-  the loaded branch's group.
-- **Branch delete with children, and the cascade.** The root is the
-  branch with `parent_branch_id = null`, and that column is a bare FK
-  (`lib/db/stories/stories.table.ts:44`), so a `SET NULL` on deleting a
-  branch with children turns them into roots and hides their delete.
-  Re-parenting them to the deleted branch's parent keeps them deletable,
-  leaving `fork_entry_id` as provenance only.
-  [`branch-navigator.md → Inline delete confirm`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-delete-confirm)
-  calls deletion a single SQL cascade, but no table declares `onDelete`:
-  the model is `deleteStory`'s per-table deletes
-  (`lib/actions/stories/delete-story.ts`), the vec0 tables and
-  `generationStore.dropBranchRecords` included.
-- **`Browse branches` is missing from the Actions menu pattern.**
-  [`branch-navigator.md → Single-branch state`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#single-branch-state)
-  names it;
-  [`actions-menu.md`](../ui/patterns/actions-menu.md) doesn't list it.
+**Readiness check (2026-11-21).** Found by the pre-promotion check. Its
+four canon defects were ruled the same day
+([exploration](../explorations/2026-11-21-m6-branch-rulings.md)): the
+diff cache's key, per-branch redo stacks, branch delete and the
+`Browse branches…` entry; their build items sit above. The entry
+corrections below remain; resolve them before promoting.
 
 Entry corrections, the developer's rulings at promotion:
 
@@ -494,7 +482,7 @@ Entry corrections, the developer's rulings at promotion:
   [`story-list.md → Story card`](../ui/screens/story-list/story-list.md#story-card--text-first),
   and `app/reader-composer/[branchId].tsx` already carries the branch in
   the route. Drop it, or design the count first.
-- **The diff cache doesn't depend on branches.** Whether M6.4 stays in
+- **The diff cache doesn't depend on M6's branch work.** Whether M6.4 stays in
   M6 or moves to M7 beside its other consumer, the Diagnostics delta
   log, is a placement call.
 
@@ -1177,6 +1165,15 @@ code before it moved; resolve with the slice it names.
   ships the jump and History's entry link, moved in from here at M5's
   promotion, since three M5 surfaces consume it. M7.3 keeps wiring the
   delta log's rows to it. Surfaced by 4.2b planning (2026-09-28).
+- **M7.3 — The delta log's `All branches` scope repeats every copied
+  delta.** A fork or a story duplicate copies deltas with their ids, so
+  each delta written before a fork shows once per branch under one id
+  ([`diagnostics.md → Tab 5`](../ui/screens/diagnostics/diagnostics.md#tab-5--delta-log)),
+  on rows that don't name their branch. Rows identify by branch and id,
+  as the diff cache's entries do
+  ([`architecture.md → Cache shape and lifecycle`](../architecture.md#cache-shape-and-lifecycle)),
+  and the row shape needs the branch named, or the scope collapses a
+  copied delta's repeats. Raised by the M6 branch rulings (2026-11-21).
 - **M7.1 — A date-time format setting, independent of the UI
   language.** Past a week, History rows and the story card show a date
   and time from `relativeTimeLabel` (`lib/i18n`), in the shape its
