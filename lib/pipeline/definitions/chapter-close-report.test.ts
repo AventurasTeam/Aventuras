@@ -4,7 +4,7 @@ import { closeReportSchema } from '@/lib/db/story-entries/close-report'
 import { makeLogger } from '@/lib/diagnostics'
 
 import { closeReportOf, closeReportPhase } from './chapter-close-report'
-import { seedCloseLedger, setCloseRange } from './close-intermediates'
+import { seedCloseLedger, setCloseFloor, setCloseRange } from './close-intermediates'
 import type { CloseLedger, CloseRange } from './intermediates'
 import type { PhaseContext } from '../types'
 
@@ -88,6 +88,19 @@ describe('closeReportOf', () => {
     expect(report).toEqual({ version: 1, actionId: 'act_close', ...LEDGER })
     expect(closeReportSchema.safeParse(report).success).toBe(true)
   })
+
+  it("records a re-run's first log position, and the schema keeps it", () => {
+    const report = closeReportOf(undefined, 'act_rerun', 41)
+    expect(report).toEqual({
+      version: 1,
+      actionId: 'act_rerun',
+      calls: [],
+      stopped: [],
+      noToolCalls: true,
+      firstLogPosition: 41,
+    })
+    expect(closeReportSchema.parse(report).firstLogPosition).toBe(41)
+  })
 })
 
 describe('closeReportPhase', () => {
@@ -147,5 +160,24 @@ describe('closeReportPhase', () => {
     const { events, result } = await drain(phaseCtx(parked(), controller.signal))
     expect(result).toEqual({ status: 'aborted' })
     expect(events).toEqual([])
+  })
+
+  // C4: under the gate a re-run's own writes start right above the floor its reversal left.
+  it.each([
+    [40, 41],
+    [0, 1],
+  ])("records a re-run's floor %i as its first log position %i", async (floor, first) => {
+    const intermediates = parked()
+    setCloseFloor(intermediates, floor)
+    const { events } = await drain(phaseCtx(intermediates))
+    expect(events).toMatchObject([
+      { action: { payload: { patch: { closeReport: { firstLogPosition: first } } } } },
+    ])
+  })
+
+  it('records no first log position for a close', async () => {
+    const { events } = await drain(phaseCtx(parked()))
+    const [event] = events as { action: { payload: { patch: { closeReport: object } } } }[]
+    expect(event?.action.payload.patch.closeReport).not.toHaveProperty('firstLogPosition')
   })
 })

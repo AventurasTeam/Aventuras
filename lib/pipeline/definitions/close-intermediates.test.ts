@@ -5,6 +5,7 @@ import type { ChapterPartCut } from '@/lib/chapters'
 import {
   closeClusterOf,
   closeClustersOf,
+  closeFloorOf,
   closeLedgerOf,
   closePartsOf,
   closeRangeOf,
@@ -12,6 +13,7 @@ import {
   requireCloseRange,
   seedCloseLedger,
   setCloseClusters,
+  setCloseFloor,
   setCloseParts,
   setCloseRange,
 } from './close-intermediates'
@@ -121,5 +123,18 @@ describe('the close clusters', () => {
     expect(closeClusterOf(intermediates, 'hap_d')).toEqual(['hap_c', 'hap_d', 'hap_e'])
     expect(closeClusterOf(intermediates, 'hap_b')).toEqual(['hap_a', 'hap_b'])
     expect(closeClusterOf(intermediates, 'hap_f')).toBeUndefined()
+  })
+})
+
+describe('the close floor', () => {
+  it('reads none on a close, then the floor a re-run parks, 0 included, under its own key', () => {
+    const intermediates: Record<string, unknown> = {}
+    expect(closeFloorOf(intermediates)).toBeUndefined()
+
+    setCloseFloor(intermediates, 0)
+    expect(closeFloorOf(intermediates)).toBe(0)
+    setCloseFloor(intermediates, 40)
+    expect(closeFloorOf(intermediates)).toBe(40)
+    expect(closeRangeOf(intermediates)).toBeUndefined()
   })
 })

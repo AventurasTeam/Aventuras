@@ -61,6 +61,14 @@ export type DeltaActionPort = {
   holdBranchWriteExclusive: (branchId: string, actionId: string) => Promise<void>
   /** Ends `actionId`'s exclusive hold, or drops its queued request; else a no-op. */
   releaseBranchWriteExclusive: (branchId: string, actionId: string) => void
+  /**
+   * Reverses the chapter's lore work for its re-run and journals it in one transaction; returns
+   * the floor. The caller holds the branch exclusive.
+   */
+  reverseCloseForRerun: (
+    args: { branchId: string; chapterId: string; actionId: string },
+    ctx: DbCtx,
+  ) => Promise<{ floor: number }>
 }
 
 let port: DeltaActionPort | undefined
@@ -138,4 +146,10 @@ export function releaseBranchWriteExclusive(
   ...args: Parameters<DeltaActionPort['releaseBranchWriteExclusive']>
 ): ReturnType<DeltaActionPort['releaseBranchWriteExclusive']> {
   return requirePort().releaseBranchWriteExclusive(...args)
+}
+
+export function reverseCloseForRerun(
+  ...args: Parameters<DeltaActionPort['reverseCloseForRerun']>
+): ReturnType<DeltaActionPort['reverseCloseForRerun']> {
+  return requirePort().reverseCloseForRerun(...args)
 }

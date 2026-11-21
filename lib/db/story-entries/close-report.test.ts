@@ -131,6 +131,13 @@ describe('closeReportSchema', () => {
     const call = { ...FULL.calls[1], reason: 7 }
     expect(closeReportSchema.safeParse({ ...FULL, calls: [call] }).success).toBe(false)
   })
+
+  // C4: a re-run's report bounds its group for the review.
+  it("keeps a re-run's first log position, and refuses one that is no integer", () => {
+    expect(closeReportSchema.parse({ ...FULL, firstLogPosition: 41 }).firstLogPosition).toBe(41)
+    expect(closeReportSchema.safeParse({ ...FULL, firstLogPosition: 4.5 }).success).toBe(false)
+    expect(closeReportSchema.parse(FULL)).not.toHaveProperty('firstLogPosition')
+  })
 })
 
 describe('closeReportSchema on a stored reason that is no key', () => {

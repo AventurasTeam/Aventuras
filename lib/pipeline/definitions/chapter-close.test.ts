@@ -40,6 +40,7 @@ import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { closeReportPhase } from './chapter-close-report'
+import { closeReversalPhase } from './chapter-close-reversal'
 import { awarenessTask, resetRetrievalStep } from './close-agent/close-awareness'
 import { embedRangeStep } from './close-agent/close-happenings'
 import { normalizeStackablesStep } from './close-agent/close-stackables'
@@ -235,7 +236,7 @@ function abortsOnSignal(): void {
 }
 
 describe('the chapter-close declaration', () => {
-  it('pins C2: four phases in order, lore-mgmt on all but report, tool calling at the agent, and every field', () => {
+  it('pins C2: five phases in order, lore-mgmt on boundary, metadata and agent, tool calling at the agent, and every field', () => {
     const pipeline = getPipeline(CHAPTER_CLOSE_KIND)
     const lore = [{ target: 'lore-mgmt' }]
     const loreWithTools = [{ target: 'lore-mgmt', requires: 'toolCalling' }]
@@ -246,10 +247,12 @@ describe('the chapter-close declaration', () => {
     expect(pipeline.phases).toEqual([
       { name: 'boundary', run: closeBoundaryPhase, resolves: lore },
       { name: 'metadata', run: closeMetadataPhase, resolves: lore },
+      { name: 'reversal', run: closeReversalPhase },
       { name: 'agent', run: closeAgentPhase, resolves: loreWithTools },
       { name: 'report', run: closeReportPhase },
     ])
-    expect(pipeline.phases[3]).not.toHaveProperty('resolves')
+    expect(pipeline.phases[2]).not.toHaveProperty('resolves')
+    expect(pipeline.phases[4]).not.toHaveProperty('resolves')
     expect(pipeline.affordance).toBe('pill-and-banner')
     expect(pipeline.gateBehavior).toBe('hard-gate')
     expect(pipeline.interruptible).toBe('close')
@@ -323,7 +326,7 @@ describe('openCloseFixture', () => {
 })
 
 describe('a committed close', () => {
-  it('runs boundary, metadata, agent and report, in that order', async () => {
+  it('runs boundary, metadata, reversal, agent and report, in that order', async () => {
     const events = recordEvents()
 
     await runClose(f.replyIds[2]!)
@@ -331,6 +334,7 @@ describe('a committed close', () => {
     expect(events.flatMap((e) => (e.type === 'phase_start' ? [e.name] : []))).toEqual([
       'boundary',
       'metadata',
+      'reversal',
       'agent',
       'report',
     ])

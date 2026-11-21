@@ -25,6 +25,7 @@ export const CLOSE_TARGET = 'lore-mgmt' satisfies ResolveTarget
 export const CLOSE_PHASE = {
   boundary: 'boundary',
   metadata: 'metadata',
+  reversal: 'reversal',
   agent: 'agent',
   report: 'report',
 } as const

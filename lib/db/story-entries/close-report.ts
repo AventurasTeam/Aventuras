@@ -144,6 +144,8 @@ const storedReportSchema = z.object({
   ),
   /** No task called a tool. */
   noToolCalls: z.boolean(),
+  /** A re-run's: the first log position its own writes take, where the review reads from. */
+  firstLogPosition: z.number().int().optional(),
 })
 
 /** `chapters.close_report`: what a close's deltas don't hold (milestone C4). */

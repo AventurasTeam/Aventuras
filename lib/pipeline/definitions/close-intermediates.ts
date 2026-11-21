@@ -10,6 +10,7 @@ const PARTS_KEY = 'closeParts'
 const LEDGER_KEY = 'closeLedger'
 const IDS_KEY = 'closeIds'
 const CLUSTERS_KEY = 'closeClusters'
+const FLOOR_KEY = 'closeFloor'
 
 export function setCloseRange(intermediates: Record<string, unknown>, range: CloseRange): void {
   intermediates[RANGE_KEY] = range
@@ -105,4 +106,14 @@ export function closeClusterOf(
   happeningId: string,
 ): readonly string[] | undefined {
   return closeClustersOf(intermediates).find((cluster) => cluster.includes(happeningId))
+}
+
+/** A re-run's floor, parked by `reversal`: the highest log position its reversal left. */
+export function setCloseFloor(intermediates: Record<string, unknown>, floor: number): void {
+  intermediates[FLOOR_KEY] = floor
+}
+
+/** Undefined on a close, which reverses nothing. */
+export function closeFloorOf(intermediates: Readonly<Record<string, unknown>>): number | undefined {
+  return intermediates[FLOOR_KEY] as number | undefined
 }
