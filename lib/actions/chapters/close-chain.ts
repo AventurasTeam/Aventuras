@@ -52,8 +52,9 @@ type CloseChainOpts = {
 type UnpreflightedOpts = Omit<CloseChainOpts, 'preflight'> & { preflight?: undefined }
 
 /**
- * Starts the pass (entries unprocessed) or the close; resolves with the chain's end, the refusal,
- * or, given a pre-flight, its failure. Rejects when the origin or the pre-flight throws, as
+ * Starts the pass (entries unprocessed; under a pending re-run, only those through its chapter's
+ * end) or the close; resolves with the chain's end, the refusal, or, given a pre-flight, its
+ * failure. Rejects when the origin or the pre-flight throws, as
  * `startChain` does: a caller must handle it.
  */
 export function startCloseChain(

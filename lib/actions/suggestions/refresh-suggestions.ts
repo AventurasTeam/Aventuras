@@ -11,8 +11,8 @@ import { generationStore, refreshHeldByRerun } from '@/lib/stores'
 import type { DbCtx } from '../types'
 
 // The re-roll trigger (reader-composer.md → Next-turn suggestions). Returns
-// runPipeline's result verbatim so the caller sees the self-block rejection —
-// a second ⟳ while one is loading is a no-op, not an error.
+// runPipeline's result verbatim; 'rejected' is the self-block (a second ⟳ while
+// one loads) or the re-run hold below, and neither is an error.
 export async function refreshSuggestions(
   ids: { storyId: string; branchId: string },
   input: SuggestionRefreshInput,

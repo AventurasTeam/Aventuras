@@ -75,7 +75,8 @@ export type ReversalSeed = {
   readonly sweep?: readonly Delta[]
   /**
    * Deltas another reversal takes back before this one: the ref clears read as after them. The
-   * closure doesn't; it is selected against the current state.
+   * closure doesn't; it is selected against the current state. A set selected with it is for
+   * counting only and is never reversed.
    */
   readonly reversedFirst?: readonly Delta[]
 }
