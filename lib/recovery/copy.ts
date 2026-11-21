@@ -10,8 +10,8 @@ import {
 
 export type RecoveryStoryNames = Readonly<Record<string, string>>
 
-function formatRun(run: RecoveredRun, storyName: string | undefined): string {
-  switch (run.kind) {
+function runLine(kind: string, storyName: string | undefined): string {
+  switch (kind) {
     case PER_TURN_KIND:
       return storyName
         ? t('crashRecovery.perTurnNamed', { storyName })
@@ -29,6 +29,12 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
         ? t('crashRecovery.genericNamed', { storyName })
         : t('crashRecovery.genericUnnamed')
   }
+}
+
+// generation-pipeline.md → Recovery modal: a re-run whose journal couldn't be written back says so.
+function formatRun(run: RecoveredRun, storyName: string | undefined): string {
+  const line = runLine(run.kind, storyName)
+  return run.closeUndone ? `${line} ${t('crashRecovery.closeUndone')}` : line
 }
 
 // A pass failure holds its branch only while the boot left the branch `running` (Send refuses until

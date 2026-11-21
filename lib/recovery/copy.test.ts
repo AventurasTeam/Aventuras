@@ -59,6 +59,26 @@ describe('formatRecoveryReport', () => {
     )
   })
 
+  // generation-pipeline.md → Recovery modal: a re-run whose journal couldn't be written back.
+  it('adds the fallback line after the close’s for a re-run whose close was undone', () => {
+    expect(
+      formatRecoveryReport(
+        report({ ...recovered('chapter-close', 'story_1'), closeUndone: true }),
+        { story_1: 'Mornstone' },
+      ),
+    ).toBe(
+      "An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
+    )
+  })
+
+  it('adds no line for a re-run whose journal was written back', () => {
+    expect(
+      formatRecoveryReport(report(recovered('chapter-close', 'story_1')), { story_1: 'Mornstone' }),
+    ).toBe(
+      'An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact.',
+    )
+  })
+
   // generation-pipeline.md → Recovery modal: a pass holds its branch's turns; it isn't background.
   it('formats a named periodic-classifier recovery', () => {
     expect(
