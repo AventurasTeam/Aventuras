@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { ScrollView, View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -225,6 +226,44 @@ export const TallContentFormOwnedScroll: Story = {
       Math.floor(box.top + box.height / 2),
     )
     expect(confirm.contains(topMost) || confirm === topMost).toBe(true)
+  },
+}
+
+function SavingDialog() {
+  const [busy, setBusy] = useState(false)
+  return (
+    <Dialog open>
+      <DialogContent busy={busy} hideCloseButton>
+        <DialogHeader>
+          <DialogTitle>Saving</DialogTitle>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="secondary" disabled={busy}>
+            <Text>Cancel</Text>
+          </Button>
+          <Button variant="primary" loading={busy} onPress={() => setBusy(true)}>
+            <Text>Save</Text>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Every action disables at once, the focused one too: the dialog takes focus so Tab stays in. */
+export const FocusStaysWhenBusy: Story = {
+  render: () => <SavingDialog />,
+  play: async () => {
+    const dialog = (await screen.findByText('Saving')).closest('[role="dialog"]') as HTMLElement
+    const save = screen.getByRole('button', { name: 'Save' })
+    save.focus()
+    await expect(save).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(save).toBeDisabled())
+    await waitFor(() => expect(save).not.toHaveFocus())
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+    await userEvent.tab()
+    expect(dialog.contains(document.activeElement)).toBe(true)
   },
 }
 

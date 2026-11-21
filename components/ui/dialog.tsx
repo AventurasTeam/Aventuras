@@ -1,6 +1,6 @@
 import * as DialogPrimitive from '@rn-primitives/dialog'
 import { X } from 'lucide-react-native'
-import { Fragment, type ComponentProps, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, type ComponentProps, type ReactNode } from 'react'
 import { Platform, ScrollView, useWindowDimensions, View, type ViewProps } from 'react-native'
 import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
@@ -63,10 +63,11 @@ function DialogContent({
   portalHost,
   hideCloseButton,
   scrollable = true,
+  busy = false,
   style,
   children,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & {
+}: Omit<ComponentProps<typeof DialogPrimitive.Content>, 'ref'> & {
   portalHost?: string
   /** Hosts whose every state carries an explicit affordance can drop the ×. */
   hideCloseButton?: boolean
@@ -76,16 +77,29 @@ function DialogContent({
    * height cap applies either way.
    */
   scrollable?: boolean
+  /** Its actions are disabling (a save in flight, a gate): focus stays in the dialog. */
+  busy?: boolean
 }) {
   // Keyed on `open` like AlertDialogContent: the reader's undo / End keys and the Actions
   // menu stand down only for a registered overlay.
   const { open } = DialogPrimitive.useRootContext()
   useRegisteredOverlay(open)
+  const contentRef = useRef<View>(null)
+  // Chromium blurs a button the moment it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !open || !busy) return
+    // The ref lands on the styled View inside Radix's focusable role=dialog element.
+    const dialog = (contentRef.current as unknown as HTMLElement | null)?.closest<HTMLElement>(
+      '[role="dialog"]',
+    )
+    if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
+  }, [open, busy])
   const { height } = useWindowDimensions()
   return (
     <DialogPortal hostName={portalHost}>
       <DialogOverlay>
         <DialogPrimitive.Content
+          ref={contentRef}
           // A width override needs the `sm:` variant (`sm:max-w-xl`): tailwind-merge replaces
           // only the same variant, so a bare `max-w-*` leaves the 32rem cap from `sm` up.
           className={cn(

@@ -489,10 +489,12 @@ mounted open keeps its forced state.
   `DialogPrimitive.Title`.
 - **Focus management.** On open, focus moves to `📁 Choose .avts
 file…`. The Dialog primitive returns focus to the trigger on
-  close. During state transitions, action-button focus is
-  retained; error regions announce via `role="alert"` (web) /
-  `accessibilityLiveRegion="assertive"` (RN) rather than
-  stealing focus.
+  close. While a read is in flight the source buttons disable, so
+  the dialog is `busy` and takes focus itself
+  ([Dialog — Busy](./overlays.md#dialog--busy)); error regions
+  announce via `role="alert"` (web) /
+  `accessibilityLiveRegion="assertive"` (RN) rather than stealing
+  focus.
 - **Hidden file input (web).** `aria-hidden="true"` plus
   visually hidden styling; the visible Button owns the
   accessible label.

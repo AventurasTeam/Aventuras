@@ -129,12 +129,6 @@ slice-planning gate forces its resolution before that slice is planned.
   asks for `role="group"` with an `aria-label` per section; the headers
   render as plain text (`components/ui/searchable-overlay-list.tsx`).
   Raised in 5.10's PR 2 review.
-- **`Dialog` has no busy focus handoff.** `AlertDialogContent` takes
-  `busy` so a control that disables while focused hands focus to a
-  stable container; `DialogContent` has no equivalent, so each dialog
-  that disables a focused button hand-rolls it, as the close modal now
-  does (`lessons-learned/rnweb-disabled-under-focus-blurs.md`). Raised
-  in 5.10's PR 2 review.
 - **Story viewport presets are copied per file.** `phone390` is defined
   in each of `chapter-in-progress-card`, `review-window`, `chapter-card`
   and `close-chapter-modal` stories; one preset in

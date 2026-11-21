@@ -641,6 +641,9 @@ export const MergeInFlightStaysOpen: Story = {
     settleResolve = null
     await userEvent.click(await screen.findByRole('button', { name: /^Merge into / }))
     await waitFor(() => expect(settleResolve).not.toBeNull())
+    // The pressed button disables under focus; the dialog takes it, so Tab stays inside.
+    const dialog = screen.getByRole('dialog')
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
 
     await userEvent.keyboard('{Escape}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()

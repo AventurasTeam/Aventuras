@@ -409,6 +409,15 @@ consumer that adds no scroll region still gets a panel that is on
 screen and dismissable, merely clipped. A Dialog has no such floor:
 without the cap its content leaves the viewport entirely.
 
+## Dialog — Busy
+
+A Dialog whose actions disable while it works (a save in flight, a
+read, a gate) passes `busy` to `DialogContent`, as an AlertDialog does
+([`alert-dialog.md → Busy`](./alert-dialog.md#busy)). On web the
+focused action blurs the moment it disables, so the dialog takes focus
+and Tab stays inside
+([a control that disables under focus drops focus on web](../../implementation/lessons-learned/rnweb-disabled-under-focus-blurs.md)).
+
 ## Popover — API surface
 
 ```

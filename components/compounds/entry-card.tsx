@@ -291,6 +291,7 @@ function WorldTimeEditDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent
         className="sm:max-w-xl"
+        busy={saving}
         hideCloseButton={saving}
         // Radix autofocuses the first tabbable field and selects its text.
         // Land on the content container instead: the selection is one
@@ -378,6 +379,7 @@ function SceneEditDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className="sm:max-w-xl"
+        busy={saving}
         hideCloseButton={saving}
         scrollable={false}
         // Radix returns focus to whatever DialogTrigger registered, and this Dialog is

@@ -457,17 +457,6 @@ function CloseModalBody({
  */
 export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactElement {
   const { open, onCancel, disabledReason } = props
-  const contentRef = useRef<View>(null)
-  const gated = disabledReason != null
-  // Chromium blurs a button as it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !open || !gated) return
-    // The ref lands on the styled View inside Radix's focusable role=dialog element.
-    const dialog = (contentRef.current as unknown as HTMLElement | null)?.closest<HTMLElement>(
-      '[role="dialog"]',
-    )
-    if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
-  }, [open, gated])
   return (
     <Dialog
       open={open}
@@ -477,7 +466,7 @@ export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactE
     >
       {/* Opened from a Sheet still animating out, it must draw above that Sheet. */}
       <DialogContent
-        ref={contentRef}
+        busy={disabledReason != null}
         portalHost={ABOVE_SHEETS_PORTAL_HOST}
         scrollable={false}
         className="sm:max-w-[480px]"

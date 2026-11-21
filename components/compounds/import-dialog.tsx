@@ -194,7 +194,7 @@ export function ImportDialog<TPayload>({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Phone expands the issue list inline, so the dialog itself has to be the scroll
           host there; every other tier bounds the list and needs no second scrollable. */}
-      <DialogContent scrollable={isPhone}>
+      <DialogContent scrollable={isPhone} busy={isReading}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
