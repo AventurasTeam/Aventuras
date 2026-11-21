@@ -331,7 +331,8 @@ every screen for the active theme.
   session 7 retrofits per surface.
 - **Haptic feedback** on actions — could land as polish post-v1;
   not foundational.
-- **Deep links via URL scheme** — defer post-v1.
+- **Deep links via URL scheme** — defer post-v1. Until then a release
+  build ignores external links (`app/+native-intent.ts`).
 - **Splash screen / launch screen / app icon configuration** —
   Expo config, not UX-shaped.
 - **Custom native modules** for any platform-specific feature —

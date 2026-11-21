@@ -61,12 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A run off the open story pre-flights without the story's override.**
-  `driveRun` passes `storySettings` only when the run's story and branch
-  are the open ones (`ownStory`), so a run on another story checks the
-  profile's model, not the override's. 5.10's tool-calling check inherits
-  this. Whether such a run is reachable today is unchecked. Raised in
-  5.10's PR 1 review.
 - **A Dialog opened without a trigger returns focus to `<body>` on
   close.** Radix's modal `DialogContent` focuses only its
   `DialogTrigger` when it closes (`@radix-ui/react-dialog`,
@@ -82,12 +76,3 @@ slice-planning gate forces its resolution before that slice is planned.
   [`import-dialog.md → Accessibility`](../ui/patterns/import-dialog.md#accessibility)
   says the primitive returns focus to the trigger, which holds only
   with one. Raised in 5.10's slice review, 2026-11-18.
-- **A deep link into another story skips the story-leave guard.** A deep
-  link is a push, which the story-leave guard doesn't see, so one into
-  another story while a run holds skips the guard that cancels runs
-  (reasoned from the `app.json` scheme, not run on a device; Electron
-  registers no protocol). Slice 5.10 gated `/dev` but left this path; it
-  is the open path in
-  [`parked.md` → A write that commits while a story opens is lost from its stores](../parked.md#a-write-that-commits-while-a-story-opens-is-lost-from-its-stores).
-  Routed by 5.10's slice review, 2026-11-18, from that slice's Open
-  questions.

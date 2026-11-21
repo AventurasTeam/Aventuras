@@ -149,7 +149,9 @@ through a debug install, and the release APK goes over it with
 `adb install -r`, which keeps the app's files. Both APKs are built in
 one checkout, so they share `android/app/debug.keystore`. On a personal
 device this replaces whatever the app holds, so back its data up
-first.
+first. A release build ignores `aventuras://` links
+(`app/+native-intent.ts`), so it is driven by taps; the `aventuras://dev/…`
+links work in a debug build only.
 
 Set up the shell first. In a worker slot `.env.dev-slot.local` exports
 `ANDROID_SERIAL` for the slot's AVD, and on slot 0 with an AVD running a
