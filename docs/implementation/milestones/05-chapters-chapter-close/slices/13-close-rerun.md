@@ -200,8 +200,8 @@ re-run, and how `Re-run…` meets the surface guard from the review window.
   2. `buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })`.
   3. The before-images, read before the transaction: a whole row per
      `(table, id)` in the plan's `patches` (`readCurrentRow` in
-     `lib/actions/delta/redo.ts:127` reads one; it is module-private and
-     gains an export), the delta rows by the ids
+     `lib/actions/delta/redo.ts:127` reads one; it was `currentRow`,
+     module-private, and gains an export), the delta rows by the ids
      above, and any journal row the plan drops. `runInTransaction` takes
      `SqlOp[]` and returns nothing (`lib/db/types.ts`), so no read can
      happen inside it; the reads are safe because the run holds the gate
@@ -233,7 +233,7 @@ set:
   reaches a row created after E that the re-run wrote);
 - prunes or edits a delta at or below that journal's floor that is
   neither a delta on the chapter's own `chapters` row, whatever its
-  source, nor one of its stamps (a rollback or regenerate of a turn
+  source, nor a `chapter_close` stamp (a rollback or regenerate of a turn
   between the chapter's end and the re-run); or
 - takes the group's last remaining delta: at least one of its deltas,
   leaving none. A report-only re-run after a divider-only removal would
@@ -271,7 +271,7 @@ transaction that drops it.
   a divider, as kept work does.
 - **The ops,** after the group's own reversal and prunes in the same
   transaction (`reverseAndPruneDeltaRows` runs `extraOps` after its
-  `pruneOps`, `reverse-replay.ts:916`):
+  `pruneOps`, `reverse-replay.ts:917`):
   - delete each row whose before-image is absent, and sweep its vectors
     (`vecSweepIdsOps`);
   - upsert each other row whole, with `embedding_stale = 1` on every
@@ -340,7 +340,7 @@ transaction that drops it.
   - It calls `undoRedoStore.clear()` after the commit, also when only the
     store sync failed, as `commitNewAction` does. A later edit's redo
     snapshot can hold the re-run's values, and redo writes an update's whole
-    `rowBeforeUndo` back (`redo.ts:299-314`), which would resurrect them
+    `rowBeforeUndo` back (`redo.ts:329-333`), which would resurrect them
     with no delta behind them.
   - `UndoResult`'s `ok` arm gains `closeUndone?: { chapterNumber }`, and
     the reader's undo handler (`app/reader-composer/[branchId].tsx`) raises
@@ -598,7 +598,7 @@ close's until this slice.
   `components/story-settings/generation-run.ts` tell a re-run from a close
   by its slot, so every disabled control names it.
 - CTRL-Z stays refused while a re-run runs: `undoLastAction`'s gated pass
-  skips the running run and refuses any target but a turn (`undo.ts:171-172`),
+  skips the running run and refuses any target but a turn (`undo.ts:135-144`),
   and the head under a re-run is never a turn. Since every press is
   refused, the reader's Undo entry (`undoGate.blocked`,
   `app/reader-composer/[branchId].tsx:1727`) disables while a `'rerun'` run
@@ -659,10 +659,12 @@ close's until this slice.
   confirm on the fresh preview with rollback's toast,
   `The counts changed while this was open. Check them before confirming.`;
   `not-latest` toasts `This is no longer the latest chapter.` and closes;
-  a refusal for a run in flight keeps the confirm open with its actions
-  disabled, `Unavailable while generating.`, as the delete and the
-  reader's rollback confirms do; other refusals toast a failure and
-  close.
+  a refusal for a run in flight toasts `Unavailable while generating.`
+  and keeps the confirm open with its actions disabled, as the delete and
+  the reader's rollback confirms do; the disabled actions carry the
+  blocking run's tooltip, falling back to that string only once no gate
+  reason remains (`chapter-overlays-host.tsx`'s `rerunReason ?? held`);
+  other refusals toast a failure and close.
 
 - **The card.** `Re-run close…` in `chapter-card.tsx`'s `moreActions`,
   between `Review changes` and `Delete…`, on the latest chapter's card when
@@ -1204,12 +1206,12 @@ change amends the scope above.
   or keeping the confirm open, would say what happened; the re-run
   confirm gets the same refusal and is specced to toast a failure and
   close. Default: one answer for both confirms, keeping the confirm open
-  with `reader:actions.blockedWhileGenerating` as its reason. Raised in
+  with `reader:actions.blockedWhileGenerating` as its message. Raised in
   Slice 5.12's review of Task 12 and its final review (the same entry's
   log-naming edge was fixed in the 2026-11-14 triage pass); routed from
   triage 2026-11-14.
 
-  Settled at planning (2026-11-21): the delete, re-run and reader rollback confirms all stay open, their confirm action disabled with `reader:actions.blockedWhileGenerating`.
+  Settled at planning (2026-11-21): the delete, re-run and reader rollback confirms all stay open on an in-flight refusal, toasting `reader:actions.blockedWhileGenerating` while their confirm action stays disabled with the blocking run's tooltip; only the re-run confirm falls back to that string once no gate reason remains.
 
 - **Does the re-run confirm share the settle re-read?** The re-read effect
   in `components/chapters/use-chapter-delete-confirm.ts` repeats

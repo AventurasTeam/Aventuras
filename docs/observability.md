@@ -422,9 +422,10 @@ convention, and the expectation that subsystems route through
   committed but the store sync after it failed; the branch re-hydrates
   next, with no failure toast) and `chapter_delete_resync_failed` (that
   re-hydration failed too; the user sees
-  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`)
-  and the re-run confirm
-  (`components/chapters/use-close-rerun-confirm.ts`):
+  `The chapter was deleted, but the Timeline couldn't refresh. Reopen the story.`).
+  `chapter_delete_threw` and `chapter_delete_sync_failed` log a replay
+  failure's cause, not its wrapper's message. The re-run confirm
+  (`components/chapters/use-close-rerun-confirm.ts`) logs:
   `close_rerun_preview_threw` (error: the read behind `Re-run close…`
   threw, with `branchId`, `chapterId` and `error`; the confirm stays shut
   and the user sees `Couldn't read what a re-run would change.`),
@@ -434,9 +435,8 @@ convention, and the expectation that subsystems route through
   `close-owed`, the documented races, toast their own copy unlogged, and
   `integrity` logs as `action_layer.reversal_refused`) and
   `close_rerun_recount_failed` (error: a re-read after a run settled
-  threw; the confirm keeps the preview it shows);
-  `chapter_delete_threw` and `chapter_delete_sync_failed` log a replay
-  failure's cause, not its wrapper's message, `world_set_lead_failed` (`app/world/[branchId].tsx`
+  threw; the confirm keeps the preview it shows).
+  `world_set_lead_failed` (`app/world/[branchId].tsx`
   — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
   refused), `world_collision_resolve_failed`
   (`components/world/use-collision-resolve.ts` — a resolve dialog's
@@ -482,7 +482,12 @@ convention, and the expectation that subsystems route through
   — plus `undo_rejected` / `redo_rejected` at debug for the refusals
   that are routine (gated, nothing to apply, branch mid-switch), and
   `rollback_counts_rejected` at debug for a refused read behind a delete
-  (a stale card, the rollback floor), where
+  (a stale card, the rollback floor), `rollback_recount_rejected` (warn,
+  `components/reader/use-live-rollback-counts.ts`: the rollback confirm's
+  re-read after a run settled was refused, with `branchId`, `entryId`,
+  `code` and `reason`; the confirm keeps the counts it shows) and
+  `rollback_recount_failed` (error, the same file: that re-read threw,
+  with `error`), where
   `undo_failed` / `redo_failed` carry the ones that mean the delta log
   cannot produce the reversal it should
   (the rollback-confirm modal's regenerate variant, distinct from the
