@@ -388,6 +388,7 @@ export function ReaderSurface({
     sliceKey,
     editGate,
     gateReason,
+    stampedReversalsHeld = false,
     jumpButtonEnabled,
     systemFixLabel,
     cutOffFixLabel,
@@ -1316,7 +1317,12 @@ export function ReaderSurface({
           {hasOlder && rows.length > 0 ? <BoundaryShimmer /> : null}
           {rows.map((row) => {
             const decoration = worldTimeDecorations[row.id]
-            const flags = rowReversalFlags({ rowId: row.id, headTurnIds, editGate })
+            const flags = rowReversalFlags({
+              rowId: row.id,
+              headTurnIds,
+              editGate,
+              reversalHeld: stampedReversalsHeld && row.chapterId != null,
+            })
             const chapterBreak = chapterBreaks[row.id]
             return (
               <Fragment key={row.id}>

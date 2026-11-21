@@ -60,6 +60,7 @@
     "inFlight": "Generation is in flight. Cancel to edit.",
     "updatingMemory": "Updating memory. Cancel to edit.",
     "chapterClose": "Chapter close in progress. Cancel to edit.",
+    "chapterCloseRerun": "Re-running the chapter's close. Cancel to edit.",
     "suggestionRefresh": "Refreshing suggestions. Cancel to edit."
   },
   "deleteUndoHint": "You can undo this from the reader's menu, or with Cmd/Ctrl-Z.",
@@ -183,6 +184,7 @@
       "closingBeforeTurn": "Closing chapter before your turn…",
       "closingBoundary": "Closing chapter: choosing where it ends…",
       "closingMetadata": "Closing chapter: writing its summary…",
+      "closingReversal": "Reversing the chapter's close…",
       "closingAgent": "Closing chapter: reviewing the chapter…",
       "closingTask": "Closing chapter: {{index}} of {{total}} — {{task}}…",
       "closingReport": "Closing chapter: finishing up…",

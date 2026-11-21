@@ -80,6 +80,7 @@ export const ClosingBeforeTurn: Story = {
       beforeTurn: true,
       currentPhase: 'agent',
       closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
+      interruptible: 'close',
     }),
     onCancel: fn(),
   },
@@ -97,6 +98,7 @@ export const ClosingTask: Story = {
       beforeTurn: false,
       currentPhase: 'agent',
       closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
+      interruptible: 'close',
     }),
     onCancel: fn(),
   },
@@ -121,6 +123,7 @@ export const PhoneClosingTask: Story = {
       beforeTurn: false,
       currentPhase: 'agent',
       closeProgress: { task: 'lifecycle', part: 3, index: 16, total: 17 },
+      interruptible: 'close',
     }),
     onCancel: fn(),
   },
@@ -133,6 +136,24 @@ export const PhoneClosingTask: Story = {
       ),
     )
     expect(screen.getByText(args.label)).toBeVisible()
+  },
+}
+
+// A re-run names its reversal step; Cancel interrupts it as a close's does.
+export const RerunReversing: Story = {
+  args: {
+    kind: 'run',
+    label: closeBannerLabel({
+      beforeTurn: false,
+      currentPhase: 'reversal',
+      interruptible: 'rerun',
+    }),
+    onCancel: fn(),
+  },
+  play: async ({ args }) => {
+    expect(screen.getByText("Reversing the chapter's close…")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(runArgs(args).onCancel).toHaveBeenCalledTimes(1))
   },
 }
 

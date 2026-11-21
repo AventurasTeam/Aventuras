@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 
 import type { GenerationPhase } from '@/components/compounds/generation-status-pill'
-import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
+import { CHAPTER_CLOSE_KIND, CHAPTER_CLOSE_RERUN } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { t } from '@/lib/i18n'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
@@ -46,25 +46,44 @@ function firstByPillOrder(runs: readonly RunState[]): RunState | undefined {
   )
 }
 
-/** @returns The kind of the pill's run across the story, or null when no run covers it. */
+/** The kind a run's tooltips and pill name: a re-run is a close by kind, told apart by its slot. */
+export function runGateKind(run: Pick<RunState, 'kind' | 'interruptible'>): string {
+  return run.interruptible === 'rerun' ? CHAPTER_CLOSE_RERUN : run.kind
+}
+
+function gateKindOf(run: RunState | undefined): string | null {
+  return run == null ? null : runGateKind(run)
+}
+
+/** @returns The gate kind of the pill's run across the story, or null when no run covers it. */
 export function selectStorySettingsGenerationRunKind(
   txState: TxState,
   storyId: string | undefined,
 ): string | null {
-  return pillRun(txState, { storyId })?.kind ?? null
+  return gateKindOf(pillRun(txState, { storyId }))
 }
 
 /**
- * The kind of the run a head reversal on `branchId` waits on, which beside a pass is not the
+ * The gate kind of the run a head reversal on `branchId` waits on, which beside a pass is not the
  * pill's: the pass lets the reversal through, a refresh beside it does not. Null when no run holds
  * that gate (a pending turn or a reversal's sweep may still close it).
  */
 export function selectHeadReversalRunKind(txState: TxState, branchId: string): string | null {
-  return (
+  return gateKindOf(
     firstByPillOrder(
       [...txState.runs.values()].filter((run) => runBlocksHeadReversal(run, branchId)),
-    )?.kind ?? null
+    ),
   )
+}
+
+/**
+ * A re-run on `branchId`: it refuses CTRL-Z while it runs, and with a row's chapter id it is
+ * `rerunHoldsReversal` for that row, which the reader document can't read itself.
+ */
+export function selectRerunRunning(txState: TxState, branchId: string): boolean {
+  for (const run of txState.runs.values())
+    if (run.branchId === branchId && run.interruptible === 'rerun') return true
+  return false
 }
 
 function cancelPillRunIn(scope: PillScope): void {
@@ -82,6 +101,7 @@ export function generationGateReason(
   if (!editBlocked) return undefined
   if (runKind === PERIODIC_CLASSIFIER_KIND) return t('generationGate.updatingMemory')
   if (runKind === CHAPTER_CLOSE_KIND) return t('generationGate.chapterClose')
+  if (runKind === CHAPTER_CLOSE_RERUN) return t('generationGate.chapterCloseRerun')
   if (runKind === SUGGESTION_REFRESH_KIND) return t('generationGate.suggestionRefresh')
   return t('generationGate.inFlight')
 }
@@ -102,6 +122,7 @@ export function useStoryGenerationGate(
   storyId: string | undefined,
   branchId?: string,
 ): {
+  /** The pill's run by its gate kind (`runGateKind`). */
   activeRunKind: string | null
   editBlocked: boolean
   gateReason: string | undefined
@@ -109,8 +130,8 @@ export function useStoryGenerationGate(
   /** Ends the pill's run; an interruptible one (pass, close) is deferred to the next Send. */
   cancelPillRun: () => void
 } {
-  const activeRunKind = generationStore.useGeneration(
-    (s) => pillRun(s.txState, { storyId, branchId })?.kind ?? null,
+  const activeRunKind = generationStore.useGeneration((s) =>
+    gateKindOf(pillRun(s.txState, { storyId, branchId })),
   )
   const beforeTurn = generationStore.useGeneration(
     (s) => pillRun(s.txState, { storyId, branchId })?.beforeTurn ?? false,
@@ -126,7 +147,7 @@ export function useStoryGenerationGate(
 
 export function storySettingsGenerationPhase(kind: string): StorySettingsGenerationPhase {
   if (kind === PERIODIC_CLASSIFIER_KIND) return 'updating-memory'
-  if (kind === CHAPTER_CLOSE_KIND) return 'closing-chapter'
+  if (kind === CHAPTER_CLOSE_KIND || kind === CHAPTER_CLOSE_RERUN) return 'closing-chapter'
   if (kind === SUGGESTION_REFRESH_KIND) return 'refreshing-suggestions'
   return 'generating-narrative'
 }

@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { fn } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import type { SuggestionCategory } from '@/lib/db'
+import { t } from '@/lib/i18n'
 
 import { SuggestionStrip } from './suggestion-strip'
 
@@ -108,6 +109,40 @@ export const LockedByTurn: Story = { args: { disabled: true } }
 /** Locked by a turn with nothing to show: spinner replaces ⟳ Generate, so the chrome ⟳ returns (disabled). */
 export const LockedByTurnEmpty: Story = {
   args: { disabled: true, chips: [] },
+}
+
+const RERUN_REASON = t('generationGate.chapterCloseRerun')
+
+/** A re-run's chain holds ⟳ alone, naming it; chips write nothing, so they stay tappable. */
+export const HeldByRerun: Story = {
+  args: { canRefresh: false, refreshDisabledReason: RERUN_REASON },
+  play: async ({ args }) => {
+    // A disabled IconAction takes its reason as its accessible name.
+    const refresh = screen.getByRole('button', { name: RERUN_REASON })
+    expect(refresh).toHaveAttribute('aria-disabled', 'true')
+    expect(refresh.closest('[title]')).toHaveAttribute('title', RERUN_REASON)
+    await userEvent.click(refresh, { pointerEventsCheck: 0 })
+    expect(args.onRefresh).not.toHaveBeenCalled()
+
+    const chip = screen.getByRole('button', {
+      name: t('reader:suggestions.chipLabel', { category: 'Action', text: chips[0]!.text }),
+    })
+    expect(chip).not.toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(chip)
+    await waitFor(() => expect(args.onTapChip).toHaveBeenCalledWith(chips[0]!.text))
+  },
+}
+
+/** With no chips the body's Generate is the ⟳; it holds with the same reason. */
+export const HeldByRerunEmpty: Story = {
+  args: { chips: [], canRefresh: false, refreshDisabledReason: RERUN_REASON },
+  play: async ({ args }) => {
+    const generate = screen.getByRole('button', { name: t('reader:suggestions.generate') })
+    expect(generate).toHaveAttribute('aria-disabled', 'true')
+    expect(generate.closest('[title]')).toHaveAttribute('title', RERUN_REASON)
+    await userEvent.click(generate, { pointerEventsCheck: 0 })
+    expect(args.onRefresh).not.toHaveBeenCalled()
+  },
 }
 
 export const Collapsed: Story = { args: { collapsed: true } }

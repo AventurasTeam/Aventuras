@@ -40,8 +40,13 @@ type SuggestionStripProps = {
   errorMessage?: string
   /** Set only for deterministic failures — replaces Retry, which could not succeed. */
   errorFix?: { label: string; onPress: () => void }
-  /** False when no category is enabled: the phase would no-op, so ⟳ must not offer the run. */
+  /**
+   * False when no category is enabled (the phase would no-op), or while a run holds ⟳ alone: ⟳
+   * must not offer the run.
+   */
   canRefresh?: boolean
+  /** Why ⟳ is held while `canRefresh` is false for a run's sake; every refresh control shows it. */
+  refreshDisabledReason?: string
   /** Receives the chip's prose; the route fills the composer and forces `Free` mode. */
   onTapChip: (text: string) => void
   onRefresh: () => void
@@ -147,6 +152,7 @@ export function SuggestionStrip({
   errorMessage,
   errorFix,
   canRefresh = true,
+  refreshDisabledReason,
   disabled = false,
   className,
   contentClassName,
@@ -223,7 +229,13 @@ export function SuggestionStrip({
               <Text>{errorFix.label}</Text>
             </Button>
           ) : (
-            <Button variant="secondary" size="sm" onPress={onRefresh} disabled={refreshBlocked}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={onRefresh}
+              disabled={refreshBlocked}
+              disabledReason={refreshDisabledReason}
+            >
               <Icon as={RefreshCw} size="sm" />
               <Text>{t('reader:suggestions.retry')}</Text>
             </Button>
@@ -259,7 +271,13 @@ export function SuggestionStrip({
     // route: the two cannot disagree if only one of them exists.
     body = (
       <View className="items-center">
-        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={refreshBlocked}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={onRefresh}
+          disabled={refreshBlocked}
+          disabledReason={refreshDisabledReason}
+        >
           <Icon as={RefreshCw} size="sm" />
           <Text>{t('reader:suggestions.generate')}</Text>
         </Button>
@@ -317,6 +335,7 @@ export function SuggestionStrip({
                 label={t('reader:suggestions.refresh')}
                 size="sm"
                 disabled={refreshBlocked}
+                disabledReason={refreshDisabledReason}
                 onPress={onRefresh}
               />
             )}

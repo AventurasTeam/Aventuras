@@ -468,6 +468,36 @@ export const ClosedGateNamesItsBlocker: Story = {
   },
 }
 
+const RERUN_REASON = t('generationGate.chapterCloseRerun')
+
+/**
+ * A re-run holds the ↻ and × of every stamped row (chapter-close.md → Re-running a close); the
+ * open region's stay live, each interrupting it.
+ */
+export const RerunHoldsStampedRows: Story = {
+  args: {
+    ...PASS_IN_FLIGHT_ARGS,
+    rows: PASS_ROWS.map((row) => (row.position <= 3 ? { ...row, chapterId: 'chap_1' } : row)),
+    editGate: 'interruptible',
+    gateReason: RERUN_REASON,
+    stampedReversalsHeld: true,
+  },
+  play: async () => {
+    // p3's pencil (an older entry, the gate's), ↻ and ×: each disabled takes the reason as its name.
+    const held = await waitFor(() => {
+      const buttons = within(entryRow('p3')).getAllByRole('button', { name: RERUN_REASON })
+      expect(buttons).toHaveLength(3)
+      return buttons
+    })
+    for (const button of held) expect(button).toBeDisabled()
+    // p2's pencil and ×.
+    expect(within(entryRow('p2')).getAllByRole('button', { name: RERUN_REASON })).toHaveLength(2)
+    expect(rowButton('p5', t('reader:entryCard.regenerate'))).not.toBeDisabled()
+    for (const id of ['p4', 'p5'])
+      expect(rowButton(id, t('reader:entryCard.deleteEntry'))).not.toBeDisabled()
+  },
+}
+
 // Enough rows to overflow the 480 px box, so the viewport can shrink under a reader at the bottom.
 const OVERFLOW_ROWS: StoryEntry[] = Array.from({ length: 14 }, (_, i) =>
   entry({

@@ -178,6 +178,19 @@ describe('useMemoryRunBanner', () => {
     expect(result.current?.label).toBe('Before your turn: 3 of 7 — Identity…')
   })
 
+  it("labels the open branch's re-run by its slot as its phases move", () => {
+    openStory()
+    const rerunning = close({ interruptible: 'rerun', currentPhase: 'metadata' })
+    generationStore.startRun(rerunning)
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current?.label).toBe('Closing chapter…')
+
+    act(() => {
+      generationStore.setCurrentPhase(rerunning.runId, 'reversal')
+    })
+    expect(result.current?.label).toBe("Reversing the chapter's close…")
+  })
+
   it('shows nothing for an interruptible run of a kind with no banner', () => {
     openStory()
     generationStore.startRun(run('other-memory-run', { interruptible: 'pass' }))
@@ -482,11 +495,15 @@ describe('closeBannerLabel', () => {
   it.each([
     ['boundary', 'Closing chapter: choosing where it ends…'],
     ['metadata', 'Closing chapter: writing its summary…'],
+    // A close's reversal returns at once: the metadata label stands through it.
+    ['reversal', 'Closing chapter: writing its summary…'],
     ['agent', 'Closing chapter: reviewing the chapter…'],
     ['report', 'Closing chapter: finishing up…'],
     ['', 'Closing chapter…'],
   ])('labels phase %j', (currentPhase, label) => {
-    expect(closeBannerLabel({ beforeTurn: false, currentPhase })).toBe(label)
+    expect(closeBannerLabel({ beforeTurn: false, currentPhase, interruptible: 'close' })).toBe(
+      label,
+    )
   })
 
   it.each([
@@ -503,6 +520,7 @@ describe('closeBannerLabel', () => {
         beforeTurn: false,
         currentPhase: 'agent',
         closeProgress: { task, part, index, total: 7 },
+        interruptible: 'close',
       }),
     ).toBe(`Closing chapter: ${index} of 7 — ${name}…`)
   })
@@ -511,13 +529,41 @@ describe('closeBannerLabel', () => {
     ['', undefined, 'Closing chapter before your turn…'],
     ['boundary', undefined, 'Before your turn: choosing where the chapter ends…'],
     ['metadata', undefined, "Before your turn: writing the chapter's summary…"],
+    ['reversal', undefined, "Before your turn: writing the chapter's summary…"],
     ['agent', undefined, 'Before your turn: reviewing the chapter…'],
     ['agent', IDENTITY, 'Before your turn: 3 of 7 — Identity…'],
     ['report', IDENTITY, 'Before your turn: finishing the chapter…'],
   ] as const)(
     'reads before your turn under Send in phase %j, with its progress',
     (currentPhase, closeProgress, label) => {
-      expect(closeBannerLabel({ beforeTurn: true, currentPhase, closeProgress })).toBe(label)
+      expect(
+        closeBannerLabel({ beforeTurn: true, currentPhase, closeProgress, interruptible: 'close' }),
+      ).toBe(label)
     },
   )
+
+  // C6: a re-run neither chooses an end nor writes a summary, and never runs before a turn.
+  it.each([
+    ['', 'Closing chapter…'],
+    ['boundary', 'Closing chapter…'],
+    ['metadata', 'Closing chapter…'],
+    ['reversal', "Reversing the chapter's close…"],
+    ['agent', 'Closing chapter: reviewing the chapter…'],
+    ['report', 'Closing chapter: finishing up…'],
+  ])("labels a re-run's phase %j", (currentPhase, label) => {
+    expect(closeBannerLabel({ beforeTurn: false, currentPhase, interruptible: 'rerun' })).toBe(
+      label,
+    )
+  })
+
+  it("counts a re-run's tasks as a close's", () => {
+    expect(
+      closeBannerLabel({
+        beforeTurn: false,
+        currentPhase: 'agent',
+        closeProgress: IDENTITY,
+        interruptible: 'rerun',
+      }),
+    ).toBe('Closing chapter: 3 of 7 — Identity…')
+  })
 })
