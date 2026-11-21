@@ -198,14 +198,15 @@ describe('failure copy', () => {
       }
   })
 
-  // generation-pipeline.md → Recovery modal: the reversal committed and only the store sync failed.
-  it('adds the fallback line after a failure whose reversal committed with the close undone', () => {
+  // generation-pipeline.md → Recovery modal: the reversal committed and only the store sync failed,
+  // so the close reads as the reversed one does, not as a failed reversal.
+  it('renders a failure whose reversal committed as the reversed close, plus the fallback line', () => {
     const undone: RecoveryFailure = { ...failed('chapter-close', 'story_1'), closeUndone: true }
     expect(formatRecoveryReport(failureReport(undone), { story_1: 'Mornstone' })).toBe(
-      "An interrupted background update in Mornstone could not be undone. Your story content is intact, and restarting the app retries automatically. The chapter's earlier close couldn't be restored, so its close was undone.",
+      "An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
     )
     expect(formatRecoveryReport(failureReport({ ...undone, storyId: null }), {})).toBe(
-      "An interrupted background update could not be undone. Your story content is intact, and restarting the app retries automatically. The chapter's earlier close couldn't be restored, so its close was undone.",
+      "An interrupted shutdown was detected. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
     )
   })
 
