@@ -10,16 +10,46 @@ import {
   type Delta,
   type StorySettings,
 } from '@/lib/db'
-import { CLOSE_TARGET } from '@/lib/pipeline'
-import { appSettingsStore, generationStore, type OpenStory } from '@/lib/stores'
+import { isStorySwapPending } from '@/lib/embedder-swap'
+import {
+  CHAPTER_CLOSE_KIND,
+  CLASSIFIER_HELD,
+  CLOSE_TARGET,
+  ensureChapterClosePipelineRegistered,
+  getPipeline,
+  isClassifierHeld,
+  preflightSnapshot,
+  runPreflight,
+  type ChainEnd,
+  type ConfigResolverError,
+  type PreflightFailedStart,
+  type RejectedStart,
+} from '@/lib/pipeline'
+import {
+  appSettingsStore,
+  currentStoryStore,
+  generationStore,
+  isStoryBusy,
+  type OpenStory,
+} from '@/lib/stores'
 
 import { ownEntryTokens, reversalImpactOf, reversalRowKey } from './chapter-delete-preview'
+import { MANUAL_CLOSE_REFUSAL, refused as refusedStart, startCloseChain } from './close-chain'
 import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { logReversalRefused } from '../delta/commit-new-action'
 import { ReversalIntegrityError } from '../delta/replay-errors'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
-import { resolveSweep, rollbackCountsOf, type RollbackCounts } from '../story-entries/operational'
+import {
+  resolveSweep,
+  rollbackCountsOf,
+  sameRollbackCounts,
+  sweepToEntry,
+  type RollbackCounts,
+  type StoryEntryRejection,
+} from '../story-entries/operational'
+import { bracketProseReversal } from '../story-entries/prose-reversal'
+import { STORY_ENTRY_REJECTION } from '../story-entries/register'
 import type { DbCtx } from '../types'
 
 const CLOSE_RERUN_PREVIEW_LOCK_ID = 'close-rerun-preview'
@@ -263,4 +293,141 @@ export async function getCloseRerunPreview(
       shortcut: shortcut?.lines ?? null,
     }
   })
+}
+
+/** What the confirm showed; the start checks it again under its mark before the turns go. */
+export type CloseRerunExpected = {
+  shortcut: { targetEntryId: string; counts: RollbackCounts } | null
+  reversal: CloseRerunPreview['reversal']
+}
+
+/** The counts moved since the confirm opened; `preview` is the confirm read again under the mark. */
+export type CloseRerunCountsChanged = {
+  status: 'rejected'
+  code: 'counts-changed'
+  reason: string
+  preview: CloseRerunPreview
+}
+
+/** The chain's end, whose `kind` tells a catch-up pass's end from the re-run's, or the refusal. */
+export type CloseRerunStart =
+  | ChainEnd
+  | RejectedStart
+  | PreflightFailedStart
+  | CloseRerunReadRefusal
+  | CloseRerunCountsChanged
+  | StoryEntryRejection
+
+function shownStill(expected: CloseRerunExpected, preview: CloseRerunPreview): boolean {
+  const { shortcut, reversal } = preview
+  const sameShortcut =
+    expected.shortcut === null
+      ? shortcut === null
+      : shortcut !== null &&
+        shortcut.targetEntryId === expected.shortcut.targetEntryId &&
+        sameRollbackCounts(shortcut.counts, expected.shortcut.counts)
+  return (
+    sameShortcut &&
+    reversal.otherChanges === expected.reversal.otherChanges &&
+    reversal.createdLore.count === expected.reversal.createdLore.count &&
+    reversal.createdLore.userEdited === expected.reversal.createdLore.userEdited
+  )
+}
+
+function countsChanged(preview: CloseRerunPreview): CloseRerunCountsChanged {
+  return {
+    status: 'rejected',
+    code: 'counts-changed',
+    reason: "the re-run's counts changed since the confirm opened",
+    preview,
+  }
+}
+
+// The chain runs it again at its reserve, after the turns went; this one comes first.
+function closePreflight(open: Pick<OpenStory, 'settings'>): ConfigResolverError | null {
+  return runPreflight(getPipeline(CHAPTER_CLOSE_KIND), preflightSnapshot(open.settings))
+}
+
+type RerunStartArgs = {
+  branchId: string
+  chapterId: string
+  expected: CloseRerunExpected
+  story: OpenStory
+  onStarted?: () => void
+}
+
+/**
+ * chapter-close.md → Re-running a close, Roll back & re-run: every refusal comes before the turns
+ * go. A pending mark spans the preview, the rollback shortcut and the chain's reserve, so no Send
+ * or start lands between them. Rejects when the shortcut's sweep or the chain's origin throws.
+ */
+export async function startCloseRerun(
+  branchId: string,
+  chapterId: string,
+  expected: CloseRerunExpected,
+  story: OpenStory,
+  ctx: DbCtx,
+  /** onStarted fires once, when the chain's first run reserves (after the mark ends); never on a refusal. */
+  opts?: { onStarted?: () => void },
+): Promise<CloseRerunStart> {
+  if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
+    return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
+  if (await isClassifierHeld(branchId, ctx)) return refusedStart(CLASSIFIER_HELD)
+
+  // No await from here to the mark, so no start or reversal lands between these checks and it.
+  const open = currentStoryStore.getCurrentStory()
+  if (open?.branchId !== branchId) return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
+  if (isStorySwapPending(open.storyId)) return refusedStart(MANUAL_CLOSE_REFUSAL.swapPending)
+  if (isStoryBusy(generationStore.getTxState(), open.storyId, branchId))
+    return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
+  ensureChapterClosePipelineRegistered()
+  const failed = closePreflight(open)
+  if (failed) return { outcome: 'preflight-failed', error: failed }
+  return generationStore.bracketPendingTurn(branchId, (endMark) =>
+    startUnderMark(
+      { branchId, chapterId, expected, story, onStarted: opts?.onStarted },
+      ctx,
+      endMark,
+    ),
+  )
+}
+
+async function startUnderMark(
+  args: RerunStartArgs,
+  ctx: DbCtx,
+  endMark: () => void,
+): Promise<CloseRerunStart> {
+  const { branchId, chapterId, expected, story } = args
+  const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
+  if ('status' in fresh) return fresh
+  if (!shownStill(expected, fresh)) return countsChanged(fresh)
+  if (fresh.shortcut !== null) {
+    const { targetEntryId, counts } = fresh.shortcut
+    const swept = await bracketProseReversal(branchId, ctx, () =>
+      sweepToEntry(branchId, targetEntryId, ctx, counts),
+    )
+    if (swept.status === 'rejected') {
+      if (swept.code !== STORY_ENTRY_REJECTION.countsChanged) return swept
+      // The confirm meets one counts-changed shape: its own lines, read again under the mark.
+      const reread = await getCloseRerunPreview(branchId, chapterId, story, ctx)
+      return 'status' in reread ? reread : countsChanged(reread)
+    }
+  }
+  generationStore.setPendingRerun(branchId, { chapterId })
+  const record = generationStore.getTxState().pendingRerun.get(branchId)
+  try {
+    return await startCloseChain(branchId, ctx, {
+      ownsPendingMark: true,
+      preflight: closePreflight,
+      onReserved: () => {
+        endMark()
+        args.onStarted?.()
+      },
+    })
+  } finally {
+    // The store clears it at the chain's end; a chain the orchestrator refused has no end. A
+    // record a later start wrote stays.
+    if (generationStore.getTxState().pendingRerun.get(branchId) === record)
+      generationStore.clearPendingRerun(branchId)
+  }
 }

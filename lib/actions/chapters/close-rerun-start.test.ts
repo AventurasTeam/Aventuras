@@ -1,0 +1,711 @@
+import { eq } from 'drizzle-orm'
+import { describe, expect, it, vi } from 'vitest'
+
+import type { generateStructured, generateToolStep } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { chapters, reversalJournals, storyEntries } from '@/lib/db'
+import {
+  CLASSIFIER_HELD,
+  CLOSE_PHASE,
+  ensurePerTurnPipelineRegistered,
+  PER_TURN_KIND,
+  pipelineEventBus,
+  type ChainEnd,
+} from '@/lib/pipeline'
+import {
+  branchLog,
+  closedChapterId,
+  defined,
+  installCloseHarnessHooks,
+  openHarness,
+  script,
+  STAND_IN_STEP,
+  TOBIN,
+  type CloseCase,
+  type CloseHarness,
+  type CloseMocks,
+  type ScriptedStep,
+} from '@/lib/pipeline/__tests__/close-harness'
+import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
+import { expectRan, within } from '@/lib/pipeline/__tests__/harness'
+import {
+  setClassifierStatus,
+  writeTurnEntry,
+} from '@/lib/pipeline/definitions/__tests__/close-fixture'
+import {
+  appSettingsStore,
+  currentStoryStore,
+  generationStore,
+  hydrateAppSettings,
+  interruptMemoryRuns,
+  type OpenStory,
+} from '@/lib/stores'
+
+import { MANUAL_CLOSE_REFUSAL } from './close-chain'
+import {
+  CLOSE_RERUN_REFUSAL,
+  getCloseRerunPreview,
+  startCloseRerun,
+  type CloseRerunExpected,
+  type CloseRerunPreview,
+  type CloseRerunStart,
+} from './close-rerun'
+import { startManualClose } from './start-manual-close'
+import { applyDeltaAction } from '../delta/apply-delta-action'
+import { shownCounts } from '../story-entries/__tests__/shown-counts'
+import { rollbackToEntry } from '../story-entries/operational'
+import {
+  registerStandInPass,
+  registerStoreOnlyRun,
+  type StandInPass,
+} from '../turns/__tests__/stand-in-pass'
+
+const { generateStructuredMock, generateToolStepMock } = vi.hoisted(() => ({
+  generateStructuredMock: vi.fn<typeof generateStructured>(),
+  generateToolStepMock: vi.fn<typeof generateToolStep>(),
+}))
+
+vi.mock('@/lib/ai', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  generateStructured: generateStructuredMock,
+  generateToolStep: generateToolStepMock,
+}))
+
+const MOCKS: CloseMocks = {
+  generateStructured: generateStructuredMock,
+  generateToolStep: generateToolStepMock,
+}
+
+installCloseHarnessHooks(MOCKS)
+
+// The close writes the Harrow ferry lore row and Tobin's description; a re-run writes them again.
+const STAND_IN: CloseCase = { slots: standInSlots, steps: [STAND_IN_STEP], merge: false }
+
+const NETWORK_FAILURE: ScriptedStep = {
+  calls: [],
+  failed: { tier: 'provider', reason: 'network', detail: 'connect ECONNREFUSED' },
+}
+
+// What a confirm hands the start for a chapter its preview refuses: nothing to compare.
+const NOTHING_SHOWN: CloseRerunExpected = {
+  shortcut: null,
+  reversal: { createdLore: { count: 0, userEdited: false }, otherChanges: 0 },
+}
+
+type Closed = { h: CloseHarness; chapterId: string }
+
+async function closed(): Promise<Closed> {
+  const h = await openHarness(STAND_IN, MOCKS)
+  await h.close()
+  return { h, chapterId: closedChapterId(h) }
+}
+
+// The chapter's last turn left past the watermark: the re-run's chain starts with a catch-up pass.
+// The stand-in pass registers before the close, whose start would otherwise fill the kind.
+async function closedWithCatchUp(): Promise<Closed & { pass: StandInPass }> {
+  const pass = registerStandInPass({ anchorEntryId: null })
+  const c = await closed()
+  await setClassifierStatus(c.h.fx, { state: 'idle', processedThrough: endPosition(c.h) - 1 })
+  return { ...c, pass }
+}
+
+function endPosition(h: CloseHarness): number {
+  return defined(
+    h.fx.entries.find((entry) => entry.id === h.endEntryId),
+    'E is not a fixture entry',
+  ).position
+}
+
+function openStory(): OpenStory {
+  return defined(currentStoryStore.getCurrentStory() ?? undefined, 'no story is open')
+}
+
+/** A turn taken after the close: its creates sit above the close's group, so it is a turn since. */
+async function turnSince(h: CloseHarness): Promise<{ action: string; reply: string }> {
+  const position = defined(h.fx.entries.at(-1), 'the fixture has no entry').position + 1
+  const action = `entry_since_${position}`
+  const reply = `entry_since_${position + 1}`
+  await writeTurnEntry(h.fx, 'act_turn_since', {
+    id: action,
+    position,
+    kind: 'user_action',
+    content: 'I ask the guard whether the reeve sits in Low Ashby tonight.',
+  })
+  await writeTurnEntry(h.fx, 'act_turn_since', {
+    id: reply,
+    position: position + 1,
+    kind: 'ai_reply',
+    content: 'The guard shrugs. The reeve keeps no hours a courier would like, he says.',
+  })
+  return { action, reply }
+}
+
+async function previewOf({ h, chapterId }: Closed): Promise<CloseRerunPreview> {
+  const read = await getCloseRerunPreview(h.fx.branchId, chapterId, openStory(), h.fx.ctx)
+  if ('status' in read) throw new Error(`the preview refused: ${read.code}`)
+  return read
+}
+
+// What the confirm hands the start: the shortcut and the counts it showed.
+function expectedOf(preview: CloseRerunPreview): CloseRerunExpected {
+  const { shortcut } = preview
+  return {
+    shortcut: shortcut && { targetEntryId: shortcut.targetEntryId, counts: shortcut.counts },
+    reversal: preview.reversal,
+  }
+}
+
+type StartOpts = { onStarted?: () => void; steps?: readonly ScriptedStep[]; story?: OpenStory }
+
+// The close used up its script, so the re-run's model is scripted again from its first step.
+function start(
+  { h, chapterId }: Closed,
+  expected: CloseRerunExpected,
+  opts: StartOpts = {},
+): Promise<CloseRerunStart> {
+  script(generateToolStepMock, opts.steps ?? [STAND_IN_STEP])
+  return startCloseRerun(h.fx.branchId, chapterId, expected, opts.story ?? openStory(), h.fx.ctx, {
+    onStarted: opts.onStarted,
+  })
+}
+
+function chainEnd(result: CloseRerunStart): ChainEnd {
+  if ('result' in result) return result
+  throw new Error(`the re-run did not start: ${JSON.stringify(result)}`)
+}
+
+async function entryCount(h: CloseHarness): Promise<number> {
+  const rows = await h.fx.ctx.db
+    .select({ id: storyEntries.id })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, h.fx.branchId))
+  return rows.length
+}
+
+async function journals(h: CloseHarness) {
+  return h.fx.ctx.db
+    .select()
+    .from(reversalJournals)
+    .where(eq(reversalJournals.branchId, h.fx.branchId))
+}
+
+const pendingRerunOn = (h: CloseHarness): boolean =>
+  generationStore.getTxState().pendingRerun.has(h.fx.branchId)
+
+type Snapshot = { entries: number; log: Awaited<ReturnType<typeof branchLog>> }
+
+async function snapshot(h: CloseHarness): Promise<Snapshot> {
+  return { entries: await entryCount(h), log: await branchLog(h.fx) }
+}
+
+// A refusal before the shortcut leaves the entries, the log and every record as they were.
+async function expectNothingChanged(h: CloseHarness, before: Snapshot): Promise<void> {
+  expect(await entryCount(h), 'story_entries').toBe(before.entries)
+  expect(await branchLog(h.fx), 'the delta log').toEqual(before.log)
+  expect(await journals(h), 'reversal_journals').toEqual([])
+  expect(pendingRerunOn(h), 'pendingRerun').toBe(false)
+  expect(generationStore.getTxState().pendingTurns.size, 'pending marks').toBe(0)
+}
+
+// A turn in flight on the close's own story; the hooks' reset ends it.
+function holdStoryWithTurn(h: CloseHarness): void {
+  ensurePerTurnPipelineRegistered()
+  generationStore.startRun({
+    runId: 'run_same_story',
+    kind: PER_TURN_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: null,
+    beforeTurn: false,
+    actionId: 'act_same_story',
+    storyId: h.fx.storyId,
+    branchId: h.fx.branchId,
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+}
+
+// Caches `modelId` on the fixture's provider with only its tool-calling flag.
+async function flagToolCalling(modelId: string, toolCalling: boolean): Promise<void> {
+  const settings = appSettingsStore.getAppSettings()
+  const next = {
+    ...settings,
+    providers: settings.providers.map((p) => ({
+      ...p,
+      cachedModels: [
+        ...(p.cachedModels ?? []).filter((m) => m.id !== modelId),
+        { id: modelId, capabilities: { toolCalling } },
+      ],
+    })),
+  }
+  expect(await hydrateAppSettings(async () => next)).toEqual({ status: 'ok' })
+}
+
+// Whether the record held as each re-run's boundary began; armed after the close.
+function recordAtBoundary(h: CloseHarness): () => readonly boolean[] {
+  const seen: boolean[] = []
+  pipelineEventBus.subscribe('phase_start', (event) => {
+    if (event.name === CLOSE_PHASE.boundary) seen.push(pendingRerunOn(h))
+  })
+  return () => seen
+}
+
+// Cancel lands as the re-run's reversal completes, before its first own write.
+function cancelAfterReversal(h: CloseHarness): void {
+  const off = pipelineEventBus.subscribe('phase_complete', (event) => {
+    if (event.name !== CLOSE_PHASE.reversal) return
+    off()
+    void interruptMemoryRuns(h.fx.branchId)
+  })
+}
+
+type Started = { marks: number; runs: string[] }
+
+// What onStarted saw: the pending marks left and the branch's runs, each as kind:slot.
+function watchStarts(h: CloseHarness): { onStarted: () => void; seen: Started[] } {
+  const seen: Started[] = []
+  return {
+    seen,
+    onStarted: () => {
+      const tx = generationStore.getTxState()
+      seen.push({
+        marks: tx.pendingTurns.size,
+        runs: [...tx.runs.values()]
+          .filter((run) => run.branchId === h.fx.branchId)
+          .map((run) => `${run.kind}:${String(run.interruptible)}`),
+      })
+    },
+  }
+}
+
+const MOVED: readonly (readonly [string, (shown: CloseRerunExpected) => CloseRerunExpected])[] = [
+  [
+    "the shortcut's counts",
+    (shown) => ({
+      ...shown,
+      shortcut: shown.shortcut && {
+        ...shown.shortcut,
+        counts: { ...shown.shortcut.counts, entries: shown.shortcut.counts.entries + 1 },
+      },
+    }),
+  ],
+  ['the shortcut itself', (shown) => ({ ...shown, shortcut: null })],
+  [
+    "the reversal's counts",
+    (shown) => ({
+      ...shown,
+      reversal: { ...shown.reversal, otherChanges: shown.reversal.otherChanges + 1 },
+    }),
+  ],
+]
+
+describe('startCloseRerun refuses before the turns go (AC 19)', () => {
+  it('refuses story-busy while a run holds the story, starting nothing', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    holdStoryWithTurn(c.h)
+    const before = await snapshot(c.h)
+    const onStarted = vi.fn()
+
+    expect(await start(c, expected, { onStarted })).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+    })
+    await expectNothingChanged(c.h, before)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('refuses a held branch, and a branch the open story is not on', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    const story = openStory()
+    const before = await snapshot(c.h)
+
+    // A pass left `running` with none live holds the branch.
+    await setClassifierStatus(c.h.fx, { state: 'running', processedThrough: endPosition(c.h) })
+    expect(await start(c, expected, { story })).toEqual({
+      outcome: 'rejected',
+      blockedBy: CLASSIFIER_HELD,
+    })
+    currentStoryStore.__reset()
+    expect(await start(c, expected, { story })).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen,
+    })
+    await expectNothingChanged(c.h, before)
+  })
+
+  it('refuses not-latest for a chapter a later close followed', async () => {
+    const c = await closed()
+    const later = expectRan(
+      await startManualClose(c.h.fx.branchId, c.h.fx.replyIds[4]!, c.h.fx.ctx),
+    )
+    expect(later.outcome).toBe('completed')
+    const before = await snapshot(c.h)
+
+    expect(await start(c, NOTHING_SHOWN)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.notLatest,
+    })
+    await expectNothingChanged(c.h, before)
+  })
+
+  it('refuses no-close for a latest chapter no close wrote', async () => {
+    const c = await closed()
+    await c.h.fx.ctx.db.insert(chapters).values({
+      id: 'chap_by_hand',
+      branchId: c.h.fx.branchId,
+      sequenceNumber: 2,
+      title: 'By hand',
+      summary: 'Written with no close.',
+      theme: 'None',
+      startEntryId: c.h.fx.entries[7]!.id,
+      endEntryId: c.h.fx.replyIds[4]!,
+      tokenCount: 1,
+      closedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const before = await snapshot(c.h)
+
+    expect(await start({ ...c, chapterId: 'chap_by_hand' }, NOTHING_SHOWN)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.noClose,
+    })
+    await expectNothingChanged(c.h, before)
+  })
+
+  it('refuses close-owed for a pending pick the shortcut would leave standing', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    generationStore.setPendingClose(c.h.fx.branchId, { endEntryId: c.h.fx.replyIds[4]! })
+    const before = await snapshot(c.h)
+
+    expect(await start(c, expected)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.closeOwed,
+    })
+    await expectNothingChanged(c.h, before)
+  })
+
+  it('refuses close-owed with auto-close on and the region the shortcut leaves at the threshold', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    const open = openStory()
+    const story: OpenStory = {
+      ...open,
+      settings: { ...open.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
+    }
+    currentStoryStore.set(story)
+    const before = await snapshot(c.h)
+
+    expect(await start(c, expected, { story })).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.closeOwed,
+    })
+    await expectNothingChanged(c.h, before)
+  })
+
+  it('refuses a lore-mgmt model flagged off for tool calling, before the turns go', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    await flagToolCalling('lore-model', false)
+    const before = await snapshot(c.h)
+    const onStarted = vi.fn()
+
+    expect(await start(c, expected, { onStarted })).toEqual({
+      outcome: 'preflight-failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'tool-calling-off',
+        target: 'lore-mgmt',
+        phaseName: 'agent',
+        modelId: 'lore-model',
+      },
+    })
+    await expectNothingChanged(c.h, before)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it.each(MOVED)(
+    'refuses counts-changed when %s moved, carrying the fresh preview',
+    async (_label, move) => {
+      const c = await closed()
+      await turnSince(c.h)
+      const fresh = await previewOf(c)
+      const before = await snapshot(c.h)
+      const onStarted = vi.fn()
+
+      expect(await start(c, move(expectedOf(fresh)), { onStarted })).toEqual({
+        status: 'rejected',
+        code: 'counts-changed',
+        reason: expect.any(String),
+        preview: fresh,
+      })
+      await expectNothingChanged(c.h, before)
+      expect(onStarted).not.toHaveBeenCalled()
+    },
+  )
+
+  it("maps the shortcut's own recount to counts-changed, with the preview read again under the mark", async () => {
+    const c = await closed()
+    const { reply } = await turnSince(c.h)
+    const shown = await previewOf(c)
+    const entries = await entryCount(c.h)
+    // A turn's classifier fact naming Tobin lands as the shortcut's bracket rises: past the
+    // preview, before the sweep. Its shared hold comes first, so the sweep's exclusive one waits.
+    let fact: ReturnType<typeof applyDeltaAction> | undefined
+    const off = generationStore.subscribe(() => {
+      if (fact !== undefined || !generationStore.getTxState().reversalInProgress) return
+      fact = applyDeltaAction(
+        {
+          action: {
+            kind: 'updateEntity',
+            source: 'per_turn_classifier',
+            payload: {
+              branchId: c.h.fx.branchId,
+              id: TOBIN.id,
+              patch: { keywords: ['the ferryman'] },
+            },
+          },
+          actionId: 'act_fact_since',
+          branchId: c.h.fx.branchId,
+          entryId: reply,
+        },
+        c.h.fx.ctx,
+      )
+    })
+
+    const result = await start(c, expectedOf(shown))
+    off()
+
+    expect(await defined(fact, 'no fact landed as the bracket rose')).toMatchObject({
+      status: 'ok',
+    })
+    const reread = await previewOf(c)
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      preview: reread,
+    })
+    expect(reread.shortcut?.counts.worldStateChanges).toBe(
+      defined(shown.shortcut ?? undefined, 'no shortcut shown').counts.worldStateChanges + 1,
+    )
+    expect(await entryCount(c.h), 'the turn since stays').toBe(entries)
+    expect(await journals(c.h)).toEqual([])
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+})
+
+describe('startCloseRerun holds the gate from its preview to the re-run (Review Focus 3)', () => {
+  it('keeps the gate shut from the shortcut until the re-run reserves, so a start in between is refused', async () => {
+    const c = await closed()
+    const { action } = await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    expect(expected.shortcut?.targetEntryId).toBe(action)
+    const before = await entryCount(c.h)
+    let swept = false
+    let reserved = false
+    let openings = 0
+    let racer: ReturnType<typeof startManualClose> | undefined
+    // At every change between the sweep and the reserve: the gate the composer reads before a
+    // Send, and a manual close started there.
+    const off = generationStore.subscribe(() => {
+      const tx = generationStore.getTxState()
+      if (tx.reversalInProgress) swept = true
+      if (!swept || reserved || tx.reversalInProgress) return
+      if ([...tx.runs.values()].some((run) => run.kind === CHAPTER_CLOSE_KIND)) {
+        reserved = true
+        return
+      }
+      if (!generationStore.isUserEditBlocked()) openings += 1
+      racer ??= startManualClose(c.h.fx.branchId, c.h.fx.replyIds[4]!, c.h.fx.ctx)
+    })
+
+    const end = chainEnd(await start(c, expected))
+    off()
+
+    expect(swept && reserved, 'the start swept, then reserved').toBe(true)
+    expect(openings, 'the gate opened between the sweep and the reserve').toBe(0)
+    expect(await defined(racer, 'no start raced the re-run')).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+    })
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(await entryCount(c.h), 'the turn since went').toBe(before - 2)
+  })
+
+  it('refuses a second start while the first holds its mark, so the turn goes once', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    const before = await entryCount(c.h)
+    script(generateToolStepMock, [STAND_IN_STEP])
+
+    const results = await Promise.all([
+      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, openStory(), c.h.fx.ctx),
+      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, openStory(), c.h.fx.ctx),
+    ])
+
+    const ends = results.filter((result): result is ChainEnd => 'result' in result)
+    expect(results.filter((result) => !('result' in result))).toEqual([
+      { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy },
+    ])
+    expect(ends).toHaveLength(1)
+    const end = ends[0]!
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(await entryCount(c.h)).toBe(before - 2)
+    expect((await journals(c.h)).map((row) => row.actionId)).toEqual([end.result.actionId])
+  })
+
+  it('re-runs at once when no turn followed the close, removing no entry', async () => {
+    const c = await closed()
+    const expected = expectedOf(await previewOf(c))
+    expect(expected.shortcut).toBeNull()
+    const before = await entryCount(c.h)
+
+    const end = chainEnd(await start(c, expected))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(end.result.actionId).not.toBe(c.h.actionId())
+    expect(await entryCount(c.h)).toBe(before)
+    const [row] = await c.h.fx.ctx.db
+      .select({ report: chapters.closeReport })
+      .from(chapters)
+      .where(eq(chapters.id, c.chapterId))
+    expect(row?.report?.actionId).toBe(end.result.actionId)
+  })
+})
+
+describe('pendingRerun is gone at every end of the start (AC 16)', () => {
+  it('clears it when the orchestrator refuses the chain it was written for', async () => {
+    const c = await closed()
+    const expected = expectedOf(await previewOf(c))
+    // Another story's turn: the story isn't busy, but the close's start is blocked by the kind.
+    ensurePerTurnPipelineRegistered()
+    registerStoreOnlyRun(PER_TURN_KIND, 'br_elsewhere')
+    let written = false
+    const off = generationStore.subscribe(() => {
+      if (pendingRerunOn(c.h)) written = true
+    })
+    const onStarted = vi.fn()
+
+    const result = await start(c, expected, { onStarted })
+    off()
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: PER_TURN_KIND })
+    expect(written, 'the record was written before the chain started').toBe(true)
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('holds it through the re-run and clears it as the re-run commits, firing onStarted once as it reserves', async () => {
+    const c = await closed()
+    const expected = expectedOf(await previewOf(c))
+    const atBoundary = recordAtBoundary(c.h)
+    const starts = watchStarts(c.h)
+
+    const end = chainEnd(await start(c, expected, { onStarted: starts.onStarted }))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(atBoundary()).toEqual([true])
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(starts.seen).toEqual([{ marks: 0, runs: [`${CHAPTER_CLOSE_KIND}:rerun`] }])
+  })
+
+  it('clears it when Cancel ends the re-run, recording no deferral', async () => {
+    const c = await closed()
+    const expected = expectedOf(await previewOf(c))
+    cancelAfterReversal(c.h)
+
+    const end = chainEnd(await start(c, expected))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'aborted' } })
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(generationStore.getTxState().deferred.has(c.h.fx.branchId)).toBe(false)
+  })
+
+  it('clears it when the re-run fails, recording no deferral', async () => {
+    const c = await closed()
+    const expected = expectedOf(await previewOf(c))
+
+    const end = chainEnd(await start(c, expected, { steps: [NETWORK_FAILURE] }))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'failed' } })
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(generationStore.getTxState().deferred.has(c.h.fx.branchId)).toBe(false)
+  })
+
+  it('clears it when the catch-up pass fails', async () => {
+    const c = await closedWithCatchUp()
+    const expected = expectedOf(await previewOf(c))
+    const started = start(c, expected)
+    const held = await within(c.pass.nextHeld(), 'the catch-up pass')
+    expect(pendingRerunOn(c.h), 'the record holds through the pass').toBe(true)
+
+    held.finish('failed')
+    const end = chainEnd(await within(started, 'the start'))
+
+    expect(end).toMatchObject({ kind: PERIODIC_CLASSIFIER_KIND, result: { outcome: 'failed' } })
+    expect(pendingRerunOn(c.h)).toBe(false)
+  })
+
+  it('clears it when Cancel ends the catch-up pass, which defers as any pass does', async () => {
+    const c = await closedWithCatchUp()
+    const expected = expectedOf(await previewOf(c))
+    const started = start(c, expected)
+    await within(c.pass.nextHeld(), 'the catch-up pass')
+
+    await interruptMemoryRuns(c.h.fx.branchId)
+    const end = chainEnd(await within(started, 'the start'))
+
+    expect(end).toMatchObject({ kind: PERIODIC_CLASSIFIER_KIND, result: { outcome: 'aborted' } })
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(generationStore.getTxState().deferred.get(c.h.fx.branchId)).toEqual({ pass: true })
+  })
+
+  it('clears it when a rollback sparing the chapter interrupts the catch-up pass', async () => {
+    const c = await closedWithCatchUp()
+    const expected = expectedOf(await previewOf(c))
+    const started = start(c, expected)
+    await within(c.pass.nextHeld(), 'the catch-up pass')
+    const target = defined(c.h.fx.replyIds.at(-1), 'the fixture has no reply')
+    const counts = await shownCounts(c.h.fx.branchId, target, c.h.fx.ctx)
+
+    expect(
+      await rollbackToEntry(c.h.fx.branchId, target, c.h.fx.ctx, { expectedCounts: counts }),
+    ).toEqual({ status: 'ok', counts })
+    const end = chainEnd(await within(started, 'the start'))
+
+    expect(end).toMatchObject({ kind: PERIODIC_CLASSIFIER_KIND, result: { outcome: 'aborted' } })
+    expect(pendingRerunOn(c.h)).toBe(false)
+  })
+
+  it('holds it from the catch-up pass into the re-run, firing onStarted once, as the pass reserves', async () => {
+    const c = await closedWithCatchUp()
+    const expected = expectedOf(await previewOf(c))
+    const atBoundary = recordAtBoundary(c.h)
+    const starts = watchStarts(c.h)
+    const started = start(c, expected, { onStarted: starts.onStarted })
+    const held = await within(c.pass.nextHeld(), 'the catch-up pass')
+
+    held.finish('completed')
+    const end = chainEnd(await within(started, 'the start'))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(atBoundary()).toEqual([true])
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(starts.seen).toEqual([{ marks: 0, runs: [`${PERIODIC_CLASSIFIER_KIND}:pass`] }])
+  })
+})

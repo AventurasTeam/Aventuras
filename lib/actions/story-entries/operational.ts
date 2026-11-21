@@ -426,6 +426,38 @@ export async function getRollbackCounts(
   })
 }
 
+/**
+ * The rollback's sweep, for a caller already inside its prose-reversal bracket: resolved, counted
+ * against the counts the user confirmed, and committed as a new action.
+ */
+export async function sweepToEntry(
+  branchId: string,
+  targetId: string,
+  ctx: DbCtx,
+  expectedCounts: RollbackCounts,
+): Promise<
+  { status: 'ok'; counts: RollbackCounts } | StoryEntryRejection | CountsChangedRejection
+> {
+  const swept = await resolveSweep(branchId, targetId, ctx)
+  if ('status' in swept) return swept
+  const counts = await rollbackCountsOf(swept, ctx)
+  // Compared with the set the commit reverses, so the consent covers exactly what goes.
+  if (!sameRollbackCounts(counts, expectedCounts))
+    return {
+      status: 'rejected',
+      code: STORY_ENTRY_REJECTION.countsChanged,
+      reason: 'rollback counts changed since the confirm opened',
+      counts,
+    }
+  try {
+    await commitNewAction(swept.set, ctx, swept.clampOps)
+  } catch (e) {
+    if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
+    throw e
+  }
+  return { status: 'ok', counts }
+}
+
 // What the re-run hold reads; a missing row reads unstamped and is left to the sweep to refuse.
 async function entryChapterOf(
   branchId: string,
@@ -458,24 +490,7 @@ export async function rollbackToEntry(
   )
     return inFlightRejection()
 
-  return bracketProseReversal(branchId, ctx, async () => {
-    const swept = await resolveSweep(branchId, targetId, ctx)
-    if ('status' in swept) return swept
-    const counts = await rollbackCountsOf(swept, ctx)
-    // Compared with the set the commit reverses, so the consent covers exactly what goes.
-    if (!sameRollbackCounts(counts, expectedCounts))
-      return {
-        status: 'rejected',
-        code: STORY_ENTRY_REJECTION.countsChanged,
-        reason: 'rollback counts changed since the confirm opened',
-        counts,
-      }
-    try {
-      await commitNewAction(swept.set, ctx, swept.clampOps)
-    } catch (e) {
-      if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
-      throw e
-    }
-    return { status: 'ok', counts }
-  })
+  return bracketProseReversal(branchId, ctx, () =>
+    sweepToEntry(branchId, targetId, ctx, expectedCounts),
+  )
 }

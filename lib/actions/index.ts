@@ -20,9 +20,13 @@ export {
 export {
   CLOSE_RERUN_REFUSAL,
   getCloseRerunPreview,
+  startCloseRerun,
+  type CloseRerunCountsChanged,
+  type CloseRerunExpected,
   type CloseRerunPreview,
   type CloseRerunReadRefusal,
   type CloseRerunRefusalCode,
+  type CloseRerunStart,
 } from './chapters/close-rerun'
 export { runPickedClose } from './chapters/picked-close'
 export { removeChapter, type RemoveChapterResult } from './chapters/remove-chapter'
