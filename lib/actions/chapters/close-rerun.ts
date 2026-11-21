@@ -10,6 +10,7 @@ import {
   type Delta,
   type StorySettings,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending } from '@/lib/embedder-swap'
 import {
   CHAPTER_CLOSE_KIND,
@@ -424,7 +425,15 @@ async function startUnderMark(
       preflight: closePreflight,
       onReserved: () => {
         endMark()
-        args.onStarted?.()
+        // A throw here would escape the orchestrator's reserve and leave the run registered.
+        try {
+          args.onStarted?.()
+        } catch (e) {
+          logger.warn('action_layer.close_rerun_on_started_threw', {
+            branchId: args.branchId,
+            error: e instanceof Error ? e.message : String(e),
+          })
+        }
       },
     })
   } finally {

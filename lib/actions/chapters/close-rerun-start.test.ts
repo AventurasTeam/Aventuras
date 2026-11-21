@@ -5,6 +5,7 @@ import type { generateStructured, generateToolStep } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { chapters, reversalJournals, storyEntries } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import {
   CLASSIFIER_HELD,
   CLOSE_PHASE,
@@ -672,6 +673,29 @@ describe('pendingRerun is gone at every end of the start (AC 16)', () => {
     expect(atBoundary()).toEqual([true])
     expect(pendingRerunOn(c.h)).toBe(false)
     expect(starts.seen).toEqual([{ marks: 0, runs: [`${CHAPTER_CLOSE_KIND}:rerun`] }])
+  })
+
+  it('runs the re-run to its end past an onStarted that throws, leaving no run registered', async () => {
+    const c = await closed()
+    const expected = expectedOf(await previewOf(c))
+    const warn = vi.spyOn(logger, 'warn')
+
+    const result = await start(c, expected, {
+      onStarted: () => {
+        throw new Error('the host threw')
+      },
+    }).catch((e: unknown) => e)
+
+    expect(
+      [...generationStore.getTxState().runs.values()].map((run) => run.branchId),
+      'runs left registered',
+    ).toEqual([])
+    expect(result).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(pendingRerunOn(c.h)).toBe(false)
+    expect(warn).toHaveBeenCalledWith('action_layer.close_rerun_on_started_threw', {
+      branchId: c.h.fx.branchId,
+      error: 'the host threw',
+    })
   })
 
   it('clears it when Cancel ends the re-run, recording no deferral', async () => {
