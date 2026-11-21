@@ -168,9 +168,10 @@ export const reader = {
   // The copy of a turn failure no kind-specific arm claims (describeTurnFailure).
   systemEntryGenericFailure: (page: Page): Locator =>
     page.getByText(t('reader:systemEntry.failureMessage'), { exact: false }),
+  // The entry rows scope both: the suggestion strip's and the rail's Retry share the first name, a
+  // toast's close button the second.
   retrySystemEntry: (page: Page): Locator =>
-    page.getByRole('button', { name: t('reader:systemEntry.retry') }),
-  // A toast's close button shares the name, so the entry rows scope it.
+    page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.retry') }),
   dismissSystemEntry: (page: Page): Locator =>
     page.locator('[data-entry-row]').getByRole('button', { name: t('reader:systemEntry.dismiss') }),
   // The collapsed disclosure a system entry's failure detail sits behind (entry-card-system.tsx).

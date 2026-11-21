@@ -67,10 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   profile's model, not the override's. 5.10's tool-calling check inherits
   this. Whether such a run is reachable today is unchecked. Raised in
   5.10's PR 1 review.
-- **`reader.retrySystemEntry` isn't scoped to entry rows**
-  (`e2e/locators/reader.ts`), unlike `dismissSystemEntry`, whose comment
-  notes a toast shares the name; a toast with a Retry action would trip
-  strict mode. Raised in 5.10's PR 2 review.
 - **`scripts/close-probe-bar.ts` judges the output-bound clause at the
   step default.** Line 100 compares a step's reply to
   `TOOL_STEP_MAX_OUTPUT_DEFAULT` even when the probe profile sets a max
