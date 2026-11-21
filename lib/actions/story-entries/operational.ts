@@ -2,21 +2,17 @@ import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta, EntryMetadata, SqlOp } from '@/lib/db'
 import { chapters, chunked, deltas, entryMetadataSchema, storyEntries } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { isRetrievalBumpOnly } from '@/lib/row-signals'
-import { entriesStore, generationStore, selectMemoryRun, undoRedoStore } from '@/lib/stores'
+import { entriesStore, generationStore, selectMemoryRun } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
+import { commitNewAction, logReversalRefused } from '../delta/commit-new-action'
 import { computeUndoPayload } from '../delta/delta-encoding'
 import { deltaRowOp } from '../delta/delta-row'
-import {
-  DeltaReplayError,
-  ReversalIntegrityError,
-  reverseAndPruneDeltaRows,
-} from '../delta/reverse-replay'
+import { ReversalIntegrityError } from '../delta/reverse-replay'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 import { contentEditUndoPayload, resolveContentEditInvalidation } from './classifier-facts'
@@ -31,31 +27,11 @@ export type StoryEntryRejection = {
   code: Exclude<StoryEntryRejectionCode, typeof STORY_ENTRY_REJECTION.countsChanged>
 }
 
-export function logReversalRefused(branchId: string, e: ReversalIntegrityError): void {
-  logger.error('action_layer.reversal_refused', { branchId, refusal: e.refusal, reason: e.message })
-}
-
 // A refused reversal wrote nothing; it travels on the action's existing rejection
 // (generation-pipeline.md → Reverse-replay).
 export function reversalRefused(branchId: string, e: ReversalIntegrityError): StoryEntryRejection {
   logReversalRefused(branchId, e)
   return { status: 'rejected', reason: e.message, code: STORY_ENTRY_REJECTION.deltaFailed }
-}
-
-// A second unrelated action clears the redo stack (data-model.md). That holds when only the store
-// sync after the commit throws too: the action landed all the same. A refusal is not committed.
-export async function commitNewAction(
-  set: ReversalSet,
-  ctx: DbCtx,
-  extraOps: readonly SqlOp[],
-): Promise<void> {
-  try {
-    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, extraOps)
-  } catch (e) {
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear()
-    throw e
-  }
-  undoRedoStore.clear()
 }
 
 export async function updateStoryEntryContent(

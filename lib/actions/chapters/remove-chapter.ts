@@ -7,8 +7,8 @@ import {
   type ChapterDeleteMode,
   type ChapterDeleteRefusal,
 } from './chapter-delete-set'
+import { commitNewAction } from '../delta/commit-new-action'
 import { ReversalIntegrityError } from '../delta/replay-errors'
-import { commitNewAction } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
 

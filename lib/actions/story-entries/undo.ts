@@ -6,8 +6,9 @@ import { entriesStore, generationStore, selectMemoryRun, undoRedoStore } from '@
 import { selectUndoTarget } from '@/lib/undo'
 
 import { resolveInvalidationForDeltas, type InvalidationOutcome } from './classifier-facts'
-import { logReversalRefused, resolveSweep } from './operational'
+import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
+import { logReversalRefused } from '../delta/commit-new-action'
 import { applyRedo, prepareUndo, type RedoSnapshot } from '../delta/redo'
 import { DeltaReplayError, ReversalIntegrityError } from '../delta/reverse-replay'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
