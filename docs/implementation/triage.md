@@ -67,12 +67,6 @@ slice-planning gate forces its resolution before that slice is planned.
   profile's model, not the override's. 5.10's tool-calling check inherits
   this. Whether such a run is reachable today is unchecked. Raised in
   5.10's PR 1 review.
-- **`scripts/close-probe-bar.ts` judges the output-bound clause at the
-  step default.** Line 100 compares a step's reply to
-  `TOOL_STEP_MAX_OUTPUT_DEFAULT` even when the probe profile sets a max
-  output, so if the Q5 remedy is ever applied to the probe profile the
-  clause judges at the wrong bound. Raised by Slice 5.10's final review,
-  2026-11-18.
 - **RN-Web's `PressResponder` presses a button on a held Space's
   repeat.** It starts a press on any Space keydown on a `role="button"`
   element, repeats included (no `event.repeat` check;
