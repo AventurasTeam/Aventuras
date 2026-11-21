@@ -225,6 +225,11 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     estimateSize: () => REPLY_ROW_ESTIMATE,
     overscan: 6,
   })
+  // It opens on the selection, which a `Close chapter here` pick leaves far below the newest reply.
+  const openedOn = useRef(replies.findIndex((row) => row.id === selectedId))
+  useEffect(() => {
+    if (openedOn.current > 0) virtualizer.scrollToIndex(openedOn.current, { align: 'center' })
+  }, [virtualizer])
   // A key can target an option virtualized out: it takes focus once the scroll has mounted it.
   const pendingFocus = useRef<string | null>(null)
   const focusPending = () => {
@@ -323,9 +328,26 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
 }
 
 function ReplyPanelNative({ replies, latestId, selectedId, onPick }: PanelProps) {
+  const listRef = useRef<FlatList<CloseModalRow>>(null)
+  const openedOn = useRef(replies.findIndex((row) => row.id === selectedId))
+  const retried = useRef(false)
+  const scrollToOpened = () =>
+    listRef.current?.scrollToIndex({ index: openedOn.current, viewPosition: 0.5, animated: false })
+  useEffect(() => {
+    if (openedOn.current > 0) scrollToOpened()
+  }, [])
   return (
     <View className="min-h-0 shrink overflow-hidden rounded-md border border-border">
       <FlatList
+        ref={listRef}
+        // Rows vary in height, so a target past the measured cells fails: jump to its estimated
+        // offset so the list renders it, then retry once.
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false })
+          if (retried.current) return
+          retried.current = true
+          requestAnimationFrame(scrollToOpened)
+        }}
         testID="close-chapter-panel"
         accessibilityLabel={t('chapters:closeModal.endHeading')}
         data={replies}

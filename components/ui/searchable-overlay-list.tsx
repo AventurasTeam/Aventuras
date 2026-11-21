@@ -907,6 +907,8 @@ function VirtualizedRowList<T>({
               <Pressable
                 nativeID={`${rowIdPrefix}-${row.id}`}
                 role="option"
+                // The search input keeps focus and points at rows by aria-activedescendant.
+                tabIndex={-1}
                 aria-selected={selected || (selectedRowIds == null && highlighted)}
                 disabled={row.disabled}
                 onPress={() => onActivate(row)}

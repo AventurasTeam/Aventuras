@@ -106,17 +106,6 @@ slice-planning gate forces its resolution before that slice is planned.
   lifted the call sequence but not the config, would keep them alike.
   Routed from Slice 5.10's planning, 2026-11-17.
 
-- **Listbox keyboard models are thin.** `ProviderInlinePicker`
-  (`components/compounds/provider-model-picker.tsx`) makes every option
-  its own tab stop, takes no arrow keys, and ignores Space (RN-Web
-  activates only button-like roles on Space). The close modal's end
-  picker now takes the arrows, Home, End and Space, but each option is
-  still its own tab stop, and its list always opens at the newest reply,
-  so an older selection (a `Close chapter here` pick) sits out of view;
-  on native that needs the variable-height `FlatList` to scroll to a row
-  it hasn't measured. `SearchableOverlayList`'s roving model and its
-  `initialScrollRowId` are the in-repo shapes to share. Raised in 5.10's
-  PR 2 review; the opening position added by its slice review.
 - **`SearchableOverlayList` section headers carry no group role.**
   [`actions-menu.md → Keyboard & ARIA`](../ui/patterns/actions-menu.md#keyboard--aria)
   asks for `role="group"` with an `aria-label` per section; the headers

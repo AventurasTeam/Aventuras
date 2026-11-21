@@ -755,6 +755,23 @@ export const LongRegionVirtualizes: Story = {
   },
 }
 
+// An older selection (a `Close chapter here` pick) is in view when the panel opens, not the newest.
+export const PanelOpensAtSelectedReply: Story = {
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_101' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const list = await screen.findByTestId('close-chapter-panel')
+    const row = await within(list).findByTestId('close-chapter-reply-entry_101')
+    await waitFor(() => {
+      const box = list.getBoundingClientRect()
+      const rect = row.getBoundingClientRect()
+      expect(rect.top).toBeGreaterThanOrEqual(box.top - 1)
+      expect(rect.bottom).toBeLessThanOrEqual(box.bottom + 1)
+    })
+  },
+}
+
 // chapter-timeline.md → Mobile expression: a Modal at every tier, the panel in-flow under the
 // trigger, and the foot on screen with the panel open.
 export const Phone390: Story = {

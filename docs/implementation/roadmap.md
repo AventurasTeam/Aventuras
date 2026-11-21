@@ -1690,6 +1690,23 @@ own.
   writes as the attribute; if it holds, the collision dialog's own
   roving focus can go. Every segment and radio-row `Select` is affected.
   Routed from triage 2026-10-09.
+- **M9.2 — In-flow listboxes have no roving focus.** Two pickers render
+  their options in the page rather than in an overlay with a search
+  field: `ProviderInlinePicker`
+  (`components/compounds/provider-model-picker.tsx`, the composer's
+  `Under:`) and the close modal's end picker
+  (`components/chapters/close-chapter-modal-view.tsx`). Every option is
+  its own tab stop in both. The provider picker takes no arrow keys and
+  ignores Space (RN-Web presses on Space only for `<button>` and
+  `role="button"`); the end picker handles the arrows, Home, End and
+  Space itself. `SearchableOverlayList` is no model for them: its search
+  input keeps focus and points at rows through `aria-activedescendant`.
+  The in-repo roving shape is `useChoiceKeys` in
+  `components/compounds/collision-resolve-dialog.tsx` (one tab stop on
+  the selection, arrows, Space), which the radio-group entry above also
+  wants, so one roving-focus hook would serve all three. `docs/ui` has
+  no keyboard rule for an in-flow listbox; the pass writes one. Routed
+  from triage 2026-11-21, raised in 5.10's PR 2 review.
 - **M9.2 — Focus-ring canon drift.** (2026-10-09)
   [`color.md → Focus`](../ui/foundations/color.md#focus) (lines 163-164) asks for a 2px
   ring with a 2px offset; none of the `focus-visible:ring-2` usages under

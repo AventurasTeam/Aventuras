@@ -7,8 +7,8 @@ import {
   TriangleAlert,
   Wrench,
 } from 'lucide-react-native'
-import { useCallback, useMemo, useState, type Ref } from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { useCallback, useId, useMemo, useState, type Ref } from 'react'
+import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -316,16 +316,47 @@ type ProviderInlinePickerProps = {
 }
 
 const INLINE_PANEL_MAX_HEIGHT = 180
+const INLINE_PANEL_CLASS = 'mt-1 overflow-hidden rounded-md border border-border bg-bg-overlay'
 
 function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePickerProps) {
   const [open, setOpen] = useState(false)
+  const listId = useId()
   const selected = providers.find((p) => p.id === value)
+  const options = (
+    <ScrollView keyboardShouldPersistTaps="handled">
+      {providers.map((p) => {
+        const isSelected = p.id === value
+        return (
+          <Pressable
+            key={p.id}
+            role="option"
+            aria-selected={isSelected}
+            onPress={() => {
+              onChange(p.id)
+              setOpen(false)
+            }}
+            className="relative w-full flex-row items-center py-row-y-md pl-row-x-md pr-10 active:bg-tint-press"
+          >
+            <Text size="sm" className="flex-1 text-fg-primary" numberOfLines={1}>
+              {p.name}
+            </Text>
+            {isSelected ? (
+              <View className="absolute right-3 flex size-5 items-center justify-center">
+                <Icon as={Check} size="md" className="shrink-0 text-fg-primary" />
+              </View>
+            ) : null}
+          </Pressable>
+        )
+      })}
+    </ScrollView>
+  )
   return (
     <View className="flex-col">
       <Pressable
         accessibilityRole="button"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
         onPress={() => setOpen((v) => !v)}
         className="h-control-md flex-row items-center justify-between gap-2 rounded-md border border-border bg-bg-base px-3"
       >
@@ -335,37 +366,21 @@ function ProviderInlinePicker({ providers, value, onChange }: ProviderInlinePick
         <Icon as={open ? ChevronUp : ChevronDown} size="sm" className="text-fg-muted" />
       </Pressable>
       {open ? (
-        <View
-          className="mt-1 overflow-hidden rounded-md border border-border bg-bg-overlay"
-          style={inlinePanelStyle}
-        >
-          <ScrollView keyboardShouldPersistTaps="handled">
-            {providers.map((p) => {
-              const isSelected = p.id === value
-              return (
-                <Pressable
-                  key={p.id}
-                  role="option"
-                  aria-selected={isSelected}
-                  onPress={() => {
-                    onChange(p.id)
-                    setOpen(false)
-                  }}
-                  className="relative w-full flex-row items-center py-row-y-md pl-row-x-md pr-10 active:bg-tint-press"
-                >
-                  <Text size="sm" className="flex-1 text-fg-primary" numberOfLines={1}>
-                    {p.name}
-                  </Text>
-                  {isSelected ? (
-                    <View className="absolute right-3 flex size-5 items-center justify-center">
-                      <Icon as={Check} size="md" className="shrink-0 text-fg-primary" />
-                    </View>
-                  ) : null}
-                </Pressable>
-              )
-            })}
-          </ScrollView>
-        </View>
+        Platform.OS === 'web' ? (
+          // RN's role type has no listbox, so web's owner of the options is a plain element.
+          <div
+            id={listId}
+            role="listbox"
+            className={cn('flex flex-col', INLINE_PANEL_CLASS)}
+            style={inlinePanelStyle}
+          >
+            {options}
+          </div>
+        ) : (
+          <View className={INLINE_PANEL_CLASS} style={inlinePanelStyle}>
+            {options}
+          </View>
+        )
       ) : null}
     </View>
   )
