@@ -72,41 +72,47 @@ export async function ownEntryTokens(
   return row?.tokens ?? 0
 }
 
-const NO_DELTAS: ReadonlySet<string> = new Set()
-
 /**
  * The delete confirm's impact lines over any reversal set: the lore its close groups created that
  * it removes, edits included, and every other change it reverses. The reader's undo of a close, a
  * re-run or kept close work counts its own set with it (reader-composer.md → Undo and redo).
- * `excludeDeltas` are delta ids another line of the same confirm counts.
+ * `reversedFirst` are deltas another line of the same confirm reverses before this set: they count
+ * there, and this set's lines read as after them.
  */
 export async function reversalImpactOf(
   branchId: string,
   set: ReversalSet,
   groups: readonly Delta[],
   ctx: DbCtx,
-  opts: { excludeDeltas?: ReadonlySet<string> } = {},
+  opts: { reversedFirst?: readonly Delta[] } = {},
 ): Promise<Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'>> {
+  const first = opts.reversedFirst ?? []
   return changesOf(
     set,
-    await createdLoreOf(branchId, groups, ctx),
-    await restoringUpdates(set, ctx),
-    opts.excludeDeltas ?? NO_DELTAS,
+    await createdLoreOf(branchId, groups, first, ctx),
+    await restoringUpdates(set, ctx, first),
+    new Set(first.map((d) => d.id)),
   )
 }
 
 type CreatedLore = { ids: ReadonlySet<string>; live: ReadonlySet<string> }
 
-// A created row the user deleted since is gone already, so the delete removes only the live ones.
+// A created row the user deleted since is gone already, so the delete removes only the live ones,
+// and those a delete reversed first brings back.
 async function createdLoreOf(
   branchId: string,
   groups: readonly Delta[],
+  reversedFirst: readonly Delta[],
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<CreatedLore> {
   const ids = new Set(
     groups.filter((d) => d.op === 'create' && d.targetTable === 'lore').map((d) => d.targetId),
   )
-  const live = new Set<string>()
+  const live = new Set(
+    reversedFirst
+      .filter((d) => d.op === 'delete' && d.targetTable === 'lore' && ids.has(d.targetId))
+      .map((d) => d.targetId),
+  )
   for (const chunk of chunked([...ids])) {
     const rows = await ctx.db
       .select({ id: lore.id })

@@ -201,7 +201,7 @@ async function spanFrom(
   return { turns: row.turns, entries: { count: row.count, first: row.first, last: row.last } }
 }
 
-type ShortcutRead = { lines: Shortcut; deltaIds: ReadonlySet<string> }
+type ShortcutRead = { lines: Shortcut; reverses: readonly Delta[] }
 
 // rollback-confirm.md → Counts at the turn, read inside this hold: getRollbackCounts takes its
 // own, and the lock isn't reentrant.
@@ -215,7 +215,7 @@ async function shortcutTo(
   const span = await spanFrom(branchId, turn.position, ctx)
   return {
     lines: { targetEntryId: turn.id, ...span, counts: await rollbackCountsOf(swept, ctx) },
-    deltaIds: new Set(swept.set.rows.map((d) => d.id)),
+    reverses: swept.set.rows,
   }
 }
 
@@ -287,9 +287,9 @@ export async function getCloseRerunPreview(
       chapterNumber: chapter.sequenceNumber,
       model: loreModelOf(story.settings),
       tokens: await ownEntryTokens(branchId, chapterId, ctx),
-      // A delta both sets hold counts on the shortcut's line alone.
+      // The shortcut runs first: its deltas count on its line, and the reversal's read after it.
       reversal: await reversalImpactOf(branchId, set, groups, ctx, {
-        excludeDeltas: shortcut?.deltaIds,
+        reversedFirst: shortcut?.reverses,
       }),
       shortcut: shortcut?.lines ?? null,
     }

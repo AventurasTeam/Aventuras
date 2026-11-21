@@ -473,6 +473,84 @@ describe('getCloseRerunPreview', () => {
     })
   })
 
+  it("counts a close's field a turn since rewrote as the re-run restoring it", async () => {
+    const { h, chapterId } = await closedStandIn()
+    const b = h.fx.branchId
+    const reply = await turnSince(h, 14)
+    // The shortcut takes this back first, so the re-run's undo of the close's description lands.
+    await sinceWrite(h, reply, {
+      kind: 'updateEntity',
+      source: 'per_turn_classifier',
+      payload: {
+        branchId: b,
+        id: TOBIN.id,
+        patch: { description: 'A ferryman who has stopped asking where anyone is going.' },
+      },
+    })
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
+      shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+    })
+    await h.rollBack('entry_since_14')
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: false },
+      otherChanges: 1,
+    })
+  })
+
+  it('counts a lore row the close created and a delete since took, which the shortcut restores', async () => {
+    const { h, chapterId } = await closedStandIn()
+    const b = h.fx.branchId
+    const reply = await turnSince(h, 14)
+    await sinceWrite(h, reply, {
+      kind: 'deleteLore',
+      source: 'user_edit',
+      payload: { branchId: b, id: await closeLoreId(h) },
+    })
+    const live = await h.fx.ctx.db.select({ id: lore.id }).from(lore).where(eq(lore.branchId, b))
+    expect(live).toEqual([])
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
+      shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2 } },
+    })
+    await h.rollBack('entry_since_14')
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: false },
+      otherChanges: 1,
+    })
+  })
+
+  it("leaves a user's edit of the close's lore row that the shortcut takes back out of userEdited", async () => {
+    const { h, chapterId } = await closedStandIn()
+    const b = h.fx.branchId
+    const reply = await turnSince(h, 14)
+    await sinceWrite(h, reply, {
+      kind: 'updateLore',
+      source: 'user_edit',
+      payload: {
+        branchId: b,
+        id: await closeLoreId(h),
+        patch: { keywords: ['night crossing'] },
+        proseEntryId: null,
+      },
+    })
+    // The edit stands outside the shortcut: the delete reads it as the user's.
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: true },
+    })
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
+    })
+    await h.rollBack('entry_since_14')
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: false },
+      otherChanges: 1,
+    })
+  })
+
   it('reads under the shared lock, so an exclusive hold waits for its last read', async () => {
     const { h, chapterId } = await closedStandIn()
     await turnSince(h, 14)

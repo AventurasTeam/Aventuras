@@ -847,10 +847,18 @@ function settledSurvivors(walk: UndoWalk, stranded: readonly Delta[]): SurvivorR
 
 /**
  * The ids of the set's `update` deltas whose undo restores some field, list term or count, read as
- * the walk reads them; one a later write replaced in every part restores nothing.
+ * the walk reads them; one a later write replaced in every part restores nothing. `reversedFirst`
+ * are later deltas another reversal takes back before this one, so none of them replaces a part.
  */
-export async function restoringUpdates(set: ReversalSet, ctx: DbCtx): Promise<ReadonlySet<string>> {
-  const chains = await loadChains(set, ctx)
+export async function restoringUpdates(
+  set: ReversalSet,
+  ctx: DbCtx,
+  reversedFirst: readonly Delta[] = [],
+): Promise<ReadonlySet<string>> {
+  const chains = await loadChains(
+    { branchId: set.branchId, held: set.held, rows: [...set.rows, ...reversedFirst] },
+    ctx,
+  )
   const restoring = new Set<string>()
   for (const delta of set.rows) {
     if (delta.op !== 'update') continue
