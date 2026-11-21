@@ -3,12 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { ChapterDeleteMode } from '@/lib/actions/chapters/chapter-delete-set'
 import { removeChapter } from '@/lib/actions/chapters/remove-chapter'
+import { saveChapter } from '@/lib/actions/chapters/save-chapter'
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
-import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import {
+  applyDeltaAction,
+  applyDeltaActionGroupWithOutcomes,
+} from '@/lib/actions/delta/apply-delta-action'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
 import { redoLastAction, undoLastAction } from '@/lib/actions/story-entries/undo'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import type { generateStructured, generateToolStep } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND, chapterDraftFrom } from '@/lib/chapters'
 import {
   chapters,
   emptyEntityState,
@@ -17,17 +22,30 @@ import {
   happeningInvolvements,
   happenings,
   lore,
+  pipelineRuns,
+  reversalJournals,
   storyEntries,
   threads,
+  vecRowPk,
+  type Chapter,
   type Delta,
   type HappeningAwareness,
 } from '@/lib/db'
-import { pipelineEventBus, type PhaseEmittedEvent, type PhaseResult } from '@/lib/pipeline'
-import { interruptMemoryRuns } from '@/lib/stores'
+import {
+  CLOSE_PHASE,
+  configureDeltaActionPort,
+  pipelineEventBus,
+  recoverInFlightRuns,
+  type ChainEnd,
+  type PhaseEmittedEvent,
+  type PhaseResult,
+} from '@/lib/pipeline'
+import { generationStore, interruptMemoryRuns, undoRedoStore } from '@/lib/stores'
 
 import {
   branchLog,
   CHARACTER_ID,
+  closedChapterId,
   defined,
   deltasOf,
   END_REPLY,
@@ -45,9 +63,10 @@ import {
   type WorldState,
 } from './close-harness'
 import { standInSlots, standInTool } from './close-stand-in'
-import { expectRan } from './harness'
+import { expectRan, realDeltaActionPort, resetSingletons, within } from './harness'
 import {
   openCloseFixture,
+  queryAllOn,
   twoPartWindow,
   type CloseFixture,
 } from '../definitions/__tests__/close-fixture'
@@ -256,19 +275,194 @@ function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
   }
 }
 
-function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState; log: Delta[] } {
+type ArmExpected = {
+  state: WorldState
+  /** The close's own log. */
+  log: Delta[]
+  /** The log of the re-run that stands, under 'after-rerun'; every other re-run's is empty. */
+  rerunLog: readonly Delta[]
+}
+
+const isDivider = (d: Delta): boolean =>
+  d.targetTable === 'chapters' || d.targetTable === 'story_entries'
+
+function expectedAfter(h: CloseHarness, arm: RoundTripArm): ArmExpected {
   switch (arm.expect) {
     case 'before-close':
-      return { state: h.before, log: [] }
+      return { state: h.before, log: [], rerunLog: [] }
     case 'after-close':
-      return h.closed()
+      return { ...h.closed(), rerunLog: [] }
     case 'divider-removed':
-      return dividerRemoved(h.closed())
+      return { ...dividerRemoved(h.closed()), rerunLog: [] }
+    case 'after-rerun': {
+      // The re-run's reversal took the close's lore work into its journal; the divider stays.
+      const rerun = latestRerun(h)
+      return { state: rerun.state, log: h.closed().log.filter(isDivider), rerunLog: rerun.log }
+    }
     default: {
       const _exhaustive: never = arm.expect
       return _exhaustive
     }
   }
+}
+
+/** A re-run that committed: its action, and the world and its own log as it committed. */
+type CommittedRerun = { actionId: string; state: WorldState; log: Delta[] }
+
+const committedReruns = new WeakMap<CloseHarness, CommittedRerun[]>()
+
+/** Re-runs the close's chapter to its commit, snapshots it, and embeds what it created. */
+async function rerunCommitted(h: CloseHarness): Promise<CommittedRerun> {
+  const end = await h.rerun(closedChapterId(h))
+  expect(end, 'the re-run committed').toMatchObject({
+    kind: CHAPTER_CLOSE_KIND,
+    result: { outcome: 'completed' },
+  })
+  const { actionId } = end.result
+  const rerun: CommittedRerun = {
+    actionId,
+    state: await worldState(h.fx),
+    log: await deltasOf(h.fx, actionId),
+  }
+  await embedCreated(h.fx, rerun.log)
+  committedReruns.set(h, [...(committedReruns.get(h) ?? []), rerun])
+  return rerun
+}
+
+function latestRerun(h: CloseHarness): CommittedRerun {
+  return defined(committedReruns.get(h)?.at(-1), 'no re-run committed')
+}
+
+// Every re-run the arm started: one that aborted or crashed reserved an action all the same.
+function rerunIdsOf(h: CloseHarness): string[] {
+  const ids = new Set((committedReruns.get(h) ?? []).map((rerun) => rerun.actionId))
+  const latest = h.rerunActionId()
+  if (latest !== undefined) ids.add(latest)
+  return [...ids]
+}
+
+// The migrated dim family. The fixture has no embedder, so nothing else writes these tables.
+const VEC_TABLES: Readonly<Record<string, string>> = {
+  entities: 'entities_vec_384',
+  lore: 'lore_vec_384',
+  happenings: 'happenings_vec_384',
+  threads: 'threads_vec_384',
+}
+const STAND_IN_EMBEDDER = 'round-trip-embedder'
+const ZERO_VECTOR = JSON.stringify(new Array<number>(384).fill(0))
+
+async function liveIds(fx: CloseFixture, table: string): Promise<Set<unknown>> {
+  const rows = await queryAllOn(fx.ctx.db)(`SELECT id FROM ${table} WHERE branch_id = ?`, [
+    fx.branchId,
+  ])
+  return new Set(rows.map(([id]) => id))
+}
+
+// The drain embeds what a re-run created once it commits; a reversal deleting the row must sweep it.
+async function embedCreated(fx: CloseFixture, log: readonly Delta[]): Promise<void> {
+  const query = queryAllOn(fx.ctx.db)
+  for (const [table, vecTable] of Object.entries(VEC_TABLES)) {
+    const live = await liveIds(fx, table)
+    for (const d of log)
+      if (d.op === 'create' && d.targetTable === table && live.has(d.targetId))
+        await query(
+          `INSERT INTO ${vecTable} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            vecRowPk(fx.branchId, d.targetId, STAND_IN_EMBEDDER),
+            fx.branchId,
+            STAND_IN_EMBEDDER,
+            d.targetId,
+            'stand-in',
+            ZERO_VECTOR,
+          ],
+        )
+  }
+}
+
+/** Each vector whose row is gone, as `table:id`. */
+async function strayVectors(fx: CloseFixture): Promise<string[]> {
+  const query = queryAllOn(fx.ctx.db)
+  const stray: string[] = []
+  for (const [table, vecTable] of Object.entries(VEC_TABLES)) {
+    const live = await liveIds(fx, table)
+    for (const [id] of await query(`SELECT id FROM ${vecTable} WHERE branch_id = ?`, [fx.branchId]))
+      if (!live.has(id)) stray.push(`${vecTable}:${String(id)}`)
+  }
+  return stray
+}
+
+async function journalsOn(fx: CloseFixture) {
+  return fx.ctx.db.select().from(reversalJournals).where(eq(reversalJournals.branchId, fx.branchId))
+}
+
+// Armed after the close, whose phases carry the same names.
+function interruptAfter(phase: string, branchId: string): void {
+  const off = pipelineEventBus.subscribe('phase_complete', (event) => {
+    if (event.name !== phase) return
+    off()
+    void interruptMemoryRuns(branchId)
+  })
+}
+
+// A stopped re-run writes its journal back: nothing says the close was undone, and nothing defers.
+function expectStopped(h: CloseHarness, end: ChainEnd, outcome: 'aborted' | 'failed'): void {
+  expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome } })
+  expect(end.result).not.toHaveProperty('closeUndone')
+  expect(generationStore.getTxState().deferred.has(h.fx.branchId), 'a re-run defers nothing').toBe(
+    false,
+  )
+  expect(generationStore.getTxState().pendingRerun.has(h.fx.branchId)).toBe(false)
+}
+
+async function chapterRow(h: CloseHarness): Promise<Chapter> {
+  const [row] = await h.fx.ctx.db
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.branchId, h.fx.branchId), eq(chapters.id, closedChapterId(h))))
+  return defined(row, 'the chapter row is gone')
+}
+
+// A Timeline card Save: one user_edit on the chapter row.
+async function renameChapter(h: CloseHarness, title: string): Promise<void> {
+  const row = await chapterRow(h)
+  expect(await saveChapter({ row, draft: { ...chapterDraftFrom(row), title } }, h.fx.ctx)).toEqual({
+    status: 'ok',
+    id: row.id,
+  })
+}
+
+// The process dies at the re-run's first group, before it lands or once it has; a restart's
+// recovery then finds the re-run's marker open.
+async function crashRerunAndRecover(h: CloseHarness, landed: boolean): Promise<void> {
+  await h.close()
+  let crash = (): void => {}
+  const crashed = new Promise<void>((resolve) => {
+    crash = resolve
+  })
+  configureDeltaActionPort({
+    ...realDeltaActionPort(),
+    applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
+      if (landed) await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+      crash()
+      return new Promise<never>(() => {})
+    },
+  })
+  void h.rerun(closedChapterId(h))
+  await within(crashed, "the re-run's first group")
+  const rerun = defined(h.rerunActionId(), 'the re-run never reserved')
+
+  // A restart: memory gone, the real port back.
+  resetSingletons()
+  const report = await recoverInFlightRuns(h.fx.ctx)
+
+  expect(report.failures).toEqual([])
+  expect(report.reversed).toMatchObject([{ kind: CHAPTER_CLOSE_KIND, actionId: rerun }])
+  expect(report.reversed[0]).not.toHaveProperty('closeUndone')
+  const [marker] = await h.fx.ctx.db
+    .select()
+    .from(pipelineRuns)
+    .where(eq(pipelineRuns.actionId, rerun))
+  expect(marker).toMatchObject({ outcome: 'recovered', rerunChapterId: closedChapterId(h) })
 }
 
 type RoundTripCase = CloseCase & {
@@ -279,10 +473,12 @@ type RoundTripCase = CloseCase & {
   armLog?: Partial<Record<string, (h: CloseHarness) => readonly Delta[]>>
 }
 
+type ArmExpect = 'before-close' | 'after-close' | 'divider-removed' | 'after-rerun'
+
 type RoundTripArm = {
   name: string
   run: (h: CloseHarness) => Promise<void>
-  expect: 'before-close' | 'after-close' | 'divider-removed'
+  expect: ArmExpect
 }
 
 const STAND_IN_CASE: RoundTripCase = {
@@ -1402,6 +1598,52 @@ const ARMS: readonly RoundTripArm[] = [
       expect(await redoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
     },
   },
+  {
+    name: 'CTRL-Z of a re-run',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      // A rename undone after the re-run leaves a redo group a re-run's undo must not keep.
+      await renameChapter(h, 'The Night Ferry')
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+      expect(undoRedoStore.hasRedo(), 'the rename waits in redo').toBe(true)
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+      expect(undoRedoStore.hasRedo(), 'CTRL-Z of a re-run clears redo').toBe(false)
+    },
+  },
+  {
+    name: 'an abort of a re-run before its first write',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      interruptAfter(CLOSE_PHASE.reversal, h.fx.branchId)
+      expectStopped(h, await h.rerun(closedChapterId(h)), 'aborted')
+    },
+  },
+  {
+    name: 'an abort of a re-run after its first write',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      h.onNextToolGroup(() => {
+        void interruptMemoryRuns(h.fx.branchId)
+      })
+      const end = await h.rerun(closedChapterId(h))
+      defined(h.actedOn(), 'the abort never fired: no group abortOn admits landed in the re-run')
+      expectStopped(h, end, 'aborted')
+    },
+  },
+  {
+    name: 'crash recovery of a re-run before its first write',
+    expect: 'after-close',
+    run: (h) => crashRerunAndRecover(h, false),
+  },
+  {
+    name: 'crash recovery of a re-run after its first write',
+    expect: 'after-close',
+    run: (h) => crashRerunAndRecover(h, true),
+  },
 ]
 
 // Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
@@ -1419,11 +1661,21 @@ describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_
     expect(await deltasOf(h.fx, h.actionId())).toEqual(
       ownLog === undefined ? expected.log : ownLog(h),
     )
+    const reruns = rerunIdsOf(h)
+    const standing = arm.expect === 'after-rerun' ? latestRerun(h).actionId : undefined
+    for (const rerun of reruns)
+      expect(await deltasOf(h.fx, rerun), `the log of re-run ${rerun}`).toEqual(
+        rerun === standing ? expected.rerunLog : [],
+      )
     const target = h.rolledBackTo()
-    const others = (await branchLog(h.fx)).filter((d) => d.actionId !== h.actionId())
+    const ours = new Set([h.actionId(), ...reruns])
+    const others = (await branchLog(h.fx)).filter((d) => !ours.has(d.actionId))
     expect(others, "other actions' deltas").toEqual(
       target === undefined ? h.beforeLog : keptByRollback(h, target),
     )
+    // WorldState reads neither.
+    expect(await journalsOn(h.fx), 'reversal_journals').toEqual([])
+    expect(await strayVectors(h.fx), 'vectors whose row is gone').toEqual([])
   })
 })
 
