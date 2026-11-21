@@ -73,6 +73,11 @@ export type ReversalSeed = {
   readonly target: readonly Delta[]
   /** Rows reversed because prose moved; redo leaves them and what only they reach to re-derive. */
   readonly sweep?: readonly Delta[]
+  /**
+   * Deltas another reversal takes back before this one: the ref clears read as after them. The
+   * closure doesn't; it is selected against the current state.
+   */
+  readonly reversedFirst?: readonly Delta[]
 }
 
 export type RowRef = { readonly table: string; readonly id: string }
@@ -327,6 +332,36 @@ async function closeOver(
 
 type PathRefValue = { readonly row: RowRef; readonly ref: RefPath; readonly id: string | null }
 
+/** The rows and path refs as they stand once the `reversedFirst` deltas are taken back. */
+type FirstReversal = {
+  readonly ids: ReadonlySet<string>
+  /** Rows its creates made, absent after it. */
+  readonly created: ReadonlySet<HeldKey>
+  /** Rows its deletes removed, present after it. */
+  readonly deleted: ReadonlySet<HeldKey>
+  /** Each ref its updates moved, at the value it restores. */
+  readonly refs: ReadonlyMap<string, RestoredRef>
+}
+
+const NO_FIRST_REVERSAL: FirstReversal = {
+  ids: new Set(),
+  created: new Set(),
+  deleted: new Set(),
+  refs: new Map(),
+}
+
+async function firstReversalOf(ctx: DbCtx, first: readonly Delta[]): Promise<FirstReversal> {
+  if (first.length === 0) return NO_FIRST_REVERSAL
+  const keysOf = (op: Delta['op']) =>
+    new Set(first.filter((d) => d.op === op).map((d) => heldKey(d.targetTable, d.targetId)))
+  return {
+    ids: new Set(first.map((d) => d.id)),
+    created: keysOf('create'),
+    deleted: keysOf('delete'),
+    refs: restoredRefs(first, await writesOutliving(ctx, first, (d) => pathUndos(d).length > 0)),
+  }
+}
+
 // generation-pipeline.md → Reverse-replay: a written ref never names a missing row, so a row
 // deleted outside the set counts as removed; a row a delete in the set puts back counts present.
 async function goneRows(
@@ -335,17 +370,37 @@ async function goneRows(
   written: readonly PathRefValue[],
   rows: readonly Delta[],
   removed: ReadonlyMap<HeldKey, RowRef>,
+  first: FirstReversal,
 ): Promise<ReadonlySet<HeldKey>> {
-  const reinserted = new Set(
-    rows.filter((d) => d.op === 'delete').map((d) => heldKey(d.targetTable, d.targetId)),
-  )
+  const reinserted = new Set([
+    ...rows.filter((d) => d.op === 'delete').map((d) => heldKey(d.targetTable, d.targetId)),
+    ...first.deleted,
+  ])
+  const gone = new Set<HeldKey>()
   const candidates = written.flatMap(({ ref, id }) => {
     if (id === null) return []
     const key = heldKey(ref.refTable, id)
-    return removed.has(key) || reinserted.has(key) ? [] : [{ table: ref.refTable, id }]
+    if (removed.has(key) || reinserted.has(key)) return []
+    if (first.created.has(key)) {
+      gone.add(key)
+      return []
+    }
+    return [{ table: ref.refTable, id }]
   })
-  const absent = await absentRefs(ctx, branchId, candidates)
-  return new Set(absent.map(({ table, id }) => heldKey(table, id)))
+  for (const { table, id } of await absentRefs(ctx, branchId, candidates))
+    gone.add(heldKey(table, id))
+  return gone
+}
+
+// Later writes the first reversal takes back don't outlive the set's own.
+function outlivingFirst(
+  laterEdits: ReadonlyMap<string, readonly Delta[]>,
+  first: FirstReversal,
+): ReadonlyMap<string, readonly Delta[]> {
+  if (first.ids.size === 0) return laterEdits
+  return new Map(
+    [...laterEdits].map(([id, edits]) => [id, edits.filter((e) => !first.ids.has(e.id))]),
+  )
 }
 
 // Entities go only through their own create, so the fixed point never waits on a clear. Later
@@ -355,8 +410,12 @@ async function refClearsOf(
   branchId: string,
   { rows, removed }: Closure,
   held: HeldRowIndex,
+  first: FirstReversal,
 ): Promise<RefClear[]> {
-  const laterEdits = await writesOutliving(ctx, rows, (d) => pathUndos(d).length > 0)
+  const laterEdits = outlivingFirst(
+    await writesOutliving(ctx, rows, (d) => pathUndos(d).length > 0),
+    first,
+  )
   const restored = restoredRefs(rows, laterEdits)
   const unmoved = (row: RowRef, ref: RefPath) => !restored.has(restoredKey(row, ref))
   // What the set's undos write: each moved ref's restored value, and each re-inserted row's refs.
@@ -371,7 +430,7 @@ async function refClearsOf(
           .map(({ ref, id }) => ({ row, ref, id }))
       }),
   ]
-  const gone = await goneRows(ctx, branchId, written, rows, removed)
+  const gone = await goneRows(ctx, branchId, written, rows, removed, first)
   const clears = new Map<string, RefClear>()
   const judge = (row: RowRef, ref: RefPath, id: string | null) => {
     if (id === null || removed.has(heldKey(row.table, row.id))) return
@@ -386,8 +445,15 @@ async function refClearsOf(
   // A row the set moved is judged by where its undos leave it, the rest by the value they hold.
   for (const { row, ref, id } of written) judge(row, ref, id)
   const named = [...removed.values()].filter((row): row is LiveRef => isRefTable(row.table))
-  for (const hit of await liveReferrers(ctx, branchId, named, isPathRef))
-    if (isPathRef(hit.ref) && unmoved(hit, hit.ref)) judge(hit, hit.ref, hit.named)
+  // A live row reads as the first reversal leaves it: gone if it made the row, else at the value
+  // it restores where it moved the ref.
+  for (const hit of await liveReferrers(ctx, branchId, named, isPathRef)) {
+    if (!isPathRef(hit.ref) || !unmoved(hit, hit.ref)) continue
+    if (first.created.has(heldKey(hit.table, hit.id))) continue
+    if (!first.refs.has(restoredKey(hit, hit.ref))) judge(hit, hit.ref, hit.named)
+  }
+  for (const { row, ref, id } of first.refs.values())
+    if (unmoved(row, ref) && !first.created.has(heldKey(row.table, row.id))) judge(row, ref, id)
   for (const { table, id } of named) {
     for (const copy of held.naming(table, id))
       for (const { ref, id: names } of pathRefIds(copy.table, copy.row))
@@ -422,7 +488,13 @@ export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise
     sweep.length > 0
       ? await closeOver(ctx, branchId, [...redo.rows, ...sweep], held, actionId)
       : redo
-  const refClears = await refClearsOf(ctx, branchId, closure, held)
+  const refClears = await refClearsOf(
+    ctx,
+    branchId,
+    closure,
+    held,
+    await firstReversalOf(ctx, seed.reversedFirst ?? []),
+  )
   return new ReversalSet({
     branchId,
     rows: closure.rows,

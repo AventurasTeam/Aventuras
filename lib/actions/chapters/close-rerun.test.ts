@@ -5,6 +5,7 @@ import type { generateStructured, generateToolStep } from '@/lib/ai'
 import {
   chapters,
   deltas,
+  emptyEntityState,
   lore,
   STORY_SETTINGS_DEFAULTS,
   storyEntries,
@@ -34,7 +35,7 @@ import { CLOSE_RERUN_REFUSAL, getCloseRerunPreview, type CloseRerunPreview } fro
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
 import { ReversalIntegrityError } from '../delta/reverse-replay'
-import type { selectReversalSet } from '../delta/row-closure'
+import type { ReversalSeed, selectReversalSet } from '../delta/row-closure'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import type { PipelineAction } from '../types'
 
@@ -51,7 +52,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 
 // A one-shot hook before the next selection; a rejection refuses it.
 const reversalSeams = vi.hoisted(() => ({
-  beforeSelection: null as (() => Promise<void>) | null,
+  beforeSelection: null as ((seed: ReversalSeed) => Promise<void>) | null,
 }))
 
 vi.mock('../delta/row-closure', async (importOriginal) => {
@@ -61,7 +62,7 @@ vi.mock('../delta/row-closure', async (importOriginal) => {
   const seamed: typeof selectReversalSet = async (ctx, seed) => {
     const before = reversalSeams.beforeSelection
     reversalSeams.beforeSelection = null
-    if (before) await before()
+    if (before) await before(seed)
     return actual.selectReversalSet(ctx, seed)
   }
   return { ...actual, selectReversalSet: seamed }
@@ -160,6 +161,49 @@ async function sinceWrite(h: CloseHarness, reply: string, action: PipelineAction
   )
   expect(written.status).toBe('ok')
 }
+
+// A faction the close itself created, logged in its group.
+const GUILD = 'ent_ferry_guild'
+const OLD_GUILD = 'ent_old_guild'
+
+async function closeFaction(h: CloseHarness): Promise<void> {
+  const created = await applyDeltaAction(
+    {
+      action: {
+        kind: 'createEntity',
+        source: 'chapter_close',
+        payload: {
+          entry: {
+            id: GUILD,
+            branchId: h.fx.branchId,
+            kind: 'faction',
+            name: 'The ferry guild',
+            description: 'The ferrymen of the Harrow crossing.',
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 13,
+            updatedAt: 13,
+          },
+        },
+      },
+      actionId: h.actionId(),
+      branchId: h.fx.branchId,
+    },
+    h.fx.ctx,
+  )
+  expect(created.status).toBe('ok')
+}
+
+const joinFaction = (
+  branchId: string,
+  id: string,
+  factionId: string | null,
+  source: 'user_edit' | 'per_turn_classifier' | 'chapter_close',
+): PipelineAction => ({
+  kind: 'setCharacterFaction',
+  source,
+  payload: { branchId, id, factionId, proseEntryId: null },
+})
 
 // The open region's tokens below `position`, from the counts the fixture stored.
 async function regionTokens(h: CloseHarness, below: number): Promise<number> {
@@ -389,17 +433,17 @@ describe('getCloseRerunPreview', () => {
     const { h, chapterId } = await closedStandIn()
     await turnSince(h, 14)
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
-    // The re-run's set selects first; the sweep's selection after it refuses.
-    reversalSeams.beforeSelection = async () => {
-      reversalSeams.beforeSelection = () =>
-        Promise.reject(
-          new ReversalIntegrityError(
-            'no-create',
-            `lore:${h.fx.branchId}:lore_gone`,
-            'act_since_14',
-          ),
-        )
+    // The sweep's selection, the one whose window holds the turn since, refuses.
+    const refuseSweep = (seed: ReversalSeed): Promise<void> => {
+      if (!seed.target.some((d) => d.actionId === 'act_since_14')) {
+        reversalSeams.beforeSelection = refuseSweep
+        return Promise.resolve()
+      }
+      return Promise.reject(
+        new ReversalIntegrityError('no-create', `lore:${h.fx.branchId}:lore_gone`, 'act_since_14'),
+      )
     }
+    reversalSeams.beforeSelection = refuseSweep
 
     expect(await preview(h, chapterId)).toMatchObject({
       status: 'rejected',
@@ -548,6 +592,171 @@ describe('getCloseRerunPreview', () => {
     expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
       createdLore: { count: 1, userEdited: false },
       otherChanges: 1,
+    })
+  })
+
+  describe('a faction the close created, named by a ref the shortcut moves', () => {
+    it('reads no clear for a membership the turn since wrote', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeFaction(h)
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, joinFaction(b, TOBIN.id, GUILD, 'per_turn_classifier'))
+
+      // Tobin's description and the guild; the shortcut takes Tobin out of it first.
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 2 },
+        shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 2,
+      })
+    })
+
+    it('reads no clear for a member the turn since created', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeFaction(h)
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, {
+        kind: 'createEntity',
+        source: 'per_turn_classifier',
+        payload: {
+          entry: {
+            id: 'char_since_14',
+            branchId: b,
+            kind: 'character',
+            name: 'Mara',
+            description: 'A toll-taker on the Harrow landing.',
+            status: 'active',
+            injectionMode: 'auto',
+            state: { ...emptyEntityState('character'), faction_id: GUILD },
+            createdAt: 14,
+            updatedAt: 14,
+          },
+        },
+      })
+
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 2 },
+        shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 2,
+      })
+    })
+
+    it('reads the clear for a membership the turn since ended, which the shortcut puts back', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeFaction(h)
+      // The user's own edit, before the turn: the shortcut leaves it.
+      const joined = await applyDeltaAction(
+        {
+          action: joinFaction(b, TOBIN.id, GUILD, 'user_edit'),
+          actionId: 'act_user_join',
+          branchId: b,
+        },
+        h.fx.ctx,
+      )
+      expect(joined.status).toBe('ok')
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, joinFaction(b, TOBIN.id, null, 'per_turn_classifier'))
+
+      // Tobin's description, the guild, and the membership the re-run then clears.
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 3 },
+        shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 3,
+      })
+    })
+  })
+
+  describe('a membership the close moved Tobin into', () => {
+    // Tobin was the user's in an older guild; the close moves him into its own.
+    async function closeMovesTobin(h: CloseHarness): Promise<void> {
+      const b = h.fx.branchId
+      const user = async (actionId: string, action: PipelineAction) => {
+        const done = await applyDeltaAction({ action, actionId, branchId: b }, h.fx.ctx)
+        expect(done.status).toBe('ok')
+      }
+      await user('act_user_old', {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: OLD_GUILD,
+            branchId: b,
+            kind: 'faction',
+            name: 'The old guild',
+            description: 'The ferrymen before the Syndicate.',
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 12,
+            updatedAt: 12,
+          },
+        },
+      })
+      await user('act_user_join', joinFaction(b, TOBIN.id, OLD_GUILD, 'user_edit'))
+      await closeFaction(h)
+      const moved = await applyDeltaAction(
+        {
+          action: joinFaction(b, TOBIN.id, GUILD, 'chapter_close'),
+          actionId: h.actionId(),
+          branchId: b,
+        },
+        h.fx.ctx,
+      )
+      expect(moved.status).toBe('ok')
+    }
+
+    it('reads no clear for the guild it returns him to when the shortcut restores that guild', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeMovesTobin(h)
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, {
+        kind: 'deleteEntity',
+        source: 'user_edit',
+        payload: { branchId: b, id: OLD_GUILD },
+      })
+
+      // Tobin's description, the guild, and his move into it, undone back to the old guild.
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 3 },
+        shortcut: { targetEntryId: 'entry_since_14' },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 3,
+      })
+    })
+
+    it('reads no clear when the turn since moved him out, which the shortcut undoes first', async () => {
+      const { h, chapterId } = await closedStandIn()
+      const b = h.fx.branchId
+      await closeMovesTobin(h)
+      const reply = await turnSince(h, 14)
+      await sinceWrite(h, reply, joinFaction(b, TOBIN.id, null, 'per_turn_classifier'))
+
+      expect(await preview(h, chapterId)).toMatchObject({
+        reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 3 },
+        shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+      })
+      await h.rollBack('entry_since_14')
+      expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+        createdLore: { count: 1, userEdited: false },
+        otherChanges: 3,
+      })
     })
   })
 

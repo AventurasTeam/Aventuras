@@ -265,19 +265,20 @@ export async function getCloseRerunPreview(
     const groups = await readChapterCloseGroups(branchId, chapterId, ctx)
     if (groups.length === 0)
       return refused(CLOSE_RERUN_REFUSAL.noClose, `no close wrote chapter ${branchId}:${chapterId}`)
+    const turn = await firstTurnSince(branchId, latestGroupStart(groups), ctx)
+    const shortcut = turn === null ? null : await shortcutTo(branchId, turn, ctx)
+    if (shortcut !== null && 'status' in shortcut) return shortcut
     let set: ReversalSet
     try {
       set = await selectReversalSet(ctx, {
         branchId,
         target: groups.filter((d) => !DIVIDER_TABLES.has(d.targetTable)),
+        reversedFirst: shortcut?.reverses,
       })
     } catch (e) {
       if (e instanceof ReversalIntegrityError) return integrityRefused(branchId, e)
       throw e
     }
-    const turn = await firstTurnSince(branchId, latestGroupStart(groups), ctx)
-    const shortcut = turn === null ? null : await shortcutTo(branchId, turn, ctx)
-    if (shortcut !== null && 'status' in shortcut) return shortcut
     if (await closeOwedAfter(branchId, turn?.position ?? null, story.settings, ctx))
       return refused(
         CLOSE_RERUN_REFUSAL.closeOwed,
