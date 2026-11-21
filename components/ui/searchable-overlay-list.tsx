@@ -48,6 +48,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { swallowKeyRepeats } from '@/components/ui/swallow-key-repeats'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
@@ -1193,7 +1194,10 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   const onSubmit = useCallback(() => {
     if (list.highlightedId == null) return
     const found = findRowSection(sections, list.highlightedId)
-    if (found && !found.row.disabled) activate(found.row)
+    if (found == null || found.row.disabled) return
+    // Focus returns to the trigger, which a held Enter's repeats would press, reopening the list.
+    swallowKeyRepeats('Enter')
+    activate(found.row)
   }, [list.highlightedId, sections, activate])
 
   const onKeyPress = useCallback(
@@ -1557,7 +1561,10 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     const id = highlightedIdRef.current
     if (id == null) return
     const found = findRowSection(sectionsRef.current, id)
-    if (found && !found.row.disabled) activate(found.row)
+    if (found == null || found.row.disabled) return
+    // Focus stays in the field, where a held Enter's repeats would pick again.
+    swallowKeyRepeats('Enter')
+    activate(found.row)
   }, [activate, disabled])
 
   const onKeyPress = useCallback(

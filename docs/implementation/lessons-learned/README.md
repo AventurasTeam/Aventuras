@@ -84,6 +84,10 @@ slice plans when relevant.
 - [A control that disables under focus drops focus on web](./rnweb-disabled-under-focus-blurs.md)
   — RN-Web sets the native `disabled` attribute and Chromium blurs the
   element; hand focus to a stable container in the same commit.
+- [A keydown that moves focus hands the key's auto-repeat to the new target](./keydown-focus-move-hands-off-key-repeat.md)
+  — Chromium clicks a `<button>` on a held Enter's repeats and a held
+  Space's release; act on keyup, or call `swallowKeyRepeats` as the
+  keydown acts.
 - [Inline `pointerEvents: 'box-none'` does nothing on web](./rnweb-inline-box-none-dropped.md)
   — RN-Web polyfills `box-none` only in compiled styles, so an inline
   object leaves the view catching clicks; use the compiled

@@ -451,3 +451,32 @@ export const ReportsOpenChange: Story = {
     await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false))
   },
 }
+
+const heldEnterActivate = fn()
+/** A held Enter picks once: its repeats don't reach the ⋯ trigger that focus returns to. */
+export const HeldEnterPicksOnce: Story = {
+  render: () => (
+    <ActionsMenu
+      contextual={READER_CONTEXT}
+      coreGroups={[
+        {
+          id: 'go-to',
+          header: 'Go to',
+          entries: [{ id: 'open-world', label: 'Open World', onActivate: heldEnterActivate }],
+        },
+      ]}
+    />
+  ),
+  play: async () => {
+    heldEnterActivate.mockClear()
+    const trigger = screen.getByRole('button', { name: /Actions/ })
+    await userEvent.click(trigger)
+    const search = await screen.findByPlaceholderText('Search actions…')
+    await waitFor(() => expect(search).toHaveFocus())
+    await userEvent.type(search, 'World')
+    await userEvent.keyboard('{Enter>4/}')
+    await waitFor(() => expect(heldEnterActivate).toHaveBeenCalledOnce())
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+    expect(screen.queryByPlaceholderText('Search actions…')).toBeNull()
+  },
+}
