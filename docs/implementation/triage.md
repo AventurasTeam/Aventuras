@@ -82,7 +82,8 @@ slice-planning gate forces its resolution before that slice is planned.
   reader's undo handler shows `Couldn't undo. Please try again.`
   (`locales/en/reader.json`, `useReaderUndo`'s guard) for any thrown
   undo, including a `DeltaReplayError` at `store-sync`, where the
-  database change landed. Trying again undoes the next group back; after
+  database change landed (a re-run's undone close excepted: it shows its
+  close-undone warning). Trying again undoes the next group back; after
   a re-run's CTRL-Z that is the close it just restored. Pre-existing for
   every undo; raised by Slice 5.13's reviews (2026-11-21).
 - **A committed reversal at boot whose store sync fails reads as

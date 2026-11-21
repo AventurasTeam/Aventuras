@@ -389,6 +389,37 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
       expect(await recoverInFlightRuns(c.fx.ctx)).toEqual({ reversed: [], failures: [] })
     })
 
+    // The marker names a chapter that is gone: the group reverses alone, and no line claims a close.
+    it('reports no close undone when the marker names a chapter that is gone', async () => {
+      const c = await openClosed()
+      await writeCloseWork(c)
+      await seedRunMarker(c.fx, { runId: RERUN_RUN, actionId: RERUN, startedAt: CLOSED_AT + 2 })
+      await c.fx.ctx.db
+        .update(pipelineRuns)
+        .set({ rerunChapterId: 'chap_gone' })
+        .where(eq(pipelineRuns.runId, RERUN_RUN))
+      await writeUnderAction(c, RERUN, [
+        loreCreate(c.fx.branchId, 'lore_act_rerun', 'The night ferry'),
+      ])
+
+      bootWithFailingSync()
+      const { reversed, failures } = await recoverInFlightRuns(c.fx.ctx)
+
+      expect(reversed).toEqual([])
+      expect(failures).toStrictEqual([
+        {
+          runId: RERUN_RUN,
+          kind: CHAPTER_CLOSE_KIND,
+          actionId: RERUN,
+          storyId: c.fx.storyId,
+          error: expect.any(DeltaReplayError),
+          refusal: null,
+        },
+      ])
+      expect(await chapterRows(c.fx)).toHaveLength(1)
+      expect(await markerOf(c, RERUN_RUN)).toMatchObject({ outcome: 'recovered' })
+    })
+
     it('reports a restored journal as the plain failure it was', async () => {
       const c = await openClosed()
       await writeCloseWork(c)
