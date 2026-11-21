@@ -1,4 +1,4 @@
-import { and, desc, eq, getTableColumns, inArray } from 'drizzle-orm'
+import { and, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm'
 import type { ZodType } from 'zod'
 
 import type { Delta, LocationState, ReversalJournalRow, SqlOp } from '@/lib/db'
@@ -7,6 +7,7 @@ import {
   deltas,
   embeddedFieldsForTable,
   isEmbeddedSourceTable,
+  reversalJournals,
   rowsPerInsert,
 } from '@/lib/db'
 import { deepEqual } from '@/lib/deep-equal'
@@ -17,6 +18,7 @@ import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
+import { journalsToDrop, type JournalHead } from './journal-drop'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
 import type { RefPath } from './live-refs'
@@ -103,6 +105,59 @@ export type ReversePlan = {
 
 export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
 
+// JSON paths only: the planner never parses a journal's before-images.
+async function journalHeadsOf(set: ReversalSet, ctx: DbCtx): Promise<JournalHead[]> {
+  const heads = await ctx.db
+    .select({
+      actionId: reversalJournals.actionId,
+      chapterId: sql<string>`json_extract(${reversalJournals.journal}, '$.chapterId')`,
+      floor: sql<number>`json_extract(${reversalJournals.journal}, '$.floor')`,
+    })
+    .from(reversalJournals)
+    .where(eq(reversalJournals.branchId, set.branchId))
+  return heads
+}
+
+// generation-pipeline.md → Reverse-replay: a reversal that would leave a re-run's write-back
+// inexact drops its journal, in the planner every reversal shares.
+async function journalDropsOf(
+  set: ReversalSet,
+  ctx: DbCtx,
+  heads: readonly JournalHead[],
+  touched: { removed: readonly Delta[]; rewritten: readonly Delta[] },
+): Promise<Pick<ReversePlan, 'droppedJournals' | 'journalOps'>> {
+  if (heads.length === 0) return { droppedJournals: [], journalOps: [] }
+  const groupRows = (await ctx.db
+    .select()
+    .from(deltas)
+    .where(
+      and(
+        eq(deltas.branchId, set.branchId),
+        inArray(
+          deltas.actionId,
+          heads.map((head) => head.actionId),
+        ),
+      ),
+    )) as Delta[]
+  const groups = new Map<string, Delta[]>()
+  for (const d of groupRows) {
+    const group = groups.get(d.actionId)
+    if (group) group.push(d)
+    else groups.set(d.actionId, [d])
+  }
+  const dropped = journalsToDrop({ heads, groups, ...touched }).map((head) => head.actionId)
+  if (dropped.length === 0) return { droppedJournals: [], journalOps: [] }
+  const droppedRows = () =>
+    and(eq(reversalJournals.branchId, set.branchId), inArray(reversalJournals.actionId, dropped))
+  return {
+    droppedJournals: (await ctx.db
+      .select()
+      .from(reversalJournals)
+      .where(droppedRows())) as ReversalJournalRow[],
+    journalOps: [ctx.db.delete(reversalJournals).where(droppedRows()).toSQL()],
+  }
+}
+
 /**
  * The reversal of a closed set, unexecuted, for a caller committing it inside its own transaction.
  * Ops and prunes stay separate: their order against the caller's ops is the caller's call. The
@@ -113,6 +168,7 @@ export async function buildReverseAndPrunePlan(
   ctx: DbCtx,
   options: ReversalOptions,
 ): Promise<ReversePlan> {
+  const heads = await journalHeadsOf(set, ctx)
   const built = await buildUndoOps(set, ctx, options)
   const reownOrPrune = (r: Delta): SqlOp => {
     const keptBy = built.reowned.get(r.id)
@@ -125,16 +181,22 @@ export async function buildReverseAndPrunePlan(
           .toSQL()
   }
   const logged = [...set.rows, ...built.prunedHolders, ...built.strandedWrites]
+  const prunedDeltas = logged.filter((d) => !built.reowned.has(d.id))
+  const reownedDeltas = logged.filter((d) => built.reowned.has(d.id))
+  const journals = await journalDropsOf(set, ctx, heads, {
+    removed: [...prunedDeltas, ...reownedDeltas],
+    rewritten: [...built.rewrittenHolders, ...built.survivorRewrites.map(({ delta }) => delta)],
+  })
   return {
     ops: built.ops,
     pruneOps: logged.map(reownOrPrune),
     patches: built.patches,
     survivorRewrites: built.survivorRewrites,
-    prunedDeltas: logged.filter((d) => !built.reowned.has(d.id)),
-    reownedDeltas: logged.filter((d) => built.reowned.has(d.id)),
+    prunedDeltas,
+    reownedDeltas,
     rewrittenHolders: built.rewrittenHolders,
-    droppedJournals: [],
-    journalOps: [],
+    droppedJournals: journals.droppedJournals,
+    journalOps: journals.journalOps,
   }
 }
 
