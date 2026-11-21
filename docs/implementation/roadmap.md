@@ -164,13 +164,14 @@ vault shell; during M8 — M9.1 and M9.3.
 
 ### M6 — Branches + diff cache
 
-**Goal.** Branches work: fork creates a new branch with a
-branch-copy of the relevant data per the
-[branch-copy manifest](../data-model.md#branch-model). Reader has
-a branch picker. The diff cache (Zustand + React Query off-label
-per
-[Project · State placement](./conventions.md))
-populates so branch comparisons are fast.
+**Goal.** Branches work. Forking at any entry creates a standalone
+branch per the [branch-copy manifest](../data-model.md#branch-model);
+the reader switches, renames and deletes branches through the
+navigator; a story can be duplicated, one branch or all. Each branch
+keeps its own lead and its own redo stack, and every read scopes to the
+loaded branch. Alongside, the
+[diff cache](../architecture.md#delta-history-diff-resolution) gives
+History its before-and-after prose.
 
 **Why now.** Branches touch every domain table (delta-log
 filtering, branch-copy semantics, composite `(branch_id, id)` keys) so they need the full
@@ -189,18 +190,24 @@ churn.
   `deltas` and `reversal_journals` copy, post-rewind `*_vec` copy,
   `branch_id` re-stamping on restore) per
   [`data-model.md → Branch model`](../data-model.md#branch-model).
-- M6.2 — Delta-log branch filtering (reads scope to current
-  branch's lineage).
+- M6.2 — Branch-scoping hardening: every read correct once a second
+  branch exists — the shared store branch filter, the History tab's
+  lookup by id alone, and two-branch register tests (the items tagged
+  M6.2 below). Develops against hand-seeded two-branch rows. Under the
+  hard fork there is no lineage to read: reads already filter by
+  `branch_id`
+  ([`data-model.md → Branch model`](../data-model.md#branch-model)).
 - M6.3 — Reader branch picker + branch creation flow.
-- M6.4 — Diff cache: query layer, eviction, deps on branch +
-  entry events. Entries key on `(branch_id, delta.id)`, the TanStack key
-  with them, since copies repeat delta ids across branches
-  ([`architecture.md → Cache shape and lifecycle`](../architecture.md#cache-shape-and-lifecycle)). Renderer iteration walks `keys(old.<column>)`
-  (not `keys(new.<column>)`), and cache-miss path falls back to
-  an `undo_payload`-keys-only summary per
-  [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution).
-- M6.5 — Multi-story branching: story list shows branch count,
-  navigation handles the branch-aware URL shape.
+- M6.4 — Diff cache. The in-memory cache that resolves an update's new
+  value for History's diff prose, per
+  [`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution):
+  the chain walk inside one read transaction, LRU at 2000 entries,
+  invalidated only by a reversal, entries keyed on
+  `(branch_id, delta.id)`. The renderer walks `keys(old.<column>)`, not
+  `keys(new.<column>)`; a miss falls back to the summary of field names
+  from the undo payload. World and Plot History move from M4's
+  field-name-only fallback to the rich prose; the Diagnostics delta log
+  (M7.3) adopts it there.
 - M6.6 — Story duplicate: the story card's Duplicate dialog (name,
   one branch or all branches) per
   [`story-list.md → Duplicate a story`](../ui/screens/story-list/story-list.md#duplicate-a-story),
@@ -215,13 +222,17 @@ churn.
   refetches them with the stories. Designed 2026-11-21
   ([exploration](../explorations/2026-11-21-story-duplicate.md)).
 
-**Parallel paths.** {M6.1} || {M6.2} — a
+**Parallel paths.** {M6.1} || {M6.2} || {M6.4} from day one. M6.1 and
+M6.2 are a
 [doc-as-contract](./conventions.md#sequencing-vs-doc-as-contract)
-pair: the lineage shape both build against is fixed by the
+pair: the row shape both build against is fixed by the
 [branch-copy manifest](../data-model.md#branch-model), so M6.2's
-lineage-scoped reads develop against hand-seeded branch rows before
-fork orchestration exists. {M6.3, M6.4, M6.5} parallel once branch
-reads work; M6.6 follows M6.1.
+hardening develops against hand-seeded two-branch rows before fork
+orchestration exists. M6.4 rests on no branch work. M6.3 follows M6.1
+and M6.2; M6.6 follows M6.1. M6.5 was dropped at the 2026-11-21
+readiness check: the branch-aware URL already shipped, and no canon
+specifies a branch count on the story card; numbering kept for
+planning to settle.
 
 **Slice-authoring notes.** M6.1 and M6.6 share a copy-core — either
 M6.1 owns it and M6.6 sequences after, or authoring extracts the
@@ -278,15 +289,15 @@ verified against the code first. Resolve with the slice each names.
   other branch. Unreachable today, since no fork action exists; **fix it
   when M6.1 lands fork**, e.g. the store records the open branch at
   `openReviewWindow`. Raised in 5.11's review.
-- **M6.1 — The register tests seed one branch, so a lost branch
+- **M6.2 — The register tests seed one branch, so a lost branch
   condition stays green.** Rows key on branch and id, so a fork's copies
   repeat every id. Each `lib/actions/*/register.test.ts` seeds a single
   branch, and its `b2` cases are branch-mismatch refusals: a handler
   whose read or write dropped its `branchId` condition would still pass.
   Story entries alone carry the two-branch shape now, for update,
   delete and stamp (`lib/actions/story-entries/register.test.ts`,
-  `branch scope`). **When M6.1 lands fork, give each register the same
-  pair of tests.** Unverified beyond story entries: the mutation run
+  `branch scope`). **Give each register the same pair of tests,
+  against a hand-seeded second branch.** Unverified beyond story entries: the mutation run
   covered only their handlers. Routed from triage 2026-11-07. The
   chapter delete's reads have the same gap: no test in
   `lib/actions/chapters/remove-chapter.test.ts` or
@@ -300,9 +311,9 @@ verified against the code first. Resolve with the slice each names.
   thread, happening, delta or chapter; its scenes name characters it has
   no rows for. A real fork there would copy the branch's rows and
   `chap_hero_1`, whose anchor (29) survives, per the
-  [branch-copy manifest](../data-model.md#branch-model). M6.2's lineage
-  reads develop against hand-seeded rows, so **rebuild the seed's fork as
-  a real branch copy once M6.1's copy core exists.** No UI opens it
+  [branch-copy manifest](../data-model.md#branch-model). M6.2's
+  hardening develops against hand-seeded rows, so **rebuild the seed's
+  fork as a real branch copy once M6.1's copy core exists.** No UI opens it
   before M6.3. Routed from triage 2026-11-07.
 - **M6.3 — Build `Re-run on new branch` for chapter closes.** Designed
   2026-11-19
@@ -378,7 +389,7 @@ verified against the code first. Resolve with the slice each names.
   while the lead is story-level, its own branch once the per-branch lead
   lands. Branch and story deletes drop their stacks. The redo guard on a
   foreign group stays as a defense.
-- **M6.3 — No shared branch filter for store rows.** About twenty call sites
+- **M6.2 — No shared branch filter for store rows.** About twenty call sites
   in `lib`, `components` and `app` filter a store's rows by
   `branchId` inline; 4.2c added two more (`branchRows` in
   `resolve-collision.ts`, `inBranch` in
@@ -389,9 +400,10 @@ verified against the code first. Resolve with the slice each names.
   `lib/world/merge-links.ts`. The working-set stores hold one branch,
   so each filter means "every row if this is the loaded branch, else
   none", and an accessor can return a stable reference instead of
-  scanning. M6.3 is where a mounted route's branch can first differ
-  from the loaded one. Routed from triage 2026-10-09.
-- **M6.3 — The History tab reads its own row without a branch check.**
+  scanning. M6.3's switching is where a mounted route's branch can
+  first differ from the loaded one, so the accessor lands before it.
+  Routed from triage 2026-10-09.
+- **M6.2 — The History tab reads its own row without a branch check.**
   `components/history/use-history-target.ts` looks the tab's row up in
   the stores by id alone; ids repeat across branches (composite primary
   key), and 4.2c added branch guards to the other-end name lookups and
@@ -455,36 +467,6 @@ verified against the code first. Resolve with the slice each names.
   the confirm's other-branches line land with its definition tab
   (M7.2). Surfaced by
   4.2b planning (2026-09-28); routed from triage 2026-10-04.
-
-**Readiness check (2026-11-21).** Found by the pre-promotion check. Its
-four canon defects were ruled the same day
-([exploration](../explorations/2026-11-21-m6-branch-rulings.md)): the
-diff cache's key, per-branch redo stacks, branch delete and the
-`Browse branches…` entry; their build items sit above. The entry
-corrections below remain; resolve them before promoting.
-
-Entry corrections, the developer's rulings at promotion:
-
-- **The goal's "so branch comparisons are fast."** No canon surface
-  compares branches; the diff cache resolves new values for History
-  diff prose
-  ([`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution)).
-- **M6.2 is obsolete as written.** Lineage-scoped reads contradict the
-  hard fork's "no lineage walk", and reads already filter by
-  `branch_id`. Drop it, or redefine it as branch-scoping hardening: the
-  shared store filter, the lookups by id alone and the two-branch
-  register tests carried above.
-- **M6.4's dependency on entry events.** Canon invalidates the cache
-  only on a reversal; a forward write never changes an earlier delta's
-  old and new values.
-- **M6.5 has no canon to build.** No story-card branch count is
-  specified in
-  [`story-list.md → Story card`](../ui/screens/story-list/story-list.md#story-card--text-first),
-  and `app/reader-composer/[branchId].tsx` already carries the branch in
-  the route. Drop it, or design the count first.
-- **The diff cache doesn't depend on M6's branch work.** Whether M6.4 stays in
-  M6 or moves to M7 beside its other consumer, the Diagnostics delta
-  log, is a placement call.
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
