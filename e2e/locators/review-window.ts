@@ -29,7 +29,8 @@ export const reviewWindow = {
       exact: true,
     }),
   done: (page: Page): Locator =>
-    dialog(page).getByRole('button', { name: t('chapters:review.done'), exact: true }), // On the latest chapter's window only.
+    dialog(page).getByRole('button', { name: t('chapters:review.done'), exact: true }),
+  // On the latest chapter's window only.
   rerun: (page: Page): Locator =>
     dialog(page).getByRole('button', {
       name: t('chapters:actions.rerunFromReview'),

@@ -303,11 +303,26 @@ test.describe.serial('re-running a close', () => {
 
     const runsBefore = (await closeRuns()).length
     const requestsBefore = liveMock().requests.length
-    await confirm.rerun.click()
+    // Held mid-re-run: a commit would close any window left over the report it no longer holds.
+    liveMock().holdNextStructured(toolLaneKey(LORE_TOOLS))
+    try {
+      await confirm.rerun.click()
+      await expect
+        .poll(
+          () =>
+            liveMock()
+              .requests.slice(requestsBefore)
+              .some((request) => request.agent === toolLaneKey(LORE_TOOLS)),
+          { timeout: 60_000, message: "the re-run never reached Lore's call" },
+        )
+        .toBe(true)
+      await expect(confirm.root).toHaveCount(0)
+      // Confirming leaves the window closed.
+      await expect(reviewWindow.mounted(page())).toHaveCount(0)
+    } finally {
+      liveMock().releaseStructured()
+    }
     secondRerun = await committedRerun(runsBefore)
-    await expect(confirm.root).toHaveCount(0)
-    // Confirming leaves the window closed.
-    await expect(reviewWindow.mounted(page())).toHaveCount(0)
     await expectRerunLanded(secondRerun, SECOND_LORE, requestsBefore)
 
     await undoTheRerun()
