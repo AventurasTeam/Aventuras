@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, sql, type SQL } from 'drizzle-orm'
 
-import { CALL_TIMEOUT_DEFAULT_MS, type ResolveModelConfig } from '@/lib/ai'
+import { CALL_TIMEOUT_DEFAULT_MS, modelConfigOf } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   buildClassifierActions,
@@ -252,12 +252,7 @@ export async function* periodicClassifierPhase(
     }),
   )
 
-  const modelConfig: ResolveModelConfig = {
-    providers: cfg.providers,
-    profiles: cfg.profiles,
-    assignments: cfg.assignments,
-    storyModels: open.settings.models,
-  }
+  const modelConfig = modelConfigOf(cfg, open.settings)
 
   // Read by the status block; left behind by a crash, it holds the branch until a boot clears it.
   await writeStatus(ctx, nextStatusOnStart(status))

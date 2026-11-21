@@ -251,6 +251,12 @@ Web `role=` and native best-effort role mapping follow the approach
 [`actions-menu.md → Keyboard & ARIA`](./actions-menu.md#keyboard--aria)
 already commits to.
 
+In both shapes a section with a text header is a `role="group"`
+inside the listbox, named by that header, which the group then
+hides so it is read once. On web the group wraps its section's
+virtualized slots with `display: contents`, so they stay positioned
+on the list's track; native has no group mapping.
+
 ## Filter, keyboard, focus & lifecycle
 
 **Filter loop.** A keystroke updates the substrate's internal

@@ -101,6 +101,17 @@ describe('composeHeld', () => {
     expect(held.chapterBreaks.e11).toEqual({ number: 2 })
   })
 
+  it('drops a decoration the incoming slice removed from a row it still holds, above or below', () => {
+    const shown = slice(10, 30, {
+      worldTimeDecorations: { e11: { label: 'Day 1', raw: 1 }, e25: { label: 'Day 3', raw: 3 } },
+    })
+    // A row lands above the anchor, and the same write clears both rows' times.
+    const incoming = slice(9, 30)
+    const held = composeHeld(shown, incoming, 'e20')
+    expect(held.worldTimeDecorations.e11).toBeUndefined()
+    expect(held.worldTimeDecorations.e25).toBeUndefined()
+  })
+
   it('keeps the close-here marks of held rows the incoming slice dropped, the rest from it', () => {
     const shown = slice(10, 30, { closeHereEntryIds: { e11: true, e13: true, e29: true } })
     // e13 left the open region (a close settled) though the incoming slice still holds it.

@@ -20,7 +20,6 @@ export type ConfigResolverError = {
   kind: 'config-resolver'
   target: ResolveTarget
   phaseName: string
-  detail?: string
 } & ({ failure: ResolveFailureKind } | { failure: 'tool-calling-off'; modelId: string })
 
 export type PipelineError =

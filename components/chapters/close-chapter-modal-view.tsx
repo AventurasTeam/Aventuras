@@ -225,6 +225,11 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
     estimateSize: () => REPLY_ROW_ESTIMATE,
     overscan: 6,
   })
+  // It opens on the selection, which a `Close chapter here` pick leaves far below the newest reply.
+  const openedOn = useRef(replies.findIndex((row) => row.id === selectedId))
+  useEffect(() => {
+    if (openedOn.current > 0) virtualizer.scrollToIndex(openedOn.current, { align: 'center' })
+  }, [virtualizer])
   // A key can target an option virtualized out: it takes focus once the scroll has mounted it.
   const pendingFocus = useRef<string | null>(null)
   const focusPending = () => {
@@ -322,10 +327,41 @@ function ReplyPanelWeb({ replies, latestId, selectedId, onPick }: PanelProps) {
   )
 }
 
+const REPLY_SCROLL_RETRIES = 10
+const REPLY_SCROLL_RETRY_MS = 50
+
 function ReplyPanelNative({ replies, latestId, selectedId, onPick }: PanelProps) {
+  const listRef = useRef<FlatList<CloseModalRow>>(null)
+  const openedOn = useRef(replies.findIndex((row) => row.id === selectedId))
+  const attempts = useRef(0)
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scrollToOpened = () =>
+    listRef.current?.scrollToIndex({ index: openedOn.current, viewPosition: 0.5, animated: false })
+  useEffect(
+    () => () => {
+      if (retryTimer.current != null) clearTimeout(retryTimer.current)
+    },
+    [],
+  )
   return (
     <View className="min-h-0 shrink overflow-hidden rounded-md border border-border">
       <FlatList
+        ref={listRef}
+        // It opens on the selection once it has a viewport to center it in.
+        onLayout={() => {
+          if (attempts.current > 0 || openedOn.current <= 0) return
+          attempts.current = 1
+          scrollToOpened()
+        }}
+        // Rows vary in height, so a target past the measured cells fails, at first with no average
+        // to estimate from: jump to the estimate so the list renders it, and retry while cells
+        // measure, as SearchableOverlayList's sheet list does.
+        onScrollToIndexFailed={({ index, averageItemLength }) => {
+          listRef.current?.scrollToOffset({ offset: index * averageItemLength, animated: false })
+          if (attempts.current >= REPLY_SCROLL_RETRIES) return
+          attempts.current += 1
+          retryTimer.current = setTimeout(scrollToOpened, REPLY_SCROLL_RETRY_MS)
+        }}
         testID="close-chapter-panel"
         accessibilityLabel={t('chapters:closeModal.endHeading')}
         data={replies}
@@ -457,17 +493,6 @@ function CloseModalBody({
  */
 export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactElement {
   const { open, onCancel, disabledReason } = props
-  const contentRef = useRef<View>(null)
-  const gated = disabledReason != null
-  // Chromium blurs a button as it disables (lessons-learned/rnweb-disabled-under-focus-blurs.md).
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !open || !gated) return
-    // The ref lands on the styled View inside Radix's focusable role=dialog element.
-    const dialog = (contentRef.current as unknown as HTMLElement | null)?.closest<HTMLElement>(
-      '[role="dialog"]',
-    )
-    if (dialog != null && !dialog.contains(document.activeElement)) dialog.focus()
-  }, [open, gated])
   return (
     <Dialog
       open={open}
@@ -477,7 +502,7 @@ export function CloseChapterModalView(props: CloseChapterModalViewProps): ReactE
     >
       {/* Opened from a Sheet still animating out, it must draw above that Sheet. */}
       <DialogContent
-        ref={contentRef}
+        busy={disabledReason != null}
         portalHost={ABOVE_SHEETS_PORTAL_HOST}
         scrollable={false}
         className="sm:max-w-[480px]"

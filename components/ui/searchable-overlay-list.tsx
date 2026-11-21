@@ -5,7 +5,12 @@ import {
 } from '@gorhom/bottom-sheet'
 import * as PopoverPrimitive from '@rn-primitives/popover'
 import { Portal } from '@rn-primitives/portal'
-import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
+import {
+  defaultRangeExtractor,
+  useVirtualizer,
+  type Range,
+  type VirtualItem,
+} from '@tanstack/react-virtual'
 import { Check, Search, X } from 'lucide-react-native'
 import {
   Fragment,
@@ -39,10 +44,12 @@ import { useAnimatedReaction } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { scheduleOnRN } from 'react-native-worklets'
 
+import { FocusOrigin } from '@/components/ui/focus-return'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { swallowKeyRepeats } from '@/components/ui/swallow-key-repeats'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
@@ -775,6 +782,25 @@ function virtualTrackStyle(totalSize: number): CSSProperties {
   return { position: 'relative', width: '100%', height: totalSize }
 }
 
+const GROUP_STYLE: CSSProperties = { display: 'contents' }
+
+/** The rendered slots, cut into one run per section; a section's slots are always consecutive. */
+function sectionRuns<T>(
+  virtualItems: VirtualItem[],
+  items: FlatItem<T>[],
+): { sectionId: string; header: ReactNode; slots: VirtualItem[] }[] {
+  const runs: { sectionId: string; header: ReactNode; slots: VirtualItem[] }[] = []
+  const headers = new Map<string, ReactNode>()
+  for (const item of items) if (item.kind === 'header') headers.set(item.sectionId, item.header)
+  for (const slot of virtualItems) {
+    const sectionId = items[slot.index]!.sectionId
+    const last = runs.at(-1)
+    if (last?.sectionId === sectionId) last.slots.push(slot)
+    else runs.push({ sectionId, header: headers.get(sectionId), slots: [slot] })
+  }
+  return runs
+}
+
 type VirtualizedRowListProps<T> = {
   sections: Section<T>[]
   highlightedId: string | null
@@ -853,6 +879,69 @@ function VirtualizedRowList<T>({
   const webProps = { role: 'listbox' } as object
   const virtualItems = virtualizer.getVirtualItems()
 
+  const renderSlot = (virtualRow: VirtualItem) => {
+    const item = items[virtualRow.index]!
+    const isSticky = item.kind === 'header' && item.sticky
+    const isActiveSticky = isSticky && activeStickyIndexRef.current === virtualRow.index
+    const wrapperStyle = isActiveSticky ? STICKY_HEADER_STYLE : translateRowStyle(virtualRow.start)
+
+    if (item.kind === 'header') {
+      return (
+        <div
+          key={virtualRow.key}
+          ref={virtualizer.measureElement}
+          data-index={virtualRow.index}
+          style={wrapperStyle}
+          // Its group carries the header as its name; read once.
+          aria-hidden={typeof item.header === 'string' ? true : undefined}
+        >
+          <View className="bg-bg-overlay px-row-x-md py-1">
+            {typeof item.header === 'string' ? (
+              <Text variant="muted" size="xs" className="uppercase tracking-wide">
+                {item.header}
+              </Text>
+            ) : (
+              item.header
+            )}
+          </View>
+        </div>
+      )
+    }
+
+    const row = item.row
+    const highlighted = row.id === highlightedId
+    const selected = selectedRowIds?.has(row.id) ?? false
+    return (
+      <div
+        key={virtualRow.key}
+        ref={virtualizer.measureElement}
+        data-index={virtualRow.index}
+        style={wrapperStyle}
+      >
+        <Pressable
+          nativeID={`${rowIdPrefix}-${row.id}`}
+          role="option"
+          // The search input keeps focus and points at rows by aria-activedescendant.
+          tabIndex={-1}
+          aria-selected={selected || (selectedRowIds == null && highlighted)}
+          disabled={row.disabled}
+          onPress={() => onActivate(row)}
+          className={cn(
+            ROW_BASE,
+            rowClass,
+            !item.isLastInSection && 'border-b border-border',
+            highlighted && !selected && 'bg-tint-hover',
+            !selected && !row.disabled && 'hover:bg-tint-hover',
+            row.disabled && 'opacity-50',
+          )}
+        >
+          {renderRow(row, { highlighted, selected })}
+          {selected ? <SelectedMark /> : null}
+        </Pressable>
+      </div>
+    )
+  }
+
   return (
     <div
       ref={parentRef}
@@ -865,66 +954,17 @@ function VirtualizedRowList<T>({
       {...webProps}
     >
       <div style={virtualTrackStyle(virtualizer.getTotalSize())}>
-        {virtualItems.map((virtualRow) => {
-          const item = items[virtualRow.index]!
-          const isSticky = item.kind === 'header' && item.sticky
-          const isActiveSticky = isSticky && activeStickyIndexRef.current === virtualRow.index
-          const wrapperStyle = isActiveSticky
-            ? STICKY_HEADER_STYLE
-            : translateRowStyle(virtualRow.start)
-
-          if (item.kind === 'header') {
-            return (
-              <div
-                key={virtualRow.key}
-                ref={virtualizer.measureElement}
-                data-index={virtualRow.index}
-                style={wrapperStyle}
-              >
-                <View className="bg-bg-overlay px-row-x-md py-1">
-                  {typeof item.header === 'string' ? (
-                    <Text variant="muted" size="xs" className="uppercase tracking-wide">
-                      {item.header}
-                    </Text>
-                  ) : (
-                    item.header
-                  )}
-                </View>
-              </div>
-            )
-          }
-
-          const row = item.row
-          const highlighted = row.id === highlightedId
-          const selected = selectedRowIds?.has(row.id) ?? false
-          return (
-            <div
-              key={virtualRow.key}
-              ref={virtualizer.measureElement}
-              data-index={virtualRow.index}
-              style={wrapperStyle}
-            >
-              <Pressable
-                nativeID={`${rowIdPrefix}-${row.id}`}
-                role="option"
-                aria-selected={selected || (selectedRowIds == null && highlighted)}
-                disabled={row.disabled}
-                onPress={() => onActivate(row)}
-                className={cn(
-                  ROW_BASE,
-                  rowClass,
-                  !item.isLastInSection && 'border-b border-border',
-                  highlighted && !selected && 'bg-tint-hover',
-                  !selected && !row.disabled && 'hover:bg-tint-hover',
-                  row.disabled && 'opacity-50',
-                )}
-              >
-                {renderRow(row, { highlighted, selected })}
-                {selected ? <SelectedMark /> : null}
-              </Pressable>
+        {sectionRuns(virtualItems, items).map(({ sectionId, header, slots }) =>
+          typeof header === 'string' ? (
+            // actions-menu.md → Keyboard & ARIA: each section is a named group. `contents` leaves the
+            // slots positioned on the track, and Chromium still exposes the group.
+            <div key={sectionId} role="group" aria-label={header} style={GROUP_STYLE}>
+              {slots.map(renderSlot)}
             </div>
-          )
-        })}
+          ) : (
+            <Fragment key={sectionId}>{slots.map(renderSlot)}</Fragment>
+          ),
+        )}
       </div>
     </div>
   )
@@ -1155,7 +1195,10 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   const onSubmit = useCallback(() => {
     if (list.highlightedId == null) return
     const found = findRowSection(sections, list.highlightedId)
-    if (found && !found.row.disabled) activate(found.row)
+    if (found == null || found.row.disabled) return
+    // Focus returns to the trigger, which a held Enter's repeats would press, reopening the list.
+    swallowKeyRepeats('Enter')
+    activate(found.row)
   }, [list.highlightedId, sections, activate])
 
   const onKeyPress = useCallback(
@@ -1335,6 +1378,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
       )}
       style={popoverStyle}
     >
+      <FocusOrigin />
       {body}
     </PopoverPrimitive.Content>
   )
@@ -1519,7 +1563,10 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
     const id = highlightedIdRef.current
     if (id == null) return
     const found = findRowSection(sectionsRef.current, id)
-    if (found && !found.row.disabled) activate(found.row)
+    if (found == null || found.row.disabled) return
+    // Focus stays in the field, where a held Enter's repeats would pick again.
+    swallowKeyRepeats('Enter')
+    activate(found.row)
   }, [activate, disabled])
 
   const onKeyPress = useCallback(

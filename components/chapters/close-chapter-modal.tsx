@@ -4,8 +4,8 @@ import { useMemo, useState, type ReactElement } from 'react'
 import { worldTimeLabel } from '@/components/reader/chapter-time-range'
 import { useStoryGenerationGate } from '@/components/story-settings/generation-run'
 import { useBranchTailId } from '@/hooks/use-branch-tail-id'
+import { useCalendarFrame } from '@/hooks/use-calendar-frame'
 import { useEntryIndex } from '@/hooks/use-entry-index'
-import { resolveCalendar, type CalendarFrame } from '@/lib/calendar'
 import { canEndChapter, tokensThrough } from '@/lib/chapters'
 import { db, openRegionSeries, type OpenRegionRow } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -58,13 +58,7 @@ export function CloseChapterModal({
     (open) => open?.definition.calendarSystemId,
   )
   const origin = currentStoryStore.useCurrentStory((open) => open?.definition.worldTimeOrigin)
-  const frame = useMemo(
-    (): CalendarFrame | null =>
-      calendarSystemId == null || origin == null
-        ? null
-        : { calendar: resolveCalendar(calendarSystemId), origin },
-    [calendarSystemId, origin],
-  )
+  const frame = useCalendarFrame(calendarSystemId, origin)
   const endedChapterNumber = chaptersStore.useChapters((rows) => {
     const latest = chaptersStore.selectLatest(rows)
     return latest?.branchId === branchId ? latest.sequenceNumber : null

@@ -103,8 +103,7 @@ export async function* closeMetadataPhase(
   setCloseParts(ctx.intermediates, parts)
 
   const call = yield* requestChapterMetadata(ctx, range, parts, inputs)
-  if (call.status === 'aborted') return { status: 'aborted' }
-  if (call.status === 'failed') return { status: 'failed', error: call.error }
+  if (call.status !== 'ok') return call
 
   const sequenceNumber = await nextSequenceNumber(ctx.db, ctx.branchId)
   const { title, summary, theme, keywords } = call.metadata

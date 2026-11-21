@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
+import { useHeldUntilDismissed, type HeldUntilDismissed } from '@/hooks/use-held-until-dismissed'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -27,7 +28,8 @@ type OverflowMenuProps = {
  */
 export function OverflowMenu(props: OverflowMenuProps) {
   const isPhone = useTier() === 'phone'
-  return isPhone ? <SheetMenu {...props} /> : <PopoverMenu {...props} />
+  const afterDismiss = useHeldUntilDismissed(isPhone)
+  return isPhone ? <SheetMenu {...props} afterDismiss={afterDismiss} /> : <PopoverMenu {...props} />
 }
 
 function PopoverMenu({ label, entries, disabled, className }: OverflowMenuProps) {
@@ -69,25 +71,22 @@ function PopoverMenu({ label, entries, disabled, className }: OverflowMenuProps)
   )
 }
 
-function SheetMenu({ label, entries, disabled, className }: OverflowMenuProps) {
+function SheetMenu({
+  label,
+  entries,
+  disabled,
+  className,
+  afterDismiss,
+}: OverflowMenuProps & { afterDismiss: HeldUntilDismissed }) {
   const [open, setOpen] = useState(false)
-  // gorhom restores a Sheet another one covered, so an entry that opens its own waits for this
-  // one's exit animation to end.
-  const afterDismiss = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (disabled) setOpen(false)
   }, [disabled])
 
   const changeOpen = (next: boolean) => {
-    if (next) afterDismiss.current = null
+    if (next) afterDismiss.clear()
     setOpen(next)
-  }
-
-  const runAfterDismiss = () => {
-    const run = afterDismiss.current
-    afterDismiss.current = null
-    run?.()
   }
 
   return (
@@ -101,7 +100,7 @@ function SheetMenu({ label, entries, disabled, className }: OverflowMenuProps) {
           className={className}
         />
       </SheetTrigger>
-      <SheetContent size="auto" onDismissed={runAfterDismiss}>
+      <SheetContent size="auto" onDismissed={afterDismiss.runHeld}>
         <View className="flex-col py-1">
           {entries.map((entry) => (
             <MenuItem
@@ -110,7 +109,9 @@ function SheetMenu({ label, entries, disabled, className }: OverflowMenuProps) {
               isPhone
               onSelect={() => {
                 setOpen(false)
-                if (entry.opensSheet === true) afterDismiss.current = entry.onPress
+                // gorhom restores a Sheet another one covered, so an entry that opens its own
+                // waits for this one's exit animation to end.
+                if (entry.opensSheet === true) afterDismiss.hold(entry.onPress)
                 else entry.onPress()
               }}
             />

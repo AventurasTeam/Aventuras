@@ -8,7 +8,7 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { updateProvider } from '@/lib/actions'
-import { STORY_OVERRIDE_TARGETS, type ResolveModelConfig, type StoryOverrideTarget } from '@/lib/ai'
+import { modelConfigOf, STORY_OVERRIDE_TARGETS, type StoryOverrideTarget } from '@/lib/ai'
 import { db, runInTransaction, type StoryAgentId, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -75,8 +75,9 @@ export function ModelsPanel({ settings, disabled = false, disabledReason }: Mode
   // `Add override` rows before a model is picked; not in the patch — an override needs a model.
   const [pending, setPending] = useState<StoryAgentId[]>([])
 
-  const config = useMemo<ResolveModelConfig>(
-    () => ({ providers, profiles, assignments }),
+  // The chain beneath any override: what the sentinel shows, and what an override copies.
+  const config = useMemo(
+    () => modelConfigOf({ providers, profiles, assignments }, undefined),
     [providers, profiles, assignments],
   )
   const sources = useMemo(() => providerSources(providers), [providers])

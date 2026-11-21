@@ -1,7 +1,7 @@
 import { and, asc, between, eq, inArray, ne } from 'drizzle-orm'
 import type { z } from 'zod'
 
-import type { PromptHalves, ResolveModelConfig } from '@/lib/ai'
+import { modelConfigOf, type PromptHalves, type ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 import { storyEntries, type DbCtx, type StoryMode, type Thread } from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -98,12 +98,7 @@ export function readMetadataInputs(ctx: PhaseContext): MetadataCallInputs | Phas
     previousChapterSummary: latestChapterSummary(ctx.branchId),
     threads: [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId),
     mode: open.definition.mode,
-    modelConfig: {
-      providers: settings.providers,
-      profiles: settings.profiles,
-      assignments: settings.assignments,
-      storyModels: open.settings.models,
-    },
+    modelConfig: modelConfigOf(settings, open.settings),
   }
 }
 

@@ -293,7 +293,7 @@ export function CollisionResolveDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-2xl lg:max-w-4xl" scrollable={false}>
+      <DialogContent className="sm:max-w-2xl lg:max-w-4xl" scrollable={false} busy={submitting}>
         <DialogHeader>
           <DialogTitle>{header.title}</DialogTitle>
           {phone ? null : explanation}

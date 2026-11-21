@@ -204,6 +204,28 @@ export const ManyProvidersComposer: Story = {
       initialFavorites={[]}
     />
   ),
+  // The `Under:` options sit in a listbox the trigger names, not loose in the page.
+  play: async () => {
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: t('modelPicker.selectedModel', { modelId: 'model-1-default' }),
+      }),
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: t('modelPicker.addCustomExpand') }),
+    )
+    const under = await screen.findByRole('button', { name: MANY_PROVIDERS[0]!.name })
+    await userEvent.click(under)
+    const option = await screen.findByRole('option', { name: MANY_PROVIDERS[11]!.name })
+    const owner = option.closest('[role="listbox"]')
+    await expect(owner).not.toBeNull()
+    await expect(screen.getByRole('listbox', { name: t('modelPicker.providerListLabel') })).toBe(
+      owner,
+    )
+    await expect(under).toHaveAttribute('aria-controls', owner!.id)
+    // Twelve providers overflow the panel's cap, so the options scroll inside it.
+    await expect(owner!.getBoundingClientRect().height).toBeLessThanOrEqual(181)
+  },
 }
 
 export const LongModelNames: Story = {

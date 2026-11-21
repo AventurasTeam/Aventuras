@@ -7,6 +7,7 @@ import {
   useRef,
   type ComponentProps,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import {
   Platform,
@@ -20,6 +21,7 @@ import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
 import { buttonTextVariants, buttonVariants } from '@/components/ui/button'
+import { FocusOrigin, useDialogFocusReturn } from '@/components/ui/focus-return'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { useScrimClass } from '@/components/ui/scrim'
 import { TextClassContext } from '@/components/ui/text'
@@ -88,6 +90,9 @@ function AlertDialogContent({
   className,
   portalHost,
   busy = false,
+  returnFocusTo,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   style,
   children,
   ...props
@@ -95,6 +100,8 @@ function AlertDialogContent({
   portalHost?: string
   /** Its actions are disabling (a save in flight, a gate): focus stays in the dialog. */
   busy?: boolean
+  /** Where focus goes as it closes, ahead of what held focus when it opened (overlays.md → Close focus). */
+  returnFocusTo?: RefObject<unknown>
 }) {
   // Keyed on `open`, not mount-scoped: the Portal unmounts its children while
   // closed, but this renders the Portal rather than living inside one, so it
@@ -102,6 +109,7 @@ function AlertDialogContent({
   const { open } = AlertDialogPrimitive.useRootContext()
   useRegisteredOverlay(open)
   const contentRef = useRef<View>(null)
+  const focusReturn = useDialogFocusReturn({ returnFocusTo, onOpenAutoFocus, onCloseAutoFocus })
   // Chromium blurs a button the moment it disables, and with every action off the dialog is all
   // that's left to hold focus (lessons-learned/rnweb-disabled-under-focus-blurs.md).
   useEffect(() => {
@@ -126,7 +134,9 @@ function AlertDialogContent({
           // indexed keys the DOM rejects. Dialog's content has no such layer.
           style={StyleSheet.flatten([{ maxHeight: height * MAX_HEIGHT_RATIO }, style])}
           {...props}
+          {...focusReturn}
         >
+          <FocusOrigin />
           <ScrollView
             keyboardShouldPersistTaps="handled"
             className="shrink"

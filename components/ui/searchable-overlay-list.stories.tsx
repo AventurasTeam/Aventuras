@@ -378,5 +378,18 @@ export const Default: Story = { render: () => <InOverlayDemo /> }
 export const AsTrigger: Story = { render: () => <AsTriggerDemo /> }
 export const WithStickyFooter: Story = { render: () => <InOverlayDemo withFooter /> }
 
+/** searchable-overlay-list.md → Structure & ARIA: the search input holds focus; Tab never lands on a row. */
+export const TabSkipsRows: Story = {
+  render: () => <InOverlayDemo />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Pick a country' }))
+    const search = await screen.findByRole('combobox')
+    await waitFor(() => expect(search).toHaveFocus())
+    await screen.findByRole('option', { name: /France/ })
+    await userEvent.tab()
+    expect(document.activeElement?.closest('[role="option"]')).toBeNull()
+  },
+}
+
 // No ThemeMatrix story — content portals to document body / Sheet, escaping per-row
 // `dataSet={{theme}}` scope. Use the Storybook toolbar's global theme switcher.

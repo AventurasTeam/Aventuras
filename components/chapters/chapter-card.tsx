@@ -9,6 +9,7 @@ import {
   destructiveEntry,
   type OverflowMenuEntry,
 } from '@/components/compounds/overflow-menu-entry'
+import { ReasonButton } from '@/components/compounds/reason-button'
 import { RowSaveBar } from '@/components/compounds/row-save-session-chrome'
 import { TagInput } from '@/components/compounds/tag-input'
 import { describedBy } from '@/components/ui/accessible-description'
@@ -329,27 +330,18 @@ function ActionRow({
         <OverflowMenu label={t('chapters:card.moreActions')} entries={more} />
       ) : (
         more.map((entry) => (
-          // Native has no tooltip, so a disabled action's reason shows under it, as the popover's.
-          // The wireframe's `.danger` sits at the row's far end; this View is the flex item.
-          <View
+          // The wireframe's `.danger` sits at the row's far end.
+          <ReasonButton
             key={entry.key}
-            className={cn('gap-0.5', entry.destructive ? 'ml-auto items-end' : 'items-start')}
+            layout={entry.destructive ? 'end' : 'start'}
+            variant={entry.destructive ? 'destructive' : 'secondary'}
+            size="sm"
+            disabled={entry.disabled}
+            disabledReason={entry.disabledReason}
+            onPress={entry.onPress}
           >
-            <Button
-              variant={entry.destructive ? 'destructive' : 'secondary'}
-              size="sm"
-              disabled={entry.disabled}
-              disabledReason={entry.disabledReason}
-              onPress={entry.onPress}
-            >
-              <Text>{entry.label}</Text>
-            </Button>
-            {entry.disabled === true && entry.disabledReason != null && Platform.OS !== 'web' ? (
-              <Text size="xs" variant="muted">
-                {entry.disabledReason}
-              </Text>
-            ) : null}
-          </View>
+            <Text>{entry.label}</Text>
+          </ReasonButton>
         ))
       )}
     </View>

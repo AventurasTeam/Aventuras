@@ -165,14 +165,9 @@ const meta = {
   component: ModalHarness,
   parameters: {
     layout: 'fullscreen',
-    // No built-in key is 390 px wide, and an unknown key silently falls back to desktop.
+    // Widths no built-in key has; an unknown key silently falls back to desktop.
     viewport: {
       options: {
-        phone390: {
-          name: 'Phone 390',
-          styles: { width: '390px', height: '844px' },
-          type: 'mobile',
-        },
         phone320: {
           name: 'Phone 320',
           styles: { width: '320px', height: '700px' },
@@ -752,6 +747,23 @@ export const LongRegionVirtualizes: Story = {
     expect(list.getBoundingClientRect().height).toBeLessThanOrEqual(PANEL_MAX + 1)
     list.scrollTop = list.scrollHeight
     await expect(await screen.findByTestId('close-chapter-reply-entry_3')).toBeVisible()
+  },
+}
+
+// An older selection (a `Close chapter here` pick) is in view when the panel opens, not the newest.
+export const PanelOpensAtSelectedReply: Story = {
+  args: { replies: manyReplies(200), initialSelectedId: 'entry_101' },
+  play: async () => {
+    await dialog()
+    await userEvent.click(trigger())
+    const list = await screen.findByTestId('close-chapter-panel')
+    const row = await within(list).findByTestId('close-chapter-reply-entry_101')
+    await waitFor(() => {
+      const box = list.getBoundingClientRect()
+      const rect = row.getBoundingClientRect()
+      expect(rect.top).toBeGreaterThanOrEqual(box.top - 1)
+      expect(rect.bottom).toBeLessThanOrEqual(box.bottom + 1)
+    })
   },
 }
 

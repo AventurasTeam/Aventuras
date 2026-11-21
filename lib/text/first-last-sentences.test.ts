@@ -46,10 +46,131 @@ describe('firstLastSentences', () => {
     })
   })
 
-  it('keeps the closing sentence when a French closer stands spaced off its mark', () => {
+  it('keeps a French closer spaced off its mark with the sentence it closes', () => {
     expect(firstLastSentences('« Bonjour. » Il partit. « Adieu. »')).toEqual({
-      first: '« Bonjour.',
+      first: '« Bonjour. »',
       last: '« Adieu. »',
+    })
+    expect(firstLastSentences('Elle rit. « Au revoir ! » Il partit.')).toEqual({
+      first: 'Elle rit.',
+      last: 'Il partit.',
+    })
+  })
+
+  it('keeps a dialogue tag after a spaced French closer with its line', () => {
+    expect(firstLastSentences('« Oui ! » dit-elle. Elle partit.')).toEqual({
+      first: '« Oui ! » dit-elle.',
+      last: 'Elle partit.',
+    })
+  })
+
+  it('does not end a sentence at a title or an initial', () => {
+    expect(firstLastSentences('Mr. Smith arrived. Then Dr. Livesey came in.')).toEqual({
+      first: 'Mr. Smith arrived.',
+      last: 'Then Dr. Livesey came in.',
+    })
+    expect(firstLastSentences('The book was by J. R. Tolkien. It was long.')).toEqual({
+      first: 'The book was by J. R. Tolkien.',
+      last: 'It was long.',
+    })
+    expect(firstLastSentences('They met at St. James. The letter was signed J. T.')).toEqual({
+      first: 'They met at St. James.',
+      last: 'The letter was signed J. T.',
+    })
+  })
+
+  it('ends a sentence at a lone capital no name stands beside', () => {
+    expect(firstLastSentences('They chose plan B. The door closed.')).toEqual({
+      first: 'They chose plan B.',
+      last: 'The door closed.',
+    })
+    expect(firstLastSentences('It was rated grade A. Nobody argued.')).toEqual({
+      first: 'It was rated grade A.',
+      last: 'Nobody argued.',
+    })
+  })
+
+  it('keeps a single initial with the surname after it', () => {
+    expect(firstLastSentences('J. Smith arrived. They listened.')).toEqual({
+      first: 'J. Smith arrived.',
+      last: 'They listened.',
+    })
+    expect(firstLastSentences('It was written by J. Smith in 1990. It sold.')).toEqual({
+      first: 'It was written by J. Smith in 1990.',
+      last: 'It sold.',
+    })
+  })
+
+  it('ends a sentence at a lone capital a new sentence or quote follows', () => {
+    expect(firstLastSentences('Take vitamin C. It helps.')).toEqual({
+      first: 'Take vitamin C.',
+      last: 'It helps.',
+    })
+    expect(firstLastSentences('Vitamin C. It helps.')).toEqual({
+      first: 'Vitamin C.',
+      last: 'It helps.',
+    })
+    expect(firstLastSentences('He chose B. “Fine,” she said.')).toEqual({
+      first: 'He chose B.',
+      last: '“Fine,” she said.',
+    })
+  })
+
+  it('keeps a middle initial inside the name, quoted or not', () => {
+    expect(firstLastSentences('John F. Kennedy spoke. They listened.')).toEqual({
+      first: 'John F. Kennedy spoke.',
+      last: 'They listened.',
+    })
+    expect(firstLastSentences('He read it. “John F. Kennedy,” he said.')).toEqual({
+      first: 'He read it.',
+      last: '“John F. Kennedy,” he said.',
+    })
+  })
+
+  it('still ends a sentence at "I."', () => {
+    expect(firstLastSentences('Not I. She went alone.')).toEqual({
+      first: 'Not I.',
+      last: 'She went alone.',
+    })
+  })
+
+  it('keeps a dialogue tag with the line it tags', () => {
+    expect(
+      firstLastSentences(
+        'The road was dark. “Dash it, Dirk!” reiterated Pew, striking with his stick upon the road.',
+      ),
+    ).toEqual({
+      first: 'The road was dark.',
+      last: '“Dash it, Dirk!” reiterated Pew, striking with his stick upon the road.',
+    })
+    expect(firstLastSentences('He waited. “Who is it?” asked Jim quietly.')).toEqual({
+      first: 'He waited.',
+      last: '“Who is it?” asked Jim quietly.',
+    })
+  })
+
+  it('carries an opening ellipsis into the first sentence', () => {
+    expect(firstLastSentences('... and then the door opened. She stood there.')).toEqual({
+      first: '... and then the door opened.',
+      last: 'She stood there.',
+    })
+  })
+
+  it('keeps markdown emphasis with the sentence it closes', () => {
+    expect(firstLastSentences('He ran. *Faster.* She followed.')).toEqual({
+      first: 'He ran.',
+      last: 'She followed.',
+    })
+    expect(firstLastSentences('He ran. _Faster._ She followed. *Gone.*')).toEqual({
+      first: 'He ran.',
+      last: '*Gone.*',
+    })
+  })
+
+  it('splits on half-width Japanese marks', () => {
+    expect(firstLastSentences('彼は走った｡｢待て｣彼女は追いかけた｡')).toEqual({
+      first: '彼は走った｡',
+      last: '｢待て｣彼女は追いかけた｡',
     })
   })
 
@@ -130,10 +251,24 @@ describe('firstLastSentences', () => {
       })
     })
 
-    it('cuts each sentence on its own', () => {
-      expect(firstLastSentences('Short one. the long road north with no end in sight', 20)).toEqual(
-        { first: 'Short one.', last: 'the long road north…' },
+    it('cuts each sentence on its own, the last to its end', () => {
+      expect(firstLastSentences('Short one. The long road north with no end in sight', 20)).toEqual(
+        { first: 'Short one.', last: '…with no end in sight' },
       )
+    })
+
+    it("cuts a long last sentence to its end, at the first space in the cap's first half", () => {
+      expect(firstLastSentences('It began. The long road north with no end in sight', 19)).toEqual({
+        first: 'It began.',
+        last: '…no end in sight',
+      })
+    })
+
+    it('cuts a long last sentence at the cap when its only space is in the second half', () => {
+      expect(firstLastSentences('It began. Abcdefghijklmnop qr', 10)).toEqual({
+        first: 'It began.',
+        last: '…jklmnop qr',
+      })
     })
 
     it('counts code points, never splitting a surrogate pair', () => {

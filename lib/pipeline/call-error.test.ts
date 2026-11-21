@@ -162,25 +162,25 @@ describe('pipelineErrorDetail', () => {
       'reverse-replay failed',
     ],
     [
-      'config-resolver with a detail',
+      'config-resolver, named by failure, target and phase',
       {
         kind: 'config-resolver',
         failure: 'profile-missing',
         target: 'narrative',
         phaseName: 'narrative',
-        detail: 'profile p gone',
       },
-      'profile p gone',
+      'profile-missing for narrative in phase narrative',
     ],
     [
-      'config-resolver without one',
+      'config-resolver refusing a model for tool calling, naming it',
       {
         kind: 'config-resolver',
-        failure: 'profile-missing',
-        target: 'narrative',
-        phaseName: 'narrative',
+        failure: 'tool-calling-off',
+        target: 'lore-mgmt',
+        phaseName: 'agent',
+        modelId: 'gemma-4',
       },
-      undefined,
+      'tool-calling-off for lore-mgmt in phase agent; model gemma-4',
     ],
     [
       'embedder',

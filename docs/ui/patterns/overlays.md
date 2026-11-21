@@ -175,7 +175,11 @@ the other anchor reads fails typecheck rather than doing nothing:
   content is still mounted. A programmatic close is included, where
   `onOpenChange(false)` is silent as `open` was already set false.
   For an action that opens another Sheet: gorhom restores a Sheet that
-  another covered, so the action waits for this one to be gone.
+  another covered, so the action waits for this one to be gone. A host
+  that swaps the Sheet for a Popover on a tier change unmounts it
+  mid-exit, which skips `onDismissed`, so it holds the action above the
+  swap with `useHeldUntilDismissed` (`hooks/`), which also runs it when
+  the tier leaves phone.
 - `keyboardBehavior?: 'interactive' | 'extend'` — bottom only;
   replaces the behavior `size` picks, see
   [Sheet — Keyboard handling](#sheet--keyboard-handling) below.
@@ -315,10 +319,10 @@ logs a dev-mode warning; opt-out via explicit empty
 named by its heading has that heading read in place there.
 
 **Focus management — close.** Default returns focus to the trigger
-element when one exists. Programmatic-open without a trigger child
-(Select drives Sheet via `open` prop directly) falls back to the
-element that held focus immediately before the open, per
-rn-primitives / Radix convention. Override via
+element when one exists. Radix has no fallback for a sheet opened
+without a trigger child (Select drives Sheet via `open` prop
+directly): focus falls to `<body>`, which is why the peek drawer
+restores what held focus as it opened itself. Override via
 `onCloseAutoFocus?: (event) => void`:
 
 ```tsx
@@ -408,6 +412,42 @@ The asymmetry is deliberate. A Sheet is bounded by its detent, so a
 consumer that adds no scroll region still gets a panel that is on
 screen and dismissable, merely clipped. A Dialog has no such floor:
 without the cap its content leaves the viewport entirely.
+
+## Dialog — Busy
+
+A Dialog whose actions disable while it works (a save in flight, a
+read, a gate) passes `busy` to `DialogContent`, as an AlertDialog does
+([`alert-dialog.md → Busy`](./alert-dialog.md#busy)). On web the
+focused action blurs the moment it disables, so the dialog takes focus
+and Tab stays inside
+([a control that disables under focus drops focus on web](../../implementation/lessons-learned/rnweb-disabled-under-focus-blurs.md)).
+
+## Close focus
+
+A Dialog or AlertDialog returns focus, as it closes, to the first of
+these that can take it (connected, enabled, visible, and not inside an
+overlay that is closing):
+
+1. what the consumer's own `onCloseAutoFocus` does, when it calls
+   `preventDefault`;
+2. the element `returnFocusTo` names;
+3. the element that held focus as the dialog opened, its trigger
+   included;
+4. the opener of the overlay it opened from: a popover, sheet or
+   dialog that closed in the same breath to open it, or a sheet still
+   exiting;
+5. nothing.
+
+Step 4 is what a menu entry needs: its row unmounts with the menu, so
+step 3 finds nothing, and focus goes back to the menu's trigger (the
+chapter chip, the `⋯`, the Actions trigger). Popover, the bottom
+Sheet and both dialogs each render `FocusOrigin`
+(`components/ui/focus-return.ts`) as their content mounts, which
+records what held focus then and hands it on as the content unmounts.
+A dialog never sends focus to a screen the stack keeps mounted beneath
+the current one, since that element isn't visible. A bottom Sheet's
+rows stay mounted through its exit animation, so the Sheet marks its
+content as closing and step 3 skips a row inside it.
 
 ## Popover — API surface
 

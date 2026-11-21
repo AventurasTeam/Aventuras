@@ -84,6 +84,10 @@ slice plans when relevant.
 - [A control that disables under focus drops focus on web](./rnweb-disabled-under-focus-blurs.md)
   — RN-Web sets the native `disabled` attribute and Chromium blurs the
   element; hand focus to a stable container in the same commit.
+- [A keydown that moves focus hands the key's auto-repeat to the new target](./keydown-focus-move-hands-off-key-repeat.md)
+  — Chromium clicks a `<button>` on a held Enter's repeats and a held
+  Space's release; act on keyup, or call `swallowKeyRepeats` as the
+  keydown acts.
 - [Inline `pointerEvents: 'box-none'` does nothing on web](./rnweb-inline-box-none-dropped.md)
   — RN-Web polyfills `box-none` only in compiled styles, so an inline
   object leaves the view catching clicks; use the compiled
@@ -302,7 +306,8 @@ slice plans when relevant.
 - [A stale typed-routes file fails a local typecheck CI passes](./stale-typed-routes-local-typecheck.md)
   — `.expo/types/router.d.ts` is written only by the dev server; a checkout
   that predates a route fails `pnpm typecheck` on links to it. Regenerate or
-  move it aside, never edit the route code.
+  move it aside, never edit the route code. Its sibling `expo-env.d.ts` does
+  the reverse, typing web-only style props (`visibility`) CI rejects.
 - [`pnpm patch-commit` drops files you added](./pnpm-patch-drops-added-files.md)
   — only edits to existing files land in the `.patch`; verify the
   file list and hand-append new-file hunks.

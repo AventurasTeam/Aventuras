@@ -1,4 +1,4 @@
-export { canEndChapter } from './can-end-chapter'
+export { canEndChapter, canEndInOpenRegion } from './can-end-chapter'
 export {
   CHAPTER_ISSUE,
   chapterActions,

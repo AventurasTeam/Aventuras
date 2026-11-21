@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
+import { generateStructured, modelConfigOf } from '@/lib/ai'
 import {
   findSuggestionAnchor,
   resolveSuggestionEmission,
@@ -117,12 +117,7 @@ async function* suggestionEmissionPhase(
 
   const guidance = input.refreshGuidance.trim()
   const cfg = appSettingsStore.getAppSettings()
-  const config: ResolveModelConfig = {
-    providers: cfg.providers,
-    profiles: cfg.profiles,
-    assignments: cfg.assignments,
-    storyModels: open.settings.models,
-  }
+  const config = modelConfigOf(cfg, open.settings)
   const load = await buildGenerationContext(ctx, {
     phaseName: SUGGESTION_EMISSION_PHASE,
     templateId: TEMPLATE_IDS.suggestionRefresh,

@@ -6,6 +6,7 @@ import {
   replyCutOff,
   replyStopOf,
   streamErrorReason,
+  modelConfigOf,
   resolveModel,
   resolveModelCapabilities,
   streamText,
@@ -156,12 +157,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // fallback classifier redoes the extraction from scratch regardless
   // (docs/memory/piggyback.md → Capability gate). Pure resolution over the same
   // config streamText resolves internally, so the two can't disagree.
-  const resolvedNarrativeModel = resolveModel('narrative', {
-    providers: cfg.providers,
-    profiles: cfg.profiles,
-    assignments: cfg.assignments,
-    storyModels: open.settings.models,
-  })
+  const modelConfig = modelConfigOf(cfg, open.settings)
+  const resolvedNarrativeModel = resolveModel('narrative', modelConfig)
   const narrativeCapabilities = resolvedNarrativeModel.ok
     ? resolveModelCapabilities(
         resolvedNarrativeModel.providerId,
@@ -210,12 +207,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // A failure lands in onError or the iteration's throw; capture both and gate the commit.
   const call = streamText('narrative', {
     prompt,
-    config: {
-      providers: cfg.providers,
-      profiles: cfg.profiles,
-      assignments: cfg.assignments,
-      storyModels: open.settings.models,
-    },
+    config: modelConfig,
     abortSignal: ctx.abortSignal,
     actionId: ctx.actionId,
     onError: ({ error }) => {

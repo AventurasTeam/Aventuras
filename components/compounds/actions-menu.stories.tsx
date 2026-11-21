@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import type { ReactNode } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import {
   AlertDialog,
@@ -100,6 +100,14 @@ type Story = StoryObj<typeof ActionsMenu>
 // `Open Reader` is self-omitted by the screen (not present in the array).
 export const Reader: Story = {
   render: () => <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />,
+  // actions-menu.md → Keyboard & ARIA: each section is a group named by its header.
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    const goTo = await screen.findByRole('group', { name: 'Go to' })
+    expect(within(goTo).getByRole('option', { name: 'Open World' })).toBeInTheDocument()
+    expect(within(goTo).queryByRole('option', { name: STORY_TOOLS.entries[0]!.label })).toBeNull()
+    expect(screen.getByRole('group', { name: 'Story tools' })).toBeInTheDocument()
+  },
 }
 
 // Same core, different contextual zone. `Open Reader` returns when not on Reader.
@@ -441,5 +449,34 @@ export const ReportsOpenChange: Story = {
     await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true))
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false))
+  },
+}
+
+const heldEnterActivate = fn()
+/** A held Enter picks once: its repeats don't reach the ⋯ trigger that focus returns to. */
+export const HeldEnterPicksOnce: Story = {
+  render: () => (
+    <ActionsMenu
+      contextual={READER_CONTEXT}
+      coreGroups={[
+        {
+          id: 'go-to',
+          header: 'Go to',
+          entries: [{ id: 'open-world', label: 'Open World', onActivate: heldEnterActivate }],
+        },
+      ]}
+    />
+  ),
+  play: async () => {
+    heldEnterActivate.mockClear()
+    const trigger = screen.getByRole('button', { name: /Actions/ })
+    await userEvent.click(trigger)
+    const search = await screen.findByPlaceholderText('Search actions…')
+    await waitFor(() => expect(search).toHaveFocus())
+    await userEvent.type(search, 'World')
+    await userEvent.keyboard('{Enter>4/}')
+    await waitFor(() => expect(heldEnterActivate).toHaveBeenCalledOnce())
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'))
+    expect(screen.queryByPlaceholderText('Search actions…')).toBeNull()
   },
 }

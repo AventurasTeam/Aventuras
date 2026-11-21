@@ -215,7 +215,7 @@ export function describeTurnFailure(error: PipelineError | undefined): {
       error.failure === 'tool-calling-off'
         ? 'reader:systemEntry.failureMessage'
         : TURN_RESOLVER_COPY[error.failure]
-    return { content: t(key), detail: error.detail }
+    return { content: t(key) }
   }
   if (error?.kind === 'embedder') {
     // One string for every embedder failure: `reason` is lossy — the shared
@@ -306,7 +306,7 @@ function describeWorkerFailure(
     // Only the close's can't-call-tools line reads `model`.
     const key = vocabulary.resolver[error.failure] ?? vocabulary.generic
     const model = error.failure === 'tool-calling-off' ? error.modelId : undefined
-    return { content: t(key, { model }), detail: error.detail }
+    return { content: t(key, { model }) }
   }
   if (error.kind === 'reply-cut-off') {
     return { content: vocabulary.cutOff(error), detail: pipelineErrorDetail(error) }

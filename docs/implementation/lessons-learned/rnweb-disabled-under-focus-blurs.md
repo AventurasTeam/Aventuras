@@ -21,10 +21,11 @@ the attribute is doing what canon asks.
   container in the same commit the state flips. The peek drawer
   refocuses its dialog when `Set as lead` disables
   (`components/reader/peek/peek-drawer.tsx`).
-- An AlertDialog whose actions and Cancel all disable while it works
+- A dialog whose actions and Cancel all disable while it works
   leaves nothing to hand focus to but the dialog itself: pass `busy`
-  to `AlertDialogContent`, which does that
-  ([`alert-dialog.md → Busy`](../../ui/patterns/alert-dialog.md#busy)).
+  to `AlertDialogContent` or `DialogContent`, which does that
+  ([`alert-dialog.md → Busy`](../../ui/patterns/alert-dialog.md#busy),
+  [`overlays.md → Dialog — Busy`](../../ui/patterns/overlays.md#dialog--busy)).
 - Whether busy and reason-bearing controls should instead stay
   focusable through `aria-disabled` is a design question owned by
   roadmap M9.2's `disabledReason` entry, since it also decides how the

@@ -47,8 +47,10 @@ export {
 } from './transport/classify-provider-error'
 export { configureTruncationNotice, type TruncationNotice } from './truncation-check'
 export {
+  modelConfigOf,
   resolveModel,
   type AppChainFailureKind,
+  type ModelChain,
   type ResolveModelConfig,
   type ResolveModelResult,
   type ResolveFailureKind,

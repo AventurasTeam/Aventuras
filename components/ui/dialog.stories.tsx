@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { ScrollView, View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { useRef, useState, type ComponentRef } from 'react'
+import { Pressable, ScrollView, View } from 'react-native'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -12,9 +13,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { modalScrimColor } from '@/components/ui/sheet-scrim-probe'
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
+import { cn } from '@/lib/utils'
 
 const meta: Meta<typeof Dialog> = {
   title: 'Primitives/Dialog',
@@ -225,6 +228,203 @@ export const TallContentFormOwnedScroll: Story = {
       Math.floor(box.top + box.height / 2),
     )
     expect(confirm.contains(topMost) || confirm === topMost).toBe(true)
+  },
+}
+
+function SavingDialog() {
+  const [busy, setBusy] = useState(false)
+  return (
+    <Dialog open>
+      <DialogContent busy={busy} hideCloseButton>
+        <DialogHeader>
+          <DialogTitle>Saving</DialogTitle>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="secondary" disabled={busy}>
+            <Text>Cancel</Text>
+          </Button>
+          <Button variant="primary" loading={busy} onPress={() => setBusy(true)}>
+            <Text>Save</Text>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Every action disables at once, the focused one too: the dialog takes focus so Tab stays in. */
+export const FocusStaysWhenBusy: Story = {
+  render: () => <SavingDialog />,
+  play: async () => {
+    const dialog = (await screen.findByText('Saving')).closest('[role="dialog"]') as HTMLElement
+    const save = screen.getByRole('button', { name: 'Save' })
+    save.focus()
+    await expect(save).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(save).toBeDisabled())
+    await waitFor(() => expect(save).not.toHaveFocus())
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+    await userEvent.tab()
+    expect(dialog.contains(document.activeElement)).toBe(true)
+  },
+}
+
+function OpenedFromState({
+  named = false,
+  hideNamed = false,
+}: {
+  named?: boolean
+  hideNamed?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
+  const target = useRef<View>(null)
+  return (
+    <View className="flex-row gap-2">
+      <Button
+        variant="secondary"
+        onPress={() => {
+          setOpen(true)
+          setOpened(true)
+        }}
+      >
+        <Text>Open from state</Text>
+      </Button>
+      <Pressable
+        ref={target}
+        role="button"
+        className={cn(
+          'rounded-md border border-border px-3 py-2',
+          hideNamed && opened && 'invisible',
+        )}
+      >
+        <Text>Named target</Text>
+      </Pressable>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent returnFocusTo={named ? target : undefined}>
+          <DialogTitle>Opened from state</DialogTitle>
+        </DialogContent>
+      </Dialog>
+    </View>
+  )
+}
+
+const openedDialog = () => screen.findByRole('dialog', { name: /Opened from/ })
+
+async function closeWithEscape() {
+  await openedDialog()
+  await userEvent.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+}
+
+/** overlays.md → Close focus: no trigger, so focus goes back to what held it as the dialog opened. */
+export const ReturnsFocusToItsOpener: Story = {
+  render: () => <OpenedFromState />,
+  play: async () => {
+    const opener = screen.getByRole('button', { name: 'Open from state' })
+    await userEvent.click(opener)
+    await closeWithEscape()
+    await waitFor(() => expect(opener).toHaveFocus())
+  },
+}
+
+export const ReturnsFocusToItsNamedTarget: Story = {
+  render: () => <OpenedFromState named />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open from state' }))
+    await closeWithEscape()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Named target' })).toHaveFocus())
+  },
+}
+
+/** A named target that can't take focus (hidden while the dialog was open) yields to the opener. */
+export const ReturnsFocusPastAHiddenTarget: Story = {
+  render: () => <OpenedFromState named hideNamed />,
+  play: async () => {
+    const opener = screen.getByRole('button', { name: 'Open from state' })
+    await userEvent.click(opener)
+    await closeWithEscape()
+    await waitFor(() => expect(opener).toHaveFocus())
+  },
+}
+
+function OpenedFromAMenu() {
+  const [open, setOpen] = useState(false)
+  const menu = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+  return (
+    <>
+      <Popover ariaLabel="Menu">
+        <PopoverTrigger ref={menu} asChild>
+          <Button variant="secondary">
+            <Text>Menu</Text>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <Button
+            variant="secondary"
+            onPress={() => {
+              menu.current?.close()
+              setOpen(true)
+            }}
+          >
+            <Text>Open dialog</Text>
+          </Button>
+        </PopoverContent>
+      </Popover>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogTitle>Opened from a menu</DialogTitle>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+/** The menu row that opened it unmounts with the menu, so focus goes to the menu's trigger. */
+export const ReturnsFocusToTheMenuItOpenedFrom: Story = {
+  render: () => <OpenedFromAMenu />,
+  play: async () => {
+    const menu = screen.getByRole('button', { name: 'Menu' })
+    await userEvent.click(menu)
+    await userEvent.click(await screen.findByRole('button', { name: 'Open dialog' }))
+    await closeWithEscape()
+    await waitFor(() => expect(menu).toHaveFocus())
+  },
+}
+
+function DialogLeadsToDialog() {
+  const [step, setStep] = useState<'none' | 'first' | 'second'>('none')
+  return (
+    <>
+      <Button variant="secondary" onPress={() => setStep('first')}>
+        <Text>Review</Text>
+      </Button>
+      <Dialog open={step === 'first'} onOpenChange={(open) => setStep(open ? 'first' : 'none')}>
+        <DialogContent>
+          <DialogTitle>First</DialogTitle>
+          <Button variant="secondary" onPress={() => setStep('second')}>
+            <Text>Re-run…</Text>
+          </Button>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={step === 'second'} onOpenChange={(open) => setStep(open ? 'second' : 'none')}>
+        <DialogContent>
+          <DialogTitle>Opened from the first</DialogTitle>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+/** A dialog that closes as it opens another hands its opener on, as the review window's re-run does. */
+export const ReturnsFocusThroughADialogThatClosed: Story = {
+  render: () => <DialogLeadsToDialog />,
+  play: async () => {
+    const opener = screen.getByRole('button', { name: 'Review' })
+    await userEvent.click(opener)
+    await userEvent.click(await screen.findByRole('button', { name: 'Re-run…' }))
+    await closeWithEscape()
+    await waitFor(() => expect(opener).toHaveFocus())
   },
 }
 

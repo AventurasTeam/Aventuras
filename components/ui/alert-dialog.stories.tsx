@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen } from 'storybook/test'
+import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -301,5 +302,40 @@ export const ScrimDark: Story = {
   play: async () => {
     await screen.findByRole('alertdialog', { name: 'Scrim' })
     expect(modalScrimColor()).toBe('rgba(0, 0, 0, 0.6)')
+  },
+}
+
+function ConfirmFromState() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button variant="secondary" onPress={() => setOpen(true)}>
+        <Text>Delete…</Text>
+      </Button>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              <Text>Cancel</Text>
+            </AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}
+
+/** overlays.md → Close focus: no trigger, so Cancel hands focus back to what opened it. */
+export const ReturnsFocusToItsOpener: Story = {
+  render: () => <ConfirmFromState />,
+  play: async () => {
+    const opener = screen.getByRole('button', { name: 'Delete…' })
+    await userEvent.click(opener)
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    await waitFor(() => expect(opener).toHaveFocus())
   },
 }

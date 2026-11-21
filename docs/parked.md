@@ -1138,10 +1138,10 @@ pass found no writer that lands in that window today: leaving a story
 cancels its runs and waits for idle, boot waits for crash recovery, a
 reload ends every run, and M6.3's branch switch is settled to wait on
 the gate. The one store guard that let the stale copy change a write,
-`promoteStagedEntity`'s, went in the same pass. One path is open and
-unverified: a deep link into another story while one is busy, which
-skips the story-leave guard
-([triage](./implementation/triage.md#inbox)). A close's failed click
+`promoteStagedEntity`'s, went in the same pass. A deep link into
+another story while one is busy skipped the story-leave guard; release
+builds now drop external links, leaving it to dev builds
+([Deep links via URL scheme](#deep-links-via-url-scheme)). A close's failed click
 pre-flight writes its system entry through `raiseSystemEntry`, one more
 patching writer.
 **Revisit signal:** an open or re-hydrate path that can run while a
@@ -2928,11 +2928,23 @@ schemes natively; route mapping plus a launch-time deep-link
 handler. Schema cost is also small (URL templates per surface).
 Held parked because v1 doesn't have a consumer that benefits.
 
+**Release builds drop external links until then.** The scheme is
+registered in every build, and a link pushed or swapped a route
+without the story-leave guard seeing it, so `aventuras://settings` left
+a busy story past the abort-confirm
+([`ui/principles.md → Affordance loci`](./ui/principles.md#affordance-loci)) and opened the race in
+[A write that commits while a story opens is lost from its stores](#a-write-that-commits-while-a-story-opens-is-lost-from-its-stores).
+`app/+native-intent.ts` opens a release build's cold link at the story
+list and ignores a warm one; dev builds keep links for the device
+loop. When deep links land, an external link leaves a busy story
+through the guard, like an in-app one. Sealed by the 2026-11-21 triage
+pass.
+
 **Back on a screen entered without the story list beneath it lands
 with this.** Today the only such entry is a renderer reload, which
 packaged builds no longer bind (dev keeps Electron's default menu, so
-a dev reload still does it); an external `aventuras://` link would do
-the same on Android, since the scheme is registered in every build.
+a dev reload still does it); an external `aventuras://` link does the
+same on an Android dev build, the one kind that still honours it.
 There, Back does nothing: the reader, World, Story Settings, App
 Settings, Diagnostics and the wizard call `router.back()`, which
 expo-router queues as a `GO_BACK` that the stack router drops at

@@ -405,7 +405,9 @@ reply owes no close
 
 - The candidates by position, each by its opening and closing sentences
   (compact representation; entries have no title, and full prose would
-  blow context on long open regions).
+  blow context on long open regions). A sentence over the cap keeps its
+  start when it opens the reply and its end when it closes it, since the
+  end is where the turn stops.
 - The range every candidate keeps the chapter within, half to one and
   a half thresholds, stated as a range so the count favours none of
   them (a running total beside the target read as "end now" on the dev

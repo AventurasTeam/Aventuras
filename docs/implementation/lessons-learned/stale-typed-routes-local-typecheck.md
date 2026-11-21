@@ -25,3 +25,17 @@ to satisfy it.
 
 Seen in the 2026-11-07 triage pass, on a slot whose file predated
 `/dev/chapter-close`.
+
+## The reverse: a local typecheck passes what CI fails
+
+The dev server also writes `expo-env.d.ts`, gitignored too, which
+references `expo/types`. Its `react-native-web.d.ts` adds web-only style
+props to React Native's types, `visibility` among them. A checkout with
+the file accepts `style={{ visibility: 'hidden' }}` on a `View` or
+`Pressable`; CI has no such file and fails with `TS2322 ... not assignable
+to type 'StyleProp<ViewStyle>'`. Seen in the 2026-11-21 triage pass, on a
+story that hid a button.
+
+To typecheck as CI does, move `expo-env.d.ts` aside for the run and put
+it back afterwards. Style a web-only prop through a class instead
+(`invisible` for `visibility: hidden`).
