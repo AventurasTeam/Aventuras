@@ -31,5 +31,10 @@ export const chapterTimeline = {
     chapterTimeline
       .card(page, chapterId)
       .getByRole('button', { name: t('chapters:actions.review'), exact: true }),
+  // The latest card's, on a chapter whose close wrote a report; inline at tablet and desktop.
+  rerunClose: (page: Page, chapterId: string): Locator =>
+    chapterTimeline
+      .card(page, chapterId)
+      .getByRole('button', { name: t('chapters:actions.rerun'), exact: true }),
   inProgressCard: (page: Page): Locator => page.getByTestId('chapter-in-progress-card'),
 }
