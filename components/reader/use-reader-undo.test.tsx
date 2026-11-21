@@ -106,6 +106,22 @@ const CLOSE: UndoTargetRead = {
   entryPositions: {},
 }
 
+const RERUN: UndoTargetRead = {
+  actionId: 'act_rerun',
+  deltas: [
+    delta({
+      actionId: 'act_rerun',
+      source: 'chapter_close',
+      op: 'update',
+      targetTable: 'chapters',
+      targetId: 'ch3',
+    }),
+  ],
+  entryPositions: {},
+}
+
+const CLOSE_UNDONE: UndoResult = { status: 'ok', closeUndone: { chapterNumber: 3 } }
+
 let toasts: ToastItem[] = []
 
 // An undo that lands pushes the redo group it took, as undoLastAction does: the target's rows as
@@ -705,5 +721,52 @@ describe('useReaderUndo — the reversal meter', () => {
     expect(ticks).toHaveBeenCalledTimes(1)
     expect(cleared).toHaveBeenCalledWith(ticks.mock.results[0].value)
     expect(measured()).toEqual([])
+  })
+})
+
+// reader-composer.md → Undo and redo: an undo that raises its own warning shows it instead.
+describe('useReaderUndo — a re-run undone with no journal to write back', () => {
+  it.each(['menu', 'keyboard'] as const)(
+    'shows the warning instead of the notice, from the %s',
+    async (origin) => {
+      actions.readUndoTarget.mockResolvedValue(RERUN)
+      actions.undoLastAction.mockResolvedValue(CLOSE_UNDONE)
+      const r = render()
+      act(() => r.result.current.undo(origin))
+      await settle()
+      act(() => r.result.current.confirm?.props.onConfirm())
+      await settle()
+
+      expect(actions.undoLastAction).toHaveBeenCalledWith('b1', ctx, {
+        expectedActionId: 'act_rerun',
+      })
+      expect(
+        toasts.map(({ severity, message, action }) => ({ severity, message, action })),
+      ).toEqual([
+        {
+          severity: 'warning',
+          message: "Chapter 3's earlier close couldn't be restored, so its close was undone.",
+          action: undefined,
+        },
+      ])
+    },
+  )
+
+  it('dismisses an older notice, whose Redo the undo cleared', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts.map((item) => item.message)).toEqual(['Undid the turn at entry #2'])
+
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    actions.undoLastAction.mockResolvedValue(CLOSE_UNDONE)
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    expect(toasts.map((item) => item.severity)).toEqual(['warning'])
   })
 })

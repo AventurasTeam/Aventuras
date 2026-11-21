@@ -398,7 +398,7 @@ function replayFailure(e: unknown, actionId: string): DeltaReplayError {
 }
 
 // The fallback's set: the group and the chapter's close groups, once each, newest first.
-function withCloseGroups(group: readonly Delta[], seed: readonly Delta[]): Delta[] {
+export function withCloseGroups(group: readonly Delta[], seed: readonly Delta[]): Delta[] {
   const byId = new Map<string, Delta>()
   for (const delta of [...group, ...seed]) byId.set(delta.id, delta)
   return [...byId.values()].sort((a, b) => b.logPosition - a.logPosition)

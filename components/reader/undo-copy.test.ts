@@ -74,6 +74,13 @@ describe('undoTargetText', () => {
     expect(undoTargetText(turn, NAMES, 'redoMenu')).toBe('Redo the turn at entry #4')
   })
 
+  it('names no re-run in redo, which a re-run never reaches', () => {
+    const rerun: UndoDescription = { kind: 'rerun', seen: false, chapterId: 'ch3' }
+    expect(undoTargetText(rerun, NAMES, 'notice')).toBe("Undid chapter 3's re-run")
+    expect(undoTargetText(rerun, NAMES, 'redoMenu')).toBe('Redo the latest change')
+    expect(undoTargetText(rerun, NAMES, 'redoNotice')).toBe('Redid the latest change')
+  })
+
   it.each<UndoDescription>([
     { kind: 'turn', seen: true, entryId: 'e_unknown' },
     { kind: 'close', seen: false, chapterId: 'ch_unknown' },

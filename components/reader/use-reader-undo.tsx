@@ -235,6 +235,13 @@ export function useReaderUndo({
         report('undo', result, origin)
         return
       }
+      if (result.closeUndone != null) {
+        // Its Redo would be stale: the undo cleared the stack.
+        if (noticeRef.current != null) toast.dismiss(noticeRef.current)
+        noticeRef.current = null
+        toast.warning(t('reader:undo.closeUndone', { number: result.closeUndone.chapterNumber }))
+        return
+      }
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
       const redoable = undoRedoStore.peekRedoGroup()?.actionId === target.actionId
       announce(

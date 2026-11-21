@@ -417,7 +417,6 @@
       "entryTime": "Redo {{entry}}'s time",
       "suggestionRefresh": "Redo the suggestion refresh at {{entry}}",
       "close": "Redo chapter {{number}}'s close",
-      "rerun": "Redo chapter {{number}}'s re-run",
       "keptClose": "Redo the kept close work at {{entry}}",
       "created": "Redo adding {{name}}",
       "deleted": "Redo deleting {{name}}",
@@ -432,7 +431,6 @@
       "entryTime": "Redid {{entry}}'s time",
       "suggestionRefresh": "Redid the suggestion refresh at {{entry}}",
       "close": "Redid chapter {{number}}'s close",
-      "rerun": "Redid chapter {{number}}'s re-run",
       "keptClose": "Redid the kept close work at {{entry}}",
       "created": "Redid adding {{name}}",
       "deleted": "Redid deleting {{name}}",
@@ -446,7 +444,8 @@
     "moreRows": "and {{count}} more",
     "confirm": "Undo",
     "targetMoved": "A newer change landed, so nothing was undone.",
-    "noticeRedo": "Redo"
+    "noticeRedo": "Redo",
+    "closeUndone": "Chapter {{number}}'s earlier close couldn't be restored, so its close was undone."
   },
   "sceneEdit": {
     "title": "Edit scene",
