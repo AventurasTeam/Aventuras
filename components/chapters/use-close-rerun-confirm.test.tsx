@@ -167,6 +167,25 @@ describe('useCloseRerunConfirm: opening', () => {
     expect(result.current.target).toEqual({ chapterId: 'chap_3', preview: RECOUNTED })
   })
 
+  it('re-reads when a run settles during the opening read', async () => {
+    const { result, loadPreview } = setup()
+    const opening = deferred<CloseRerunPreview>()
+    loadPreview.mockReturnValueOnce(opening.promise).mockResolvedValueOnce(RECOUNTED)
+    let pendingOpen!: Promise<void>
+    act(() => {
+      pendingOpen = result.current.open('chap_2')
+    })
+
+    settleARun()
+    await act(async () => {
+      opening.resolve(PREVIEW)
+      await pendingOpen
+    })
+
+    await waitFor(() => expect(result.current.target?.preview).toEqual(RECOUNTED))
+    expect(loadPreview).toHaveBeenCalledTimes(2)
+  })
+
   it('opens nothing for an opening read that resolves after the host let go', async () => {
     const { result, rerender, loadPreview } = setup()
     const pending = deferred<CloseRerunPreview>()
