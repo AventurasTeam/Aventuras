@@ -213,6 +213,7 @@
       "closed": "Chapter closed: {{title}}",
       "stopped_one": "Chapter closed, but {{count}} task stopped early",
       "stopped_other": "Chapter closed, but {{count}} tasks stopped early",
+      "rerun": "Chapter {{number}}'s close re-ran",
       "review": "Review",
       "dismiss": "Dismiss"
     }

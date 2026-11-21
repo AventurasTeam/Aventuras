@@ -11,12 +11,16 @@ export type OverlaySurface = {
 
 export type CloseModalRequest = { branchId: string; endEntryId?: string }
 
-/** A committed close, held for the commit banner's done state. */
+/** A committed close or re-run, held for the commit banner's done state. */
 export type CloseResult = {
   branchId: string
   /** The story open it committed in: a reopen keeps the branch id, so only this tells them apart. */
   openSeq: number
   chapterId: string
+  /** The run that committed, its report's `actionId`. */
+  actionId: string
+  /** A re-run's commit: the banner names the re-run rather than the chapter's title. */
+  rerun: boolean
   stoppedTasks: number
 }
 

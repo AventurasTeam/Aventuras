@@ -86,6 +86,22 @@ function committed(actionId: string, beforeTurn = false): void {
   })
 }
 
+// A close reserved under pendingRerun: run_complete carries its slot as `rerun`.
+function rerunEnded(outcome: 'completed' | 'aborted' | 'failed', actionId = 'act_rerun'): void {
+  pipelineEventBus.emit({
+    type: 'run_complete',
+    runId: 'run-rerun',
+    kind: CHAPTER_CLOSE_KIND,
+    actionId,
+    beforeTurn: false,
+    outcome,
+    rerun: true,
+    ...(outcome === 'failed'
+      ? { error: { kind: 'provider', reason: 'timeout', detail: 'lore: timeout' } as const }
+      : {}),
+  })
+}
+
 function report(actionId: string, stopped: CloseReport['stopped'] = []): CloseReport {
   return { version: 1, actionId, calls: [], stopped, noToolCalls: true }
 }
@@ -270,6 +286,8 @@ describe('useMemoryRunOutcomes', () => {
           branchId: 'br_1',
           openSeq: 1,
           chapterId: 'chap_2',
+          actionId: 'act_close',
+          rerun: false,
           stoppedTasks: 0,
         }),
       )
@@ -369,6 +387,8 @@ describe('useMemoryRunOutcomes', () => {
           branchId: 'br_1',
           openSeq: 1,
           chapterId: 'chap_2',
+          actionId: 'act_close',
+          rerun: false,
           stoppedTasks: 0,
         }),
       )
@@ -439,6 +459,46 @@ describe('useMemoryRunOutcomes', () => {
       unmount()
       resolveRead({ chapterId: 'chap_2', report: report('act_close') })
       await flush()
+      expect(held()).toBeNull()
+    })
+
+    it("holds a re-run's commit with its action and the re-run flag, with no toast", async () => {
+      openStory()
+      reads.latest.mockResolvedValue({ chapterId: 'chap_2', report: report('act_rerun') })
+      render(<Probe />)
+      rerunEnded('completed')
+      await vi.waitFor(() =>
+        expect(held()).toEqual({
+          branchId: 'br_1',
+          openSeq: 1,
+          chapterId: 'chap_2',
+          actionId: 'act_rerun',
+          rerun: true,
+          stoppedTasks: 0,
+        }),
+      )
+      expect(shown).toEqual([])
+    })
+
+    it('holds nothing for a re-run whose report another run wrote', async () => {
+      openStory()
+      reads.latest.mockResolvedValue({ chapterId: 'chap_2', report: report('act_close') })
+      render(<Probe />)
+      rerunEnded('completed')
+      await vi.waitFor(() => expect(reads.latest).toHaveBeenCalledTimes(1))
+      await flush()
+      expect(held()).toBeNull()
+    })
+
+    // reader-composer.md → During a memory update: the re-run's host toasts its own end.
+    it('holds nothing and toasts nothing for a re-run that fails or is cancelled', async () => {
+      openStory()
+      render(<Probe />)
+      rerunEnded('failed')
+      rerunEnded('aborted')
+      await flush()
+      expect(shown).toEqual([])
+      expect(reads.latest).not.toHaveBeenCalled()
       expect(held()).toBeNull()
     })
   })
@@ -530,6 +590,8 @@ describe('useMemoryRunOutcomes', () => {
           branchId: 'b1',
           openSeq: 1,
           chapterId: 'chap_2',
+          actionId: closeActionId,
+          rerun: false,
           stoppedTasks: 0,
         }),
       )
@@ -547,9 +609,12 @@ describe('useMemoryRunOutcomes', () => {
       const endEntryId = fx.replyIds[0]!
       const stoppedLore = { task: 'lore', part: 1, reason: 'budget' } as const
 
+      let reportActionId = ''
+
       async function* writesChapter(ctx: {
         actionId: string
       }): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
+        reportActionId = ctx.actionId
         const now = Date.now()
         yield {
           type: 'delta_emitted',
@@ -616,10 +681,89 @@ describe('useMemoryRunOutcomes', () => {
       }).chain
 
       await vi.waitFor(() =>
-        expect(held()).toEqual({ branchId: fx.branchId, openSeq: 0, chapterId, stoppedTasks: 1 }),
+        expect(held()).toEqual({
+          branchId: fx.branchId,
+          openSeq: 0,
+          chapterId,
+          actionId: reportActionId,
+          rerun: false,
+          stoppedTasks: 1,
+        }),
       )
       expect(storeHadReport).toEqual([true])
       expect(chaptersStore.getById(chapterId)?.hasCloseReport).toBe(true)
+    })
+  })
+
+  // Through the orchestrator, so the flag is the one emitRunComplete sets from the run's slot.
+  describe('a re-run through the orchestrator', () => {
+    beforeEach(() => {
+      resetSingletons()
+    })
+    afterEach(() => {
+      resetSingletons()
+    })
+
+    async function* commits(): AsyncGenerator<never, PhaseResult> {
+      return { status: 'completed' }
+    }
+
+    async function* fails(): AsyncGenerator<never, PhaseResult> {
+      return { status: 'failed', error: { kind: 'phase-logic', detail: 'stand-in re-run failed' } }
+    }
+
+    // As chapter-close declares itself while pendingRerun holds the branch.
+    function defineRerun(phase: () => AsyncGenerator<never, PhaseResult>): void {
+      definePipeline({
+        kind: CHAPTER_CLOSE_KIND,
+        phases: [{ name: 'report', run: phase }],
+        affordance: 'pill-and-banner',
+        gateBehavior: 'hard-gate',
+        interruptible: 'close',
+        runSlot: () => 'rerun',
+        concurrencyPolicy: {},
+      })
+    }
+
+    it('holds a committed re-run with the re-run flag', async () => {
+      const { ctx } = await makeHarness()
+      let rerunActionId = ''
+      pipelineEventBus.subscribe('run_start', (event) => {
+        if (event.kind === CHAPTER_CLOSE_KIND) rerunActionId = event.actionId
+      })
+      reads.latest.mockImplementation(async () => ({
+        chapterId: 'chap_2',
+        report: report(rerunActionId),
+      }))
+      defineRerun(commits)
+      openStory('b1')
+      render(<Probe />)
+
+      await startPipeline(CHAPTER_CLOSE_KIND, ctx).chain
+
+      await vi.waitFor(() =>
+        expect(held()).toEqual({
+          branchId: 'b1',
+          openSeq: 1,
+          chapterId: 'chap_2',
+          actionId: rerunActionId,
+          rerun: true,
+          stoppedTasks: 0,
+        }),
+      )
+      expect(shown).toEqual([])
+    })
+
+    it('toasts nothing for a re-run that fails', async () => {
+      const { ctx } = await makeHarness()
+      defineRerun(fails)
+      render(<Probe />)
+
+      await startPipeline(CHAPTER_CLOSE_KIND, ctx).chain
+      await flush()
+
+      expect(shown).toEqual([])
+      expect(held()).toBeNull()
     })
   })
 })

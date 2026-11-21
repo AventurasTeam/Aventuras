@@ -300,7 +300,14 @@ async function openReady(): Promise<ReviewWindowProps> {
 
 function holdResult(branchId: string, stoppedTasks = 0, chapterId = 'chap_2'): void {
   const openSeq = currentStoryStore.getOpenSeq()
-  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
+  chapterOverlaysStore.showCloseResult({
+    branchId,
+    openSeq,
+    chapterId,
+    actionId: 'act_close_2',
+    rerun: false,
+    stoppedTasks,
+  })
 }
 
 beforeEach(() => {
@@ -698,6 +705,8 @@ describe('ChapterOverlaysHost — the derived rule', () => {
       branchId: 'br_1',
       openSeq: 0,
       chapterId: 'chap_2',
+      actionId: 'act_close_2',
+      rerun: false,
       stoppedTasks: 0,
     })
 
@@ -744,6 +753,8 @@ describe('ChapterOverlaysHost — the derived rule', () => {
       branchId: 'br_1',
       openSeq: 0,
       chapterId: 'chap_3',
+      actionId: 'act_close_2',
+      rerun: false,
       stoppedTasks: 1,
     })
   })

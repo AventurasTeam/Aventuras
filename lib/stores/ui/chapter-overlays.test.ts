@@ -95,18 +95,24 @@ describe('chapterOverlaysStore', () => {
       branchId: 'br_hero',
       openSeq: 1,
       chapterId: 'chap_hero_2',
+      actionId: 'act_close_2',
+      rerun: false,
       stoppedTasks: 1,
     })
     chapterOverlaysStore.showCloseResult({
       branchId: 'br_hero',
       openSeq: 1,
       chapterId: 'chap_hero_3',
+      actionId: 'act_close_3',
+      rerun: false,
       stoppedTasks: 0,
     })
     expect(chapterOverlaysStore.getState().closeResult).toStrictEqual({
       branchId: 'br_hero',
       openSeq: 1,
       chapterId: 'chap_hero_3',
+      actionId: 'act_close_3',
+      rerun: false,
       stoppedTasks: 0,
     })
     chapterOverlaysStore.clearCloseResult()
@@ -122,7 +128,14 @@ describe('chapterOverlaysStore', () => {
     chapterOverlaysStore.openCloseModal(request)
     expect(chapterOverlaysStore.getState().closeModal).not.toBe(request)
 
-    const result = { branchId: 'br_hero', openSeq: 1, chapterId: 'chap_hero_2', stoppedTasks: 0 }
+    const result = {
+      branchId: 'br_hero',
+      openSeq: 1,
+      chapterId: 'chap_hero_2',
+      actionId: 'act_close',
+      rerun: false,
+      stoppedTasks: 0,
+    }
     chapterOverlaysStore.showCloseResult(result)
     expect(chapterOverlaysStore.getState().closeResult).not.toBe(result)
   })
@@ -134,6 +147,8 @@ describe('chapterOverlaysStore', () => {
       branchId: 'br_hero',
       openSeq: 1,
       chapterId: 'chap_hero_2',
+      actionId: 'act_close',
+      rerun: false,
       stoppedTasks: 0,
     })
     chapterOverlaysStore.registerSurface(surface())
@@ -162,7 +177,14 @@ describe('the overlays hold rule', () => {
     ['chap_1', held],
     ['chap_2', other],
   ])
-  const result = { branchId: 'br_1', openSeq: 3, chapterId: 'chap_1', stoppedTasks: 0 }
+  const result = {
+    branchId: 'br_1',
+    openSeq: 3,
+    chapterId: 'chap_1',
+    actionId: 'act_close',
+    rerun: false,
+    stoppedTasks: 0,
+  }
   const open = { branchId: 'br_1', openSeq: 3 }
 
   it('gives back a chapter with a report on the open branch, and null for any other', () => {

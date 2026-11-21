@@ -113,7 +113,34 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
 
 function holdResult(stoppedTasks = 0, branchId = 'branch-1', chapterId = 'chap_2'): void {
   const openSeq = currentStoryStore.getOpenSeq()
-  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
+  chapterOverlaysStore.showCloseResult({
+    branchId,
+    openSeq,
+    chapterId,
+    actionId: 'act_close_2',
+    rerun: false,
+    stoppedTasks,
+  })
+}
+
+// As a re-run's commit lands: its report update patches the row, then the outcome hook holds it.
+function holdRerun(stoppedTasks = 0): void {
+  chaptersStore.patch('branch-1', {
+    op: 'update',
+    id: 'chap_2',
+    columns: {
+      closeReport: { version: 1, actionId: 'act_rerun', calls: [], stopped: [], noToolCalls: true },
+    },
+  })
+  const openSeq = currentStoryStore.getOpenSeq()
+  chapterOverlaysStore.showCloseResult({
+    branchId: 'branch-1',
+    openSeq,
+    chapterId: 'chap_2',
+    actionId: 'act_rerun',
+    rerun: true,
+    stoppedTasks,
+  })
 }
 
 afterEach(() => {
@@ -389,6 +416,41 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
       chaptersStore.patch('branch-1', { op: 'delete', id: 'chap_2' })
     })
     expect(result.current).toBeNull()
+  })
+})
+
+describe("useMemoryRunBanner — a committed re-run's done state", () => {
+  it("names the chapter's re-run in the info tone", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdRerun()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current)).toMatchObject({
+      tone: 'info',
+      label: "Chapter 2's close re-ran",
+    })
+  })
+
+  it('keeps its own line in the warning tone when a task stopped early', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdRerun(2)
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current)).toMatchObject({
+      tone: 'warning',
+      label: "Chapter 2's close re-ran",
+    })
+  })
+
+  it("replaces a close's done state", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current).label).toBe('Chapter closed: The Keep Leans Closer')
+
+    act(() => holdRerun())
+    expect(closedBanner(result.current).label).toBe("Chapter 2's close re-ran")
   })
 })
 
