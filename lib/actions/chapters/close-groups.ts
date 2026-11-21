@@ -4,6 +4,9 @@ import { deltas, type Delta } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 
+// C1: a close writes no entries, so its deltas on these are the chapter row, its report and stamps.
+export const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
+
 /** Every delta of the chapter's close groups (C13), newest first; [] when no close wrote it. */
 export async function readChapterCloseGroups(
   branchId: string,

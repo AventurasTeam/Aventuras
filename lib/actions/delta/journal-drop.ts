@@ -1,9 +1,8 @@
 import type { Delta } from '@/lib/db'
 
-export type JournalHead = { actionId: string; chapterId: string; floor: number }
+import { DIVIDER_TABLES } from '../chapters/close-groups'
 
-// C1: a close's only writes on these are the chapter row, its report and the stamps.
-const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
+export type JournalHead = { actionId: string; chapterId: string; floor: number }
 
 // No journal covers the chapter's own row, whoever wrote it, nor a close's stamps.
 function outsideAnyJournal(d: Delta, head: JournalHead): boolean {

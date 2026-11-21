@@ -13,7 +13,7 @@ import {
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import { readChapterCloseGroups } from '../chapters/close-groups'
+import { DIVIDER_TABLES, readChapterCloseGroups } from '../chapters/close-groups'
 import type { DbCtx } from '../types'
 import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { readCurrentRow } from './redo'
@@ -27,9 +27,6 @@ import {
   type ReversePlan,
 } from './reverse-replay'
 import { selectReversalSet, type ReversalSet } from './row-closure'
-
-// C1: a close writes no entries, so its deltas there are the chapter row, the report and the stamps.
-const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
 
 const rowKey = (table: string, id: string): string => `${table}:${id}`
 

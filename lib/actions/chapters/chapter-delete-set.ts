@@ -2,7 +2,7 @@ import { and, desc, eq } from 'drizzle-orm'
 
 import { chapters, type Chapter, type Delta } from '@/lib/db'
 
-import { readChapterCloseGroups } from './close-groups'
+import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { logReversalRefused } from '../delta/commit-new-action'
 import { ReversalIntegrityError } from '../delta/replay-errors'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
@@ -39,9 +39,6 @@ export type ChapterDeleteSet = {
   /** Every delta of the chapter's close groups, newest first. */
   groups: readonly Delta[]
 }
-
-// C1: a close writes no entries, so its rows on these are the chapter row, its report and stamps.
-const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
 
 function refused(code: ChapterDeleteReadRefusal['code'], reason: string): ChapterDeleteReadRefusal {
   return { status: 'rejected', code, reason }
