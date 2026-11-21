@@ -2421,10 +2421,9 @@ type PipelineError =
     }
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
   | ({
-      kind: 'config-resolver'
+      kind: 'config-resolver' // logged as "<failure> for <target> in phase <phaseName>[; model <modelId>]"
       target: ResolveTarget
       phaseName: string
-      detail?: string
     } & (
       | { failure: ResolveFailureKind } // resolver could not produce a usable model config
       // pre-flight found the model flagged off for a capability its phase requires (Config

@@ -68,13 +68,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `max_input_tokens`, and `lib/ai/catalog.ts` has no Anthropic adapter.
   Either the sentence goes or it gains "(not built yet)". Raised in
   5.10's PR 1 review.
-- **Pre-flight's failure log drops what failed.**
-  `pipeline.preflight_failed` (`lib/pipeline/runtime/orchestrator.ts`,
-  `driveRun`) logs only `errorKind` and `errorDetail`. A
-  `config-resolver` refusal carries no `detail`, so its `failure`,
-  `target`, `phaseName` and `modelId` never reach diagnostics: a close
-  refused for tool calling logs the same line as a missing profile.
-  Raised in 5.10's PR 1 review.
 - **A run off the open story pre-flights without the story's override.**
   `driveRun` passes `storySettings` only when the run's story and branch
   are the open ones (`ownStory`), so a run on another story checks the

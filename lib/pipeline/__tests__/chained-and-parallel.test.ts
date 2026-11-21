@@ -1178,7 +1178,14 @@ describe('an interrupt at the swap into a close', () => {
       kind: CHAPTER_CLOSE_KIND,
       result: { outcome: 'failed', error: { kind: 'config-resolver', target: 'lore-mgmt' } },
     })
-    expect(logged('pipeline.preflight_failed')).toBe(true)
+    const fields = (kind: string) =>
+      getDiagnosticsSnapshot().logEntries.find((e) => e.kind === kind)?.fields
+    const named = {
+      errorKind: 'config-resolver',
+      errorDetail: expect.stringContaining('for lore-mgmt in phase') as unknown,
+    }
+    expect(fields('pipeline.preflight_failed')).toMatchObject(named)
+    expect(fields('pipeline.run_aborted')).toMatchObject(named)
   })
 
   it('aborts the close at the top of its drive, skipping pre-flight, and defers it', async () => {

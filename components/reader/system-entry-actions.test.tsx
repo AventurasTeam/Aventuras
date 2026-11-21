@@ -192,7 +192,6 @@ describe('describeTurnFailure', () => {
       failure: 'no-profile-assigned',
       target: 'narrative',
       phaseName: 'narrative',
-      detail: 'narrative',
     })
     expect(out.content).toBe(t('reader:systemEntry.failure.noProfileAssigned'))
   })
@@ -210,7 +209,6 @@ describe('describeTurnFailure', () => {
       failure: 'override-provider-missing',
       target: 'narrative',
       phaseName: 'narrative',
-      detail: 'narrative',
     })
     const key = 'reader:systemEntry.failure.overrideProviderMissing'
     expect(out.content).toBe(t(key))
@@ -551,12 +549,9 @@ describe('describeCloseFailure', () => {
     })
   })
 
-  it('names the lore management agent for a resolver failure, with its detail', () => {
-    expect(
-      describeCloseFailure({ ...CLOSE_UNASSIGNED, detail: 'lore-mgmt: no assignment' }),
-    ).toEqual({
+  it('names the lore management agent for a resolver failure', () => {
+    expect(describeCloseFailure(CLOSE_UNASSIGNED)).toEqual({
       content: 'Chapter close failed: the lore management agent has no profile assigned.',
-      detail: 'lore-mgmt: no assignment',
     })
   })
 

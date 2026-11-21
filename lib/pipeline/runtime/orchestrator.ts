@@ -596,7 +596,7 @@ async function driveRun(
       {
         runId: run.runId,
         errorKind: preflightError.kind,
-        errorDetail: preflightError.detail,
+        errorDetail: pipelineErrorDetail(preflightError),
       },
       { actionId: run.actionId },
     )

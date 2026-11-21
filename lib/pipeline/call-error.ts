@@ -8,7 +8,7 @@ import {
   providerTimeoutDetail,
 } from '@/lib/ai'
 
-import type { PhaseEmittedEvent, PipelineError } from './types'
+import type { ConfigResolverError, PhaseEmittedEvent, PipelineError } from './types'
 
 // CallRetryError is lib/ai's vocabulary; the pipeline maps it to PipelineError
 // when it surfaces recoverable_error / fatal events (generation-pipeline.md →
@@ -88,18 +88,24 @@ export function* retriedAttemptEvents(
     yield { type: 'recoverable_error', error: toPipelineError(attempt, target) }
 }
 
-/** Log and status detail: the arm's own (may span lines), or the window or cut-off described. */
+function describeConfigResolver(e: ConfigResolverError): string {
+  const model = e.failure === 'tool-calling-off' ? `; model ${e.modelId}` : ''
+  return `${e.failure} for ${e.target} in phase ${e.phaseName}${model}`
+}
+
+/** Log and status detail: the arm's own (may span lines), or the window, cut-off or resolver failure described. */
 export function pipelineErrorDetail(e: PipelineError): string | undefined {
   switch (e.kind) {
     case 'context-window':
       return describeContextWindow(e)
     case 'reply-cut-off':
       return describeReplyCutOff(e)
+    case 'config-resolver':
+      return describeConfigResolver(e)
     case 'provider':
     case 'phase-logic':
     case 'action-layer':
     case 'orchestrator':
-    case 'config-resolver':
     case 'embedder':
       return e.detail
     default: {
