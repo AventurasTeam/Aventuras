@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useSettleReread } from '@/hooks/use-settle-reread'
 import {
   CHAPTER_DELETE_REFUSAL,
   DeltaReplayError,
@@ -87,7 +88,6 @@ export function useChapterDeleteConfirm({
   // Read synchronously, so a second press returns before it reaches removeChapter's own refusal.
   const pendingRef = useRef(false)
   const openRequest = useRef(0)
-  const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const reviewOpen = chapterOverlaysStore.useOverlays((s) => s.review != null)
   // The re-read effect's cleanup is what drops a stale read, so the host's fresh callbacks each
   // render must not re-run it: they ride in a ref.
@@ -97,7 +97,6 @@ export function useChapterDeleteConfirm({
   })
 
   const chapterId = target?.chapterId ?? null
-  const countedAtSettle = target?.countedAtSettle ?? null
 
   const open = useCallback(
     async (opening: string) => {
@@ -128,35 +127,33 @@ export function useChapterDeleteConfirm({
     [branchId],
   )
 
-  useEffect(() => {
-    if (chapterId == null || countedAtSettle == null || settleCount <= countedAtSettle)
-      return undefined
-    // A removal's own reversal settles under it: its result closes the confirm, not a re-read.
-    if (pendingRef.current) return undefined
-    let live = true
-    void attempt(() => latest.current.loadPreview(chapterId)).then((read) => {
-      if (!live || pendingRef.current) return
-      if (!read.ok) {
-        logger.error('app.chapter_delete_recount_failed', {
-          branchId,
-          chapterId,
-          error: messageOf(read.error),
-        })
-        return
-      }
-      const result = read.value
-      if ('status' in result) {
-        logReadRefusal(branchId, chapterId, result.code)
-        setTarget(null)
-        toast.error(t(chapterDeleteRefusalCopy(result.code)))
-        return
-      }
-      setTarget((prev) => (prev?.chapterId === chapterId ? { ...prev, preview: result } : prev))
-    })
-    return () => {
-      live = false
-    }
-  }, [branchId, chapterId, countedAtSettle, settleCount])
+  useSettleReread({
+    targetKey: chapterId == null ? null : `${branchId}:${chapterId}`,
+    countedAtSettle: target?.countedAtSettle ?? null,
+    onSettle: (isLive) => {
+      // A removal's own reversal settles under it: its result closes the confirm, not a re-read.
+      if (pendingRef.current || chapterId == null) return
+      void attempt(() => latest.current.loadPreview(chapterId)).then((read) => {
+        if (!isLive() || pendingRef.current) return
+        if (!read.ok) {
+          logger.error('app.chapter_delete_recount_failed', {
+            branchId,
+            chapterId,
+            error: messageOf(read.error),
+          })
+          return
+        }
+        const result = read.value
+        if ('status' in result) {
+          logReadRefusal(branchId, chapterId, result.code)
+          setTarget(null)
+          toast.error(t(chapterDeleteRefusalCopy(result.code)))
+          return
+        }
+        setTarget((prev) => (prev?.chapterId === chapterId ? { ...prev, preview: result } : prev))
+      })
+    },
+  })
 
   const confirm = useCallback(
     async (mode: ChapterDeleteMode) => {
