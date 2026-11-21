@@ -67,6 +67,7 @@ import {
   headTurnIdsOf,
   inlineEditSaveGate,
   rowGateReason,
+  rowReversalFlags,
   undoHold,
 } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
@@ -824,6 +825,18 @@ export default function ReaderComposerRoute() {
     [editRequests],
   )
   const editHeadTurnIds = useMemo(() => headTurnIdsOf(entries, tailEntryId), [entries, tailEntryId])
+  // An open confirm's reversal is held as its row's ↻ or × is, so a confirm a refusal re-opened
+  // can't press into the run that refused it.
+  const rollbackBlockedReason =
+    rollback != null &&
+    rowReversalFlags({
+      rowId: rollback.targetId,
+      headTurnIds: editHeadTurnIds,
+      editGate,
+      reversalHeld: rerunRunning && rows.get(rollback.targetId)?.chapterId != null,
+    }).reversalDisabled
+      ? rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason })
+      : undefined
   const {
     guard,
     navigateGuarded,
@@ -2010,6 +2023,7 @@ export default function ReaderComposerRoute() {
           targetEntryNumber={rollback.targetNumber}
           counts={rollback.counts}
           variant={rollback.mode}
+          blockedReason={rollbackBlockedReason}
           onConfirm={() =>
             runAction(confirmRollback(), {
               event:

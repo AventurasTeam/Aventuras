@@ -5,6 +5,7 @@ import { STORY_ENTRY_REJECTION, type RollbackCounts } from '@/lib/actions'
 import {
   confirmAfterImmediateRefusal,
   countsAfterRefusal,
+  keepsConfirmOpen,
   regenerateRefusalCopy,
   regenerateRefusalToast,
   reopenAfterRefusal,
@@ -53,11 +54,18 @@ describe('rollbackRefusalCopy', () => {
     expect(rollbackRefusalCopy(COUNTS_CHANGED)).toBe('reader:rollbackCountsChanged')
   })
 
-  it('reports any other refusal as a failed rollback', () => {
+  // rollback-confirm.md → Edge cases: a run started since the confirm last rendered enabled.
+  it('says a run is in flight on an in-flight refusal', () => {
     expect(rollbackRefusalCopy(refused(STORY_ENTRY_REJECTION.inFlight))).toBe(
+      'reader:actions.blockedWhileGenerating',
+    )
+  })
+
+  it('reports any other refusal as a failed rollback', () => {
+    expect(rollbackRefusalCopy(refused(STORY_ENTRY_REJECTION.deltaFailed))).toBe(
       'reader:rollbackFailed',
     )
-    expect(rollbackRefusalCopy(refused(STORY_ENTRY_REJECTION.deltaFailed))).toBe(
+    expect(rollbackRefusalCopy(refused(STORY_ENTRY_REJECTION.notFound))).toBe(
       'reader:rollbackFailed',
     )
   })
@@ -261,5 +269,34 @@ describe('confirmAfterImmediateRefusal', () => {
         stillOnBranch: false,
       }),
     ).toBeNull()
+  })
+})
+
+describe('keepsConfirmOpen', () => {
+  it.each(['in-flight', 'in-flight-gated', 'story-busy', 'generation-in-flight'])(
+    'keeps a confirm open on %s',
+    (code) => {
+      expect(keepsConfirmOpen(code)).toBe(true)
+    },
+  )
+
+  it.each(['counts-changed', 'not-latest', 'integrity', 'delta-failed', 'not-found'])(
+    'lets %s take its own path',
+    (code) => {
+      expect(keepsConfirmOpen(code)).toBe(false)
+    },
+  )
+})
+
+describe('reopenAfterRefusal on an in-flight refusal', () => {
+  it('re-opens on the counts the user confirmed', () => {
+    expect(
+      reopenAfterRefusal({
+        current: null,
+        confirmed: CONFIRMED,
+        refusal: refused(STORY_ENTRY_REJECTION.inFlight),
+        stillOnBranch: true,
+      }),
+    ).toEqual(CONFIRMED)
   })
 })

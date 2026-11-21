@@ -21,6 +21,8 @@ type RollbackConfirmModalProps = {
   onOpenChange: (open: boolean) => void
   targetEntryNumber: number
   counts: RollbackCounts
+  /** Set while its reversal can't run (a run holds it, as it holds the row's ↻ and ×); the confirm disables with it. */
+  blockedReason?: string
   onConfirm: () => void
   variant?: 'rollback' | 'regenerate'
 }
@@ -62,6 +64,7 @@ export function RollbackConfirmModal({
   onOpenChange,
   targetEntryNumber,
   counts,
+  blockedReason,
   onConfirm,
   variant = 'rollback',
 }: RollbackConfirmModalProps) {
@@ -82,7 +85,7 @@ export function RollbackConfirmModal({
   const chapterLines = kind !== 'regenerate-close'
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent busy={blockedReason != null}>
         <AlertDialogHeader>
           <AlertDialogTitle>{copy.title}</AlertDialogTitle>
           <AlertDialogDescription>
@@ -128,7 +131,12 @@ export function RollbackConfirmModal({
             </Button>
           </AlertDialogCancel>
           <AlertDialogAction asChild>
-            <Button variant="destructive" onPress={onConfirm}>
+            <Button
+              variant="destructive"
+              disabled={blockedReason != null}
+              disabledReason={blockedReason}
+              onPress={onConfirm}
+            >
               <Text>{copy.confirm}</Text>
             </Button>
           </AlertDialogAction>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { keepsConfirmOpen } from '@/components/reader/confirm-refusal'
 import { useSettleReread } from '@/hooks/use-settle-reread'
 import {
   CHAPTER_DELETE_REFUSAL,
@@ -24,7 +25,11 @@ export type ChapterDeleteConfirmTarget = {
 
 export function chapterDeleteRefusalCopy(
   code: ChapterDeleteRefusalCode,
-): 'chapters:deleteConfirm.notLatest' | 'chapters:deleteConfirm.failed' {
+):
+  | 'chapters:deleteConfirm.notLatest'
+  | 'chapters:deleteConfirm.failed'
+  | 'reader:actions.blockedWhileGenerating' {
+  if (keepsConfirmOpen(code)) return 'reader:actions.blockedWhileGenerating'
   return code === CHAPTER_DELETE_REFUSAL.notLatest
     ? 'chapters:deleteConfirm.notLatest'
     : 'chapters:deleteConfirm.failed'
@@ -161,34 +166,38 @@ export function useChapterDeleteConfirm({
       pendingRef.current = true
       setPending(true)
       const removal = await attempt(() => latest.current.remove(chapterId, mode))
-      setTarget(null)
       if (removal.ok) {
         const result = removal.value
+        // An in-flight refusal leaves the confirm open; the gate now holds its actions.
+        if (result.status !== 'rejected' || !keepsConfirmOpen(result.code)) setTarget(null)
         if (result.status === 'rejected') toast.error(t(chapterDeleteRefusalCopy(result.code)))
-      } else if (removal.error instanceof DeltaReplayError && removal.error.committed) {
-        // The delete landed and only its store sync failed: a re-hydrate drops the stale card.
-        logger.warn('app.chapter_delete_sync_failed', {
-          branchId,
-          chapterId,
-          error: failureOf(removal.error),
-        })
-        const resynced = await attempt(() => latest.current.resync())
-        if (!resynced.ok) {
-          logger.error('app.chapter_delete_resync_failed', {
+      } else {
+        setTarget(null)
+        if (removal.error instanceof DeltaReplayError && removal.error.committed) {
+          // The delete landed and only its store sync failed: a re-hydrate drops the stale card.
+          logger.warn('app.chapter_delete_sync_failed', {
             branchId,
             chapterId,
-            error: messageOf(resynced.error),
+            error: failureOf(removal.error),
           })
-          toast.error(t('chapters:deleteConfirm.resyncFailed'))
+          const resynced = await attempt(() => latest.current.resync())
+          if (!resynced.ok) {
+            logger.error('app.chapter_delete_resync_failed', {
+              branchId,
+              chapterId,
+              error: messageOf(resynced.error),
+            })
+            toast.error(t('chapters:deleteConfirm.resyncFailed'))
+          }
+        } else {
+          logger.error('app.chapter_delete_threw', {
+            branchId,
+            chapterId,
+            mode,
+            error: failureOf(removal.error),
+          })
+          toast.error(t('chapters:deleteConfirm.failed'))
         }
-      } else {
-        logger.error('app.chapter_delete_threw', {
-          branchId,
-          chapterId,
-          mode,
-          error: failureOf(removal.error),
-        })
-        toast.error(t('chapters:deleteConfirm.failed'))
       }
       pendingRef.current = false
       setPending(false)

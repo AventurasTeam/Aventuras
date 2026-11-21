@@ -39,6 +39,21 @@ describe('useSettleReread', () => {
     expect(onSettle).not.toHaveBeenCalled()
   })
 
+  it('calls nothing while the host shows nothing, whatever count it still holds', () => {
+    const onSettle = vi.fn()
+    const counted = generationStore.getSettleCount()
+    setup({ targetKey: null, countedAtSettle: counted, onSettle })
+    settleARun()
+    expect(onSettle).not.toHaveBeenCalled()
+  })
+
+  it('calls nothing for data with no settle count to compare', () => {
+    const onSettle = vi.fn()
+    setup({ targetKey: 'a', countedAtSettle: null, onSettle })
+    settleARun()
+    expect(onSettle).not.toHaveBeenCalled()
+  })
+
   it('calls nothing for the settle the shown data was read at', () => {
     const onSettle = vi.fn()
     settleARun()

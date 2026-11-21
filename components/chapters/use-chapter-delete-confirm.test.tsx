@@ -23,6 +23,7 @@ type Hook = ReturnType<typeof useChapterDeleteConfirm>
 
 const NOT_LATEST = 'This is no longer the latest chapter.'
 const FAILED = "Couldn't delete the chapter."
+const BLOCKED = 'Unavailable while generating.'
 const RESYNC_FAILED =
   "The chapter was deleted, but the Timeline couldn't refresh. Reopen the story."
 
@@ -536,6 +537,21 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(toast.error).toHaveBeenCalledWith(NOT_LATEST)
   })
 
+  // A run started since the last enabled render: the gate now holds the confirm's actions.
+  it('keeps the confirm open and says why on an in-flight refusal', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce(refusal('in-flight'))
+
+    await act(async () => {
+      await result.current.confirm('whole')
+    })
+
+    expect(result.current.target).toEqual(expect.objectContaining({ preview: PREVIEW }))
+    expect(result.current.pending).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith(BLOCKED)
+  })
+
   it('dismisses and confirms again after a refused removal', async () => {
     const { result, remove } = setup()
     await openOn(result)
@@ -693,8 +709,12 @@ describe('chapterDeleteRefusalCopy', () => {
     expect(chapterDeleteRefusalCopy('not-latest')).toBe('chapters:deleteConfirm.notLatest')
   })
 
+  it('says a run is in flight', () => {
+    expect(chapterDeleteRefusalCopy('in-flight')).toBe('reader:actions.blockedWhileGenerating')
+  })
+
   it('reports every other refusal as a failed delete', () => {
-    for (const code of ['in-flight', 'not-found', 'no-close', 'integrity'] as const)
+    for (const code of ['not-found', 'no-close', 'integrity'] as const)
       expect(chapterDeleteRefusalCopy(code)).toBe('chapters:deleteConfirm.failed')
   })
 })
