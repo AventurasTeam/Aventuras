@@ -1240,7 +1240,7 @@ and reversing the re-run's group, by CTRL-Z, Cancel, a failure or crash
 recovery, writes the journal back after the re-run's own writes reverse
 (even before it has any),
 restoring the close, its deltas and report included. CTRL-Z of a re-run
-can't be redone, and clears the redo stack: re-running is the way back.
+can't be redone, and clears its branch's redo stack: re-running is the way back.
 The journal is exact only while nothing else touched what it covers, so
 a rollback or regenerate of a turn between the chapter's end and the
 re-run drops it, and so does a check that finds the group broken or a

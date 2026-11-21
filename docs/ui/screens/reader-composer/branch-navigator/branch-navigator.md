@@ -82,13 +82,15 @@ Two icons on the right side of each row, both reachable in a
 single click:
 
 - **`✎` Rename** — opens [inline rename](#inline-rename) on this row.
-- **`×` Delete** — opens [inline delete confirm](#inline-delete-confirm)
-  on this row. **Hidden** on the root branch (the one with
-  `parent_branch_id = null`) and on the **current** branch (you
-  can't delete out from under your own active session). Per the
+- **`×` Delete** — opens the [delete confirm](#delete-confirm).
+  **Hidden** on the **current** branch (you can't delete out from
+  under your own active session). Per the
   [hidden-vs-disabled rule](../../../patterns/icon-actions.md#disabled-vs-hidden):
-  these are structural unavailabilities (not temporary), so they
-  hide rather than grey out.
+  that's a structural unavailability (not temporary), so it hides
+  rather than greys out. The story's first branch deletes like any
+  other: under the hard fork no branch depends on another, so being
+  first is a label
+  ([`data-model.md → Branch model`](../../../../data-model.md#branch-model)).
 
 No `Set as default`, no `Pin`, no `Duplicate`, no overflow menu.
 Branches don't have a default-vs-non-default concept
@@ -101,8 +103,8 @@ nested-popover pattern (popover → menu) is awkward visually.
 
 ### Sort order
 
-Branches sort by `created_at` ascending — root first, then
-siblings in fork order. Stable, intuitive ("main, then the
+Branches sort by `created_at` ascending — the story's first branch
+first, then the rest in fork order. Stable, intuitive ("main, then the
 order I forked them in"), no extra state to remember. The
 **current** branch always renders first regardless of position
 (matches the [pinned-to-top sort layer](../../../patterns/entity.md#entity-list-sort-order--static-four-layer))
@@ -125,7 +127,9 @@ included), branch lifecycle operations are **paused**:
   turn. Switching isn't a head reversal, so it doesn't interrupt one
   ([`principles.md → Edit restrictions during in-flight generation`](../../../principles.md#edit-restrictions-during-in-flight-generation)).
 - **Delete** — `×` icon hidden across all rows during generation
-  (same hide rule used for root + current).
+  (same hide rule used for the current branch). It also hides while
+  an embedder swap is pending on the story, which embeds across the
+  story's branches; switching stays live then.
 - **Create** — the per-entry
   [`⎇ Branch from this entry` action](../reader-composer.md#per-entry-actions)
   is disabled in the reader, so the
@@ -167,38 +171,54 @@ time (the input border turns warn-colored, save is a no-op until
 the user fixes or cancels). Same uniqueness behavior as creation
 — the data model doesn't enforce it; the navigator doesn't either.
 
-### Inline delete confirm
+### Delete confirm
 
-Triggered from the `×` icon. The row's body collapses into an
-inline confirmation block in place — no modal, no popover-
-within-popover:
+Triggered from the `×` icon. An
+[AlertDialog](../../../patterns/alert-dialog.md) opens over the
+navigator — over the Popover on desktop and tablet, over the Sheet
+on phone, which the
+[stacking rules](../../../foundations/mobile/layout.md#stacking) allow:
 
 ```
-   alt-ending-2
-   Delete this branch?       [ Cancel ]  [ Delete ]
+┌──── Delete alt-ending-2? ──────────────────┐
+│                                              │
+│   38 entries exist only on this branch.      │
+│   Its world, plot and chapter changes go     │
+│   with it. This can't be undone.             │
+│                                              │
+│               [ Cancel ]  [ Delete branch ]  │
+└──────────────────────────────────────────────┘
 ```
 
-`Cancel` (or `Esc`) → revert to the read-only row.
-`Delete` → executes the deletion. The row removes from the list;
-the navigator's count in the header decrements; the navigator
-stays open. The chip's count badge in the reader top bar updates
-when the popover closes.
+A branch delete can't be undone and takes the branch's whole line
+with it, so it gets the consent gate rather than the
+[inline strip](../../../patterns/inline-delete-confirm.md) a
+row-local delete uses.
 
-Deletion is a single SQL cascade per the
-[composite-PK design](../../../../data-model.md#branch-model) —
-every branch-scoped row with that `branch_id` goes (entries,
-entities, lore, threads, happenings, chapters, deltas, etc.).
-Assets are reference-counted via `entry_assets`; orphaned assets
+- **Title** — `Delete <name>?`.
+- **Count** — `<N> entries exist only on this branch.`: the branch's
+  non-system entries whose id no other branch of the story holds. A
+  fork copies its entries with their ids, so shared history shares
+  ids and the count is what was written after the branches parted.
+  It misses edits this branch made to entries the branches still
+  share, so it indicates the loss rather than inventories it. At zero
+  the line reads `No entries exist only on this branch.`
+- **Last line** — the branch's world, plot and chapter changes go
+  with it, and the delete can't be undone, as the sketch above
+  words it.
+- `Cancel` (or `Esc`, or hardware back) closes the dialog and leaves
+  the navigator as it was. `Delete branch` (destructive) deletes. The
+  dialog closes, the row leaves the list, the navigator's count in the
+  header decrements, and the navigator stays open. The chip's count
+  badge in the reader top bar updates when the navigator closes.
+
+The delete is one transaction of per-table deletes scoped by the
+branch, re-parenting its children to its own parent, per
+[`data-model.md → Branch model`](../../../../data-model.md#branch-model).
+Its `entry_assets` rows go, and assets no story references any more
 enter the trash-can flow (`assets.pending_delete_at` flag, trash
 sweep, rollback restoration) per
 [`data-model.md → Assets`](../../../../data-model.md#assets-images--future-media).
-
-**Implementation note:** the row's expansion from "compact" to
-"row + confirmation buttons" is functional as drawn, but the
-layout shift will feel jolting without a transition. Animate
-height/padding (~150ms ease-out) on enter and exit so the change
-reads as a deliberate state transition rather than a layout
-glitch.
 
 ## Why no creation entry point in the navigator
 
@@ -277,10 +297,9 @@ When `stories.current_branch_id` is the only branch in the story:
 - The navigator is therefore **not reachable from the chip**.
 - It IS reachable from the
   [Actions](../../../principles.md#actions--platform-agnostic-action-directory)
-  menu (`Browse branches`). Opening it on a single-branch story
-  shows one row with `Rename` available but `Delete` disabled
-  (root + current = both deletion blocks apply). The header reads
-  `Branches · 1`.
+  menu (`Browse branches…`). Opening it on a single-branch story
+  shows one row with `Rename` available and no `×`: the only branch
+  is the current one. The header reads `Branches · 1`.
 - The **creation modal** is reachable as always — from the
   per-entry `⎇` action. Creating a second branch causes the chip
   to appear on next render.
@@ -309,8 +328,9 @@ Tablet inherits desktop verbatim per
   the touch hover-replacement (always-visible-muted, no
   brighten-on-touch) lives in the pattern doc, not duplicated
   here.
-- **Inline rename and delete-confirm** work identically across
-  tiers.
+- **Inline rename** works identically across tiers, and so does
+  the [delete confirm](#delete-confirm), an AlertDialog modal on
+  every tier.
 - **Stack-aware Return.** Android `BackHandler` and iOS
   swipe-back dismiss the sheet (not the parent reader) per
   [navigation.md → Stack-aware Return on mobile](../../../foundations/mobile/navigation.md#stack-aware-return-on-mobile).
@@ -321,9 +341,9 @@ on every tier per
 
 ## Empty state
 
-Not applicable. A story always has at least the root branch
-(created with the story itself). The navigator can't render with
-zero rows.
+Not applicable. A story always has at least one branch: the first
+is created with the story, and the current branch can't be deleted.
+The navigator can't render with zero rows.
 
 ## Data-model touchpoints
 
@@ -331,8 +351,10 @@ No new schema. This pass uses:
 
 - [`branches`](../../../../data-model.md#branch-model) — `id`,
   `story_id`, `parent_branch_id`, `fork_entry_id`, `name`,
-  `created_at`. Composite PKs on branch-scoped tables guarantee
-  fork copies and deletions are simple cascades.
+  `created_at`. Composite PKs on branch-scoped tables let a fork
+  copy and a delete scope every table by the branch. A delete
+  re-parents the branch's children; nothing else reads
+  `parent_branch_id` or `fork_entry_id`.
 - `stories.current_branch_id` — the single field that "switch
   branch" mutates.
 
@@ -347,6 +369,6 @@ No new schema. This pass uses:
   If demand emerges, lands as either a Story Settings · Branches
   tab or a `View details →` row action. Premature now.
 - **"Where did the delete icon go?" discoverability** — the
-  delete icon is hidden on root + current rather than greyed.
+  delete icon is hidden on the current branch rather than greyed.
   Trade-off favors visual cleanliness; revisit if real users
   hit the question.
