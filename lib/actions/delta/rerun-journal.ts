@@ -18,8 +18,14 @@ import type { DbCtx } from '../types'
 import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { readCurrentRow } from './redo'
 import { resolveByTable, whereForDelta, type TableDescriptor } from './registry'
-import { reverseAndPruneDeltaRows, type PatchEmission, type ReversePlan } from './reverse-replay'
-import { selectReversalSet } from './row-closure'
+import { DeltaReplayError, ReversalIntegrityError } from './replay-errors'
+import {
+  reverseAndPruneDeltaRows,
+  reverseReplayDeltas,
+  type PatchEmission,
+  type ReversePlan,
+} from './reverse-replay'
+import { selectReversalSet, type ReversalSet } from './row-closure'
 
 // C1: a close writes no entries, so its deltas there are the chapter row, the report and the stamps.
 const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
@@ -376,4 +382,94 @@ export async function rerunWriteBack(
     ops: [],
     journal: 'missing',
   })
+}
+
+export type RunGroupReversal = {
+  deltas: number
+  journal: 'restored' | 'undone' | null
+  chapterNumber: number | null
+}
+
+// A refusal already names what it refused and committed nothing; wrapping would hide it.
+function replayFailure(e: unknown, actionId: string): DeltaReplayError {
+  return e instanceof ReversalIntegrityError
+    ? e
+    : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
+}
+
+// The fallback's set: the group and the chapter's close groups, once each, newest first.
+function withCloseGroups(group: readonly Delta[], seed: readonly Delta[]): Delta[] {
+  const byId = new Map<string, Delta>()
+  for (const delta of [...group, ...seed]) byId.set(delta.id, delta)
+  return [...byId.values()].sort((a, b) => b.logPosition - a.logPosition)
+}
+
+/**
+ * Reverses a run's group as abort and boot recovery do: a group that is no re-run's as
+ * `reverseReplayDeltas` does, a re-run's with its journal written back or its close undone
+ * (generation-pipeline.md → Reverse-replay). `settleOps(reversed)` joins the transaction, told
+ * whether anything was reversed or written back. Callers hold the branch exclusive, or run at boot.
+ */
+export async function reverseRunGroup(
+  args: { actionId: string; branchId: string | null; rerunChapterId?: string | null },
+  ctx: DbCtx,
+  settleOps: (reversed: boolean) => readonly SqlOp[] = () => [],
+): Promise<RunGroupReversal> {
+  const { actionId } = args
+  let group: Delta[]
+  let writeBack: RerunWriteBack
+  try {
+    group = (await ctx.db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.actionId, actionId))
+      .orderBy(desc(deltas.logPosition))) as Delta[]
+    writeBack = await rerunWriteBack(
+      { actionId, branchId: args.branchId, group, rerunChapterId: args.rerunChapterId },
+      ctx,
+    )
+  } catch (e) {
+    throw replayFailure(e, actionId)
+  }
+  if (writeBack.outcome === 'none') {
+    const reversed = await reverseReplayDeltas(actionId, ctx, (count) => settleOps(count > 0))
+    return { deltas: reversed, journal: null, chapterNumber: null }
+  }
+  const journal = writeBack.outcome
+  const chapterNumber = writeBack.outcome === 'undone' ? writeBack.chapterNumber : null
+  let set: ReversalSet
+  let settle: readonly SqlOp[]
+  try {
+    const target = writeBack.outcome === 'undone' ? withCloseGroups(group, writeBack.seed) : group
+    // An empty target runs no query, so its branch is never read.
+    set = await selectReversalSet(ctx, {
+      branchId: target[0]?.branchId ?? args.branchId ?? '',
+      target,
+    })
+    settle = settleOps(set.rows.length > 0 || writeBack.ops.length > 0)
+  } catch (e) {
+    throw replayFailure(e, actionId)
+  }
+  try {
+    const reversed = await reverseAndPruneDeltaRows(
+      set,
+      ctx,
+      { keepRedoExact: false },
+      [...writeBack.ops, ...settle],
+      undefined,
+      writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
+    )
+    return { deltas: reversed, journal, chapterNumber }
+  } catch (e) {
+    // The outcome rides the error, so an undone close never reads as restored.
+    if (e instanceof DeltaReplayError && e.committed)
+      throw new DeltaReplayError(e.message, {
+        cause: e.cause,
+        actionId,
+        stage: 'store-sync',
+        journal,
+        chapterNumber,
+      })
+    throw e
+  }
 }

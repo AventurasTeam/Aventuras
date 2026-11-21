@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
 import { chapterDraftFrom } from '@/lib/chapters'
@@ -23,11 +23,16 @@ import {
 } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { queryAllOn, type CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
-import { happeningsStore, loreStore } from '@/lib/stores'
+import { entriesStore, happeningsStore, loreStore } from '@/lib/stores'
 
 import { DeltaReplayError } from './replay-errors'
-import { rerunWriteBack, reverseCloseForRerun, type RerunWriteBack } from './rerun-journal'
-import { reverseAndPruneDeltaRows } from './reverse-replay'
+import {
+  rerunWriteBack,
+  reverseCloseForRerun,
+  reverseRunGroup,
+  type RerunWriteBack,
+} from './rerun-journal'
+import { describeDeltaReplayError, reverseAndPruneDeltaRows } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import {
   ASKED,
@@ -994,5 +999,195 @@ describe('rerunWriteBack', () => {
     expect(await reverseWithWriteBack(c.fx, RERUN)).toMatchObject({ outcome: 'restored' })
 
     expect(await fullState(c.fx)).toEqual(before)
+  })
+})
+
+// The marker's settle, as abortRun's rides the reversal's transaction.
+const settleMarker = (fx: CloseFixture, actionId: string): SqlOp =>
+  fx.ctx.db
+    .update(pipelineRuns)
+    .set({ finishedAt: CLOSED_AT + 2, outcome: 'aborted' })
+    .where(eq(pipelineRuns.actionId, actionId))
+    .toSQL()
+
+describe('reverseRunGroup', () => {
+  // A store spy that throws would otherwise outlive its test.
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('restores a journaled group with no delta of its own, telling the settle it reversed something', async () => {
+    const c = await workedClose()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    const heard: boolean[] = []
+
+    expect(
+      await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx, (reversed) => {
+        heard.push(reversed)
+        return [settleMarker(c.fx, RERUN)]
+      }),
+    ).toEqual({ deltas: 0, journal: 'restored', chapterNumber: null })
+
+    expect(heard).toEqual([true])
+    expect(await fullState(c.fx)).toEqual(before)
+    expect(await journalRows(c.fx)).toEqual([])
+    const [marker] = await c.fx.ctx.db
+      .select()
+      .from(pipelineRuns)
+      .where(eq(pipelineRuns.actionId, RERUN))
+    expect(marker?.outcome).toBe('aborted')
+  })
+
+  it('restores one with its own writes, counting them', async () => {
+    const c = await workedClose()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+
+    expect(await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx)).toEqual({
+      deltas: 5,
+      journal: 'restored',
+      chapterNumber: null,
+    })
+
+    expect(await fullState(c.fx)).toEqual(before)
+  })
+
+  it('syncs the stores with the journal after the group, so a loser merged again ends absent', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
+
+    await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx)
+
+    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
+    expect(happeningsStore.getById(TOLD.id)?.description).toBe(MERGED_HAPPENING)
+  })
+
+  it('puts back the report of a close that changed nothing, aborted before its first write', async () => {
+    const c = await openClosed()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+
+    expect(await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx)).toEqual({
+      deltas: 0,
+      journal: 'restored',
+      chapterNumber: null,
+    })
+
+    expect(await fullState(c.fx)).toEqual(before)
+    expect(await journalRows(c.fx)).toEqual([])
+  })
+
+  it('undoes the close when the check fails, naming the chapter', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+
+    expect(
+      await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx),
+    ).toMatchObject({ journal: 'undone', chapterNumber: c.chapter.sequenceNumber })
+
+    expect(await chapterRows(c.fx)).toEqual([])
+    expect(await journalRows(c.fx)).toEqual([])
+  })
+
+  it('reverses a group that is no re-run as reverseReplayDeltas does', async () => {
+    const c = await openClosed()
+    await writeLater(
+      c.fx,
+      describeTobin(c.fx.branchId, 'The ferryman, as the pass read him.', 'periodic_classifier'),
+      { actionId: 'act_pass', entryId: c.fx.replyIds[1] },
+    )
+
+    expect(await reverseRunGroup({ actionId: 'act_pass', branchId: null }, c.fx.ctx)).toEqual({
+      deltas: 1,
+      journal: null,
+      chapterNumber: null,
+    })
+
+    expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(TOBIN.description)
+    expect(await deltasOf(c.fx, 'act_pass')).toEqual([])
+  })
+
+  it('tells the settle nothing was reversed for an action that left nothing', async () => {
+    const c = await openClosed()
+    await seedRunMarker(c.fx, {
+      runId: 'run_empty',
+      actionId: 'act_empty',
+      startedAt: CLOSED_AT + 1,
+    })
+    const heard: boolean[] = []
+
+    expect(
+      await reverseRunGroup({ actionId: 'act_empty', branchId: null }, c.fx.ctx, (reversed) => {
+        heard.push(reversed)
+        return [
+          c.fx.ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.actionId, 'act_empty')).toSQL(),
+        ]
+      }),
+    ).toEqual({ deltas: 0, journal: null, chapterNumber: null })
+
+    expect(heard).toEqual([false])
+    expect(
+      await c.fx.ctx.db.select().from(pipelineRuns).where(eq(pipelineRuns.actionId, 'act_empty')),
+    ).toEqual([])
+  })
+
+  it('carries a restored journal on the error when only the store sync after the commit fails', async () => {
+    const c = await workedClose()
+    const before = await fullState(c.fx)
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    vi.spyOn(loreStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await reverseRunGroup(
+      { actionId: RERUN, branchId: c.fx.branchId },
+      c.fx.ctx,
+    ).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: store sync boom',
+      committed: true,
+      refusal: null,
+      journal: 'restored',
+      chapterNumber: null,
+    })
+    expect(await fullState(c.fx)).toEqual(before)
+  })
+
+  it('carries an undone journal and its chapter on the error when only the store sync fails', async () => {
+    const c = await workedClose()
+    await reverseForRerun(c)
+    await rerunWritesWithMerge(c)
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+      actionId: USER_TOBIN,
+      entryId: null,
+    })
+    vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await reverseRunGroup(
+      { actionId: RERUN, branchId: c.fx.branchId },
+      c.fx.ctx,
+    ).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)).toEqual({
+      detail: 'Error: store sync boom',
+      committed: true,
+      refusal: null,
+      journal: 'undone',
+      chapterNumber: c.chapter.sequenceNumber,
+    })
+    expect(await chapterRows(c.fx)).toEqual([])
   })
 })
