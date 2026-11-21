@@ -36,6 +36,7 @@ import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/
 import { ReversalIntegrityError } from '../delta/reverse-replay'
 import type { selectReversalSet } from '../delta/row-closure'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
+import type { PipelineAction } from '../types'
 
 const { generateStructuredMock, generateToolStepMock } = vi.hoisted(() => ({
   generateStructuredMock: vi.fn<typeof generateStructured>(),
@@ -141,6 +142,25 @@ async function systemEntry(h: CloseHarness, position: number): Promise<void> {
   })
 }
 
+// The stand-in close's one lore row.
+async function closeLoreId(h: CloseHarness): Promise<string> {
+  const rows = await h.fx.ctx.db
+    .select({ id: lore.id })
+    .from(lore)
+    .where(eq(lore.branchId, h.fx.branchId))
+  expect(rows).toHaveLength(1)
+  return rows[0]!.id
+}
+
+// A write of the turn since at 14, on its action and anchored on its reply.
+async function sinceWrite(h: CloseHarness, reply: string, action: PipelineAction): Promise<void> {
+  const written = await applyDeltaAction(
+    { action, actionId: 'act_since_14', branchId: h.fx.branchId, entryId: reply },
+    h.fx.ctx,
+  )
+  expect(written.status).toBe('ok')
+}
+
 // The open region's tokens below `position`, from the counts the fixture stored.
 async function regionTokens(h: CloseHarness, below: number): Promise<number> {
   const [row] = await h.fx.ctx.db
@@ -226,8 +246,8 @@ describe('getCloseRerunPreview', () => {
       chapterNumber: 1,
       model: 'lore-model',
       tokens: expect.any(Number),
-      // Tobin's row is the shortcut's too, so the close's description of him counts there alone.
-      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 0 },
+      // The close's description of Tobin is the re-run's alone; the shortcut takes the keywords.
+      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
       shortcut: {
         targetEntryId: action,
         turns: 1,
@@ -245,6 +265,11 @@ describe('getCloseRerunPreview', () => {
     expect((read as CloseRerunPreview).shortcut?.counts).toEqual(
       await shownCounts(b, action, h.fx.ctx),
     )
+    await h.rollBack(action)
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: false },
+      otherChanges: 1,
+    })
   })
 
   it('reads a system entry since the close as no turn', async () => {
@@ -386,38 +411,65 @@ describe('getCloseRerunPreview', () => {
     )
   })
 
-  it('counts a lore row the close created and a turn since edited on the shortcut alone', async () => {
+  it('counts a lore row the close created and a turn since edited as the re-run removing it', async () => {
     const { h, chapterId } = await closedStandIn()
     const b = h.fx.branchId
     const reply = await turnSince(h, 14)
-    const [created] = await h.fx.ctx.db
-      .select({ id: lore.id })
-      .from(lore)
-      .where(eq(lore.branchId, b))
-    const edited = await applyDeltaAction(
-      {
-        action: {
-          kind: 'updateLore',
-          source: 'per_turn_classifier',
-          payload: {
-            branchId: b,
-            id: created!.id,
-            patch: { keywords: ['night crossing'] },
-            proseEntryId: null,
-          },
-        },
-        actionId: 'act_since_14',
+    const created = await closeLoreId(h)
+    await sinceWrite(h, reply, {
+      kind: 'updateLore',
+      source: 'per_turn_classifier',
+      payload: {
         branchId: b,
-        entryId: reply,
+        id: created,
+        patch: { keywords: ['night crossing'] },
+        proseEntryId: null,
       },
-      h.fx.ctx,
-    )
-    expect(edited.status).toBe('ok')
+    })
 
     expect(await preview(h, chapterId)).toMatchObject({
-      // Tobin's description still counts; the lore row is the shortcut's line.
-      reversal: { createdLore: { count: 0, userEdited: false }, otherChanges: 1 },
+      // The shortcut takes back the turn's keywords; the re-run still removes the row.
+      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
       shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+    })
+    await h.rollBack('entry_since_14')
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: false },
+      otherChanges: 1,
+    })
+  })
+
+  it("counts a turn's write both the re-run and the shortcut reverse once, on the shortcut", async () => {
+    const { h, chapterId } = await closedStandIn()
+    const b = h.fx.branchId
+    const reply = await turnSince(h, 14)
+    // A translation names the close's lore row, so the re-run's closure takes the turn's create too.
+    await sinceWrite(h, reply, {
+      kind: 'createTranslation',
+      source: 'per_turn_classifier',
+      payload: {
+        entry: {
+          id: 'tr_since_14',
+          branchId: b,
+          targetKind: 'lore',
+          targetId: await closeLoreId(h),
+          field: 'title',
+          language: 'es',
+          translatedText: 'El transbordador de Harrow',
+          createdAt: 14,
+          updatedAt: 14,
+        },
+      },
+    })
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
+      shortcut: { targetEntryId: 'entry_since_14', counts: { entries: 2, worldStateChanges: 1 } },
+    })
+    await h.rollBack('entry_since_14')
+    expect(await getChapterDeletePreview(b, chapterId, story(), h.fx.ctx)).toMatchObject({
+      createdLore: { count: 1, userEdited: false },
+      otherChanges: 1,
     })
   })
 

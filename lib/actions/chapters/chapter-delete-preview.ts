@@ -72,31 +72,26 @@ export async function ownEntryTokens(
   return row?.tokens ?? 0
 }
 
-const NO_ROWS: ReadonlySet<string> = new Set()
-
-/** A row as `reversalImpactOf`'s `excludeRows` names it. */
-export function reversalRowKey(table: string, id: string): string {
-  return `${table}:${id}`
-}
+const NO_DELTAS: ReadonlySet<string> = new Set()
 
 /**
  * The delete confirm's impact lines over any reversal set: the lore its close groups created that
  * it removes, edits included, and every other change it reverses. The reader's undo of a close, a
  * re-run or kept close work counts its own set with it (reader-composer.md → Undo and redo).
- * `excludeRows` are rows another line of the same confirm counts.
+ * `excludeDeltas` are delta ids another line of the same confirm counts.
  */
 export async function reversalImpactOf(
   branchId: string,
   set: ReversalSet,
   groups: readonly Delta[],
   ctx: DbCtx,
-  opts: { excludeRows?: ReadonlySet<string> } = {},
+  opts: { excludeDeltas?: ReadonlySet<string> } = {},
 ): Promise<Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'>> {
   return changesOf(
     set,
     await createdLoreOf(branchId, groups, ctx),
     await restoringUpdates(set, ctx),
-    opts.excludeRows ?? NO_ROWS,
+    opts.excludeDeltas ?? NO_DELTAS,
   )
 }
 
@@ -133,14 +128,12 @@ function changesOf(
   let userEdited = false
   let otherChanges = set.refClears.length
   for (const d of set.rows) {
-    if (excluded.has(reversalRowKey(d.targetTable, d.targetId))) continue
+    if (excluded.has(d.id)) continue
     if (d.targetTable === 'lore' && created.ids.has(d.targetId)) {
       if (d.source === 'user_edit' && created.live.has(d.targetId)) userEdited = true
     } else if (!countsNowhere(d, restoring)) otherChanges++
   }
-  let count = 0
-  for (const id of created.live) if (!excluded.has(reversalRowKey('lore', id))) count++
-  return { createdLore: { count, userEdited }, otherChanges }
+  return { createdLore: { count: created.live.size, userEdited }, otherChanges }
 }
 
 // An update a later write replaced in every field, list term and count restores nothing.

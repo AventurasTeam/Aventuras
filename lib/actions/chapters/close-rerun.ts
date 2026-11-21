@@ -33,7 +33,7 @@ import {
   type OpenStory,
 } from '@/lib/stores'
 
-import { ownEntryTokens, reversalImpactOf, reversalRowKey } from './chapter-delete-preview'
+import { ownEntryTokens, reversalImpactOf } from './chapter-delete-preview'
 import { MANUAL_CLOSE_REFUSAL, refused as refusedStart, startCloseChain } from './close-chain'
 import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
@@ -201,7 +201,7 @@ async function spanFrom(
   return { turns: row.turns, entries: { count: row.count, first: row.first, last: row.last } }
 }
 
-type ShortcutRead = { lines: Shortcut; rows: ReadonlySet<string> }
+type ShortcutRead = { lines: Shortcut; deltaIds: ReadonlySet<string> }
 
 // rollback-confirm.md → Counts at the turn, read inside this hold: getRollbackCounts takes its
 // own, and the lock isn't reentrant.
@@ -215,7 +215,7 @@ async function shortcutTo(
   const span = await spanFrom(branchId, turn.position, ctx)
   return {
     lines: { targetEntryId: turn.id, ...span, counts: await rollbackCountsOf(swept, ctx) },
-    rows: new Set(swept.set.rows.map((d) => reversalRowKey(d.targetTable, d.targetId))),
+    deltaIds: new Set(swept.set.rows.map((d) => d.id)),
   }
 }
 
@@ -287,8 +287,9 @@ export async function getCloseRerunPreview(
       chapterNumber: chapter.sequenceNumber,
       model: loreModelOf(story.settings),
       tokens: await ownEntryTokens(branchId, chapterId, ctx),
+      // A delta both sets hold counts on the shortcut's line alone.
       reversal: await reversalImpactOf(branchId, set, groups, ctx, {
-        excludeRows: shortcut?.rows,
+        excludeDeltas: shortcut?.deltaIds,
       }),
       shortcut: shortcut?.lines ?? null,
     }
