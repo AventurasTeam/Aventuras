@@ -74,11 +74,11 @@ vi.mock('../delta/reverse-replay', async (importOriginal) => {
   const actual = await importOriginal<
     Record<string, unknown> & { reverseAndPruneDeltaRows: typeof reverseAndPruneDeltaRows }
   >()
-  const seamed: typeof reverseAndPruneDeltaRows = async (set, ctx, options, extraOps) => {
+  const seamed: typeof reverseAndPruneDeltaRows = async (...args) => {
     const fault = reversalSeams.failCommit
     reversalSeams.failCommit = null
     if (fault) throw fault
-    return actual.reverseAndPruneDeltaRows(set, ctx, options, extraOps)
+    return actual.reverseAndPruneDeltaRows(...args)
   }
   return { ...actual, reverseAndPruneDeltaRows: seamed }
 })

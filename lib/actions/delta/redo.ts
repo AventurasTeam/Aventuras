@@ -123,7 +123,8 @@ function heldInRedo(set: ReversalSet, row: RowRef, actionId: string): ReversalIn
   )
 }
 
-async function currentRow(
+/** A row as it stands, whole, or null when absent. */
+export async function readCurrentRow(
   ctx: DbCtx,
   table: string,
   row: Pick<Delta, 'branchId' | 'targetId'>,
@@ -173,11 +174,14 @@ async function snapshotForRedo(
   if (heldClear) throw heldInRedo(set, heldClear.row, set.redoRows[0]?.actionId ?? 'redo')
   const snapshots: RedoSnapshot[] = []
   for (const delta of set.redoRows) {
-    snapshots.push({ delta, rowBeforeUndo: await currentRow(ctx, delta.targetTable, delta) })
+    snapshots.push({ delta, rowBeforeUndo: await readCurrentRow(ctx, delta.targetTable, delta) })
   }
   const refRestores: RefRestore[] = []
   for (const { row, ref } of restored) {
-    const before = await currentRow(ctx, row.table, { branchId: set.branchId, targetId: row.id })
+    const before = await readCurrentRow(ctx, row.table, {
+      branchId: set.branchId,
+      targetId: row.id,
+    })
     // Neither live nor held: the planner clears nothing there, so nothing goes back.
     if (before) {
       const id = pathRefIds(row.table, before).find((p) => p.ref.path === ref.path)?.id ?? null
@@ -345,7 +349,7 @@ async function applyRedoLocked(
     const { branchId, row, ref } = restore
     const entry = resolveByTable(row.table)
     if (!entry) throw new Error(`redo apply: unknown target_table ${row.table}`)
-    const current = await currentRow(ctx, row.table, { branchId, targetId: row.id })
+    const current = await readCurrentRow(ctx, row.table, { branchId, targetId: row.id })
     if (!current) continue
     const columns = { [ref.column]: restoredState(current[ref.column], restore, dead) }
     ops.push(

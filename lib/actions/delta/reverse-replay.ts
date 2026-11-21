@@ -1,7 +1,7 @@
 import { and, desc, eq, getTableColumns, inArray } from 'drizzle-orm'
 import type { ZodType } from 'zod'
 
-import type { Delta, LocationState, SqlOp } from '@/lib/db'
+import type { Delta, LocationState, ReversalJournalRow, SqlOp } from '@/lib/db'
 import {
   chunked,
   deltas,
@@ -89,6 +89,16 @@ export type ReversePlan = {
    * the payload it writes (generation-pipeline.md → Reverse-replay).
    */
   survivorRewrites: SurvivorRewrite[]
+  /** Every delta the prunes remove, whole, as logged before the reversal. */
+  prunedDeltas: readonly Delta[]
+  /** Creates the reversal re-owns rather than prunes, as logged before. */
+  reownedDeltas: readonly Delta[]
+  /** Held-delete holders whose undo_payload the ops rewrite, as logged before. */
+  rewrittenHolders: readonly Delta[]
+  /** reversal_journals rows the planner drops (generation-pipeline.md → Reverse-replay), whole. */
+  droppedJournals: readonly ReversalJournalRow[]
+  /** Their deletes, apart from pruneOps: a fork's copy omits them. */
+  journalOps: SqlOp[]
 }
 
 export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
@@ -114,11 +124,17 @@ export async function buildReverseAndPrunePlan(
           .where(eq(deltas.id, r.id))
           .toSQL()
   }
+  const logged = [...set.rows, ...built.prunedHolders, ...built.strandedWrites]
   return {
     ops: built.ops,
-    pruneOps: [...set.rows, ...built.prunedHolders, ...built.strandedWrites].map(reownOrPrune),
+    pruneOps: logged.map(reownOrPrune),
     patches: built.patches,
     survivorRewrites: built.survivorRewrites,
+    prunedDeltas: logged.filter((d) => !built.reowned.has(d.id)),
+    reownedDeltas: logged.filter((d) => built.reowned.has(d.id)),
+    rewrittenHolders: built.rewrittenHolders,
+    droppedJournals: [],
+    journalOps: [],
   }
 }
 
@@ -189,6 +205,8 @@ type BuiltUndo = {
   /** Writes outside the set to a row-keeping row the reversal leaves absent. */
   strandedWrites: Delta[]
   survivorRewrites: SurvivorRewrite[]
+  /** The holders whose payload the walk's held copies rewrite, as logged before. */
+  rewrittenHolders: Delta[]
 }
 
 // A null partial on a schema-backed column means the column itself was null pre-change — no
@@ -239,7 +257,12 @@ function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<stri
 function settleHeldCopies(
   copies: ReadonlyMap<string, HeldCopy>,
   ctx: DbCtx,
-): { payloadOps: SqlOp[]; pruned: Delta[]; rewritten: Map<string, Record<string, unknown>> } {
+): {
+  payloadOps: SqlOp[]
+  pruned: Delta[]
+  rewritten: Map<string, Record<string, unknown>>
+  rewrittenHolders: Delta[]
+} {
   const byHolder = new Map<string, HeldCopy[]>()
   for (const copy of copies.values()) {
     const group = byHolder.get(copy.held.holder.id)
@@ -249,6 +272,7 @@ function settleHeldCopies(
   const payloadOps: SqlOp[] = []
   const pruned: Delta[] = []
   const rewritten = new Map<string, Record<string, unknown>>()
+  const rewrittenHolders: Delta[] = []
   for (const group of byHolder.values()) {
     const { holder } = group[0].held
     if (group.some((c) => c.held.place === 'target' && c.removed)) {
@@ -257,11 +281,12 @@ function settleHeldCopies(
     }
     const payload = rebuiltPayload(holder, group)
     rewritten.set(holder.id, payload)
+    rewrittenHolders.push(holder)
     payloadOps.push(
       ctx.db.update(deltas).set({ undoPayload: payload }).where(eq(deltas.id, holder.id)).toSQL(),
     )
   }
-  return { payloadOps, pruned, rewritten }
+  return { payloadOps, pruned, rewritten, rewrittenHolders }
 }
 
 // A write left targeting a gone row would CTRL-Z to nothing. Redo restores none of them, so CTRL-Z
@@ -698,7 +723,7 @@ async function buildUndoOps(
   for (const clear of set.refClears) await clearRef(walk, clear)
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
-  const { payloadOps, pruned, rewritten } = settleHeldCopies(walk.heldCopies, ctx)
+  const { payloadOps, pruned, rewritten, rewrittenHolders } = settleHeldCopies(walk.heldCopies, ctx)
   const strandedWrites = await strandedWritesOf(ctx, set, walk.rowStates, walk.heldCopies)
   const [stranded] = strandedWrites
   if (options.keepRedoExact && stranded)
@@ -727,6 +752,7 @@ async function buildUndoOps(
     prunedHolders: pruned,
     strandedWrites,
     survivorRewrites,
+    rewrittenHolders,
   }
 }
 
@@ -763,6 +789,14 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
   return keeping.reduce((oldest, e) => (e.logPosition < oldest.logPosition ? e : oldest))
 }
 
+/** What a caller adds to a reversal's own transaction; undefined, the reversal runs as before. */
+export type ReverseCommitHooks = {
+  /** Read inside the key locks after planning; its ops lead the transaction. */
+  opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
+  /** Emitted after the plan's patches, under the same store-sync stage. */
+  patchesAfter?: readonly PatchEmission[]
+}
+
 export async function reverseAndPruneDeltaRows(
   set: ReversalSet,
   ctx: DbCtx,
@@ -770,16 +804,34 @@ export async function reverseAndPruneDeltaRows(
   extraOps: readonly SqlOp[] = [],
   /** Hears the plan before its transaction runs, as a redo snapshot reads its rewrites. */
   onPlan: (plan: ReversePlan) => void = () => {},
+  hooks: ReverseCommitHooks = {},
 ): Promise<number> {
-  if (set.rows.length === 0 && extraOps.length === 0) return 0
+  const { opsFromPlan, patchesAfter } = hooks
+  // A hook still commits on an empty set: a re-run that reversed nothing journals all the same.
+  if (
+    set.rows.length === 0 &&
+    extraOps.length === 0 &&
+    opsFromPlan === undefined &&
+    patchesAfter === undefined
+  )
+    return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
   return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
     try {
       const plan = await buildReverseAndPrunePlan(set, ctx, options)
-      patches = plan.patches
+      patches = [...plan.patches, ...(patchesAfter ?? [])]
       onPlan(plan)
-      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
+      // Canon writes a journal before the plan's ops; a write-back's extraOps re-insert deltas at
+      // positions the prunes free, so they stay last.
+      const leading = opsFromPlan ? await opsFromPlan(plan) : []
+      await ctx.runInTransaction([
+        ...leading,
+        ...plan.ops,
+        ...plan.pruneOps,
+        ...plan.journalOps,
+        ...extraOps,
+      ])
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
@@ -829,7 +881,7 @@ export async function reverseReplayDeltas(
 
       const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       patches = plan.patches
-      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
+      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
     } catch (e) {
       throw fail(e)
     }

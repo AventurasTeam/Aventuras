@@ -95,9 +95,9 @@ vi.mock('../delta/reverse-replay', async (importOriginal) => {
   const actual = await importOriginal<
     Record<string, unknown> & { reverseAndPruneDeltaRows: typeof reverseAndPruneDeltaRows }
   >()
-  const hooked: typeof reverseAndPruneDeltaRows = (set, ctx, options, extraOps) => {
-    sweepHook.onSweep?.(set.rows)
-    return actual.reverseAndPruneDeltaRows(set, ctx, options, extraOps)
+  const hooked: typeof reverseAndPruneDeltaRows = (...args) => {
+    sweepHook.onSweep?.(args[0].rows)
+    return actual.reverseAndPruneDeltaRows(...args)
   }
   return { ...actual, reverseAndPruneDeltaRows: hooked }
 })
