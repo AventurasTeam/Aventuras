@@ -31,6 +31,7 @@ import {
   generationStore,
   happeningAwarenessStore,
   happeningsStore,
+  isStoryBusy,
   loreStore,
   reportChapter,
   rerunConfirmChapter,
@@ -350,7 +351,9 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
   const { branchId, chapterId } = request
   const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
   const rerunReason = useRerunDisabledReason(storyId, branchId)
-  const settleCount = generationStore.useGeneration((s) => s.settleCount)
+  const storyBusy = generationStore.useGeneration(
+    (s) => storyId != null && isStoryBusy(s.txState, storyId, branchId),
+  )
   const {
     target,
     open: openPreview,
@@ -383,8 +386,10 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
   // Read synchronously, so a second press returns before it reaches startCloseRerun.
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
-  // An in-flight refusal holds the confirm actions until the next settle.
-  const [heldAtSettle, setHeldAtSettle] = useState<number | null>(null)
+  // An in-flight refusal holds the confirm actions while the story is busy. Not until a settle: a
+  // pending turn's mark ends with none.
+  const [heldInFlight, setHeldInFlight] = useState(false)
+  if (heldInFlight && !storyBusy) setHeldInFlight(false)
 
   if (target == null) return null
   const { preview } = target
@@ -394,7 +399,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
     if (pendingRef.current || story == null || story.branchId !== branchId) return
     pendingRef.current = true
     setPending(true)
-    setHeldAtSettle(null)
+    setHeldInFlight(false)
     // Once the chain's first run reserves every refusal is past, and the banner speaks.
     const onStarted = () => {
       if (chapterOverlaysStore.getState().rerunConfirm === request)
@@ -408,7 +413,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
           replace(step.preview)
           return
         case 'keep-open':
-          setHeldAtSettle(generationStore.getSettleCount())
+          setHeldInFlight(true)
           return
         case 'ended':
         case 'refused':
@@ -423,7 +428,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
     if (!pendingRef.current) chapterOverlaysStore.closeRerunConfirm({ reopen: true })
   }
 
-  const held = heldAtSettle === settleCount ? t('reader:actions.blockedWhileGenerating') : undefined
+  const held = heldInFlight ? t('reader:actions.blockedWhileGenerating') : undefined
   return (
     <CloseRerunConfirm
       open

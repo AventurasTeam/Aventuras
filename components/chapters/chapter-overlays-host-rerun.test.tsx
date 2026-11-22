@@ -293,6 +293,25 @@ async function confirmShown(): Promise<CloseRerunConfirmProps> {
   return confirmView.props
 }
 
+// A Send's pending mark on the branch, held until `end`.
+function markPendingTurn(): { end: () => Promise<void> } {
+  let release: () => void = () => {}
+  const body = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let marked: Promise<void> = Promise.resolve()
+  act(() => {
+    marked = generationStore.bracketPendingTurn('br_1', () => body)
+  })
+  return {
+    end: () =>
+      act(async () => {
+        release()
+        await marked
+      }),
+  }
+}
+
 const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
 beforeEach(() => {
@@ -639,12 +658,15 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunConfirm.notLatest'))
   })
 
-  it('an in-flight refusal toasts and keeps the confirm open, its actions disabled until a run settles', async () => {
+  it('an in-flight refusal toasts and keeps the confirm open, its actions disabled while the story is busy', async () => {
     const error = vi.spyOn(toast, 'error').mockReturnValue('')
     actions.start.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })
     renderHost()
     openRerun()
     const props = await confirmShown()
+    // A background run the gate lets through: the hold alone disables the actions.
+    const pass = { ...gateRun(), runId: 'run_pass', gateBehavior: 'no-gate' as const }
+    act(() => generationStore.startRun(pass))
     act(() => props.onConfirm())
     await waitFor(() =>
       expect(confirmView.props?.blockedReason).toBe(t('reader:actions.blockedWhileGenerating')),
@@ -654,8 +676,28 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(chapterOverlaysStore.getState().rerunConfirm).not.toBeNull()
     expect(error).toHaveBeenCalledExactlyOnceWith('Unavailable while generating.')
 
+    // Another run's settle ends no blocker of this story's.
     settleRun()
-    await waitFor(() => expect(confirmView.props?.blockedReason).toBeUndefined())
+    expect(confirmView.props?.blockedReason).toBe(t('reader:actions.blockedWhileGenerating'))
+    act(() => generationStore.finishRun(pass.runId))
+    expect(confirmView.props?.blockedReason).toBeUndefined()
+  })
+
+  // A Send refused before its run reserves: its mark ends with no run, so nothing settles.
+  it('releases the in-flight hold when a pending turn ends with no run', async () => {
+    actions.start.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    const send = markPendingTurn()
+    const settled = generationStore.getSettleCount()
+    act(() => props.onConfirm())
+    await waitFor(() => expect(confirmView.props?.pending).toBe(false))
+    expect(confirmView.props?.blockedReason).toBe(t('generationGate.inFlight'))
+
+    await send.end()
+    expect(generationStore.getSettleCount()).toBe(settled)
+    expect(confirmView.props?.blockedReason).toBeUndefined()
   })
 
   it("disables the confirm's actions with the gate's reason while a run holds it", async () => {

@@ -113,15 +113,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`use-review-window-presence.ts`); other consumers that reopen a Sheet
   on a timer or after a cancelled confirm are unchecked. Raised by Slice
   5.13's Task 26 review (2026-11-21).
-- **A pending turn's end never bumps `settleCount`.** `bracketPendingTurn`'s
-  `end` and its `finally` drop the mark without a settle
-  (`lib/stores/generation/generation.ts`), so a re-read keyed on the count
-  misses a mark that ends with no run: a Send refused before its run
-  reserves leaves the re-run confirm's in-flight hold
-  (`chapter-overlays-host.tsx`, until the next settle) disabled with
-  `Unavailable while generating.` while nothing runs. The delete confirm
-  reads the gate alone and doesn't hit it. Raised by Slice 5.13's Task 25
-  review (2026-11-21).
 - **The rollback modal's "stays open" misses the regenerate mode.**
   `rollback-confirm.md → A run starting under an open modal` says the
   modal stays open on an in-flight refusal; a regenerate-mode confirm
