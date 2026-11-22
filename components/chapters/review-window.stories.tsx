@@ -254,10 +254,7 @@ function ExitHarness({ onExited }: { onExited: () => void }) {
 const REQUESTED = { id: 'chap_trail', sequenceNumber: 2, title: 'The Trail North' } as StoreChapter
 const REOPEN_AFTER_MS = 80
 
-/**
- * The host's mount for the window, with its `Re-run…` then the confirm's `Cancel`: the request
- * clears, and comes back while the Sheet is still sliding out.
- */
+/** The host's mount: `Re-run…` then `Cancel` clears the request, and it returns mid slide-out. */
 function ReopenHarness({
   onExited,
   closeBeforePresent = false,

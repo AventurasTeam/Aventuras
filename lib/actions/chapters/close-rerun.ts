@@ -227,7 +227,7 @@ async function closeOwedAfter(
     (row) => shortcutFrom === null || row.position < shortcutFrom,
   )
   const pick = generationStore.getTxState().pendingClose.get(branchId)
-  // The preview's rule, not the live closeOwed's any-pick: a pick the shortcut removes owes nothing.
+  // The preview's rule, not closeOwed's any-pick: a pick the shortcut removes owes nothing.
   const pickSurvives = pick !== undefined && region.some((row) => row.id === pick.endEntryId)
   return isCloseOwed(
     chapterProgressOf(region, settings.chapterTokenThreshold),

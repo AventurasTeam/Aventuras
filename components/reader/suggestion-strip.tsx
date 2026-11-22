@@ -40,10 +40,7 @@ type SuggestionStripProps = {
   errorMessage?: string
   /** Set only for deterministic failures — replaces Retry, which could not succeed. */
   errorFix?: { label: string; onPress: () => void }
-  /**
-   * False when no category is enabled (the phase would no-op), or while a run holds ⟳ alone: ⟳
-   * must not offer the run.
-   */
+  /** False when no category is enabled (the phase would no-op) or a run holds ⟳ alone. */
   canRefresh?: boolean
   /** Why ⟳ is held while `canRefresh` is false for a run's sake; every refresh control shows it. */
   refreshDisabledReason?: string

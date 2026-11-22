@@ -7,7 +7,7 @@ const met = { tokens: 1_000, threshold: THRESHOLD, canClose: true }
 const under = { tokens: 999, threshold: THRESHOLD, canClose: true }
 const noReply = { tokens: 2_500, threshold: THRESHOLD, canClose: false }
 
-// C10: a pending pick owes a close whatever the region; else auto-close at the threshold with a reply.
+// C10: a pending pick owes a close whatever the region; else auto-close at threshold with a reply.
 describe('isCloseOwed', () => {
   it.each([
     { progress: met, autoClose: true, manualPending: false, owed: true },

@@ -102,7 +102,7 @@ function moreActions({
           },
         ]
       : []),
-    // An AlertDialog, not a Sheet: on phone it opens over the menu's dismissing Sheet, as Delete… does.
+    // An AlertDialog, not a Sheet: on phone it opens over the menu's dismissing Sheet.
     ...(latest && hasCloseReport
       ? [
           {

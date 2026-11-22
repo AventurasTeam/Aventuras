@@ -58,10 +58,8 @@ function startHolds(branchId: string): boolean {
   return false
 }
 
-/**
- * The re-run confirm's preview (chapter-timeline.md → Re-run a close), re-read whenever a run
- * settles under it, as `useChapterDeleteConfirm` re-reads its own.
- */
+/** The re-run confirm's preview (chapter-timeline.md → Re-run a close), re-read when a run settles
+ * under it. */
 export function useCloseRerunConfirm({
   branchId,
   active,

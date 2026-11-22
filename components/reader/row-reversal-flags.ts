@@ -56,10 +56,8 @@ export function rowReversalFlags(args: {
   }
 }
 
-/**
- * The reader's Undo, a head reversal: a re-run refuses every CTRL-Z while it runs, so Undo holds
- * then too, naming the pill's run (the re-run) where no run blocks the head reversals.
- */
+/** The reader's Undo: a re-run refuses every CTRL-Z, so Undo holds then, naming the pill's run
+ * where no run blocks head reversals. */
 export function undoHold(args: {
   headReversalBlocked: boolean
   rerunRunning: boolean

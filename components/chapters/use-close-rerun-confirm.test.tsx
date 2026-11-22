@@ -122,7 +122,7 @@ describe('useCloseRerunConfirm: opening', () => {
     expect(toast.error).toHaveBeenCalledWith(copy)
   })
 
-  // A missing close or chapter is a broken log or a stale card; the rest are races or logged elsewhere.
+  // A missing close or chapter is a broken log or stale card; others are races/logged elsewhere.
   it('logs a refusal that means a broken log or a stale card', async () => {
     const { result, loadPreview } = setup()
     loadPreview

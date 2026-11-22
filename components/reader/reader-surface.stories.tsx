@@ -471,8 +471,8 @@ export const ClosedGateNamesItsBlocker: Story = {
 const RERUN_REASON = t('generationGate.chapterCloseRerun')
 
 /**
- * A re-run holds the ↻ and × of every stamped row (chapter-close.md → Re-running a close); the
- * open region's stay live, each interrupting it.
+ * Re-run holds ↻ and × on stamped rows; the open region's stay live (chapter-close.md →
+ * Re-running a close).
  */
 export const RerunHoldsStampedRows: Story = {
   args: {
@@ -483,7 +483,7 @@ export const RerunHoldsStampedRows: Story = {
     stampedReversalsHeld: true,
   },
   play: async () => {
-    // p3's pencil (an older entry, the gate's), ↻ and ×: each disabled takes the reason as its name.
+    // p3's pencil (older entry, gate-held), ↻ and ×: a disabled button's name is the reason.
     const held = await waitFor(() => {
       const buttons = within(entryRow('p3')).getAllByRole('button', { name: RERUN_REASON })
       expect(buttons).toHaveLength(3)

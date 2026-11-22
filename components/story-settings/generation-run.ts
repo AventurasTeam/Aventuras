@@ -64,9 +64,9 @@ export function selectStorySettingsGenerationRunKind(
 }
 
 /**
- * The gate kind of the run a head reversal on `branchId` waits on, which beside a pass is not the
- * pill's: the pass lets the reversal through, a refresh beside it does not. Null when no run holds
- * that gate (a pending turn or a reversal's sweep may still close it).
+ * The gate kind of the run a head reversal on `branchId` waits on; beside a pass it isn't the
+ * pill's (a pass lets it through, a refresh doesn't). Null when no run holds that gate; a pending
+ * turn or a reversal's sweep may still close it.
  */
 export function selectHeadReversalRunKind(txState: TxState, branchId: string): string | null {
   return gateKindOf(
@@ -76,10 +76,8 @@ export function selectHeadReversalRunKind(txState: TxState, branchId: string): s
   )
 }
 
-/**
- * A re-run on `branchId`: it refuses CTRL-Z while it runs, and with a row's chapter id it is
- * `rerunHoldsReversal` for that row, which the reader document can't read itself.
- */
+/** A re-run on `branchId`: refuses CTRL-Z while it runs; with a row's chapter id it is
+ * `rerunHoldsReversal`, which the reader document can't read itself. */
 export function selectRerunRunning(txState: TxState, branchId: string): boolean {
   for (const run of txState.runs.values())
     if (run.branchId === branchId && run.interruptible === 'rerun') return true
@@ -127,7 +125,7 @@ export function useStoryGenerationGate(
   editBlocked: boolean
   gateReason: string | undefined
   beforeTurn: boolean
-  /** Ends the pill's run; an interruptible pass or close is deferred to the next Send, a re-run defers nothing. */
+  /** Ends the pill's run; an interruptible one defers to the next Send, a re-run defers nothing. */
   cancelPillRun: () => void
 } {
   const activeRunKind = generationStore.useGeneration((s) =>

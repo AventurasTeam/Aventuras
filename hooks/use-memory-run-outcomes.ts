@@ -66,9 +66,8 @@ async function committedClose(actionId: string, rerun: boolean): Promise<CloseRe
 }
 
 /**
- * Toasts a pass or close moved to the next Send, and a pass or close that failed outside a Send;
- * holds a committed close or re-run for the in-story banner. Mount once, at the app root: the
- * orchestrator emits each event once.
+ * Toasts a pass or close deferred to the next Send or failed outside one; holds a committed close
+ * or re-run for the banner. Mount once at the app root: each event is emitted once.
  */
 export function useMemoryRunOutcomes(): void {
   useEffect(() => {

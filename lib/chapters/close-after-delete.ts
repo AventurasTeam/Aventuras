@@ -15,7 +15,6 @@ export function closeAfterDelete(args: {
   /** `pendingClose.has(branchId)`: closeOwed owes it whatever the tokens. */
   manualPending: boolean
 }): ChapterDeleteAfter {
-  // The region after a delete always holds the end reply (C10), so it can close.
   const progress = { tokens: args.tokensAfter, threshold: args.threshold, canClose: true }
   if (isCloseOwed(progress, args.autoClose, args.manualPending)) return 'closes-next-send'
   return args.autoClose ? 'waits' : 'stays-open'

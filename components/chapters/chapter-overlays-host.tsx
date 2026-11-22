@@ -108,9 +108,8 @@ async function readRerunPreview(
 }
 
 /**
- * C7's root host, for the review window, the close modal and the re-run confirm. A row press or
- * `Re-run…` closes the window before the guard runs, so a dirty pane is never bypassed and no
- * dialog sits over the window.
+ * C7's root host for the review window, close modal and re-run confirm. A row press or `Re-run…`
+ * closes the window before the guard runs: a dirty pane is never bypassed, no dialog over it.
  */
 export function ChapterOverlaysHost(): ReactElement | null {
   const review = chapterOverlaysStore.useOverlays((s) => s.review)
@@ -337,8 +336,7 @@ function ReviewHost({
 
 /**
  * chapter-timeline.md → Re-run a close, mounted while its request holds. The start outlives it:
- * once the re-run's chain holds the branch the confirm closes, and `runCloseRerun` speaks for the
- * chain's end.
+ * the confirm closes once the chain holds the branch, and `runCloseRerun` speaks for its end.
  */
 function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactElement | null {
   const { branchId, chapterId } = request

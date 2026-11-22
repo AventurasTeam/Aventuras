@@ -106,10 +106,8 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
   return startFailed(start.code)
 }
 
-/**
- * Starts the confirmed re-run and shows what it ended in. Resolves with the chain's end or the
- * refusal: for a re-run that ran, minutes later and after the confirm has gone.
- */
+/** Starts the confirmed re-run and toasts its end; a run that ran resolves minutes later, after the
+ * confirm has gone. */
 export async function runCloseRerun(args: {
   branchId: string
   chapterId: string

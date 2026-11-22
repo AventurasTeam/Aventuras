@@ -5,10 +5,9 @@ import { useTier } from '@/hooks/use-tier'
 import type { StoreChapter } from '@/lib/stores'
 
 /**
- * The review window's mount, apart from its request: the last window held open stays mounted,
- * closed, until its exit ends, so the phone Sheet can slide out. A request that returns during the
- * exit is held until it ends: a Sheet presented while still dismissing never appears. A phone
- * window closed before its Sheet presented has no exit to wait for, so it unmounts at once.
+ * The review window's mount, apart from its request: the last window stays mounted, closed, until
+ * its exit ends (phone Sheet slide-out). A request returning mid-exit is held until it ends, as a
+ * Sheet presented while dismissing never appears. A phone window closed unpresented unmounts now.
  */
 export function useReviewWindowPresence({
   requested,

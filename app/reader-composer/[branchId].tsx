@@ -1715,9 +1715,9 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
-    // Undo of the turn is a head reversal, live through a pass; the action refuses any other
-    // target with `gated`, and every target while a re-run runs, so Undo holds then. Redo never is
-    // one, so it keeps the whole gate. An open editor holds both, the gate's reason outranking its own.
+    // Undo of the turn is a head reversal, live through a pass; the action refuses any other target
+    // with `gated`, and every target while a re-run runs. Redo never is one: whole gate. An open
+    // editor holds both, the gate's reason outranking its own.
     const held = t('reader:editFocus.held')
     const undoGate = undoHold({
       headReversalBlocked,

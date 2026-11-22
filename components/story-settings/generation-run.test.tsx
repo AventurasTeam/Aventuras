@@ -398,7 +398,7 @@ describe('a re-run at the gate', () => {
     )
   })
 
-  // principles.md → Affordance loci: a re-run holding a reversal that reaches its chapter names the pill's run.
+  // principles.md → Affordance loci: a re-run holding a reversal names the pill's run.
   it('names the re-run where no run blocks the head reversals', () => {
     expect(headReversalGateReason(true, { headReversal: null, pill: CHAPTER_CLOSE_RERUN })).toBe(
       RERUN_REASON,
@@ -421,8 +421,7 @@ describe('a re-run at the gate', () => {
 })
 
 describe('selectRerunRunning', () => {
-  // The reader holds a row's ↻ and × when this holds and the row's entry is stamped; that must be
-  // the answer rerunHoldsReversal gives for the row.
+  // The reader holds a row's ↻ and × on this plus a stamped entry; must equal rerunHoldsReversal.
   it.each([
     ['rerun', 'chap_2', true],
     ['rerun', null, false],
