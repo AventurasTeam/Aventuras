@@ -766,5 +766,11 @@ remains.
   rows, columns and bytes, the same KNN). Temp table inside one batch:
   passed (`t1`, `t2` moved).
 
+**Second to land.** At the final rebase (`e981d8922`), neither
+[Slice 6.7](./07-diff-cache.md) nor [Slice 6.8](./08-per-branch-lead.md) had
+landed, so each of their PRs owns its job: 6.8 numbers its steps after
+`0022_m6_pipeline_runs_branch`, and 6.7 writes the database-seeded two-branch
+walk test in `lib/history/diff-walk.test.ts`.
+
 _Populated at finish: notable deviations from the plan and resolved
 developer decisions._
