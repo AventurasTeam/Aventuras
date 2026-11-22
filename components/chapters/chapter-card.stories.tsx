@@ -42,9 +42,15 @@ const COPY = {
   discard: 'Discard',
 }
 
-function chapter(
-  overrides: Partial<StoreChapter> & Pick<StoreChapter, 'id' | 'sequenceNumber'>,
-): StoreChapter {
+// A row with a report names its action; the default has neither.
+type ChapterOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
+  Pick<StoreChapter, 'id' | 'sequenceNumber'> &
+  (
+    | { hasCloseReport?: false; closeReportActionId?: null }
+    | { hasCloseReport: true; closeReportActionId: string }
+  )
+
+function chapter(overrides: ChapterOverrides): StoreChapter {
   return {
     branchId: 'br_1',
     title: '',

@@ -101,6 +101,7 @@ export {
   wizardStore,
 }
 
+export { closeReportFields } from './chapters/chapter-store-projection'
 export { createWorkingSetStore } from './factory/working-set-store'
 
 export { openEmbedderSwapDialog } from './ui/embedder-swap'

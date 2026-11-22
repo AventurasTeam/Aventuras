@@ -16,6 +16,7 @@ import {
   stories,
   threads,
   translations,
+  type CloseReport,
   type NewChapter,
   type StoryDefinition,
   type StorySettings,
@@ -309,6 +310,11 @@ describe('loadOpenStory', () => {
         closeReport: { version: 1, actionId: 'act_1', calls: [], stopped: [], noToolCalls: true },
       },
       chapter('chap_2', 2),
+      // No writer stores these; the report schema refuses a report without its action.
+      ...[{ actionId: 7 }, { actionId: { id: 'act_4' } }, {}].map((report, i) => ({
+        ...chapter(`chap_${i + 3}`, i + 3),
+        closeReport: { version: 1, calls: [], ...report } as unknown as CloseReport,
+      })),
     ])
 
     expect(await loadOpenStory('br_1', ctx)).toEqual({
@@ -320,6 +326,9 @@ describe('loadOpenStory', () => {
     for (const [id, hasCloseReport, actionId] of [
       ['chap_1', true, 'act_1'],
       ['chap_2', false, null],
+      ['chap_3', false, null],
+      ['chap_4', false, null],
+      ['chap_5', false, null],
     ] as const) {
       const stored = chaptersStore.getById(id)
       expect(stored).toBeDefined()

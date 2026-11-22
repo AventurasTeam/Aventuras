@@ -203,7 +203,14 @@ async function openReady(): Promise<ReviewWindowProps> {
   return shown()
 }
 
-function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
+// The action alone keeps the default report; a row without one drops both.
+type ChapterOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
+  (
+    | { hasCloseReport?: true; closeReportActionId?: string }
+    | { hasCloseReport: false; closeReportActionId: null }
+  )
+
+function chapter(over: ChapterOverrides = {}): StoreChapter {
   return {
     id: 'chap_2',
     branchId: 'br_1',

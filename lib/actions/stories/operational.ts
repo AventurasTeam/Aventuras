@@ -20,6 +20,7 @@ import { kickStoryDrain } from '@/lib/embedder-swap'
 import {
   chaptersStore,
   characterRelationshipsStore,
+  closeReportFields,
   currentStoryStore,
   entitiesStore,
   entriesStore,
@@ -97,6 +98,10 @@ type IsCurrentRequest = () => boolean
 
 const alwaysCurrent: IsCurrentRequest = () => true
 
+// A string action only: json_extract alone reads an object action as its JSON text.
+const REPORT_ACTION_ID = sql<string | null>`CASE json_type(${chapters.closeReport}, '$.actionId')
+  WHEN 'text' THEN json_extract(${chapters.closeReport}, '$.actionId') END`
+
 // Single place every story-open path (landing, wizard, deep link) shares, so hydration and
 // currentStoryStore updates stay in lockstep across them.
 async function loadAndPublish(
@@ -166,15 +171,15 @@ async function loadAndPublish(
   if (!isCurrentRequest()) return { status: 'cancelled' }
   // C4: the report stays out of chaptersStore, which keeps whether a row has one and its action.
   const { closeReport: _closeReport, ...chapterColumns } = getTableColumns(chapters)
-  const chapterRows = await ctx.db
-    .select({
-      ...chapterColumns,
-      hasCloseReport: sql<boolean>`${chapters.closeReport} IS NOT NULL`.mapWith(Boolean),
-      closeReportActionId: sql<string | null>`json_extract(${chapters.closeReport}, '$.actionId')`,
-    })
+  const chapterReads = await ctx.db
+    .select({ ...chapterColumns, reportActionId: REPORT_ACTION_ID })
     .from(chapters)
     .where(eq(chapters.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
+  const chapterRows = chapterReads.map(({ reportActionId, ...row }) => ({
+    ...row,
+    ...closeReportFields(reportActionId),
+  }))
   const relationshipRows = await ctx.db
     .select()
     .from(characterRelationships)

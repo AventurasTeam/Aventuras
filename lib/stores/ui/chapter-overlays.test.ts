@@ -18,7 +18,14 @@ function surface(guard: Guard = (proceed) => proceed()): OverlaySurface {
   return { guard, navigate: vi.fn<(path: string) => void>() }
 }
 
-function row(over: Partial<StoreChapter> & Pick<StoreChapter, 'id'>): StoreChapter {
+// The action alone keeps the default report; a row without one drops both.
+type RowOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
+  (
+    | { hasCloseReport?: true; closeReportActionId?: string }
+    | { hasCloseReport: false; closeReportActionId: null }
+  )
+
+function row(over: RowOverrides & Pick<StoreChapter, 'id'>): StoreChapter {
   return {
     branchId: 'br_hero',
     sequenceNumber: 2,
