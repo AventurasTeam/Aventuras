@@ -235,7 +235,8 @@ function upsertRowOp(ctx: DbCtx, descriptor: TableDescriptor, row: Record<string
     .toSQL()
 }
 
-// Each restored row and delta takes the executing branch: a fork copies the journal verbatim.
+// Each restored row and delta takes the executing branch, for a fork's verbatim copy of the
+// journal (no forks yet, M6.1).
 async function writeBackOps(
   found: FoundJournal,
   actionId: string,
@@ -266,7 +267,7 @@ async function writeBackOps(
     const row: Record<string, unknown> = {
       ...before,
       ...(branchKey === undefined ? {} : { [branchKey]: branchId }),
-      // The drain has re-embedded the reverted text by now: a clean flag would keep that vector.
+      // The drain may have re-embedded the re-run's text: a clean flag would keep that vector.
       ...(isEmbeddedSourceTable(table) ? { embeddingStale: 1 } : {}),
     }
     rowOps.push(upsertRowOp(ctx, descriptor, row))
