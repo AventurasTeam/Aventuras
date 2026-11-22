@@ -61,13 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A reversal's error names the newest delta's action, not the
-  reversed one.** `reverseAndPruneDeltaRows` labels its
-  `DeltaReplayError` with `set.rows[0]?.actionId ?? 'rollback'`, so a
-  failed CTRL-Z of a group whose set holds a later user edit names that
-  edit, and a set with no rows names `'rollback'`. Diagnostics only:
-  callers read `detail` and `committed`. Raised by Slice 5.13's reviews
-  (2026-11-21).
 - **A committed undo whose store sync fails says to try again.** The
   reader's undo handler shows `Couldn't undo. Please try again.`
   (`locales/en/reader.json`, `useReaderUndo`'s guard) for any thrown
