@@ -864,6 +864,41 @@ describe('rerunWriteBack', () => {
     expect(await chapterRows(c.fx)).toEqual([])
   })
 
+  // A floor raised by one puts the group's first delta at it: the rest still fill the positions
+  // above, alone or, with an edit above them, one for one.
+  it.each([
+    ['nothing else above it', async (): Promise<void> => {}],
+    [
+      'an edit outside it above, matching the group’s count',
+      (c: ClosedChapter) =>
+        writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'user_edit'), {
+          actionId: USER_TOBIN,
+          entryId: null,
+        }),
+    ],
+  ] as const)(
+    'undoes the close when the group holds a delta at the floor, with %s',
+    async (_label, above) => {
+      const c = await openClosed()
+      await writeCloseWork(c)
+      await reverseForRerun(c)
+      await rerunWrites(c)
+      const journal = await journalOf(c.fx, RERUN)
+      const floor = journal.floor + 1
+      await c.fx.ctx.db
+        .update(reversalJournals)
+        .set({ journal: { ...journal, floor } })
+        .where(eq(reversalJournals.actionId, RERUN))
+      await above(c)
+      const group = await deltasOf(c.fx, RERUN)
+      expect(group.map((d) => d.logPosition)).toEqual([floor + 1, floor])
+
+      expect(
+        await rerunWriteBack({ actionId: RERUN, branchId: c.fx.branchId, group }, c.fx.ctx),
+      ).toMatchObject({ outcome: 'undone', journal: 'not-whole' })
+    },
+  )
+
   it('restores the first close’s lore after a divider-only removal, with no chapter row', async () => {
     const c = await workedClose()
     const before = await fullState(c.fx)
