@@ -3,6 +3,7 @@ import { describeCloseFailure, retryRefusalText } from '@/components/reader/syst
 import {
   CLOSE_RERUN_REFUSAL,
   describeDeltaReplayError,
+  loadOpenStory,
   MANUAL_CLOSE_REFUSAL,
   startCloseRerun,
   STORY_ENTRY_REJECTION,
@@ -19,6 +20,7 @@ import {
   pipelineErrorDetail,
   type ChainEnd,
 } from '@/lib/pipeline'
+import { currentStoryStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -128,6 +130,26 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
   return startFailed(start.code)
 }
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+// As a cold open does; the start outlives the confirm, so it never re-publishes a branch left since.
+async function resyncBranch(branchId: string, chapterId: string): Promise<boolean> {
+  try {
+    const result = await loadOpenStory(
+      branchId,
+      ctx,
+      () => currentStoryStore.getCurrentStory()?.branchId === branchId,
+    )
+    if (result.status === 'ok' || result.status === 'cancelled') return true
+    throw new Error(`branch re-hydration ${result.status}`)
+  } catch (error) {
+    logger.error('app.close_rerun_resync_failed', { branchId, chapterId, error: messageOf(error) })
+    return false
+  }
+}
+
 /** Starts the confirmed re-run and toasts its end; a run that ran resolves minutes later, after the
  * confirm has gone. */
 export async function runCloseRerun(args: {
@@ -142,14 +164,17 @@ export async function runCloseRerun(args: {
   try {
     start = await startCloseRerun(branchId, chapterId, expectedOf(preview), ctx, { onStarted })
   } catch (error) {
-    // A replay failure's message is fixed: log its cause, and whether its write landed.
+    // A replay failure's message is fixed: log its cause.
     const replay = describeDeltaReplayError(error)
-    logger.error('app.close_rerun_start_threw', {
-      branchId,
-      chapterId,
-      error: replay?.detail ?? (error instanceof Error ? error.message : String(error)),
-      ...(replay != null && { committed: replay.committed }),
-    })
+    const detail = replay?.detail ?? messageOf(error)
+    if (replay?.committed === true) {
+      // The shortcut's rollback landed and only its store sync failed: the stores may hold its turns.
+      logger.warn('app.close_rerun_sync_failed', { branchId, chapterId, error: detail })
+      if (!(await resyncBranch(branchId, chapterId))) {
+        toast.error(t('chapters:rerunNotice.resyncFailed'))
+        return { step: 'refused' }
+      }
+    } else logger.error('app.close_rerun_start_threw', { branchId, chapterId, error: detail })
     toast.error(t('chapters:rerunNotice.startFailed'))
     return { step: 'refused' }
   }
