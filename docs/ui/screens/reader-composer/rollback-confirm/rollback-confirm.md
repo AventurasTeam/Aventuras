@@ -225,7 +225,8 @@ mechanism rather than the hover-preview.
   only the commit raises shows the same toast with the modal still open,
   except `counts-changed`, which has its own toast ([Counts](#counts)).
 - **A run starting under an open modal** — the modal's confirm disables
-  while a run holds the gate. If a run starts between its last enabled
+  when the target row's ↻ or × would: a closed gate, or a re-run on a
+  stamped entry. If a run starts between its last enabled
   render and the press, the commit refuses as in flight: a toast says
   `Unavailable while generating.` and the modal stays open, its confirm
   disabled with the blocking run's tooltip

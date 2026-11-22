@@ -1913,10 +1913,10 @@ sweep's set:
 - removes the group's last remaining delta.
 
 A divider-only removal takes only the chapter row's deltas and the
-stamps, a card Save's rename of the row included, so the journal stays,
-unless that removal takes the group's last delta (a re-run that wrote
-only its report, whose group is that one delta), and the write-back then
-restores the first close's lore without a divider. When the journal is gone or the check fails, the re-run's
+stamps, a card Save's rename of the row included, so the journal stays
+and the write-back then restores the first close's lore without a
+divider, unless that removal takes the group's last delta (a re-run that
+wrote only its report, whose group is that one delta). When the journal is gone or the check fails, the re-run's
 reversal takes the chapter's other close groups with it, as a delete
 does, and deletes the journal row: the close is undone altogether, and a
 toast says
