@@ -1178,12 +1178,21 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
   })
 
   it('confirming leaves a remembered window closed', async () => {
-    actions.start.mockResolvedValue(END.committed)
+    let release: (end: ChainEnd) => void = () => {}
+    actions.start.mockImplementation(
+      () =>
+        new Promise<ChainEnd>((resolve) => {
+          release = resolve
+        }),
+    )
     await openReady()
     openRerun({ fromReview: true })
     const props = await confirmShown()
     act(() => props.onConfirm())
-    await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+    act(() => actions.start.mock.calls[0]?.[5]?.onStarted?.())
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    await act(async () => release(END.committed))
     expect(chapterOverlaysStore.getState().review).toBeNull()
     expect(actions.start).toHaveBeenCalledExactlyOnceWith(
       'br_1',
@@ -1193,6 +1202,20 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
       { db: {}, runInTransaction: expect.any(Function) },
       { onStarted: expect.any(Function) },
     )
+  })
+
+  it('a Cancel pressed before the confirm re-renders pending is ignored', async () => {
+    actions.start.mockImplementation(() => new Promise<ChainEnd>(() => {}))
+    await openReady()
+    openRerun({ fromReview: true })
+    const props = await confirmShown()
+    act(() => {
+      props.onConfirm()
+      props.onCancel()
+    })
+    expect(chapterOverlaysStore.getState().rerunConfirm).not.toBeNull()
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(confirmView.props?.pending).toBe(true)
   })
 
   it('a branch switch drops the request, and the window it closed reopens on neither branch', async () => {
@@ -1473,6 +1496,25 @@ describe('ChapterOverlaysHost — Re-run… and its reasons', () => {
     await waitFor(() =>
       expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
     )
+  })
+
+  it('gives no reason once auto-close is off, though the open region is past the threshold', async () => {
+    reads.series.mockResolvedValue([
+      { id: 'entry_59', kind: 'user_action', position: 59, tokens: 12_000 },
+      { id: 'entry_60', kind: 'ai_reply', position: 60, tokens: 12_000 },
+    ])
+    await openReady()
+    await waitFor(() =>
+      expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
+    )
+
+    act(() =>
+      currentStoryStore.set({
+        ...story('br_1'),
+        settings: { ...STORY_SETTINGS_DEFAULTS, chapterAutoClose: false },
+      }),
+    )
+    await waitFor(() => expect(shown().rerunDisabledReason).toBeUndefined())
   })
 
   it("disables the confirm's actions with the same reason while a close is owed", async () => {

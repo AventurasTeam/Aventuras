@@ -399,6 +399,25 @@ describe('useMemoryRunOutcomes', () => {
       })
     })
 
+    it("keeps a re-run's flag when its report read fails", async () => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => {})
+      openStory()
+      chaptersStore.hydrate('br_1', [chapter('chap_2', 2)])
+      reads.latest.mockRejectedValue(new Error('disk'))
+      render(<Probe />)
+      rerunEnded('completed')
+      await vi.waitFor(() =>
+        expect(held()).toEqual({
+          branchId: 'br_1',
+          openSeq: 1,
+          chapterId: 'chap_2',
+          actionId: 'act_rerun',
+          rerun: true,
+          stoppedTasks: 0,
+        }),
+      )
+    })
+
     it('holds nothing on a failed read when the store holds another branch', async () => {
       vi.spyOn(logger, 'warn').mockImplementation(() => {})
       openStory()
