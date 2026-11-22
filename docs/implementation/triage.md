@@ -61,11 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The review window's dialog has no description.** Its `DialogContent`
-  carries a title and no `DialogDescription` or `aria-describedby`
-  (`components/chapters/review-window.tsx`), so every open logs the
-  dialog's "Missing Description" warning; `main` logs it too. Raised by
-  Slice 5.13's Task 29 smoke (2026-11-22).
 - **The delete and rollback confirms' disabled reasons don't show on
   Android.** Their confirm actions are plain `Button`s with
   `disabledReason` (`components/chapters/chapter-delete-confirm.tsx`,

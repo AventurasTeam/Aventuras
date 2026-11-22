@@ -1955,7 +1955,11 @@ own.
   above. Separately, a `DialogContent` with no `DialogDescription` raises
   Radix's "Missing `Description`" warning, ungated by `NODE_ENV`: the
   review window, the import and embedder-download dialogs, and the
-  world-time and scene dialogs in `entry-card`. Radix's opt-out,
+  world-time and scene dialogs in `entry-card`, all above phone width
+  (the review window's phone Sheet holds no Radix). The close modal
+  renders its description only once its start query has loaded
+  (`close-chapter-modal-view.tsx`), and Radix checks once at mount, so
+  a cold open likely warns too (inferred, not run). Radix's opt-out,
   `aria-describedby={undefined}` on its Content, can't be reached:
   rn-primitives' web `Content` hands Radix's element only its focus and
   dismiss props. The choice is a real description per dialog or a
