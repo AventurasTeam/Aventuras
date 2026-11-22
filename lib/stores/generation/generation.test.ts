@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 
 import {
   awaitRunTerminal,
@@ -16,6 +17,7 @@ import {
   type RunState,
   type TxState,
 } from './generation'
+import { currentStoryStore } from '../current-story/current-story'
 
 function run(id: string, kind = 'synthetic'): RunState {
   return {
@@ -48,6 +50,7 @@ function tx(runs: RunState[], over: Partial<TxState> = {}): TxState {
     deferred: new Map(),
     pendingClose: new Map(),
     pendingRerun: new Map(),
+    heldBranches: new Map(),
     ...over,
   }
 }
@@ -554,6 +557,96 @@ describe('pendingRerun', () => {
     expect(generationStore.getTxState().runs.get('run_turn')?.interruptible).toBeNull()
     generationStore.finishRun('run_turn')
     expect(rerunOn('b1')).toEqual({ chapterId: 'chap_1' })
+  })
+})
+
+function openStoryOn(branchId: string): void {
+  currentStoryStore.set({
+    storyId: 's1',
+    branchId,
+    definition: storyDefinitionSchema.parse({
+      mode: 'creative',
+      leadEntityId: null,
+      narration: 'third',
+      genre: { label: 'Fantasy', promptBody: '' },
+      tone: { label: 'Wry', promptBody: '' },
+      setting: '',
+      calendarSystemId: 'gregorian',
+      worldTimeOrigin: { year: 0 },
+    }),
+    settings: STORY_SETTINGS_DEFAULTS,
+  })
+}
+
+// generation-pipeline.md → Recovery-failure policy: a re-run's abort that couldn't take itself back
+// holds its branch until a restart, whose boot recovery finishes the reversal.
+describe('a branch held until restart', () => {
+  beforeEach(() => {
+    generationStore.__reset()
+    currentStoryStore.__reset()
+  })
+
+  function holdB1(): void {
+    generationStore.startRun(rerunRun('run_rerun'))
+    generationStore.abortRun('run_rerun', 'failed', { unreversed: true })
+  }
+
+  it("holds a re-run's branch when its abort couldn't take itself back, in the update that removes the run", () => {
+    generationStore.startRun(rerunRun('run_rerun'))
+    const seen: { registered: boolean; held: boolean }[] = []
+    const off = generationStore.subscribe(() => {
+      const state = generationStore.getTxState()
+      seen.push({ registered: state.runs.has('run_rerun'), held: state.heldBranches.has('b1') })
+    })
+    try {
+      generationStore.abortRun('run_rerun', 'failed', { unreversed: true })
+    } finally {
+      off()
+    }
+    expect(seen).toEqual([{ registered: false, held: true }])
+    expect(generationStore.getTxState().heldBranches.get('b1')).toEqual({ storyId: 's1' })
+  })
+
+  it.each<[string, RunState, { unreversed: true } | undefined]>([
+    ['a pass whose reversal failed', pass('run_x'), { unreversed: true }],
+    ['a close whose reversal failed', closeRun('run_x'), { unreversed: true }],
+    ['a re-run whose reversal committed', rerunRun('run_x'), undefined],
+  ])('holds nothing for %s', (_label, ended, opts) => {
+    generationStore.startRun(ended)
+    generationStore.abortRun('run_x', 'failed', opts)
+    expect(generationStore.getTxState().heldBranches.size).toBe(0)
+  })
+
+  it('closes the edit gate and head reversals on its branch alone, and never makes the story busy', () => {
+    const held = tx([], { heldBranches: new Map([['b1', { storyId: 's1' }]]) })
+    expect(isUserEditBlocked(held, 'b1')).toBe(true)
+    expect(isUserEditBlocked(held, 'b2')).toBe(false)
+    expect(isHeadReversalBlocked(held, 'b1')).toBe(true)
+    expect(isHeadReversalBlocked(held, 'b2')).toBe(false)
+    // Leaving the story waits until it isn't busy, which a hold must never stop.
+    expect(isStoryBusy(held, 's1', 'b1')).toBe(false)
+  })
+
+  it("reads the open story's branch through the store namespace", () => {
+    holdB1()
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+    openStoryOn('b2')
+    expect(generationStore.isUserEditBlocked()).toBe(false)
+    openStoryOn('b1')
+    expect(generationStore.isUserEditBlocked()).toBe(true)
+    expect(generationStore.isHeadReversalBlocked('b1')).toBe(true)
+  })
+
+  it('outlasts the runs that end after it, and a reset (the restart) drops it', () => {
+    holdB1()
+    generationStore.startRun(pass('run_b2', { branchId: 'b2' }))
+    generationStore.finishRun('run_b2')
+    generationStore.startRun(pass('run_b2_again', { branchId: 'b2' }))
+    generationStore.abortRun('run_b2_again', 'aborted')
+    expect(generationStore.getTxState().heldBranches.has('b1')).toBe(true)
+
+    generationStore.__reset()
+    expect(generationStore.getTxState().heldBranches.size).toBe(0)
   })
 })
 

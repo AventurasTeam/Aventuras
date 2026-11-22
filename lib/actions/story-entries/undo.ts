@@ -151,10 +151,14 @@ export async function undoLastAction(
   // Brackets the whole target-selection + reversal sweep, matching
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
-  return bracketProseReversal(branchId, ctx, () =>
-    refusingIntegrity(branchId, () =>
-      undoBracketed(branchId, ctx, throughInterrupt, expectedActionId),
-    ),
+  return bracketProseReversal(
+    branchId,
+    ctx,
+    () =>
+      refusingIntegrity(branchId, () =>
+        undoBracketed(branchId, ctx, throughInterrupt, expectedActionId),
+      ),
+    () => GATED,
   )
 }
 
@@ -270,25 +274,29 @@ export async function redoLastAction(
     }
 
   // Bracketed like every reversal, so no pass starts mid-sweep.
-  return bracketProseReversal(branchId, ctx, () =>
-    refusingIntegrity(branchId, async () => {
-      // A write committing during the settle clears the stack; its snapshot would restore over it.
-      if (undoRedoStore.peekRedoGroup() !== group)
-        return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
-      const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)
-      if (invalidation.status === 'unreadable')
-        return unreadableScopeRejection(invalidation.deltaId)
-      try {
-        await applyRedo(group, ctx, invalidation.clampOps)
-      } catch (e) {
-        // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
-        // a retry would re-insert an already-inserted delta row and collide on its primary key.
-        if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
-        throw e
-      }
-      undoRedoStore.popRedoGroup()
-      return { status: 'ok' }
-    }),
+  return bracketProseReversal(
+    branchId,
+    ctx,
+    () =>
+      refusingIntegrity(branchId, async () => {
+        // A write committing during the settle clears the stack; its snapshot would restore over it.
+        if (undoRedoStore.peekRedoGroup() !== group)
+          return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
+        const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)
+        if (invalidation.status === 'unreadable')
+          return unreadableScopeRejection(invalidation.deltaId)
+        try {
+          await applyRedo(group, ctx, invalidation.clampOps)
+        } catch (e) {
+          // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
+          // a retry would re-insert an already-inserted delta row and collide on its primary key.
+          if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
+          throw e
+        }
+        undoRedoStore.popRedoGroup()
+        return { status: 'ok' }
+      }),
+    () => GATED,
   )
 }
 

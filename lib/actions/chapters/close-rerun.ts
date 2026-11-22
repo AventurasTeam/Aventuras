@@ -30,7 +30,9 @@ import {
   appSettingsStore,
   currentStoryStore,
   generationStore,
+  isBranchHeld,
   isStoryBusy,
+  RERUN_HELD,
   type OpenStory,
   type PendingMark,
 } from '@/lib/stores'
@@ -382,6 +384,8 @@ export async function startCloseRerun(
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   if (isStorySwapPending(open.storyId)) return refusedStart(MANUAL_CLOSE_REFUSAL.swapPending)
+  // Before the shortcut's sweep, which the chain's own refusal would come too late to spare.
+  if (isBranchHeld(generationStore.getTxState(), branchId)) return refusedStart(RERUN_HELD)
   if (isStoryBusy(generationStore.getTxState(), open.storyId, branchId))
     return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
   if (generationStore.getSettleCount() !== settled) return refusedStart(MANUAL_CLOSE_REFUSAL.busy)

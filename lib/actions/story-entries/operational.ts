@@ -55,8 +55,11 @@ export async function updateStoryEntryContent(
   const inHeadTurn =
     onlyInterruptibleRunsHold(branchId) && (await isHeadTurnEntry(branchId, id, ctx))
   if (contentEditBlocked(branchId, inHeadTurn)) return inFlightRejection()
-  return bracketProseReversal(branchId, ctx, () =>
-    updateStoryEntryContentBracketed(branchId, id, content, ctx),
+  return bracketProseReversal(
+    branchId,
+    ctx,
+    () => updateStoryEntryContentBracketed(branchId, id, content, ctx),
+    inFlightRejection,
   )
 }
 
@@ -494,7 +497,10 @@ export async function rollbackToEntry(
   )
     return inFlightRejection()
 
-  return bracketProseReversal(branchId, ctx, () =>
-    sweepToEntry(branchId, targetId, ctx, expectedCounts),
+  return bracketProseReversal(
+    branchId,
+    ctx,
+    () => sweepToEntry(branchId, targetId, ctx, expectedCounts),
+    inFlightRejection,
   )
 }

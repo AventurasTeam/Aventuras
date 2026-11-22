@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { canEndInOpenRegion } from '@/lib/chapters'
 import { storyEntries, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { generationStore, interruptMemoryRuns } from '@/lib/stores'
+import { generationStore, interruptMemoryRuns, isBranchHeld } from '@/lib/stores'
 
 import { settleUserWrites } from '../delta/apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
@@ -15,18 +15,23 @@ const PROSE_REVERSAL_LOCK_ID = 'prose-reversal'
 /**
  * generation-pipeline.md -> Prose reversals and the interrupt. Not re-entrant: a nested `finally`
  * drops the barrier mid-sweep. After the body settles (thrown or not), a close pick whose end entry
- * it removed or closed into a chapter is dropped.
+ * it removed or closed into a chapter is dropped. `held` is the action's refusal for a branch held
+ * past the interrupt, which can end a re-run whose reversal doesn't commit; by default it throws.
  */
 export async function bracketProseReversal<T>(
   branchId: string,
   ctx: Pick<DbCtx, 'db'>,
   body: () => Promise<T>,
+  held: () => T = () => {
+    throw new Error(`bracketProseReversal: branch ${branchId} is held until restart`)
+  },
 ): Promise<T> {
   if (generationStore.getTxState().reversalInProgress)
     throw new Error('bracketProseReversal is not re-entrant')
   generationStore.setReversalInProgress(true)
   try {
     await interruptMemoryRuns(branchId)
+    if (isBranchHeld(generationStore.getTxState(), branchId)) return held()
     await settleUserWrites()
     // Exclusive, so the reversal can't commit between a rollback preview's closure reads.
     await holdBranchWriteExclusive(branchId, PROSE_REVERSAL_LOCK_ID)

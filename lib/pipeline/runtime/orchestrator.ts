@@ -4,7 +4,13 @@ import type { GroupOutcome, MutationResult } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink, type LogKind } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { currentStoryStore, generationStore, type RunState } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  isBranchHeld,
+  RERUN_HELD,
+  type RunState,
+} from '@/lib/stores'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import { pipelineErrorDetail } from '../call-error'
@@ -499,7 +505,11 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   if (cause.reason === 'phase-failure' && cause.threw && !reversalFailed)
     await runPhaseExceptionHook(run, ctx, cause.error)
   if (cause.reason === 'user-cancel' && !reversalFailed) await runInterruptHook(run, ctx)
-  const newlyDeferred = generationStore.abortRun(run.runId, outcome)
+  const newlyDeferred = generationStore.abortRun(
+    run.runId,
+    outcome,
+    reversalFailed ? { unreversed: true } : undefined,
+  )
   // Uncommitted: the marker rolled back with the reversal, so boot recovery still owns the run.
   if (reversalFailed)
     logger.warn(
@@ -530,9 +540,9 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
   run.resolveTerminal()
   const { runId, actionId } = run
   const undone = closeUndone ? { closeUndone: true as const } : {}
-  return failure === undefined
-    ? { runId, actionId, outcome: 'aborted', ...undone }
-    : { runId, actionId, outcome: 'failed', error: failure, ...undone }
+  if (failure === undefined) return { runId, actionId, outcome: 'aborted', ...undone }
+  const marks = reversalFailed ? { unreversed: true as const } : undone
+  return { runId, actionId, outcome: 'failed', error: failure, ...marks }
 }
 
 type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause }
@@ -643,6 +653,11 @@ async function driveOrigin(kind: string, ctx: RunCtx): Promise<OriginDriven> {
   // yielding runs, re-check; a blocking run may have started during the wait.
   for (;;) {
     const txState = generationStore.getTxState()
+    // A held branch takes no run until a restart: boot recovery still owns its re-run's writes.
+    if (isBranchHeld(txState, ctx.branchId)) {
+      logger.debug('pipeline.run_rejected', { kind, blockedBy: RERUN_HELD })
+      return { result: { outcome: 'rejected', blockedBy: RERUN_HELD } }
+    }
     const decision = checkConcurrencyContract(kind, txState.runs, txState.reversalInProgress)
     if (decision.kind === 'blocked') {
       logger.debug('pipeline.run_rejected', { kind, blockedBy: decision.by })

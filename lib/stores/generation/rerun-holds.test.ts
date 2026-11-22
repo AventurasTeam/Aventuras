@@ -30,6 +30,7 @@ function tx(runs: RunState[], pendingRerun: readonly string[] = []): TxState {
     deferred: new Map(),
     pendingClose: new Map(),
     pendingRerun: new Map(pendingRerun.map((branchId) => [branchId, { chapterId: 'chap_1' }])),
+    heldBranches: new Map(),
   }
 }
 

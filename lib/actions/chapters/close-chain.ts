@@ -21,6 +21,7 @@ import {
   isStoryBusy,
   type OpenStory,
   type PendingMark,
+  type RERUN_HELD,
 } from '@/lib/stores'
 
 import { BRANCH_NOT_OPEN } from '../refusal-codes'
@@ -28,7 +29,8 @@ import type { DbCtx } from '../types'
 
 /**
  * `RejectedStart.blockedBy` for a close chain refused before it runs. A held branch reads
- * `CLASSIFIER_HELD`; a start the orchestrator rejects reads the kind that blocked it.
+ * `CLASSIFIER_HELD`, or `RERUN_HELD` until a restart; a start the orchestrator rejects reads the
+ * kind that blocked it.
  */
 export const MANUAL_CLOSE_REFUSAL = {
   branchNotOpen: BRANCH_NOT_OPEN,
@@ -39,10 +41,9 @@ export const MANUAL_CLOSE_REFUSAL = {
 
 export type ManualCloseRefusal = (typeof MANUAL_CLOSE_REFUSAL)[keyof typeof MANUAL_CLOSE_REFUSAL]
 
-export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD): RejectedStart => ({
-  outcome: 'rejected',
-  blockedBy,
-})
+export const refused = (
+  blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD | typeof RERUN_HELD,
+): RejectedStart => ({ outcome: 'rejected', blockedBy })
 
 type CloseChainOpts = {
   /** Runs after the held check, before the unprocessed count; a refusal ends the start. */

@@ -87,6 +87,13 @@ const IN_FLIGHT_REJECTION = {
   reason: 'generation in flight',
 } as const
 
+type Swept =
+  | { status: 'ok' }
+  | StoryEntryRejection
+  | CountsChangedRejection
+  | typeof HELD_REJECTION
+  | typeof IN_FLIGHT_REJECTION
+
 async function sweepFrom(
   branchId: string,
   targetId: string,
@@ -176,23 +183,23 @@ export async function regenerateTurn(
         )
           return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
-          let swept:
-            | { status: 'ok' }
-            | StoryEntryRejection
-            | CountsChangedRejection
-            | typeof HELD_REJECTION
+          let swept: Swept
           try {
-            swept = await bracketProseReversal(ids.branchId, ctx, async () =>
-              // This interrupt can leave the branch held: a pass whose reversal didn't commit.
-              (await isClassifierHeld(ids.branchId, ctx))
-                ? HELD_REJECTION
-                : sweepFrom(ids.branchId, replyEntryId, ctx, opts.expectedCounts),
+            swept = await bracketProseReversal<Swept>(
+              ids.branchId,
+              ctx,
+              async () =>
+                // This interrupt can leave the branch held: a pass whose reversal didn't commit.
+                (await isClassifierHeld(ids.branchId, ctx))
+                  ? HELD_REJECTION
+                  : sweepFrom(ids.branchId, replyEntryId, ctx, opts.expectedCounts),
+              () => IN_FLIGHT_REJECTION,
             )
           } catch (error) {
             if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
             throw error
           }
-          if (swept === HELD_REJECTION) return swept
+          if (swept === HELD_REJECTION || swept === IN_FLIGHT_REJECTION) return swept
           if (swept.status === 'rejected')
             return swept.code === STORY_ENTRY_REJECTION.countsChanged
               ? swept
@@ -218,8 +225,15 @@ export async function regenerateTurn(
           let converged = true
           if (result.outcome !== 'completed') {
             try {
-              const followUp = await bracketProseReversal(ids.branchId, ctx, () =>
-                sweepFrom(ids.branchId, origin.id, ctx),
+              const followUp = await bracketProseReversal(
+                ids.branchId,
+                ctx,
+                () => sweepFrom(ids.branchId, origin.id, ctx),
+                (): StoryEntryRejection => ({
+                  status: 'rejected',
+                  code: STORY_ENTRY_REJECTION.inFlight,
+                  reason: 'branch held until restart',
+                }),
               )
               if (followUp.status === 'rejected') {
                 // A refused sweep reverses nothing, so the user_action stands.
