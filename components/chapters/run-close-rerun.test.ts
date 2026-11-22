@@ -14,7 +14,12 @@ import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
-import { CHAPTER_CLOSE_KIND, type ChainEnd, type PipelineError } from '@/lib/pipeline'
+import {
+  CHAPTER_CLOSE_KIND,
+  CLASSIFIER_HELD,
+  type ChainEnd,
+  type PipelineError,
+} from '@/lib/pipeline'
 import type { OpenStory } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -229,24 +234,38 @@ describe('rerunStartOutcome', () => {
     })
   })
 
-  it('closes on not-latest with its own copy, unlogged', () => {
-    expect(
-      rerunStartOutcome(
-        { status: 'rejected', code: CLOSE_RERUN_REFUSAL.notLatest, reason: 'x' },
-        2,
-      ),
-    ).toStrictEqual({
+  it.each([
+    [CLOSE_RERUN_REFUSAL.notLatest, t('chapters:rerunConfirm.notLatest')],
+    [CLOSE_RERUN_REFUSAL.closeOwed, t('chapters:rerunConfirm.closeOwed')],
+  ] as const)("closes on %s with the preview's own copy, unlogged", (code, message) => {
+    expect(rerunStartOutcome({ status: 'rejected', code, reason: 'x' }, 2)).toStrictEqual({
       step: { step: 'refused' },
-      notice: { severity: 'error', message: t('chapters:rerunConfirm.notLatest') },
+      notice: { severity: 'error', message },
       logCode: null,
     })
   })
 
   it.each([
+    [EMBEDDER_SWAP_REFUSAL, t('reader:actions.blockedWhileSwapping')],
+    [CLASSIFIER_HELD, t('reader:systemEntry.closeRetryBlocked')],
+  ] as const)(
+    "closes on %s with the manual close's copy for it, logging the code",
+    (code, message) => {
+      expect(rerunStartOutcome({ outcome: 'rejected', blockedBy: code }, 2)).toStrictEqual({
+        step: { step: 'refused' },
+        notice: { severity: 'error', message },
+        logCode: code,
+      })
+    },
+  )
+
+  it.each([
     ['no-close', { status: 'rejected', code: CLOSE_RERUN_REFUSAL.noClose, reason: 'x' }],
-    ['close-owed', { status: 'rejected', code: CLOSE_RERUN_REFUSAL.closeOwed, reason: 'x' }],
     ['integrity', { status: 'rejected', code: CLOSE_RERUN_REFUSAL.integrity, reason: 'x' }],
-    [EMBEDDER_SWAP_REFUSAL, { outcome: 'rejected', blockedBy: EMBEDDER_SWAP_REFUSAL }],
+    [
+      MANUAL_CLOSE_REFUSAL.branchNotOpen,
+      { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen },
+    ],
     [
       STORY_ENTRY_REJECTION.rollbackFloor,
       { status: 'rejected', code: STORY_ENTRY_REJECTION.rollbackFloor, reason: 'x' },

@@ -1,7 +1,8 @@
 import { keepsConfirmOpen } from '@/components/reader/confirm-refusal'
-import { describeCloseFailure } from '@/components/reader/system-entry-actions'
+import { describeCloseFailure, retryRefusalText } from '@/components/reader/system-entry-actions'
 import {
   CLOSE_RERUN_REFUSAL,
+  MANUAL_CLOSE_REFUSAL,
   startCloseRerun,
   STORY_ENTRY_REJECTION,
   type CloseRerunExpected,
@@ -11,7 +12,12 @@ import {
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { CHAPTER_CLOSE_KIND, pipelineErrorDetail, type ChainEnd } from '@/lib/pipeline'
+import {
+  CHAPTER_CLOSE_KIND,
+  CLASSIFIER_HELD,
+  pipelineErrorDetail,
+  type ChainEnd,
+} from '@/lib/pipeline'
 import type { OpenStory } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -62,11 +68,20 @@ export function rerunEndNotice(end: ChainEnd, chapterNumber: number): RerunNotic
   }
 }
 
-const startFailed = (logCode: string): Outcome => ({
+const refusedWith = (message: string, logCode: string | null): Outcome => ({
   step: { step: 'refused' },
-  notice: { severity: 'error', message: t('chapters:rerunNotice.startFailed') },
+  notice: { severity: 'error', message },
   logCode,
 })
+
+const startFailed = (logCode: string): Outcome =>
+  refusedWith(t('chapters:rerunNotice.startFailed'), logCode)
+
+// A swap or a held branch outlasts the press, so the re-run says what the manual close does.
+const LASTING_REFUSALS: ReadonlySet<string> = new Set([
+  MANUAL_CLOSE_REFUSAL.swapPending,
+  CLASSIFIER_HELD,
+])
 
 // As the delete and rollback confirms: it stays open, held by the gate, and says why nothing ran.
 const keepOpen = (): Outcome => ({
@@ -86,7 +101,13 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
         notice: { severity: 'warning', message: describeCloseFailure(start.error).content },
         logCode: 'preflight-failed',
       }
-    return keepsConfirmOpen(start.blockedBy) ? keepOpen() : startFailed(start.blockedBy)
+    if (keepsConfirmOpen(start.blockedBy)) return keepOpen()
+    if (LASTING_REFUSALS.has(start.blockedBy))
+      return refusedWith(
+        retryRefusalText(start.blockedBy, 'reader:systemEntry.closeRetryBlocked'),
+        start.blockedBy,
+      )
+    return startFailed(start.blockedBy)
   }
   // The start reads the preview again under its mark, so this one shape carries the fresh lines.
   if (start.code === STORY_ENTRY_REJECTION.countsChanged)
@@ -96,13 +117,11 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
       logCode: null,
     }
   if (keepsConfirmOpen(start.code)) return keepOpen()
-  // The documented race (a close landed while the confirm was open) has its own copy, unlogged.
+  // The documented races (a close landed or came owed under the confirm): own copy, unlogged.
   if (start.code === CLOSE_RERUN_REFUSAL.notLatest)
-    return {
-      step: { step: 'refused' },
-      notice: { severity: 'error', message: t('chapters:rerunConfirm.notLatest') },
-      logCode: null,
-    }
+    return refusedWith(t('chapters:rerunConfirm.notLatest'), null)
+  if (start.code === CLOSE_RERUN_REFUSAL.closeOwed)
+    return refusedWith(t('chapters:rerunConfirm.closeOwed'), null)
   return startFailed(start.code)
 }
 
