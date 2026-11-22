@@ -88,8 +88,12 @@ slice-planning gate forces its resolution before that slice is planned.
   sqlite-vec 0.1.9 with metadata and auxiliary columns also creates
   `_auxiliary`, `_metadatachunks00/01` and `_metadatatext00/01`
   (checked on a scratch `vec0` table with the families' column shape).
-  The exact-name regex still holds, so only the comment misleads. Found
-  by M6.1's final review (2026-11-22).
+  The exact-name regex still holds, so only the comment misleads. Its
+  stated reason is off too: the shadow tables reject DML only under
+  SQLite's defensive flag (`node:sqlite`'s default), and
+  `_vector_chunks00` accepts a `DELETE` even then;
+  `lib/actions/stories/delete-story.test.ts:354`'s test name repeats it.
+  Found by M6.1's final review and its slice review (2026-11-22).
 
 - **Two close-agent test comments cite "(5.9)" as future work.**
   `lib/pipeline/definitions/close-agent/lore-tools.test.ts:295` and
