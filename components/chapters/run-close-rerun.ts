@@ -25,6 +25,7 @@ import {
   type ChainEnd,
 } from '@/lib/pipeline'
 import { currentStoryStore, RERUN_HELD } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -144,10 +145,6 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
   if (start.code === CLOSE_RERUN_REFUSAL.closeOwed)
     return refusedWith(t('chapters:rerunConfirm.closeOwed'), null)
   return startFailed(start.code)
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 // As a cold open does; the start outlives the confirm, so it never re-publishes a branch left since.

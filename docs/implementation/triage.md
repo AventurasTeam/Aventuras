@@ -147,10 +147,3 @@ slice-planning gate forces its resolution before that slice is planned.
   re-run confirm's turns since, an open rollback confirm's entry counts)
   doesn't see it until the next settle; readers keyed on the entry tail
   do. Raised by Slice 5.13's PR 3 review (2026-11-22).
-- **A thrown value's message and an `attempt` wrapper are copied per
-  file.** The re-run and delete confirm hooks each define `attempt` (a
-  try/catch kept outside the hook, since React Compiler can't lower one
-  inside it) and `messageOf`, and the same error-to-message ternary
-  recurs about 143 times across the repo. A shared helper in
-  `lib/utils.ts` is a repo-wide change. Raised by Slice 5.13's closing
-  review's simplifier pass (2026-11-22).

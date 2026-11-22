@@ -4203,7 +4203,7 @@ Inferred from the code; never seen. **Revisit signal:** a `database is
 locked` failure in that spec. Raised in the 2026-11-07 triage pass,
 unverified.
 
-#### Two test and logging helpers have no home yet
+#### Test factories and the error-message idiom repeat per file
 
 The `run()` and `entry()` factories repeat across `hooks` tests: the
 terminal stub appears in 28 files, and more than 12 define their own
@@ -4219,6 +4219,13 @@ already (`use-history-chunks.ts`, `save-session.tsx`,
 `lib/db/__tests__/test-db.ts` is the precedent for a shared test helper.
 Parked 2026-11-04; the signal is a slice that already touches most of
 those sites, since a sweep of about 90 files nears the review cap.
+Since 2026-11-22 `lib/thrown.ts` holds `messageOf`, and `attempt` for a
+hook whose try block would hold a value block, and every private copy
+outside `electron/` uses it. The inline idiom is left in 143 lines of 97
+non-test files, four of them in `electron/`, which keeps its own. A
+sweep converts the exact idiom only: a fixed-string fallback, a
+stack-first message and the bare `String(e)` log fields read
+differently.
 
 #### A fresh dev slot could install its embedder itself
 

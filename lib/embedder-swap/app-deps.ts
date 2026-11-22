@@ -48,6 +48,7 @@ import {
   rehydrateStories,
   storiesStore,
 } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 
 import {
   cancelSwap,
@@ -101,9 +102,6 @@ const GENERATION_IN_FLIGHT_REJECTION: StoryEmbedderActionRejection = {
   status: 'rejected',
   reason: 'generation in flight',
 }
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 type StoryAdmission =
   | { owner: 'turn'; holders: number }

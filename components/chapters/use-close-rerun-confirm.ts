@@ -10,26 +10,12 @@ import {
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { generationStore } from '@/lib/stores'
+import { attempt, messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 export type CloseRerunConfirmTarget = { chapterId: string; preview: CloseRerunPreview }
 
 type HeldTarget = CloseRerunConfirmTarget & { countedAtSettle: number }
-
-type Attempt<T> = { ok: true; value: T } | { ok: false; error: unknown }
-
-// Outside the hook: React Compiler can't lower a try/catch whose block holds a value block.
-async function attempt<T>(run: () => Promise<T>): Promise<Attempt<T>> {
-  try {
-    return { ok: true, value: await run() }
-  } catch (error) {
-    return { ok: false, error }
-  }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 function refusalCopy(
   code: CloseRerunRefusalCode,

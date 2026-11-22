@@ -11,6 +11,7 @@ import {
   RERUN_HELD,
   type RunState,
 } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import { pipelineErrorDetail } from '../call-error'
@@ -158,8 +159,6 @@ function unwindRun(run: RunState, detail: string): void {
   emitRunComplete(run, 'failed', error)
   run.resolveTerminal()
 }
-
-const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 // A throw that escaped before the run ended would otherwise hold the gate until a restart. One
 // beginRun already unwound (a failed marker insert) is no longer registered.
