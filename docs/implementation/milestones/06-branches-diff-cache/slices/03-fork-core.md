@@ -717,6 +717,18 @@ files named are suggestions the plan may rename, with this doc amended.
   while the two are one; if the split reaches the survivor rewrites
   this callback takes, it must follow the write branch, and agree with
   the group's own branch once C6 lands.
+- **The seed's create deltas.** `entryCreateDeltas`
+  (`lib/db/devtools/seed-dataset.ts:1364-1386`) logs every entry create
+  with a null anchor and an action of its own, and
+  [The seed's fork](#the-seeds-fork) plans the fork's appended turns in
+  that shape. Since [Slice 6.1](./01-copy-substrate.md), `submitTurn`
+  anchors the `user_action` create on its entry
+  (`lib/actions/turns/submit-turn.ts:180`), as the `ai_reply` create
+  already was
+  (`lib/pipeline/definitions/per-turn.ts:547`), and one turn shares one
+  action. Nothing on screen differs today; whether the seed's creates,
+  main's and the fork's, follow the production shape is this slice's
+  call when it rebuilds the seed (C11 gives 6.3 the fork's rows).
 - **How short the survivor copy's two lists stay.** The predicate is
   the default (C7). Whether the deltas the plan prunes outside the
   window, or the creates it re-owns, can pass the bind cap on a real
