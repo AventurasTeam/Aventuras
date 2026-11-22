@@ -350,6 +350,39 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     expect(onStarted).not.toHaveBeenCalled()
   })
 
+  // A run settling during the held read makes it stale (a pass can end there held); otherwise
+  // only the chain would see that, once the turns had gone.
+  it('refuses story-busy when a run settles during the held read, starting nothing', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    holdStoryWithTurn(c.h)
+    const before = await snapshot(c.h)
+    const onStarted = vi.fn()
+    let selects = 0
+    const db = new Proxy(c.h.fx.ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && selects++ === 0) generationStore.finishRun('run_same_story')
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+    script(generateToolStepMock, [STAND_IN_STEP])
+
+    const result = await startCloseRerun(
+      c.h.fx.branchId,
+      c.chapterId,
+      expected,
+      openStory(),
+      { ...c.h.fx.ctx, db },
+      { onStarted },
+    )
+
+    expect(generationStore.getTxState().runs.has('run_same_story'), 'the run settled').toBe(false)
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
+    await expectNothingChanged(c.h, before)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
   it('refuses a held branch, and a branch the open story is not on', async () => {
     const c = await closed()
     await turnSince(c.h)

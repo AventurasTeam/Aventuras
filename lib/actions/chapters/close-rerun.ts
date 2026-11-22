@@ -374,6 +374,8 @@ export async function startCloseRerun(
 ): Promise<CloseRerunStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
     return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
+  // A pass ending during the held read can leave the branch held, which that read missed.
+  const settled = generationStore.getSettleCount()
   if (await isClassifierHeld(branchId, ctx)) return refusedStart(CLASSIFIER_HELD)
 
   // No await from here to the mark, so no start or reversal lands between these checks and it.
@@ -382,6 +384,7 @@ export async function startCloseRerun(
   if (isStorySwapPending(open.storyId)) return refusedStart(MANUAL_CLOSE_REFUSAL.swapPending)
   if (isStoryBusy(generationStore.getTxState(), open.storyId, branchId))
     return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
+  if (generationStore.getSettleCount() !== settled) return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
   ensureChapterClosePipelineRegistered()
   const failed = closePreflight(open)
   if (failed) return { outcome: 'preflight-failed', error: failed }
