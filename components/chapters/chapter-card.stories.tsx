@@ -265,6 +265,9 @@ export const Latest: Story = {
     const { right: rowRight } = (row as HTMLElement).getBoundingClientRect()
     const rowPad = parseFloat(getComputedStyle(row as HTMLElement).paddingRight)
     expect(remove.getBoundingClientRect().right).toBeCloseTo(rowRight - rowPad, 0)
+    // ...a gap away from Re-run close….
+    const gap = remove.getBoundingClientRect().left - rerun.getBoundingClientRect().right
+    expect(gap).toBeGreaterThan(24)
     await userEvent.click(review)
     await waitFor(() => expect(args.onReview).toHaveBeenCalledTimes(1), WAIT)
     await userEvent.click(rerun)
