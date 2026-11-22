@@ -263,8 +263,8 @@ async function writeBackOps(
   for (const [table, ids] of removed)
     sweeps.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
   // At its own position: the group's prunes freed any its own writes took.
-  const deltaOps = journal.deltas.map((raw) => {
-    const delta = { ...(raw as Delta), branchId }
+  const deltaOps = journal.deltas.map((logged) => {
+    const delta = { ...logged, branchId }
     return ctx.db
       .insert(deltas)
       .values(delta)
@@ -277,7 +277,7 @@ async function writeBackOps(
       .values({
         actionId: held.actionId,
         branchId,
-        journal: parseRerunJournal(held.journal),
+        journal: held.journal,
         createdAt: held.createdAt,
       })
       .toSQL(),

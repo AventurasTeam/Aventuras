@@ -109,6 +109,29 @@ describe('parseRerunJournal', () => {
     expect(() => parseRerunJournal({ ...JOURNAL, extra: true })).toThrow(/extra/)
   })
 
+  it('refuses a delta row with a key the deltas table does not define', () => {
+    const [delta] = JOURNAL.deltas
+    const deltas = [{ ...delta, extra: true }]
+
+    expect(() => parseRerunJournal({ ...JOURNAL, deltas })).toThrow(/extra/)
+  })
+
+  it('refuses a delta row missing a column', () => {
+    const { logPosition: _logPosition, ...withoutPosition } = JOURNAL.deltas[0]!
+
+    expect(() => parseRerunJournal({ ...JOURNAL, deltas: [withoutPosition] })).toThrow(
+      /logPosition/,
+    )
+  })
+
+  it('refuses a held journal that is not a whole journal', () => {
+    const held = { actionId: 'act_rerun_1', journal: { chapterId: 'chapter_2', floor: 30 } }
+
+    expect(() => parseRerunJournal({ ...JOURNAL, journals: [{ ...held, createdAt: 3 }] })).toThrow(
+      /version/,
+    )
+  })
+
   it('takes a dropped journal row whole and keeps no branch_id from it', () => {
     const held = { actionId: 'act_rerun_1', branchId: 'b1', journal: EARLIER, createdAt: 3 }
 
