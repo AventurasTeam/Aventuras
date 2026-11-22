@@ -117,8 +117,10 @@ export function useCloseRerunConfirm({
   )
 
   useSettleReread({
-    targetKey: held == null ? null : `${branchId}:${held.chapterId}`,
-    countedAtSettle: held?.countedAtSettle ?? null,
+    target:
+      held == null
+        ? null
+        : { key: `${branchId}:${held.chapterId}`, countedAtSettle: held.countedAtSettle },
     onSettle: (isLive) => {
       if (held == null || startHolds(branchId)) return
       const { chapterId, preview: shown } = held

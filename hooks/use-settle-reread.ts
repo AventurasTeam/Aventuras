@@ -7,17 +7,17 @@ import { generationStore } from '@/lib/stores'
  * (rollback-confirm.md → Counts). The host keeps its own skip, refusal handling and logs.
  */
 export function useSettleReread({
-  targetKey,
-  countedAtSettle,
+  target,
   onSettle,
 }: {
-  /** What the host shows, by identity; null while it shows nothing. A change drops a read in flight. */
-  targetKey: string | null
-  /** The settle count the shown data was read at; only a settle past it re-reads. */
-  countedAtSettle: number | null
   /**
-   * Called once per settle past `countedAtSettle`. `isLive()` turns false once a newer settle,
-   * another target or the host closing supersedes the read.
+   * What the host shows, by identity, and the settle count it was read at; null while it shows
+   * nothing. A new key drops a read in flight.
+   */
+  target: { key: string; countedAtSettle: number } | null
+  /**
+   * Called once per render in which the settle count has moved past `countedAtSettle`. `isLive()`
+   * turns false once a newer settle, another target or the host closing supersedes the read.
    */
   onSettle: (isLive: () => boolean) => void
 }): void {
@@ -29,13 +29,15 @@ export function useSettleReread({
     latest.current = onSettle
   })
 
+  // Primitives, so a host's fresh target object each render re-runs nothing.
+  const key = target?.key ?? null
+  const countedAtSettle = target?.countedAtSettle ?? null
   useEffect(() => {
-    if (targetKey == null || countedAtSettle == null || settleCount <= countedAtSettle)
-      return undefined
+    if (key == null || countedAtSettle == null || settleCount <= countedAtSettle) return undefined
     let live = true
     latest.current(() => live)
     return () => {
       live = false
     }
-  }, [targetKey, countedAtSettle, settleCount])
+  }, [key, countedAtSettle, settleCount])
 }

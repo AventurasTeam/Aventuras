@@ -20,8 +20,10 @@ export function useLiveRollbackCounts({
 }): void {
   const targetId = target?.targetId ?? null
   useSettleReread({
-    targetKey: targetId == null ? null : `${branchId}:${targetId}`,
-    countedAtSettle: target?.countedAtSettle ?? null,
+    target:
+      target == null
+        ? null
+        : { key: `${branchId}:${target.targetId}`, countedAtSettle: target.countedAtSettle },
     onSettle: (isLive) => {
       if (targetId == null) return
       load(branchId, targetId).then(

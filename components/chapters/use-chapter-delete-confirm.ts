@@ -133,8 +133,10 @@ export function useChapterDeleteConfirm({
   )
 
   useSettleReread({
-    targetKey: chapterId == null ? null : `${branchId}:${chapterId}`,
-    countedAtSettle: target?.countedAtSettle ?? null,
+    target:
+      target == null
+        ? null
+        : { key: `${branchId}:${target.chapterId}`, countedAtSettle: target.countedAtSettle },
     onSettle: (isLive) => {
       // A removal's own reversal settles under it: its result closes the confirm, not a re-read.
       if (pendingRef.current || chapterId == null) return
