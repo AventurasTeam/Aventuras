@@ -98,3 +98,28 @@ slice-planning gate forces its resolution before that slice is planned.
   is in `close-agent/read-turns.ts`, merged in #735), so the pointer is
   stale per `.claude/rules/code.md`'s commenting discipline. Found by
   M6.1's final review (2026-11-22).
+
+- **Two vec0 comments say a `pk IN` read answers no rows.**
+  `lib/db/embeddings/knn.ts:63-65` and `lib/db/embeddings/ops.ts:75-76`
+  say vec0 answers `pk IN (…)` with zero rows, and
+  [Slice 6.1](milestones/06-branches-diff-cache/slices/01-copy-substrate.md)
+  repeats it in its Scope. On sqlite-vec 0.1.9 under `node:sqlite`,
+  desktop's version, every `pk` predicate answers correctly: `=`, `IN`,
+  `IN (SELECT …)`, `LIKE`, and a `DELETE … pk IN`. Android's
+  v0.1.7-alpha.2 is unchecked. The code reads by `branch_id` and `id`
+  either way, so only the comments' stated reason may be stale. Found by
+  M6.1's slice review (2026-11-22).
+
+- **A desktop crash mid-migration can leave the database unable to
+  boot.** Desktop's runner applies a migration's statements one by one
+  with no wrapping transaction (`electron/db/service.ts:97-100`).
+  Killed partway through a table rebuild (`0003`, `0009`, `0016` and
+  `0021` rebuild), the next boot re-runs the step from its start and
+  fails: after the `CREATE` or the `DROP`, on "table `__new_deltas`
+  already exists"; after `0021`'s closing `ALTER`, before drizzle records
+  the step, on "duplicate column name: branch_id". Android runs every
+  pending migration in one transaction and rolls back. The relaunch that
+  could cause such a kill is parked as
+  [A relaunch kills a primary whose main thread stalls](../parked.md#a-relaunch-kills-a-primary-whose-main-thread-stalls);
+  this is what the kill leaves behind. Found by M6.1's slice review
+  (2026-11-22), probed on `node:sqlite`.
