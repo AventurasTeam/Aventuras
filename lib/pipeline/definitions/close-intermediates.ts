@@ -120,7 +120,9 @@ export function closeFloorOf(intermediates: Readonly<Record<string, unknown>>): 
   return intermediates[FLOOR_KEY] as number | undefined
 }
 
-/** C2 → metadata: the lore-mgmt config whose window cut the parts, which every later call runs on. */
+/**
+ * C2 → metadata: the lore-mgmt config whose window cut the parts, which every later call runs on.
+ */
 export function setCloseModelConfig(
   intermediates: Record<string, unknown>,
   config: ResolveModelConfig,

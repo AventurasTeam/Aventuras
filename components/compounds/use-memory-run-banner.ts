@@ -88,8 +88,9 @@ function closedLabel(
 }
 
 /**
- * The open branch's running pass or close (Cancel defers it to the next Send); else its last close or
- * re-run of this open until reviewed, dismissed or reversed, only while that chapter is the latest.
+ * The open branch's running pass, close or re-run (Cancel defers a pass or close to the next Send,
+ * a re-run nothing); else its last close or re-run of this open until reviewed, dismissed or
+ * reversed, only while that chapter is the latest.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)

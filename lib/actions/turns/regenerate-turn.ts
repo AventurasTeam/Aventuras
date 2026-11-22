@@ -169,7 +169,7 @@ export async function regenerateTurn(
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
         // Re-checked past the reads, synchronously with the mark: a reversal opened during them
-        // would throw this one out of its bracket as re-entry. A re-run holds its end reply.
+        // would throw this one out of its bracket as re-entry. A re-run holds any stamped reply.
         if (
           generationStore.isHeadReversalBlocked(ids.branchId) ||
           rerunHoldsReversal(generationStore.getTxState(), ids.branchId, target)
