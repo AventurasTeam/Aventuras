@@ -768,9 +768,10 @@ remains.
 
 **Second to land.** At the final rebase (`e981d8922`), neither
 [Slice 6.7](./07-diff-cache.md) nor [Slice 6.8](./08-per-branch-lead.md) had
-landed, so each of their PRs owns its job: 6.8 numbers its steps after
-`0022_m6_pipeline_runs_branch`, and 6.7 writes the database-seeded two-branch
-walk test in `lib/history/diff-walk.test.ts`.
+landed. If either merges before this PR, this PR takes that slice's job before
+it merges: for 6.8, regenerate this slice's migrations from its snapshot and
+renumber them after its steps (C4); for 6.7, write the database-seeded
+two-branch walk test in `lib/history/diff-walk.test.ts` (C9).
 
 _Populated at finish: notable deviations from the plan and resolved
 developer decisions._
