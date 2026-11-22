@@ -189,39 +189,41 @@ async function scratchCheck(
   scratch: readonly string[],
   probe: () => Promise<Outcome>,
 ): Promise<Check> {
+  let passed = false
+  let text: string
   try {
     await dropTables(scratch)
     const { failures, detail } = await probe()
-    const text = `${versions}; ${JSON.stringify(detail)}`
-    return failures.length === 0
-      ? { label, result: text }
-      : { label, error: `${failures.join('; ')}; ${text}` }
+    const body = `${versions}; ${JSON.stringify(detail)}`
+    passed = failures.length === 0
+    text = passed ? body : `${failures.join('; ')}; ${body}`
   } catch (e) {
-    return { label, error: `${versions}; threw: ${messageOf(e)}` }
-  } finally {
-    await dropTables(scratch)
+    text = `${versions}; threw: ${messageOf(e)}`
   }
+  try {
+    await dropTables(scratch)
+  } catch (e) {
+    return { label, error: `${text}; dropping the scratch tables threw: ${messageOf(e)}` }
+  }
+  return passed ? { label, result: text } : { label, error: text }
 }
 
 async function runBranchCopyChecks(): Promise<Check[]> {
+  const out: Check[] = []
   let versions: string
   try {
     versions = await readVersions()
+    out.push({ label: 'branch copy: versions', result: versions })
   } catch (e) {
-    return [{ label: 'branch copy: versions', error: messageOf(e) }]
+    versions = 'versions unread'
+    out.push({ label: 'branch copy: versions', error: messageOf(e) })
   }
   const probes: [string, readonly string[], () => Promise<Outcome>][] = [
     ['branch copy: vector statement', [PROBE_VEC, PROBE_SRC], vectorCopyProbe],
     ['branch copy: temp table in one batch', [PROBE_TMP, PROBE_FROM, PROBE_INTO], tempTableProbe],
   ]
-  const out: Check[] = [{ label: 'branch copy: versions', result: versions }]
   for (const [label, scratch, probe] of probes) {
-    out.push(
-      await scratchCheck(label, versions, scratch, probe).catch((e: unknown) => ({
-        label,
-        error: `${versions}; dropping the scratch tables threw: ${messageOf(e)}`,
-      })),
-    )
+    out.push(await scratchCheck(label, versions, scratch, probe))
   }
   return out
 }
