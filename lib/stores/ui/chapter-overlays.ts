@@ -122,7 +122,8 @@ export const chapterOverlaysStore = {
   closeCloseModal: (): void => store.setState({ closeModal: null }),
   /**
    * From the review window the window closes first, so the guard's dialog never sits over it, and
-   * the request remembers it. The guard has no cancel path: its Cancel holds nothing.
+   * the request remembers it. A guard Cancel holds no request, so the window stays closed. A press
+   * made during the window's exit is dropped, as a row press is.
    */
   openRerunConfirm: ({
     branchId,
@@ -133,9 +134,13 @@ export const chapterOverlaysStore = {
     chapterId: string
     fromReview?: boolean
   }): void => {
-    const reopenReview = fromReview && store.getState().review != null
-    if (fromReview) store.setState({ review: null })
-    guarded(() => store.setState({ rerunConfirm: { branchId, chapterId, reopenReview } }))
+    if (fromReview) {
+      if (store.getState().review == null) return
+      store.setState({ review: null })
+    }
+    guarded(() =>
+      store.setState({ rerunConfirm: { branchId, chapterId, reopenReview: fromReview } }),
+    )
   },
   /** `reopen` brings back the review window the request closed; a card's request has none. */
   closeRerunConfirm: ({ reopen }: { reopen: boolean }): void => {

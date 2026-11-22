@@ -254,13 +254,39 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
     expect(chapterOverlaysStore.getState().review).toBeNull()
   })
 
-  it('remembers no window when none was open', () => {
+  // A second Re-run… press during the phone Sheet's slide-out, as a row press's second is dropped.
+  it('drops a second request from the window once the first has closed it', () => {
+    const guard = vi.fn<Guard>((proceed) => proceed())
+    chapterOverlaysStore.registerSurface(surface(guard))
+    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    const fromReview = { branchId: 'br_hero', chapterId: 'chap_hero_2', fromReview: true }
+    chapterOverlaysStore.openRerunConfirm(fromReview)
+    chapterOverlaysStore.openRerunConfirm(fromReview)
+    expect(guard).toHaveBeenCalledTimes(1)
+    expect(chapterOverlaysStore.getState().rerunConfirm).toStrictEqual({
+      branchId: 'br_hero',
+      chapterId: 'chap_hero_2',
+      reopenReview: true,
+    })
+
+    chapterOverlaysStore.closeRerunConfirm({ reopen: true })
+    expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      chapterId: 'chap_hero_2',
+      actionId: 'act_close_2',
+    })
+  })
+
+  it('drops a request from a window that is not open: no guard runs, nothing changes', () => {
+    const guard = vi.fn<Guard>((proceed) => proceed())
+    chapterOverlaysStore.registerSurface(surface(guard))
+    const before = chapterOverlaysStore.getState()
     chapterOverlaysStore.openRerunConfirm({
       branchId: 'br_hero',
       chapterId: 'chap_hero_2',
       fromReview: true,
     })
-    expect(chapterOverlaysStore.getState().rerunConfirm?.reopenReview).toBe(false)
+    expect(guard).not.toHaveBeenCalled()
+    expect(chapterOverlaysStore.getState()).toBe(before)
   })
 
   it('holds the request at once with no surface registered', () => {
