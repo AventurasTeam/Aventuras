@@ -40,7 +40,7 @@ import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { logReversalRefused } from '../delta/commit-new-action'
 import { ReversalIntegrityError } from '../delta/replay-errors'
-import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
+import { selectReversalSet, type CountedReversalSet } from '../delta/row-closure'
 import {
   resolveSweep,
   rollbackCountsOf,
@@ -263,7 +263,7 @@ export async function getCloseRerunPreview(
     const turn = await firstTurnSince(branchId, latestGroupStart(groups), ctx)
     const shortcut = turn === null ? null : await shortcutTo(branchId, turn, ctx)
     if (shortcut !== null && 'status' in shortcut) return shortcut
-    let set: ReversalSet
+    let set: CountedReversalSet
     try {
       set = await selectReversalSet(ctx, {
         branchId,

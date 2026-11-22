@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest'
 import { branches, deltas, happeningInvolvements, happenings, stories, type Delta } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { reverseReplayDeltas } from './reverse-replay'
+import {
+  buildReverseAndPrunePlan,
+  restoringUpdates,
+  reverseAndPruneDeltaRows,
+  reverseReplayDeltas,
+} from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 
 const delta = (
@@ -89,5 +94,22 @@ describe('the reversal closure', () => {
     })
 
     expect(set.rows.map((d) => d.id)).toEqual(['d_inv', 'd_rename', 'd_create'])
+  })
+})
+
+describe('a set selected with reversedFirst', () => {
+  it('goes to the counting readers and to no reversal', async () => {
+    const { ctx } = await seed()
+    const counted = await selectReversalSet(ctx, { branchId: 'b1', target: [], reversedFirst: [] })
+
+    const reversals = [
+      // @ts-expect-error it nulls refs as if live deltas were gone, which CTRL-Z can't restore
+      () => reverseAndPruneDeltaRows(counted, ctx, { keepRedoExact: false }),
+      // @ts-expect-error nor does the plan every reversal commits take it
+      () => buildReverseAndPrunePlan(counted, ctx, { keepRedoExact: false }),
+    ]
+
+    expect(reversals).toHaveLength(2)
+    expect(await restoringUpdates(counted, ctx)).toEqual(new Set())
   })
 })

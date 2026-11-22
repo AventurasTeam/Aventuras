@@ -45,6 +45,7 @@ import {
   reversalLockKeys,
   selectReversalSet,
   writesTo,
+  type CountableSet,
   type RefClear,
   type ReversalSet,
   type RowRef,
@@ -851,7 +852,7 @@ function settledSurvivors(walk: UndoWalk, stranded: readonly Delta[]): SurvivorR
  * are later deltas another reversal takes back before this one, so none of them replaces a part.
  */
 export async function restoringUpdates(
-  set: ReversalSet,
+  set: CountableSet,
   ctx: DbCtx,
   reversedFirst: readonly Delta[] = [],
 ): Promise<ReadonlySet<string>> {
