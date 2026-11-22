@@ -74,13 +74,3 @@ slice-planning gate forces its resolution before that slice is planned.
   unnamed there. The re-run confirm renders its actions through
   `ReasonButton`, which shows the reason under a disabled button; both
   confirms predate it. Raised by Slice 5.13's PR 3 review (2026-11-22).
-- **A refused Send whose own reversal fails uncommitted leaves its
-  `user_action` unreported to settle-keyed re-reads.** A rejected
-  admission reverses the Send's `user_action` with `reverseReplayDeltas`
-  (`lib/actions/turns/submit-turn.ts`, after `startTurn`); if that throws
-  uncommitted, the entry stands and only an error is logged. A pending
-  turn's end bumps no `settleCount`, and that reversal raises no
-  `reversalInProgress`, so a re-read keyed on the count alone (an open
-  re-run confirm's turns since, an open rollback confirm's entry counts)
-  doesn't see it until the next settle; readers keyed on the entry tail
-  do. Raised by Slice 5.13's PR 3 review (2026-11-22).
