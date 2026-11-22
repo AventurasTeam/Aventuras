@@ -445,13 +445,17 @@ git-ignored pointer only):
 
 This slice extends them:
 
-- The chapters store row carries `closeReportActionId: string | null`
-  beside `hasCloseReport`, projected the same way in
+- The chapters store row carries `closeReportActionId` beside
+  `hasCloseReport` as one union,
+  `{ hasCloseReport: false; closeReportActionId: null } | { hasCloseReport: true; closeReportActionId: string }`,
+  built by `closeReportFields` in
   `lib/stores/chapters/chapter-store-projection.ts`: on create, and on an
   update only when `closeReport` is a key of `columns`. The hydrate select
-  (`lib/actions/stories/operational.ts:173`) reads
-  `json_extract(close_report, '$.actionId')`. C4's store test walks a
-  re-run's commit and its CTRL-Z too.
+  (`lib/actions/stories/operational.ts`) reads the action only where
+  `json_type(close_report, '$.actionId')` is `'text'`, and derives the
+  flag from it. A stored report whose action isn't a string reads as
+  none: no writer stores one and the report schema refuses it. C4's store
+  test walks a re-run's commit and its CTRL-Z too.
 - `loadCloseDeltas` (`lib/history/close-read.ts`) gains a lower bound and
   reads a re-run's group from it to its report update, so its changes keep
   their old values. The default under [Open questions](#open-questions):
@@ -552,7 +556,7 @@ close's until this slice.
   pruned the close's into the journal. So a delete after a re-run, and a
   second re-run, count the re-run's lore creates whose rows still
   stand.
-- `startCloseRerun(branchId, chapterId, expected, story, ctx)`, shaped as
+- `startCloseRerun(branchId, chapterId, expected, ctx)`, shaped as
   `regenerateTurn` is: one admission, and a pending mark
   (`generationStore.bracketPendingTurn`) held from before the shortcut
   until the chain reserves, so no start lands between the shortcut and

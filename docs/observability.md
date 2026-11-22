@@ -387,14 +387,21 @@ convention, and the expectation that subsystems route through
   refused for a reason other than the counts changing, the chapter no
   longer being the latest, a close owed, or a run in flight, with
   `branchId`, `chapterId` and the refusal `code` (`preflight-failed` for
-  a failed pre-flight); the confirm closes with `Couldn't start the
-re-run.`, with the manual close's copy for an embedder swap or a held
-  branch, or with the close's own pre-flight copy),
+  a failed pre-flight); the confirm closes with the start-failed copy,
+  with the manual close's copy for an embedder swap or a held branch,
+  or with the close's own pre-flight copy),
   `close_rerun_start_threw` (error, the same file: `startCloseRerun`
-  threw rather than resolving, with `branchId`, `chapterId` and `error`,
-  a replay failure's cause rather than its wrapper's message, plus
-  `committed` for one; the confirm closes with `Couldn't start the
-re-run.`),
+  threw rather than resolving and wrote nothing, with `branchId`,
+  `chapterId` and `error`, a replay failure's cause rather than its
+  wrapper's message; the confirm closes with the start-failed copy),
+  `close_rerun_sync_failed` (warn, the same file: the rollback shortcut
+  committed but its store sync failed, with `branchId`, `chapterId` and
+  `error`, the replay failure's cause; the open branch re-hydrates next,
+  only while it is still the open one, and the confirm closes with the
+  start-failed copy), `close_rerun_resync_failed` (error, the same file:
+  that re-hydration threw, or read no story or a corrupt one, with
+  `branchId`, `chapterId` and `error`; the confirm closes with the
+  `resyncFailed` copy, which asks to reopen the story),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already

@@ -333,7 +333,10 @@ generation pipeline is in flight:
   they recount as runs settle, and the start refuses `counts-changed`
   with the fresh counts. If a close landed while it was open, the re-run
   is refused with a toast, as the delete is. Every refusal comes before
-  the turns go or any branch is created.
+  the turns go or any branch is created. If the rollback lands but the
+  screens can't follow it, the branch reloads and the confirm closes
+  with the start-failed toast, or asks to reopen the story if the reload
+  fails too.
 
 While it runs, the reader's banner shows a close's progress, and its
 commit banner and toasts are
