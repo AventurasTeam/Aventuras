@@ -379,21 +379,26 @@ async function commitRun(
   const successor = nextPipeline
     ? newRunState(nextPipeline.kind, { ...ctx, inputs: undefined, actionId: undefined })
     : undefined
-  generationStore.finishRun(run.runId, successor)
+  // Settled under the gate: an open marker would have boot reverse this run from under whatever
+  // the session builds on it, so a failed write fails the run now, its abort reversing it.
   try {
     await ctx.db
       .update(pipelineRuns)
       .set({ finishedAt: Date.now(), outcome: 'completed' })
       .where(eq(pipelineRuns.runId, run.runId))
   } catch (e) {
-    // The run's writes already committed; a failed marker leaves an orphan that
-    // boot recovery reconciles. Finish cleanly regardless.
     logger.error(
       'pipeline.marker_write_failed',
-      { runId: run.runId, outcome: 'completed', error: String(e) },
+      { runId: run.runId, outcome: 'completed', error: messageOf(e) },
       { actionId: run.actionId },
     )
+    const error: PipelineError = {
+      kind: 'orchestrator',
+      detail: `marker write failed: ${messageOf(e)}`,
+    }
+    return { tx: await abortRun(run, ctx, { reason: 'phase-failure', error, threw: true }) }
   }
+  generationStore.finishRun(run.runId, successor)
   turnCaptureSink.endTurn(run.actionId, 'completed')
   logger.debug(
     'pipeline.run_complete',

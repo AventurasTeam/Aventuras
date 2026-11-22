@@ -108,16 +108,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `Recovery incomplete` over a body saying the close was reverted
   (`formatRecoveryTitle` counts every failure; Slice 5.13's closing review,
   2026-11-22).
-- **A failed completed-marker write makes the next boot reverse a
-  committed run.** `commitRun` settles the run's `pipeline_runs` marker
-  after its last group commits, outside that transaction, and only logs
-  `pipeline.marker_write_failed` when the update throws
-  (`lib/pipeline/runtime/orchestrator.ts`); boot recovery then reverses
-  the committed run as an orphan. For a close's re-run that writes its
-  journal back, so the earlier close returns, or undoes the chapter's
-  close altogether once a turn has logged above the re-run's floor.
-  Pre-existing for every run kind; the re-run adds the second outcome.
-  Raised by Slice 5.13's closing review (2026-11-22).
 - **The rollback modal's "stays open" misses the regenerate mode.**
   `rollback-confirm.md → A run starting under an open modal` says the
   modal stays open on an in-flight refusal; a regenerate-mode confirm

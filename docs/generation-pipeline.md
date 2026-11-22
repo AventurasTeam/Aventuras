@@ -1160,12 +1160,13 @@ in-progress (currentPhase iterates)
    │
    ├── last phase returns completed ────────────► commitRun
    │                                                  │  await pipeline.chainsTo (run still in txState)
+   │                                                  │  UPDATE pipeline_runs SET finished_at, outcome='completed'
+   │                                                  │    └── update fails ─► abortRun (reason: phase-failure, threw: true)
    │                                                  │
    │                                                  ├── returns next kind ───► beginRun(next) (atomic transition, no idle)
    │                                                  │
    │                                                  └── returns null
    │                                                          │
-   │                                                          │  UPDATE pipeline_runs SET finished_at, outcome='completed'
    │                                                          │  remove run from txState
    │                                                          │  emit run_complete (outcome: 'completed')
    │
@@ -1240,7 +1241,11 @@ Atomicity windows worth being honest about:
   effectively succeeded but the marker still says in-flight, so
   recovery reverses just-finished work. **Accepted for v1**;
   tighten in v2 if it bites real users (couple final action's
-  SQLite txn with the marker UPDATE).
+  SQLite txn with the marker UPDATE). The window is a crash's
+  alone: the UPDATE runs before the run leaves txState, and one
+  that fails fails the run, whose abort reverses it while nothing
+  has built on it, the marker riding the reversal's transaction. A
+  reversal that can't commit either leaves the orphan to boot.
 
 Rows are kept after `finished_at` is set — diagnostic surface (run
 history, recovery audit). Pruning policy is a future concern.
