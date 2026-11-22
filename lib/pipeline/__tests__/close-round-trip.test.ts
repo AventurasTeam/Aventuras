@@ -55,6 +55,8 @@ import {
   END_REPLY,
   installCloseHarnessHooks,
   openHarness,
+  recordGroups,
+  rerunMarker,
   script,
   seedEntity,
   STAND_IN_INPUT,
@@ -1736,7 +1738,14 @@ const ARMS: readonly RoundTripArm[] = [
     run: async (h) => {
       await h.close()
       interruptAfter(CLOSE_PHASE.reversal, h.fx.branchId)
+      const groups = recordGroups()
       expectStopped(h, await h.rerun(closedChapterId(h)), 'aborted')
+      expect(groups, 'the re-run dispatched no group').toEqual([])
+      // The reversal committed: its transaction wrote the marker's column.
+      expect(await rerunMarker(h)).toMatchObject({
+        outcome: 'aborted',
+        rerunChapterId: closedChapterId(h),
+      })
     },
   },
   {

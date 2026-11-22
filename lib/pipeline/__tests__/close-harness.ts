@@ -30,10 +30,12 @@ import {
   happeningInvolvements,
   happenings,
   lore,
+  pipelineRuns,
   storyEntries,
   threads,
   type Delta,
   type EntityState,
+  type PipelineRun,
 } from '@/lib/db'
 import {
   configureDeltaActionPort,
@@ -508,6 +510,25 @@ export function closedChapterId(h: CloseHarness): string {
   const [chapter, ...more] = h.closed().state.rows.chapters
   expect(more, 'the close made one chapter').toEqual([])
   return defined(chapter, 'the close made no chapter').id
+}
+
+/** The latest re-run's run marker. */
+export async function rerunMarker(h: CloseHarness): Promise<PipelineRun | undefined> {
+  const actionId = defined(h.rerunActionId(), 'the re-run never reserved')
+  const [row] = await h.fx.ctx.db
+    .select()
+    .from(pipelineRuns)
+    .where(eq(pipelineRuns.actionId, actionId))
+  return row
+}
+
+/** The kinds of every group dispatched from now on, refused or not. */
+export function recordGroups(): PipelineAction['kind'][][] {
+  const seen: PipelineAction['kind'][][] = []
+  pipelineEventBus.subscribe('delta_group_emitted', (event) => {
+    seen.push(event.actions.map((a) => a.kind))
+  })
+  return seen
 }
 
 const PART_SUMMARY: GenerateStructuredResult<{ summary: string }> = {

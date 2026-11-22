@@ -1,9 +1,8 @@
-import { eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured, generateToolStep } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
-import { pipelineRuns, reversalJournals, type Delta } from '@/lib/db'
+import { reversalJournals, type Delta } from '@/lib/db'
 import { CLOSE_PHASE, pipelineEventBus, type PipelineEvent } from '@/lib/pipeline'
 import { generationStore, interruptMemoryRuns } from '@/lib/stores'
 
@@ -12,6 +11,8 @@ import {
   closedChapterId,
   installCloseHarnessHooks,
   openHarness,
+  recordGroups,
+  rerunMarker,
   STAND_IN_STEP,
   worldState,
   type CloseCase,
@@ -71,16 +72,6 @@ function recordDeferred(): PipelineEvent[] {
   return seen
 }
 
-async function rerunMarker(h: CloseHarness) {
-  const actionId = h.rerunActionId()
-  expect(actionId, 'the re-run reserved').toEqual(expect.any(String))
-  const [row] = await h.fx.ctx.db
-    .select()
-    .from(pipelineRuns)
-    .where(eq(pipelineRuns.actionId, actionId!))
-  return row
-}
-
 // AC 9: the close as it stood before the re-run, its log positions included.
 async function expectCloseAsItWas({ h, log }: Closed): Promise<void> {
   expect(await worldState(h.fx)).toEqual(h.closed().state)
@@ -94,12 +85,14 @@ describe('a re-run that stops (AC 9)', () => {
   it('restores the close when aborted after its reversal, before any write of its own', async () => {
     const c = await closed()
     const deferred = recordDeferred()
+    const groups = recordGroups()
     interruptOnce(CLOSE_PHASE.reversal, c.h.fx.branchId)
 
     const end = await within(c.h.rerun(c.chapterId), 'the re-run')
 
     expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'aborted' } })
     expect(end.result).not.toHaveProperty('closeUndone')
+    expect(groups, 'the re-run dispatched no group').toEqual([])
     await expectCloseAsItWas(c)
     // The reversal committed: its transaction wrote the marker's column.
     expect(await rerunMarker(c.h)).toMatchObject({
@@ -131,10 +124,7 @@ describe('a re-run that stops (AC 9)', () => {
     const deferred = recordDeferred()
     // Fires on a landed group only: a refused first group leaves it unset.
     c.h.onNextToolGroup(() => {})
-    const rerunGroups: string[][] = []
-    pipelineEventBus.subscribe('delta_group_emitted', (event) => {
-      rerunGroups.push(event.actions.map((a) => a.kind))
-    })
+    const rerunGroups = recordGroups()
 
     const end = await within(c.h.rerun(c.chapterId), 'the re-run')
 
