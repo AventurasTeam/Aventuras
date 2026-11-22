@@ -12,8 +12,8 @@ export type UnfinishedRun = {
 }
 
 /**
- * What fork judges against its prune set (6.3) and duplicate refuses on (6.6). A run that records
- * no branch is in no branch's read.
+ * C2: a branch's unfinished runs, oldest start first. A run that records no branch is in no
+ * branch's read.
  */
 export async function readUnfinishedRuns(
   branchId: string,
