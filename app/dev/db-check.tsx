@@ -169,15 +169,12 @@ async function tempTableProbe(): Promise<Outcome> {
   const leftover = await queryRows('SELECT name FROM sqlite_temp_master WHERE name = ?', [
     PROBE_TMP,
   ])
+  const expected = [
+    ['t1', 'one'],
+    ['t2', 'two'],
+  ]
   const failures: string[] = []
-  if (
-    !same(moved, [
-      ['t1', 'one'],
-      ['t2', 'two'],
-    ])
-  ) {
-    failures.push('rows moved through the temp table differ')
-  }
+  if (!same(moved, expected)) failures.push('rows moved through the temp table differ')
   if (leftover.length !== 0) failures.push('the temp table outlived its batch')
   return { failures, detail: { moved } }
 }

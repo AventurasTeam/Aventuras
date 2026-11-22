@@ -19,7 +19,7 @@ export async function readUnfinishedRuns(
   branchId: string,
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<UnfinishedRun[]> {
-  const rows = await ctx.db
+  return ctx.db
     .select({
       runId: pipelineRuns.runId,
       kind: pipelineRuns.kind,
@@ -29,5 +29,4 @@ export async function readUnfinishedRuns(
     .from(pipelineRuns)
     .where(and(eq(pipelineRuns.branchId, branchId), isNull(pipelineRuns.finishedAt)))
     .orderBy(asc(pipelineRuns.startedAt), asc(pipelineRuns.runId))
-  return rows
 }
