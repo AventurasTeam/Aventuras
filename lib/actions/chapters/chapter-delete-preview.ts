@@ -96,8 +96,8 @@ export async function reversalImpactOf(
 
 type CreatedLore = { ids: ReadonlySet<string>; live: ReadonlySet<string> }
 
-// A created row the user deleted since is gone already, so the delete removes only the live ones,
-// and those a delete reversed first brings back.
+// A created row the user deleted since is gone, so the delete removes only the live ones, plus
+// any a `reversedFirst` delete brings back.
 async function createdLoreOf(
   branchId: string,
   groups: readonly Delta[],

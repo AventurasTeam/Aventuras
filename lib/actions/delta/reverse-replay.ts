@@ -113,8 +113,8 @@ export type ReversePlan = {
   rewrittenHolders: readonly Delta[]
   /** reversal_journals rows the planner drops (generation-pipeline.md → Reverse-replay), whole. */
   droppedJournals: readonly ReversalJournalRow[]
-  /** Their deletes, apart from pruneOps: a fork's copy omits them. */
-  journalOps: SqlOp[]
+  /** Their deletes, apart from pruneOps: a fork's copy will omit them (no forks yet, M6.1). */
+  journalOps: readonly SqlOp[]
 }
 
 export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
