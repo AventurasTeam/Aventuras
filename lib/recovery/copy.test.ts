@@ -203,6 +203,7 @@ describe('failure copy', () => {
   it('renders a failure whose reversal committed as the reversed close, plus the fallback line', () => {
     const undone: RecoveryFailure = {
       ...failed('chapter-close', 'story_1'),
+      committed: true,
       refusal: null,
       closeUndone: true,
     }
@@ -217,9 +218,24 @@ describe('failure copy', () => {
   it('types a failure whose reversal committed as refusing nothing', () => {
     const refused = failed('chapter-close', 'story_1', 'write-back')
     // @ts-expect-error a committed reversal refused nothing
-    const undone: RecoveryFailure = { ...refused, closeUndone: true }
+    const undone: RecoveryFailure = { ...refused, committed: true, closeUndone: true }
+    // @ts-expect-error only a committed reversal can have undone a close
+    const uncommitted: RecoveryFailure = { ...failed('chapter-close', null), closeUndone: true }
 
     expect(undone.refusal).toBe('write-back')
+    expect(uncommitted.closeUndone).toBe(true)
+  })
+
+  // The marker is settled and the next story-open hydrates fresh: nothing is left to retry.
+  it('renders any failure whose reversal committed as that run reversed, promising no retry', () => {
+    const synced: RecoveryFailure = {
+      ...failed('per-turn', 'story_1'),
+      committed: true,
+      refusal: null,
+    }
+    expect(formatRecoveryReport(failureReport(synced), { story_1: 'Mornstone' })).toBe(
+      'An interrupted shutdown was detected in Mornstone. Your last AI response was reverted to keep the story consistent.',
+    )
   })
 
   it('adds no fallback line to a failure that undid no close', () => {
@@ -285,6 +301,24 @@ describe('formatRecoveryTitle', () => {
 
   it('claims recovery when something was', () => {
     expect(formatRecoveryTitle(report(recovered('per-turn', 'story_1')))).toBe('Story recovered')
+  })
+
+  it('claims recovery when the only failure committed its reversal', () => {
+    const synced: RecoveryFailure = {
+      ...failed('chapter-close', 'story_1'),
+      committed: true,
+      refusal: null,
+    }
+    expect(formatRecoveryTitle({ reversed: [], failures: [synced], heldStoryIds: [] })).toBe(
+      'Story recovered',
+    )
+    expect(
+      formatRecoveryTitle({
+        reversed: [],
+        failures: [synced, failed('per-turn', 'story_2')],
+        heldStoryIds: [],
+      }),
+    ).toBe('Recovery incomplete')
   })
 
   it('does not claim recovery when a reversal succeeded alongside one that failed', () => {

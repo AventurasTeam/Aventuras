@@ -93,21 +93,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the branch, so the removed entries stay on screen; the chapter delete
   and the re-run's shortcut re-hydrate in that case (Slice 5.13's closing
   review, 2026-11-22).
-- **A committed reversal at boot whose store sync fails reads as
-  retryable.** `recoverInFlightRuns` records the throw as a recovery
-  failure, and the modal's `incomplete*` copy says the update "could not
-  be undone" and that "restarting the app retries automatically". The
-  reversal's transaction already settled the marker as `recovered`, so no
-  later boot retries or reports it, and the stores resync from the
-  database on the next load. Pre-existing for every orphan kind; raised by
-  Slice 5.13's PR review (2026-11-21), which only added the close-undone
-  line to this failure. Its title reads `Recovery incomplete` too, though
-  canon keeps that title for a boot where an orphan didn't reverse
-  (`generation-pipeline.md → Recovery-failure policy`), and a re-run's
-  close-undone failure, rendered as the reversed close, then reads
-  `Recovery incomplete` over a body saying the close was reverted
-  (`formatRecoveryTitle` counts every failure; Slice 5.13's closing review,
-  2026-11-22).
 - **The rollback modal's "stays open" misses the regenerate mode.**
   `rollback-confirm.md → A run starting under an open modal` says the
   modal stays open on an in-flight refusal; a regenerate-mode confirm

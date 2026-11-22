@@ -45,8 +45,9 @@ function formatFailure(
   storyName: string | undefined,
   isHeld: (storyId: string | null) => boolean,
 ): string {
-  // A closeUndone failure committed its reversal and only the store sync failed: a reversed close.
-  if (failure.closeUndone) return withCloseUndone(runLine(failure.kind, storyName), true)
+  // Only its store sync failed: the run reversed, and the story's next open hydrates fresh.
+  if (failure.committed)
+    return withCloseUndone(runLine(failure.kind, storyName), failure.closeUndone)
   return failureLine(failure, storyName, isHeld)
 }
 
@@ -98,9 +99,9 @@ function unexplainedHolds(report: BootRecoveryReport): readonly string[] {
 
 /** "Story recovered" over-claims while any orphan's writes are still on disk or a branch may be held. */
 export function formatRecoveryTitle(report: BootRecoveryReport): string {
-  return report.reversed.length > 0 &&
-    report.failures.length === 0 &&
-    report.heldStoryIds?.length === 0
+  const left = report.failures.filter((failure) => failure.committed !== true)
+  const reversed = report.reversed.length + report.failures.length - left.length
+  return reversed > 0 && left.length === 0 && report.heldStoryIds?.length === 0
     ? t('crashRecovery.title')
     : t('crashRecovery.titleIncomplete')
 }
