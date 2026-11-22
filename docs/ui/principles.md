@@ -408,7 +408,10 @@ label leads with `Before your turn:` instead
 (`Before your turn: 3 of 7 — Identity…`), since on phone, where the pill
 shows only a spinner, the banner is the one place that names the wait; a
 close that hasn't reached a step yet reads `Closing chapter before your
-turn…`.
+turn…`. A close's re-run reads `Reversing the chapter's close…` while it
+reverses the close it replaces, and plain `Closing chapter…` before
+that, since it neither chooses an end nor writes a summary; from its
+first task it reads as a close. It never runs before a turn.
 
 A close's commit, or its re-run's, leaves the banner in a done state
 instead of dismissing it: `Chapter closed: <title>`, or
@@ -432,13 +435,21 @@ editable control disables when a transaction is in flight,
 including form save buttons (so the user doesn't draft an edit
 they can't submit). Hover/focus reveals a uniform tooltip:
 
-| Pipeline             | Tooltip copy                                      |
-| -------------------- | ------------------------------------------------- |
-| Per-turn             | `Generation is in flight. Cancel to edit.`        |
-| Periodic classifier  | `Updating memory. Cancel to edit.`                |
-| Chapter-close        | `Chapter close in progress. Cancel to edit.`      |
-| Chapter-close re-run | `Re-running the chapter's close. Cancel to edit.` |
-| Suggestion refresh   | `Refreshing suggestions. Cancel to edit.`         |
+| Pipeline             | Tooltip copy                                                                   |
+| -------------------- | ------------------------------------------------------------------------------ |
+| Per-turn             | `Generation is in flight. Cancel to edit.`                                     |
+| Periodic classifier  | `Updating memory. Cancel to edit.`                                             |
+| Chapter-close        | `Chapter close in progress. Cancel to edit.`                                   |
+| Chapter-close re-run | `Re-running the chapter's close. Cancel to edit.`                              |
+| Suggestion refresh   | `Refreshing suggestions. Cancel to edit.`                                      |
+| Held until restart   | `A re-run couldn't be undone. Restart the app to restore its chapter's close.` |
+
+The last row is no run: a re-run whose own undo failed without
+committing holds its branch until the app restarts, with no pill and no
+Cancel, and every editable control on that branch, Send included,
+disables with it
+([`chapter-close.md → Re-running a close`](../memory/chapter-close.md#re-running-a-close)).
+Leaving the story stays open, since nothing runs.
 
 Suggestion refresh is a hard-gate run too, and may run beside a pass
 or a close, but not beside a close's re-run: while a re-run's chain

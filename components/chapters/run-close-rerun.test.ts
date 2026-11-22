@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 
 import {
   CLOSE_RERUN_REFUSAL,
+  DeltaReplayError,
   MANUAL_CLOSE_REFUSAL,
   STORY_ENTRY_REJECTION,
   type CloseRerunPreview,
@@ -14,8 +15,13 @@ import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
-import { CHAPTER_CLOSE_KIND, type ChainEnd, type PipelineError } from '@/lib/pipeline'
-import type { OpenStory } from '@/lib/stores'
+import {
+  CHAPTER_CLOSE_KIND,
+  CLASSIFIER_HELD,
+  type ChainEnd,
+  type PipelineError,
+} from '@/lib/pipeline'
+import { currentStoryStore, RERUN_HELD, resetAllStores, type OpenStory } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import { expectedOf, rerunEndNotice, rerunStartOutcome, runCloseRerun } from './run-close-rerun'
@@ -23,10 +29,11 @@ import { expectedOf, rerunEndNotice, rerunStartOutcome, runCloseRerun } from './
 // The close-failure copy's module also holds a hook on expo-router, which the unit project can't load.
 vi.mock('expo-router', () => ({ useRouter: () => ({}) }))
 
-const actions = vi.hoisted(() => ({ start: vi.fn() }))
+const actions = vi.hoisted(() => ({ start: vi.fn(), load: vi.fn() }))
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   startCloseRerun: actions.start,
+  loadOpenStory: actions.load,
 }))
 
 const COUNTS: RollbackCounts = {
@@ -94,6 +101,15 @@ const END = {
     kind: CHAPTER_CLOSE_KIND,
     result: { ...RUN, outcome: 'aborted', closeUndone: true },
   },
+  failedUnreversed: {
+    kind: CHAPTER_CLOSE_KIND,
+    result: {
+      ...RUN,
+      outcome: 'failed',
+      error: { kind: 'orchestrator', detail: 'reverse-replay failed: disk I/O error' },
+      unreversed: true,
+    },
+  },
   failedUndone: {
     kind: CHAPTER_CLOSE_KIND,
     result: {
@@ -110,24 +126,33 @@ const END = {
   passAborted: { kind: PERIODIC_CLASSIFIER_KIND, result: { ...RUN, outcome: 'aborted' } },
 } as const satisfies Record<string, ChainEnd>
 
-const STORY: OpenStory = {
-  storyId: 'story_1',
-  branchId: 'br_1',
-  definition: storyDefinitionSchema.parse({
-    mode: 'adventure',
-    leadEntityId: 'char_kael',
-    narration: 'second',
-    genre: { label: 'Fantasy', promptBody: '' },
-    tone: { label: 'Wry', promptBody: '' },
-    setting: '',
-    calendarSystemId: 'gregorian',
-    worldTimeOrigin: { year: 0 },
-  }),
-  settings: STORY_SETTINGS_DEFAULTS,
+const rerun = () => runCloseRerun({ branchId: 'br_1', chapterId: 'chap_2', preview: PREVIEW })
+
+function replayFailure(stage: 'transaction' | 'store-sync'): DeltaReplayError {
+  return new DeltaReplayError('reverse replay failed', {
+    cause: new Error('UNIQUE constraint failed'),
+    actionId: 'act_sweep',
+    stage,
+  })
 }
 
-const rerun = () =>
-  runCloseRerun({ branchId: 'br_1', chapterId: 'chap_2', preview: PREVIEW, story: STORY })
+function story(branchId: string): OpenStory {
+  return {
+    storyId: 'story_1',
+    branchId,
+    definition: storyDefinitionSchema.parse({
+      mode: 'adventure',
+      leadEntityId: 'char_kael',
+      narration: 'second',
+      genre: { label: 'Fantasy', promptBody: '' },
+      tone: { label: 'Wry', promptBody: '' },
+      setting: '',
+      calendarSystemId: 'gregorian',
+      worldTimeOrigin: { year: 0 },
+    }),
+    settings: STORY_SETTINGS_DEFAULTS,
+  }
+}
 
 let info: MockInstance<typeof toast.info>
 let warning: MockInstance<typeof toast.warning>
@@ -137,6 +162,7 @@ let logError: MockInstance<typeof logger.error>
 
 beforeEach(() => {
   actions.start.mockReset()
+  actions.load.mockReset()
   info = vi.spyOn(toast, 'info').mockReturnValue('')
   warning = vi.spyOn(toast, 'warning').mockReturnValue('')
   error = vi.spyOn(toast, 'error').mockReturnValue('')
@@ -146,6 +172,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  resetAllStores()
 })
 
 describe('expectedOf', () => {
@@ -194,6 +221,12 @@ describe('rerunEndNotice', () => {
       'warning',
       t('chapters:rerunNotice.undone', { number: 2 }),
     ],
+    [
+      "stopped with a reversal that didn't commit",
+      END.failedUnreversed,
+      'error',
+      t('chapters:rerunNotice.unreversed', { number: 2 }),
+    ],
   ] as const)('speaks for a re-run %s', (_name, end, severity, message) => {
     expect(rerunEndNotice(end, 2)).toStrictEqual({ severity, message })
   })
@@ -229,24 +262,39 @@ describe('rerunStartOutcome', () => {
     })
   })
 
-  it('closes on not-latest with its own copy, unlogged', () => {
-    expect(
-      rerunStartOutcome(
-        { status: 'rejected', code: CLOSE_RERUN_REFUSAL.notLatest, reason: 'x' },
-        2,
-      ),
-    ).toStrictEqual({
+  it.each([
+    [CLOSE_RERUN_REFUSAL.notLatest, t('chapters:rerunConfirm.notLatest')],
+    [CLOSE_RERUN_REFUSAL.closeOwed, t('chapters:rerunConfirm.closeOwed')],
+  ] as const)("closes on %s with the preview's own copy, unlogged", (code, message) => {
+    expect(rerunStartOutcome({ status: 'rejected', code, reason: 'x' }, 2)).toStrictEqual({
       step: { step: 'refused' },
-      notice: { severity: 'error', message: t('chapters:rerunConfirm.notLatest') },
+      notice: { severity: 'error', message },
       logCode: null,
     })
   })
 
   it.each([
+    [EMBEDDER_SWAP_REFUSAL, t('reader:actions.blockedWhileSwapping')],
+    [CLASSIFIER_HELD, t('reader:systemEntry.closeRetryBlocked')],
+    [RERUN_HELD, t('generationGate.rerunHeld')],
+  ] as const)(
+    'closes on %s with the copy for a refusal that outlasts the press, logging the code',
+    (code, message) => {
+      expect(rerunStartOutcome({ outcome: 'rejected', blockedBy: code }, 2)).toStrictEqual({
+        step: { step: 'refused' },
+        notice: { severity: 'error', message },
+        logCode: code,
+      })
+    },
+  )
+
+  it.each([
     ['no-close', { status: 'rejected', code: CLOSE_RERUN_REFUSAL.noClose, reason: 'x' }],
-    ['close-owed', { status: 'rejected', code: CLOSE_RERUN_REFUSAL.closeOwed, reason: 'x' }],
     ['integrity', { status: 'rejected', code: CLOSE_RERUN_REFUSAL.integrity, reason: 'x' }],
-    [EMBEDDER_SWAP_REFUSAL, { outcome: 'rejected', blockedBy: EMBEDDER_SWAP_REFUSAL }],
+    [
+      MANUAL_CLOSE_REFUSAL.branchNotOpen,
+      { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen },
+    ],
     [
       STORY_ENTRY_REJECTION.rollbackFloor,
       { status: 'rejected', code: STORY_ENTRY_REJECTION.rollbackFloor, reason: 'x' },
@@ -267,6 +315,25 @@ describe('rerunStartOutcome', () => {
     expect(outcome.logCode).toBe('preflight-failed')
   })
 
+  it("closes on a catch-up pass's failed pre-flight with the memory pass's own copy", () => {
+    const classifierGone: PipelineError = {
+      kind: 'config-resolver',
+      failure: 'profile-missing',
+      target: 'classifier',
+      phaseName: 'classify',
+    }
+    expect(
+      rerunStartOutcome({ outcome: 'preflight-failed', error: classifierGone }, 2),
+    ).toStrictEqual({
+      step: { step: 'refused' },
+      notice: {
+        severity: 'warning',
+        message: t('reader:systemEntry.failure.memoryProfileMissing'),
+      },
+      logCode: 'preflight-failed',
+    })
+  })
+
   it("hands a chain's end to the end notice", () => {
     expect(rerunStartOutcome(END.aborted, 2)).toStrictEqual({
       step: { step: 'ended' },
@@ -285,7 +352,6 @@ describe('runCloseRerun', () => {
         branchId: 'br_1',
         chapterId: 'chap_2',
         preview: PREVIEW,
-        story: STORY,
         onStarted,
       }),
     ).toStrictEqual({ step: 'ended' })
@@ -296,7 +362,6 @@ describe('runCloseRerun', () => {
         shortcut: { targetEntryId: 'entry_58', counts: COUNTS },
         reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
       },
-      STORY,
       { db: expect.anything(), runInTransaction: expect.any(Function) },
       { onStarted },
     )
@@ -337,4 +402,82 @@ describe('runCloseRerun', () => {
     })
     expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
   })
+
+  it("logs a replay failure that wrote nothing by its cause, not its wrapper's message", async () => {
+    actions.start.mockRejectedValue(replayFailure('transaction'))
+    expect(await rerun()).toStrictEqual({ step: 'refused' })
+    expect(logError).toHaveBeenCalledExactlyOnceWith('app.close_rerun_start_threw', {
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      error: 'Error: UNIQUE constraint failed',
+    })
+    expect(actions.load).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
+  })
+})
+
+describe('runCloseRerun — a shortcut that landed and failed its store sync', () => {
+  it('re-hydrates the branch while it stays open, and toasts that the re-run did not start', async () => {
+    currentStoryStore.set(story('br_1'))
+    actions.start.mockRejectedValue(replayFailure('store-sync'))
+    actions.load.mockResolvedValue({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
+
+    expect(await rerun()).toStrictEqual({ step: 'refused' })
+
+    expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_sync_failed', {
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      error: 'Error: UNIQUE constraint failed',
+    })
+    expect(logError).not.toHaveBeenCalled()
+    expect(actions.load).toHaveBeenCalledExactlyOnceWith(
+      'br_1',
+      { db: expect.anything(), runInTransaction: expect.any(Function) },
+      expect.any(Function),
+    )
+    const stillOpen = actions.load.mock.calls[0]?.[2] as () => boolean
+    expect(stillOpen()).toBe(true)
+    currentStoryStore.set(story('br_2'))
+    expect(stillOpen()).toBe(false)
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
+  })
+
+  it('toasts nothing more when the branch was left before the re-hydration read', async () => {
+    actions.start.mockRejectedValue(replayFailure('store-sync'))
+    actions.load.mockResolvedValue({ status: 'cancelled' })
+
+    expect(await rerun()).toStrictEqual({ step: 'refused' })
+
+    expect(logError).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
+  })
+
+  it.each([
+    ['throws', () => Promise.reject(new Error('disk')), 'disk'],
+    [
+      'reads a corrupt story',
+      () => Promise.resolve({ status: 'failed', kind: 'settings-corrupt' }),
+      'branch re-hydration failed',
+    ],
+    [
+      'finds no story',
+      () => Promise.resolve({ status: 'no-story' }),
+      'branch re-hydration no-story',
+    ],
+  ] as const)(
+    'logs and toasts a re-hydration that %s, saying the story needs reopening',
+    async (_name, load, message) => {
+      actions.start.mockRejectedValue(replayFailure('store-sync'))
+      actions.load.mockImplementation(load)
+
+      expect(await rerun()).toStrictEqual({ step: 'refused' })
+
+      expect(logError).toHaveBeenCalledExactlyOnceWith('app.close_rerun_resync_failed', {
+        branchId: 'br_1',
+        chapterId: 'chap_2',
+        error: message,
+      })
+      expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.resyncFailed'))
+    },
+  )
 })

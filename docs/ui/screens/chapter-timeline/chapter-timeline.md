@@ -333,7 +333,16 @@ generation pipeline is in flight:
   they recount as runs settle, and the start refuses `counts-changed`
   with the fresh counts. If a close landed while it was open, the re-run
   is refused with a toast, as the delete is. Every refusal comes before
-  the turns go or any branch is created.
+  the turns go or any branch is created, a catch-up pass's settings
+  included: when the chapter's end is still unprocessed, a failing
+  memory-pass setting refuses with that pass's settings copy. A branch
+  held until a restart, after a re-run's undo failed, refuses with the
+  restart line its disabled actions show
+  ([`principles.md → Affordance loci`](../../principles.md#affordance-loci)).
+  If the rollback lands but the
+  screens can't follow it, the branch reloads and the confirm closes
+  with the start-failed toast, or asks to reopen the story if the reload
+  fails too.
 
 While it runs, the reader's banner shows a close's progress, and its
 commit banner and toasts are
@@ -608,8 +617,13 @@ close stands.
   while a run is in flight or a close is owed, with the card's tooltips,
   closes the window first, runs the screen's unsaved-changes guard, then
   opens the [re-run confirm](#re-run-a-close) alone, so no dialog sits
-  over the window. The confirm's `Cancel` reopens the review; the
-  guard's Cancel and confirming leave it closed.
+  over the window. The confirm's `Cancel` reopens the review, as does a
+  preview read that refuses or fails before the confirm shows; the
+  guard's Cancel, confirming, a refused re-read and a dropped request
+  leave it closed. A second press during the window's exit does nothing,
+  as a row's does. While the re-run's request is held, its confirm still
+  loading or open, a `Review` from a card or the commit banner opens
+  nothing, so the confirm never stacks over the window.
 - **After a re-run** the window shows the re-run's report, its changes
   against the chapter before any close, as a close's are.
 - **If the close reverses while the window is open,** the window closes,

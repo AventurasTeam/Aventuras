@@ -1,15 +1,25 @@
 import type { StorePatch } from '@/lib/actions'
 
-type ReportFields = { hasCloseReport: boolean; closeReportActionId: string | null }
+/** C4: whether a row has a report, and the action of the close or re-run that wrote it. */
+export type CloseReportFields =
+  | { hasCloseReport: false; closeReportActionId: null }
+  | { hasCloseReport: true; closeReportActionId: string }
 
-// The column's JSON reaches a patch unparsed; a stored report always carries its action (C4).
-function reportFields(report: unknown): ReportFields {
-  if (report == null) return { hasCloseReport: false, closeReportActionId: null }
-  const { actionId } = report as { actionId?: unknown }
-  return {
-    hasCloseReport: true,
-    closeReportActionId: typeof actionId === 'string' ? actionId : null,
-  }
+const NO_REPORT: CloseReportFields = { hasCloseReport: false, closeReportActionId: null }
+
+/**
+ * C4's pair from a stored report's action. No writer stores a report without one, and the report
+ * schema refuses it, so a report whose action isn't a string reads as none: no window could show it.
+ */
+export function closeReportFields(actionId: unknown): CloseReportFields {
+  return typeof actionId === 'string'
+    ? { hasCloseReport: true, closeReportActionId: actionId }
+    : NO_REPORT
+}
+
+// The column's JSON reaches a patch unparsed.
+function reportFields(report: unknown): CloseReportFields {
+  return report == null ? NO_REPORT : closeReportFields((report as { actionId?: unknown }).actionId)
 }
 
 /**
@@ -20,14 +30,12 @@ export function projectChapterPatch(p: StorePatch): StorePatch {
   switch (p.op) {
     case 'create': {
       const { closeReport, ...row } = p.row
-      const report: ReportFields =
+      const report =
         'closeReport' in p.row
           ? reportFields(closeReport)
-          : {
-              hasCloseReport: row.hasCloseReport === true,
-              closeReportActionId:
-                typeof row.closeReportActionId === 'string' ? row.closeReportActionId : null,
-            }
+          : row.hasCloseReport === true
+            ? closeReportFields(row.closeReportActionId)
+            : NO_REPORT
       return { op: 'create', id: p.id, row: { ...row, ...report } }
     }
     case 'update': {

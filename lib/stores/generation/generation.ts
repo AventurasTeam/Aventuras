@@ -3,6 +3,8 @@ import { createStore } from 'zustand/vanilla'
 
 import type { CloseTask } from '@/lib/db'
 
+import { currentStoryStore } from '../current-story/current-story'
+
 export type DeferredWork = { readonly pass?: true; readonly close?: true }
 export type DeferredWorkKind = keyof DeferredWork
 
@@ -46,11 +48,20 @@ export type RunState = {
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
 
+/** A bracket body's own mark, which `isStoryBusy` can skip, and the idempotent end releasing it. */
+export type PendingMark = { readonly mark: PendingTurn; readonly end: () => void }
+
 /** A manual close's pick (C14). A close owed by the threshold keeps no record. */
 export type PendingClose = { readonly endEntryId: string }
 
 /** A close's re-run, held for its chain's life (generation-pipeline.md → Multi-run txState). */
 export type PendingRerun = { readonly chapterId: string }
+
+/** A branch whose re-run's abort couldn't take itself back: held until a restart's boot recovery. */
+export type HeldBranch = { readonly storyId: string | null }
+
+/** RejectedStart.blockedBy for a start on a held branch, and the gate kind its controls name. */
+export const RERUN_HELD = 'rerun-held'
 
 // reversalInProgress: a prose reversal's interrupt->sweep window; blocks interruptible starts and
 // user dispatch. pendingTurns: generation-pipeline.md → Gate derivation as a selector.
@@ -65,12 +76,19 @@ export type TxState = {
   pendingClose: ReadonlyMap<string, PendingClose>
   /** In memory only; cleared in the update that ends the re-run's chain. */
   pendingRerun: ReadonlyMap<string, PendingRerun>
+  /** In memory only, so a restart drops it; nothing else clears it. */
+  heldBranches: ReadonlyMap<string, HeldBranch>
+}
+
+export function isBranchHeld(txState: TxState, branchId: string): boolean {
+  return txState.heldBranches.has(branchId)
 }
 
 // A pending turn counts: it is about to raise the hard gate, and a reversal opened in the gap
-// would have its queued user_action refused.
-export function isUserEditBlocked(txState: TxState): boolean {
+// would have its queued user_action refused. `branchId` adds that branch's hold.
+export function isUserEditBlocked(txState: TxState, branchId?: string | null): boolean {
   if (txState.reversalInProgress || txState.pendingTurns.size > 0) return true
+  if (branchId != null && isBranchHeld(txState, branchId)) return true
   return [...txState.runs.values()].some((r) => r.gateBehavior === 'hard-gate')
 }
 
@@ -78,6 +96,7 @@ export function isUserEditBlocked(txState: TxState): boolean {
 // this branch is the one a head reversal passes through by interrupting it.
 export function isHeadReversalBlocked(txState: TxState, branchId: string): boolean {
   if (txState.reversalInProgress || txState.pendingTurns.size > 0) return true
+  if (isBranchHeld(txState, branchId)) return true
   return [...txState.runs.values()].some((r) => runBlocksHeadReversal(r, branchId))
 }
 
@@ -87,16 +106,17 @@ export function runBlocksHeadReversal(run: RunState, branchId: string): boolean 
 }
 
 // Pending turns and reversals hold no run yet, so leaving the story waits on them too; a start
-// holding the branch's own mark (`ignorePendingTurns`) waits only on the rest.
+// holding its own mark (`ownMark`) skips that one, never another on the branch. A held branch
+// isn't busy: leaving waits on this, and only a restart ends a hold.
 export function isStoryBusy(
   txState: TxState,
   storyId: string,
   branchId: string,
-  opts?: { ignorePendingTurns?: true },
+  opts?: { ownMark?: PendingTurn },
 ): boolean {
   if (txState.reversalInProgress) return true
-  if (!opts?.ignorePendingTurns)
-    for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
+  for (const turn of txState.pendingTurns)
+    if (turn.branchId === branchId && turn !== opts?.ownMark) return true
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
 }
 
@@ -149,14 +169,19 @@ type GenerationState = {
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
   /** Removes the run, swapping in `successor` atomically; clears its deferral, a close's pending
-   * close, and (no successor) the pending re-run. */
+   * close, and, for a pass or close with no successor, the pending re-run. */
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. `'aborted'` defers an interruptible pass or close; `'failed'`/`'unwound'`
    * leave the record (only a commit clears it); a re-run records none. A pending close stays; any
-   * pass or close end clears the pending re-run. Returns the slot newly recorded, or null.
+   * pass or close end clears the pending re-run. A re-run `unreversed` (its abort's reversal didn't
+   * commit) holds its branch. Returns the slot newly recorded, or null.
    */
-  abortRun: (runId: string, outcome: 'aborted' | 'failed' | 'unwound') => DeferredWorkKind | null
+  abortRun: (
+    runId: string,
+    outcome: 'aborted' | 'failed' | 'unwound',
+    opts?: { unreversed?: true },
+  ) => DeferredWorkKind | null
   /** Writes the branch's owed close, replacing any. */
   setPendingClose: (branchId: string, record: PendingClose) => void
   clearPendingClose: (branchId: string) => void
@@ -170,10 +195,13 @@ type GenerationState = {
   /** C6: replaces the stored run with a copy carrying `progress`; no-op for an unknown run. */
   setCloseProgress: (runId: string, progress: CloseProgress) => void
   setReversalInProgress: (value: boolean) => void
-  /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
+  /**
+   * Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner.
+   * `own.end` is `endEarly`.
+   */
   bracketPendingTurn: <T>(
     branchId: string,
-    body: (endEarly: () => void) => Promise<T>,
+    body: (endEarly: () => void, own: PendingMark) => Promise<T>,
   ) => Promise<T>
   __reset: () => void
 }
@@ -185,6 +213,7 @@ const emptyTxState = (): TxState => ({
   deferred: new Map(),
   pendingClose: new Map(),
   pendingRerun: new Map(),
+  heldBranches: new Map(),
 })
 
 const store = createStore<GenerationState>()((set) => ({
@@ -235,7 +264,7 @@ const store = createStore<GenerationState>()((set) => ({
         settleCount: s.settleCount + 1,
       }
     }),
-  abortRun: (runId, outcome) => {
+  abortRun: (runId, outcome, opts) => {
     let recorded: DeferredWorkKind | null = null
     set((s) => {
       const run = s.txState.runs.get(runId)
@@ -250,8 +279,12 @@ const store = createStore<GenerationState>()((set) => ({
       const pendingRerun = run?.interruptible
         ? withoutBranch(s.txState.pendingRerun, run.branchId)
         : s.txState.pendingRerun
+      const heldBranches =
+        run?.interruptible === 'rerun' && opts?.unreversed
+          ? new Map([...s.txState.heldBranches, [run.branchId, { storyId: run.storyId }]])
+          : s.txState.heldBranches
       return {
-        txState: { ...s.txState, runs, deferred, pendingRerun },
+        txState: { ...s.txState, runs, deferred, pendingRerun, heldBranches },
         settleCount: s.settleCount + 1,
       }
     })
@@ -323,7 +356,7 @@ const store = createStore<GenerationState>()((set) => ({
         return { txState: { ...s.txState, pendingTurns } }
       })
     try {
-      return await body(end)
+      return await body(end, { mark: turn, end })
     } finally {
       set((s) => {
         if (!s.turnBodies.has(turn)) return s
@@ -367,7 +400,9 @@ export const generationStore = {
   useGeneration,
   getTxState,
   getSettleCount,
-  isUserEditBlocked: () => isUserEditBlocked(getTxState()),
+  /** The open story's branch counts its hold: every user write targets the open story. */
+  isUserEditBlocked: () =>
+    isUserEditBlocked(getTxState(), currentStoryStore.getCurrentStory()?.branchId),
   isHeadReversalBlocked: (branchId: string) => isHeadReversalBlocked(getTxState(), branchId),
   hasActiveRun: () => getTxState().runs.size > 0,
   startRun: api.startRun,

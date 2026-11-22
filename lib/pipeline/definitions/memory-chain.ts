@@ -62,7 +62,7 @@ export async function unprocessedThroughChapter(
       storyEntries,
       and(eq(storyEntries.branchId, chapters.branchId), eq(storyEntries.id, chapters.endEntryId)),
     )
-    // chapters' primary key is (branch_id, id): a fork copies chapter ids.
+    // chapters' primary key is (branch_id, id): a fork will copy chapter ids (no forks yet, M6.1).
     .where(and(eq(chapters.branchId, branchId), eq(chapters.id, chapterId)))
   if (!end) return 0
   const [row] = await ctx.db

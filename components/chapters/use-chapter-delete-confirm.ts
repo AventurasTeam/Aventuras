@@ -94,8 +94,6 @@ export function useChapterDeleteConfirm({
   const pendingRef = useRef(false)
   const openRequest = useRef(0)
   const reviewOpen = chapterOverlaysStore.useOverlays((s) => s.review != null)
-  // The re-read effect's cleanup is what drops a stale read, so the host's fresh callbacks each
-  // render must not re-run it: they ride in a ref.
   const latest = useRef({ loadPreview, remove, resync })
   useEffect(() => {
     latest.current = { loadPreview, remove, resync }
@@ -133,8 +131,10 @@ export function useChapterDeleteConfirm({
   )
 
   useSettleReread({
-    targetKey: chapterId == null ? null : `${branchId}:${chapterId}`,
-    countedAtSettle: target?.countedAtSettle ?? null,
+    target:
+      target == null
+        ? null
+        : { key: `${branchId}:${target.chapterId}`, countedAtSettle: target.countedAtSettle },
     onSettle: (isLive) => {
       // A removal's own reversal settles under it: its result closes the confirm, not a re-read.
       if (pendingRef.current || chapterId == null) return

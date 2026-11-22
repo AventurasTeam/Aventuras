@@ -36,15 +36,14 @@ const RUN_MUTATORS = generationStoreMutators(
 
 // A stray write makes the next Send start a close nobody owes, or skip one that is owed.
 const CLOSE_RECORD_MUTATORS = generationStoreMutators(
-  [
-    'setPendingClose',
-    'clearPendingClose',
-    'clearDeferredClose',
-    'dropBranchRecords',
-    'setPendingRerun',
-    'clearPendingRerun',
-  ],
-  "Only a close's record writers write pendingClose, pendingRerun or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
+  ['setPendingClose', 'clearPendingClose', 'clearDeferredClose', 'dropBranchRecords'],
+  "Only a close's record writers write pendingClose or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
+)
+
+// A stray write turns the branch's next close into a re-run, or ends a re-run's chain early.
+const RERUN_RECORD_MUTATORS = generationStoreMutators(
+  ['setPendingRerun', 'clearPendingRerun'],
+  "Only the re-run's start writes pendingRerun; the store clears it as the chain ends. See docs/generation-pipeline.md → Multi-run txState.",
 )
 
 const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(
@@ -128,6 +127,7 @@ module.exports = defineConfig([
         'error',
         ...RUN_MUTATORS,
         ...CLOSE_RECORD_MUTATORS,
+        ...RERUN_RECORD_MUTATORS,
         ...CLOSE_PROGRESS_MUTATORS,
       ],
 
@@ -321,6 +321,19 @@ module.exports = defineConfig([
       'lib/pipeline/definitions/memory-chain.ts',
     ],
     rules: {
+      'no-restricted-properties': [
+        'error',
+        ...RUN_MUTATORS,
+        ...RERUN_RECORD_MUTATORS,
+        ...CLOSE_PROGRESS_MUTATORS,
+      ],
+    },
+  },
+
+  // The re-run's start, the one writer of the re-run record; it may write a close's too.
+  {
+    files: ['lib/actions/chapters/close-rerun.ts'],
+    rules: {
       'no-restricted-properties': ['error', ...RUN_MUTATORS, ...CLOSE_PROGRESS_MUTATORS],
     },
   },
@@ -329,7 +342,7 @@ module.exports = defineConfig([
   {
     files: ['lib/pipeline/runtime/**'],
     rules: {
-      'no-restricted-properties': ['error', ...CLOSE_RECORD_MUTATORS],
+      'no-restricted-properties': ['error', ...CLOSE_RECORD_MUTATORS, ...RERUN_RECORD_MUTATORS],
     },
   },
 
@@ -340,6 +353,7 @@ module.exports = defineConfig([
       'no-restricted-properties': [
         'error',
         ...CLOSE_RECORD_MUTATORS.filter(({ property }) => property !== 'clearPendingClose'),
+        ...RERUN_RECORD_MUTATORS,
         ...CLOSE_PROGRESS_MUTATORS,
       ],
     },

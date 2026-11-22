@@ -151,10 +151,14 @@ export async function undoLastAction(
   // Brackets the whole target-selection + reversal sweep, matching
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
-  return bracketProseReversal(branchId, ctx, () =>
-    refusingIntegrity(branchId, () =>
-      undoBracketed(branchId, ctx, throughInterrupt, expectedActionId),
-    ),
+  return bracketProseReversal(
+    branchId,
+    ctx,
+    () =>
+      refusingIntegrity(branchId, () =>
+        undoBracketed(branchId, ctx, throughInterrupt, expectedActionId),
+      ),
+    () => GATED,
   )
 }
 
@@ -219,13 +223,14 @@ async function undoRerun(
   const invalidation = await resolveInvalidationForDeltas(branchId, group, ctx)
   if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
   const target = writeBack.outcome === 'undone' ? withCloseGroups(group, writeBack.seed) : group
+  const ops = writeBack.outcome === 'alone' ? [] : writeBack.ops
   const set = await selectReversalSet(ctx, { branchId, target, sweep: invalidation.rows })
   try {
     await reverseAndPruneDeltaRows(
       set,
       ctx,
       { keepRedoExact: false },
-      [...invalidation.clampOps, ...writeBack.ops],
+      [...invalidation.clampOps, ...ops],
       undefined,
       writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
     )
@@ -241,7 +246,7 @@ async function undoRerun(
   }
   undoRedoStore.clear()
   logCloseUndone(actionId, writeBack)
-  return writeBack.outcome === 'undone' && writeBack.chapterNumber !== null
+  return writeBack.outcome === 'undone'
     ? { status: 'ok', closeUndone: { chapterNumber: writeBack.chapterNumber } }
     : { status: 'ok' }
 }
@@ -269,25 +274,29 @@ export async function redoLastAction(
     }
 
   // Bracketed like every reversal, so no pass starts mid-sweep.
-  return bracketProseReversal(branchId, ctx, () =>
-    refusingIntegrity(branchId, async () => {
-      // A write committing during the settle clears the stack; its snapshot would restore over it.
-      if (undoRedoStore.peekRedoGroup() !== group)
-        return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
-      const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)
-      if (invalidation.status === 'unreadable')
-        return unreadableScopeRejection(invalidation.deltaId)
-      try {
-        await applyRedo(group, ctx, invalidation.clampOps)
-      } catch (e) {
-        // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
-        // a retry would re-insert an already-inserted delta row and collide on its primary key.
-        if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
-        throw e
-      }
-      undoRedoStore.popRedoGroup()
-      return { status: 'ok' }
-    }),
+  return bracketProseReversal(
+    branchId,
+    ctx,
+    () =>
+      refusingIntegrity(branchId, async () => {
+        // A write committing during the settle clears the stack; its snapshot would restore over it.
+        if (undoRedoStore.peekRedoGroup() !== group)
+          return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
+        const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)
+        if (invalidation.status === 'unreadable')
+          return unreadableScopeRejection(invalidation.deltaId)
+        try {
+          await applyRedo(group, ctx, invalidation.clampOps)
+        } catch (e) {
+          // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
+          // a retry would re-insert an already-inserted delta row and collide on its primary key.
+          if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
+          throw e
+        }
+        undoRedoStore.popRedoGroup()
+        return { status: 'ok' }
+      }),
+    () => GATED,
   )
 }
 

@@ -63,6 +63,31 @@ describe('projectChapterPatch', () => {
     })
   })
 
+  // No writer stores either; the report schema refuses a report without its action.
+  it('reads a report whose action is not a string as none, on a create and an update', () => {
+    for (const closeReport of [
+      { ...REPORT, actionId: 7 },
+      { version: 1, calls: [] },
+    ]) {
+      expect(
+        projectChapterPatch({ op: 'create', id: 'chap_1', row: { ...ROW, closeReport } }),
+      ).toStrictEqual({ op: 'create', id: 'chap_1', row: { ...ROW, ...NO_REPORT } })
+      expect(
+        projectChapterPatch({ op: 'update', id: 'chap_1', columns: { closeReport } }),
+      ).toStrictEqual({ op: 'update', id: 'chap_1', columns: NO_REPORT })
+    }
+  })
+
+  it('reads a store-shaped create whose flag and action disagree as having none', () => {
+    for (const fields of [
+      { hasCloseReport: true, closeReportActionId: null },
+      { hasCloseReport: false, closeReportActionId: 'act_stale' },
+    ])
+      expect(
+        projectChapterPatch({ op: 'create', id: 'chap_1', row: { ...ROW, ...fields } }),
+      ).toStrictEqual({ op: 'create', id: 'chap_1', row: { ...ROW, ...NO_REPORT } })
+  })
+
   it("lets a create's report win over a store-shaped action it also carries", () => {
     expect(
       projectChapterPatch({

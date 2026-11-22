@@ -137,8 +137,10 @@
     "failed": "Re-run failed. Chapter {{number}}'s close is as it was.",
     "failedWithReason": "Re-run failed ({{reason}}). Chapter {{number}}'s close is as it was.",
     "undone": "Chapter {{number}}'s earlier close couldn't be restored, so its close was undone.",
+    "unreversed": "The re-run couldn't be undone. Restart the app to restore chapter {{number}}'s close; until then, the story can't be changed.",
     "countsChanged": "The counts changed while this was open. Check them before confirming.",
-    "startFailed": "Couldn't start the re-run."
+    "startFailed": "Couldn't start the re-run.",
+    "resyncFailed": "The turns were rolled back, but the re-run couldn't start and the story couldn't refresh. Reopen the story."
   },
   "review": {
     "title": "Review — Chapter {{number}}: {{title}}",

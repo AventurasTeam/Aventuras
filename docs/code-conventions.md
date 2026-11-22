@@ -164,17 +164,19 @@ access, so it is restricted with `no-restricted-properties` in
 the orchestrator and the prose-reversal bracket, since a stray caller
 can leave the hard gate or the reversal barrier stuck. The close's
 record mutators (`setPendingClose`, `clearPendingClose`,
-`setPendingRerun`, `clearPendingRerun`, `clearDeferredClose`,
-`dropBranchRecords`) belong to the files that
+`clearDeferredClose`, `dropBranchRecords`) belong to the files that
 write those records (`lib/actions/chapters/**`, `delete-story.ts`,
 `chapter-close-boundary.ts` and `memory-chain.ts`), and
 `clearPendingClose` also to the prose-reversal bracket, since a stray
 write makes the next Send start a close nobody owes or skip one that is
-owed. `setCloseProgress` is the orchestrator's. The lint holds each
-owner to its own mutators: the record writers call neither the run
-mutators nor `setCloseProgress`, the orchestrator calls no record
-mutator, and the bracket calls only the run mutators and
-`clearPendingClose`.
+owed. The re-run's record mutators (`setPendingRerun`,
+`clearPendingRerun`) belong to the re-run's start (`close-rerun.ts`)
+alone; the store clears the record as the chain ends.
+`setCloseProgress` is the orchestrator's. The lint holds each owner to
+its own mutators: the record writers call neither the run mutators nor
+`setCloseProgress`, and outside `close-rerun.ts` no re-run record
+mutator; the orchestrator calls no record mutator, and the bracket
+calls only the run mutators and `clearPendingClose`.
 
 Failure handling is **not** part of this mechanism — it is a
 per-store, per-context policy, and the mechanism itself carries no

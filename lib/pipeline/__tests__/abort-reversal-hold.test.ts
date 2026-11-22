@@ -16,7 +16,7 @@ import {
   pipelineErrorDetail,
   pipelineEventBus,
 } from '@/lib/pipeline'
-import { generationStore, type DeferredWorkKind } from '@/lib/stores'
+import { generationStore, RERUN_HELD, type RunSlot } from '@/lib/stores'
 
 import { makeHarness, realDeltaActionPort, resetSingletons } from './harness'
 
@@ -45,7 +45,7 @@ const grantedWithin = (what: string) =>
     what,
   )
 
-function defineRun(kind: string, interruptible?: DeferredWorkKind): { landed: Promise<void> } {
+function defineRun(kind: string, slot?: RunSlot): { landed: Promise<void> } {
   let land!: () => void
   const landed = new Promise<void>((resolve) => {
     land = resolve
@@ -79,7 +79,7 @@ function defineRun(kind: string, interruptible?: DeferredWorkKind): { landed: Pr
     phases: [{ name: 'run', run: writeThenWait }],
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
-    interruptible,
+    ...(slot === 'rerun' ? { runSlot: () => slot } : { interruptible: slot }),
     concurrencyPolicy: {},
   })
   return { landed }
@@ -251,7 +251,7 @@ describe("an abort's journal outcome", () => {
     const asked: unknown[] = []
     await abortWith(async (args) => {
       asked.push(args)
-      return { deltas: 0, journal: null, chapterNumber: null }
+      return { deltas: 0, journal: null }
     })
 
     expect(asked).toEqual([{ actionId: expect.any(String), branchId: 'b1' }])
@@ -264,9 +264,8 @@ describe("an abort's journal outcome", () => {
   })
 
   it.each([
-    ['restored', { deltas: 2, journal: 'restored', chapterNumber: null }],
-    ['undone with no chapter left', { deltas: 1, journal: 'undone', chapterNumber: null }],
-    ['with no journal', { deltas: 1, journal: null, chapterNumber: null }],
+    ['restored', { deltas: 2, journal: 'restored' }],
+    ['with no journal', { deltas: 1, journal: null }],
   ] as const)(
     'leaves an aborted run unmarked when its reversal ended %s',
     async (_name, reversal) => {
@@ -284,8 +283,7 @@ describe("an abort's journal outcome", () => {
           cause: new Error('store sync boom'),
           actionId,
           stage: 'store-sync',
-          journal: 'undone',
-          chapterNumber: 3,
+          rerun: { journal: 'undone', chapterNumber: 3 },
         }),
       ),
     )
@@ -307,8 +305,6 @@ describe("an abort's journal outcome", () => {
           cause: new Error('forced'),
           actionId,
           stage: 'transaction',
-          journal: 'undone',
-          chapterNumber: 3,
         }),
       ),
     )
@@ -318,9 +314,8 @@ describe("an abort's journal outcome", () => {
   })
 
   it.each([
-    ['a restored journal', { journal: 'restored' }],
+    ['a restored journal', { rerun: { journal: 'restored' } }],
     ['no journal', {}],
-    ['an undone close with no chapter left', { journal: 'undone', chapterNumber: null }],
   ] as const)(
     'leaves a failed run unmarked when only the store sync failed after %s',
     async (_name, payload) => {
@@ -345,4 +340,86 @@ describe("an abort's journal outcome", () => {
       expect(result).not.toHaveProperty('closeUndone')
     },
   )
+})
+
+// generation-pipeline.md → Recovery-failure policy: a re-run's abort that couldn't take itself back
+// holds its branch until a restart; the writes it left are boot recovery's to reverse.
+describe("an abort whose reversal didn't commit", () => {
+  beforeEach(() => {
+    resetSingletons()
+  })
+  afterEach(() => {
+    resetSingletons()
+  })
+
+  const UNCOMMITTED: DeltaActionPort['reverseRunGroup'] = ({ actionId }) =>
+    Promise.reject(
+      new DeltaReplayError('Reverse-replay failed', {
+        cause: new Error('forced'),
+        actionId,
+        stage: 'transaction',
+      }),
+    )
+
+  const STORE_SYNC: DeltaActionPort['reverseRunGroup'] = ({ actionId }) =>
+    Promise.reject(
+      new DeltaReplayError('Post-commit patch sync failed', {
+        cause: new Error('store sync boom'),
+        actionId,
+        stage: 'store-sync',
+      }),
+    )
+
+  async function abortWith(
+    reverse: DeltaActionPort['reverseRunGroup'],
+    slot: 'rerun' | 'pass',
+  ): Promise<unknown> {
+    const { ctx } = await makeHarness()
+    configurePort({ reverseRunGroup: reverse })
+    const kind = slot === 'rerun' ? 'rerun-stand-in' : PERIODIC_CLASSIFIER_KIND
+    const { landed } = defineRun(kind, slot)
+    const run = startPipeline(kind, ctx)
+    await landed
+    abortRuns()
+    return within(run.origin, 'abort')
+  }
+
+  const held = () => generationStore.getTxState().heldBranches.has('b1')
+
+  it("marks the run unreversed and holds a re-run's branch", async () => {
+    const result = await abortWith(UNCOMMITTED, 'rerun')
+
+    expect(result).toMatchObject({ outcome: 'failed', unreversed: true })
+    expect(held()).toBe(true)
+  })
+
+  it('marks a pass unreversed but holds nothing', async () => {
+    const result = await abortWith(UNCOMMITTED, 'pass')
+
+    expect(result).toMatchObject({ outcome: 'failed', unreversed: true })
+    expect(held()).toBe(false)
+  })
+
+  it('neither marks nor holds a re-run whose reversal committed before its store sync failed', async () => {
+    const result = await abortWith(STORE_SYNC, 'rerun')
+
+    expect(result).toMatchObject({ outcome: 'failed' })
+    expect(result).not.toHaveProperty('unreversed')
+    expect(held()).toBe(false)
+  })
+
+  it('refuses every start on the held branch, reserving nothing, and starts one on another', async () => {
+    await abortWith(UNCOMMITTED, 'rerun')
+    const { ctx } = await makeHarness()
+    defineRun('later-run')
+
+    const refused = await within(startPipeline('later-run', ctx).origin, 'a start on b1')
+    expect(refused).toEqual({ outcome: 'rejected', blockedBy: RERUN_HELD })
+    expect(generationStore.getTxState().runs.size).toBe(0)
+
+    const elsewhere = startPipeline('later-run', { ...ctx, branchId: 'b2' })
+    expect(generationStore.getTxState().runs.size).toBe(1)
+    abortRuns()
+    await within(elsewhere.origin, 'a start on b2')
+  })
 })

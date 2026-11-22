@@ -1081,6 +1081,8 @@ export function EntryCard({
   const editHold = heldControl(editOff, held, reasons)
   const reversalHold = heldControl(reversalOff, held, reasons)
   const clusterHold = heldControl(disabled, held, reasons)
+  // A clean draft holds Save & regenerate too, and no gate is why.
+  const saveAndRegenReason = editOff === true || reversalOff === true ? disabledReason : undefined
 
   // Carries the narrowed values rather than a bare boolean so the footer can
   // forward them without a non-null assertion.
@@ -1298,6 +1300,7 @@ export function EntryCard({
                 size="sm"
                 onPress={onCommitEditAndRegen}
                 disabled={editOff || reversalOff || !editDirty}
+                disabledReason={saveAndRegenReason}
               >
                 <Icon as={RefreshCw} size="sm" />
                 <Text>{t('reader:entryCard.saveAndRegenerate')}</Text>

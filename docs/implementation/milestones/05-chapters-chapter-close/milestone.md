@@ -445,11 +445,15 @@ type CloseReportCall = {
   share. On create it drops `closeReport` and derives `hasCloseReport`.
   On update it does so only when `closeReport` is a key of `columns`,
   since an update patch carries only what was written: a title save must
-  leave the flag alone. The hydrate select matches, with `.mapWith(Boolean)`
-  so the flag isn't 0 or 1. The store's row is
+  leave the flag alone. The hydrate select matches: it reads the
+  report's action and derives the flag from it, so the flag is a
+  boolean, never 0 or 1. The store's row is
   `Omit<Chapter, 'closeReport'> & { hasCloseReport: boolean }`, and from
-  5.13 `closeReportActionId: string | null` beside it, projected the
-  same way, so the review window can tell a report a re-run replaced. A store
+  5.13 the pair
+  `{ hasCloseReport: false; closeReportActionId: null } | { hasCloseReport: true; closeReportActionId: string }`,
+  projected the same way, so the review window can tell a report a
+  re-run replaced. A stored report whose action isn't a string reads as
+  none. A store
   test walks commit, a title save and its undo, CTRL-Z and redo. The
   review window reads the report by chapter id when it opens.
 
@@ -561,7 +565,9 @@ builds on it. Consumers: 5.3, 5.7, 5.13.
 
 `lib/stores/ui/chapter-overlays.ts` exposes
 `openCloseModal({ branchId, endEntryId? })` and
-`openReviewWindow({ chapterId })`, and from 5.13, which provides it,
+`openReviewWindow({ chapterId })` (it returns whether the window
+opened, and from 5.13 refuses while a re-run request is held), and from
+5.13, which provides it,
 `openRerunConfirm({ branchId, chapterId, fromReview? })`, and one host for all,
 `ChapterOverlaysHost` in `components/chapters/chapter-overlays-host.tsx`,
 mounts at the app root beside `MemoryRunToasts` (`app/_layout.tsx:116-117`).

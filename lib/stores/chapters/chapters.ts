@@ -1,14 +1,10 @@
 import type { StorePatch } from '@/lib/actions'
 import type { Chapter } from '@/lib/db'
 
-import { projectChapterPatch } from './chapter-store-projection'
+import { projectChapterPatch, type CloseReportFields } from './chapter-store-projection'
 import { createWorkingSetStore } from '../factory/working-set-store'
 
-export type StoreChapter = Omit<Chapter, 'closeReport'> & {
-  hasCloseReport: boolean
-  /** C4: the action of the close or re-run that wrote the report; null with no report. */
-  closeReportActionId: string | null
-}
+export type StoreChapter = Omit<Chapter, 'closeReport'> & CloseReportFields
 
 const store = createWorkingSetStore<StoreChapter>()
 

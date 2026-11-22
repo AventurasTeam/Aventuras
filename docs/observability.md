@@ -192,12 +192,23 @@ convention, and the expectation that subsystems route through
   `lib/actions/delta/rerun-journal.ts`: a close's re-run's `reversal`
   phase committed its journal, with `branchId`, `chapterId`, the `floor`
   and the counts of journaled `rows`, `deltas` and `journals`, under the
-  run's `actionId`) and `rerun_close_undone` (warn, the same file: a
+  run's `actionId`), `rerun_journal_dropped` (debug,
+  `lib/actions/delta/reverse-replay.ts`: a reversal committed with the
+  planner dropping re-run journals it would leave inexact
+  ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+  with `branchId` and `journals`, the dropped journals' action ids, under
+  the reversal's `actionId`; logged only after the commit, so a later
+  `rerun_close_undone` with `journal: 'missing'` that names a logged
+  re-run reads as a designed drop, not a lost journal) and
+  `rerun_close_undone` (warn, the same file: a
   re-run's reversal committed with its chapter's close undone, since the
   journal couldn't be written back, with `chapterId`, `chapterNumber`
   and `journal`, `not-whole` or `missing`, under the re-run's
   `actionId`; the user sees the toast, or after a crash the recovery
-  modal's re-run line),
+  modal's re-run line. With `chapterNumber` null and `journal`
+  `missing`, no journal and no chapter row were left, so the group
+  reversed alone, no close was undone, and the user sees no close-undone
+  line),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /
@@ -374,13 +385,23 @@ convention, and the expectation that subsystems route through
   `close_rerun_start_refused` (warn,
   `components/chapters/run-close-rerun.ts`: a confirmed re-run was
   refused for a reason other than the counts changing, the chapter no
-  longer being the latest, or a run in flight, with `branchId`,
-  `chapterId` and the refusal `code` (`preflight-failed` for a failed
-  pre-flight); the confirm closes with `Couldn't start the re-run.`, or
-  with the close's own pre-flight copy),
+  longer being the latest, a close owed, or a run in flight, with
+  `branchId`, `chapterId` and the refusal `code` (`preflight-failed` for
+  a failed pre-flight); the confirm closes with the start-failed copy,
+  with the manual close's copy for an embedder swap or a held branch,
+  or with the close's own pre-flight copy),
   `close_rerun_start_threw` (error, the same file: `startCloseRerun`
-  threw rather than resolving, with `branchId`, `chapterId` and `error`;
-  the confirm closes with `Couldn't start the re-run.`),
+  threw rather than resolving and wrote nothing, with `branchId`,
+  `chapterId` and `error`, a replay failure's cause rather than its
+  wrapper's message; the confirm closes with the start-failed copy),
+  `close_rerun_sync_failed` (warn, the same file: the rollback shortcut
+  committed but its store sync failed, with `branchId`, `chapterId` and
+  `error`, the replay failure's cause; the open branch re-hydrates next,
+  only while it is still the open one, and the confirm closes with the
+  start-failed copy), `close_rerun_resync_failed` (error, the same file:
+  that re-hydration threw, or read no story or a corrupt one, with
+  `branchId`, `chapterId` and `error`; the confirm closes with the
+  `resyncFailed` copy, which asks to reopen the story),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already

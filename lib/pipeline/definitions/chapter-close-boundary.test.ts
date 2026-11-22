@@ -707,7 +707,7 @@ describe('closeBoundaryPhase under a re-run', () => {
     logChapterWrite('b1', 1, 'chap_1', 'chapter_close', 'create')
     logChapterWrite('b1', 2, 'chap_2', 'chapter_close', 'create')
     // Another branch of the one database: a fork's chapter shares chap_2's id and sits past b1's
-    // latest number, with a close's write on it; its range and e-ids are not b1's.
+    // latest number, with a close's write on it; its range (x1–x2) is not b1's.
     insertChapterRow('b2', 'chap_2', 3, 'x1', 'x2')
     insertChapterRow('b2', 'chap_b2_only', 4, 'x3', 'x4')
     logChapterWrite('b2', 1, 'chap_2', 'chapter_close', 'create')

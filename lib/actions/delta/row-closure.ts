@@ -67,6 +67,17 @@ class ReversalSet {
 // Type-only: a value export would let another module construct an unclosed set.
 export type { ReversalSet }
 
+declare const countedOnly: unique symbol
+
+/**
+ * A set selected with `reversedFirst`. Its ref clears assume deltas still live are gone, so
+ * reversing it would null refs CTRL-Z can't restore: only the counting readers take it.
+ */
+export type CountedReversalSet = ReversalSetFields & { readonly [countedOnly]: true }
+
+/** What the counting readers take: a set to reverse, or one selected only to count. */
+export type CountableSet = ReversalSet | CountedReversalSet
+
 export type ReversalSeed = {
   readonly branchId: string
   /** The action being undone, or a path's whole selection. */
@@ -74,9 +85,8 @@ export type ReversalSeed = {
   /** Rows reversed because prose moved; redo leaves them and what only they reach to re-derive. */
   readonly sweep?: readonly Delta[]
   /**
-   * Deltas another reversal takes back before this one: the ref clears read as after them. The
-   * closure doesn't; it is selected against the current state. A set selected with it is for
-   * counting only and is never reversed.
+   * Deltas another reversal takes back first: ref clears read as after them, the closure doesn't.
+   * Types the set as a `CountedReversalSet`, which no reversal takes.
    */
   readonly reversedFirst?: readonly Delta[]
 }
@@ -463,7 +473,17 @@ async function refClearsOf(
   return [...clears.values()]
 }
 
-export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise<ReversalSet> {
+// Intersected with ReversalSeed: alone, an all-optional type is weak and rejects a seed without it.
+type ReversibleSeed = ReversalSeed & { readonly reversedFirst?: undefined }
+type SelectedSet<S extends ReversalSeed> = S extends ReversibleSeed
+  ? ReversalSet
+  : CountedReversalSet
+
+export function selectReversalSet<S extends ReversalSeed>(
+  ctx: DbCtx,
+  seed: S,
+): Promise<SelectedSet<S>>
+export async function selectReversalSet(ctx: DbCtx, seed: ReversalSeed): Promise<CountableSet> {
   const { branchId, target } = seed
   const sweep = seed.sweep ?? []
   const all = [...target, ...sweep]

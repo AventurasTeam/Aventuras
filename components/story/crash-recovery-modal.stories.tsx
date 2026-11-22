@@ -3,7 +3,7 @@ import { StrictMode, useEffect, useState } from 'react'
 import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
 import { logger } from '@/lib/diagnostics'
-import type { BootRecoveryReport } from '@/lib/pipeline'
+import type { BootRecoveryReport, RecoveryFailure } from '@/lib/pipeline'
 import { recoveryReportStore } from '@/lib/stores'
 
 import { CrashRecoveryModal } from './crash-recovery-modal'
@@ -38,26 +38,26 @@ const multiReport: BootRecoveryReport = {
   heldStoryIds: [],
 }
 
+const classifierFailure = {
+  runId: 'run-classifier',
+  kind: 'periodic-classifier',
+  actionId: 'action-classifier',
+  storyId: 's1',
+  error: new Error('could not reverse'),
+  refusal: null,
+} satisfies RecoveryFailure
+
 // Nothing reversed (orphan's writes survive, branch held): must not title itself "Story recovered".
 const degradedReport: BootRecoveryReport = {
   reversed: [],
-  failures: [
-    {
-      runId: 'run-classifier',
-      kind: 'periodic-classifier',
-      actionId: 'action-classifier',
-      storyId: 's1',
-      error: new Error('could not reverse'),
-      refusal: null,
-    },
-  ],
+  failures: [classifierFailure],
   heldStoryIds: ['s1'],
 }
 
 // Every boot refuses it again, so the copy must not promise that restarting retries.
 const refusedReport: BootRecoveryReport = {
   reversed: [],
-  failures: [{ ...degradedReport.failures[0], refusal: 'write-back' }],
+  failures: [{ ...classifierFailure, refusal: 'write-back' }],
   heldStoryIds: ['s1'],
 }
 

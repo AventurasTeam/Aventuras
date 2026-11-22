@@ -32,6 +32,7 @@ function tx(fields: Partial<TxState> = {}, ...runs: RunState[]): TxState {
     deferred: new Map(),
     pendingClose: new Map(),
     pendingRerun: new Map(),
+    heldBranches: new Map(),
     ...fields,
   }
 }
@@ -97,5 +98,22 @@ describe('suggestionRefreshHoldReason', () => {
     expect(suggestionRefreshHoldReason(tx({}, CLOSE), 'br_1')).toBeUndefined()
     expect(suggestionRefreshHoldReason(tx({}, PASS), 'br_1')).toBeUndefined()
     expect(suggestionRefreshHoldReason(tx(RERUN_CHAIN), 'br_2')).toBeUndefined()
+  })
+})
+
+// chapter-close.md → Re-running a close: a re-run whose undo failed holds its branch until restart.
+describe('a branch held until restart', () => {
+  const HELD: Partial<TxState> = { heldBranches: new Map([['br_1', { storyId: 'story_1' }]]) }
+
+  it('refuses a refresh on it, and names the hold on its strip', () => {
+    expect(suggestionRefreshBlocked(tx(HELD), 'br_1', false)).toBe(true)
+    expect(suggestionRefreshHoldReason(tx(HELD), 'br_1')).toBe(
+      "A re-run couldn't be undone. Restart the app to restore its chapter's close.",
+    )
+  })
+
+  it("holds no other branch's strip", () => {
+    expect(suggestionRefreshBlocked(tx(HELD), 'br_2', false)).toBe(false)
+    expect(suggestionRefreshHoldReason(tx(HELD), 'br_2')).toBeUndefined()
   })
 })

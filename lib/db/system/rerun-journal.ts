@@ -1,4 +1,8 @@
+import { createSelectSchema } from 'drizzle-zod'
 import { z } from 'zod'
+
+import { deltas } from './system.table'
+import type { Delta } from '../types'
 
 /** `reversal_journals.journal`: a re-run's undo half (generation-pipeline.md → Reverse-replay). */
 export type RerunJournal = {
@@ -11,12 +15,16 @@ export type RerunJournal = {
   /** Each row the plan writes, by table and id: its whole row before, or null when absent. */
   rows: { table: string; id: string; before: Record<string, unknown> | null }[]
   /** Each delta row the plan prunes, re-owns or rewrites, whole, as logged before. */
-  deltas: Record<string, unknown>[]
+  deltas: Delta[]
   /** Each earlier reversal_journals row the plan drops, whole. */
-  journals: { actionId: string; journal: unknown; createdAt: number }[]
+  journals: { actionId: string; journal: RerunJournal; createdAt: number }[]
 }
 
 const wholeRow = z.record(z.string(), z.unknown())
+
+const deltaRow = z.strictObject(
+  createSelectSchema(deltas, { undoPayload: wholeRow.nullable() }).shape,
+)
 
 // A new shape takes a new version, so v1 parses strictly.
 export const rerunJournalSchema: z.ZodType<RerunJournal> = z.strictObject({
@@ -31,10 +39,14 @@ export const rerunJournalSchema: z.ZodType<RerunJournal> = z.strictObject({
       before: wholeRow.nullable(),
     }),
   ),
-  deltas: z.array(wholeRow),
+  deltas: z.array(deltaRow),
   // Strips a dropped row's branch_id: the write-back stamps the executing branch on restore.
   journals: z.array(
-    z.object({ actionId: z.string().min(1), journal: z.unknown(), createdAt: z.number().int() }),
+    z.object({
+      actionId: z.string().min(1),
+      journal: z.lazy(() => rerunJournalSchema),
+      createdAt: z.number().int(),
+    }),
   ),
 })
 

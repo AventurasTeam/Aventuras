@@ -5,12 +5,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CHAPTER_CLOSE_KIND, CHAPTER_CLOSE_RERUN } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { generationStore, rerunHoldsReversal, type RunState, type TxState } from '@/lib/stores'
+import {
+  generationStore,
+  RERUN_HELD,
+  rerunHoldsReversal,
+  type RunState,
+  type TxState,
+} from '@/lib/stores'
 
 import {
   generationGateReason,
   headReversalGateReason,
   runGateKind,
+  selectGateHeld,
   selectHeadReversalRunKind,
   selectRerunRunning,
   selectStorySettingsGenerationRunKind,
@@ -72,6 +79,7 @@ function tx(...runs: RunState[]): TxState {
     deferred: new Map(),
     pendingClose: new Map(),
     pendingRerun: new Map(),
+    heldBranches: new Map(),
   }
 }
 
@@ -436,5 +444,54 @@ describe('selectRerunRunning', () => {
   it("reads false for another branch's re-run, and with no run", () => {
     expect(selectRerunRunning(tx(rerun({ branchId: 'branch-2' })), 'branch-1')).toBe(false)
     expect(selectRerunRunning(tx(), 'branch-1')).toBe(false)
+  })
+})
+
+// generation-pipeline.md → Recovery-failure policy: a re-run whose abort couldn't take itself back
+// holds its branch until a restart, with no run left for a pill to name.
+describe('a branch held until restart, at the gate', () => {
+  const HELD_REASON = "A re-run couldn't be undone. Restart the app to restore its chapter's close."
+
+  function holdBranch1(): void {
+    const stopped = rerun()
+    generationStore.startRun(stopped)
+    generationStore.abortRun(stopped.runId, 'failed', { unreversed: true })
+  }
+
+  function gateOf(storyId: string, branchId?: string): Gate | undefined {
+    let gate: Gate | undefined
+    render(<GateProbe storyId={storyId} branchId={branchId} onResult={(g) => (gate = g)} />)
+    return gate
+  }
+
+  it("blocks the branch's screens with the restart reason, and shows no pill", () => {
+    holdBranch1()
+    expect(gateOf('story-1', 'branch-1')).toEqual({
+      activeRunKind: null,
+      editBlocked: true,
+      gateReason: HELD_REASON,
+      beforeTurn: false,
+      cancelPillRun: expect.any(Function),
+    })
+  })
+
+  it("holds the story's screens that name no branch, and no other branch or story", () => {
+    holdBranch1()
+    expect(gateOf('story-1')?.gateReason).toBe(HELD_REASON)
+    expect(gateOf('story-1', 'branch-2')?.editBlocked).toBe(false)
+    expect(gateOf('story-2')?.editBlocked).toBe(false)
+  })
+
+  it('reads the hold by branch when given one, by story when not', () => {
+    const held: TxState = { ...tx(), heldBranches: new Map([['branch-1', { storyId: 'story-1' }]]) }
+    expect(selectGateHeld(held, { storyId: 'story-1', branchId: 'branch-1' })).toBe(true)
+    expect(selectGateHeld(held, { storyId: 'story-1', branchId: 'branch-2' })).toBe(false)
+    expect(selectGateHeld(held, { storyId: 'story-1' })).toBe(true)
+    expect(selectGateHeld(held, { storyId: 'story-2' })).toBe(false)
+    expect(selectGateHeld(tx(), { storyId: 'story-1' })).toBe(false)
+  })
+
+  it('names the hold for head reversals, which no run holds', () => {
+    expect(headReversalGateReason(true, { headReversal: null, pill: RERUN_HELD })).toBe(HELD_REASON)
   })
 })

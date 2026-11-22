@@ -403,6 +403,12 @@ describe('useMemoryRunOutcomes', () => {
       vi.spyOn(logger, 'warn').mockImplementation(() => {})
       openStory()
       chaptersStore.hydrate('br_1', [chapter('chap_2', 2)])
+      // The re-run's report update lands on the chapter row before its run_complete.
+      chaptersStore.patch('br_1', {
+        op: 'update',
+        id: 'chap_2',
+        columns: { closeReport: report('act_rerun') },
+      })
       reads.latest.mockRejectedValue(new Error('disk'))
       render(<Probe />)
       rerunEnded('completed')
@@ -416,6 +422,8 @@ describe('useMemoryRunOutcomes', () => {
           stoppedTasks: 0,
         }),
       )
+      const rows = chaptersStore.getChapters()
+      expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 1 })?.id).toBe('chap_2')
     })
 
     it('holds nothing on a failed read when the store holds another branch', async () => {

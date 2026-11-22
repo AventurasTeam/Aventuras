@@ -290,7 +290,8 @@ that goes under an open window stops pressing. The entry link is
 closed: <title>` at the info tone. With stopped tasks it takes the
   warning tone, `Chapter closed, but <n> tasks stopped early`, with
   singular and plural keys. Both carry `Review`, calling
-  `openReviewWindow({ chapterId })` and clearing the result, and ×.
+  `openReviewWindow({ chapterId })` and clearing the result when the
+  window opened, and ×.
 - It stays until ×, `Review`, the chapter reversing, a newer close
   committing, or the story closing (seen when it next opens) or
   switching branch. A later run's

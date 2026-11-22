@@ -354,8 +354,9 @@ transaction that drops it.
 **`pendingRerun` and the `'rerun'` slot** (`lib/stores/generation/generation.ts`).
 
 - `TxState.pendingRerun: ReadonlyMap<string, { chapterId: string }>`, with
-  `setPendingRerun` and `clearPendingRerun`, both added to
-  `CLOSE_RECORD_MUTATORS` in `eslint.config.js`.
+  `setPendingRerun` and `clearPendingRerun`, both in
+  `RERUN_RECORD_MUTATORS` in `eslint.config.js`, owned by
+  `close-rerun.ts` alone.
 - `RunState.interruptible` widens to `DeferredWorkKind | 'rerun' | null`.
   `newRunState` (`orchestrator.ts`) sets `'rerun'` for a `chapter-close`
   run reserved while `pendingRerun` holds its branch, a chained successor
@@ -444,13 +445,17 @@ git-ignored pointer only):
 
 This slice extends them:
 
-- The chapters store row carries `closeReportActionId: string | null`
-  beside `hasCloseReport`, projected the same way in
+- The chapters store row carries `closeReportActionId` beside
+  `hasCloseReport` as one union,
+  `{ hasCloseReport: false; closeReportActionId: null } | { hasCloseReport: true; closeReportActionId: string }`,
+  built by `closeReportFields` in
   `lib/stores/chapters/chapter-store-projection.ts`: on create, and on an
   update only when `closeReport` is a key of `columns`. The hydrate select
-  (`lib/actions/stories/operational.ts:173`) reads
-  `json_extract(close_report, '$.actionId')`. C4's store test walks a
-  re-run's commit and its CTRL-Z too.
+  (`lib/actions/stories/operational.ts`) reads the action only where
+  `json_type(close_report, '$.actionId')` is `'text'`, and derives the
+  flag from it. A stored report whose action isn't a string reads as
+  none: no writer stores one and the report schema refuses it. C4's store
+  test walks a re-run's commit and its CTRL-Z too.
 - `loadCloseDeltas` (`lib/history/close-read.ts`) gains a lower bound and
   reads a re-run's group from it to its report update, so its changes keep
   their old values. The default under [Open questions](#open-questions):
@@ -502,8 +507,9 @@ close's until this slice.
   `Re-run failed. Chapter <N>'s close is as it was.` with the reason as
   5.6's failure copy gives one; either with `closeUndone`, warning,
   `Chapter <N>'s earlier close couldn't be restored, so its close was undone.`
-  instead. A catch-up pass that ends the chain raises its own pass toast,
-  as today.
+  instead, and either whose undo didn't commit (`unreversed`), error,
+  the restart line (Implementation notes). A catch-up pass that ends the
+  chain raises its own pass toast, as today.
 
 **The action** (`lib/actions/chapters/close-rerun.ts`, exported from
 `lib/actions`).
@@ -551,25 +557,29 @@ close's until this slice.
   pruned the close's into the journal. So a delete after a re-run, and a
   second re-run, count the re-run's lore creates whose rows still
   stand.
-- `startCloseRerun(branchId, chapterId, expected, story, ctx)`, shaped as
+- `startCloseRerun(branchId, chapterId, expected, ctx)`, shaped as
   `regenerateTurn` is: one admission, and a pending mark
   (`generationStore.bracketPendingTurn`) held from before the shortcut
   until the chain reserves, so no start lands between the shortcut and
   the reserve. Nothing commits before step 4:
   1. The manual close's start refusals, read up front as
      `startCloseChain` reads them: the branch not open, a pending
-     embedder swap, a busy story (`story-busy`) and a held branch.
+     embedder swap, a busy story (`story-busy`) and a held branch, and
+     a branch held until restart (`rerun-held`).
   2. 5.10's pre-flight over the chain's snapshot; a failure resolves
      `{ outcome: 'preflight-failed', error }`, which the host toasts.
   3. Under the mark, the preview's refusals, then `counts-changed`
      against `expected` (the shortcut's target and counts, the
-     reversal's counts), carrying the fresh preview.
+     reversal's counts), carrying the fresh preview, then the memory
+     pass's pre-flight when a catch-up pass will run.
   4. With turns since, the rollback's sweep (`sweepToEntry`) with the
      confirm's counts, in its own prose-reversal bracket inside the
      mark; a refusal ends the start.
-  5. `setPendingRerun` under the mark, then `startCloseChain` told the
-     mark is its own (`ownsPendingMark`), with the pre-flight again and
-     an `onReserved` that releases the mark. The store clears
+  5. `setPendingRerun` under the mark, then `startCloseChain` handed
+     the mark the bracket gave its body (`pendingMark`), which its busy
+     check skips (no other mark on the branch) and which it ends at the
+     reserve, before the caller's `onReserved`; with the pre-flight
+     again. The store clears
      `pendingRerun` in the update that ends the chain's last run; a
      `finally` here is the backstop for a refused start.
 
@@ -665,7 +675,12 @@ close's until this slice.
   the reader's rollback confirms do; the disabled actions carry the
   blocking run's tooltip, falling back to that string only once no gate
   reason remains (`chapter-overlays-host.tsx`'s `rerunReason ?? held`);
-  other refusals toast a failure and close.
+  `close-owed` toasts `Close the open chapter first.`, an embedder swap
+  or a held branch the manual close's copy, `rerun-held` the restart
+  line, a catch-up pass's pre-flight the memory pass's settings copy,
+  and other refusals a failure,
+  each closing it. A refused or failed first preview read from the
+  review window reopens the window.
 
 - **The card.** `Re-run close…` in `chapter-card.tsx`'s `moreActions`,
   between `Review changes` and `Delete…`, on the latest chapter's card when
@@ -848,7 +863,7 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     `run_complete` carries `rerun: true`; with an unprocessed entry at or
     before E the chain starts a pass, then the re-run; with unprocessed
     entries only after E it starts the re-run; the re-run chains nothing.
-16. `lib/actions/chapters/close-rerun.test.ts`: `pendingRerun` is absent
+16. `lib/actions/chapters/close-rerun-start.test.ts`: `pendingRerun` is absent
     after each end: a refused start, a catch-up pass that fails, one
     cancelled, one interrupted, and the re-run committing, aborting and
     failing.
@@ -868,17 +883,18 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 
 **The action.**
 
-19. `lib/actions/chapters/close-rerun.test.ts`, refusals before the
+19. `lib/actions/chapters/close-rerun-start.test.ts`, refusals before the
     shortcut, each leaving the `story_entries` count and the log as they
     were: `story-busy` for a busy story, `not-latest`, `no-close`,
     `close-owed` (a pending
     manual close, and auto-close at the threshold after the shortcut),
     `preflight-failed` with `toolCalling` off, and `counts-changed`
     carrying the fresh preview.
-20. The same file: a reply regenerated since the close makes its
+20. `lib/actions/chapters/close-rerun.test.ts`: a reply regenerated since the close makes its
     `user_action` the target; the shortcut's counts equal, as literal
     numbers, those `getRollbackCounts` reads at that target outside any
-    hold; the reversal's counts leave out a row both sets hold; an
+    hold; the reversal's counts leave out a delta both sets hold,
+    counting it once on the shortcut's line; an
     exclusive hold requested during the preview takes the lock after the
     preview returns.
 21. The same file: after a re-run whose Lore task created two lore rows,
@@ -926,7 +942,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     latest report's `actionId` matches holds a `closeResult` with that
     `actionId` and `rerun: true`; a failed `rerun` event holds nothing and
     toasts nothing.
-29. 5.11's host test (`components/chapters/chapter-overlays-host.test.tsx`):
+29. 5.11's host test (`components/chapters/chapter-overlays-host.test.tsx`,
+    the first item) and `components/chapters/chapter-overlays-host-rerun.test.tsx`
+    (the rest):
     - a re-run's commit closes an open window and replaces a close's done
       state with `Chapter <N>'s close re-ran`, in the warning tone when the
       report holds a stopped task; its CTRL-Z clears it;
@@ -1275,10 +1293,14 @@ change amends the scope above.
   good, or an older pass's work can come back on a later boot; that is
   parked with its fix
   ([`parked.md → Recovery order after an orphan's failure on a re-run's branch`](../../../../parked.md#recovery-order-after-an-orphans-failure-on-a-re-runs-branch)).
-- **The abort's outcome rides a new port member.** `reverseRunGroup`
-  carries the delta count and the journal's outcome;
-  `reverseReplayDeltas` keeps `Promise<number>` for `submitTurn`
-  (the Scope above said its return type changes).
+- **The abort's outcome rides a new port member.** Abort and recovery
+  call `reverseRunGroup` (`lib/actions/delta/rerun-journal.ts`), which
+  reads the run's group, writes the journal back or takes the fallback,
+  and reverses any other group as `reverseReplayDeltas` does; it returns
+  the delta count with the journal's outcome and hands `settleOps` a
+  boolean. `reverseReplayDeltas` keeps `Promise<number>` and no
+  write-back, for `submitTurn` (the Scope's abort bullet, which names it,
+  predates the split).
 - **A committed reversal whose store sync fails keeps its outcome.**
   CTRL-Z of a re-run whose close was undone shows the close-undone
   warning even when only the store sync failed, and a recovery failure
@@ -1306,5 +1328,104 @@ change amends the scope above.
   round-trip arm keeps, so it stays as planned. The round trip grew
   from 264 to 610 tests (about 6 s to 18 s locally); CI's unit shards
   stayed inside main's recent range, so the file is not split.
-- **The Android measure (AC 34) is pending:** no Fold was attached
-  during the run. The functional smoke ran on a slot emulator.
+- **The Android measure (AC 34) holds, many journals included.** On the
+  Fold's release build the reversal's commit stalls the JS thread at
+  most 257.6 ms and the re-run's CTRL-Z at most 356.3 ms, under the
+  500 ms bar, beside 5.10's 399 ms CTRL-Z and 5.2's 1.1 s stamp burst.
+  The many-journals case (developer decision at the slice review: every
+  reversal reads each journal row on its branch, `reverse-replay.ts`,
+  `journalHeadsOf`) put 30, then 100, committed re-run journals of the
+  dataset close's size on the branch, 82,873 bytes each: the commit kept
+  its time and the CTRL-Z rose about 20 ms, to at most 378.5 ms, a rise
+  that barely grows from 30 to 100. The review's desktop benchmark had
+  used 230 KB journals (30: 5.8 ms a reversal; 100: 18.5 ms; 30 of
+  920 KB: 29.9 ms). Numbers and setup are in
+  [Android measure](#android-measure). The schema keeps no `chapter_id`
+  or `floor` column.
+- **A re-run whose own undo fails holds its branch until restart
+  (developer decision at the slice review).** A Cancel, failed call or
+  interrupting head reversal whose reversal doesn't commit leaves the
+  re-run's writes, journal and open marker for boot recovery, and any
+  write to the branch before then could turn the write-back into an
+  undone close. The run's end sets `heldBranches` in the generation
+  store (in memory, so the restart drops it), and the edit gate, head
+  reversals, every run start, a reversal past its interrupt, Send and
+  the re-run's start all refuse; the branch's controls and the notice
+  (`chapters:rerunNotice.unreversed`) say a restart restores the close.
+  A pass's or a close's failed abort still lifts its gate, and a failed
+  completed-marker write stays as triage files it.
+- **The re-run's CTRL-Z confirm names an undone close (same review).**
+  `readUndoImpact` runs the write-back's own decision (`closeUndoneBy`,
+  the read-only half of `rerunWriteBack`) and the confirm adds a line
+  when the earlier close can't be restored; the warning after the undo
+  stays for a state that changes past the confirm.
+- **The start pre-flights a catch-up pass (same review).** Under the
+  mark and before the sweep, when an entry through the chapter's end is
+  unprocessed (`unprocessedThroughChapter`, the chain's own count), the
+  memory pass's pre-flight runs, and its failure resolves
+  `preflight-failed`; the host toasts the memory pass's settings copy,
+  since the close's names the lore agent.
+
+### Android measure
+
+Bar (AC 34): no JS-thread stall over 500 ms on the Fold's release build,
+for the `reversal` phase's commit and for the re-run's CTRL-Z, two runs
+each. The group is `pnpm db:seed:dataset`'s close: 224 deltas, 89 of
+them outside `chapters` and `story_entries`. A temporary stall meter
+around the phase's `reverseCloseForRerun` call times the commit, and
+reads the journal's size once it stops; `timedReversal`
+(`reader.undo_measured`) times the CTRL-Z, from Actions →
+`Undo chapter 1's re-run…` and the confirm's `Undo`. Each run re-ran the
+close from the card's `Re-run close…` (the two-button confirm: no turns
+since) with every mock tool lane unscripted, then undid it, which leaves
+the database as it was, so run 2 times the same group. The reader sat
+idle three minutes before each run.
+
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, `3fd0eef28` and a temporary mark | Run 1 wall / longest stall   | Run 2 wall / longest stall   | Notes                |
+| --------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------- | -------------------- |
+| `reversal` phase commit                                                                             | 257.6 / 257.6 ms             | 240.1 / 240.1 ms             | journal 82,876 bytes |
+| Re-run CTRL-Z (reversal and write-back)                                                             | 356.3 / 356.3 ms (tail 37.2) | 340.9 / 340.9 ms (tail 35.6) |                      |
+
+The bar holds, at 356.3 ms for the longest stall. The journal holds 82
+before-images, 89 deltas and no earlier journal, at floor 1,106. As in
+5.10's measure, the longest stall equals the wall time in every run:
+no 16 ms tick lands while a reversal runs, and the tails show the meter
+ticking. The numbers come from the logger's console mirror in logcat
+(`adb logcat -s ReactNativeJS`), as 5.10's did.
+
+The many-journals case runs the same two measures, two runs each, with
+extra committed re-run journals on the branch:
+
+| Extra journals (82,873 bytes each) | `reversal` phase commit, wall (2 runs) | Re-run CTRL-Z, wall (2 runs, tails) |
+| ---------------------------------- | -------------------------------------- | ----------------------------------- |
+| none                               | 257.6 and 240.1 ms                     | 356.3 and 340.9 ms (37.2, 35.6)     |
+| 30, 2,486,190 bytes                | 247.2 and 253.7 ms                     | 363.3 and 372.2 ms (35.0, 33.4)     |
+| 100, 8,287,300 bytes               | 255.8 and 250.6 ms                     | 365.7 and 378.5 ms (33.6, 30.2)     |
+
+The longest stall equals the wall time in every run. The commit, which
+reads every journal on the branch as the CTRL-Z does, stays inside its
+spread between runs. The CTRL-Z's mean goes from 348.6 ms to 367.8 ms
+with 30 journals and 372.1 ms with 100, about 20 ms against a spread of
+up to 15 ms between runs; since 100 journals add only about 4 ms over
+30, the rise doesn't scale with the count, so most of it is likely the
+spread between app sessions (each case was a fresh push and launch)
+rather than the read. Either way it stays far under the bar at this
+size. The dataset close's journal is 82,876 bytes, not the 230 KB the
+review's desktop benchmark used.
+
+The extra journals are copies of the journal the app writes for this
+re-run, taken from a desktop run, under distinct action ids, inserted
+into the seeded database before `pnpm device:push-db`, with `floor` set
+to 0 (3 bytes shorter). A copy that keeps the close's floor (1,106) is
+not inert: the re-run's reversal removes the close's lore deltas, at
+positions 1,017 to 1,105, below that floor, so it drops the copy
+(`journalsToDrop` run on the journal's own deltas) and would nest it in
+its own journal. At floor 0, owning no deltas, no reversal here can drop
+them.
+A desktop E2E run on the same three database files showed it: the
+re-run's journal nested none, and its CTRL-Z restored the close's group
+and report, dropped only the re-run's own journal (consumed by its
+write-back, in every variant) and left the world tables identical
+across none, 30 and 100. On the Fold, too, every re-run's journal
+nested none and every CTRL-Z dropped only the re-run's own. Neither that
+spec nor the setup is in the repo.

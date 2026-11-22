@@ -111,8 +111,15 @@ function guarded(proceed: () => void): void {
 export const chapterOverlaysStore = {
   useOverlays: <T>(selector: (s: ChapterOverlaysState) => T): T => useStore(store, selector),
   getState: (): ChapterOverlaysState => store.getState(),
-  openReviewWindow: (input: { chapterId: string }): void =>
-    store.setState({ review: reviewOf(input.chapterId) }),
+  /**
+   * Refused while a re-run request is held (its confirm mounts once its read lands). Returns
+   * whether the window opened.
+   */
+  openReviewWindow: (input: { chapterId: string }): boolean => {
+    if (store.getState().rerunConfirm != null) return false
+    store.setState({ review: reviewOf(input.chapterId) })
+    return true
+  },
   closeReviewWindow: (): void => store.setState({ review: null }),
   /** Runs the current surface's guard before holding the request, so no trigger skips it. */
   openCloseModal: ({ branchId, endEntryId }: CloseModalRequest): void =>
@@ -121,8 +128,8 @@ export const chapterOverlaysStore = {
     ),
   closeCloseModal: (): void => store.setState({ closeModal: null }),
   /**
-   * From the review window the window closes first, so the guard's dialog never sits over it, and
-   * the request remembers it. The guard has no cancel path: its Cancel holds nothing.
+   * From the review window it closes first, so the guard's dialog never sits over it, and the
+   * request remembers that. A guard Cancel leaves it closed; a press during its exit is dropped.
    */
   openRerunConfirm: ({
     branchId,
@@ -133,9 +140,13 @@ export const chapterOverlaysStore = {
     chapterId: string
     fromReview?: boolean
   }): void => {
-    const reopenReview = fromReview && store.getState().review != null
-    if (fromReview) store.setState({ review: null })
-    guarded(() => store.setState({ rerunConfirm: { branchId, chapterId, reopenReview } }))
+    if (fromReview) {
+      if (store.getState().review == null) return
+      store.setState({ review: null })
+    }
+    guarded(() =>
+      store.setState({ rerunConfirm: { branchId, chapterId, reopenReview: fromReview } }),
+    )
   },
   /** `reopen` brings back the review window the request closed; a card's request has none. */
   closeRerunConfirm: ({ reopen }: { reopen: boolean }): void => {

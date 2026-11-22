@@ -17,7 +17,7 @@ import {
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
-import type { DeferredWorkKind } from '@/lib/stores'
+import { generationStore, isBranchHeld, RERUN_HELD, type DeferredWorkKind } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
@@ -58,6 +58,12 @@ const SWAP_REJECTION = {
 } as const
 
 const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true } as const
+
+const RERUN_HELD_REJECTION = {
+  outcome: 'rejected',
+  blockedBy: RERUN_HELD,
+  converged: true,
+} as const
 
 // Send's owed work as one chain: a pass, its catch-ups, the close (chapter-close.md → Phase 0).
 // Null once it committed so the turn may start; else the Send's result.
@@ -109,6 +115,9 @@ export async function submitTurn(
       if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
       return withPendingTurn(ids.branchId, async (startTurn): Promise<SubmitTurnResult> => {
+        // Before the user_action's write: its turn's run would be refused, and its reversal could
+        // fail on the held branch too.
+        if (isBranchHeld(generationStore.getTxState(), ids.branchId)) return RERUN_HELD_REJECTION
         // Under the turn's mark, so no reversal interrupts Send's own work. Only a chain that
         // committed lets the turn start: a cancel cancels the Send, a failure or refusal fails it.
         const owed = await owedWorkAtSend(ids.branchId, ctx)

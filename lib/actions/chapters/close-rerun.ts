@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, gte, lt, ne, sql } from 'drizzle-orm'
 
 import { modelConfigOf, resolveModel } from '@/lib/ai'
 import { chapterProgressOf, isCloseOwed } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   chapters,
   deltas,
@@ -17,10 +18,13 @@ import {
   CLASSIFIER_HELD,
   CLOSE_TARGET,
   ensureChapterClosePipelineRegistered,
+  ensurePeriodicClassifierPipelineRegistered,
   getPipeline,
   isClassifierHeld,
   preflightSnapshot,
+  readClassifierStatus,
   runPreflight,
+  unprocessedThroughChapter,
   type ChainEnd,
   type ConfigResolverError,
   type PreflightFailedStart,
@@ -30,8 +34,11 @@ import {
   appSettingsStore,
   currentStoryStore,
   generationStore,
+  isBranchHeld,
   isStoryBusy,
+  RERUN_HELD,
   type OpenStory,
+  type PendingMark,
 } from '@/lib/stores'
 
 import { ownEntryTokens, reversalImpactOf } from './chapter-delete-preview'
@@ -40,7 +47,7 @@ import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { logReversalRefused } from '../delta/commit-new-action'
 import { ReversalIntegrityError } from '../delta/replay-errors'
-import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
+import { selectReversalSet, type CountedReversalSet } from '../delta/row-closure'
 import {
   resolveSweep,
   rollbackCountsOf,
@@ -263,7 +270,7 @@ export async function getCloseRerunPreview(
     const turn = await firstTurnSince(branchId, latestGroupStart(groups), ctx)
     const shortcut = turn === null ? null : await shortcutTo(branchId, turn, ctx)
     if (shortcut !== null && 'status' in shortcut) return shortcut
-    let set: ReversalSet
+    let set: CountedReversalSet
     try {
       set = await selectReversalSet(ctx, {
         branchId,
@@ -298,7 +305,9 @@ export type CloseRerunExpected = {
   reversal: CloseRerunPreview['reversal']
 }
 
-/** The counts moved since the confirm opened; `preview` is the confirm read again under the mark. */
+/**
+ * The counts moved since the confirm opened; `preview` is the confirm read again under the mark.
+ */
 export type CloseRerunCountsChanged = {
   status: 'rejected'
   code: 'counts-changed'
@@ -345,6 +354,19 @@ function closePreflight(open: Pick<OpenStory, 'settings'>): ConfigResolverError 
   return runPreflight(getPipeline(CHAPTER_CLOSE_KIND), preflightSnapshot(open.settings))
 }
 
+// The chain starts with a catch-up pass on the chapter's unprocessed end (memory-chain.ts →
+// memoryRunOn), so its settings fail before the turns go; the shortcut never moves that count.
+async function catchUpPreflight(
+  { branchId, chapterId, story }: Pick<RerunStartArgs, 'branchId' | 'chapterId' | 'story'>,
+  ctx: DbCtx,
+): Promise<ConfigResolverError | null> {
+  const { processedThrough } = await readClassifierStatus(branchId, ctx)
+  if ((await unprocessedThroughChapter(branchId, chapterId, processedThrough, ctx)) === 0)
+    return null
+  ensurePeriodicClassifierPipelineRegistered()
+  return runPreflight(getPipeline(PERIODIC_CLASSIFIER_KIND), preflightSnapshot(story.settings))
+}
+
 type RerunStartArgs = {
   branchId: string
   chapterId: string
@@ -355,36 +377,43 @@ type RerunStartArgs = {
 
 /**
  * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
- * A pending mark spans preview, shortcut and the chain's reserve. Rejects when the sweep or the
- * chain's origin throws. `story` is unread: settings come from the store's open story.
+ * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or
+ * the chain's origin throws. Settings come from the store's open story.
  */
 export async function startCloseRerun(
   branchId: string,
   chapterId: string,
   expected: CloseRerunExpected,
-  story: OpenStory,
   ctx: DbCtx,
-  /** onStarted fires once, when the chain's first run reserves (after the mark ends); never on a refusal. */
+  /**
+   * onStarted fires once, when the chain's first run reserves (after the mark ends); never on a
+   * refusal.
+   */
   opts?: { onStarted?: () => void },
 ): Promise<CloseRerunStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
     return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
+  // A pass ending during the held read can leave the branch held, which that read missed.
+  const settled = generationStore.getSettleCount()
   if (await isClassifierHeld(branchId, ctx)) return refusedStart(CLASSIFIER_HELD)
 
   // No await from here to the mark, so no start or reversal lands between these checks and it.
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   if (isStorySwapPending(open.storyId)) return refusedStart(MANUAL_CLOSE_REFUSAL.swapPending)
+  // Before the shortcut's sweep, which the chain's own refusal would come too late to spare.
+  if (isBranchHeld(generationStore.getTxState(), branchId)) return refusedStart(RERUN_HELD)
   if (isStoryBusy(generationStore.getTxState(), open.storyId, branchId))
     return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
+  if (generationStore.getSettleCount() !== settled) return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
   ensureChapterClosePipelineRegistered()
   const failed = closePreflight(open)
   if (failed) return { outcome: 'preflight-failed', error: failed }
-  return generationStore.bracketPendingTurn(branchId, (endMark) =>
+  return generationStore.bracketPendingTurn(branchId, (_endEarly, own) =>
     startUnderMark(
       { branchId, chapterId, expected, story: open, onStarted: opts?.onStarted },
       ctx,
-      endMark,
+      own,
     ),
   )
 }
@@ -392,12 +421,14 @@ export async function startCloseRerun(
 async function startUnderMark(
   args: RerunStartArgs,
   ctx: DbCtx,
-  endMark: () => void,
+  own: PendingMark,
 ): Promise<CloseRerunStart> {
   const { branchId, chapterId, expected, story } = args
   const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
   if ('status' in fresh) return fresh
   if (!shownStill(expected, fresh)) return countsChanged(fresh)
+  const passFailed = await catchUpPreflight(args, ctx)
+  if (passFailed) return { outcome: 'preflight-failed', error: passFailed }
   if (fresh.shortcut !== null) {
     const { targetEntryId, counts } = fresh.shortcut
     const swept = await bracketProseReversal(branchId, ctx, () =>
@@ -414,16 +445,15 @@ async function startUnderMark(
   const record = generationStore.getTxState().pendingRerun.get(branchId)
   try {
     return await startCloseChain(branchId, ctx, {
-      ownsPendingMark: true,
+      pendingMark: own,
       preflight: closePreflight,
       onReserved: () => {
-        endMark()
         // A throw here would escape the orchestrator's reserve and leave the run registered.
         try {
           args.onStarted?.()
         } catch (e) {
           logger.warn('action_layer.close_rerun_on_started_threw', {
-            branchId: args.branchId,
+            branchId,
             error: e instanceof Error ? e.message : String(e),
           })
         }

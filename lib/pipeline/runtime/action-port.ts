@@ -1,10 +1,11 @@
 import type {
+  DescribedReplayError,
   GroupOutcome,
-  IntegrityRefusal,
   MutationResult,
   PipelineAction,
   RowGuard,
   RowGuardArgs,
+  RunGroupReversal,
 } from '@/lib/actions/types'
 import type { DbCtx, SqlOp } from '@/lib/db'
 
@@ -39,22 +40,9 @@ export type DeltaActionPort = {
     args: { actionId: string; branchId: string | null; rerunChapterId?: string | null },
     ctx: DbCtx,
     settleOps?: (reversed: boolean) => readonly SqlOp[],
-  ) => Promise<{
-    deltas: number
-    journal: 'restored' | 'undone' | null
-    chapterNumber: number | null
-  }>
-  // Undefined for anything but a DeltaReplayError. `committed`: the reversal landed, only the store
-  // sync failed (a re-run's then carries `journal`/`chapterNumber`); `refusal`: integrity refusal.
-  describeReplayError: (e: unknown) =>
-    | {
-        detail: string
-        committed: boolean
-        refusal: IntegrityRefusal | null
-        journal?: 'restored' | 'undone'
-        chapterNumber?: number | null
-      }
-    | undefined
+  ) => Promise<RunGroupReversal>
+  /** Undefined for anything but a DeltaReplayError. */
+  describeReplayError: (e: unknown) => DescribedReplayError | undefined
   /** Resolves once every user write dispatched so far has committed or been refused. */
   settleUserWrites: () => Promise<void>
   /** Takes the branch write lock exclusive for `actionId`; idempotent per actionId, never rejects. */

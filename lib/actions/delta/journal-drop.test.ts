@@ -19,6 +19,12 @@ import {
   type SqlOp,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import {
+  __resetDiagnosticsGate,
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+} from '@/lib/diagnostics'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
@@ -307,25 +313,42 @@ describe('the planner drops a journal its reversal would make inexact', () => {
   }
 
   /**
-   * Close, a fact, a card rename, a re-run (lore create unless `rerunLore` is false, plus a chapter
-   * write as its report), a later turn. The journal's floor is the rename's position.
+   * Close, a fact, the user's delete of a second stamped entry if `deletedEntry`, a card rename, a
+   * re-run (lore create unless `rerunLore` is false, plus a chapter write as its report), a later
+   * turn. The journal's floor is the rename's position.
    */
-  async function seed({ rerunLore = true } = {}): Promise<number> {
+  async function seed({ rerunLore = true, deletedEntry = false } = {}): Promise<number> {
+    if (deletedEntry)
+      await ctx.db.insert(storyEntries).values({
+        id: 'e2',
+        branchId: 'b1',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'The far bank.',
+        createdAt: 1,
+      })
     await act('act_close', {
       kind: 'createChapter',
       source: 'chapter_close',
       payload: { entry: CHAPTER },
     })
-    await act('act_close', {
-      kind: 'stampEntryChapter',
-      source: 'chapter_close',
-      payload: { branchId: 'b1', id: 'e1', chapterId: 'ch_1' },
-    })
+    for (const id of deletedEntry ? ['e1', 'e2'] : ['e1'])
+      await act('act_close', {
+        kind: 'stampEntryChapter',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id, chapterId: 'ch_1' },
+      })
     await act('act_turn', {
       kind: 'createLore',
       source: 'periodic_classifier',
       payload: { entry: loreEntry('lore_t') },
     })
+    if (deletedEntry)
+      await act('act_del', {
+        kind: 'deleteStoryEntry',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'e2' },
+      })
     await act('act_save', {
       kind: 'updateChapter',
       source: 'user_edit',
@@ -406,6 +429,28 @@ describe('the planner drops a journal its reversal would make inexact', () => {
     expect(plan.droppedJournals).toEqual([])
     await reverse(divider)
     expect(await journalIds()).toEqual(['act_rerun'])
+  })
+
+  it("(b) drops it when a divider-only removal rewrites a delete's held entry below the floor", async () => {
+    const floor = await seed({ deletedEntry: true })
+    const [deleted] = await deltasOf('act_del')
+    const divider = await deltasOf('act_close')
+
+    const plan = await planFor(divider)
+
+    expect(deleted.logPosition).toBeLessThan(floor)
+    expect(plan.rewrittenHolders).toEqual([deleted])
+    // Below the floor it removes only the chapter's own row and the close's stamps.
+    expect(plan.prunedDeltas.map((d) => d.actionId).sort()).toEqual([
+      'act_close',
+      'act_close',
+      'act_close',
+      'act_rerun',
+      'act_save',
+    ])
+    expect(plan.droppedJournals.map((j) => j.actionId)).toEqual(['act_rerun'])
+    await reverse(divider)
+    expect(await journalIds()).toEqual([])
   })
 
   it("(c) drops a report-only re-run's journal when a divider-only removal empties its group", async () => {
@@ -554,5 +599,82 @@ describe('the planner drops a journal its reversal would make inexact', () => {
 
     expect(await journalIds()).toEqual(['act_rerun'])
     expect(await ctx.db.select().from(lore).where(eq(lore.id, 'lore_t'))).toHaveLength(1)
+  })
+
+  // Tells a later rerun_close_undone {journal: 'missing'} a designed drop from a lost journal.
+  describe('logs the drop once its reversal commits', () => {
+    beforeEach(() => {
+      clearBuffers()
+      configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    })
+
+    afterEach(() => __resetDiagnosticsGate())
+
+    const dropLogs = () =>
+      getDiagnosticsSnapshot()
+        .logEntries.filter((e) => e.kind === 'action_layer.rerun_journal_dropped')
+        .map(({ level, fields, actionId }) => ({ level, fields, actionId }))
+
+    const DROPPED = {
+      level: 'debug',
+      fields: { branchId: 'b1', journals: ['act_rerun'] },
+      actionId: 'act_turn',
+    }
+
+    // A second insert of a taken run id fails the reversal's transaction.
+    const taken = (): SqlOp =>
+      ctx.db
+        .insert(pipelineRuns)
+        .values({ runId: 'run_taken', kind: 'chapter-close', actionId: 'act_x', startedAt: 1 })
+        .toSQL()
+
+    it('from a set reversal', async () => {
+      await seed()
+
+      await reverse(await deltasOf('act_turn'))
+
+      expect(dropLogs()).toEqual([DROPPED])
+    })
+
+    it('from an action replay', async () => {
+      await seed()
+
+      await reverseReplayDeltas('act_turn', ctx)
+
+      expect(dropLogs()).toEqual([DROPPED])
+    })
+
+    it('and not for a set reversal that rolls back', async () => {
+      await seed()
+      await ctx.runInTransaction([taken()])
+
+      await expect(reverse(await deltasOf('act_turn'), [taken()])).rejects.toBeInstanceOf(
+        DeltaReplayError,
+      )
+
+      expect(await journalIds()).toEqual(['act_rerun'])
+      expect(dropLogs()).toEqual([])
+    })
+
+    it('and not for an action replay that rolls back', async () => {
+      await seed()
+      await ctx.runInTransaction([taken()])
+
+      await expect(reverseReplayDeltas('act_turn', ctx, () => [taken()])).rejects.toBeInstanceOf(
+        DeltaReplayError,
+      )
+
+      expect(await journalIds()).toEqual(['act_rerun'])
+      expect(dropLogs()).toEqual([])
+    })
+
+    it('and not for a reversal that drops none', async () => {
+      await seed()
+
+      await reverse(await deltasOf('act_late'))
+
+      expect(await journalIds()).toEqual(['act_rerun'])
+      expect(dropLogs()).toEqual([])
+    })
   })
 })

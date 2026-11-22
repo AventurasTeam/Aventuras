@@ -64,12 +64,14 @@ slice-planning gate forces its resolution before that slice is planned.
 - **Reads of a delta group by `action_id` scan the log.** `deltas` has
   no index on `action_id`, so every group read by action walks the
   branch's log, or the whole table where the read has no branch filter:
-  `reverseReplayDeltas`'s group read (no branch filter, every abort and
-  recovery), `refuseWriteBack`'s group read, and the planner's
-  journal-group read when a reversal takes from a re-run's group. Raised
-  by Slice 5.13's reviews (2026-11-21), which narrowed the planner's read
-  to the groups a set takes from; an index, or a branch filter on the
-  abort read, is the fix. Worth measuring on a long branch before
+  `reverseRunGroup`'s group read (`lib/actions/delta/rerun-journal.ts`,
+  no branch filter, every abort and recovery), `reverseReplayDeltas`'s
+  (no branch filter, a refused Send's reversal), `refuseWriteBack`'s
+  group read, and the planner's journal-group read when a reversal takes
+  from a re-run's group. Raised by Slice 5.13's reviews (2026-11-21),
+  which narrowed the planner's read to the groups a set takes from; an
+  index, or a branch filter on the abort read (the abort already passes
+  its branch), is the fix. Worth measuring on a long branch before
   choosing.
 - **A reversal's error names the newest delta's action, not the
   reversed one.** `reverseAndPruneDeltaRows` labels its
@@ -85,7 +87,19 @@ slice-planning gate forces its resolution before that slice is planned.
   database change landed (a re-run's undone close excepted: it shows its
   close-undone warning). Trying again undoes the next group back; after
   a re-run's CTRL-Z that is the close it just restored. Pre-existing for
-  every undo; raised by Slice 5.13's reviews (2026-11-21).
+  every undo; raised by Slice 5.13's reviews (2026-11-21). The reader's
+  rollback has the same shape: `runAction` toasts `reader:rollbackFailed`
+  for a committed sweep whose store sync threw, and nothing re-hydrates
+  the branch, so the removed entries stay on screen; the chapter delete
+  and the re-run's shortcut re-hydrate in that case (Slice 5.13's closing
+  review, 2026-11-22).
+- **The inline editor's Save and Cancel disable with no reason.** While
+  the edit gate holds them (`editOff` in
+  `components/compounds/entry-card.tsx`), both buttons render disabled
+  with no `disabledReason`, so neither the web tooltip nor the native
+  hint names the run; `Save & regenerate` names the gate when a gate
+  holds it. Pre-existing; raised by Slice 5.13's closing review
+  (2026-11-22).
 - **A committed reversal at boot whose store sync fails reads as
   retryable.** `recoverInFlightRuns` records the throw as a recovery
   failure, and the modal's `incomplete*` copy says the update "could not
@@ -94,7 +108,23 @@ slice-planning gate forces its resolution before that slice is planned.
   later boot retries or reports it, and the stores resync from the
   database on the next load. Pre-existing for every orphan kind; raised by
   Slice 5.13's PR review (2026-11-21), which only added the close-undone
-  line to this failure.
+  line to this failure. Its title reads `Recovery incomplete` too, though
+  canon keeps that title for a boot where an orphan didn't reverse
+  (`generation-pipeline.md → Recovery-failure policy`), and a re-run's
+  close-undone failure, rendered as the reversed close, then reads
+  `Recovery incomplete` over a body saying the close was reverted
+  (`formatRecoveryTitle` counts every failure; Slice 5.13's closing review,
+  2026-11-22).
+- **A failed completed-marker write makes the next boot reverse a
+  committed run.** `commitRun` settles the run's `pipeline_runs` marker
+  after its last group commits, outside that transaction, and only logs
+  `pipeline.marker_write_failed` when the update throws
+  (`lib/pipeline/runtime/orchestrator.ts`); boot recovery then reverses
+  the committed run as an orphan. For a close's re-run that writes its
+  journal back, so the earlier close returns, or undoes the chapter's
+  close altogether once a turn has logged above the re-run's floor.
+  Pre-existing for every run kind; the re-run adds the second outcome.
+  Raised by Slice 5.13's closing review (2026-11-22).
 - **A throwing `onReserved` leaves its run registered.** The
   orchestrator calls `reserveRun`, and the caller's `onReserved` inside
   it, outside `driveOrigin`'s try and unwind
@@ -142,3 +172,16 @@ slice-planning gate forces its resolution before that slice is planned.
   re-run confirm's turns since, an open rollback confirm's entry counts)
   doesn't see it until the next settle; readers keyed on the entry tail
   do. Raised by Slice 5.13's PR 3 review (2026-11-22).
+- **A thrown value's message and an `attempt` wrapper are copied per
+  file.** The re-run and delete confirm hooks each define `attempt` (a
+  try/catch kept outside the hook, since React Compiler can't lower one
+  inside it) and `messageOf`, and the same error-to-message ternary
+  recurs about 143 times across the repo. A shared helper in
+  `lib/utils.ts` is a repo-wide change. Raised by Slice 5.13's closing
+  review's simplifier pass (2026-11-22).
+- **The overlay host's test suites copy their run helpers.**
+  `chapter-overlays-host.test.tsx`, `-rerun.test.tsx` and
+  `-close-modal.test.tsx` each define `settleRun` and `gateRun`; a shared
+  overlay-host fixture would hold them, with each file's `vi.mock` setup
+  staying in the file. Raised by Slice 5.13's closing review's
+  simplifier pass (2026-11-22).

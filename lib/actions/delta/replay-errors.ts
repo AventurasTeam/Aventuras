@@ -2,31 +2,25 @@
 export type ReplayFailureStage = 'transaction' | 'store-sync'
 
 /** How a re-run journal ended its group's reversal (generation-pipeline.md → Reverse-replay). */
-export type JournalOutcome = 'restored' | 'undone'
+export type JournalOutcome = { journal: 'restored' } | { journal: 'undone'; chapterNumber: number }
+
+type ReplayFailure = { cause: unknown; actionId: string } & (
+  | { stage: 'transaction' }
+  // Only a committed reversal can have ended a re-run's journal.
+  | { stage: 'store-sync'; rerun?: JournalOutcome }
+)
 
 export class DeltaReplayError extends Error {
   readonly actionId: string
   readonly stage: ReplayFailureStage
   /** A re-run group's journal outcome, carried when only the store sync after its commit failed. */
-  readonly journal?: JournalOutcome
-  /** The chapter an `undone` outcome names; null when no chapter row was left. */
-  readonly chapterNumber?: number | null
-  constructor(
-    message: string,
-    opts: {
-      cause: unknown
-      actionId: string
-      stage: ReplayFailureStage
-      journal?: JournalOutcome
-      chapterNumber?: number | null
-    },
-  ) {
+  readonly rerun?: JournalOutcome
+  constructor(message: string, opts: ReplayFailure) {
     super(message, { cause: opts.cause })
     this.name = 'DeltaReplayError'
     this.actionId = opts.actionId
     this.stage = opts.stage
-    this.journal = opts.journal
-    this.chapterNumber = opts.chapterNumber
+    if (opts.stage === 'store-sync') this.rerun = opts.rerun
   }
 
   /** The DB write landed: callers must not retry it as a failed reversal. */
@@ -37,6 +31,15 @@ export class DeltaReplayError extends Error {
 
 /** Which integrity state a reversal refused (generation-pipeline.md → Reverse-replay). */
 export type IntegrityRefusal = 'write-back' | 'held-in-redo' | 'no-create' | 'pruned-outside-redo'
+
+/** What the pipeline port reads off a DeltaReplayError. */
+export type DescribedReplayError = {
+  detail: string
+  /** The reversal landed and only the store sync failed. */
+  committed: boolean
+  refusal: IntegrityRefusal | null
+  rerun?: JournalOutcome
+}
 
 /** A reversal refused before writing anything, so it never reads as committed. */
 export class ReversalIntegrityError extends DeltaReplayError {

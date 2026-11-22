@@ -157,7 +157,7 @@ function expectedOf(preview: CloseRerunPreview): CloseRerunExpected {
   }
 }
 
-type StartOpts = { onStarted?: () => void; steps?: readonly ScriptedStep[]; story?: OpenStory }
+type StartOpts = { onStarted?: () => void; steps?: readonly ScriptedStep[] }
 
 // The close used up its script, so the re-run's model is scripted again from its first step.
 function start(
@@ -166,7 +166,7 @@ function start(
   opts: StartOpts = {},
 ): Promise<CloseRerunStart> {
   script(generateToolStepMock, opts.steps ?? [STAND_IN_STEP])
-  return startCloseRerun(h.fx.branchId, chapterId, expected, opts.story ?? openStory(), h.fx.ctx, {
+  return startCloseRerun(h.fx.branchId, chapterId, expected, h.fx.ctx, {
     onStarted: opts.onStarted,
   })
 }
@@ -242,6 +242,13 @@ async function flagToolCalling(modelId: string, toolCalling: boolean): Promise<v
       ],
     })),
   }
+  expect(await hydrateAppSettings(async () => next)).toEqual({ status: 'ok' })
+}
+
+// The memory pass's assignment pointed at a profile that no longer exists.
+async function assignClassifier(profileId: string): Promise<void> {
+  const settings = appSettingsStore.getAppSettings()
+  const next = { ...settings, assignments: { ...settings.assignments, classifier: profileId } }
   expect(await hydrateAppSettings(async () => next)).toEqual({ status: 'ok' })
 }
 
@@ -350,21 +357,52 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     expect(onStarted).not.toHaveBeenCalled()
   })
 
+  // A run settling during the held read makes it stale (a pass can end there held); otherwise
+  // only the chain would see that, once the turns had gone.
+  it('refuses story-busy when a run settles during the held read, starting nothing', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    holdStoryWithTurn(c.h)
+    const before = await snapshot(c.h)
+    const onStarted = vi.fn()
+    let selects = 0
+    const db = new Proxy(c.h.fx.ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'select' && selects++ === 0) generationStore.finishRun('run_same_story')
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+    script(generateToolStepMock, [STAND_IN_STEP])
+
+    const result = await startCloseRerun(
+      c.h.fx.branchId,
+      c.chapterId,
+      expected,
+      { ...c.h.fx.ctx, db },
+      { onStarted },
+    )
+
+    expect(generationStore.getTxState().runs.has('run_same_story'), 'the run settled').toBe(false)
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
+    await expectNothingChanged(c.h, before)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
   it('refuses a held branch, and a branch the open story is not on', async () => {
     const c = await closed()
     await turnSince(c.h)
     const expected = expectedOf(await previewOf(c))
-    const story = openStory()
     const before = await snapshot(c.h)
 
     // A pass left `running` with none live holds the branch.
     await setClassifierStatus(c.h.fx, { state: 'running', processedThrough: endPosition(c.h) })
-    expect(await start(c, expected, { story })).toEqual({
+    expect(await start(c, expected)).toEqual({
       outcome: 'rejected',
       blockedBy: CLASSIFIER_HELD,
     })
     currentStoryStore.__reset()
-    expect(await start(c, expected, { story })).toEqual({
+    expect(await start(c, expected)).toEqual({
       outcome: 'rejected',
       blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen,
     })
@@ -430,32 +468,13 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     await turnSince(c.h)
     const expected = expectedOf(await previewOf(c))
     const open = openStory()
-    const story: OpenStory = {
+    currentStoryStore.set({
       ...open,
       settings: { ...open.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
-    }
-    currentStoryStore.set(story)
-    const before = await snapshot(c.h)
-
-    expect(await start(c, expected, { story })).toMatchObject({
-      status: 'rejected',
-      code: CLOSE_RERUN_REFUSAL.closeOwed,
-    })
-    await expectNothingChanged(c.h, before)
-  })
-
-  it("refuses close-owed by the open story's auto-close settings, not a stale story it was handed", async () => {
-    const c = await closed()
-    await turnSince(c.h)
-    const expected = expectedOf(await previewOf(c))
-    const stale = openStory()
-    currentStoryStore.set({
-      ...stale,
-      settings: { ...stale.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
     })
     const before = await snapshot(c.h)
 
-    expect(await start(c, expected, { story: stale })).toMatchObject({
+    expect(await start(c, expected)).toMatchObject({
       status: 'rejected',
       code: CLOSE_RERUN_REFUSAL.closeOwed,
     })
@@ -482,6 +501,36 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     })
     await expectNothingChanged(c.h, before)
     expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  // A catch-up pass whose settings fail would end the chain after the turns went.
+  it("refuses a catch-up pass's missing memory profile, before the turns go", async () => {
+    const c = await closed()
+    await setClassifierStatus(c.h.fx, { state: 'idle', processedThrough: endPosition(c.h) - 1 })
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    expect(expected.shortcut, 'the start would roll the turn back').not.toBeNull()
+    await assignClassifier('prof_gone')
+    const before = await snapshot(c.h)
+    const onStarted = vi.fn()
+
+    expect(await start(c, expected, { onStarted })).toMatchObject({
+      outcome: 'preflight-failed',
+      error: { kind: 'config-resolver', failure: 'profile-missing', target: 'classifier' },
+    })
+    await expectNothingChanged(c.h, before)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('checks no memory setting when no catch-up pass is due', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    await assignClassifier('prof_gone')
+
+    const end = chainEnd(await start(c, expected))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
   })
 
   it.each(MOVED)(
@@ -604,8 +653,8 @@ describe('startCloseRerun holds the gate from its preview to the re-run', () => 
     script(generateToolStepMock, [STAND_IN_STEP])
 
     const results = await Promise.all([
-      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, openStory(), c.h.fx.ctx),
-      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, openStory(), c.h.fx.ctx),
+      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, c.h.fx.ctx),
+      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, c.h.fx.ctx),
     ])
 
     const ends = results.filter((result): result is ChainEnd => 'result' in result)

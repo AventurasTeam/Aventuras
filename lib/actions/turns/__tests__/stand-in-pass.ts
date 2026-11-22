@@ -227,13 +227,17 @@ export function failReversalsOf(stand: {
   })
 }
 
-/** A gate-holding run with no pipeline behind it, for refusal tests; only `abortRun` ends it. */
-export function registerStoreOnlyRun(kind: string, branchId: string): RunState {
+/** Gate-holding run with no pipeline behind it, for refusal tests; only `abortRun` ends it. */
+export function registerStoreOnlyRun(
+  kind: string,
+  branchId: string,
+  interruptible: RunState['interruptible'] = null,
+): RunState {
   const run: RunState = {
     runId: `run_${kind}_${branchId}`,
     kind,
     gateBehavior: 'hard-gate',
-    interruptible: null,
+    interruptible,
     beforeTurn: false,
     actionId: `act_${kind}_${branchId}`,
     storyId: 's1',

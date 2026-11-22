@@ -487,7 +487,7 @@ describe('getCloseRerunPreview', () => {
     const { h, chapterId } = await closedStandIn()
     const b = h.fx.branchId
     const reply = await turnSince(h, 14)
-    // A translation names the close's lore row, so the re-run's closure takes the turn's create too.
+    // A translation names the close's lore row: the re-run's closure takes the turn's create too.
     await sinceWrite(h, reply, {
       kind: 'createTranslation',
       source: 'per_turn_classifier',

@@ -3,7 +3,8 @@ import { PAYLOAD_META_PREFIX } from './delta/delta-encoding'
 import type { LockedTable } from './delta/row-locks'
 
 export type { DbCtx } from '@/lib/db'
-export type { IntegrityRefusal } from './delta/replay-errors'
+export type { DescribedReplayError, IntegrityRefusal, JournalOutcome } from './delta/replay-errors'
+export type { RunGroupReversal } from './delta/rerun-journal'
 
 /**
  * The entry a classifier write derives from: a field the user wrote after its prose keeps its

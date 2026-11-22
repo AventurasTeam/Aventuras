@@ -89,7 +89,14 @@ function closedBanner(state: MemoryRunBannerState | null) {
   return state
 }
 
-function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
+// The action alone keeps the default report; a row without one drops both.
+type ChapterOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
+  (
+    | { hasCloseReport?: true; closeReportActionId?: string }
+    | { hasCloseReport: false; closeReportActionId: null }
+  )
+
+function chapter(over: ChapterOverrides = {}): StoreChapter {
   return {
     id: 'chap_2',
     branchId: 'branch-1',
@@ -370,6 +377,21 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
     })
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
     expect(result.current).toBeNull()
+  })
+
+  // The confirm's first read is pending, so the window refuses to open over its request.
+  it('Review keeps the result when the window refuses to open', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    chapterOverlaysStore.openRerunConfirm({ branchId: 'branch-1', chapterId: 'chap_2' })
+    const { result } = renderHook(() => useMemoryRunBanner())
+
+    act(() => closedBanner(result.current).onReview())
+
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(chapterOverlaysStore.getState().closeResult).not.toBeNull()
+    expect(result.current?.kind).toBe('closed')
   })
 
   it('× clears the result and opens nothing', () => {

@@ -11,6 +11,7 @@ import {
   rowsPerInsert,
 } from '@/lib/db'
 import { deepEqual } from '@/lib/deep-equal'
+import { logger } from '@/lib/diagnostics'
 import { isJsonObject } from '@/lib/json-object'
 import { withPlacement } from '@/lib/world'
 
@@ -38,13 +39,13 @@ import { resolveByTable, whereForDelta, type StorePatch, type TableEntry } from 
 import {
   DeltaReplayError,
   ReversalIntegrityError,
-  type IntegrityRefusal,
-  type JournalOutcome,
+  type DescribedReplayError,
 } from './replay-errors'
 import {
   reversalLockKeys,
   selectReversalSet,
   writesTo,
+  type CountableSet,
   type RefClear,
   type ReversalSet,
   type RowRef,
@@ -59,20 +60,11 @@ export {
 } from './replay-errors'
 
 /** What the pipeline port needs from a replay failure; `undefined` hands any other error back. */
-export function describeDeltaReplayError(e: unknown):
-  | {
-      detail: string
-      committed: boolean
-      refusal: IntegrityRefusal | null
-      journal?: JournalOutcome
-      chapterNumber?: number | null
-    }
-  | undefined {
+export function describeDeltaReplayError(e: unknown): DescribedReplayError | undefined {
   if (!(e instanceof DeltaReplayError)) return undefined
   const refusal = e instanceof ReversalIntegrityError ? e.refusal : null
-  const journal =
-    e.journal === undefined ? {} : { journal: e.journal, chapterNumber: e.chapterNumber ?? null }
-  return { detail: String(e.cause), committed: e.committed, refusal, ...journal }
+  const rerun = e.rerun === undefined ? {} : { rerun: e.rerun }
+  return { detail: String(e.cause), committed: e.committed, refusal, ...rerun }
 }
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
@@ -112,15 +104,15 @@ export type ReversePlan = {
   rewrittenHolders: readonly Delta[]
   /** reversal_journals rows the planner drops (generation-pipeline.md → Reverse-replay), whole. */
   droppedJournals: readonly ReversalJournalRow[]
-  /** Their deletes, apart from pruneOps: a fork's copy omits them. */
-  journalOps: SqlOp[]
+  /** Their deletes, apart from pruneOps: a fork's copy will omit them (no forks yet, M6.1). */
+  journalOps: readonly SqlOp[]
 }
 
 export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
 
 // JSON paths only: the planner never parses a journal's before-images.
 async function journalHeadsOf(set: ReversalSet, ctx: DbCtx): Promise<JournalHead[]> {
-  const heads = await ctx.db
+  return ctx.db
     .select({
       actionId: reversalJournals.actionId,
       chapterId: sql<string>`json_extract(${reversalJournals.journal}, '$.chapterId')`,
@@ -128,7 +120,6 @@ async function journalHeadsOf(set: ReversalSet, ctx: DbCtx): Promise<JournalHead
     })
     .from(reversalJournals)
     .where(eq(reversalJournals.branchId, set.branchId))
-  return heads
 }
 
 // generation-pipeline.md → Reverse-replay: a reversal that would leave a re-run's write-back
@@ -216,6 +207,16 @@ export async function buildReverseAndPrunePlan(
 
 export function emitPatches(patches: readonly PatchEmission[]): void {
   for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+}
+
+// Only once committed: a drop rolled back drops nothing.
+function logCommittedDrops(plan: ReversePlan, branchId: string, actionId: string): void {
+  if (plan.droppedJournals.length === 0) return
+  logger.debug(
+    'action_layer.rerun_journal_dropped',
+    { branchId, journals: plan.droppedJournals.map((j) => j.actionId) },
+    { actionId },
+  )
 }
 
 function emitCommittedPatches(patches: readonly PatchEmission[], actionId: string): void {
@@ -851,7 +852,7 @@ function settledSurvivors(walk: UndoWalk, stranded: readonly Delta[]): SurvivorR
  * are later deltas another reversal takes back before this one, so none of them replaces a part.
  */
 export async function restoringUpdates(
-  set: ReversalSet,
+  set: CountableSet,
   ctx: DbCtx,
   reversedFirst: readonly Delta[] = [],
 ): Promise<ReadonlySet<string>> {
@@ -901,9 +902,10 @@ export async function reverseAndPruneDeltaRows(
     return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
   return withKeyLocks(reversalLockKeys(set), async () => {
+    let plan: ReversePlan
     let patches: PatchEmission[]
     try {
-      const plan = await buildReverseAndPrunePlan(set, ctx, options)
+      plan = await buildReverseAndPrunePlan(set, ctx, options)
       patches = [...plan.patches, ...(patchesAfter ?? [])]
       onPlan(plan)
       // Canon writes a journal before the plan's ops; a write-back's extraOps re-insert deltas at
@@ -924,6 +926,7 @@ export async function reverseAndPruneDeltaRows(
         stage: 'transaction',
       })
     }
+    logCommittedDrops(plan, set.branchId, actionId)
     emitCommittedPatches(patches, actionId)
     return set.rows.length
   })
@@ -975,19 +978,19 @@ export async function reverseReplayGroup(
     throw replayFailure(e, actionId)
   }
   return withKeyLocks(reversalLockKeys(set), async () => {
-    let patches: PatchEmission[]
+    let plan: ReversePlan
     try {
       const settle = settleOps(set.rows.length)
       if (set.rows.length === 0 && settle.length === 0) return 0
 
-      const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
-      patches = plan.patches
+      plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
     } catch (e) {
       throw replayFailure(e, actionId)
     }
+    logCommittedDrops(plan, set.branchId, actionId)
     // Action layer owns the patch: invert in the held-branch store after the tx.
-    emitCommittedPatches(patches, actionId)
+    emitCommittedPatches(plan.patches, actionId)
     return set.rows.length
   })
 }

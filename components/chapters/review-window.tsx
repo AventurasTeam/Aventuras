@@ -43,11 +43,11 @@ export type EntryLink = { label: string; onPress: () => void }
 export type ReviewWindowProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Runs once a close has finished: after the phone Sheet's slide-out, at once above phone. */
+  /** Runs once the window's exit ends: after the phone Sheet's slide-out, at once above phone. */
   onExited?: () => void
   /** Phone only: the Sheet has presented, so its dismissal will report `onExited`. */
   onPresented?: () => void
-  /** `Re-run…` in the footer; absent, no button (the host gives it on the latest chapter's only). */
+  /** `Re-run…` in the footer; absent, no button (host passes it for the latest chapter only). */
   onRerun?: () => void
   /** Why `Re-run…` is disabled: the gate's reason in flight, else a close owed. */
   rerunDisabledReason?: string

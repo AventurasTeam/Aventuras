@@ -7,8 +7,7 @@ import { generationStore } from '@/lib/stores'
 import { useSettleReread } from './use-settle-reread'
 
 type Props = {
-  targetKey: string | null
-  countedAtSettle: number | null
+  target: { key: string; countedAtSettle: number } | null
   onSettle: (isLive: () => boolean) => void
 }
 
@@ -34,22 +33,7 @@ afterEach(() => {
 describe('useSettleReread', () => {
   it('calls nothing while the host shows nothing', () => {
     const onSettle = vi.fn()
-    setup({ targetKey: null, countedAtSettle: null, onSettle })
-    settleARun()
-    expect(onSettle).not.toHaveBeenCalled()
-  })
-
-  it('calls nothing while the host shows nothing, whatever count it still holds', () => {
-    const onSettle = vi.fn()
-    const counted = generationStore.getSettleCount()
-    setup({ targetKey: null, countedAtSettle: counted, onSettle })
-    settleARun()
-    expect(onSettle).not.toHaveBeenCalled()
-  })
-
-  it('calls nothing for data with no settle count to compare', () => {
-    const onSettle = vi.fn()
-    setup({ targetKey: 'a', countedAtSettle: null, onSettle })
+    setup({ target: null, onSettle })
     settleARun()
     expect(onSettle).not.toHaveBeenCalled()
   })
@@ -57,13 +41,13 @@ describe('useSettleReread', () => {
   it('calls nothing for the settle the shown data was read at', () => {
     const onSettle = vi.fn()
     settleARun()
-    setup({ targetKey: 'a', countedAtSettle: generationStore.getSettleCount(), onSettle })
+    setup({ target: { key: 'a', countedAtSettle: generationStore.getSettleCount() }, onSettle })
     expect(onSettle).not.toHaveBeenCalled()
   })
 
   it('calls once for each settle past the counted one', () => {
     const onSettle = vi.fn()
-    setup({ targetKey: 'a', countedAtSettle: generationStore.getSettleCount(), onSettle })
+    setup({ target: { key: 'a', countedAtSettle: generationStore.getSettleCount() }, onSettle })
     settleARun()
     settleARun()
     expect(onSettle).toHaveBeenCalledTimes(2)
@@ -74,15 +58,14 @@ describe('useSettleReread', () => {
     const onSettle = vi.fn()
     const counted = generationStore.getSettleCount()
     settleARun()
-    setup({ targetKey: 'a', countedAtSettle: counted, onSettle })
+    setup({ target: { key: 'a', countedAtSettle: counted }, onSettle })
     expect(onSettle).toHaveBeenCalledTimes(1)
   })
 
   it('turns a read dead once a newer settle supersedes it', () => {
     const lives: (() => boolean)[] = []
     setup({
-      targetKey: 'a',
-      countedAtSettle: generationStore.getSettleCount(),
+      target: { key: 'a', countedAtSettle: generationStore.getSettleCount() },
       onSettle: (isLive) => lives.push(isLive),
     })
     settleARun()
@@ -94,10 +77,10 @@ describe('useSettleReread', () => {
     const lives: (() => boolean)[] = []
     const onSettle = (isLive: () => boolean) => lives.push(isLive)
     const counted = generationStore.getSettleCount()
-    const { rerender } = setup({ targetKey: 'a', countedAtSettle: counted, onSettle })
+    const { rerender } = setup({ target: { key: 'a', countedAtSettle: counted }, onSettle })
     settleARun()
 
-    rerender({ targetKey: null, countedAtSettle: null, onSettle })
+    rerender({ target: null, onSettle })
     settleARun()
 
     expect(lives).toHaveLength(1)
@@ -108,20 +91,32 @@ describe('useSettleReread', () => {
     const lives: (() => boolean)[] = []
     const onSettle = (isLive: () => boolean) => lives.push(isLive)
     const counted = generationStore.getSettleCount()
-    const { rerender } = setup({ targetKey: 'a', countedAtSettle: counted, onSettle })
+    const { rerender } = setup({ target: { key: 'a', countedAtSettle: counted }, onSettle })
     settleARun()
 
-    rerender({ targetKey: 'b', countedAtSettle: counted, onSettle })
+    rerender({ target: { key: 'b', countedAtSettle: counted }, onSettle })
 
     expect(lives.map((isLive) => isLive())).toEqual([false, true])
+  })
+
+  it("keeps a read live across a re-render with the host's fresh, equal target", () => {
+    const lives: (() => boolean)[] = []
+    const onSettle = (isLive: () => boolean) => lives.push(isLive)
+    const counted = generationStore.getSettleCount()
+    const { rerender } = setup({ target: { key: 'a', countedAtSettle: counted }, onSettle })
+    settleARun()
+
+    rerender({ target: { key: 'a', countedAtSettle: counted }, onSettle })
+
+    expect(lives.map((isLive) => isLive())).toEqual([true])
   })
 
   it('calls the callback of the latest render', () => {
     const first = vi.fn()
     const second = vi.fn()
     const counted = generationStore.getSettleCount()
-    const { rerender } = setup({ targetKey: 'a', countedAtSettle: counted, onSettle: first })
-    rerender({ targetKey: 'a', countedAtSettle: counted, onSettle: second })
+    const { rerender } = setup({ target: { key: 'a', countedAtSettle: counted }, onSettle: first })
+    rerender({ target: { key: 'a', countedAtSettle: counted }, onSettle: second })
     settleARun()
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledTimes(1)

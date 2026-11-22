@@ -445,7 +445,8 @@
     "confirm": "Undo",
     "targetMoved": "A newer change landed, so nothing was undone.",
     "noticeRedo": "Redo",
-    "closeUndone": "Chapter {{number}}'s earlier close couldn't be restored, so its close was undone."
+    "closeUndone": "Chapter {{number}}'s earlier close couldn't be restored, so its close was undone.",
+    "confirmCloseUndone": "This also undoes chapter {{number}}'s close: its earlier close can't be restored."
   },
   "sceneEdit": {
     "title": "Edit scene",

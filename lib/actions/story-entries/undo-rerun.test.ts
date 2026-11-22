@@ -10,9 +10,11 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
+import { writeTurnEntry } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { entitiesStore, loreStore, resetAllStores, threadsStore, undoRedoStore } from '@/lib/stores'
 
 import { redoLastAction, undoLastAction } from './undo'
+import { readUndoImpact } from './undo-target'
 import {
   CLOSE_LORE_ID,
   MERGED_DESCRIPTION,
@@ -323,8 +325,7 @@ describe('CTRL-Z of a re-run', () => {
       detail: 'Error: store sync boom',
       committed: true,
       refusal: null,
-      journal: 'undone',
-      chapterNumber: 1,
+      rerun: { journal: 'undone', chapterNumber: 1 },
     })
     expect(await chapterRows(c.fx)).toEqual([])
   })
@@ -343,8 +344,7 @@ describe('CTRL-Z of a re-run', () => {
       detail: 'Error: store sync boom',
       committed: true,
       refusal: null,
-      journal: 'restored',
-      chapterNumber: null,
+      rerun: { journal: 'restored' },
     })
   })
 
@@ -402,5 +402,67 @@ describe('CTRL-Z of a re-run', () => {
     expect(await chapterRows(c.fx)).toEqual(before.chapters)
     expect(await journalRows(c)).toEqual([])
     expect(loreStore.getById(CLOSE_LORE_ID)).toBeDefined()
+  })
+})
+
+// reader-composer.md → Undo and redo: the confirm reads whether the undo will take the close too,
+// by the predicate the write-back itself runs.
+describe("the CTRL-Z confirm's read of a re-run", () => {
+  // A turn after the re-run, its entries through the action layer as a turn writes them.
+  async function turnAfter(c: ClosedChapter): Promise<void> {
+    const position = (await entryRows(c.fx)).length + 1
+    await writeTurnEntry(c.fx, 'act_turn_after', {
+      id: `entry_after_${position}`,
+      position,
+      kind: 'user_action',
+      content: 'I ask Tobin for the night crossing.',
+    })
+    await writeTurnEntry(c.fx, 'act_turn_after', {
+      id: `entry_after_${position + 1}`,
+      position: position + 1,
+      kind: 'ai_reply',
+      content: 'Tobin names his price and pushes off.',
+    })
+  }
+
+  it("names the close when a pass's fact sits above it once the turns are undone, and the undo takes it", async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    expect(c.chapter.sequenceNumber).toBe(1)
+    await rerun(c)
+    await turnAfter(c)
+    await writeLater(
+      c.fx,
+      {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry: { ...MIRA, branchId: c.fx.branchId } },
+      },
+      { actionId: 'act_pass_above', entryId: c.fx.replyIds[5]! },
+    )
+    // CTRL-Z takes the turn and steps over the pass, whose fact stays above the re-run.
+    expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
+    expect(await entityOf(c.fx, MIRA.id)).toBeDefined()
+
+    expect(await readUndoImpact(c.fx.branchId, RERUN, c.fx.ctx)).toMatchObject({
+      closeUndone: { chapterNumber: 1 },
+    })
+    expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({
+      status: 'ok',
+      closeUndone: { chapterNumber: 1 },
+    })
+    expect(await chapterRows(c.fx)).toEqual([])
+  })
+
+  it('names no close while the re-run can restore the one it replaced', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await rerun(c)
+    await turnAfter(c)
+    expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
+
+    expect(await readUndoImpact(c.fx.branchId, RERUN, c.fx.ctx)).not.toHaveProperty('closeUndone')
+    expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
+    expect(await chapterRows(c.fx)).toHaveLength(1)
   })
 })

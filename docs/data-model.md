@@ -188,7 +188,7 @@ erDiagram
         text end_entry_id "FK-less ref into story_entries; always set — only closed chapters exist as rows"
         integer token_count "sum of content_tokens over the chapter's non-system entries at close; a snapshot, so a later edit in the chapter leaves it alone"
         integer closed_at
-        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
+        json close_report "what the close's deltas don't hold: its action_id, each tool call's task, rows, why, turns and result, each landed write's new value, the writes that didn't land and any task that stopped early, and for a re-run the first log_position of its own writes, which bounds its review; null on a chapter no close wrote. Kept out of the working-set store. See docs/memory/chapter-close.md → Review"
         integer embedding_stale "0 | 1; 1 = embedded fields (summary/theme) need (re-)embedding. Set on any embedded-field write whose content hash differs from the vector's source_hash (edit, create, or failed sync); cleared when the pre-retrieval sync stage embeds the row or content reverts to the embedded value. Still flagged at retrieval means the sync stage couldn't embed it (embedder unavailable), so it is excluded. See docs/memory/retrieval.md → Compute lifecycle"
         integer created_at
         integer updated_at
@@ -3127,8 +3127,8 @@ write by position
 judges a restored write exactly as it did before the undo. A following
 CTRL-Z still reaches the restored group first, since only
 periodic-classifier groups, which CTRL-Z steps over, can sit above it.
-For the write-back, the re-run's own reversal in the same transaction
-frees every position its deltas took, and its check requires nothing
+For the write-back, the reversal of the re-run's own group, in the same
+transaction, frees every position its deltas took, and its check requires nothing
 foreign above the floor, so the journaled deltas' slots are free. A
 writer that bypassed either would collide on the uniqueness backstop
 below, failing the restore whole rather than misordering the log.

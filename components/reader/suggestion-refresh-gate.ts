@@ -1,6 +1,12 @@
 import { generationGateReason } from '@/components/story-settings/generation-run'
 import { CHAPTER_CLOSE_RERUN } from '@/lib/chapters'
-import { isHeadReversalBlocked, refreshHeldByRerun, type TxState } from '@/lib/stores'
+import {
+  isBranchHeld,
+  isHeadReversalBlocked,
+  refreshHeldByRerun,
+  RERUN_HELD,
+  type TxState,
+} from '@/lib/stores'
 
 /**
  * The ⟳ tap's synchronous guard: the orchestrator admits a refresh during a prose reversal or a
@@ -19,13 +25,15 @@ export function suggestionRefreshBlocked(
 }
 
 /**
- * Why ⟳ alone is held: a re-run's chain, catch-up pass included; a refresh's chip delta would sit
- * above the re-run's floor and its CTRL-Z would undo the close. Chip taps write nothing.
+ * Why ⟳ alone is held: a re-run's chain, catch-up pass included, or its branch held until restart;
+ * a refresh's chip delta would sit above the re-run's floor and its undo would undo the close.
+ * Chip taps write nothing.
  */
 export function suggestionRefreshHoldReason(
   txState: TxState,
   branchId: string,
 ): string | undefined {
+  if (isBranchHeld(txState, branchId)) return generationGateReason(true, RERUN_HELD)
   return refreshHeldByRerun(txState, branchId)
     ? generationGateReason(true, CHAPTER_CLOSE_RERUN)
     : undefined

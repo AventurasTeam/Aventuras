@@ -63,15 +63,22 @@ function startHolds(branchId: string): boolean {
 export function useCloseRerunConfirm({
   branchId,
   active,
+  pending,
   loadPreview,
 }: {
   branchId: string
   /** The host holds the confirm's request; losing it dismisses as `dismiss` does. */
   active: boolean
+  /**
+   * The host's start is in flight, from the press, before any mark: its result decides the
+   * confirm, so no re-read starts or lands.
+   */
+  pending: () => boolean
   loadPreview: (chapterId: string) => Promise<CloseRerunPreview | CloseRerunReadRefusal>
 }): {
   target: CloseRerunConfirmTarget | null
-  open: (chapterId: string) => Promise<void>
+  /** Resolves whether it holds the preview: false on a refusal, a throw or a superseded read. */
+  open: (chapterId: string) => Promise<boolean>
   /** A start refused `counts-changed` with this fresh preview; nothing happens with none open. */
   replace: (preview: CloseRerunPreview) => void
   dismiss: () => void
@@ -84,18 +91,18 @@ export function useCloseRerunConfirm({
     setHeldState(next)
   }, [])
   const openRequest = useRef(0)
-  const latest = useRef({ loadPreview })
+  const latest = useRef({ loadPreview, pending })
   useEffect(() => {
-    latest.current = { loadPreview }
+    latest.current = { loadPreview, pending }
   })
 
   const open = useCallback(
-    async (opening: string) => {
+    async (opening: string): Promise<boolean> => {
       openRequest.current += 1
       const request = openRequest.current
       const counted = generationStore.getSettleCount()
       const read = await attempt(() => latest.current.loadPreview(opening))
-      if (request !== openRequest.current) return
+      if (request !== openRequest.current) return false
       if (!read.ok) {
         logger.error('app.close_rerun_preview_threw', {
           branchId,
@@ -103,27 +110,31 @@ export function useCloseRerunConfirm({
           error: messageOf(read.error),
         })
         toast.error(t('chapters:rerunConfirm.readFailed'))
-        return
+        return false
       }
       const result = read.value
       if ('status' in result) {
         logReadRefusal(branchId, opening, result.code)
         toast.error(t(refusalCopy(result.code)))
-        return
+        return false
       }
       setHeld({ chapterId: opening, preview: result, countedAtSettle: counted })
+      return true
     },
     [branchId, setHeld],
   )
 
   useSettleReread({
-    targetKey: held == null ? null : `${branchId}:${held.chapterId}`,
-    countedAtSettle: held?.countedAtSettle ?? null,
+    target:
+      held == null
+        ? null
+        : { key: `${branchId}:${held.chapterId}`, countedAtSettle: held.countedAtSettle },
     onSettle: (isLive) => {
-      if (held == null || startHolds(branchId)) return
+      const startOwns = () => latest.current.pending() || startHolds(branchId)
+      if (held == null || startOwns()) return
       const { chapterId, preview: shown } = held
       void attempt(() => latest.current.loadPreview(chapterId)).then((read) => {
-        if (!isLive() || startHolds(branchId)) return
+        if (!isLive() || startOwns()) return
         if (!read.ok) {
           logger.error('app.close_rerun_recount_failed', {
             branchId,

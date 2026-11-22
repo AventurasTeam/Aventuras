@@ -12,7 +12,7 @@ export function rerunDisabledReason(
   return gateReason ?? (closeOwed ? t('chapters:actions.closeOpenFirst') : undefined)
 }
 
-/** Why `Re-run close…`, `Re-run…` and the re-run confirm disable on `branchId`; undefined while one may start. */
+/** Why the re-run actions and confirm disable on `branchId`; undefined while one may start. */
 export function useRerunDisabledReason(
   storyId: string | undefined,
   branchId: string,

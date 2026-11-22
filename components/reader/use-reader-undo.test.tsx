@@ -725,6 +725,44 @@ describe('useReaderUndo — the reversal meter', () => {
   })
 })
 
+// reader-composer.md → Undo and redo: the confirm says when the undo will take the close too.
+describe("useReaderUndo — a re-run's confirm", () => {
+  const TAKES_CLOSE = "This also undoes chapter 3's close: its earlier close can't be restored."
+
+  it("adds the close's line when the re-run's earlier close can't be restored", async () => {
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    actions.readUndoImpact.mockResolvedValue({
+      createdLore: { count: 2, userEdited: false },
+      otherChanges: 4,
+      closeUndone: { chapterNumber: 3 },
+    })
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+
+    expect(r.result.current.confirm?.props.lines).toEqual([
+      '2 lore rows removed',
+      '4 other changes reversed',
+      TAKES_CLOSE,
+    ])
+  })
+
+  it("adds it under the group's own rows when there are no counts to list", async () => {
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    actions.readUndoImpact.mockResolvedValue({
+      createdLore: { count: 0, userEdited: false },
+      otherChanges: 0,
+      closeUndone: { chapterNumber: 3 },
+    })
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+
+    expect(r.result.current.confirm?.props.lines.at(-1)).toBe(TAKES_CLOSE)
+    expect(r.result.current.confirm?.props.lines.length).toBeGreaterThan(1)
+  })
+})
+
 // reader-composer.md → Undo and redo: an undo that raises its own warning shows it instead.
 describe('useReaderUndo — a re-run undone with no journal to write back', () => {
   it.each(['menu', 'keyboard'] as const)(
@@ -774,15 +812,12 @@ describe('useReaderUndo — a re-run undone with no journal to write back', () =
 
 // A store sync that failed after the undo committed: the close is undone whatever the error says.
 describe('useReaderUndo — a re-run undone, then its store sync fails', () => {
-  const syncFailure = (outcome: {
-    journal?: 'restored' | 'undone'
-    chapterNumber?: number | null
-  }) =>
+  const syncFailure = (rerun?: DeltaReplayError['rerun']) =>
     new DeltaReplayError('store sync boom', {
       cause: 'store sync boom',
       actionId: 'act_rerun',
       stage: 'store-sync',
-      ...outcome,
+      rerun,
     })
 
   async function undoRerunThrowing(error: Error) {
@@ -844,26 +879,8 @@ describe('useReaderUndo — a re-run undone, then its store sync fails', () => {
       'an undo that never committed',
       new DeltaReplayError('x', { cause: 'x', actionId: 'a', stage: 'transaction' }),
     ],
-    [
-      'an undone outcome on an undo that never committed',
-      new DeltaReplayError('x', {
-        cause: 'x',
-        actionId: 'a',
-        stage: 'transaction',
-        journal: 'undone',
-        chapterNumber: 3,
-      }),
-    ],
-    ['a committed restore', syncFailure({ journal: 'restored', chapterNumber: null })],
-    [
-      'a committed restore naming a chapter',
-      syncFailure({ journal: 'restored', chapterNumber: 3 }),
-    ],
-    [
-      'a committed undone outcome naming no chapter',
-      syncFailure({ journal: 'undone', chapterNumber: null }),
-    ],
-    ['a committed failure carrying no outcome', syncFailure({})],
+    ['a committed restore', syncFailure({ journal: 'restored' })],
+    ['a committed failure carrying no outcome', syncFailure()],
     ['an error that is no replay failure', new Error('boom')],
   ])('keeps the generic failure for %s', async (_label, error) => {
     await undoRerunThrowing(error)

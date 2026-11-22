@@ -23,14 +23,16 @@ const RUN_MUTATORS = [
   'recordPhaseResult',
 ]
 
-const RECORD_MUTATORS = [
+const CLOSE_RECORD_MUTATORS = [
   'setPendingClose',
   'clearPendingClose',
   'clearDeferredClose',
   'dropBranchRecords',
-  'setPendingRerun',
-  'clearPendingRerun',
 ]
+
+const RERUN_RECORD_MUTATORS = ['setPendingRerun', 'clearPendingRerun']
+
+const RECORD_MUTATORS = [...CLOSE_RECORD_MUTATORS, ...RERUN_RECORD_MUTATORS]
 
 // eslint.config.js's record-writer block; prose reversal's clearPendingClose is its own block.
 const RECORD_WRITERS = [
@@ -39,6 +41,8 @@ const RECORD_WRITERS = [
   'lib/pipeline/definitions/chapter-close-boundary.ts',
   'lib/pipeline/definitions/memory-chain.ts',
 ]
+
+const RERUN_START = 'lib/actions/chapters/close-rerun.ts'
 
 async function verdicts(
   filePath: string,
@@ -125,7 +129,7 @@ describe('generationStore mutator lint', () => {
   })
 
   it.each(RECORD_WRITERS)(
-    "lets %s write a close's records, but neither drive a run nor set progress",
+    "lets %s write a close's records, but not a re-run's, and neither drive a run nor set progress",
     async (filePath) => {
       expect(
         await verdicts(filePath, [...RECORD_MUTATORS, 'startRun', 'setCloseProgress']),
@@ -134,17 +138,35 @@ describe('generationStore mutator lint', () => {
         clearPendingClose: false,
         clearDeferredClose: false,
         dropBranchRecords: false,
-        setPendingRerun: false,
-        clearPendingRerun: false,
+        setPendingRerun: true,
+        clearPendingRerun: true,
         startRun: true,
         setCloseProgress: true,
       })
     },
   )
 
+  it("lets the re-run's start write its record and a close's, but neither drive a run nor set progress", async () => {
+    expect(
+      await verdicts(RERUN_START, [...RECORD_MUTATORS, 'startRun', 'setCloseProgress']),
+    ).toEqual({
+      setPendingClose: false,
+      clearPendingClose: false,
+      clearDeferredClose: false,
+      dropBranchRecords: false,
+      setPendingRerun: false,
+      clearPendingRerun: false,
+      startRun: true,
+      setCloseProgress: true,
+    })
+  })
+
   // The owner blocks sit before the tests' off-block, so an owner's own tests stay exempt.
   it("leaves a record writer's tests alone", async () => {
     expect(await flagged(call('startRun'), 'lib/actions/chapters/__mutator-fixture.test.ts')).toBe(
+      false,
+    )
+    expect(await flagged(call('setPendingRerun'), 'lib/actions/chapters/close-rerun.test.ts')).toBe(
       false,
     )
   })

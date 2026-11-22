@@ -599,6 +599,7 @@ type TxState = {
   deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send or a close entry's Retry clears a close no longer owed
   pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string }> // a manual close's pick, owed once phase 0's passes catch up; a close the threshold owes keeps none
   pendingRerun: ReadonlyMap<string /* branchId */, { chapterId: string }> // a close's re-run, for its chain's life, whatever ends it; never owed
+  heldBranches: ReadonlyMap<string /* branchId */, { storyId: string | null }> // a re-run whose abort's reversal didn't commit holds its branch until a restart; in memory only
 }
 
 type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
@@ -664,14 +665,26 @@ it. A close started while it holds the
 branch runs as that chapter's re-run
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
+`heldBranches` holds a branch whose re-run's abort couldn't take itself
+back: the reversal failed without committing, so the re-run's writes,
+its journal and its open marker are boot recovery's
+([Recovery-failure policy](#recovery-failure-policy)). The orchestrator
+writes it in the update that removes the run, and nothing clears it: a
+restart drops it with the rest of `txState`.
+
 ### Gate derivation as a selector
 
 ```ts
-const isUserEditBlocked = (s: TxState): boolean =>
+const isUserEditBlocked = (s: TxState, branchId?: string): boolean =>
   s.reversalInProgress ||
   s.pendingTurns.size > 0 ||
+  (branchId !== undefined && s.heldBranches.has(branchId)) ||
   [...s.runs.values()].some((r) => pipelines.get(r.kind)!.gateBehavior === 'hard-gate')
 ```
+
+A user write reads the gate for the open story's branch, so a branch in
+`heldBranches` refuses every write to it, its head reversals included,
+with no run holding the gate. Leaving the story never waits on a hold.
 
 Every v1 kind declares `hard-gate`, so any run in flight closes the
 gate. A turn closes it earlier still, from its admission inside the
@@ -1201,7 +1214,10 @@ CREATE TABLE pipeline_runs (
 - `commitRun` / `abortRun` set `finished_at` and `outcome`.
   `abortRun` writes them inside the reversal's own transaction, so a
   reversal that rolls back leaves the row open for the
-  [startup recovery pass](#startup-recovery-pass) to retry.
+  [startup recovery pass](#startup-recovery-pass) to retry. The run
+  then ends `failed` with `unreversed: true`, and a close's re-run holds
+  its branch until that boot
+  ([Recovery-failure policy](#recovery-failure-policy)).
 - A close's re-run sets `rerun_chapter_id` in its `reversal` phase's
   transaction, beside its journal. Recovery reads it to know the run for
   a re-run exactly: with its journal, the write-back runs as usual; with
@@ -1294,7 +1310,7 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
         },
       )
       if (!settled.reversed) continue
-      const closeUndone = result.journal === 'undone' && result.chapterNumber !== null
+      const closeUndone = result.journal === 'undone'
       reversed.push({
         runId: orphan.run_id,
         kind: orphan.kind,
@@ -1377,12 +1393,12 @@ Recovery failures do mount it, under a different title; see
 
 #### Recovery-failure policy
 
-When `reverseReplayDeltas` throws `DeltaReplayError` during startup
+When `reverseRunGroup` throws `DeltaReplayError` during startup
 recovery, the loop catches per-orphan and continues; boot is not
 blocked. An uncommitted failure leaves the orphan row with
-`finished_at = NULL` so the next boot retries. (A store-sync failure
-after the commit would already have settled it, but boot has no
-branch loaded, so there is no store to sync.) Either way the failure
+`finished_at = NULL` so the next boot retries. A store-sync failure
+after the commit has already settled it: no branch is loaded at boot,
+but the reversal's patches still run through the store patchers. Either way the failure
 emits `pipeline.recovery_failed` at `error` severity via
 observability — visible in the Diagnostics Hub Logs tab.
 
@@ -1420,6 +1436,25 @@ So this is not an observability-only state:
   the chapter-close copy plus the close-undone line. Its marker is
   settled, so that report is the only word of it, and no retry follows.
 
+The same failure can come at runtime: a run's abort whose own reversal
+doesn't commit leaves its writes, and its marker open, for the next
+boot. A pass's or a close's gate lifts anyway, so its branch takes
+writes meanwhile, and a pass's branch takes no turns while it stays
+`running`. A close's re-run instead holds its branch until the app
+restarts (`heldBranches`,
+[Multi-run txState](#multi-run-txstate)): its journal is written back
+only while nothing but its group sits above the floor, and a CTRL-Z, a
+close, a delete or another re-run in between would leave the next boot
+undoing the chapter's close, or writing a deleted close's lore back. So
+every write to that branch refuses: the edit gate and head reversals
+read the hold, every run start refuses as `rerun-held`, a reversal that
+interrupted the re-run refuses past its interrupt, and Send and the
+re-run's start refuse before they write anything. The branch's
+controls, and the re-run's end notice, say a restart restores the
+chapter's close. The hold is in memory, so the restart drops it, and
+its boot recovery reads the open marker and finishes the reversal.
+Only a re-run's failed abort holds its branch.
+
 A failure of the pass itself is the query that lists the orphans
 throwing, the one thing the per-orphan catch can't hold. Boot logs
 `bootstrap.recovery_failed`, skips the reset, which has no report to
@@ -1442,8 +1477,9 @@ and
 [a reversal refused as an integrity error](./parked.md#a-boot-recovery-refused-as-an-integrity-error-never-settles).
 Reaching either of the first two takes a build and data from
 different versions. The third needs a user write to land while an
-orphan's writes are still there: after a run whose abort's own reversal
-failed, since the orchestrator lifts the run's gate even then, or after
+orphan's writes are still there: after a pass or a close whose abort's
+own reversal failed, since the orchestrator lifts the run's gate even
+then (a close's re-run holds its branch until the restart instead), or after
 a boot whose recovery failed on that orphan or as a whole, since
 nothing but a held branch stops a turn. That write can be one the
 reversal would break, and
@@ -1703,17 +1739,21 @@ async function reverseReplayDeltas(
 }
 ```
 
-The primitive is substrate-level and consumed by three callers:
-runtime `abortRun` (re-wraps the thrown `DeltaReplayError` as a
-`PipelineError` so the orchestrator's pipeline-failure path handles
-it), startup `recoverInFlightRuns` (catches `DeltaReplayError`
-directly and routes to the recovery-failure policy above), and
-`submitTurn`, which reverses a turn refused at admission since no run
-was reserved to do it. The two pipeline callers pass their
-`pipeline_runs` marker write as `settleOps`, so it commits or rolls
-back with the reversal. The return value is the delta count so
-callers can distinguish a pre-first-delta zero-delta case from a real
-recovery.
+The primitive is substrate-level. `submitTurn` calls it directly, to
+reverse a turn refused at admission since no run was reserved to do
+it. The two pipeline callers, runtime `abortRun` (re-wraps the thrown
+`DeltaReplayError` as a `PipelineError` so the orchestrator's
+pipeline-failure path handles it) and startup `recoverInFlightRuns`
+(catches `DeltaReplayError` directly and routes to the recovery-failure
+policy above), call `reverseRunGroup` instead: it reverses any other
+run's group exactly as this does, and a close's re-run's with its
+journal written back or its close undone (below). They pass their
+`pipeline_runs` marker write as its `settleOps`, which hears whether
+anything was reversed or written back, so the marker commits or rolls
+back with the reversal and a re-run that stopped before its first own
+write still counts as recovered. It returns the delta count, the
+journal's outcome (`'restored'`, `'undone'` or none) and, for
+`'undone'`, the chapter's number.
 
 A `DeltaReplayError` at stage `store-sync`, which reads as
 `committed`, means the reversal and its prune landed and only the
@@ -2084,7 +2124,9 @@ above would take: redo restores only its snapshot, so an update whose
 undo deleted the pair redoes onto no row yet re-logs, its next CTRL-Z
 reporting an undo that changed nothing. Only `write-back`
 is reachable today, and only at boot recovery of a pass or a close
-whose abort's own reversal failed: the run's gate lifts then, so the
+whose abort's own reversal failed (not a re-run, whose branch is held
+until the restart, [Recovery-failure policy](#recovery-failure-policy)):
+the run's gate lifts then, so the
 user can delete a row it created, in an entity delete whose tail-scene
 update names it, before recovery reverses the create. Each
 boot refuses it again, a failure a restart can't heal
@@ -2776,6 +2818,11 @@ function checkConcurrencyContract(
 }
 ```
 
+Before the contract, a start on a branch in `heldBranches` is refused as
+`rerun-held`, reserving nothing, whatever its kind: the branch waits for
+the restart's boot recovery
+([Recovery-failure policy](#recovery-failure-policy)).
+
 ### Prose reversals and the interrupt
 
 Reversing prose — regenerate, entry-delete rollback, swipe-switch, an
@@ -2820,7 +2867,10 @@ cancelled before its writes has committed nothing, and one cancelled
 during them reverse-replays its own group. A close's re-run cancelled
 after its reversal also writes its journal back, with or without
 writes of its own. Under the gate nothing else
-wrote meanwhile, so that reversal never meets a user write. The
+wrote meanwhile, so that reversal never meets a user write. When the
+re-run's reversal fails without committing, its branch is held
+([Recovery-failure policy](#recovery-failure-policy)), and the reversal
+that interrupted it finds the hold and refuses, writing nothing. The
 run's abort then records it in `txState.deferred` for its branch
 ([Multi-run txState](#multi-run-txstate)), so the next Send runs it
 before the turn ([chainsTo on predecessor](#chainsto-on-predecessor)),

@@ -9,7 +9,7 @@ import { resolveChapterDeleteSet, type ChapterDeleteReadRefusal } from './chapte
 import { DIVIDER_TABLES } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { restoringUpdates } from '../delta/reverse-replay'
-import type { ReversalSet } from '../delta/row-closure'
+import type { CountableSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 
 const CHAPTER_DELETE_PREVIEW_LOCK_ID = 'chapter-delete-preview'
@@ -80,7 +80,7 @@ export async function ownEntryTokens(
  */
 export async function reversalImpactOf(
   branchId: string,
-  set: ReversalSet,
+  set: CountableSet,
   groups: readonly Delta[],
   ctx: DbCtx,
   opts: { reversedFirst?: readonly Delta[] } = {},
@@ -96,8 +96,8 @@ export async function reversalImpactOf(
 
 type CreatedLore = { ids: ReadonlySet<string>; live: ReadonlySet<string> }
 
-// A created row the user deleted since is gone already, so the delete removes only the live ones,
-// and those a delete reversed first brings back.
+// A created row the user deleted since is gone, so the delete removes only the live ones, plus
+// any a `reversedFirst` delete brings back.
 async function createdLoreOf(
   branchId: string,
   groups: readonly Delta[],
@@ -125,7 +125,7 @@ async function createdLoreOf(
 // No write to a created lore row counts again: a live one has its own line, a gone one changes
 // nothing. The stamps and chapter row are the delete itself; a retrieval bump isn't worth showing.
 function changesOf(
-  set: ReversalSet,
+  set: CountableSet,
   created: CreatedLore,
   restoring: ReadonlySet<string>,
   excluded: ReadonlySet<string>,

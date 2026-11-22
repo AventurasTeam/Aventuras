@@ -101,6 +101,7 @@ export {
   wizardStore,
 }
 
+export { closeReportFields } from './chapters/chapter-store-projection'
 export { createWorkingSetStore } from './factory/working-set-store'
 
 export { openEmbedderSwapDialog } from './ui/embedder-swap'
@@ -114,9 +115,11 @@ export {
   awaitRunTerminal,
   cancelStoryRuns,
   interruptMemoryRuns,
+  isBranchHeld,
   isHeadReversalBlocked,
   isStoryBusy,
   isUserEditBlocked,
+  RERUN_HELD,
   runBlocksHeadReversal,
   selectMemoryRun,
 } from './generation/generation'
@@ -125,7 +128,9 @@ export type {
   CloseProgress,
   DeferredWork,
   DeferredWorkKind,
+  HeldBranch,
   PendingClose,
+  PendingMark,
   PendingRerun,
   PendingTurn,
   RunSlot,
