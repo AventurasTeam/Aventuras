@@ -354,8 +354,9 @@ transaction that drops it.
 **`pendingRerun` and the `'rerun'` slot** (`lib/stores/generation/generation.ts`).
 
 - `TxState.pendingRerun: ReadonlyMap<string, { chapterId: string }>`, with
-  `setPendingRerun` and `clearPendingRerun`, both added to
-  `CLOSE_RECORD_MUTATORS` in `eslint.config.js`.
+  `setPendingRerun` and `clearPendingRerun`, both in
+  `RERUN_RECORD_MUTATORS` in `eslint.config.js`, owned by
+  `close-rerun.ts` alone.
 - `RunState.interruptible` widens to `DeferredWorkKind | 'rerun' | null`.
   `newRunState` (`orchestrator.ts`) sets `'rerun'` for a `chapter-close`
   run reserved while `pendingRerun` holds its branch, a chained successor
@@ -567,9 +568,11 @@ close's until this slice.
   4. With turns since, the rollback's sweep (`sweepToEntry`) with the
      confirm's counts, in its own prose-reversal bracket inside the
      mark; a refusal ends the start.
-  5. `setPendingRerun` under the mark, then `startCloseChain` told the
-     mark is its own (`ownsPendingMark`), with the pre-flight again and
-     an `onReserved` that releases the mark. The store clears
+  5. `setPendingRerun` under the mark, then `startCloseChain` handed
+     the mark the bracket gave its body (`pendingMark`), which its busy
+     check skips (no other mark on the branch) and which it ends at the
+     reserve, before the caller's `onReserved`; with the pre-flight
+     again. The store clears
      `pendingRerun` in the update that ends the chain's last run; a
      `finally` here is the backstop for a refused start.
 
@@ -665,7 +668,10 @@ close's until this slice.
   the reader's rollback confirms do; the disabled actions carry the
   blocking run's tooltip, falling back to that string only once no gate
   reason remains (`chapter-overlays-host.tsx`'s `rerunReason ?? held`);
-  other refusals toast a failure and close.
+  `close-owed` toasts `Close the open chapter first.`, an embedder swap
+  or a held branch the manual close's copy, and other refusals a failure,
+  each closing it. A refused or failed first preview read from the
+  review window reopens the window.
 
 - **The card.** `Re-run close…` in `chapter-card.tsx`'s `moreActions`,
   between `Review changes` and `Delete…`, on the latest chapter's card when

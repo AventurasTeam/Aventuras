@@ -608,8 +608,13 @@ close stands.
   while a run is in flight or a close is owed, with the card's tooltips,
   closes the window first, runs the screen's unsaved-changes guard, then
   opens the [re-run confirm](#re-run-a-close) alone, so no dialog sits
-  over the window. The confirm's `Cancel` reopens the review; the
-  guard's Cancel and confirming leave it closed.
+  over the window. The confirm's `Cancel` reopens the review, as does a
+  preview read that refuses or fails before the confirm shows; the
+  guard's Cancel, confirming, a refused re-read and a dropped request
+  leave it closed. A second press during the window's exit does nothing,
+  as a row's does. While the re-run's request is held, its confirm still
+  loading or open, a `Review` from a card or the commit banner opens
+  nothing, so the confirm never stacks over the window.
 - **After a re-run** the window shows the re-run's report, its changes
   against the chapter before any close, as a close's are.
 - **If the close reverses while the window is open,** the window closes,
