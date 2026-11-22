@@ -73,6 +73,24 @@ async function floorAfter(plan: ReversePlan, branchId: string, ctx: DbCtx): Prom
   return top.find((row) => !pruned.has(row.id))?.logPosition ?? 0
 }
 
+function logJournalWritten(
+  journal: RerunJournal,
+  { branchId, chapterId, actionId }: { branchId: string; chapterId: string; actionId: string },
+): void {
+  logger.debug(
+    'action_layer.rerun_journal_written',
+    {
+      branchId,
+      chapterId,
+      floor: journal.floor,
+      rows: journal.rows.length,
+      deltas: journal.deltas.length,
+      journals: journal.journals.length,
+    },
+    { actionId },
+  )
+}
+
 /**
  * Reverses the chapter's lore work and journals its before-images in one transaction (C13); the
  * journal and the run marker's `rerun_chapter_id` lead it. Caller holds the branch exclusive.
@@ -93,49 +111,45 @@ export async function reverseCloseForRerun(
     target: groups.filter((delta) => !DIVIDER_TABLES.has(delta.targetTable)),
   })
   const written: { journal?: RerunJournal } = {}
-  await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, [], undefined, {
-    opsFromPlan: async (plan): Promise<SqlOp[]> => {
-      const journal = parseRerunJournal({
-        version: 1,
-        chapterId,
-        chapterNumber: chapter.sequenceNumber,
-        floor: await floorAfter(plan, branchId, ctx),
-        rows: await beforeImages(plan, ctx),
-        deltas: journaledDeltas(plan),
-        journals: plan.droppedJournals.map((held) => ({
-          actionId: held.actionId,
-          journal: held.journal,
-          createdAt: held.createdAt,
-        })),
-      })
-      written.journal = journal
-      return [
-        ctx.db
-          .insert(reversalJournals)
-          .values({ actionId, branchId, journal, createdAt: Date.now() })
-          .toSQL(),
-        ctx.db
-          .update(pipelineRuns)
-          .set({ rerunChapterId: chapterId })
-          .where(eq(pipelineRuns.actionId, actionId))
-          .toSQL(),
-      ]
-    },
-  })
+  try {
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, [], undefined, {
+      opsFromPlan: async (plan): Promise<SqlOp[]> => {
+        const journal = parseRerunJournal({
+          version: 1,
+          chapterId,
+          chapterNumber: chapter.sequenceNumber,
+          floor: await floorAfter(plan, branchId, ctx),
+          rows: await beforeImages(plan, ctx),
+          deltas: journaledDeltas(plan),
+          journals: plan.droppedJournals.map((held) => ({
+            actionId: held.actionId,
+            journal: held.journal,
+            createdAt: held.createdAt,
+          })),
+        })
+        written.journal = journal
+        return [
+          ctx.db
+            .insert(reversalJournals)
+            .values({ actionId, branchId, journal, createdAt: Date.now() })
+            .toSQL(),
+          ctx.db
+            .update(pipelineRuns)
+            .set({ rerunChapterId: chapterId })
+            .where(eq(pipelineRuns.actionId, actionId))
+            .toSQL(),
+        ]
+      },
+    })
+  } catch (e) {
+    // Committed: only the store sync failed, so the journal is on disk all the same.
+    if (e instanceof DeltaReplayError && e.committed && written.journal)
+      logJournalWritten(written.journal, args)
+    throw e
+  }
   const { journal } = written
   if (!journal) throw new Error('reverseCloseForRerun: the reversal committed without its journal')
-  logger.debug(
-    'action_layer.rerun_journal_written',
-    {
-      branchId,
-      chapterId,
-      floor: journal.floor,
-      rows: journal.rows.length,
-      deltas: journal.deltas.length,
-      journals: journal.journals.length,
-    },
-    { actionId },
-  )
+  logJournalWritten(journal, args)
   return { floor: journal.floor }
 }
 

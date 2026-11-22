@@ -393,6 +393,36 @@ describe('reverseCloseForRerun', () => {
     expect(marker?.rerunChapterId).toBeNull()
   })
 
+  it('logs its journal when only the store sync after the commit throws', async () => {
+    const c = await workedClose()
+    vi.spyOn(loreStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    const error: unknown = await reverseForRerun(c).catch((e: unknown) => e)
+
+    expect(describeDeltaReplayError(error)?.committed).toBe(true)
+    const journal = await journalOf(c.fx, RERUN)
+    expect(
+      getDiagnosticsSnapshot()
+        .logEntries.filter((e) => e.kind === 'action_layer.rerun_journal_written')
+        .map(({ level, fields, actionId }) => ({ level, fields, actionId })),
+    ).toEqual([
+      {
+        level: 'debug',
+        fields: {
+          branchId: c.fx.branchId,
+          chapterId: c.chapter.id,
+          floor: journal.floor,
+          rows: journal.rows.length,
+          deltas: journal.deltas.length,
+          journals: 0,
+        },
+        actionId: RERUN,
+      },
+    ])
+  })
+
   it('journals a close that changed nothing with its chapter, number and floor alone', async () => {
     const c = await openClosed()
     const report = await reportOf(c)
