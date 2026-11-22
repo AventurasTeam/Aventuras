@@ -769,8 +769,10 @@ remains.
 **Second to land.** At the final rebase (`e981d8922`), neither
 [Slice 6.7](./07-diff-cache.md) nor [Slice 6.8](./08-per-branch-lead.md) had
 landed. If either merges before this PR, this PR takes that slice's job before
-it merges: for 6.8, regenerate this slice's migrations from its snapshot and
-renumber them after its steps (C4); for 6.7, write the database-seeded
+it merges: for 6.8, regenerate this slice's generated step (the `deltas`
+rebuild and the `pipeline_runs` column) from main's snapshot, renumber the
+hand-written backfill after it with a journal `when` above every earlier
+entry's, and add both bundle entries (C4); for 6.7, write the database-seeded
 two-branch walk test in `lib/history/diff-walk.test.ts` (C9).
 
 _Populated at finish: notable deviations from the plan and resolved
