@@ -593,3 +593,63 @@ export const OnDismissedAfterProgrammaticClose: Story = {
     expect(dismissedSpy).toHaveBeenCalledTimes(1)
   },
 }
+
+const reopenChangeSpy = fn()
+const reopenDismissedSpy = fn()
+
+function ReopenHarness() {
+  const [open, setOpen] = useState(false)
+  const change = (next: boolean) => {
+    reopenChangeSpy(next)
+    setOpen(next)
+  }
+  return (
+    <View className="items-start gap-4 p-4" style={{ minHeight: 640 }}>
+      <Button onPress={() => setOpen(true)}>
+        <Text>Open</Text>
+      </Button>
+      <Button
+        onPress={() => {
+          setOpen(false)
+          setTimeout(() => setOpen(true), EXIT_HEAD_START_MS)
+        }}
+      >
+        <Text>Close and reopen</Text>
+      </Button>
+      <Text>{open ? 'Host open' : 'Host closed'}</Text>
+      <Sheet open={open} onOpenChange={change} ariaLabel="Reopened sheet">
+        <SheetContent anchor="bottom" size="short" onDismissed={reopenDismissedSpy}>
+          <Text>Reopened sheet body</Text>
+        </SheetContent>
+      </Sheet>
+    </View>
+  )
+}
+
+/** gorhom drops a `present()` sent while it is still dismissing: the reopen waits for the exit. */
+export const ReopenDuringExit: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => <ReopenHarness />,
+  play: async () => {
+    reopenChangeSpy.mockClear()
+    reopenDismissedSpy.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    await waitForSheetAtRest(await screen.findByText('Reopened sheet body', {}, BACKDROP_WAIT))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close and reopen' }))
+    await waitFor(() => expect(reopenDismissedSpy).toHaveBeenCalledTimes(1), BACKDROP_WAIT)
+    const body = await screen.findByText('Reopened sheet body', {}, BACKDROP_WAIT)
+    await waitForSheetAtRest(body)
+    expect(body).toBeVisible()
+    expect(screen.getByText('Host open')).toBeInTheDocument()
+    expect(reopenChangeSpy).not.toHaveBeenCalled()
+
+    // The sheet on screen is the one Escape closes: no invisible sheet swallows the press.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(
+      () => expect(screen.queryByText('Reopened sheet body')).not.toBeInTheDocument(),
+      BACKDROP_WAIT,
+    )
+    expect(screen.getByText('Host closed')).toBeInTheDocument()
+  },
+}

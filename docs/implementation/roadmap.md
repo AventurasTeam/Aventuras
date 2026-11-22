@@ -2039,7 +2039,8 @@ own.
   690 ms later, when gorhom's dismiss animation ends. (A close sent
   before gorhom finished presenting was dropped, and one sent before it
   mounted blocked the next open; since 2026-10-09 the primitive holds
-  such a close until the sheet settles.) But
+  such a close until the sheet settles, and since 2026-11-22 a reopen
+  sent while it dismisses waits for the exit.) But
   `OverflowMenu`'s phone sheet kept its rows mounted and on screen for
   3 s after both an item pick and a disable-close, three runs of three,
   while its trigger reported `aria-expanded="false"`. `sheet.tsx`

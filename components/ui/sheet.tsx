@@ -19,6 +19,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ComponentProps,
   type FC,
 } from 'react'
@@ -296,9 +297,9 @@ function BottomSheetContent({
 
   // Latest-ref: the back listener must not re-subscribe on a render. Android calls the newest
   // listener first, so a re-subscribe would put it above a guard dialog opened from it.
-  const latest = useRef({ dismissable, onOpenChange, onDismissRefused, onDismissed })
+  const latest = useRef({ open, dismissable, onOpenChange, onDismissRefused, onDismissed })
   useLayoutEffect(() => {
-    latest.current = { dismissable, onOpenChange, onDismissRefused, onDismissed }
+    latest.current = { open, dismissable, onOpenChange, onDismissRefused, onDismissed }
   })
   const reportRefused = useCallback(() => latest.current.onDismissRefused?.(), [])
   const dismissal = useSheetDismissal(dismissable, reportRefused)
@@ -313,9 +314,14 @@ function BottomSheetContent({
   // the sheet reports a detent, then sent from the settled state.
   const isSettledRef = useRef(false)
   const isDismissHeldRef = useRef(false)
+  // gorhom drops a present() sent while its dismiss animates, then unmounts the modal through
+  // the onDismiss captured when the close began. A reopen waits for that exit, then presents.
+  const isDismissingRef = useRef(false)
+  const [reopenCount, setReopenCount] = useState(0)
   const dismissSheet = useCallback(() => {
     isPresentedRef.current = false
     isSettledRef.current = false
+    isDismissingRef.current = true
     sheetRef.current?.dismiss()
   }, [])
   const handleChange = useCallback(
@@ -380,7 +386,7 @@ function BottomSheetContent({
     // effects, which run after this one. Defer to the next tick.
     const handle = setTimeout(() => {
       if (open) isDismissHeldRef.current = false
-      if (open && !isPresentedRef.current) {
+      if (open && !isPresentedRef.current && !isDismissingRef.current) {
         // gorhom's keyboard state is built purely from show/hide events
         // (useAnimatedKeyboard subscribes; it never reads Keyboard.metrics), so
         // it starts at height 0 and a sheet opened while the keyboard is
@@ -404,7 +410,7 @@ function BottomSheetContent({
       cancelled = true
       clearTimeout(handle)
     }
-  }, [open, dismissSheet])
+  }, [open, dismissSheet, reopenCount])
 
   const snapPoints = useMemo(() => {
     if (size === 'auto') return undefined
@@ -475,10 +481,14 @@ function BottomSheetContent({
       onChange={handleChange}
       onDismiss={() => {
         if (!isMountedRef.current) return
+        const reopen = isDismissingRef.current && latest.current.open
+        isDismissingRef.current = false
         isPresentedRef.current = false
         isSettledRef.current = false
         isDismissHeldRef.current = false
-        onOpenChange(false)
+        // This closure is the close's render, whose onOpenChange can't report against a reopen.
+        if (reopen) setReopenCount((n) => n + 1)
+        else onOpenChange(false)
         latest.current.onDismissed?.()
       }}
     >
