@@ -67,6 +67,11 @@ function redoNames(group: RedoGroup): UndoNames {
   return undoNames(firstRowOf(liveUndoRow, snapshotRowsOf(group.snapshots)))
 }
 
+function rowLines(target: Target): string[] {
+  const rows = firstRowOf(liveUndoRow, deletedRowsOf(target.deltas))
+  return undoConfirmRows(target.deltas, target.names, rows)
+}
+
 // Default-lane React work a reversal schedules (effects' setState, refetches keyed on its settle)
 // runs after its promise resolves, so a second window follows it.
 const TAIL_MS = 250
@@ -291,10 +296,15 @@ export function useReaderUndo({
           },
         )
         const lines = impact == null ? [] : chapterImpactLines(impact)
-        if (lines.length > 0) return lines
+        // The warning after the undo stays for a close that turns unrestorable past this read.
+        const closeUndone =
+          impact?.closeUndone == null
+            ? []
+            : [t('reader:undo.confirmCloseUndone', { number: impact.closeUndone.chapterNumber })]
+        if (lines.length > 0) return [...lines, ...closeUndone]
+        return [...rowLines(target), ...closeUndone]
       }
-      const rows = firstRowOf(liveUndoRow, deletedRowsOf(target.deltas))
-      return undoConfirmRows(target.deltas, target.names, rows)
+      return rowLines(target)
     },
     [branchId, ctx],
   )

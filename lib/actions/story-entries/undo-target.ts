@@ -7,6 +7,7 @@ import { resolveInvalidationForDeltas } from './classifier-facts'
 import { headUndoGroup } from './undo'
 import { reversalImpactOf, type ChapterDeletePreview } from '../chapters/chapter-delete-preview'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
+import { closeUndoneBy } from '../delta/rerun-journal'
 import { ReversalIntegrityError } from '../delta/reverse-replay'
 import { selectReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
@@ -54,6 +55,12 @@ async function positionsOf(
   return positions
 }
 
+/** What undoing a close, its re-run or its kept work reverses, as the confirm lists it. */
+export type UndoImpact = Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'> & {
+  /** A re-run whose earlier close can't be restored: its undo takes the chapter's close too. */
+  closeUndone?: { chapterNumber: number }
+}
+
 /**
  * The confirm's impact lines for undoing a close, its re-run or its kept work: the chapter delete
  * confirm's, counted over the set this undo would reverse. Null when the set can't be read, so the
@@ -63,7 +70,7 @@ export async function readUndoImpact(
   branchId: string,
   actionId: string,
   ctx: DbCtx,
-): Promise<Pick<ChapterDeletePreview, 'createdLore' | 'otherChanges'> | null> {
+): Promise<UndoImpact | null> {
   return withBranchWriteShared(branchId, UNDO_IMPACT_LOCK_ID, async () => {
     const group = (await ctx.db
       .select()
@@ -79,7 +86,10 @@ export async function readUndoImpact(
         target: group,
         sweep: invalidation.rows,
       })
-      return await reversalImpactOf(branchId, set, group, ctx)
+      const impact = await reversalImpactOf(branchId, set, group, ctx)
+      // The undo's own predicate (undo.ts → undoBracketed), read here before it runs.
+      const closeUndone = await closeUndoneBy({ actionId, branchId, group }, ctx)
+      return closeUndone === null ? impact : { ...impact, closeUndone }
     } catch (e) {
       if (e instanceof ReversalIntegrityError) return null
       throw e

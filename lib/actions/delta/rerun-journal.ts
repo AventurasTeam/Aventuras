@@ -375,36 +375,46 @@ export function withJournalOutcome(
   })
 }
 
-/**
- * How a re-run's group reverses (generation-pipeline.md → Reverse-replay): journal written back,
- * or, with no journal or a group no longer whole, the close undone. Read before any transaction;
- * the caller runs the ops after its prunes.
- */
-export async function rerunWriteBack(
-  args: {
-    actionId: string
-    /** Null when the caller knows no branch (recovery of a group with no delta). */
-    branchId: string | null
-    /** The group's deltas, newest first, as the caller read them. */
-    group: readonly Delta[]
-    /** pipeline_runs.rerun_chapter_id, when the caller holds the marker. */
-    rerunChapterId?: string | null
-  },
-  ctx: DbCtx,
-): Promise<RerunWriteBack> {
+type WriteBackArgs = {
+  actionId: string
+  /** Null when the caller knows no branch (recovery of a group with no delta). */
+  branchId: string | null
+  /** The group's deltas, newest first, as the caller read them. */
+  group: readonly Delta[]
+  /** pipeline_runs.rerun_chapter_id, when the caller holds the marker. */
+  rerunChapterId?: string | null
+}
+
+// The write-back's decision, from reads alone; `rerunWriteBack` builds its ops from it.
+type WriteBackPlan =
+  | { outcome: 'none' }
+  | { outcome: 'restored'; found: FoundJournal }
+  | {
+      outcome: 'undone'
+      chapterId: string
+      branchId: string
+      chapterNumber: number
+      /** Set when a journal exists and is dropped with the close. */
+      found?: FoundJournal
+      journal: UndoneClose['journal']
+    }
+  | { outcome: 'alone'; chapterId: string }
+
+async function planWriteBack(args: WriteBackArgs, ctx: DbCtx): Promise<WriteBackPlan> {
   const { actionId, group } = args
   const found = await readJournal(actionId, args.branchId, ctx)
   if (found !== undefined) {
     const { branchId, journal } = found
     if (await groupIsWhole(journal.floor, branchId, group, ctx))
-      return { outcome: 'restored', ...(await writeBackOps(found, actionId, ctx)) }
-    return undoneClose(ctx, {
+      return { outcome: 'restored', found }
+    return {
+      outcome: 'undone',
       chapterId: journal.chapterId,
       branchId,
       chapterNumber: journal.chapterNumber,
-      ops: [journalDelete(ctx, branchId, actionId)],
+      found,
       journal: 'not-whole',
-    })
+    }
   }
   const chapterId = args.rerunChapterId ?? (await shapedChapterId(group, ctx))
   if (chapterId === null) return { outcome: 'none' }
@@ -418,13 +428,46 @@ export async function rerunWriteBack(
         : and(eq(chapters.branchId, knownBranch), eq(chapters.id, chapterId)),
     )
   if (!chapter) return { outcome: 'alone', chapterId }
-  return undoneClose(ctx, {
+  return {
+    outcome: 'undone',
     chapterId,
     branchId: chapter.branchId,
     chapterNumber: chapter.sequenceNumber,
-    ops: [],
     journal: 'missing',
-  })
+  }
+}
+
+/**
+ * How a re-run's group reverses (generation-pipeline.md → Reverse-replay): journal written back,
+ * or, with no journal or a group no longer whole, the close undone. Read before any transaction;
+ * the caller runs the ops after its prunes.
+ */
+export async function rerunWriteBack(args: WriteBackArgs, ctx: DbCtx): Promise<RerunWriteBack> {
+  const plan = await planWriteBack(args, ctx)
+  switch (plan.outcome) {
+    case 'none':
+    case 'alone':
+      return plan
+    case 'restored':
+      return { outcome: 'restored', ...(await writeBackOps(plan.found, args.actionId, ctx)) }
+    case 'undone': {
+      const { found, ...undone } = plan
+      const ops = found === undefined ? [] : [journalDelete(ctx, found.branchId, args.actionId)]
+      return undoneClose(ctx, { ...undone, ops })
+    }
+  }
+}
+
+/**
+ * The close a reversal of this group would undo rather than restore, as `rerunWriteBack` decides
+ * it, writing nothing; null when it restores one or the group is no re-run's.
+ */
+export async function closeUndoneBy(
+  args: WriteBackArgs,
+  ctx: DbCtx,
+): Promise<{ chapterNumber: number } | null> {
+  const plan = await planWriteBack(args, ctx)
+  return plan.outcome === 'undone' ? { chapterNumber: plan.chapterNumber } : null
 }
 
 /** How many deltas a run group's reversal took, and how a re-run's journal ended. */
