@@ -121,6 +121,15 @@ export function whereForDelta(
     : eq(descriptor.idCol, delta.targetId)
 }
 
+/** The table's branch column's key on a drizzle row object, or undefined for a table with none. */
+export function branchKeyOf(descriptor: TableDescriptor): string | undefined {
+  const { branchCol } = descriptor
+  if (branchCol === undefined) return undefined
+  return Object.entries(getTableColumns(descriptor.table)).find(
+    ([, column]) => column === branchCol,
+  )?.[0]
+}
+
 /** A string list a reversal undoes term by term: a column, or an array `path` inside a schema-backed one. */
 export type TermListField = {
   readonly column: string

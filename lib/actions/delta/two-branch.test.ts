@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   branches,
+  characterRelationships,
   deltas,
   entities,
+  happeningAwareness,
+  happenings,
   parseRerunJournal,
   reversalJournals,
   stories,
@@ -26,7 +29,7 @@ import { entitiesStore, entriesStore, generationStore, undoRedoStore } from '@/l
 import { applyDeltaAction } from './apply-delta-action'
 import { __resetBranchWriteLocks } from './branch-write-lock'
 import { readCurrentRow } from './redo'
-import { reverseAndPruneDeltaRows } from './reverse-replay'
+import { reverseAndPruneDeltaRows, type ReversePlan } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '../story-entries/operational'
@@ -363,5 +366,129 @@ describe('redo and the re-run write-back on a copied branch', () => {
         branchId: B,
       })
     expect(branchSnapshot(t.sqlite, fx.branchId)).toEqual(aBefore)
+  })
+})
+
+// data-model.md → Branch model: a copy keeps undo_payload verbatim, so a delete copied onto B
+// still names A; generation-pipeline.md → Reverse-replay restores onto the branch it writes.
+describe("restores stamp their row target's branch", () => {
+  const STAMP_A = 'br_stamp_a'
+  const STAMP_B = 'br_stamp_b'
+  const GONE = 'char_gone'
+  const STAYS = 'char_stays'
+  const REL = 'rel_pair'
+  const HAP = 'hap_seen'
+  const HAW = 'haw_seen'
+  const DELETE_ACTION = 'act_gone'
+
+  let stamp: TestDb
+  let stampCtx: DbCtx
+
+  const onStampA = (id: string): NewEntity => ({
+    id,
+    branchId: STAMP_A,
+    kind: 'character',
+    name: id,
+    status: 'active',
+    injectionMode: 'auto',
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+
+  // Every branch a row with this id sits on.
+  const branchesHolding = (table: string, id: string): unknown[] =>
+    (
+      stamp.sqlite.prepare(`SELECT branch_id FROM ${table} WHERE id = ?`).all(id) as {
+        branch_id: unknown
+      }[]
+    ).map((row) => row.branch_id)
+
+  beforeEach(async () => {
+    stamp = await createTestDb()
+    stampCtx = { db: stamp.db, runInTransaction: stamp.runInTransaction }
+    await stamp.db.insert(stories).values({ id: 's_stamp', title: 'T', createdAt: 1, updatedAt: 1 })
+    await stamp.db
+      .insert(branches)
+      .values({ id: STAMP_A, storyId: 's_stamp', name: 'a', createdAt: 1 })
+    await stamp.db.insert(entities).values([onStampA(GONE), onStampA(STAYS)])
+    await stamp.db
+      .insert(happenings)
+      .values({ id: HAP, branchId: STAMP_A, title: 'Fire', createdAt: 1, updatedAt: 1 })
+    // a_id < b_id: char_rel_canonical_order.
+    await stamp.db.insert(characterRelationships).values({
+      id: REL,
+      branchId: STAMP_A,
+      aId: GONE,
+      bId: STAYS,
+      kind: 'ally',
+      inverseKind: null,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await stamp.db
+      .insert(happeningAwareness)
+      .values({ id: HAW, branchId: STAMP_A, happeningId: HAP, characterId: GONE })
+    const removed = await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteEntity',
+          source: 'user_edit',
+          payload: { branchId: STAMP_A, id: GONE },
+        },
+        actionId: DELETE_ACTION,
+        branchId: STAMP_A,
+      },
+      stampCtx,
+    )
+    if (removed.status !== 'ok') throw new Error(`deleteEntity: ${JSON.stringify(removed)}`)
+    cloneBranch(stamp.sqlite, STAMP_A, STAMP_B)
+  })
+
+  it('restores a copied delete and its captured children onto B alone, stamping copies', async () => {
+    const group = (await stamp.db
+      .select()
+      .from(deltas)
+      .where(and(eq(deltas.branchId, STAMP_B), eq(deltas.actionId, DELETE_ACTION)))
+      .orderBy(desc(deltas.logPosition))) as Delta[]
+    const set = await selectReversalSet(stampCtx, { branchId: STAMP_B, target: group })
+    const held = set.rows.find((delta) => delta.op === 'delete' && delta.targetId === GONE)
+    if (!held) throw new Error('the reversal set holds no delete of the character')
+    const payloadBefore = structuredClone(held.undoPayload)
+    // Not vacuous: the copy's payload still names the branch that wrote it.
+    expect(payloadBefore).toMatchObject({
+      branchId: STAMP_A,
+      relationships: [{ id: REL, branchId: STAMP_A }],
+      awareness: [{ id: HAW, branchId: STAMP_A }],
+    })
+    const sourceBefore = branchSnapshot(stamp.sqlite, STAMP_A)
+
+    const plans: ReversePlan[] = []
+    await reverseAndPruneDeltaRows(set, stampCtx, { keepRedoExact: false }, [], (plan) => {
+      plans.push(plan)
+    })
+
+    expect(branchSnapshot(stamp.sqlite, STAMP_A)).toEqual(sourceBefore)
+    expect(branchesHolding('entities', GONE)).toEqual([STAMP_B])
+    expect(branchesHolding('character_relationships', REL)).toEqual([STAMP_B])
+    expect(branchesHolding('happening_awareness', HAW)).toEqual([STAMP_B])
+
+    const created = plans
+      .flatMap((plan) => plan.patches)
+      .flatMap(({ table, branchId, patch }) =>
+        patch.op === 'create'
+          ? [{ key: `${table}:${patch.id}`, branchId, rowBranchId: patch.row.branchId }]
+          : [],
+      )
+    expect(created.map(({ key }) => key).sort()).toEqual([
+      `character_relationships:${REL}`,
+      `entities:${GONE}`,
+      `happening_awareness:${HAW}`,
+    ])
+    for (const patch of created)
+      expect(patch).toMatchObject({ branchId: STAMP_B, rowBranchId: STAMP_B })
+
+    // Stamped on copies: the set's delete still holds the payload exactly as it was read.
+    expect(held.undoPayload).toEqual(payloadBefore)
   })
 })

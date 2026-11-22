@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, gt } from 'drizzle-orm'
+import { and, asc, desc, eq, gt } from 'drizzle-orm'
 
 import {
   chapters,
@@ -17,7 +17,7 @@ import { DIVIDER_TABLES, readChapterCloseGroups } from '../chapters/close-groups
 import type { DbCtx } from '../types'
 import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { readCurrentRow } from './redo'
-import { resolveByTable, whereForDelta, type TableDescriptor } from './registry'
+import { branchKeyOf, resolveByTable, whereForDelta, type TableDescriptor } from './registry'
 import { DeltaReplayError, type JournalOutcome } from './replay-errors'
 import {
   replayFailure,
@@ -218,14 +218,6 @@ async function groupIsWhole(
     above.length === own.size &&
     above.every((row, i) => own.has(row.id) && row.logPosition === floor + 1 + i)
   )
-}
-
-function branchKeyOf(descriptor: TableDescriptor): string | undefined {
-  const { branchCol } = descriptor
-  if (branchCol === undefined) return undefined
-  return Object.entries(getTableColumns(descriptor.table)).find(
-    ([, column]) => column === branchCol,
-  )?.[0]
 }
 
 function upsertRowOp(ctx: DbCtx, descriptor: TableDescriptor, row: Record<string, unknown>): SqlOp {

@@ -35,7 +35,13 @@ import {
   type ReversalChains,
   type SurvivorEdit,
 } from './own-write'
-import { resolveByTable, whereForDelta, type StorePatch, type TableEntry } from './registry'
+import {
+  branchKeyOf,
+  resolveByTable,
+  whereForDelta,
+  type StorePatch,
+  type TableEntry,
+} from './registry'
 import {
   DeltaReplayError,
   ReversalIntegrityError,
@@ -560,6 +566,10 @@ function emitInsert(
   { ref, branchId, entry }: RowTarget,
   row: Record<string, unknown>,
 ): void {
+  // A copied payload names the branch that wrote it; drizzle drops a `branch_id` key, so the
+  // table's own branch key carries the branch the plan writes.
+  const branchKey = branchKeyOf(entry.descriptor)
+  if (branchKey !== undefined) row[branchKey] = branchId
   // A deleted row's flag was accurate when it went, but an embedder swap since then re-embeds
   // only LIVE rows, so the vector can be gone while it reads clean.
   if (isEmbeddedSourceTable(ref.table)) row.embeddingStale = 1
@@ -646,9 +656,14 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
     const childEntry = resolveByTable(childTableName)
     if (!childEntry) throw new Error(`reverse-replay: unknown child table ${childTableName}`)
     const { table: childTable } = childEntry.descriptor
-    const restoredChildren: Record<string, unknown>[] = isEmbeddedSourceTable(childTableName)
-      ? childRows.map((childRow) => ({ ...childRow, embeddingStale: 1 }))
-      : childRows
+    const childKey = branchKeyOf(childEntry.descriptor)
+    const embedded = isEmbeddedSourceTable(childTableName)
+    // Copies: the payload's row objects are shared with the set's deltas, redo snapshots and journals.
+    const restoredChildren: Record<string, unknown>[] = childRows.map((childRow) => ({
+      ...childRow,
+      ...(childKey === undefined ? {} : { [childKey]: target.branchId }),
+      ...(embedded ? { embeddingStale: 1 } : {}),
+    }))
     // A wide child table × large row count can overrun SQLite's per-statement bind cap —
     // chunk by the table's full column count, an upper bound on drizzle's binds per row.
     const chunkSize = rowsPerInsert(Object.keys(getTableColumns(childTable)).length)
@@ -663,14 +678,14 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
     for (const childRow of restoredChildren) {
       const id = childRow.id as string
       // Seeded so an older undo on the child composes onto the restored row.
-      walk.rowStates.set(rowKey(childTableName, delta.branchId, id), {
+      walk.rowStates.set(rowKey(childTableName, target.branchId, id), {
         ref: { table: childTableName, id },
         row: { ...childRow },
         presence: 'live',
       })
       walk.patches.push({
         table: childTableName,
-        branchId: delta.branchId,
+        branchId: target.branchId,
         patch: { op: 'create', id, row: childRow },
       })
     }
