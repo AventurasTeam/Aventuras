@@ -408,7 +408,10 @@ label leads with `Before your turn:` instead
 (`Before your turn: 3 of 7 — Identity…`), since on phone, where the pill
 shows only a spinner, the banner is the one place that names the wait; a
 close that hasn't reached a step yet reads `Closing chapter before your
-turn…`.
+turn…`. A close's re-run reads `Reversing the chapter's close…` while it
+reverses the close it replaces, and plain `Closing chapter…` before
+that, since it neither chooses an end nor writes a summary; from its
+first task it reads as a close. It never runs before a turn.
 
 A close's commit, or its re-run's, leaves the banner in a done state
 instead of dismissing it: `Chapter closed: <title>`, or

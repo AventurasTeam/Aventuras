@@ -848,7 +848,7 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     `run_complete` carries `rerun: true`; with an unprocessed entry at or
     before E the chain starts a pass, then the re-run; with unprocessed
     entries only after E it starts the re-run; the re-run chains nothing.
-16. `lib/actions/chapters/close-rerun.test.ts`: `pendingRerun` is absent
+16. `lib/actions/chapters/close-rerun-start.test.ts`: `pendingRerun` is absent
     after each end: a refused start, a catch-up pass that fails, one
     cancelled, one interrupted, and the re-run committing, aborting and
     failing.
@@ -868,17 +868,18 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 
 **The action.**
 
-19. `lib/actions/chapters/close-rerun.test.ts`, refusals before the
+19. `lib/actions/chapters/close-rerun-start.test.ts`, refusals before the
     shortcut, each leaving the `story_entries` count and the log as they
     were: `story-busy` for a busy story, `not-latest`, `no-close`,
     `close-owed` (a pending
     manual close, and auto-close at the threshold after the shortcut),
     `preflight-failed` with `toolCalling` off, and `counts-changed`
     carrying the fresh preview.
-20. The same file: a reply regenerated since the close makes its
+20. `lib/actions/chapters/close-rerun.test.ts`: a reply regenerated since the close makes its
     `user_action` the target; the shortcut's counts equal, as literal
     numbers, those `getRollbackCounts` reads at that target outside any
-    hold; the reversal's counts leave out a row both sets hold; an
+    hold; the reversal's counts leave out a delta both sets hold,
+    counting it once on the shortcut's line; an
     exclusive hold requested during the preview takes the lock after the
     preview returns.
 21. The same file: after a re-run whose Lore task created two lore rows,
@@ -926,7 +927,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     latest report's `actionId` matches holds a `closeResult` with that
     `actionId` and `rerun: true`; a failed `rerun` event holds nothing and
     toasts nothing.
-29. 5.11's host test (`components/chapters/chapter-overlays-host.test.tsx`):
+29. 5.11's host test (`components/chapters/chapter-overlays-host.test.tsx`,
+    the first item) and `components/chapters/chapter-overlays-host-rerun.test.tsx`
+    (the rest):
     - a re-run's commit closes an open window and replaces a close's done
       state with `Chapter <N>'s close re-ran`, in the warning tone when the
       report holds a stopped task; its CTRL-Z clears it;
@@ -1275,10 +1278,14 @@ change amends the scope above.
   good, or an older pass's work can come back on a later boot; that is
   parked with its fix
   ([`parked.md → Recovery order after an orphan's failure on a re-run's branch`](../../../../parked.md#recovery-order-after-an-orphans-failure-on-a-re-runs-branch)).
-- **The abort's outcome rides a new port member.** `reverseRunGroup`
-  carries the delta count and the journal's outcome;
-  `reverseReplayDeltas` keeps `Promise<number>` for `submitTurn`
-  (the Scope above said its return type changes).
+- **The abort's outcome rides a new port member.** Abort and recovery
+  call `reverseRunGroup` (`lib/actions/delta/rerun-journal.ts`), which
+  reads the run's group, writes the journal back or takes the fallback,
+  and reverses any other group as `reverseReplayDeltas` does; it returns
+  the delta count with the journal's outcome and hands `settleOps` a
+  boolean. `reverseReplayDeltas` keeps `Promise<number>` and no
+  write-back, for `submitTurn` (the Scope's abort bullet, which names it,
+  predates the split).
 - **A committed reversal whose store sync fails keeps its outcome.**
   CTRL-Z of a re-run whose close was undone shows the close-undone
   warning even when only the store sync failed, and a recovery failure

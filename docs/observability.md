@@ -197,7 +197,9 @@ convention, and the expectation that subsystems route through
   journal couldn't be written back, with `chapterId`, `chapterNumber`
   and `journal`, `not-whole` or `missing`, under the re-run's
   `actionId`; the user sees the toast, or after a crash the recovery
-  modal's re-run line),
+  modal's re-run line. With `chapterNumber` null, at boot for a marker
+  whose chapter row was already gone, the group reversed alone and the
+  user sees no close-undone line),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /

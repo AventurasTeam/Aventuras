@@ -1377,12 +1377,12 @@ Recovery failures do mount it, under a different title; see
 
 #### Recovery-failure policy
 
-When `reverseReplayDeltas` throws `DeltaReplayError` during startup
+When `reverseRunGroup` throws `DeltaReplayError` during startup
 recovery, the loop catches per-orphan and continues; boot is not
 blocked. An uncommitted failure leaves the orphan row with
-`finished_at = NULL` so the next boot retries. (A store-sync failure
-after the commit would already have settled it, but boot has no
-branch loaded, so there is no store to sync.) Either way the failure
+`finished_at = NULL` so the next boot retries. A store-sync failure
+after the commit has already settled it: no branch is loaded at boot,
+but the reversal's patches still run through the store patchers. Either way the failure
 emits `pipeline.recovery_failed` at `error` severity via
 observability — visible in the Diagnostics Hub Logs tab.
 
@@ -1703,17 +1703,21 @@ async function reverseReplayDeltas(
 }
 ```
 
-The primitive is substrate-level and consumed by three callers:
-runtime `abortRun` (re-wraps the thrown `DeltaReplayError` as a
-`PipelineError` so the orchestrator's pipeline-failure path handles
-it), startup `recoverInFlightRuns` (catches `DeltaReplayError`
-directly and routes to the recovery-failure policy above), and
-`submitTurn`, which reverses a turn refused at admission since no run
-was reserved to do it. The two pipeline callers pass their
-`pipeline_runs` marker write as `settleOps`, so it commits or rolls
-back with the reversal. The return value is the delta count so
-callers can distinguish a pre-first-delta zero-delta case from a real
-recovery.
+The primitive is substrate-level. `submitTurn` calls it directly, to
+reverse a turn refused at admission since no run was reserved to do
+it. The two pipeline callers, runtime `abortRun` (re-wraps the thrown
+`DeltaReplayError` as a `PipelineError` so the orchestrator's
+pipeline-failure path handles it) and startup `recoverInFlightRuns`
+(catches `DeltaReplayError` directly and routes to the recovery-failure
+policy above), call `reverseRunGroup` instead: it reverses any other
+run's group exactly as this does, and a close's re-run's with its
+journal written back or its close undone (below). They pass their
+`pipeline_runs` marker write as its `settleOps`, which hears whether
+anything was reversed or written back, so the marker commits or rolls
+back with the reversal and a re-run that stopped before its first own
+write still counts as recovered. It returns the delta count, the
+journal's outcome (`'restored'`, `'undone'` or none) and, for
+`'undone'`, the chapter's number.
 
 A `DeltaReplayError` at stage `store-sync`, which reads as
 `committed`, means the reversal and its prune landed and only the
