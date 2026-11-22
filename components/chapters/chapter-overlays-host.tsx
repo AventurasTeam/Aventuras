@@ -429,12 +429,13 @@ function RerunConfirmHost({
     setPending(true)
     setHeldInFlight(false)
     onStarting(request, true)
-    // Once the chain's first run reserves every refusal is past, and the banner speaks.
-    const onStarted = () => {
+    // A request opened since, or already closed when the chain started, is not this one's.
+    const closeOwn = () => {
       if (chapterOverlaysStore.getState().rerunConfirm === request)
         chapterOverlaysStore.closeRerunConfirm({ reopen: false })
     }
-    void runCloseRerun({ branchId, chapterId, preview, onStarted }).then((step) => {
+    // Once the chain's first run reserves every refusal is past, and the banner speaks.
+    void runCloseRerun({ branchId, chapterId, preview, onStarted: closeOwn }).then((step) => {
       pendingRef.current = false
       setPending(false)
       onStarting(request, false)
@@ -447,9 +448,7 @@ function RerunConfirmHost({
           return
         case 'ended':
         case 'refused':
-          // A request opened since, or already closed when the chain started, is not this one's.
-          if (chapterOverlaysStore.getState().rerunConfirm === request)
-            chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+          closeOwn()
       }
     })
   }

@@ -2227,27 +2227,6 @@ describe('rollback counts and chapters', () => {
 })
 
 describe('rollback during a re-run', () => {
-  // A run holding b1 with no pipeline behind it; only its slot matters to the hold.
-  function holdB1(kind: string, interruptible: RunState['interruptible']): RunState {
-    const run: RunState = {
-      runId: `run_${kind}`,
-      kind,
-      gateBehavior: 'hard-gate',
-      interruptible,
-      beforeTurn: false,
-      actionId: `act_${kind}`,
-      storyId: 's1',
-      branchId: 'b1',
-      abortController: new AbortController(),
-      currentPhase: '',
-      intermediates: {},
-      terminal: Promise.resolve(),
-      resolveTerminal: () => {},
-    }
-    generationStore.startRun(run)
-    return run
-  }
-
   // As a close stamps them: op and t1 are chapter 1; t2 and t3 are the open region.
   async function closeOpAndT1(db: Awaited<ReturnType<typeof createTestDb>>['db']): Promise<void> {
     await db
@@ -2265,7 +2244,7 @@ describe('rollback during a re-run', () => {
     await closeOpAndT1(db)
     entriesStore.hydrate('b1', [])
     const shown = await shownCounts('b1', 't1', ctx)
-    const rerun = holdB1(CHAPTER_CLOSE_KIND, 'rerun')
+    const rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, 'b1', 'rerun')
     const log = await db.select().from(deltas)
 
     const result = await rollbackToEntry('b1', 't1', ctx, { expectedCounts: shown })
@@ -2283,7 +2262,7 @@ describe('rollback during a re-run', () => {
     await closeOpAndT1(db)
     entriesStore.hydrate('b1', [])
     const shown = await shownCounts('b1', 't2', ctx)
-    const rerun = holdB1(CHAPTER_CLOSE_KIND, 'rerun')
+    const rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, 'b1', 'rerun')
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
 
@@ -2301,7 +2280,8 @@ describe('rollback during a re-run', () => {
     let rerun: RunState | undefined
     const watched = new Proxy(db, {
       get(target, prop, receiver) {
-        if (prop === 'select' && rerun === undefined) rerun = holdB1(CHAPTER_CLOSE_KIND, 'rerun')
+        if (prop === 'select' && rerun === undefined)
+          rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, 'b1', 'rerun')
         return Reflect.get(target, prop, receiver) as unknown
       },
     })
@@ -2327,7 +2307,8 @@ describe('rollback during a re-run', () => {
     let turn: RunState | undefined
     const watched = new Proxy(db, {
       get(target, prop, receiver) {
-        if (prop === 'select' && turn === undefined) turn = holdB1(PER_TURN_KIND, null)
+        if (prop === 'select' && turn === undefined)
+          turn = registerStoreOnlyRun(PER_TURN_KIND, 'b1')
         return Reflect.get(target, prop, receiver) as unknown
       },
     })

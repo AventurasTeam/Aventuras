@@ -112,7 +112,7 @@ export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<
 
 // JSON paths only: the planner never parses a journal's before-images.
 async function journalHeadsOf(set: ReversalSet, ctx: DbCtx): Promise<JournalHead[]> {
-  const heads = await ctx.db
+  return ctx.db
     .select({
       actionId: reversalJournals.actionId,
       chapterId: sql<string>`json_extract(${reversalJournals.journal}, '$.chapterId')`,
@@ -120,7 +120,6 @@ async function journalHeadsOf(set: ReversalSet, ctx: DbCtx): Promise<JournalHead
     })
     .from(reversalJournals)
     .where(eq(reversalJournals.branchId, set.branchId))
-  return heads
 }
 
 // generation-pipeline.md → Reverse-replay: a reversal that would leave a re-run's write-back

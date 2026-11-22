@@ -28,11 +28,11 @@ import {
   entitiesStore,
   entriesStore,
   generationStore,
-  type RunState,
 } from '@/lib/stores'
 
 import { refreshSuggestions } from './refresh-suggestions'
 import { undoLastAction } from '../story-entries/undo'
+import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
 import type { DbCtx } from '../types'
 
 const { generateStructuredMock } = vi.hoisted(() => ({
@@ -360,25 +360,6 @@ describe('refreshSuggestions', () => {
 })
 
 describe('refreshSuggestions during a re-run (AC 24)', () => {
-  // A memory run on b1 with no pipeline behind it, in the slot its chain gives it.
-  function holdMemoryRun(kind: string, interruptible: RunState['interruptible']): void {
-    generationStore.startRun({
-      runId: `run_${kind}`,
-      kind,
-      gateBehavior: 'hard-gate',
-      interruptible,
-      beforeTurn: false,
-      actionId: `act_${kind}`,
-      storyId: 's1',
-      branchId: 'b1',
-      abortController: new AbortController(),
-      currentPhase: '',
-      intermediates: {},
-      terminal: Promise.resolve(),
-      resolveTerminal: () => {},
-    })
-  }
-
   // Ready to refresh: the run beside it reads as a registered kind, so only the hold refuses.
   async function refreshable() {
     const { db, ctx } = await makeHarness()
@@ -403,7 +384,7 @@ describe('refreshSuggestions during a re-run (AC 24)', () => {
   ])('refuses during $name, starting no run and logging nothing', async ({ kind, slot }) => {
     const { db, ctx } = await refreshable()
     generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
-    holdMemoryRun(kind, slot)
+    registerStoreOnlyRun(kind, 'b1', slot)
 
     const result = await refresh(ctx)
 
@@ -416,7 +397,7 @@ describe('refreshSuggestions during a re-run (AC 24)', () => {
 
   it('starts beside a plain close', async () => {
     const { ctx } = await refreshable()
-    holdMemoryRun(CHAPTER_CLOSE_KIND, 'close')
+    registerStoreOnlyRun(CHAPTER_CLOSE_KIND, 'b1', 'close')
 
     const result = await refresh(ctx)
 

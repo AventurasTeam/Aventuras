@@ -1339,22 +1339,7 @@ describe('regenerateTurn during a re-run (AC 23)', () => {
       .update(storyEntries)
       .set({ chapterId: 'chap_1' })
       .where(eq(storyEntries.branchId, 'b1'))
-    const rerun: RunState = {
-      runId: 'run_rerun',
-      kind: CHAPTER_CLOSE_KIND,
-      gateBehavior: 'hard-gate',
-      interruptible: 'rerun',
-      beforeTurn: false,
-      actionId: 'act_rerun',
-      storyId: 's1',
-      branchId: 'b1',
-      abortController: new AbortController(),
-      currentPhase: 'agent',
-      intermediates: {},
-      terminal: Promise.resolve(),
-      resolveTerminal: () => {},
-    }
-    generationStore.startRun(rerun)
+    const rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, 'b1', 'rerun')
     const log = await ctx.db.select().from(deltas)
     const swept: string[] = []
 

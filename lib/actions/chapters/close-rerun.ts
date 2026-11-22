@@ -430,7 +430,7 @@ async function startUnderMark(
           args.onStarted?.()
         } catch (e) {
           logger.warn('action_layer.close_rerun_on_started_threw', {
-            branchId: args.branchId,
+            branchId,
             error: e instanceof Error ? e.message : String(e),
           })
         }

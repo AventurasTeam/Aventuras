@@ -94,8 +94,6 @@ export function useChapterDeleteConfirm({
   const pendingRef = useRef(false)
   const openRequest = useRef(0)
   const reviewOpen = chapterOverlaysStore.useOverlays((s) => s.review != null)
-  // The re-read effect's cleanup is what drops a stale read, so the host's fresh callbacks each
-  // render must not re-run it: they ride in a ref.
   const latest = useRef({ loadPreview, remove, resync })
   useEffect(() => {
     latest.current = { loadPreview, remove, resync }

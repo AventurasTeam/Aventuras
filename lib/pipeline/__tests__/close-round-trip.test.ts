@@ -262,6 +262,9 @@ async function removeTheChapter(h: CloseHarness, mode: ChapterDeleteMode): Promi
   expect(await removeChapter(h.fx.branchId, id, mode, h.fx.ctx)).toEqual({ status: 'ok' })
 }
 
+const isDivider = (d: Delta): boolean =>
+  d.targetTable === 'chapters' || d.targetTable === 'story_entries'
+
 // C13: removing the divider reverses the chapter row, its report and its stamps; the rest stands.
 function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
   state: WorldState
@@ -276,9 +279,7 @@ function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
         (e) => e.chapterId === null || !removed.has(e.chapterId),
       ),
     },
-    log: closed.log.filter(
-      (d) => d.targetTable !== 'chapters' && d.targetTable !== 'story_entries',
-    ),
+    log: closed.log.filter((d) => !isDivider(d)),
   }
 }
 
@@ -289,9 +290,6 @@ type ArmExpected = {
   /** The log of the re-run that stands, under 'after-rerun'; every other re-run's is empty. */
   rerunLog: readonly Delta[]
 }
-
-const isDivider = (d: Delta): boolean =>
-  d.targetTable === 'chapters' || d.targetTable === 'story_entries'
 
 function expectedAfter(h: CloseHarness, arm: RoundTripArm): ArmExpected {
   switch (arm.expect) {
