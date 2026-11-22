@@ -313,25 +313,42 @@ describe('the planner drops a journal its reversal would make inexact', () => {
   }
 
   /**
-   * Close, a fact, a card rename, a re-run (lore create unless `rerunLore` is false, plus a chapter
-   * write as its report), a later turn. The journal's floor is the rename's position.
+   * Close, a fact, the user's delete of a second stamped entry if `deletedEntry`, a card rename, a
+   * re-run (lore create unless `rerunLore` is false, plus a chapter write as its report), a later
+   * turn. The journal's floor is the rename's position.
    */
-  async function seed({ rerunLore = true } = {}): Promise<number> {
+  async function seed({ rerunLore = true, deletedEntry = false } = {}): Promise<number> {
+    if (deletedEntry)
+      await ctx.db.insert(storyEntries).values({
+        id: 'e2',
+        branchId: 'b1',
+        position: 2,
+        kind: 'ai_reply',
+        content: 'The far bank.',
+        createdAt: 1,
+      })
     await act('act_close', {
       kind: 'createChapter',
       source: 'chapter_close',
       payload: { entry: CHAPTER },
     })
-    await act('act_close', {
-      kind: 'stampEntryChapter',
-      source: 'chapter_close',
-      payload: { branchId: 'b1', id: 'e1', chapterId: 'ch_1' },
-    })
+    for (const id of deletedEntry ? ['e1', 'e2'] : ['e1'])
+      await act('act_close', {
+        kind: 'stampEntryChapter',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id, chapterId: 'ch_1' },
+      })
     await act('act_turn', {
       kind: 'createLore',
       source: 'periodic_classifier',
       payload: { entry: loreEntry('lore_t') },
     })
+    if (deletedEntry)
+      await act('act_del', {
+        kind: 'deleteStoryEntry',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'e2' },
+      })
     await act('act_save', {
       kind: 'updateChapter',
       source: 'user_edit',
@@ -412,6 +429,28 @@ describe('the planner drops a journal its reversal would make inexact', () => {
     expect(plan.droppedJournals).toEqual([])
     await reverse(divider)
     expect(await journalIds()).toEqual(['act_rerun'])
+  })
+
+  it("(b) drops it when a divider-only removal rewrites a delete's held entry below the floor", async () => {
+    const floor = await seed({ deletedEntry: true })
+    const [deleted] = await deltasOf('act_del')
+    const divider = await deltasOf('act_close')
+
+    const plan = await planFor(divider)
+
+    expect(deleted.logPosition).toBeLessThan(floor)
+    expect(plan.rewrittenHolders).toEqual([deleted])
+    // Below the floor it removes only the chapter's own row and the close's stamps.
+    expect(plan.prunedDeltas.map((d) => d.actionId).sort()).toEqual([
+      'act_close',
+      'act_close',
+      'act_close',
+      'act_rerun',
+      'act_save',
+    ])
+    expect(plan.droppedJournals.map((j) => j.actionId)).toEqual(['act_rerun'])
+    await reverse(divider)
+    expect(await journalIds()).toEqual([])
   })
 
   it("(c) drops a report-only re-run's journal when a divider-only removal empties its group", async () => {
