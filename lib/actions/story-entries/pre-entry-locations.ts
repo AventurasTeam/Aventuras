@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or } from 'drizzle-orm'
+import { and, asc, eq, inArray, ne, or } from 'drizzle-orm'
 
 import { deltas, type Entity } from '@/lib/db'
 import { isJsonObject } from '@/lib/json-object'
@@ -18,7 +18,8 @@ export async function firstLocationWrites(
   const first = new Map<string, string | null>()
   if (characterIds.length === 0) return first
 
-  // The turn's fold logs with no entry anchor; its run is the one that created the entry.
+  // The turn's fold logs with no entry anchor; its run is the one that created the entry. A
+  // user_action's create, anchored too, is the user's: the run's writes belong to its reply.
   const [created] = await ctx.db
     .select({ actionId: deltas.actionId })
     .from(deltas)
@@ -29,6 +30,7 @@ export async function firstLocationWrites(
         eq(deltas.targetTable, 'story_entries'),
         eq(deltas.targetId, entryId),
         eq(deltas.op, 'create'),
+        ne(deltas.source, 'user_edit'),
       ),
     )
     .limit(1)
