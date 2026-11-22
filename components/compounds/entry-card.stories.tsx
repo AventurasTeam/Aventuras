@@ -696,6 +696,8 @@ export const HeadTurnEditDuringPass: StoryT = {
   },
 }
 
+const RERUN_REASON = t('generationGate.chapterCloseRerun')
+
 /**
  * Save & regenerate is a save then a regenerate: with the reversal gate held it stays off,
  * so a saved edit is never followed by a refused regenerate. Plain Save follows `editDisabled`.
@@ -708,8 +710,40 @@ export const SaveAndRegenerateWaitsOnReversalGate: StoryT = {
     content: 'I draw my sword and step toward the figure in the doorway.',
     editing: true,
     disabled: true,
+    disabledReason: RERUN_REASON,
     editDisabled: false,
     reversalDisabled: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    const saveAndRegen = await screen.findByRole('button', {
+      name: t('reader:entryCard.saveAndRegenerate'),
+    })
+    expect(saveAndRegen).toBeDisabled()
+    // The held button alone carries the gate's tooltip.
+    const tooltips = screen.getAllByTitle(RERUN_REASON)
+    expect(tooltips).toHaveLength(1)
+    expect(tooltips[0]).toContainElement(saveAndRegen)
+    expect(screen.getByRole('button', { name: t('save') })).not.toBeDisabled()
+  },
+}
+
+/** A clean draft holds Save & regenerate under a live reversal gate, but no gate holds it. */
+export const PristineDraftDuringPassNamesNoGate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    editDirty: false,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: false,
+    reversalDisabled: false,
     onContentChange: fn(),
     onCommitEdit: fn(),
     onCommitEditAndRegen: fn(),
@@ -719,7 +753,7 @@ export const SaveAndRegenerateWaitsOnReversalGate: StoryT = {
     expect(
       await screen.findByRole('button', { name: t('reader:entryCard.saveAndRegenerate') }),
     ).toBeDisabled()
-    expect(screen.getByRole('button', { name: t('save') })).not.toBeDisabled()
+    expect(screen.queryByTitle(PASS_REASON)).toBeNull()
   },
 }
 
