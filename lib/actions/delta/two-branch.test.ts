@@ -5,6 +5,8 @@ import {
   branches,
   deltas,
   entities,
+  parseRerunJournal,
+  reversalJournals,
   stories,
   storyEntries,
   type CharacterState,
@@ -13,16 +15,22 @@ import {
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { branchSnapshot, cloneBranch, type TestDb } from '@/lib/db/__tests__/two-branch'
+import {
+  branchSnapshot,
+  cloneBranch,
+  seedCopyFixture,
+  type TestDb,
+} from '@/lib/db/__tests__/two-branch'
 import { entitiesStore, entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
 import { __resetBranchWriteLocks } from './branch-write-lock'
+import { readCurrentRow } from './redo'
 import { reverseAndPruneDeltaRows } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '../story-entries/operational'
-import { undoLastAction } from '../story-entries/undo'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 
 // After a copy every id repeats on both branches: each case writes on B and reads A, which holds
@@ -281,5 +289,79 @@ describe('delta writes on a copied branch', () => {
     expect(onB.map((row) => row.id).sort()).toEqual(['op', 't1'])
     expect(await deltasOn(A, 'turn2', 'turn3')).toHaveLength(4)
     expect(branchSnapshot(t.sqlite, A)).toEqual(aBefore)
+  })
+})
+
+describe('redo and the re-run write-back on a copied branch', () => {
+  it("redoLastAction on B restores B's survivor payload and leaves A's", async () => {
+    await openOnA()
+    await onA('act_0', {
+      kind: 'createEntity',
+      source: 'user_edit',
+      payload: { entry: character('char_kael', { name: 'Kael', keywords: ['the knight'] }) },
+    })
+    await onA('act_u', {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: { branchId: A, id: 'char_kael', patch: { keywords: ['the knight', 'ser kael'] } },
+    })
+    await onA('act_pass', {
+      kind: 'appendEntityKeywords',
+      source: 'periodic_classifier',
+      payload: { branchId: A, id: 'char_kael', keywords: ['the wanderer'], proseEntryId: null },
+    })
+    cloneBranch(t.sqlite, A, B)
+    const [survivor] = await deltasOn(B, 'act_pass')
+    const undone = { keywords: ['the knight'] }
+    expect(survivor.undoPayload).not.toEqual(undone)
+    // A's copy differs from B's, so a restore that reached A would show.
+    await ctx.db
+      .update(deltas)
+      .set({ undoPayload: { keywords: ['changed on A'] } })
+      .where(and(eq(deltas.branchId, A), eq(deltas.id, survivor.id)))
+    const aBefore = branchSnapshot(t.sqlite, A)
+    entriesStore.hydrate(B, [])
+
+    expect(await undoLastAction(B, ctx)).toEqual({ status: 'ok' })
+    expect((await deltaOn(B, survivor.id))?.undoPayload).toEqual(undone)
+    expect(await redoLastAction(B, ctx)).toEqual({ status: 'ok' })
+
+    expect((await deltaOn(B, survivor.id))?.undoPayload).toEqual(survivor.undoPayload)
+    expect(branchSnapshot(t.sqlite, A)).toEqual(aBefore)
+  })
+
+  it('undoLastAction of a re-run on B writes its journal back onto B and leaves A', async () => {
+    const fx = await seedCopyFixture(t)
+    const [stored] = await ctx.db
+      .select()
+      .from(reversalJournals)
+      .where(
+        and(
+          eq(reversalJournals.branchId, fx.branchId),
+          eq(reversalJournals.actionId, fx.journalActionId),
+        ),
+      )
+    const journal = parseRerunJournal(stored.journal)
+    const restoredRows = journal.rows.filter((row) => row.before !== null)
+    expect(journal.deltas).not.toEqual([])
+    expect(restoredRows).not.toEqual([])
+    cloneBranch(t.sqlite, fx.branchId, B)
+    const aBefore = branchSnapshot(t.sqlite, fx.branchId)
+    entriesStore.hydrate(B, [])
+
+    expect(await undoLastAction(B, ctx)).toEqual({ status: 'ok' })
+
+    expect(await deltasOn(B, fx.journalActionId)).toEqual([])
+    expect(
+      await ctx.db.select().from(reversalJournals).where(eq(reversalJournals.branchId, B)),
+    ).toEqual([])
+    for (const logged of journal.deltas)
+      expect(await deltaOn(B, logged.id)).toEqual({ ...logged, branchId: B })
+    for (const { table, id } of restoredRows)
+      expect(await readCurrentRow(ctx, table, { branchId: B, targetId: id })).toMatchObject({
+        id,
+        branchId: B,
+      })
+    expect(branchSnapshot(t.sqlite, fx.branchId)).toEqual(aBefore)
   })
 })
