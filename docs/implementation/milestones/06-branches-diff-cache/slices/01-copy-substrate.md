@@ -233,11 +233,11 @@ branch.
 - The survivor rewrite in `buildUndoOps` (`:816-819`), by
   `delta.branchId`.
 - Redo's survivor restore (`lib/actions/delta/redo.ts:344-345`), whose
-  `SurvivorPayload` holds only an id. Its branch comes from the group's
-  snapshots, which each hold their delta. A group with survivors always
-  has a snapshot, since `prepareUndo` keeps only the survivors on rows
-  the snapshot restores (`redo.ts:103-108`). C6 later gives the group a
-  branch of its own ([Slice 6.2](./02-scoped-reads-redo.md)).
+  `SurvivorPayload` held only an id. It gains a `branchId`, which
+  `prepareUndo`'s `takeSurvivors` fills from the set the undo wrote
+  (`set.branchId`), so it needs no invariant tying survivors to a
+  snapshot. C6 later gives the group a branch of its own
+  ([Slice 6.2](./02-scoped-reads-redo.md)), the same value.
 - The journal write-back's upsert (`rerun-journal.ts:283-290`): its
   conflict target becomes `[deltas.branchId, deltas.id]`. SQLite rejects
   `ON CONFLICT(id)` once no unique constraint matches it, so with the
@@ -330,9 +330,11 @@ after it merges. One proposed shape is a synchronous
   so a column a parallel slice adds, such as 6.8's `is_lead`, copies
   with no edit. JSON columns copy as stored text: no JSON function
   touches them, so the subtype lesson doesn't apply.
-- **Predicates.** Each table takes an optional predicate, a SQL fragment
-  with its own binds, ANDed into its `WHERE` and evaluated inside the
-  statement, so it reads the batch's state at that point. A fork leaves
+- **Predicates.** Each table takes a predicate, a SQL fragment with its
+  own binds, ANDed into its `WHERE` and evaluated inside the statement,
+  so it reads the batch's state at that point. A fork must pass one for
+  `story_entries`, `deltas` and `reversal_journals` (`'all'` for none),
+  by type and at runtime; elsewhere it's optional. A fork leaves
   out `kind = 'system'` entries and the deltas and journals its plan
   removes; the exclusion can't be a bound id list, since a fork near the
   start of a long story removes more ids than SQLite binds
@@ -703,53 +705,8 @@ remains.
 
 ## Open questions
 
-- **Unaudited contract wording.** This slice builds on wording the
-  milestone's [Open questions](../milestone.md#open-questions) list as
-  never rechecked: C1's pin that a row target's branch is the branch the
-  plan writes, with `undoDelete`'s child key and patch following it and
-  the children stamped on copies; C2's third backfill source; C12's
-  narrower gate on this slice; and the "second to land" criteria. Read
-  each against the code at slice planning before building on it.
-- **A plain `CREATE TEMP TABLE` inside a batch.** vec0's own DDL is
-  routed around the batch (`lib/db/runtime/exec.ts:3-5`), and nothing
-  yet shows whether ordinary DDL runs inside desktop's single-IPC
-  `transaction` or Android's `withTransactionSync`. The first-task
-  temp-table check answers it on both platforms. If either refuses, the
-  vector fallback has no route should the vector check fail too, and
-  [Slice 6.3](./03-fork-core.md)'s survivor exclusion can't take the
-  temp-table route; take that to the developer before building on
-  either.
-- **Every model's vectors.** Canon's manifest filters by no model,
-  so the copy carries every `model_id`, leftovers of an abandoned swap
-  included. Both callers refuse while a swap is pending, so staged rows
-  of a live swap never copy. Default: copy all, as canon reads, and
-  record it in Implementation notes.
-- **A row with none of the three backfill sources.** It stays null and
-  keeps the id-only reads (C2). It has nothing to reverse: no delta, no
-  journal, and no `rerun_chapter_id` or one naming no chapter. The first
-  boot after the migration runs recovery before any story can open, and
-  a recovery that reverses nothing deletes the marker
-  (`recovery.ts:73-89`), so no copy can meet the row. That holds unless
-  that boot's recovery of such a row throws and the marker survives to
-  a later boot. The plan confirms that only a failed transaction can do
-  that, which the next boot retries, or names another way.
-- **`firstLocationWrites` on a `user_action` tail.** With the anchor,
-  the function's create lookup finds the tail's create, and its action
-  is the turn's run's (`submit-turn.ts:177,190`), so that run's
-  unanchored writes join a `user_action` tail's result. Such writes
-  survive under a `user_action` tail only when the run's own reversal
-  failed. Default: keep the earlier result, by restricting the action
-  arm to entries a run created (not `user_action`), since the function's
-  comment ties the arm to "its run is the one that created the entry".
-- **Fixtures and the marker's foreign key.** A test that runs a pipeline
-  with no `branches` row for its branch now fails at the marker insert,
-  and `unwindRun` reports it as a failed run. The pipeline harness seeds
-  `b1` (`lib/pipeline/__tests__/harness.ts:44`); other fixtures may not.
-  Seed the row; don't loosen the key.
-- **Size.** Planned at 16 tasks. The milestone's
-  [Open questions](../milestone.md#open-questions) say that if R1's
-  recovery work grows this slice, the copier moves to 6.3 and duplicate
-  waits on the planner. Check at the plan skeleton.
+None open. Each was answered at slice planning or in the work; the
+answers are in [Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
@@ -766,6 +723,67 @@ remains.
   rows, columns and bytes, the same KNN). Temp table inside one batch:
   passed (`t1`, `t2` moved).
 
+Both passing, the vectors take the single statement per family and C3's
+temp-table fallback isn't built. The temp-table answer stands for
+[Slice 6.3](./03-fork-core.md)'s survivor exclusion: a plain temp table
+can be created, filled, emptied and dropped inside one batch on both
+platforms. The optional boot check also ran: this branch's build, opened
+once over the slot AVD's existing dev database (21 migrations, 217
+deltas, one finished run), applied both new steps at boot: 23
+migrations, `deltas` keyed `(branch_id, id)` with both indexes, 217
+deltas kept, `foreign_key_check` empty, the finished run's `branch_id`
+left null as the backfill leaves finished rows.
+
+**Copier contract for 6.3 and 6.6.** The copier parenthesizes each
+predicate before ANDing it to the branch condition: drizzle's `and()`
+doesn't, and a predicate's top-level `OR` would reach other branches.
+Drizzle writes a predicate's columns as `"table"."col"`, so a predicate
+whose subquery reads the table it filters must alias the inner table, or
+its references bind to the outer row. Both fail silently in a fork's
+survivor predicate. In `fork` mode the copier requires a predicate for
+`story_entries`, `deltas` and `reversal_journals`, by type and at
+runtime (`'all'` copies one unfiltered): the manifest names a fork's
+filters, but nothing else makes a caller pass them.
+
+**Copy order.** The manifest's key order is the copy order, not
+`BRANCH_SCOPED`'s (which puts `entry_assets` after `reversal_journals`):
+`deltas` and `reversal_journals` copy after every domain table, so a
+fork predicate may read another table's copy earlier in the batch.
+
+**Migration steps, for 6.8's data step.** A hand-written step holds one
+statement per `--> statement-breakpoint` chunk. Drizzle's expo session
+prepares each chunk once, so a second statement in a chunk runs on
+desktop and is silently skipped on Android. The migration test finds
+this slice's steps by their `_m6_deltas_key` and `_m6_pipeline_runs_branch`
+suffixes, not their numbers, so a regeneration must keep both names.
+
+**Decisions.**
+
+- Every `model_id`'s vectors copy, as canon's manifest reads; both
+  callers refuse during a pending swap, so only a settled swap's
+  leftovers copy.
+- Redo's survivor restore takes its branch from the set the undo wrote
+  (`SurvivorPayload.branchId` from `set.branchId`), not from the group's
+  snapshots as the brief first read; the developer confirmed the
+  departure.
+- `firstLocationWrites` keeps its earlier result on a `user_action`
+  tail: its create lookup adds `ne(deltas.source, 'user_edit')`, since
+  the `user_action` create is the only entry-create delta sourced
+  `user_edit`.
+- A marker row with none of the three backfill sources needs nothing:
+  it has nothing to copy or reverse, and its boot recovery deletes it;
+  only a failed transaction leaves it, which the next boot retries.
+- The marker's foreign key holds: one fixture needed a seeded `branches`
+  row (`b2` in `abort-reversal-hold.test.ts`), and no key was loosened.
+- The contract wording was read against the code at planning and held;
+  the work found one read C1 lists under neither slice (carried forward
+  below). R1's canon landed before the gated recovery work; the plan
+  came in at 16 tasks, so the copier stayed here.
+
+**Carried forward.** Two branch reads 6.3's split of read and write
+branches must decide are in
+[Slice 6.3's Open questions](./03-fork-core.md#open-questions).
+
 **Second to land.** At the final rebase (`e981d8922`), neither
 [Slice 6.7](./07-diff-cache.md) nor [Slice 6.8](./08-per-branch-lead.md) had
 landed. If either merges before this PR, this PR takes that slice's job before
@@ -774,6 +792,3 @@ rebuild and the `pipeline_runs` column) from main's snapshot, renumber the
 hand-written backfill after it with a journal `when` above every earlier
 entry's, and add both bundle entries (C4); for 6.7, write the database-seeded
 two-branch walk test in `lib/history/diff-walk.test.ts` (C9).
-
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._

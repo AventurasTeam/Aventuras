@@ -709,6 +709,20 @@ files named are suggestions the plan may rename, with this doc amended.
   `ReversePlan` gains: separate re-own ops, separate vector-sweep ops,
   or a fork view over the plan. `ReversePlan` keeps its fields either
   way.
+- **Two reads still on the read branch.** [Slice 6.1](./01-copy-substrate.md)
+  moved every stamp, key and patch C1 gave it off `delta.branchId`, and
+  left two branch reads the split must decide:
+  - `undoDelete`'s liveness read, `liveLinks(delta.branchId, …)`
+    (`lib/actions/delta/reverse-replay.ts:646`), which C1 lists under
+    neither slice. Once a row target's branch is the plan's write
+    branch, the restored children would be checked for liveness on the
+    read branch and written to the write branch. Does the read follow
+    the write branch?
+  - `prepareUndo`'s `takeSurvivors` fills `SurvivorPayload.branchId`
+    from `set.branchId` (`lib/actions/delta/redo.ts:110`). That is the
+    branch the undo wrote while the two are one; if the split reaches
+    the survivor rewrites this callback takes, it must follow the write
+    branch, and agree with the group's own branch once C6 lands.
 - **How short the survivor copy's two lists stay.** The predicate is
   the default (C7). Whether the deltas the plan prunes outside the
   window, or the creates it re-owns, can pass the bind cap on a real
