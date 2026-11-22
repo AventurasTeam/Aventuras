@@ -352,7 +352,8 @@ function rerunIdsOf(h: CloseHarness): string[] {
   return [...ids]
 }
 
-// The migrated dim family. The fixture has no embedder, so nothing else writes these tables.
+// The migrations' 384-dim vector tables for the rows a close's tools write, so not chapter
+// summaries'. The fixture has no embedder: only this suite's stand-ins write them.
 const VEC_TABLES: Readonly<Record<string, string>> = {
   entities: 'entities_vec_384',
   lore: 'lore_vec_384',
@@ -362,41 +363,67 @@ const VEC_TABLES: Readonly<Record<string, string>> = {
 const STAND_IN_EMBEDDER = 'round-trip-embedder'
 const ZERO_VECTOR = JSON.stringify(new Array<number>(384).fill(0))
 
-async function liveIds(fx: CloseFixture, table: string): Promise<Set<unknown>> {
-  const rows = await queryAllOn(fx.ctx.db)(`SELECT id FROM ${table} WHERE branch_id = ?`, [
-    fx.branchId,
-  ])
+type Db = CloseFixture['ctx']['db']
+
+async function idsOn(db: Db, branchId: string, table: string): Promise<Set<unknown>> {
+  const rows = await queryAllOn(db)(`SELECT id FROM ${table} WHERE branch_id = ?`, [branchId])
   return new Set(rows.map(([id]) => id))
 }
 
-// The drain embeds what a re-run created once it commits; a reversal deleting the row must sweep it.
+// A vector for each standing row of `ids` that has none, as an embed writes one.
+async function embedRows(
+  db: Db,
+  branchId: string,
+  table: string,
+  ids: readonly string[],
+): Promise<void> {
+  const vecTable = defined(VEC_TABLES[table], `no vector table for ${table}`)
+  const live = await idsOn(db, branchId, table)
+  const embedded = await idsOn(db, branchId, vecTable)
+  for (const id of ids)
+    if (live.has(id) && !embedded.has(id))
+      await queryAllOn(db)(
+        `INSERT INTO ${vecTable} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          vecRowPk(branchId, id, STAND_IN_EMBEDDER),
+          branchId,
+          STAND_IN_EMBEDDER,
+          id,
+          'stand-in',
+          ZERO_VECTOR,
+        ],
+      )
+}
+
+// The drain embeds what a close or a re-run created once it commits; a reversal deleting the row
+// must sweep it.
 async function embedCreated(fx: CloseFixture, log: readonly Delta[]): Promise<void> {
-  const query = queryAllOn(fx.ctx.db)
-  for (const [table, vecTable] of Object.entries(VEC_TABLES)) {
-    const live = await liveIds(fx, table)
-    for (const d of log)
-      if (d.op === 'create' && d.targetTable === table && live.has(d.targetId))
-        await query(
-          `INSERT INTO ${vecTable} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
-          [
-            vecRowPk(fx.branchId, d.targetId, STAND_IN_EMBEDDER),
-            fx.branchId,
-            STAND_IN_EMBEDDER,
-            d.targetId,
-            'stand-in',
-            ZERO_VECTOR,
-          ],
-        )
+  for (const table of Object.keys(VEC_TABLES))
+    await embedRows(
+      fx.ctx.db,
+      fx.branchId,
+      table,
+      log.filter((d) => d.op === 'create' && d.targetTable === table).map((d) => d.targetId),
+    )
+}
+
+/** `h`, its close embedding what it created as it completes. */
+function embeddingCloses(h: CloseHarness): CloseHarness {
+  return {
+    ...h,
+    close: async () => {
+      await h.close()
+      await embedCreated(h.fx, h.closed().log)
+    },
   }
 }
 
 /** Each vector whose row is gone, as `table:id`. */
 async function strayVectors(fx: CloseFixture): Promise<string[]> {
-  const query = queryAllOn(fx.ctx.db)
   const stray: string[] = []
   for (const [table, vecTable] of Object.entries(VEC_TABLES)) {
-    const live = await liveIds(fx, table)
-    for (const [id] of await query(`SELECT id FROM ${vecTable} WHERE branch_id = ?`, [fx.branchId]))
+    const live = await idsOn(fx.ctx.db, fx.branchId, table)
+    for (const id of await idsOn(fx.ctx.db, fx.branchId, vecTable))
       if (!live.has(id)) stray.push(`${vecTable}:${String(id)}`)
   }
   return stray
@@ -1334,7 +1361,8 @@ async function seedCounted(fx: CloseFixture): Promise<void> {
   await seedRetrievals(fx, wren, 1)
 }
 
-// No embedder runs in the suite: this stands in for the range embed with the seeded cluster.
+// No embedder runs in the suite: this stands in for the range embed with the seeded cluster, and
+// embeds its rows. A re-run's embed reaches a row its reversal brought back, which a stop must sweep.
 function clustered(ids: readonly string[]): SlotEntry<'happenings'> {
   return {
     kind: 'code',
@@ -1343,6 +1371,7 @@ function clustered(ids: readonly string[]): SlotEntry<'happenings'> {
       run: async function* (
         ctx,
       ): AsyncGenerator<PhaseEmittedEvent, PhaseResult, GroupOutcome | undefined> {
+        await embedRows(ctx.db, ctx.branchId, 'happenings', ids)
         setCloseClusters(ctx.phase.intermediates, [ids])
         return { status: 'completed' }
       },
@@ -1893,7 +1922,7 @@ const ARMS: readonly RoundTripArm[] = [
 // Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
 describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_name, c) => {
   it.each(ARMS)('$name leaves the database $expect', async (arm) => {
-    const h = await openHarness(c, MOCKS)
+    const h = embeddingCloses(await openHarness(c, MOCKS))
 
     await arm.run(h)
 
