@@ -1499,6 +1499,26 @@ describe('rollback during a pass', () => {
     held.finish('completed')
     expect(await start.origin).toMatchObject({ outcome: 'completed' })
   })
+
+  it('refuses a rollback to a missing entry before interrupting the pass', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    const pass = registerStandInPass({ anchorEntryId: 't1' })
+    const start = startStandInPass(ctx)
+    const held = await pass.nextHeld()
+    const run = runningPass('b1')
+    expect(run?.actionId).toBe(held.actionId)
+
+    const result = await rollbackToEntry('b1', 'ghost', ctx, { expectedCounts: NEVER_SHOWN })
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'not-found' })
+    expect(run?.abortController.signal.aborted).toBe(false)
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    held.finish('completed')
+    expect(await start.origin).toMatchObject({ outcome: 'completed' })
+  })
 })
 
 describe('rollback confirm counts', () => {

@@ -483,7 +483,8 @@ export async function rollbackToEntry(
   // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
   if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
   const target = await entryChapterOf(branchId, targetId, ctx)
-  // Refused before the bracket: a missing row reads unstamped, so it would interrupt a re-run.
+  // Refused before the bracket, which interrupts any pass, close or re-run: a missing row reads
+  // unstamped, so no re-run hold would stop it.
   if (!target) return targetNotFound(branchId, targetId)
   // Past the read, synchronously with the bracket's entry: a turn reserved during it refuses, and
   // a re-run holds a rollback into its chapter until it ends.
