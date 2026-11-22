@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react'
 
+import { ReasonButton } from '@/components/compounds/reason-button'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -110,31 +111,34 @@ export function CloseRerunConfirm({
               before the start settles. The owner closes it on the result. */}
           {shortcut != null ? (
             <>
-              <Button
+              <ReasonButton
+                layout="stretch"
                 variant="destructive"
                 disabled={actionsDisabled}
                 disabledReason={reason}
                 onPress={onConfirm}
               >
                 <Text>{t('chapters:rerunConfirm.rollbackAndRerun')}</Text>
-              </Button>
-              <Button
+              </ReasonButton>
+              <ReasonButton
+                layout="stretch"
                 variant="primary"
                 disabled
                 disabledReason={t('chapters:rerunConfirm.rerunOnBranchLater')}
               >
                 <Text>{t('chapters:rerunConfirm.rerunOnBranch')}</Text>
-              </Button>
+              </ReasonButton>
             </>
           ) : (
-            <Button
+            <ReasonButton
+              layout="stretch"
               variant="primary"
               disabled={actionsDisabled}
               disabledReason={reason}
               onPress={onConfirm}
             >
               <Text>{t('chapters:rerunConfirm.rerun')}</Text>
-            </Button>
+            </ReasonButton>
           )}
         </AlertDialogFooter>
       </AlertDialogContent>

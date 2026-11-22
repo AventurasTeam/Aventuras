@@ -285,3 +285,47 @@ export const PendingHidesBlockedReason: Story = {
     expect(rerun.closest('[title]')).toBeNull()
   },
 }
+
+const PHONE = { viewport: { value: 'phone390' } }
+
+// The footer's buttons and the title, whose box spans the dialog's content width.
+async function footerLayout(names: readonly string[]) {
+  const dialog = await findDialog()
+  await waitFor(() => expect(dialog).toBeVisible(), WAIT)
+  const title = document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')
+  if (title == null) throw new Error("the confirm's title is not rendered")
+  const content = title.getBoundingClientRect()
+  return { content, rects: names.map((name) => button(name).getBoundingClientRect()) }
+}
+
+/** Above phone the footer is one row at the dialog's right, each button sized to its label. */
+export const FooterRow: Story = {
+  play: async () => {
+    const { content, rects } = await footerLayout([
+      COPY.cancel,
+      COPY.rollbackAndRerun,
+      COPY.rerunOnBranch,
+    ])
+    for (const rect of rects) expect(Math.abs(rect.top - rects[0]!.top)).toBeLessThan(1)
+    expect(Math.abs(Math.max(...rects.map((r) => r.right)) - content.right)).toBeLessThan(1)
+    expect(rects.reduce((sum, r) => sum + r.width, 0)).toBeLessThan(content.width)
+  },
+}
+
+/** Phone: the footer stacks, each button the dialog's full width. */
+export const Phone390FooterStack: Story = {
+  globals: PHONE,
+  play: async () => {
+    const { content, rects } = await footerLayout([
+      COPY.cancel,
+      COPY.rollbackAndRerun,
+      COPY.rerunOnBranch,
+    ])
+    for (const rect of rects) {
+      expect(Math.abs(rect.left - content.left)).toBeLessThan(1)
+      expect(Math.abs(rect.width - content.width)).toBeLessThan(1)
+    }
+    const tops = rects.map((r) => r.top)
+    expect(new Set(tops).size).toBe(3)
+  },
+}
