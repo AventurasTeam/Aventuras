@@ -64,12 +64,14 @@ slice-planning gate forces its resolution before that slice is planned.
 - **Reads of a delta group by `action_id` scan the log.** `deltas` has
   no index on `action_id`, so every group read by action walks the
   branch's log, or the whole table where the read has no branch filter:
-  `reverseReplayDeltas`'s group read (no branch filter, every abort and
-  recovery), `refuseWriteBack`'s group read, and the planner's
-  journal-group read when a reversal takes from a re-run's group. Raised
-  by Slice 5.13's reviews (2026-11-21), which narrowed the planner's read
-  to the groups a set takes from; an index, or a branch filter on the
-  abort read, is the fix. Worth measuring on a long branch before
+  `reverseRunGroup`'s group read (`lib/actions/delta/rerun-journal.ts`,
+  no branch filter, every abort and recovery), `reverseReplayDeltas`'s
+  (no branch filter, a refused Send's reversal), `refuseWriteBack`'s
+  group read, and the planner's journal-group read when a reversal takes
+  from a re-run's group. Raised by Slice 5.13's reviews (2026-11-21),
+  which narrowed the planner's read to the groups a set takes from; an
+  index, or a branch filter on the abort read (the abort already passes
+  its branch), is the fix. Worth measuring on a long branch before
   choosing.
 - **A reversal's error names the newest delta's action, not the
   reversed one.** `reverseAndPruneDeltaRows` labels its
@@ -94,7 +96,23 @@ slice-planning gate forces its resolution before that slice is planned.
   later boot retries or reports it, and the stores resync from the
   database on the next load. Pre-existing for every orphan kind; raised by
   Slice 5.13's PR review (2026-11-21), which only added the close-undone
-  line to this failure.
+  line to this failure. Its title reads `Recovery incomplete` too, though
+  canon keeps that title for a boot where an orphan didn't reverse
+  (`generation-pipeline.md → Recovery-failure policy`), and a re-run's
+  close-undone failure, rendered as the reversed close, then reads
+  `Recovery incomplete` over a body saying the close was reverted
+  (`formatRecoveryTitle` counts every failure; Slice 5.13's closing review,
+  2026-11-22).
+- **A failed completed-marker write makes the next boot reverse a
+  committed run.** `commitRun` settles the run's `pipeline_runs` marker
+  after its last group commits, outside that transaction, and only logs
+  `pipeline.marker_write_failed` when the update throws
+  (`lib/pipeline/runtime/orchestrator.ts`); boot recovery then reverses
+  the committed run as an orphan. For a close's re-run that writes its
+  journal back, so the earlier close returns, or undoes the chapter's
+  close altogether once a turn has logged above the re-run's floor.
+  Pre-existing for every run kind; the re-run adds the second outcome.
+  Raised by Slice 5.13's closing review (2026-11-22).
 - **A throwing `onReserved` leaves its run registered.** The
   orchestrator calls `reserveRun`, and the caller's `onReserved` inside
   it, outside `driveOrigin`'s try and unwind
