@@ -372,6 +372,21 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
     expect(result.current).toBeNull()
   })
 
+  // The confirm's first read is pending, so the window refuses to open over its request.
+  it('Review keeps the result when the window refuses to open', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    chapterOverlaysStore.openRerunConfirm({ branchId: 'branch-1', chapterId: 'chap_2' })
+    const { result } = renderHook(() => useMemoryRunBanner())
+
+    act(() => closedBanner(result.current).onReview())
+
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(chapterOverlaysStore.getState().closeResult).not.toBeNull()
+    expect(result.current?.kind).toBe('closed')
+  })
+
   it('× clears the result and opens nothing', () => {
     openStory()
     chaptersStore.hydrate('branch-1', [chapter()])

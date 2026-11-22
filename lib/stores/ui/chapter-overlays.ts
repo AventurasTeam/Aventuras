@@ -113,11 +113,12 @@ export const chapterOverlaysStore = {
   getState: (): ChapterOverlaysState => store.getState(),
   /**
    * Refused while a re-run request is held: its confirm mounts once its read lands, and never
-   * stacks over the window.
+   * stacks over the window. Returns whether the window opened.
    */
-  openReviewWindow: (input: { chapterId: string }): void => {
-    if (store.getState().rerunConfirm != null) return
+  openReviewWindow: (input: { chapterId: string }): boolean => {
+    if (store.getState().rerunConfirm != null) return false
     store.setState({ review: reviewOf(input.chapterId) })
+    return true
   },
   closeReviewWindow: (): void => store.setState({ review: null }),
   /** Runs the current surface's guard before holding the request, so no trigger skips it. */

@@ -338,11 +338,11 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
   it('refuses to open the review window while a request is held, and opens it once none is', () => {
     chapterOverlaysStore.openRerunConfirm({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     const before = chapterOverlaysStore.getState()
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    expect(chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })).toBe(false)
     expect(chapterOverlaysStore.getState()).toBe(before)
 
     chapterOverlaysStore.closeRerunConfirm({ reopen: false })
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    expect(chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })).toBe(true)
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
       chapterId: 'chap_hero_2',
       actionId: 'act_close_2',

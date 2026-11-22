@@ -119,8 +119,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
     tone: stoppedTasks === 0 ? 'info' : 'warning',
     label: closedLabel(result, held),
     onReview: () => {
-      chapterOverlaysStore.openReviewWindow({ chapterId })
-      clear()
+      if (chapterOverlaysStore.openReviewWindow({ chapterId })) clear()
     },
     onDismiss: clear,
   }
