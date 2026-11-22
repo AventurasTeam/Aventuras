@@ -180,6 +180,10 @@ slice plans when relevant.
   — `react-native-keyboard-controller` KAV measures once;
   Reanimated-entry containers drive `paddingBottom` off
   `useReanimatedKeyboardAnimation` directly.
+- [gorhom drops a present sent while its modal dismisses](./gorhom-present-during-dismiss.md)
+  — a reopen during the slide-out leaves the Sheet open in React over
+  nothing, and gorhom's `onDismiss` is the closing render's; the
+  primitive holds the reopen, and gorhom callbacks read state by ref.
 - [`LayoutAnimationConfig skipExiting` doesn't reach the Accordion](./layoutanimationconfig-skipexiting-gap.md)
   — it does not suppress `AccordionContent`'s `FadeOutUp` when the
   whole list swaps. The collapse fade never showed on native, so the

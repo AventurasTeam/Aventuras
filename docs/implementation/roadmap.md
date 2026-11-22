@@ -1671,8 +1671,8 @@ own.
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
   On native the reason shows nowhere, `ReasonTooltip` being a no-op there,
-  unless a host writes a visible line under the button, as three M5 hosts
-  do; the same pass decides whether every disabled button shows one
+  unless a host writes a visible line under the button, as `ReasonButton`
+  does at eight call sites in six files; the same pass decides whether every disabled button shows one
   ([Slice 5.10 → Implementation notes](./milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes)).
   The same pass owns focus: RN Web maps `disabled` to the native
   attribute, so a control that disables under focus drops it to
@@ -1697,7 +1697,15 @@ own.
   dialog's clipboard `SourceButton`, which takes a reason but doesn't
   pass it to `Button`. The Actions menu's rows show the native line
   (`components/compounds/actions-menu-row.tsx`). Widened from triage
-  2026-11-21.
+  2026-11-21. The Timeline's delete confirm and the reader's rollback
+  confirm show no native line either, though the re-run confirm on the
+  same flow does; about 26 plain `Button` sites with a reason render
+  natively (counted 2026-11-22). Inside the reader's DOM component
+  (`components/reader/reader-document.tsx`, `'use dom'`) Android runs
+  RN Web, so the entry card's reasons reach neither a hint nor a line
+  there, and `ReasonButton`, which draws its line only off web, can't
+  help. Widened from triage 2026-11-22, raised by Slice 5.13's
+  reviews.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
@@ -1955,7 +1963,11 @@ own.
   above. Separately, a `DialogContent` with no `DialogDescription` raises
   Radix's "Missing `Description`" warning, ungated by `NODE_ENV`: the
   review window, the import and embedder-download dialogs, and the
-  world-time and scene dialogs in `entry-card`. Radix's opt-out,
+  world-time and scene dialogs in `entry-card`, all above phone width
+  (the review window's phone Sheet holds no Radix). The close modal
+  renders its description only once its start query has loaded
+  (`close-chapter-modal-view.tsx`), and Radix checks once at mount, so
+  a cold open likely warns too (inferred, not run). Radix's opt-out,
   `aria-describedby={undefined}` on its Content, can't be reached:
   rn-primitives' web `Content` hands Radix's element only its focus and
   dismiss props. The choice is a real description per dialog or a
@@ -2039,7 +2051,8 @@ own.
   690 ms later, when gorhom's dismiss animation ends. (A close sent
   before gorhom finished presenting was dropped, and one sent before it
   mounted blocked the next open; since 2026-10-09 the primitive holds
-  such a close until the sheet settles.) But
+  such a close until the sheet settles, and since 2026-11-22 a reopen
+  sent while it dismisses waits for the exit.) But
   `OverflowMenu`'s phone sheet kept its rows mounted and on screen for
   3 s after both an item pick and a disable-close, three runs of three,
   while its trigger reported `aria-expanded="false"`. `sheet.tsx`
@@ -2080,30 +2093,23 @@ own.
   desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
   (2026-08-08), whose desktop half is now canon.
 
-- **M9.5 — Reversal selection reads the whole branch log, and an
-  abort's lookup scans every branch.** `loadHeldRows` in
-  `lib/actions/delta/held-rows.ts` filters on `op = 'delete'` and
-  JSON-decodes every delete payload each time a reversal set is
-  selected: every CTRL-Z, redo, prose edit, rollback and its preview,
-  abort and boot recovery. CTRL-Z also loads the branch's whole log,
-  payloads included, to pick its target (`recentDeltaRows` in
-  `lib/actions/story-entries/undo.ts`), and while a pass runs
-  `undoLastAction` reads it twice: once before the gate decides, once
-  in the reversal bracket. `reverseReplayDeltas`'s
-  `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
-  matches no index, so abort and boot recovery scan `deltas` across
-  every story. The only `deltas` indexes are `(branch_id, log_position)`
-  and `(branch_id, target_id, log_position)` (`lib/db/system/system.table.ts`,
+- **M9.5 — Reversal selection decodes every delete payload.**
+  `loadHeldRows` in `lib/actions/delta/held-rows.ts` filters on
+  `op = 'delete'` and JSON-decodes every delete payload each time a
+  reversal set is selected: every CTRL-Z, redo, prose edit, rollback
+  and its preview, abort and boot recovery. The only `deltas` indexes
+  are `(branch_id, log_position)` and
+  `(branch_id, target_id, log_position)` (`lib/db/system/system.table.ts`,
   migration `0001_striped_prism.sql`), and the log grows every turn
-  (awareness bumps add update deltas). Fine at today's lengths and not
-  measured. A fix is one migration (an `action_id` or
-  `(branch_id, action_id)` index, and a partial
-  `(branch_id, log_position) WHERE op = 'delete'`) plus a bounded head
-  read for CTRL-Z's target, measured on a bench beside
-  `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
-  review (2026-10-05); the two wider scans were found when it was
-  routed, and the double read during a pass by the gated classifier
-  slice's task reviews (2026-10-21).
+  (awareness bumps add update deltas). Not measured. A fix is a partial
+  `(branch_id, log_position) WHERE op = 'delete'` index, measured on
+  `pnpm bench:undo`. The reads by `action_id` (an abort's and boot
+  recovery's group, CTRL-Z's head group, a re-run's journal group) scan
+  without an index too, but cost 1.7 ms at 60k deltas on that bench
+  (2026-11-22), and `deltas` takes no `action_id` index: settled by the
+  2026-11-07 triage pass and again at Slice 5.13's planning. That pass
+  also cut CTRL-Z's whole-log read, 187 ms at 60k, to its head group.
+  Raised in the reversal-integrity PR's review (2026-10-05).
 - **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
   `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
   indexes without statistics. Measured while planning 4.2c's History

@@ -15,6 +15,7 @@ import {
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { chapterOverlaysStore, generationStore } from '@/lib/stores'
+import { attempt, messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 export type ChapterDeleteConfirmTarget = {
@@ -33,21 +34,6 @@ export function chapterDeleteRefusalCopy(
   return code === CHAPTER_DELETE_REFUSAL.notLatest
     ? 'chapters:deleteConfirm.notLatest'
     : 'chapters:deleteConfirm.failed'
-}
-
-type Attempt<T> = { ok: true; value: T } | { ok: false; error: unknown }
-
-// Outside the hook: React Compiler can't lower a try/catch whose block holds a value block.
-async function attempt<T>(run: () => Promise<T>): Promise<Attempt<T>> {
-  try {
-    return { ok: true, value: await run() }
-  } catch (error) {
-    return { ok: false, error }
-  }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 // A replay failure's message is fixed; what went wrong is in its cause.

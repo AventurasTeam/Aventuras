@@ -8,6 +8,7 @@ import {
 } from 'react-hook-form'
 
 import { logger } from '@/lib/diagnostics'
+import { messageOf } from '@/lib/thrown'
 
 export type RowCommitResult = { status: 'ok' } | { status: 'rejected'; reason: string }
 
@@ -164,10 +165,6 @@ function firstIssue(node: object): string | null {
   return null
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
 /**
  * save-sessions.md: one form per row, explicit Save/Discard, a leave queue transitions route
  * through. Not the Story Settings session — that one aggregates sections into one write.
@@ -245,7 +242,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
             if (run === latest) setDraftIssue(firstIssue(result.errors))
           })
           .catch((error: unknown) => {
-            logger.error('app.row_save_validate_failed', { error: errorMessage(error) })
+            logger.error('app.row_save_validate_failed', { error: messageOf(error) })
           })
       },
     })
@@ -284,7 +281,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
     // Re-checked against the refreshed values, so an invalid draft never looks writable.
     if (hadIssues) {
       void form.trigger().catch((error: unknown) => {
-        logger.error('app.row_save_validate_failed', { error: errorMessage(error) })
+        logger.error('app.row_save_validate_failed', { error: messageOf(error) })
       })
     }
   }, [rowKey, values, form, setPendingConfirm])
@@ -303,7 +300,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       try {
         proceed()
       } catch (error) {
-        logger.error('app.row_save_leave_failed', { error: errorMessage(error) })
+        logger.error('app.row_save_leave_failed', { error: messageOf(error) })
       }
     }
   }, [])
@@ -318,7 +315,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
       try {
         onRejected?.(reason)
       } catch (error) {
-        logger.error('app.row_save_rejected_handler_failed', { error: errorMessage(error) })
+        logger.error('app.row_save_rejected_handler_failed', { error: messageOf(error) })
       }
     },
     [onRejected],
@@ -339,7 +336,7 @@ export function useRowSaveSession<Draft extends FieldValues>({
         return result.status === 'ok' ? { status: 'ok', draft } : result
       } catch (error) {
         // Raw errors (SQLITE_BUSY, a resolver bug) are for the log, not the user.
-        logger.error('app.row_save_failed', { error: errorMessage(error) })
+        logger.error('app.row_save_failed', { error: messageOf(error) })
         return { status: 'rejected', reason: failureText() }
       }
     },

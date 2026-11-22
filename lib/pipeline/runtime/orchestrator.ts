@@ -11,6 +11,7 @@ import {
   RERUN_HELD,
   type RunState,
 } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import { pipelineErrorDetail } from '../call-error'
@@ -121,11 +122,9 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
 // Synchronous reservation: place the run in txState before any await, so the
 // concurrency check that precedes it can't be raced by a second start of a
 // mutually-blocking kind slipping in across an await boundary.
-function reserveRun(kind: string, ctx: RunCtx): RunState {
-  const run = newRunState(kind, ctx)
+function reserveRun(run: RunState, ctx: RunCtx): void {
   generationStore.startRun(run)
   ctx.onReserved?.()
-  return run
 }
 
 function emitRunComplete(
@@ -160,8 +159,6 @@ function unwindRun(run: RunState, detail: string): void {
   emitRunComplete(run, 'failed', error)
   run.resolveTerminal()
 }
-
-const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 // A throw that escaped before the run ended would otherwise hold the gate until a restart. One
 // beginRun already unwound (a failed marker insert) is no longer registered.
@@ -382,21 +379,28 @@ async function commitRun(
   const successor = nextPipeline
     ? newRunState(nextPipeline.kind, { ...ctx, inputs: undefined, actionId: undefined })
     : undefined
-  generationStore.finishRun(run.runId, successor)
+  // Settled under the gate: an open marker would have boot reverse this run from under whatever
+  // the session builds on it, so a failed write fails the run now, its abort reversing it.
   try {
     await ctx.db
       .update(pipelineRuns)
       .set({ finishedAt: Date.now(), outcome: 'completed' })
       .where(eq(pipelineRuns.runId, run.runId))
   } catch (e) {
-    // The run's writes already committed; a failed marker leaves an orphan that
-    // boot recovery reconciles. Finish cleanly regardless.
     logger.error(
       'pipeline.marker_write_failed',
-      { runId: run.runId, outcome: 'completed', error: String(e) },
+      { runId: run.runId, outcome: 'completed', error: messageOf(e) },
       { actionId: run.actionId },
     )
+    const error: PipelineError = {
+      kind: 'orchestrator',
+      detail: `marker write failed: ${messageOf(e)}`,
+    }
+    return { tx: await abortRun(run, ctx, { reason: 'phase-failure', error, threw: true }) }
   }
+  // A cancel landing during the write still commits the run, and chains nothing.
+  const next = aborted() ? undefined : successor
+  generationStore.finishRun(run.runId, next)
   turnCaptureSink.endTurn(run.actionId, 'completed')
   logger.debug(
     'pipeline.run_complete',
@@ -405,7 +409,7 @@ async function commitRun(
   )
   emitRunComplete(run, 'completed')
   run.resolveTerminal()
-  return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
+  return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor: next }
 }
 
 async function runHook(
@@ -673,9 +677,11 @@ async function driveOrigin(kind: string, ctx: RunCtx): Promise<OriginDriven> {
     )
   }
   // reserveRun registers synchronously right after the loop's 'start' (race-free for
-  // the common path); beginRun then persists the marker and emits run_start.
-  const run = reserveRun(kind, ctx)
+  // the common path); beginRun then persists the marker and emits run_start. Inside the try, a
+  // store listener or onReserved that throws unwinds the run it registered.
+  const run = newRunState(kind, ctx)
   try {
+    reserveRun(run, ctx)
     await beginRun(run, ctx)
     // A user write checks the gate before locking its rows: one passing just before reserveRun can
     // commit under this run's reads. A successor needs no settle: the gate held across the handoff.

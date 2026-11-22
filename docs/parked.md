@@ -1120,6 +1120,16 @@ then keep its `'aborted'` outcome. Relabelling the outcome alone is
 the wrong remedy: the reader resyncs only on `'failed'`, so `'aborted'`
 without the resync leaves the stale rows showing.
 
+The reader's undo, redo and rollback say `Please try again.` on that
+failure, as for any throw (`useReaderUndo`'s guard, the rollback's
+`runAction`), though the reversal landed: trying again undoes or redoes
+the next group back, which after a re-run's CTRL-Z is usually the close
+it just restored. A re-run's undone close keeps its own warning. The
+chapter delete, the re-run's shortcut, regenerate and the prose edit
+already re-hydrate on that failure, so the branch-wide resync would
+replace four per-caller copies. Folded in from triage 2026-11-22,
+raised by Slice 5.13's reviews.
+
 Parked 2026-09-13 from the PR #513 review; a delta-patched store
 gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read
@@ -4203,7 +4213,7 @@ Inferred from the code; never seen. **Revisit signal:** a `database is
 locked` failure in that spec. Raised in the 2026-11-07 triage pass,
 unverified.
 
-#### Two test and logging helpers have no home yet
+#### Test factories and the error-message idiom repeat per file
 
 The `run()` and `entry()` factories repeat across `hooks` tests: the
 terminal stub appears in 28 files, and more than 12 define their own
@@ -4219,6 +4229,13 @@ already (`use-history-chunks.ts`, `save-session.tsx`,
 `lib/db/__tests__/test-db.ts` is the precedent for a shared test helper.
 Parked 2026-11-04; the signal is a slice that already touches most of
 those sites, since a sweep of about 90 files nears the review cap.
+Since 2026-11-22 `lib/thrown.ts` holds `messageOf`, and `attempt` for a
+hook whose try block would hold a value block, and every private copy
+outside `electron/` uses it. The inline idiom is left in 143 lines of 97
+non-test files, four of them in `electron/`, which keeps its own. A
+sweep converts the exact idiom only: a fixed-string fallback, a
+stack-first message and the bare `String(e)` log fields read
+differently.
 
 #### A fresh dev slot could install its embedder itself
 
@@ -4246,7 +4263,10 @@ what the edit does. Routed from triage 2026-11-07. The 2026-11-14 pass
 gave the close's test helpers one home each and found more not yet
 counted here, unverified: `runDeltas` in about seven test files,
 `idsWithTurns` and `START_CONFIG` in five or six, `seedCharacter` in
-four, and several `apply` variants.
+four, and several `apply` variants. Recounted 2026-11-22: a `RunState`
+by hand in 45 test, story and fixture files, and a `StoreChapter`
+literal in 13; the chapter overlay host's three suites share
+`components/chapters/__tests__/overlay-host-fixture.tsx`.
 
 #### The mock LLM's token count has no run guard
 

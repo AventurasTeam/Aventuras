@@ -1291,7 +1291,7 @@ export function EntryCard({
             }}
           />
           <View className="flex-row flex-wrap justify-end gap-2">
-            <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={editOff}>
+            <Button variant="ghost" size="sm" onPress={onCancelEdit}>
               <Text>{t('cancel')}</Text>
             </Button>
             {onCommitEditAndRegen != null ? (
@@ -1311,6 +1311,7 @@ export function EntryCard({
               size="sm"
               onPress={onCommitEdit}
               disabled={editOff || !editDirty}
+              disabledReason={editOff === true ? disabledReason : undefined}
             >
               <Text>{t('save')}</Text>
             </Button>

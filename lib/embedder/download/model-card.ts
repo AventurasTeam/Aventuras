@@ -6,6 +6,7 @@ import type {
   LicenseKind,
   ModelMeta,
 } from '@/components/compounds/embedder-download-dialog-machine'
+import { messageOf } from '@/lib/thrown'
 
 const HF_ORIGIN = 'https://huggingface.co'
 const FETCH_TIMEOUT_MS = 15_000
@@ -16,10 +17,6 @@ const FETCH_TIMEOUT_MS = 15_000
 // model-card fallback.
 const LICENSE_DATASET_PATH = 'datasets/choosealicense/licenses'
 const LICENSE_DATASET_REVISION = '20edaed2b9e7dccd366d0654d4536fb377850680'
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
 
 // AbortSignal.timeout is a static Hermes has historically lacked; build the
 // same behavior from AbortController + setTimeout so this (shared,

@@ -16,6 +16,7 @@ import {
 } from '@/lib/actions'
 import type { StoryInfoPatch, StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { messageOf } from '@/lib/thrown'
 
 import {
   cloneDraft,
@@ -107,10 +108,6 @@ const SectionRegistryContext = createContext<SectionRegistry | null>(null)
 
 function dirtyIds(sections: readonly SectionDirtyState[]): Set<string> {
   return new Set(sections.filter((s) => s.dirtyFields.length > 0).map((s) => s.id))
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /** `devChecks` is an injectable seam: production takes the logging branch, never the throw. */
@@ -238,7 +235,7 @@ export function StorySettingsSaveSessionProvider({
         // Isolated: one section's failure must not strand the rest mid-reset.
         logger.error('action_layer.story_settings_reset_failed', {
           sectionId: id,
-          error: errorMessage(error),
+          error: messageOf(error),
         })
       }
     }
@@ -255,7 +252,7 @@ export function StorySettingsSaveSessionProvider({
         proceed()
       } catch (error) {
         // Isolated: one intent failing must not strand the rest.
-        logger.error('action_layer.story_settings_leave_failed', { error: errorMessage(error) })
+        logger.error('action_layer.story_settings_leave_failed', { error: messageOf(error) })
       }
     }
   }, [update])
@@ -338,8 +335,8 @@ export function StorySettingsSaveSessionProvider({
         } catch (handlerError) {
           // Isolated so commit never rejects: every caller fires it with `void`.
           logger.error('action_layer.story_settings_save_failed_handler_failed', {
-            error: errorMessage(handlerError),
-            saveError: errorMessage(error),
+            error: messageOf(handlerError),
+            saveError: messageOf(error),
           })
         }
         // The write landed and only the store re-read failed, so this is not a save failure.
@@ -373,7 +370,7 @@ export function StorySettingsSaveSessionProvider({
           // save bar, resetting one the user has moved on from costs their edit.
           logger.error('action_layer.story_settings_reset_check_failed', {
             sectionId: id,
-            error: errorMessage(error),
+            error: messageOf(error),
           })
         }
       }
@@ -382,7 +379,7 @@ export function StorySettingsSaveSessionProvider({
         onSaved?.()
       } catch (error) {
         logger.error('action_layer.story_settings_post_commit_failed', {
-          error: errorMessage(error),
+          error: messageOf(error),
         })
       }
       // Any save satisfies a waiting leave, not just the one the guard started — the back

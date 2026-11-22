@@ -79,6 +79,35 @@ async function* throwsDirectly(): AsyncGenerator<never, PhaseResult> {
   throw new Error('phase blew up')
 }
 
+async function* writesEntry(): AsyncGenerator<
+  { type: 'delta_emitted'; action: PipelineAction },
+  PhaseResult
+> {
+  yield { type: 'delta_emitted', action: newEntry('entry_committed') }
+  return { status: 'completed' }
+}
+
+// Throws on the first `times` writes to pipeline_runs; every other write passes.
+function failingMarkerDb<D extends { update: (table: typeof pipelineRuns) => unknown }>(
+  db: D,
+  times: number,
+): D {
+  let left = times
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === 'update')
+        return (table: typeof pipelineRuns) => {
+          if (table === pipelineRuns && left > 0) {
+            left -= 1
+            throw new Error('marker write failed')
+          }
+          return target.update(table)
+        }
+      return Reflect.get(target, prop, receiver) as unknown
+    },
+  })
+}
+
 async function* completesCleanly(): AsyncGenerator<never, PhaseResult> {
   return { status: 'completed' }
 }
@@ -423,27 +452,116 @@ describe('orchestrator hardening', () => {
     expect(result.error?.kind).toBe('orchestrator')
   })
 
-  it('a marker-write failure on commit finishes cleanly without leaking state', async () => {
+  it('unwinds a run whose onReserved throws, so it holds no gate', async () => {
     const { ctx } = await makeHarness()
-    definePipeline({ kind: 'commitfail', phases: [{ name: 'p', run: completesCleanly }], ...base })
+    definePipeline({
+      kind: 'reservethrow',
+      phases: [{ name: 'p', run: completesCleanly }],
+      ...base,
+    })
+    const onReserved = () => {
+      throw new Error('host threw')
+    }
+
+    await expect(runPipeline('reservethrow', { ...ctx, onReserved })).rejects.toThrow('host threw')
+
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(expectRan(await runPipeline('reservethrow', ctx)).outcome).toBe('completed')
+  })
+
+  it('unwinds a run whose registration a store listener throws on', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'listenthrow', phases: [{ name: 'p', run: completesCleanly }], ...base })
+    let armed = true
+    const off = generationStore.subscribe(() => {
+      if (!armed || generationStore.getTxState().runs.size === 0) return
+      armed = false
+      throw new Error('listener threw')
+    })
+
+    try {
+      await expect(runPipeline('listenthrow', ctx)).rejects.toThrow('listener threw')
+    } finally {
+      off()
+    }
+
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
+  it('settles the completed marker before the run leaves the gate', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'settles', phases: [{ name: 'p', run: completesCleanly }], ...base })
+    const gateAtMarker: boolean[] = []
     const db = new Proxy(ctx.db, {
       get(target, prop, receiver) {
-        if (prop === 'update') {
-          return () => {
-            throw new Error('marker write failed')
+        if (prop === 'update')
+          return (table: typeof pipelineRuns) => {
+            if (table === pipelineRuns)
+              gateAtMarker.push(generationStore.getTxState().runs.size > 0)
+            return target.update(table)
           }
-        }
         return Reflect.get(target, prop, receiver) as unknown
       },
     })
 
-    const result = expectRan(await runPipeline('commitfail', { ...ctx, db }))
+    expect(expectRan(await runPipeline('settles', { ...ctx, db })).outcome).toBe('completed')
+    expect(gateAtMarker).toStrictEqual([true])
+  })
 
-    expect(result.outcome).toBe('completed') // run logically completed; marker failure swallowed
-    expect(generationStore.getTxState().runs.size).toBe(0) // active run released
+  it('fails a run whose completed marker fails to write, reversing it while the app is open', async () => {
+    const { db, ctx } = await makeHarness()
+    const onPhaseException = vi.fn(() => Promise.resolve())
+    definePipeline({
+      kind: 'commitfail',
+      phases: [{ name: 'p', run: writesEntry }],
+      ...base,
+      onPhaseException,
+    })
+
+    const result = expectRan(
+      await runPipeline('commitfail', { ...ctx, db: failingMarkerDb(ctx.db, 1) }),
+    )
+
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      error: { kind: 'orchestrator', detail: expect.stringContaining('marker write failed') },
+    })
+    const rows = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_committed'))
+    expect(rows).toHaveLength(0)
+    const [marker] = await db
+      .select()
+      .from(pipelineRuns)
+      .where(eq(pipelineRuns.runId, result.runId))
+    expect(marker.outcome).toBe('failed')
+    expect(marker.finishedAt).not.toBeNull()
+    expect(generationStore.getTxState().runs.size).toBe(0)
     expect(
       getDiagnosticsSnapshot().logEntries.some((e) => e.kind === 'pipeline.marker_write_failed'),
     ).toBe(true)
+    expect((await recoverInFlightRuns(ctx)).reversed).toHaveLength(0)
+    // A pass records the failure through it, as for any write that throws.
+    expect(onPhaseException).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a run to boot recovery when neither its marker nor its reversal can write', async () => {
+    const { db, ctx } = await makeHarness()
+    definePipeline({ kind: 'dbdown', phases: [{ name: 'p', run: writesEntry }], ...base })
+
+    const result = expectRan(
+      await runPipeline('dbdown', { ...ctx, db: failingMarkerDb(ctx.db, Infinity) }),
+    )
+
+    expect(result).toMatchObject({ outcome: 'failed', unreversed: true })
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    const [marker] = await db
+      .select()
+      .from(pipelineRuns)
+      .where(eq(pipelineRuns.runId, result.runId))
+    expect(marker.finishedAt).toBeNull()
+    const report = await recoverInFlightRuns(ctx)
+    expect(report.reversed.map((r) => r.runId)).toStrictEqual([result.runId])
+    const rows = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_committed'))
+    expect(rows).toHaveLength(0)
   })
 
   // The deltas an aborted run could not reverse are still on disk. Settling the

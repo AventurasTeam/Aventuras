@@ -90,7 +90,7 @@ type EntryCardProps = {
   // Edit-restrictions (uniform with principles):
   disabled?: boolean
   disabledReason?: string
-  editDisabled?: boolean // pencil and every edit-mode control; falls back to disabled
+  editDisabled?: boolean // pencil and every edit-mode control but Cancel; falls back to disabled
   reversalDisabled?: boolean // regen and delete; Save & regenerate needs both flags; falls back to disabled
 
   // Edit mode (host-controlled):
@@ -955,8 +955,8 @@ density-aware sizing inherit from icon-actions.
 **During a pass or a close.** Head reversals pass through either
 ([`principles.md → Edit restrictions during in-flight generation`](../principles.md#edit-restrictions-during-in-flight-generation)),
 so the gate splits in three. `reversalDisabled` gates regen and
-delete, `editDisabled` gates the pencil and every edit-mode control,
-and `disabled` gates the rest: branch, flip era, `Close chapter here`,
+delete, `editDisabled` gates the pencil and every edit-mode control
+but `Cancel`, which writes nothing, and `disabled` gates the rest: branch, flip era, `Close chapter here`,
 the world-time footer, the scene editor and the system-entry buttons, though not the
 [system entry's](#system-entry) copy buttons and toggles. Save &
 regenerate saves, then regenerates, so it needs both flags clear. Each

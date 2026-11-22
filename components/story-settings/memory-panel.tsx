@@ -46,15 +46,13 @@ import {
   embeddingStatusStore,
   openEmbedderSwapDialog,
 } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
 const declineStoryUpgrade: DeclineEmbeddingUpgradeFn = (storyId, modelId) =>
   declineEmbeddingUpgrade(storyId, modelId, ctx)
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 // Unresolvable-config reasons the memory tab can explain (see resolveEmbedderConfig);
 // 'no-model' and 'unknown-local-model' both read as "the model is gone" to the user.
@@ -286,7 +284,7 @@ export function MemoryPanel({
             storyId,
             stale,
             unreadable,
-            error: error instanceof Error ? error.message : String(error),
+            error: messageOf(error),
           })
           toast.error(t(stale ? 'storySettings:save.stale' : 'storySettings:save.unreadable'))
           return

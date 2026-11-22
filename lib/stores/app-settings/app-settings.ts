@@ -9,6 +9,7 @@ import {
   appSettingsDiagnosticsSchema,
 } from '@/lib/db'
 import { logger, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
+import { messageOf } from '@/lib/thrown'
 
 // getAppSettings/useAppSettings hand out the LIVE state object's collections;
 // readonly at array/record level makes in-place mutation (push, index-assign)
@@ -81,8 +82,6 @@ function getAppSettings(): AppSettingsSnapshot {
 }
 
 export type BootHydrateResult = { status: 'ok' } | { status: 'config-corrupt'; error: string }
-
-const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 export async function hydrateAppSettings(read: () => Promise<unknown>): Promise<BootHydrateResult> {
   let raw: unknown

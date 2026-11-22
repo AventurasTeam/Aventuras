@@ -1,17 +1,10 @@
 // @vitest-environment jsdom
-import { QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CloseRerunPreview, CloseRerunReadRefusal } from '@/lib/actions'
-import { createQueryClient } from '@/lib/cache'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import {
-  STORY_SETTINGS_DEFAULTS,
-  storyDefinitionSchema,
-  type CloseReport,
-  type Delta,
-} from '@/lib/db'
+import { type CloseReport, type Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { CloseReview } from '@/lib/history'
 import { t } from '@/lib/i18n'
@@ -22,13 +15,19 @@ import {
   currentStoryStore,
   generationStore,
   resetAllStores,
-  type OpenStory,
-  type RunState,
-  type StoreChapter,
 } from '@/lib/stores'
 import { toast, toastStore } from '@/lib/toast'
 
-import { ChapterOverlaysHost } from './chapter-overlays-host'
+import {
+  chapter,
+  flush,
+  gateRun,
+  openRerun,
+  openStory,
+  openWindow,
+  renderHost,
+  settleRun,
+} from './__tests__/overlay-host-fixture'
 import type { CloseRerunConfirmProps } from './close-rerun-confirm'
 import type { ReviewWindowProps } from './review-window'
 
@@ -135,65 +134,9 @@ const DELTAS: Delta[] = []
 
 const REVIEW: CloseReview = { stopped: [], noToolCalls: false, notApplied: [], changes: [] }
 
-function story(branchId: string): OpenStory {
-  return {
-    storyId: 'story_1',
-    branchId,
-    definition: storyDefinitionSchema.parse({
-      mode: 'adventure',
-      leadEntityId: 'char_kael',
-      narration: 'second',
-      genre: { label: 'Fantasy', promptBody: '' },
-      tone: { label: 'Wry', promptBody: '' },
-      setting: '',
-      calendarSystemId: 'gregorian',
-      worldTimeOrigin: { year: 0 },
-    }),
-    settings: STORY_SETTINGS_DEFAULTS,
-  }
-}
-
-// A branch switch or reload republishes the open; it isn't a new open of the story.
-function openStory(branchId = 'br_1'): void {
-  currentStoryStore.set(story(branchId))
-}
-
-function settleRun(): void {
-  const run: RunState = {
-    runId: 'run_settle',
-    kind: 'per-turn',
-    gateBehavior: 'hard-gate',
-    interruptible: null,
-    beforeTurn: false,
-    actionId: 'act_settle',
-    storyId: 'story_1',
-    branchId: 'br_1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  }
-  act(() => generationStore.startRun(run))
-  act(() => generationStore.finishRun(run.runId))
-}
-
-function renderHost() {
-  const client = createQueryClient()
-  return render(
-    <QueryClientProvider client={client}>
-      <ChapterOverlaysHost />
-    </QueryClientProvider>,
-  )
-}
-
 function shown(): ReviewWindowProps {
   if (view.props == null) throw new Error('the review window is not rendered')
   return view.props
-}
-
-function openWindow(chapterId = 'chap_2'): void {
-  act(() => chapterOverlaysStore.openReviewWindow({ chapterId }))
 }
 
 async function openReady(): Promise<ReviewWindowProps> {
@@ -201,35 +144,6 @@ async function openReady(): Promise<ReviewWindowProps> {
   openWindow()
   await waitFor(() => expect(view.props?.state.status).toBe('ready'))
   return shown()
-}
-
-// The action alone keeps the default report; a row without one drops both.
-type ChapterOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
-  (
-    | { hasCloseReport?: true; closeReportActionId?: string }
-    | { hasCloseReport: false; closeReportActionId: null }
-  )
-
-function chapter(over: ChapterOverrides = {}): StoreChapter {
-  return {
-    id: 'chap_2',
-    branchId: 'br_1',
-    sequenceNumber: 2,
-    title: 'The Keep Leans Closer',
-    summary: '',
-    theme: '',
-    keywords: [],
-    startEntryId: 'entry_40',
-    endEntryId: 'entry_58',
-    tokenCount: 0,
-    closedAt: 1,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-    hasCloseReport: true,
-    closeReportActionId: 'act_close_2',
-    ...over,
-  }
 }
 
 const PREVIEW: CloseRerunPreview = {
@@ -273,30 +187,6 @@ const END = {
   },
 } as const satisfies Record<string, ChainEnd>
 
-function gateRun(): RunState {
-  return {
-    runId: 'run_gate',
-    kind: 'per-turn',
-    gateBehavior: 'hard-gate',
-    interruptible: null,
-    beforeTurn: false,
-    actionId: 'act_gate',
-    storyId: 'story_1',
-    branchId: 'br_1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  }
-}
-
-function openRerun(input: { fromReview?: boolean } = {}): void {
-  act(() =>
-    chapterOverlaysStore.openRerunConfirm({ branchId: 'br_1', chapterId: 'chap_2', ...input }),
-  )
-}
-
 async function confirmShown(): Promise<CloseRerunConfirmProps> {
   await waitFor(() => expect(confirmView.mounted).toBe(true))
   if (confirmView.props == null) throw new Error('the re-run confirm is not rendered')
@@ -321,8 +211,6 @@ function markPendingTurn(): { end: () => Promise<void> } {
       }),
   }
 }
-
-const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
 beforeEach(() => {
   resetAllStores()
@@ -408,7 +296,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(shown().open).toBe(true)
   })
 
-  it("on phone, the confirm's Cancel during the window's slide-out reopens it after the exit", async () => {
+  it("on phone, the confirm's Cancel during the window's slide-out reopens it", async () => {
     view.phone = true
     const guard = vi.fn<(proceed: () => void) => void>()
     surfaceWith(guard)
@@ -419,7 +307,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
 
     act(() => props.onCancel())
     expect(chapterOverlaysStore.getState().review).not.toBeNull()
-    expect(shown().open).toBe(false)
+    expect(shown().open).toBe(true)
     act(() => shown().onExited?.())
     expect(shown().open).toBe(true)
   })

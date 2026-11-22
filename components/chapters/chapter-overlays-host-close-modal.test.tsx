@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-import { QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createQueryClient } from '@/lib/cache'
-import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type OpenRegionRow } from '@/lib/db'
+import { type OpenRegionRow } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import { t } from '@/lib/i18n'
@@ -15,13 +13,17 @@ import {
   currentStoryStore,
   generationStore,
   resetAllStores,
-  type OpenStory,
-  type RunState,
-  type StoreChapter,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
-import { ChapterOverlaysHost } from './chapter-overlays-host'
+import {
+  chapter,
+  gateRun,
+  openStory,
+  renderHost,
+  settleRun,
+  story,
+} from './__tests__/overlay-host-fixture'
 import type { CloseChapterModalViewProps } from './close-chapter-modal-view'
 
 const reads = vi.hoisted(() => ({ series: vi.fn(), times: vi.fn() }))
@@ -138,87 +140,6 @@ const TOOL_OFF: PipelineError = {
   modelId: 'gemma-4-26b',
 }
 
-// The action alone keeps the default report; a row without one drops both.
-type ChapterOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
-  (
-    | { hasCloseReport?: true; closeReportActionId?: string }
-    | { hasCloseReport: false; closeReportActionId: null }
-  )
-
-function chapter(over: ChapterOverrides = {}): StoreChapter {
-  return {
-    id: 'chap_2',
-    branchId: 'br_1',
-    sequenceNumber: 2,
-    title: 'The Keep Leans Closer',
-    summary: '',
-    theme: '',
-    keywords: [],
-    startEntryId: 'entry_40',
-    endEntryId: 'entry_58',
-    tokenCount: 0,
-    closedAt: 1,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-    hasCloseReport: true,
-    closeReportActionId: 'act_close_2',
-    ...over,
-  }
-}
-
-function story(branchId: string): OpenStory {
-  return {
-    storyId: 'story_1',
-    branchId,
-    definition: storyDefinitionSchema.parse({
-      mode: 'adventure',
-      leadEntityId: 'char_kael',
-      narration: 'second',
-      genre: { label: 'Fantasy', promptBody: '' },
-      tone: { label: 'Wry', promptBody: '' },
-      setting: '',
-      calendarSystemId: 'gregorian',
-      worldTimeOrigin: { year: 0 },
-    }),
-    settings: STORY_SETTINGS_DEFAULTS,
-  }
-}
-
-// A branch switch or reload republishes the open; it isn't a new open of the story.
-function openStory(branchId = 'br_1'): void {
-  currentStoryStore.set(story(branchId))
-}
-
-function settleRun(): void {
-  const run: RunState = {
-    runId: 'run_settle',
-    kind: 'per-turn',
-    gateBehavior: 'hard-gate',
-    interruptible: null,
-    beforeTurn: false,
-    actionId: 'act_settle',
-    storyId: 'story_1',
-    branchId: 'br_1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  }
-  act(() => generationStore.startRun(run))
-  act(() => generationStore.finishRun(run.runId))
-}
-
-function renderHost() {
-  const client = createQueryClient()
-  return render(
-    <QueryClientProvider client={client}>
-      <ChapterOverlaysHost />
-    </QueryClientProvider>,
-  )
-}
-
 beforeEach(() => {
   resetAllStores()
   reads.series.mockReset().mockResolvedValue(SERIES)
@@ -266,24 +187,6 @@ describe('ChapterOverlaysHost — the close modal', () => {
     openModal()
     const props = await shownModal()
     act(() => props.onConfirm())
-  }
-
-  function gateRun(): RunState {
-    return {
-      runId: 'run_gate',
-      kind: 'per-turn',
-      gateBehavior: 'hard-gate',
-      interruptible: null,
-      beforeTurn: false,
-      actionId: 'act_gate',
-      storyId: 'story_1',
-      branchId: 'br_1',
-      abortController: new AbortController(),
-      currentPhase: '',
-      intermediates: {},
-      terminal: Promise.resolve(),
-      resolveTerminal: () => {},
-    }
   }
 
   it('mounts no body, and reads nothing, while no request is held', () => {

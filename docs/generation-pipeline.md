@@ -1160,12 +1160,13 @@ in-progress (currentPhase iterates)
    │
    ├── last phase returns completed ────────────► commitRun
    │                                                  │  await pipeline.chainsTo (run still in txState)
+   │                                                  │  UPDATE pipeline_runs SET finished_at, outcome='completed'
+   │                                                  │    └── update fails ─► abortRun (reason: phase-failure, threw: true)
    │                                                  │
    │                                                  ├── returns next kind ───► beginRun(next) (atomic transition, no idle)
    │                                                  │
    │                                                  └── returns null
    │                                                          │
-   │                                                          │  UPDATE pipeline_runs SET finished_at, outcome='completed'
    │                                                          │  remove run from txState
    │                                                          │  emit run_complete (outcome: 'completed')
    │
@@ -1240,7 +1241,11 @@ Atomicity windows worth being honest about:
   effectively succeeded but the marker still says in-flight, so
   recovery reverses just-finished work. **Accepted for v1**;
   tighten in v2 if it bites real users (couple final action's
-  SQLite txn with the marker UPDATE).
+  SQLite txn with the marker UPDATE). The window is a crash's
+  alone: the UPDATE runs before the run leaves txState, and one
+  that fails fails the run, whose abort reverses it while nothing
+  has built on it, the marker riding the reversal's transaction. A
+  reversal that can't commit either leaves the orphan to boot.
 
 Rows are kept after `finished_at` is set — diagnostic surface (run
 history, recovery audit). Pruning policy is a future concern.
@@ -1397,9 +1402,11 @@ When `reverseRunGroup` throws `DeltaReplayError` during startup
 recovery, the loop catches per-orphan and continues; boot is not
 blocked. An uncommitted failure leaves the orphan row with
 `finished_at = NULL` so the next boot retries. A store-sync failure
-after the commit has already settled it: no branch is loaded at boot,
-but the reversal's patches still run through the store patchers. Either way the failure
-emits `pipeline.recovery_failed` at `error` severity via
+after the commit has already settled it. No branch is loaded at boot,
+so each store patcher returns before writing and only a throw ahead of
+that check reaches here; the first story-open hydrates from the
+database either way. Both kinds of failure
+emit `pipeline.recovery_failed` at `error` severity via
 observability — visible in the Diagnostics Hub Logs tab.
 
 The modal reports it too. SQLite ROLLBACK undoes the partial
@@ -1431,10 +1438,11 @@ So this is not an observability-only state:
   was refused as an integrity error (`ReversalIntegrityError`): every
   boot refuses that one again, so its copy says the update could not
   be undone without breaking later changes and promises no retry.
-- A failure whose reversal committed with a re-run's close undone, and
-  only the store sync then failed, renders as the reversed close does:
-  the chapter-close copy plus the close-undone line. Its marker is
-  settled, so that report is the only word of it, and no retry follows.
+- A failure whose reversal committed, and only the store sync then
+  failed, renders as that run reversed does, a re-run's undone close
+  with its close-undone line, and counts as reversed for the title. Its
+  marker is settled, so that report is the only word of it, and no
+  retry follows.
 
 The same failure can come at runtime: a run's abort whose own reversal
 doesn't commit leaves its writes, and its marker open, for the next

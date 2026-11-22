@@ -378,6 +378,7 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
           actionId: RERUN,
           storyId: c.fx.storyId,
           error: expect.any(DeltaReplayError),
+          committed: true,
           refusal: null,
           closeUndone: true,
         },
@@ -413,6 +414,7 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
           actionId: RERUN,
           storyId: c.fx.storyId,
           error: expect.any(DeltaReplayError),
+          committed: true,
           refusal: null,
         },
       ])
@@ -420,7 +422,7 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
       expect(await markerOf(c, RERUN_RUN)).toMatchObject({ outcome: 'recovered' })
     })
 
-    it('reports a restored journal as the plain failure it was', async () => {
+    it('reports a restored journal as a committed failure, with no close undone', async () => {
       const c = await openClosed()
       await writeCloseWork(c)
       await crashedRerun(c)
@@ -436,6 +438,7 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
           actionId: RERUN,
           storyId: c.fx.storyId,
           error: expect.any(DeltaReplayError),
+          committed: true,
           refusal: null,
         },
       ])

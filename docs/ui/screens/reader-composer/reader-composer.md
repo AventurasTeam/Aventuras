@@ -1022,6 +1022,12 @@ pass or close has written no turn either, so it puts the entry back
 too, and hands its own text to the draft. Once any owed work has
 committed, the text goes back alone and the entry stays dropped.
 
+A Send refused at admission reverses its own action. When that
+reversal fails, the action stays in the story, so its text goes back
+to neither an entry nor the draft: a `Retry` or a resend would put the
+action in twice. A toast says the turn was blocked and the action
+stayed, to be undone before sending again, and the branch reloads.
+
 This leaves a failed turn's text under the same custody as any unsent
 draft, including the same limit: composer input is pre-submit state
 and does not survive a restart, the wart the

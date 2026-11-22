@@ -9,6 +9,7 @@ import {
   type ScanLinkEnds,
 } from '@/lib/history'
 import { t } from '@/lib/i18n'
+import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 import { useHistoryLoader, type HistoryLoader } from './history-loader'
@@ -42,10 +43,6 @@ export type HistoryChunks = {
   hasMore: boolean
   loadMore: () => void
   retry: () => void
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /**
@@ -110,7 +107,7 @@ export function useHistoryChunks(
         logger.error('app.history_load_more_failed', {
           targetTable: from.query.targetTable,
           targetId: from.query.targetId,
-          error: message(error),
+          error: messageOf(error),
         })
         setApplied((current) => current && { ...current, status: 'ready' })
         toast.error(t('history:tab.failed'))
@@ -159,7 +156,7 @@ export function useHistoryChunks(
         logger.error('app.history_load_failed', {
           targetTable: request.query.targetTable,
           targetId: request.query.targetId,
-          error: message(error),
+          error: messageOf(error),
         })
         setApplied(
           refresh

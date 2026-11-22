@@ -1,14 +1,11 @@
 // @vitest-environment jsdom
-import { QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useMemoryRunBanner } from '@/components/compounds/use-memory-run-banner'
 import type { CloseRerunPreview } from '@/lib/actions'
-import { createQueryClient } from '@/lib/cache'
 import {
   STORY_SETTINGS_DEFAULTS,
-  storyDefinitionSchema,
   type CloseReport,
   type Delta,
   type Happening,
@@ -31,12 +28,19 @@ import {
   loreStore,
   resetAllStores,
   threadsStore,
-  type OpenStory,
-  type RunState,
-  type StoreChapter,
 } from '@/lib/stores'
 
-import { ChapterOverlaysHost } from './chapter-overlays-host'
+import {
+  chapter,
+  flush,
+  gateRun,
+  openRerun,
+  openStory,
+  openWindow,
+  renderHost,
+  settleRun,
+  story,
+} from './__tests__/overlay-host-fixture'
 import type { CloseRerunConfirmProps } from './close-rerun-confirm'
 import type { ReviewWindowProps } from './review-window'
 
@@ -257,61 +261,9 @@ const REVIEW: CloseReview = {
   ],
 }
 
-function story(branchId: string): OpenStory {
-  return {
-    storyId: 'story_1',
-    branchId,
-    definition: storyDefinitionSchema.parse({
-      mode: 'adventure',
-      leadEntityId: 'char_kael',
-      narration: 'second',
-      genre: { label: 'Fantasy', promptBody: '' },
-      tone: { label: 'Wry', promptBody: '' },
-      setting: '',
-      calendarSystemId: 'gregorian',
-      worldTimeOrigin: { year: 0 },
-    }),
-    settings: STORY_SETTINGS_DEFAULTS,
-  }
-}
-
-// A branch switch or reload republishes the open; it isn't a new open of the story.
-function openStory(branchId = 'br_1'): void {
-  currentStoryStore.set(story(branchId))
-}
-
 // Back to the story list and into the same story again.
 function reopenStory(branchId = 'br_1'): void {
   currentStoryStore.open(story(branchId))
-}
-
-function settleRun(): void {
-  const run: RunState = {
-    runId: 'run_settle',
-    kind: 'per-turn',
-    gateBehavior: 'hard-gate',
-    interruptible: null,
-    beforeTurn: false,
-    actionId: 'act_settle',
-    storyId: 'story_1',
-    branchId: 'br_1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  }
-  act(() => generationStore.startRun(run))
-  act(() => generationStore.finishRun(run.runId))
-}
-
-function renderHost() {
-  const client = createQueryClient()
-  return render(
-    <QueryClientProvider client={client}>
-      <ChapterOverlaysHost />
-    </QueryClientProvider>,
-  )
 }
 
 function shown(): ReviewWindowProps {
@@ -325,44 +277,11 @@ function pressOf(row: CloseReviewChange): () => void {
   return press
 }
 
-function openWindow(chapterId = 'chap_2'): void {
-  act(() => chapterOverlaysStore.openReviewWindow({ chapterId }))
-}
-
 async function openReady(): Promise<ReviewWindowProps> {
   renderHost()
   openWindow()
   await waitFor(() => expect(view.props?.state.status).toBe('ready'))
   return shown()
-}
-
-// The action alone keeps the default report; a row without one drops both.
-type ChapterOverrides = Partial<Omit<StoreChapter, 'hasCloseReport' | 'closeReportActionId'>> &
-  (
-    | { hasCloseReport?: true; closeReportActionId?: string }
-    | { hasCloseReport: false; closeReportActionId: null }
-  )
-
-function chapter(over: ChapterOverrides = {}): StoreChapter {
-  return {
-    id: 'chap_2',
-    branchId: 'br_1',
-    sequenceNumber: 2,
-    title: 'The Keep Leans Closer',
-    summary: '',
-    theme: '',
-    keywords: [],
-    startEntryId: 'entry_40',
-    endEntryId: 'entry_58',
-    tokenCount: 0,
-    closedAt: 1,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-    hasCloseReport: true,
-    closeReportActionId: 'act_close_2',
-    ...over,
-  }
 }
 
 function holdResult(
@@ -399,37 +318,11 @@ const PREVIEW: CloseRerunPreview = {
   shortcut: null,
 }
 
-function gateRun(): RunState {
-  return {
-    runId: 'run_gate',
-    kind: 'per-turn',
-    gateBehavior: 'hard-gate',
-    interruptible: null,
-    beforeTurn: false,
-    actionId: 'act_gate',
-    storyId: 'story_1',
-    branchId: 'br_1',
-    abortController: new AbortController(),
-    currentPhase: '',
-    intermediates: {},
-    terminal: Promise.resolve(),
-    resolveTerminal: () => {},
-  }
-}
-
-function openRerun(input: { fromReview?: boolean } = {}): void {
-  act(() =>
-    chapterOverlaysStore.openRerunConfirm({ branchId: 'br_1', chapterId: 'chap_2', ...input }),
-  )
-}
-
 async function confirmShown(): Promise<CloseRerunConfirmProps> {
   await waitFor(() => expect(confirmView.mounted).toBe(true))
   if (confirmView.props == null) throw new Error('the re-run confirm is not rendered')
   return confirmView.props
 }
-
-const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
 beforeEach(() => {
   resetAllStores()
@@ -700,14 +593,13 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(reads.report).toHaveBeenCalledTimes(1)
   })
 
-  it('reopened during a phone exit, waits for the exit, then opens again without remounting', async () => {
+  // The Sheet holds the present until its slide-out ends (`ReopenDuringExit` in sheet.stories).
+  it('reopened during a phone exit, opens again at once without remounting', async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
     openWindow()
-    // The Sheet is still sliding out: presenting it now would drop the reopen.
-    expect(shown().open).toBe(false)
-    expect(chapterOverlaysStore.getState().review).not.toBeNull()
+    expect(shown().open).toBe(true)
     act(() => shown().onExited?.())
     expect(shown().open).toBe(true)
     expect(view.mounted).toBe(true)
@@ -729,20 +621,21 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(view.mounts).toBe(1)
   })
 
-  it("a direct close while the window is closed doesn't drop the reopen held behind it", async () => {
+  it("a close reported by the render that closed the window doesn't close a reopen", async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
+    const closedRender = shown()
     openWindow()
 
-    act(() => shown().onOpenChange(false))
+    act(() => closedRender.onOpenChange(false))
     act(() => shown().onExited?.())
 
     expect(chapterOverlaysStore.getState().review).not.toBeNull()
     expect(shown().open).toBe(true)
   })
 
-  it('a window closed again while the reopen was held stays closed once its exit ends', async () => {
+  it('a window reopened and closed again during its exit stays closed once the exit ends', async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
