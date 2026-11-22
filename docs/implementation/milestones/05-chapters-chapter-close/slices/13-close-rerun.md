@@ -1328,16 +1328,20 @@ change amends the scope above.
   round-trip arm keeps, so it stays as planned. The round trip grew
   from 264 to 610 tests (about 6 s to 18 s locally); CI's unit shards
   stayed inside main's recent range, so the file is not split.
-- **The Android measure (AC 34) is pending:** no Fold was attached
-  during the run. The functional smoke ran on a slot emulator. When it
-  runs it adds a many-journals case (developer decision at the slice
-  review): every reversal reads each journal row on its branch
-  (`reverse-replay.ts`, `journalHeadsOf`), so it also times a reversal
-  on a branch holding 30, then 100, committed re-run journals the size
-  of the dataset close's, beside the review's desktop benchmark (30
-  journals of 230 KB: 5.8 ms a reversal; 100: 18.5 ms; 30 of 920 KB:
-  29.9 ms). The schema keeps no `chapter_id` or `floor` column until
-  that measure asks for one.
+- **The Android measure (AC 34) holds, many journals included.** On the
+  Fold's release build the reversal's commit stalls the JS thread at
+  most 257.6 ms and the re-run's CTRL-Z at most 356.3 ms, under the
+  500 ms bar, beside 5.10's 399 ms CTRL-Z and 5.2's 1.1 s stamp burst.
+  The many-journals case (developer decision at the slice review: every
+  reversal reads each journal row on its branch, `reverse-replay.ts`,
+  `journalHeadsOf`) put 30, then 100, committed re-run journals of the
+  dataset close's size on the branch, 82,873 bytes each: the commit kept
+  its time and the CTRL-Z rose about 20 ms, to at most 378.5 ms, a rise
+  that barely grows from 30 to 100. The review's desktop benchmark had
+  used 230 KB journals (30: 5.8 ms a reversal; 100: 18.5 ms; 30 of
+  920 KB: 29.9 ms). Numbers and setup are in
+  [Android measure](#android-measure). The schema keeps no `chapter_id`
+  or `floor` column.
 - **A re-run whose own undo fails holds its branch until restart
   (developer decision at the slice review).** A Cancel, failed call or
   interrupting head reversal whose reversal doesn't commit leaves the
@@ -1361,3 +1365,67 @@ change amends the scope above.
   memory pass's pre-flight runs, and its failure resolves
   `preflight-failed`; the host toasts the memory pass's settings copy,
   since the close's names the lore agent.
+
+### Android measure
+
+Bar (AC 34): no JS-thread stall over 500 ms on the Fold's release build,
+for the `reversal` phase's commit and for the re-run's CTRL-Z, two runs
+each. The group is `pnpm db:seed:dataset`'s close: 224 deltas, 89 of
+them outside `chapters` and `story_entries`. A temporary stall meter
+around the phase's `reverseCloseForRerun` call times the commit, and
+reads the journal's size once it stops; `timedReversal`
+(`reader.undo_measured`) times the CTRL-Z, from Actions →
+`Undo chapter 1's re-run…` and the confirm's `Undo`. Each run re-ran the
+close from the card's `Re-run close…` (the two-button confirm: no turns
+since) with every mock tool lane unscripted, then undid it, which leaves
+the database as it was, so run 2 times the same group. The reader sat
+idle three minutes before each run.
+
+| Android 17, Galaxy Z Fold (SM-F966B), folded, release `arm64-v8a`, `3fd0eef28` and a temporary mark | Run 1 wall / longest stall   | Run 2 wall / longest stall   | Notes                |
+| --------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------- | -------------------- |
+| `reversal` phase commit                                                                             | 257.6 / 257.6 ms             | 240.1 / 240.1 ms             | journal 82,876 bytes |
+| Re-run CTRL-Z (reversal and write-back)                                                             | 356.3 / 356.3 ms (tail 37.2) | 340.9 / 340.9 ms (tail 35.6) |                      |
+
+The bar holds, at 356.3 ms for the longest stall. The journal holds 82
+before-images, 89 deltas and no earlier journal, at floor 1,106. As in
+5.10's measure, the longest stall equals the wall time in every run:
+no 16 ms tick lands while a reversal runs, and the tails show the meter
+ticking. The numbers come from the logger's console mirror in logcat
+(`adb logcat -s ReactNativeJS`), as 5.10's did.
+
+The many-journals case runs the same two measures, two runs each, with
+extra committed re-run journals on the branch:
+
+| Extra journals (82,873 bytes each) | `reversal` phase commit, wall (2 runs) | Re-run CTRL-Z, wall (2 runs, tails) |
+| ---------------------------------- | -------------------------------------- | ----------------------------------- |
+| none                               | 257.6 and 240.1 ms                     | 356.3 and 340.9 ms (37.2, 35.6)     |
+| 30, 2,486,190 bytes                | 247.2 and 253.7 ms                     | 363.3 and 372.2 ms (35.0, 33.4)     |
+| 100, 8,287,300 bytes               | 255.8 and 250.6 ms                     | 365.7 and 378.5 ms (33.6, 30.2)     |
+
+The longest stall equals the wall time in every run. The commit, which
+reads every journal on the branch as the CTRL-Z does, stays inside its
+spread between runs. The CTRL-Z's mean goes from 348.6 ms to 367.8 ms
+with 30 journals and 372.1 ms with 100, about 20 ms against a spread of
+up to 15 ms between runs; since 100 journals add only about 4 ms over
+30, the rise doesn't scale with the count, so most of it is likely the
+spread between app sessions (each case was a fresh push and launch)
+rather than the read. Either way it stays far under the bar at this
+size. The dataset close's journal is 82,876 bytes, not the 230 KB the
+review's desktop benchmark used.
+
+The extra journals are copies of the journal the app writes for this
+re-run, taken from a desktop run, under distinct action ids, inserted
+into the seeded database before `pnpm device:push-db`, with `floor` set
+to 0 (3 bytes shorter). A copy that keeps the close's floor (1,106) is
+not inert: the re-run's reversal removes the close's lore deltas, at
+positions 1,017 to 1,105, below that floor, so it drops the copy
+(`journalsToDrop` run on the journal's own deltas) and would nest it in
+its own journal. At floor 0, owning no deltas, no reversal here can drop
+them.
+A desktop E2E run on the same three database files showed it: the
+re-run's journal nested none, and its CTRL-Z restored the close's group
+and report, dropped only the re-run's own journal (consumed by its
+write-back, in every variant) and left the world tables identical
+across none, 30 and 100. On the Fold, too, every re-run's journal
+nested none and every CTRL-Z dropped only the re-run's own. Neither that
+spec nor the setup is in the repo.
