@@ -9,6 +9,7 @@ import {
   deltasOf,
   describeTobin,
   editLore,
+  entityOf,
   entryRows,
   installChapterDeleteHooks,
   LATER_DESCRIPTION,
@@ -16,19 +17,23 @@ import {
   loreCreate,
   openClosed,
   seedRunMarker,
+  TOBIN,
   worldRows,
   writeCloseWork,
   writeLater,
   writeUnderAction,
   type ClosedChapter,
+  type WorldRows,
 } from '@/lib/actions/chapters/__tests__/chapter-delete-fixture'
 import { reverseCloseForRerun } from '@/lib/actions/delta/rerun-journal'
 import type { generateStructured } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { deltas, pipelineRuns, reversalJournals, storyEntries } from '@/lib/db'
+import { branchSnapshot, cloneBranch } from '@/lib/db/__tests__/two-branch'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
-import { recoverInFlightRuns } from '@/lib/pipeline'
+import { PER_TURN_KIND, recoverInFlightRuns } from '@/lib/pipeline'
+import type { CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { loreStore } from '@/lib/stores'
 
 import { makeHarness, resetSingletons } from './harness'
@@ -474,5 +479,149 @@ describe('recoverInFlightRuns over a close’s re-run', () => {
     ])
     expect(await chapterRows(c.fx)).toHaveLength(1)
     expect(await markerOf(c, RERUN_RUN)).toMatchObject({ finishedAt: null })
+  })
+})
+
+const COPY = 'br_copy'
+
+/** The close fixture's branch copied onto COPY, so one delta id, journal and chapter repeat. */
+function cloneToCopy(c: ClosedChapter): void {
+  cloneBranch(c.fx.sqlite, c.fx.branchId, COPY)
+}
+
+/** The run's marker records COPY, as `beginRun` records the branch a run starts on. */
+async function markOnCopy(c: ClosedChapter, runId: string): Promise<void> {
+  await c.fx.ctx.db
+    .update(pipelineRuns)
+    .set({ branchId: COPY })
+    .where(eq(pipelineRuns.runId, runId))
+}
+
+const onCopy = (c: ClosedChapter): CloseFixture => ({ ...c.fx, branchId: COPY })
+
+const onBranch = (world: WorldRows, branchId: string): WorldRows => ({
+  entities: world.entities.map((row) => ({ ...row, branchId })),
+  lore: world.lore.map((row) => ({ ...row, branchId })),
+  threads: world.threads.map((row) => ({ ...row, branchId })),
+})
+
+describe('recoverInFlightRuns on two branches holding one run’s ids', () => {
+  installChapterDeleteHooks(generateStructuredMock)
+
+  it('reverses the marker branch’s copy of a turn’s group and leaves the other branch’s', async () => {
+    const c = await openClosed()
+    const prior = (await entityOf(c.fx, TOBIN.id))?.description
+    await seedRunMarker(c.fx, {
+      runId: 'run_turn',
+      actionId: 'act_turn',
+      startedAt: CLOSED_AT + 2,
+      kind: PER_TURN_KIND,
+    })
+    await writeLater(c.fx, describeTobin(c.fx.branchId, LATER_DESCRIPTION, 'per_turn_classifier'), {
+      actionId: 'act_turn',
+      entryId: c.fx.replyIds.at(-1) ?? null,
+    })
+    cloneToCopy(c)
+    await markOnCopy(c, 'run_turn')
+    expect((await entityOf(onCopy(c), TOBIN.id))?.description).toBe(LATER_DESCRIPTION)
+    const parent = branchSnapshot(c.fx.sqlite, c.fx.branchId)
+
+    resetSingletons()
+    expect(await recoverInFlightRuns(c.fx.ctx)).toEqual({
+      reversed: [
+        {
+          runId: 'run_turn',
+          kind: PER_TURN_KIND,
+          actionId: 'act_turn',
+          storyId: c.fx.storyId,
+          deltas: 1,
+        },
+      ],
+      failures: [],
+    })
+
+    expect((await entityOf(onCopy(c), TOBIN.id))?.description).toBe(prior)
+    expect(await deltasOf(onCopy(c), 'act_turn')).toEqual([])
+    expect(await markerOf(c, 'run_turn')).toMatchObject({ outcome: 'recovered', branchId: COPY })
+    expect(branchSnapshot(c.fx.sqlite, c.fx.branchId)).toEqual(parent)
+  })
+
+  it('writes the marker branch’s journal back, though the other branch’s copy sorts first', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    const world = await worldRows(c.fx)
+    const log = await logRows(c.fx)
+    await crashedRerun(c)
+    cloneToCopy(c)
+    await markOnCopy(c, RERUN_RUN)
+    // First by rowid and by branch id: a journal read by action id alone takes the parent's.
+    expect(c.fx.branchId < COPY).toBe(true)
+    const parent = branchSnapshot(c.fx.sqlite, c.fx.branchId)
+
+    resetSingletons()
+    expect(await recoverInFlightRuns(c.fx.ctx)).toEqual({
+      reversed: [
+        {
+          runId: RERUN_RUN,
+          kind: CHAPTER_CLOSE_KIND,
+          actionId: RERUN,
+          storyId: c.fx.storyId,
+          deltas: 0,
+        },
+      ],
+      failures: [],
+    })
+
+    expect(await worldRows(onCopy(c))).toEqual(onBranch(world, COPY))
+    expect(await logRows(onCopy(c))).toEqual(log.map((delta) => ({ ...delta, branchId: COPY })))
+    expect(
+      await c.fx.ctx.db.select().from(reversalJournals).where(eq(reversalJournals.branchId, COPY)),
+    ).toEqual([])
+    expect(branchSnapshot(c.fx.sqlite, c.fx.branchId)).toEqual(parent)
+  })
+
+  it('undoes the marker branch’s close from its chapter alone and leaves the other branch’s', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await crashedRerun(c)
+    // As a sweep from below the re-run drops its journal after an abort that couldn't commit.
+    await c.fx.ctx.db.delete(reversalJournals).where(eq(reversalJournals.actionId, RERUN))
+    expect(await deltasOf(c.fx, RERUN)).toEqual([])
+    cloneToCopy(c)
+    await markOnCopy(c, RERUN_RUN)
+    expect(await markerOf(c, RERUN_RUN)).toMatchObject({ rerunChapterId: c.chapter.id })
+    const parent = branchSnapshot(c.fx.sqlite, c.fx.branchId)
+
+    resetSingletons()
+    const { reversed, failures } = await recoverInFlightRuns(c.fx.ctx)
+
+    expect(failures).toEqual([])
+    expect(reversed).toEqual([expect.objectContaining({ runId: RERUN_RUN, closeUndone: true })])
+    expect(await chapterRows(onCopy(c))).toEqual([])
+    expect(await deltasOf(onCopy(c), c.actionId)).toEqual([])
+    expect(await chapterRows(c.fx)).toHaveLength(1)
+    expect(branchSnapshot(c.fx.sqlite, c.fx.branchId)).toEqual(parent)
+  })
+
+  it('deletes a marker that records no branch and has nothing to reverse, as before', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await seedRunMarker(c.fx, {
+      runId: 'run_empty',
+      actionId: 'act_empty',
+      startedAt: CLOSED_AT + 2,
+      kind: PER_TURN_KIND,
+    })
+    cloneToCopy(c)
+    expect(await markerOf(c, 'run_empty')).toMatchObject({ branchId: null, finishedAt: null })
+    const parent = branchSnapshot(c.fx.sqlite, c.fx.branchId)
+    const copy = branchSnapshot(c.fx.sqlite, COPY)
+
+    resetSingletons()
+    expect(await recoverInFlightRuns(c.fx.ctx)).toEqual({ reversed: [], failures: [] })
+
+    expect(await markerOf(c, 'run_empty')).toBeUndefined()
+    expect(branchSnapshot(c.fx.sqlite, c.fx.branchId)).toEqual(parent)
+    expect(branchSnapshot(c.fx.sqlite, COPY)).toEqual(copy)
   })
 })

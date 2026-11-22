@@ -369,7 +369,7 @@ export function withJournalOutcome(
 
 type WriteBackArgs = {
   actionId: string
-  /** Null when the caller knows no branch (recovery of a group with no delta). */
+  /** Null for a run marker that records no branch (C2): the reads then go by id alone. */
   branchId: string | null
   /** The group's deltas, newest first, as the caller read them. */
   group: readonly Delta[]
@@ -489,7 +489,11 @@ export async function reverseRunGroup(
     group = (await ctx.db
       .select()
       .from(deltas)
-      .where(eq(deltas.actionId, actionId))
+      .where(
+        args.branchId === null
+          ? eq(deltas.actionId, actionId)
+          : and(eq(deltas.branchId, args.branchId), eq(deltas.actionId, actionId)),
+      )
       .orderBy(desc(deltas.logPosition))) as Delta[]
     writeBack = await rerunWriteBack(
       { actionId, branchId: args.branchId, group, rerunChapterId: args.rerunChapterId },
