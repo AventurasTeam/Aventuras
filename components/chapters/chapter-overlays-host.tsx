@@ -33,12 +33,14 @@ import {
   happeningsStore,
   isStoryBusy,
   loreStore,
+  overlayChapter,
   reportChapter,
   rerunConfirmChapter,
   threadsStore,
   type RerunConfirmRequest,
   type StoreChapter,
 } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 
 import { CloseChapterModal } from './close-chapter-modal'
 import { CloseRerunConfirm } from './close-rerun-confirm'
@@ -116,6 +118,13 @@ async function readRerunPreview(
   return getCloseRerunPreview(branchId, chapterId, open, ctx)
 }
 
+// Only a later chapter on the same branch is a close landing; a switch or story close is silent.
+function closeLandedUnder(request: RerunConfirmRequest): boolean {
+  const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
+  const chapter = overlayChapter(chaptersStore.getById(request.chapterId), openBranchId)
+  return chapter != null && chaptersStore.getLatest()?.id !== chapter.id
+}
+
 /**
  * C7's root host for the review window, close modal and re-run confirm. A row press or `Re-run…`
  * closes the window before the guard runs: a dirty pane is never bypassed, no dialog over it.
@@ -157,10 +166,19 @@ export function ChapterOverlaysHost(): ReactElement | null {
   useEffect(() => {
     if (closeModal != null && !closeHolds) chapterOverlaysStore.closeCloseModal()
   }, [closeModal, closeHolds])
-  // A pruned request's window stays closed: its chapter or branch went, and it may be another's now.
+  // The request whose start is in flight: that start refuses a close landing under it, and says so.
+  const startingRef = useRef<RerunConfirmRequest | null>(null)
+  const onStarting = useCallback((request: RerunConfirmRequest, starting: boolean) => {
+    if (starting) startingRef.current = request
+    else if (startingRef.current === request) startingRef.current = null
+  }, [])
+  // A pruned request's window stays closed: its chapter or branch went, and it may be another's
+  // now. A close that landed under it says so, as the start's refusal would.
   useEffect(() => {
-    if (rerunConfirm != null && !rerunHolds)
-      chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+    if (rerunConfirm == null || rerunHolds) return
+    chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+    if (startingRef.current !== rerunConfirm && closeLandedUnder(rerunConfirm))
+      toast.error(t('chapters:rerunConfirm.notLatest'))
   }, [rerunConfirm, rerunHolds])
 
   // The modal shuts at once, since the close runs under the banner; the start outlives the body.
@@ -193,6 +211,7 @@ export function ChapterOverlaysHost(): ReactElement | null {
         <RerunConfirmHost
           key={`${rerunConfirm.branchId}:${rerunConfirm.chapterId}`}
           request={rerunConfirm}
+          onStarting={onStarting}
         />
       ) : null}
     </>
@@ -347,7 +366,14 @@ function ReviewHost({
  * chapter-timeline.md → Re-run a close, mounted while its request holds. The start outlives it:
  * the confirm closes once the chain holds the branch, and `runCloseRerun` speaks for its end.
  */
-function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactElement | null {
+function RerunConfirmHost({
+  request,
+  onStarting,
+}: {
+  request: RerunConfirmRequest
+  /** Its start is in flight (true) or has resolved (false). */
+  onStarting: (request: RerunConfirmRequest, starting: boolean) => void
+}): ReactElement | null {
   const { branchId, chapterId } = request
   const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
   const rerunReason = useRerunDisabledReason(storyId, branchId)
@@ -404,6 +430,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
     pendingRef.current = true
     setPending(true)
     setHeldInFlight(false)
+    onStarting(request, true)
     // Once the chain's first run reserves every refusal is past, and the banner speaks.
     const onStarted = () => {
       if (chapterOverlaysStore.getState().rerunConfirm === request)
@@ -412,6 +439,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
     void runCloseRerun({ branchId, chapterId, preview, story, onStarted }).then((step) => {
       pendingRef.current = false
       setPending(false)
+      onStarting(request, false)
       switch (step.step) {
         case 'replace':
           replace(step.preview)

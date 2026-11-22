@@ -467,7 +467,8 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(confirmView.props?.pending).toBe(true)
   })
 
-  it('a branch switch drops the request, and the window it closed reopens on neither branch', async () => {
+  it('a branch switch drops the request silently, and the window it closed reopens on neither branch', async () => {
+    const show = vi.spyOn(toastStore, 'show')
     await openReady()
     openRerun({ fromReview: true })
     await confirmShown()
@@ -475,6 +476,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(confirmView.mounted).toBe(false)
     expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(show).not.toHaveBeenCalled()
 
     act(() => openStory('br_1'))
     expect(chapterOverlaysStore.getState().review).toBeNull()
@@ -482,13 +484,15 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(actions.start).not.toHaveBeenCalled()
   })
 
-  it('a story close drops the request', async () => {
+  it('a story close drops the request silently', async () => {
+    const show = vi.spyOn(toastStore, 'show')
     renderHost()
     openRerun()
     await confirmShown()
     act(() => currentStoryStore.clear())
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(confirmView.mounted).toBe(false)
+    expect(show).not.toHaveBeenCalled()
   })
 
   it('a request dropped on its own branch leaves the window it closed closed', async () => {
@@ -507,7 +511,9 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(shown().open).toBe(false)
   })
 
-  it('drops the request once its chapter is no longer the latest', async () => {
+  // chapter-timeline.md → Re-run a close: a close landing while it is open refuses with a toast.
+  it('drops the request with the not-latest toast once a close lands under it', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
     renderHost()
     openRerun()
     await confirmShown()
@@ -520,6 +526,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     )
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(confirmView.mounted).toBe(false)
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunConfirm.notLatest'))
   })
 
   it('a refused preview toasts and opens nothing', async () => {
@@ -665,6 +672,27 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     act(() => props.onConfirm())
     await waitFor(() => expect(actions.start).toHaveBeenCalledTimes(1))
     expect(actions.start.mock.calls[0]?.[3]).toBe(live)
+  })
+
+  it('a close landing after a start refused in flight toasts not-latest itself', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
+    actions.start.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirm())
+    await waitFor(() => expect(confirmView.props?.pending).toBe(false))
+    error.mockClear()
+
+    act(() =>
+      chaptersStore.patch('br_1', {
+        op: 'create',
+        id: 'chap_3',
+        row: chapter({ id: 'chap_3', sequenceNumber: 3, closeReportActionId: 'act_close_3' }),
+      }),
+    )
+    expect(confirmView.mounted).toBe(false)
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunConfirm.notLatest'))
   })
 
   it('toasts a refusal that lands after its confirm has gone', async () => {
