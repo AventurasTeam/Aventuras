@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, gte, lt, ne, sql } from 'drizzle-orm'
 
 import { modelConfigOf, resolveModel } from '@/lib/ai'
 import { chapterProgressOf, isCloseOwed } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   chapters,
   deltas,
@@ -17,10 +18,13 @@ import {
   CLASSIFIER_HELD,
   CLOSE_TARGET,
   ensureChapterClosePipelineRegistered,
+  ensurePeriodicClassifierPipelineRegistered,
   getPipeline,
   isClassifierHeld,
   preflightSnapshot,
+  readClassifierStatus,
   runPreflight,
+  unprocessedThroughChapter,
   type ChainEnd,
   type ConfigResolverError,
   type PreflightFailedStart,
@@ -350,6 +354,19 @@ function closePreflight(open: Pick<OpenStory, 'settings'>): ConfigResolverError 
   return runPreflight(getPipeline(CHAPTER_CLOSE_KIND), preflightSnapshot(open.settings))
 }
 
+// The chain starts with a catch-up pass on the chapter's unprocessed end (memory-chain.ts →
+// memoryRunOn), so its settings fail before the turns go; the shortcut never moves that count.
+async function catchUpPreflight(
+  { branchId, chapterId, story }: Pick<RerunStartArgs, 'branchId' | 'chapterId' | 'story'>,
+  ctx: DbCtx,
+): Promise<ConfigResolverError | null> {
+  const { processedThrough } = await readClassifierStatus(branchId, ctx)
+  if ((await unprocessedThroughChapter(branchId, chapterId, processedThrough, ctx)) === 0)
+    return null
+  ensurePeriodicClassifierPipelineRegistered()
+  return runPreflight(getPipeline(PERIODIC_CLASSIFIER_KIND), preflightSnapshot(story.settings))
+}
+
 type RerunStartArgs = {
   branchId: string
   chapterId: string
@@ -410,6 +427,8 @@ async function startUnderMark(
   const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
   if ('status' in fresh) return fresh
   if (!shownStill(expected, fresh)) return countsChanged(fresh)
+  const passFailed = await catchUpPreflight(args, ctx)
+  if (passFailed) return { outcome: 'preflight-failed', error: passFailed }
   if (fresh.shortcut !== null) {
     const { targetEntryId, counts } = fresh.shortcut
     const swept = await bracketProseReversal(branchId, ctx, () =>

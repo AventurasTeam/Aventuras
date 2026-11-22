@@ -315,6 +315,25 @@ describe('rerunStartOutcome', () => {
     expect(outcome.logCode).toBe('preflight-failed')
   })
 
+  it("closes on a catch-up pass's failed pre-flight with the memory pass's own copy", () => {
+    const classifierGone: PipelineError = {
+      kind: 'config-resolver',
+      failure: 'profile-missing',
+      target: 'classifier',
+      phaseName: 'classify',
+    }
+    expect(
+      rerunStartOutcome({ outcome: 'preflight-failed', error: classifierGone }, 2),
+    ).toStrictEqual({
+      step: { step: 'refused' },
+      notice: {
+        severity: 'warning',
+        message: t('reader:systemEntry.failure.memoryProfileMissing'),
+      },
+      logCode: 'preflight-failed',
+    })
+  })
+
   it("hands a chain's end to the end notice", () => {
     expect(rerunStartOutcome(END.aborted, 2)).toStrictEqual({
       step: { step: 'ended' },

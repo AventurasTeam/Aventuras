@@ -1,5 +1,9 @@
 import { keepsConfirmOpen } from '@/components/reader/confirm-refusal'
-import { describeCloseFailure, retryRefusalText } from '@/components/reader/system-entry-actions'
+import {
+  describeCloseFailure,
+  describePassFailure,
+  retryRefusalText,
+} from '@/components/reader/system-entry-actions'
 import {
   CLOSE_RERUN_REFUSAL,
   describeDeltaReplayError,
@@ -103,12 +107,19 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
   if ('result' in start)
     return { step: { step: 'ended' }, notice: rerunEndNotice(start, chapterNumber), logCode: null }
   if ('outcome' in start) {
-    if (start.outcome === 'preflight-failed')
+    if (start.outcome === 'preflight-failed') {
+      // A catch-up pass's settings failed it: the memory pass's own copy names its agent.
+      const { error } = start
+      const { content } =
+        error.target === 'classifier'
+          ? describePassFailure({ held: false, error })
+          : describeCloseFailure(error)
       return {
         step: { step: 'refused' },
-        notice: { severity: 'warning', message: describeCloseFailure(start.error).content },
+        notice: { severity: 'warning', message: content },
         logCode: 'preflight-failed',
       }
+    }
     if (keepsConfirmOpen(start.blockedBy)) return keepOpen()
     if (start.blockedBy === RERUN_HELD)
       return refusedWith(t('generationGate.rerunHeld'), start.blockedBy)

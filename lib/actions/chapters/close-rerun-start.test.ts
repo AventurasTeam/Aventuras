@@ -245,6 +245,13 @@ async function flagToolCalling(modelId: string, toolCalling: boolean): Promise<v
   expect(await hydrateAppSettings(async () => next)).toEqual({ status: 'ok' })
 }
 
+// The memory pass's assignment pointed at a profile that no longer exists.
+async function assignClassifier(profileId: string): Promise<void> {
+  const settings = appSettingsStore.getAppSettings()
+  const next = { ...settings, assignments: { ...settings.assignments, classifier: profileId } }
+  expect(await hydrateAppSettings(async () => next)).toEqual({ status: 'ok' })
+}
+
 // Whether the record held as each re-run's boundary began; armed after the close.
 function recordAtBoundary(h: CloseHarness): () => readonly boolean[] {
   const seen: boolean[] = []
@@ -494,6 +501,36 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     })
     await expectNothingChanged(c.h, before)
     expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  // A catch-up pass whose settings fail would end the chain after the turns went.
+  it("refuses a catch-up pass's missing memory profile, before the turns go", async () => {
+    const c = await closed()
+    await setClassifierStatus(c.h.fx, { state: 'idle', processedThrough: endPosition(c.h) - 1 })
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    expect(expected.shortcut, 'the start would roll the turn back').not.toBeNull()
+    await assignClassifier('prof_gone')
+    const before = await snapshot(c.h)
+    const onStarted = vi.fn()
+
+    expect(await start(c, expected, { onStarted })).toMatchObject({
+      outcome: 'preflight-failed',
+      error: { kind: 'config-resolver', failure: 'profile-missing', target: 'classifier' },
+    })
+    await expectNothingChanged(c.h, before)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('checks no memory setting when no catch-up pass is due', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const expected = expectedOf(await previewOf(c))
+    await assignClassifier('prof_gone')
+
+    const end = chainEnd(await start(c, expected))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
   })
 
   it.each(MOVED)(
