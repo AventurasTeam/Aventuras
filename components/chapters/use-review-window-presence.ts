@@ -7,7 +7,8 @@ import type { StoreChapter } from '@/lib/stores'
 /**
  * The review window's mount, apart from its request: the last window stays mounted, closed, until
  * its exit ends (phone Sheet slide-out). A request returning mid-exit is held until it ends, as a
- * Sheet presented while dismissing never appears. A phone window closed unpresented unmounts now.
+ * Sheet presented while dismissing never appears. A phone window closed unpresented unmounts at
+ * once.
  */
 export function useReviewWindowPresence({
   requested,
