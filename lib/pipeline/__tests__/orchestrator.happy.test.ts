@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
-import { deltas, pipelineRuns, storyEntries } from '@/lib/db'
+import { branches, deltas, pipelineRuns, storyEntries } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import {
   definePipeline,
@@ -103,6 +103,29 @@ describe('orchestrator happy path', () => {
     const entry = getDiagnosticsSnapshot().logEntries.find((e) => e.fields.marker === 'from-phase')
     expect(entry).toBeDefined()
     expect(entry?.actionId).toBe(result.actionId)
+  })
+
+  it("writes the run's branch on its marker", async () => {
+    const { db, ctx } = await makeHarness()
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'side', createdAt: 1 })
+    async function* idle(): AsyncGenerator<never, PhaseResult> {
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'marks', phases: [{ name: 'only', run: idle }], ...base })
+
+    const onMain = expectRan(await runPipeline('marks', ctx))
+    const onSide = expectRan(await runPipeline('marks', { ...ctx, branchId: 'b2' }))
+
+    const markers = await db
+      .select({ runId: pipelineRuns.runId, branchId: pipelineRuns.branchId })
+      .from(pipelineRuns)
+    expect(markers).toHaveLength(2)
+    expect(markers).toEqual(
+      expect.arrayContaining([
+        { runId: onMain.runId, branchId: 'b1' },
+        { runId: onSide.runId, branchId: 'b2' },
+      ]),
+    )
   })
 })
 
