@@ -253,6 +253,8 @@ function ExitHarness({ onExited }: { onExited: () => void }) {
 
 const REQUESTED = { id: 'chap_trail', sequenceNumber: 2, title: 'The Trail North' } as StoreChapter
 const REOPEN_AFTER_MS = 80
+// The reopen's request, so a story can prove it landed before the exit it means to wait for.
+const reopenRequested = fn()
 
 /** The host's mount: `Re-run…` then `Cancel` clears the request, and it returns mid slide-out. */
 function ReopenHarness({
@@ -296,7 +298,10 @@ function ReopenHarness({
           onPresented={() => presence.onPresented(presence.shown!.id)}
           onRerun={() => {
             markRequested(null)
-            setTimeout(() => markRequested(REQUESTED), REOPEN_AFTER_MS)
+            setTimeout(() => {
+              reopenRequested()
+              markRequested(REQUESTED)
+            }, REOPEN_AFTER_MS)
           }}
           title={TITLE}
           state={{ status: 'ready', review: FULL }}
@@ -702,6 +707,9 @@ export const Phone390Rerun: Story = {
 export const Phone390ReopensDuringSlideOut: Story = {
   globals: PHONE,
   render: (args) => <ReopenHarness onExited={args.onExited} />,
+  beforeEach: () => {
+    reopenRequested.mockClear()
+  },
   play: async ({ args }) => {
     const dialog = await findWindow()
     await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
@@ -709,6 +717,10 @@ export const Phone390ReopensDuringSlideOut: Story = {
 
     // The slide-out ends first; the held reopen then presents the window again.
     await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+    // A slide-out shorter than the delay would end before the reopen, and prove nothing here.
+    expect(reopenRequested).toHaveBeenCalledTimes(1)
+    const exited = (args.onExited as ReturnType<typeof fn>).mock.invocationCallOrder[0]
+    expect(reopenRequested.mock.invocationCallOrder[0]).toBeLessThan(exited)
     const reopened = await findWindow()
     const top = await settledTop(within(reopened).getByRole('heading', { name: TITLE, level: 2 }))
     expect(top).toBeLessThan(window.innerHeight * 0.2)
