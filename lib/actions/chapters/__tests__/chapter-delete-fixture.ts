@@ -302,16 +302,26 @@ export async function writeCloseReport(c: ClosedChapter, actionId: string): Prom
   )
 }
 
-/** An open pipeline_runs marker, as a run the process died in leaves it. */
+/**
+ * An open pipeline_runs marker, as a run the process died in leaves it. It records the fixture's
+ * branch as `beginRun` does; pass `branchId: null` for a row older than that column.
+ */
 export async function seedRunMarker(
   fx: CloseFixture,
-  marker: { runId: string; actionId: string; startedAt: number; kind?: string },
+  marker: {
+    runId: string
+    actionId: string
+    startedAt: number
+    kind?: string
+    branchId?: string | null
+  },
 ): Promise<void> {
   await fx.ctx.db.insert(pipelineRuns).values({
     runId: marker.runId,
     kind: marker.kind ?? CHAPTER_CLOSE_KIND,
     actionId: marker.actionId,
     storyId: fx.storyId,
+    branchId: marker.branchId === undefined ? fx.branchId : marker.branchId,
     startedAt: marker.startedAt,
   })
 }

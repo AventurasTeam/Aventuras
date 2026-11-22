@@ -56,6 +56,7 @@ async function seedOrphan(
     kind: 'per-turn',
     actionId: o.actionId,
     storyId: 's1',
+    branchId: 'b1',
     startedAt: o.startedAt,
   })
 }
@@ -603,7 +604,7 @@ describe('recoverInFlightRuns on two branches holding one run’s ids', () => {
     expect(branchSnapshot(c.fx.sqlite, c.fx.branchId)).toEqual(parent)
   })
 
-  it('deletes a marker that records no branch and has nothing to reverse, as before', async () => {
+  it('deletes a marker that records no branch and has nothing to reverse', async () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await seedRunMarker(c.fx, {
@@ -611,6 +612,7 @@ describe('recoverInFlightRuns on two branches holding one run’s ids', () => {
       actionId: 'act_empty',
       startedAt: CLOSED_AT + 2,
       kind: PER_TURN_KIND,
+      branchId: null,
     })
     cloneToCopy(c)
     expect(await markerOf(c, 'run_empty')).toMatchObject({ branchId: null, finishedAt: null })
