@@ -11,6 +11,7 @@ import {
   rowsPerInsert,
 } from '@/lib/db'
 import { deepEqual } from '@/lib/deep-equal'
+import { logger } from '@/lib/diagnostics'
 import { isJsonObject } from '@/lib/json-object'
 import { withPlacement } from '@/lib/world'
 
@@ -217,6 +218,16 @@ export async function buildReverseAndPrunePlan(
 
 export function emitPatches(patches: readonly PatchEmission[]): void {
   for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
+}
+
+// Only once committed: a drop rolled back drops nothing.
+function logCommittedDrops(plan: ReversePlan, branchId: string, actionId: string): void {
+  if (plan.droppedJournals.length === 0) return
+  logger.debug(
+    'action_layer.rerun_journal_dropped',
+    { branchId, journals: plan.droppedJournals.map((j) => j.actionId) },
+    { actionId },
+  )
 }
 
 function emitCommittedPatches(patches: readonly PatchEmission[], actionId: string): void {
@@ -902,9 +913,10 @@ export async function reverseAndPruneDeltaRows(
     return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
   return withKeyLocks(reversalLockKeys(set), async () => {
+    let plan: ReversePlan
     let patches: PatchEmission[]
     try {
-      const plan = await buildReverseAndPrunePlan(set, ctx, options)
+      plan = await buildReverseAndPrunePlan(set, ctx, options)
       patches = [...plan.patches, ...(patchesAfter ?? [])]
       onPlan(plan)
       // Canon writes a journal before the plan's ops; a write-back's extraOps re-insert deltas at
@@ -925,6 +937,7 @@ export async function reverseAndPruneDeltaRows(
         stage: 'transaction',
       })
     }
+    logCommittedDrops(plan, set.branchId, actionId)
     emitCommittedPatches(patches, actionId)
     return set.rows.length
   })
@@ -976,19 +989,19 @@ export async function reverseReplayGroup(
     throw replayFailure(e, actionId)
   }
   return withKeyLocks(reversalLockKeys(set), async () => {
-    let patches: PatchEmission[]
+    let plan: ReversePlan
     try {
       const settle = settleOps(set.rows.length)
       if (set.rows.length === 0 && settle.length === 0) return 0
 
-      const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
-      patches = plan.patches
+      plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
     } catch (e) {
       throw replayFailure(e, actionId)
     }
+    logCommittedDrops(plan, set.branchId, actionId)
     // Action layer owns the patch: invert in the held-branch store after the tx.
-    emitCommittedPatches(patches, actionId)
+    emitCommittedPatches(plan.patches, actionId)
     return set.rows.length
   })
 }

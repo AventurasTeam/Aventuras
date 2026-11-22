@@ -19,6 +19,12 @@ import {
   type SqlOp,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import {
+  __resetDiagnosticsGate,
+  clearBuffers,
+  configureDiagnosticsGate,
+  getDiagnosticsSnapshot,
+} from '@/lib/diagnostics'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
@@ -554,5 +560,82 @@ describe('the planner drops a journal its reversal would make inexact', () => {
 
     expect(await journalIds()).toEqual(['act_rerun'])
     expect(await ctx.db.select().from(lore).where(eq(lore.id, 'lore_t'))).toHaveLength(1)
+  })
+
+  // Tells a later rerun_close_undone {journal: 'missing'} a designed drop from a lost journal.
+  describe('logs the drop once its reversal commits', () => {
+    beforeEach(() => {
+      clearBuffers()
+      configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+    })
+
+    afterEach(() => __resetDiagnosticsGate())
+
+    const dropLogs = () =>
+      getDiagnosticsSnapshot()
+        .logEntries.filter((e) => e.kind === 'action_layer.rerun_journal_dropped')
+        .map(({ level, fields, actionId }) => ({ level, fields, actionId }))
+
+    const DROPPED = {
+      level: 'debug',
+      fields: { branchId: 'b1', journals: ['act_rerun'] },
+      actionId: 'act_turn',
+    }
+
+    // A second insert of a taken run id fails the reversal's transaction.
+    const taken = (): SqlOp =>
+      ctx.db
+        .insert(pipelineRuns)
+        .values({ runId: 'run_taken', kind: 'chapter-close', actionId: 'act_x', startedAt: 1 })
+        .toSQL()
+
+    it('from a set reversal', async () => {
+      await seed()
+
+      await reverse(await deltasOf('act_turn'))
+
+      expect(dropLogs()).toEqual([DROPPED])
+    })
+
+    it('from an action replay', async () => {
+      await seed()
+
+      await reverseReplayDeltas('act_turn', ctx)
+
+      expect(dropLogs()).toEqual([DROPPED])
+    })
+
+    it('and not for a set reversal that rolls back', async () => {
+      await seed()
+      await ctx.runInTransaction([taken()])
+
+      await expect(reverse(await deltasOf('act_turn'), [taken()])).rejects.toBeInstanceOf(
+        DeltaReplayError,
+      )
+
+      expect(await journalIds()).toEqual(['act_rerun'])
+      expect(dropLogs()).toEqual([])
+    })
+
+    it('and not for an action replay that rolls back', async () => {
+      await seed()
+      await ctx.runInTransaction([taken()])
+
+      await expect(reverseReplayDeltas('act_turn', ctx, () => [taken()])).rejects.toBeInstanceOf(
+        DeltaReplayError,
+      )
+
+      expect(await journalIds()).toEqual(['act_rerun'])
+      expect(dropLogs()).toEqual([])
+    })
+
+    it('and not for a reversal that drops none', async () => {
+      await seed()
+
+      await reverse(await deltasOf('act_late'))
+
+      expect(await journalIds()).toEqual(['act_rerun'])
+      expect(dropLogs()).toEqual([])
+    })
   })
 })
