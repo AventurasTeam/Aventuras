@@ -76,6 +76,10 @@ function rowsOf(sqlite: DatabaseSync, table: string, branchId: string): Record<s
     .map(({ row }) => row)
 }
 
+function idsOf(sqlite: DatabaseSync, query: string, ...params: SQLInputValue[]): string[] {
+  return (sqlite.prepare(query).all(...params) as { id: string }[]).map(({ id }) => id)
+}
+
 function countOn(sqlite: DatabaseSync, table: string, branchId: string): number {
   const found = sqlite
     .prepare(`SELECT count(*) AS n FROM "${table}" WHERE branch_id = ?`)
@@ -89,11 +93,13 @@ function tableOf(op: SqlOp): string | undefined {
 
 describe('branchCopyOps', () => {
   it('copies each table a duplicate copies onto the new branch, every column as stored', async () => {
-    const [entity] = t.sqlite
-      .prepare('SELECT id FROM entities WHERE branch_id = ? ORDER BY id LIMIT 1')
-      .all(fx.branchId) as { id: string }[]
+    const [entityId] = idsOf(
+      t.sqlite,
+      'SELECT id FROM entities WHERE branch_id = ? ORDER BY id LIMIT 1',
+      fx.branchId,
+    )
     const rawWrites = [
-      ['entities', 'state', 'id', entity.id],
+      ['entities', 'state', 'id', entityId],
       ['deltas', 'undo_payload', 'action_id', fx.deleteActionId],
       ['reversal_journals', 'journal', 'action_id', fx.journalActionId],
     ] as const
@@ -164,11 +170,11 @@ describe('branchCopyOps', () => {
     await t.runInTransaction([branchRowOp(COPY), ...(await branchCopyOps(t.db, fork))])
 
     const entryIds = (branchId: string) =>
-      (
-        t.sqlite
-          .prepare('SELECT id FROM story_entries WHERE branch_id = ? ORDER BY position')
-          .all(branchId) as { id: string }[]
-      ).map(({ id }) => id)
+      idsOf(
+        t.sqlite,
+        'SELECT id FROM story_entries WHERE branch_id = ? ORDER BY position',
+        branchId,
+      )
     expect(entryIds(fx.branchId)).toContain(fx.systemEntryId)
     expect(entryIds(COPY)).toEqual(entryIds(fx.branchId).filter((id) => id !== fx.systemEntryId))
     // 'all' copies the whole table: a fork at the tail keeps every delta and journal.
@@ -180,9 +186,11 @@ describe('branchCopyOps', () => {
   })
 
   it('leaves out exactly the deltas a correlated predicate names, reading tables copied before them', async () => {
-    const [entity] = t.sqlite
-      .prepare('SELECT id FROM entities WHERE branch_id = ? ORDER BY id LIMIT 1')
-      .all(fx.branchId) as { id: string }[]
+    const [entityId] = idsOf(
+      t.sqlite,
+      'SELECT id FROM entities WHERE branch_id = ? ORDER BY id LIMIT 1',
+      fx.branchId,
+    )
     const [{ top }] = t.sqlite
       .prepare('SELECT max(log_position) AS top FROM deltas WHERE branch_id = ?')
       .all(fx.branchId) as { top: number }[]
@@ -195,7 +203,7 @@ describe('branchCopyOps', () => {
       logPosition: top + 1,
       source: 'user_edit',
       targetTable: 'entities',
-      targetId: entity.id,
+      targetId: entityId,
       op: 'update',
       undoPayload: { name: 'before' },
       createdAt: 1,
@@ -203,11 +211,7 @@ describe('branchCopyOps', () => {
     // Reads the copy's entities, so it holds only if entities copy before deltas in the batch.
     const targetOnCopy = sql`${deltas.targetTable} != 'entities' or exists (select 1 from ${entities} where ${entities.branchId} = ${COPY} and ${entities.id} = ${deltas.targetId})`
     const entityIds = new Set(
-      (
-        t.sqlite.prepare('SELECT id FROM entities WHERE branch_id = ?').all(fx.branchId) as {
-          id: string
-        }[]
-      ).map(({ id }) => id),
+      idsOf(t.sqlite, 'SELECT id FROM entities WHERE branch_id = ?', fx.branchId),
     )
     const logged = t.sqlite
       .prepare('SELECT id, action_id, target_table, target_id FROM deltas WHERE branch_id = ?')
@@ -228,11 +232,7 @@ describe('branchCopyOps', () => {
 
     await t.runInTransaction([branchRowOp(COPY), ...(await duplicateOps({ deltas: targetOnCopy }))])
 
-    const copied = (
-      t.sqlite.prepare('SELECT id FROM deltas WHERE branch_id = ?').all(COPY) as { id: string }[]
-    )
-      .map(({ id }) => id)
-      .sort()
+    const copied = idsOf(t.sqlite, 'SELECT id FROM deltas WHERE branch_id = ?', COPY).sort()
     expect(copied).toEqual(
       logged
         .filter(kept)

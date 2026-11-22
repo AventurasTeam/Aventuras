@@ -381,41 +381,27 @@ describe("restores stamp their row target's branch", () => {
   const HAW = 'haw_seen'
   const DELETE_ACTION = 'act_gone'
 
-  let stamp: TestDb
-  let stampCtx: DbCtx
-
-  const onStampA = (id: string): NewEntity => ({
-    id,
-    branchId: STAMP_A,
-    kind: 'character',
-    name: id,
-    status: 'active',
-    injectionMode: 'auto',
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-  })
+  const onStampA = (id: string): NewEntity =>
+    character(id, { branchId: STAMP_A, embeddingStale: 0 })
 
   const branchesHolding = (table: string, id: string): unknown[] =>
     (
-      stamp.sqlite.prepare(`SELECT branch_id FROM ${table} WHERE id = ?`).all(id) as {
+      t.sqlite.prepare(`SELECT branch_id FROM ${table} WHERE id = ?`).all(id) as {
         branch_id: unknown
       }[]
     ).map((row) => row.branch_id)
 
   beforeEach(async () => {
-    stamp = await createTestDb()
-    stampCtx = { db: stamp.db, runInTransaction: stamp.runInTransaction }
-    await stamp.db.insert(stories).values({ id: 's_stamp', title: 'T', createdAt: 1, updatedAt: 1 })
-    await stamp.db
+    await ctx.db.insert(stories).values({ id: 's_stamp', title: 'T', createdAt: 1, updatedAt: 1 })
+    await ctx.db
       .insert(branches)
       .values({ id: STAMP_A, storyId: 's_stamp', name: 'a', createdAt: 1 })
-    await stamp.db.insert(entities).values([onStampA(GONE), onStampA(STAYS)])
-    await stamp.db
+    await ctx.db.insert(entities).values([onStampA(GONE), onStampA(STAYS)])
+    await ctx.db
       .insert(happenings)
       .values({ id: HAP, branchId: STAMP_A, title: 'Fire', createdAt: 1, updatedAt: 1 })
     // a_id < b_id: char_rel_canonical_order.
-    await stamp.db.insert(characterRelationships).values({
+    await ctx.db.insert(characterRelationships).values({
       id: REL,
       branchId: STAMP_A,
       aId: GONE,
@@ -425,7 +411,7 @@ describe("restores stamp their row target's branch", () => {
       createdAt: 1,
       updatedAt: 1,
     })
-    await stamp.db
+    await ctx.db
       .insert(happeningAwareness)
       .values({ id: HAW, branchId: STAMP_A, happeningId: HAP, characterId: GONE })
     const removed = await applyDeltaAction(
@@ -438,19 +424,15 @@ describe("restores stamp their row target's branch", () => {
         actionId: DELETE_ACTION,
         branchId: STAMP_A,
       },
-      stampCtx,
+      ctx,
     )
     if (removed.status !== 'ok') throw new Error(`deleteEntity: ${JSON.stringify(removed)}`)
-    cloneBranch(stamp.sqlite, STAMP_A, STAMP_B)
+    cloneBranch(t.sqlite, STAMP_A, STAMP_B)
   })
 
   it('restores a copied delete and its captured children onto B alone, stamping copies', async () => {
-    const group = (await stamp.db
-      .select()
-      .from(deltas)
-      .where(and(eq(deltas.branchId, STAMP_B), eq(deltas.actionId, DELETE_ACTION)))
-      .orderBy(desc(deltas.logPosition))) as Delta[]
-    const set = await selectReversalSet(stampCtx, { branchId: STAMP_B, target: group })
+    const group = await deltasOn(STAMP_B, DELETE_ACTION)
+    const set = await selectReversalSet(ctx, { branchId: STAMP_B, target: group })
     const held = set.rows.find((delta) => delta.op === 'delete' && delta.targetId === GONE)
     if (!held) throw new Error('the reversal set holds no delete of the character')
     const payloadBefore = structuredClone(held.undoPayload)
@@ -460,14 +442,14 @@ describe("restores stamp their row target's branch", () => {
       relationships: [{ id: REL, branchId: STAMP_A }],
       awareness: [{ id: HAW, branchId: STAMP_A }],
     })
-    const sourceBefore = branchSnapshot(stamp.sqlite, STAMP_A)
+    const sourceBefore = branchSnapshot(t.sqlite, STAMP_A)
 
     const plans: ReversePlan[] = []
-    await reverseAndPruneDeltaRows(set, stampCtx, { keepRedoExact: false }, [], (plan) => {
+    await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, [], (plan) => {
       plans.push(plan)
     })
 
-    expect(branchSnapshot(stamp.sqlite, STAMP_A)).toEqual(sourceBefore)
+    expect(branchSnapshot(t.sqlite, STAMP_A)).toEqual(sourceBefore)
     expect(branchesHolding('entities', GONE)).toEqual([STAMP_B])
     expect(branchesHolding('character_relationships', REL)).toEqual([STAMP_B])
     expect(branchesHolding('happening_awareness', HAW)).toEqual([STAMP_B])

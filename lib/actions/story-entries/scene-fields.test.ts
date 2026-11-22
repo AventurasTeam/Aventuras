@@ -543,9 +543,7 @@ describe('updateEntrySceneFields', () => {
     )
     await hydrateEntities(db)
 
-    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)).toEqual({
-      status: 'ok',
-    })
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
     expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_B)
   })
 

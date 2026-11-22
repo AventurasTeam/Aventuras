@@ -26,7 +26,7 @@ import { writeProbeCapture } from '@/lib/probe/writer'
 import type { createTestDb } from './test-db'
 
 export type TestDb = Awaited<ReturnType<typeof createTestDb>>
-export type BranchTable = SQLiteTable & { branchId: SQLiteColumn }
+type BranchTable = SQLiteTable & { branchId: SQLiteColumn }
 
 /** Every dbSchema table with a branchId column except pipeline_runs, whose run_id key is global. */
 export const CLONED_TABLES: readonly BranchTable[] = (
