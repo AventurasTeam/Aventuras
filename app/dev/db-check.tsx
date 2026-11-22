@@ -256,7 +256,7 @@ export default function DbCheckDevRoute() {
       .finally(() => setRunning(false))
   }, [])
 
-  // On press only: an effect double-mounts in dev, racing two runs over one set of scratch tables.
+  // On press only: Fast Refresh re-runs effects, racing a second run over the same scratch tables.
   const runCopy = useCallback(() => {
     setCopyRunning(true)
     runBranchCopyChecks()
