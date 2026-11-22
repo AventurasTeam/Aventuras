@@ -722,16 +722,25 @@ fallback isn't built. The temp-table answer stands for
 can be created, filled, emptied and dropped inside one batch on both
 platforms.
 
-**Copier contract for 6.3 and 6.6.** The copier parenthesizes each
-predicate before ANDing it to the branch condition: drizzle's `and()`
-doesn't, and a predicate's top-level `OR` would reach other branches.
-Drizzle writes a predicate's columns as `"table"."col"`, so a predicate
-whose subquery reads the table it filters must alias the inner table and
-name the inner columns through that alias: unaliased, the predicate's
-references to the row being copied bind to the subquery's row, and an
-inner column written through drizzle after aliasing binds to the row
-being copied. Both fail silently in a fork's
-survivor predicate. In `fork` mode the copier requires a predicate for
+**Copier contract for 6.3 and 6.6.** The copier is one async builder,
+`branchCopyOps(db, { from, to, mode, where, between })` through
+`@/lib/db`. It returns the table ops in manifest order, then the
+caller's `between` ops (a fork's plan), then one vector statement per
+family table, all for one `{ from, to }`. The brief proposed the table
+and vector builders apart; one builder keeps a caller from running the
+vectors first or naming two targets, either of which commits with no
+vectors while the copied rows read clean. Its `where` takes only the
+tables the mode copies.
+
+The copier parenthesizes each predicate before ANDing it to the branch
+condition: drizzle's `and()` doesn't, and a predicate's top-level `OR`
+would reach other branches. Drizzle writes a predicate's columns as
+`"table"."col"`, so a predicate whose subquery reads the table it
+filters must alias the inner table and name the inner columns through
+that alias: unaliased, the predicate's references to the row being
+copied bind to the subquery's row, and an inner column written through
+drizzle after aliasing binds to the row being copied. Both fail
+silently in a fork's survivor predicate. In `fork` mode the copier requires a predicate for
 `story_entries`, `deltas` and `reversal_journals`, by type and at
 runtime (`'all'` copies one unfiltered): the manifest names a fork's
 filters, but nothing else makes a caller pass them.
