@@ -68,3 +68,33 @@ slice-planning gate forces its resolution before that slice is planned.
   everywhere. It predates M6: found by M6's planning research
   (2026-11-22), since `⋯` is Duplicate's entry point, and left out of
   Slice 6.6. Read at the component, not run on a phone tier.
+
+- **`probe_captures`' ER note says it is the only table not copied on
+  fork.** `docs/data-model.md:255` calls it "the only such table", but
+  the Branch-copy manifest skips `pipeline_runs` too (both copies), so
+  the note has been stale since that row landed. Found by M6.1's final
+  review (2026-11-22); pre-existing canon, outside that slice's scope.
+
+- **The rollback's create-delta lookup still hedges on `entry_id`.**
+  `lib/actions/story-entries/operational.ts:255-256` says the lookup by
+  `target_id` works "whether or not foreground deltas stamp entry_id".
+  That is settled: the `user_action` create is anchored on its entry
+  (`lib/actions/story-entries/pre-entry-locations.ts:22`), so the hedge
+  reads as an open question it no longer is. Found by M6.1's final
+  review (2026-11-22).
+
+- **The vec0 shadow-table list is incomplete.**
+  `lib/db/embeddings/vec-tables.ts:16-18` names four shadow tables;
+  sqlite-vec 0.1.9 with metadata and auxiliary columns also creates
+  `_auxiliary`, `_metadatachunks00/01` and `_metadatatext00/01`
+  (checked on a scratch `vec0` table with the families' column shape).
+  The exact-name regex still holds, so only the comment misleads. Found
+  by M6.1's final review (2026-11-22).
+
+- **Two close-agent test comments cite "(5.9)" as future work.**
+  `lib/pipeline/definitions/close-agent/lore-tools.test.ts:295` and
+  `lib/pipeline/definitions/close-agent/write-path.test.ts:1067` say "as
+  read_turns will show one (5.9)". Slice 5.9 has shipped (`read_turns`
+  is in `close-agent/read-turns.ts`, merged in #735), so the pointer is
+  stale per `.claude/rules/code.md`'s commenting discipline. Found by
+  M6.1's final review (2026-11-22).
