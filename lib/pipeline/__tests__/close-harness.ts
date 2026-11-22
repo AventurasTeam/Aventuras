@@ -293,7 +293,7 @@ export const TOBIN: SeedEntity = {
   status: 'active',
 }
 
-// A pass's create anchored on the first reply: both rollbacks below spare it.
+// A pass's create anchored on the first reply: a rollback to E or past it spares it.
 export async function seedEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
   const result = await applyDeltaAction(
     {
