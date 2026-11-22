@@ -1074,6 +1074,38 @@ describe('rerunWriteBack', () => {
 
     expect(await fullState(c.fx)).toEqual(before)
   })
+
+  it('writes the deltas it edited in place back over a copied branch’s own, leaving the source’s', async () => {
+    const fx = await openSeeded()
+    await seedHappeningPair(fx)
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
+    await writeCloseWork(c)
+    await writeUnderAction(c, c.actionId, [closePairView(fx.branchId)])
+    await writeLater(fx, userPairView(fx.branchId), { actionId: USER_PAIR, entryId: null })
+    await writeLater(fx, deleteKeptThread(fx.branchId), { actionId: USER_DELETE, entryId: null })
+    const logBefore = await logRows(fx)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+    cloneBranch(fx.sqlite, fx.branchId, 'br_copy')
+    const copy: CloseFixture = { ...fx, branchId: 'br_copy' }
+    const source = branchSnapshot(fx.sqlite, fx.branchId)
+    const { deltas: logged } = await journalOf(copy, RERUN)
+    const held = new Map((await logRows(copy)).map((d) => [d.id, d]))
+    const edited = logged.filter((d) => held.has(d.id))
+    expect(edited.map(shapeOf).sort()).toEqual([
+      expect.stringMatching(/^create character_relationships:/),
+      `delete threads:${THREAD_KEPT.id}`,
+    ])
+    for (const d of edited) {
+      expect(d.branchId).toBe(fx.branchId)
+      expect(held.get(d.id)).not.toEqual({ ...d, branchId: copy.branchId })
+    }
+
+    expect(await reverseWithWriteBack(copy, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    expect(await logRows(copy)).toEqual(logBefore.map((d) => ({ ...d, branchId: copy.branchId })))
+    expect(branchSnapshot(fx.sqlite, fx.branchId)).toEqual(source)
+  })
 })
 
 // The marker's settle, as abortRun's rides the reversal's transaction.
