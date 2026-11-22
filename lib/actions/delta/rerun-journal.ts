@@ -159,7 +159,7 @@ export type RerunWriteBack =
   | { outcome: 'restored'; ops: readonly SqlOp[]; patches: readonly PatchEmission[] }
   | {
       outcome: 'undone'
-      /** The chapter's close groups to add to the caller's set; empty with no chapter row. */
+      /** The chapter's close groups, for the caller to merge with `withCloseGroups`. */
       seed: readonly Delta[]
       /** The journal row's delete, when one exists. */
       ops: readonly SqlOp[]
@@ -323,13 +323,10 @@ async function undoneClose(
   ctx: DbCtx,
   undone: Omit<UndoneClose, 'outcome' | 'seed'> & { actionId: string; branchId: string | null },
 ): Promise<UndoneClose> {
-  // The caller already holds the group: seeded twice, a create would enter the closure twice.
   const seed =
     undone.branchId === null
       ? []
-      : (await readChapterCloseGroups(undone.branchId, undone.chapterId, ctx)).filter(
-          (delta) => delta.actionId !== undone.actionId,
-        )
+      : await readChapterCloseGroups(undone.branchId, undone.chapterId, ctx)
   const { chapterId, chapterNumber, ops, journal } = undone
   return { outcome: 'undone', seed, ops, chapterId, chapterNumber, journal }
 }

@@ -831,11 +831,9 @@ describe('rerunWriteBack', () => {
       chapterNumber: c.chapter.sequenceNumber,
       journal: 'not-whole',
     })
-    // The caller holds the group itself, so the seed is the chapter's other close groups only.
-    expect(result.outcome === 'undone' ? result.seed.map((d) => d.actionId) : []).not.toContain(
-      RERUN,
-    )
 
+    expect(await deltasOf(c.fx, RERUN)).toEqual([])
+    expect((await worldRows(c.fx)).lore).toEqual([])
     expect(await chapterRows(c.fx)).toEqual([])
     expect((await entryRows(c.fx)).map((e) => e.chapterId)).toEqual(c.fx.entries.map(() => null))
     expect(await deltasOf(c.fx, c.actionId)).toEqual([])
