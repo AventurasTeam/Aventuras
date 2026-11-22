@@ -60,3 +60,11 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
+
+- **The story card's `⋯` is a Popover on every tier.**
+  [`story-list.md → Mobile expression`](../ui/screens/story-list/story-list.md#mobile-expression)
+  binds it to a short Sheet on phone, and
+  `components/story/story-card.tsx:189-238` renders a Popover
+  everywhere. It predates M6: found by M6's planning research
+  (2026-11-22), since `⋯` is Duplicate's entry point, and left out of
+  Slice 6.6. Read at the component, not run on a phone tier.

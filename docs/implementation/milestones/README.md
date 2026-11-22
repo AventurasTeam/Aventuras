@@ -38,3 +38,9 @@ directory (`NN-name/`) with a `milestone.md` definition and a
   and reversal as one action; reader chapters, Chapter Timeline, the
   review window, and chapter delete that keeps the entries; thirteen
   slices, four day-one startable.
+- [Milestone 6 — Branches + diff cache](./06-branches-diff-cache/milestone.md).
+  Branches work: a copy substrate under story duplicate and fork, the
+  fork proven equal to a copy rolled back, the navigator with switching,
+  rename and delete, one redo stack and one lead per branch, and
+  History's before-and-after prose from the diff cache; nine slices,
+  four day-one startable.

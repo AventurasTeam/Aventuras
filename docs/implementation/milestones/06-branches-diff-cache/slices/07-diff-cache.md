@@ -1,0 +1,640 @@
+# Slice 6.7 — Diff cache
+
+## Metadata
+
+- **Milestone:** [Milestone 6 — Branches + diff cache](../milestone.md)
+- **Depends on:** none. Two things wait inside it. Its eviction tasks
+  start after R3's canon pass lands
+  ([C12](../milestone.md#c12--canon-and-flips)). Its database-seeded
+  two-branch key test needs [Slice 6.1](./01-copy-substrate.md)'s
+  composite `deltas` key, with no edge: it is a criterion here if 6.1
+  has landed, and in 6.1 if this slice has
+  ([C9](../milestone.md#c9--the-diff-caches-seams)).
+- **Blocks:** none. It meets [Slice 6.8](./08-per-branch-lead.md) only at
+  `isLead`'s prose: a criterion here if 6.8 has landed, and in 6.8 if
+  this slice has.
+
+## Goal
+
+World and Plot History say what an update changed, before and after,
+for the seven tables they list. This slice delivers the consistent read
+the walk needs, the walk itself, an in-memory cache of its results keyed
+by branch and delta id, a renderer that turns an entry into prose, and a
+History host that shows the field-name summary until the prose resolves
+and keeps it when the walk fails. A reversal, a redo and a journal
+write-back evict their branch's entries through a post-commit hook that
+`lib/actions` owns, so no entry outlives a rewrite of the log.
+
+## Background
+
+An update's `undo_payload` holds the value it replaced. Nothing stores
+the value it wrote: the row as it stands is that value only for the
+newest delta on it. The walk recovers the rest by reading the row's
+later deltas and stepping back through them, newest first, applying each
+payload column by column as rollback does. Canon assumes a WAL read
+transaction for that read; neither platform has one, so the slice builds
+the read. Since M4, History renders `Modified <fields>` from the
+payload's keys (`lib/history/humanize.ts:71-78`); that summary stays as
+the miss path, for search, and for the reader's undo confirm. The design
+is
+[`architecture.md → Delta history diff resolution`](../../../../architecture.md#delta-history-diff-resolution);
+R3 (evict by branch, through a hook) lands in it before the eviction
+tasks start.
+
+## Required reading
+
+- [`architecture.md → Delta history diff resolution`](../../../../architecture.md#delta-history-diff-resolution)
+  whole:
+  [Walk algorithm](../../../../architecture.md#walk-algorithm),
+  [Cache shape and lifecycle](../../../../architecture.md#cache-shape-and-lifecycle),
+  [Consumer flow](../../../../architecture.md#consumer-flow),
+  [Concurrency, rollback, error path](../../../../architecture.md#concurrency-rollback-error-path)
+  and
+  [Search is orthogonal](../../../../architecture.md#search-is-orthogonal),
+  as R3's design pass leaves them.
+- [`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay),
+  from "A delta's result is the prior value of the next delta" through
+  "Only a reversal rewrites a prior value": what a reversal does to the
+  payloads the walk reads, and the column groups.
+- [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback)
+  (the `op=update` encoding, the meta keys, and the paragraph on a redo's
+  re-insert and the journal write-back), the `deltas` entity and
+  `deltas_chain_idx` in the [ER diagram](../../../../data-model.md#diagram),
+  and [`Branch model`](../../../../data-model.md#branch-model) for why a
+  delta id repeats across branches.
+- [`world.md → History tab`](../../../../ui/screens/world/world.md#history-tab)
+  whole (Search, Link rows, Link-row wording, Refresh),
+  [`History tab — lore`](../../../../ui/screens/world/world.md#history-tab--lore),
+  and the History bullet of
+  [`plot.md → Threads side`](../../../../ui/screens/plot/plot.md#threads-side).
+- [`delta-log-row.md → Summary`](../../../../ui/patterns/delta-log-row.md#summary)
+  and [`lists.md → Search bar scope`](../../../../ui/patterns/lists.md#search-bar-scope).
+- [`tech-stack.md → TanStack Query`](../../../../tech-stack.md#12-tanstack-query-react-query).
+- [`observability.md → Logger contract`](../../../../observability.md#logger-contract)
+  and
+  [`Subsystem emission inventory`](../../../../observability.md#subsystem-emission-inventory).
+- [`code-conventions.md → Module structure`](../../../../code-conventions.md#module-structure),
+  [`State placement`](../../../../code-conventions.md#state-placement),
+  [`i18n discipline`](../../../../code-conventions.md#i18n-discipline)
+  and
+  [`Testing discipline`](../../../../code-conventions.md#testing-discipline).
+- [`testing.md → E2E target: desktop only`](../../../../testing.md#e2e-target-desktop-only),
+  [`Fixture + seed contract`](../../../../testing.md#fixture--seed-contract),
+  [`Mock LLM`](../../../../testing.md#mock-llm) and
+  [`Selector strategy`](../../../../testing.md#selector-strategy).
+- Milestone contracts: [C9](../milestone.md#c9--the-diff-caches-seams),
+  which this slice provides;
+  [C1](../milestone.md#c1--delta-rows-on-two-branches), which it
+  consumes; [C11](../milestone.md#c11--shared-files) and
+  [C12](../milestone.md#c12--canon-and-flips), which it follows; the
+  [Definition of done](../milestone.md#definition-of-done)'s Diff prose
+  line; and the milestone's
+  [Open questions](../milestone.md#open-questions) on the prose
+  vocabulary.
+- Lessons:
+  [known-answer vectors share blind spots](../../../lessons-learned/known-answer-vectors-share-blind-spots.md#how-to-apply)
+  (walk tests take expectations from what the test wrote, never from the
+  walk),
+  [the unit project can't render RN-Web chrome](../../../lessons-learned/unit-project-no-rn-web-chrome.md#how-to-apply),
+  [one `exhaustive-deps` suppression disables the compiler](../../../lessons-learned/exhaustive-deps-suppression-disables-the-compiler.md#how-to-apply),
+  and, if the read is one statement,
+  [a JSON value crossing a scalar subquery needs `json()`](../../../lessons-learned/sqlite-json-subtype-lost-across-subquery.md#how-to-apply).
+
+## Scope: in
+
+The proposed home for the walk, the cache and the renderer is
+`lib/history` (`diff-walk.ts`, `diff-cache.ts`, `diff-prose.ts`), which
+already imports the `lib/actions` barrel and which `lib/actions` never
+imports. Canon leaves the path to implementation; planning may pick a new
+`lib/` module instead, under the same import rule. Test files named below
+follow the default.
+
+**The consistent read.**
+
+- One read gives the walk a target's chain and its seed together: every
+  delta on `(branch_id, target_id)` with `log_position` at or above the
+  oldest requested delta, `target_table` as a post-filter, every op,
+  retrieval bumps included, ordered by `log_position`; and the target
+  row by branch and id. No forward write may commit between the two
+  halves.
+- Rows come back as drizzle maps them: field names, not columns
+  (`inverseKind`, not `inverse_kind`), JSON columns parsed, integer
+  booleans as the schema types them. Payload keys are field names
+  (`lib/history/link-ends.ts:45`), so a raw read that skips the mapping
+  misses every key, and a `0` against a `false` breaks the "old equals
+  new renders nothing" rule.
+- Planning picks the mechanism; see
+  [Open questions](#open-questions). Whichever it is, `DbCtx`
+  (`lib/db/types.ts:41-44`) gains no required member (C9): the read is a
+  function beside it, or an optional member. The test database
+  (`lib/db/__tests__/test-db.ts`) gets the same read, so the walk's tests
+  run through it.
+- If the read crosses the desktop bridge, the slice may touch: the
+  handler's body in `electron/db/service.ts`, beside `transaction`; its
+  IPC channel in `electron/main.ts` and `electron/preload.ts`; the two
+  bridge type copies, kept in step (`types/db-bridge.d.ts`,
+  `electron/db/types.ts`); and the drizzle client in
+  `lib/db/runtime/client.ts`, which gains the batch callback. A native
+  half goes beside it in `lib/db/runtime/` as a `.native.ts` file.
+- The chain read uses `deltas_chain_idx`
+  (`lib/db/system/system.table.ts:89`). Without table statistics an
+  `ORDER BY log_position` can steer SQLite onto another index
+  (`lib/history/link-ends.ts:274-275`), and `deltas_log_position_uniq`
+  (`:90`) also serves that order.
+
+**The column-level apply (C9).**
+
+- `undoneValue` and `undoneColumn` stay where they sit
+  (`lib/actions/delta/reverse-replay.ts:291-309`), since 6.1 and 6.3 edit
+  that file. The least-touching route: an `export` keyword on
+  `undoneColumn`, and the wrapper in a new file under
+  `lib/actions/delta/`.
+- One wrapper keyed by table name, exported through
+  `lib/actions/index.ts` (a suggested shape:
+  `undoneColumnOf(table, column, partial, current)`). It takes its
+  `TableEntry` from `resolveByTable`, which stays private, and throws on
+  an unregistered table. A place's parent and `unplaced` mark restore as
+  one field through it, as they do in a reversal.
+
+**The walk** (`lib/history/diff-walk.ts`).
+
+- For an update on one of the seven tables History lists (`entities`,
+  `lore`, `threads`, `happenings`, `character_relationships`,
+  `happening_involvements`, `happening_awareness`), seeded from the first
+  that exists:
+  1. the live row;
+  2. the payload of a delete at the head of the chain;
+  3. the copy another row's delete holds, for a link row removed with its
+     other end: a delete on the branch in `entities` or `happenings`
+     whose payload holds the row under its cascade key (the shapes
+     `HELD_KEY` and `HOLDING_TABLES` already name,
+     `lib/history/link-ends.ts:101-107`).
+- **A requested delta that is gone** resolves as gone, before any seed
+  is looked for: absent from its chain, it was pruned after its History
+  row loaded. A reversal's hook evicts before History's list refreshes (the
+  list waits on `settleCount`, `history-tab.tsx:91`), so the rows of
+  deltas it just pruned are still mounted and re-read once. Gone is not
+  a failure: no entry, no `warn`, nothing remembered, and the row keeps
+  its field-name summary until the list drops it. A failed or cancelled
+  pass that touched an open History row is the common case.
+- **With none of the three seeds,** the target is corrupt: the walk
+  rejects with a reason naming it.
+- Newest to oldest over the chain's updates. For each: `new` is the
+  state picked by the payload's column keys, `old` the payload; then the
+  state steps back through the wrapper, column by column. `$`-prefixed
+  keys (`isPayloadMetaKey`) are skipped on both sides and never reach the
+  wrapper as columns.
+- Each update on the path that History lists gets an entry, so one walk
+  serves every requested delta on its target. An awareness update whose
+  payload holds only `retrievalCount`, the shape History leaves out
+  (a retrieval bump, or a close's reset; `lib/history/query.ts:130-134`),
+  is stepped back through but gets no entry: a retrieval can bump each
+  aware in-scene row once a turn, so one long awareness chain would
+  otherwise fill the 2000-entry cache. The walk tests that shape with
+  the same rule as the list's query, one definition beside
+  `RETRIEVAL_COUNT` (`lib/history/link-rows.ts`), so the two can't
+  drift.
+- Every read is scoped by `branch_id`.
+
+**The cache** (`lib/history/diff-cache.ts`).
+
+- A process-wide singleton holding its state in-module
+  ([State placement](../../../../code-conventions.md#state-placement)):
+  `peek(branchId, deltaId)`, synchronous; `populate(delta)`, keyed on
+  `delta.branchId`; `populateBatch(deltas)`, grouped by branch and
+  target, one walk per target. Keyed on branch and delta id from its
+  first commit (C9).
+- An LRU with a hard cap of 2000 entries; a `peek` hit and a `populate`
+  both refresh recency.
+- In-flight coalescing per branch and delta id, as canon has it.
+- Eviction by branch: every entry, every in-flight walk and every
+  remembered failure of that branch goes. A walk that started before an
+  eviction never writes an entry after it, and a `populate` called after
+  it starts a new walk rather than joining the old one. The guard
+  discards such a walk's rejection as it discards its entry: no `warn`,
+  nothing remembered, since a read across the eviction can see a
+  half-reversed row. The guard's mechanism is planning's (see
+  [Open questions](#open-questions)); the behavior is the scope.
+- A gone delta (see The walk) settles its `populate` without an entry
+  and without rejecting as a failure; whether as a typed result or a
+  typed rejection the host tells apart is planning's. Canon's proposed
+  signature, `populate(delta): Promise<DiffCacheEntry>`, changes with
+  it.
+- A failed walk: `populate` rejects, the cache remembers the failure by
+  branch and delta id, and one `warn` names the delta id and the reason.
+  A later `populate` for it rejects at once, with no walk and no second
+  `warn`, whether or not TanStack has dropped its query. The memory goes
+  with its branch's next eviction: under a consistent read, only a
+  rewrite of the log can change a chain the walk found corrupt.
+- The cache registers its eviction with the hook when its module loads,
+  so no entry can exist before its listener does.
+
+**The eviction hook (C9, R3).**
+
+- A registration that `lib/actions` owns and exports through its barrel:
+  a listener hears the branch whose log a commit rewrote. The delta
+  layer never imports the cache. Any boundary rule this needs goes in
+  `eslint.config.js` (C11).
+- Fired after the commit and before the store sync, which can throw:
+  - in `reverseAndPruneDeltaRows`, between its transaction
+    (`reverse-replay.ts:914-920`) and `emitCommittedPatches` (`:930`),
+    with `set.branchId`. A journal write-back commits here, as
+    `extraOps` (`lib/actions/delta/rerun-journal.ts:529`,
+    `lib/actions/story-entries/undo.ts:229`);
+  - in `reverseReplayGroup`, between its transaction (`:987`) and
+    `emitCommittedPatches` (`:993`), with `set.branchId`;
+  - in `applyRedoLocked`, after its transaction
+    (`lib/actions/delta/redo.ts:364`) and before its patch block
+    (`:367`), with the branch the redo wrote: its snapshots' and ref
+    restores', which are one branch, or the group's branch once
+    [Slice 6.2](./02-scoped-reads-redo.md) gives it one.
+- Only after a commit. A transaction that throws, a refusal, and the
+  early returns on an empty set (`:896-902`, `:984`) fire nothing.
+- A listener that throws doesn't stop the store sync, the other
+  listeners or the caller's result; its error is logged.
+- 6.1 and 6.3 leave these commit tails in place; a fork's commit is its
+  own batch and fires nothing (C9). A duplicate and a branch delete evict
+  nothing (R3).
+
+**The renderer** (`lib/history/diff-prose.ts`).
+
+- From a cache entry, the row's table and, for a relationship, the tab's
+  side, to a summary string. It iterates the keys of `old` per column,
+  descending a nested column as `changedPaths` does (`state`, and
+  `state.visual` within it), and looks each path up in `new`. A path
+  whose old and new are deep-equal renders nothing.
+- Wording per field kind through `t()` in the `history` namespace, as
+  the design route at planning settles it (see
+  [Open questions](#open-questions)). The kinds across the seven tables:
+  free text, enums, term lists, row refs, entry refs, the `stackables`
+  record, `state.visual`'s sub-fields, numbers and counters, flags, the
+  column groups (a place's parent and `unplaced`, the collision triple,
+  a status with its reason or entry), and a relationship's two views by
+  side.
+- `humanizeDelta` and `changedPaths` keep their signatures and output:
+  the fallback, search, the reader's undo confirm
+  (`components/reader/undo-copy.ts:300,333`) and the close review
+  (`lib/history/close-review-changes.ts:229`) read them.
+
+**The History host** (`components/history/history-tab.tsx`).
+
+- An `update` row reads its entry through a TanStack query under
+  `['diff', branchId, delta.id]`, seeded from `peek`. A hit shows the
+  prose at once. A miss shows the field-name summary at once and
+  upgrades to the prose when the walk resolves. A rejected read keeps
+  the summary, and so does a gone one. Create, delete and removal rows
+  never touch the cache.
+- The row takes its entry from the query, not from a bare `peek` in
+  render: React Compiler memoizes a render-time call by its arguments,
+  so the row could stay on the summary after the entry lands (inferred;
+  see [Open questions](#open-questions)).
+- The misses of a loaded chunk go through `populateBatch`, so N update
+  rows over M targets run M walks.
+- On an eviction of branch `b`, the host's `['diff', b]` queries are
+  invalidated or reset, not only removed: `removeQueries` notifies no
+  mounted observer (TanStack's `Query.#dispatch` runs on a reset, not on
+  a remove), so a mounted row would keep the stale prose until something
+  else re-rendered it (C9). The host hears the eviction from the cache,
+  not from a hook of its own. Every query key in the app so far carries
+  `settleCount` instead (`hooks/use-entry-index.ts:105`); this is the
+  first invalidation by key.
+- A loader seam beside `HistoryLoaderProvider`
+  (`components/history/history-loader.tsx`), defaulting to the cache, so
+  stories and tests inject entries with no database.
+- `HistoryTabView` stays a pure view: summaries reach it as strings, and
+  `DeltaLogRow`'s `summary: string` contract doesn't change.
+- The host's new store reads, if any (names for ref values), use 6.2's
+  accessor if it has landed and the inline form if not
+  ([C5](../milestone.md#c5--branch-scoped-store-reads)).
+
+**Order-free meetings (C9).** Each is an acceptance criterion in both
+slices of its pair, written as "if the other has landed"
+([Dependency graph](../milestone.md#dependency-graph)).
+
+- If 6.1 has landed, this slice writes the database-seeded test that two
+  branches holding one delta id get distinct entries. The in-memory
+  half, two `Delta` objects with one id on two branches through an
+  injected walk, needs no composite key and ships here either way.
+- If 6.8 has landed, `isLead` gets its prose here, with 6.8's label.
+
+**Stories.** In `components/history/history-tab.stories.tsx`, through
+the loader seam: one story per field kind above, a relationship row from
+each side, the pending miss (summary showing), and the failed walk
+(summary kept).
+
+**Canon and inventory edits** (C12). The PR makes:
+
+- `architecture.md → Walk algorithm`: the seed from a copy another row's
+  delete holds; the read as built, in place of the WAL read
+  transaction; the column-level apply through the wrapper, in place of
+  a row-level `applyUndoPayload`.
+- `architecture.md → Concurrency, rollback, error path`: the snapshot
+  sentence as built; "falls back permanently" as the cache's remembered
+  failure, cleared by its branch's eviction; the in-flight guard, which
+  discards a stale walk's rejection too; a gone delta, which is no
+  failure; and whatever of redo and the write-back R3's design pass
+  didn't write.
+- `architecture.md → Cache shape and lifecycle`: the module path chosen,
+  `populate`'s gone outcome, and the walk's skip of the retrieval-count
+  shape.
+- `world.md → History tab` (Search) and the History row of
+  `lists.md → Search bar scope`: search matches the field-name summary
+  and the payload's pre-change values, not the prose a row shows. The
+  `history:tab.scopeSummary` chip follows if the wording changes.
+  `plot.md`'s History bullet defers to `lists.md`.
+- The prose vocabulary, wherever the design route lands it.
+- `observability.md → Subsystem emission inventory`: the walk-failure
+  `warn`.
+- `tech-stack.md → TanStack Query`: "and later the diff cache" becomes
+  present.
+- [`component-inventory.md → Compounds — shipped`](../../../../ui/component-inventory.md#compounds--shipped):
+  the `HistoryTab` row names its diff reads and their loader seam.
+
+## Scope: out
+
+- **The five tables only Diagnostics lists** (`story_entries`,
+  `chapters`, `translations`, `branch_era_flips`, `entry_assets`): their
+  prose and the
+  [Diagnostics delta log](../../../../ui/screens/diagnostics/diagnostics.md#tab-5--delta-log)'s
+  adoption of the cache are M7.3's.
+- **Search.** It stays SQL over the log. The free-text arm matching only
+  a pre-change value is not lifted by the cache; canon's
+  [Search is orthogonal](../../../../architecture.md#search-is-orthogonal)
+  stands, and M4's note that it would lift "until M6.4" is stale.
+- **The reader's undo confirm** keeps the field-name summary.
+- **The close review's formatter** (`close-review-changes.ts`) keeps its
+  `old → new` wording; the renderer may reuse its value helpers if the
+  vocabulary agrees, without changing its output.
+- **The composite `deltas` key and the branch-scoped delta writes**
+  (6.1, C1). This slice reads by branch from its first commit and
+  relies on C1 for the rest.
+- **The redo map and a redo group's branch** (6.2). The hook takes what
+  redo holds when it lands.
+- **History's own branch scoping:** `use-history-target.ts`'s lookup by
+  id and the inline filters in `useStoreNames`
+  (`history-tab.tsx:44-50`) are 6.2's sweep (C5).
+- **The fork, a duplicate and a branch delete** (6.3, 6.6): they evict
+  nothing.
+- **`isLead`'s column and its History label** (6.8).
+
+## Acceptance criteria
+
+1. **The wrapper.** A test in `lib/actions/delta/` (proposed
+   `column-undo.test.ts`) gives a scalar column, an entity `state`
+   partial, a `null` partial on `state`, and a parent-only partial on an
+   unplaced place, and asserts the wrapper returns what a reversal of
+   the same payload writes to the row. An unregistered table throws.
+   `git diff` on `reverse-replay.ts:291-309` shows at most an `export`
+   keyword. `pnpm lint` passes with the walk importing only
+   `@/lib/actions`.
+2. **The read.** A test in `lib/history/diff-walk.test.ts` lands a
+   forward write on the walked target while a walk is pending, at each
+   point the chosen mechanism leaves open, and gets the entry a walk
+   gives with that write wholly before or wholly after it. For a read
+   that is one call, the test instead shows the walk makes one read call
+   per target. A second case does the same with a forward delete of a
+   live link row, and gets no rejection. A third runs
+   `EXPLAIN QUERY PLAN` on the chain read against the test database and
+   finds `deltas_chain_idx`. `git diff lib/db/types.ts` adds no required
+   member to `DbCtx`.
+3. **The read on each platform.** The test database's read is a third
+   implementation beside the platforms', so criterion 2 can't show a
+   platform's read is atomic. If the read crosses the desktop bridge, a
+   case in `electron/db/service.test.ts` shows the handler serves the
+   chain and the row from one synchronous call on one connection: no
+   `await` and no second round trip inside it, and the renderer's half
+   in `lib/db/runtime/client.ts` sends one IPC message per read.
+   `pnpm exec tsc -p electron/tsconfig.json` passes. If the read has a
+   native half, planning confirms that expo-sqlite's synchronous reads
+   can't interleave with `withTransactionSync`, by reading expo-sqlite's
+   source or by a probe on the slot AVD, and records which in
+   Implementation notes.
+4. **The walk.** `lib/history/diff-walk.test.ts`, on the test database
+   with every domain registered, writing through `applyDeltaAction` and
+   the shipped reversals, with every expectation a literal the test
+   wrote:
+   - three updates to one character's `state` (traits, drives, traits
+     again) give each delta `old` equal to its payload and `new` equal to
+     the value just after it;
+   - a lore row updated then deleted seeds from the delete's payload;
+   - a relationship whose character was deleted seeds from the copy in
+     the character's delete, rejects nothing and logs no `warn`;
+   - a target with no row, no head delete and no held copy rejects;
+   - an entity edit carrying `$resolvedPair` puts no `$` key in `old` or
+     `new`;
+   - stepping back through a parent-only payload on a place that a
+     reversal's ref clear left unplaced restores the parent and
+     `unplaced` as one field;
+   - an awareness row with retrieval bumps between two listed updates
+     gives the listed updates their true `old` and `new`, and the bumps
+     get no entry;
+   - a delta read for its row and then pruned by a reversal (a pass's
+     update, reversed as an abort reverses it) resolves as gone, with no
+     `warn`;
+   - after CTRL-Z of a user edit that a later pass's write on the same
+     field survives, the survivor's entry shows its rewritten `old`, and
+     after the redo, its original `old`.
+5. **The cache.** `lib/history/diff-cache.test.ts`, with an injected
+   walk:
+   - a miss, then a `populate`, then a `peek` hit;
+   - two `Delta` objects sharing an id on two branches get distinct
+     entries;
+   - the 2001st entry evicts the least recent, and a `peek` hit refreshes
+     recency;
+   - two concurrent `populate` calls for one key run one walk;
+     `populateBatch` over N deltas on M targets runs M walks;
+   - evicting branch `b` leaves branch `c`'s entries; a walk started
+     before the eviction and resolved after leaves `peek` empty; a
+     `populate` after it runs a second walk;
+   - a walk started before an eviction that rejects after it logs no
+     `warn` and leaves nothing remembered: the next `populate` walks;
+   - a gone outcome logs no `warn`, writes no entry and is not
+     remembered: the next `populate` walks;
+   - a failed walk rejects and logs one `warn` naming the delta id; a
+     second `populate` rejects with no walk and no `warn`; an eviction of
+     its branch lets a third walk run.
+
+   Removing the in-flight guard turns the stale-walk case red; keying on
+   the delta id alone turns the two-branch case red.
+
+6. **The hook.** A test in `lib/actions/delta/` (proposed
+   `post-commit-hook.test.ts`) registers a listener and finds it called
+   once with the branch after each of: a CTRL-Z (`reverseAndPruneDeltaRows`),
+   a reversal by `reverseReplayDeltas` (`reverseReplayGroup`), a redo
+   (`applyRedo`), and a re-run's undo that writes its journal back.
+   Called too when a patcher throws and the reversal rejects at stage
+   `store-sync`. Not called when the transaction throws, on a refusal or
+   on an empty set. A listener that throws leaves the patches emitted,
+   the caller's result unchanged and the error logged. Deleting any one
+   of the three calls turns its case red.
+   `grep -rnE "diff-cache|@/lib/history" lib/actions --include=*.ts`
+   finds nothing outside tests.
+7. **The cache as the app registers it.** The Definition of done's
+   eviction test. In `lib/history/diff-cache-eviction.test.ts` (proposed),
+   on the test database with every domain registered: the test imports
+   the cache only through the module History's host imports (the
+   `@/lib/history` barrel, or the chosen home's) and makes no
+   registration call of its own. It writes a user edit and a later
+   pass's write on the same field, populates the survivor's entry
+   through the real walk, then runs the shipped `undoLastAction` on the
+   edit. `peek(branch, survivor)` is empty, and the next `populate`
+   returns the rewritten `old`, a literal the test wrote. Removing the
+   cache's registration, or moving it into a module that barrel doesn't
+   import, turns it red.
+8. **The renderer.** `lib/history/diff-prose.test.ts`:
+   - canon's example: an entry with `old.state = { traits: ['brave'] }`
+     against a `new.state` holding traits, drives and voice names the
+     added trait and nothing of drives or voice. Iterating `new`'s keys
+     instead turns it red;
+   - a path whose old and new are equal renders nothing;
+   - a relationship's `kind` reads by the tab's side;
+   - one case per field kind, in the wording canon holds once the design
+     route lands it.
+
+   `lib/history/humanize.test.ts`, `lib/history/close-review-changes.test.ts`
+   and the reader's undo-copy tests pass with no expectation changed.
+
+9. **The host.** `components/history/history-tab.test.tsx`:
+   - an update row shows `Modified <labels>` first, then the prose when
+     its read resolves;
+   - a rejected read keeps the summary, and so does a gone one;
+   - create, delete and removal rows never call the loader;
+   - a chunk of N update rows on M targets runs M walks;
+   - an eviction of the tab's branch, fired through the cache's own
+     eviction (the path the hook drives), re-reads a mounted row and
+     shows the new prose with no other trigger; an eviction of another
+     branch re-reads nothing. Replacing the invalidation with
+     `removeQueries` turns it red.
+10. **Stories.** The stories named under Scope pass
+    `pnpm vitest run --project storybook components/history/history-tab.stories.tsx`.
+11. **E2E** (desktop, new spec, proposed
+    `e2e/tests/history-diff-prose.spec.ts`). A World edit of a
+    character's field shows its before-and-after prose in History; CTRL-Z
+    of the edit from the reader (`undoFromReader`,
+    `e2e/flows/navigation.ts`) and then Redo leave History showing the
+    right values. A thread edit in Plot shows its prose. Each step
+    asserts its write in the database first, then the row's text through
+    the same i18n keys the app renders. That flow passes with no
+    eviction at all, which criterion 7 covers. If planning finds a UI
+    path that leaves a later write surviving the undo (see
+    [Open questions](#open-questions)), the spec adds it: the undo shows
+    the survivor's rewritten prose, the redo its original, and removing
+    the cache's registration turns the undo step red.
+    `pnpm build:web && pnpm test:e2e -- history-diff-prose`, with
+    `pnpm electron:compile` first if the bridge changed.
+12. **If 6.1 has landed:** `lib/history/diff-walk.test.ts` holds the
+    database-seeded test that two branches holding one delta id, with
+    different payloads, get distinct entries (C9). It fails with
+    `branch_id` dropped from the walk's chain read.
+13. **If 6.8 has landed:** `lib/history/diff-prose.test.ts` holds a case
+    for the `isLead` flag's prose, set and cleared, under 6.8's label.
+14. **Canon.** Each edit under Scope is in the PR, and
+    `pnpm lint:docs` passes.
+15. **Gates.** `pnpm lint`, `pnpm format:check`, `pnpm typecheck`,
+    `pnpm exec tsc -p electron/tsconfig.json`, `pnpm compiler:check`,
+    `pnpm lint:docs` and `pnpm test:run` pass. Every new user-facing
+    string routes through `t()`.
+
+## Tests
+
+| Level                  | Tool                                                                          | What                                                                                                                                                                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Level                  | Tool                                                                          | What                                                                                                                                                                                                                              |
+| ---                    | ---                                                                           | ---                                                                                                                                                                                                                               |
+| Unit, `lib/actions`    | Vitest, `--project unit`, test database                                       | The wrapper against the reversal's own restore; the hook at its three call sites, after a store-sync failure, and with a throwing listener.                                                                                       |
+| Unit, `lib/history`    | Vitest, `--project unit`, test database                                       | The read's consistency and its index; the walk's seeds, meta keys, column group, bumps with no entry, a gone delta, and survivor rewrites across an undo and a redo; the renderer per field kind; the fallback's tests unchanged. |
+| Unit, cache            | Vitest, `--project unit`, injected walk                                       | Keying, LRU, coalescing, batching, eviction, the in-flight guard on entries and rejections, gone outcomes, remembered failures.                                                                                                   |
+| Unit, registered cache | Vitest, `--project unit`, test database, the real cache as History imports it | A shipped `undoLastAction` evicts the survivor's entry and the next read gives its rewritten `old`.                                                                                                                               |
+| Unit, desktop read     | Vitest, `--project unit`, `electron/db/service.test.ts`                       | If the read crosses the bridge: one synchronous handler call serves the chain and the row.                                                                                                                                        |
+| Component              | Vitest jsdom, `--project unit`, mocked view as `history-tab.test.tsx` does    | Summary first then prose, rejection, gone, eviction refresh through the cache, M walks for M targets.                                                                                                                             |
+| Stories                | Storybook, `--project storybook`                                              | Each field kind, both relationship sides, pending, failed.                                                                                                                                                                        |
+| E2E                    | Playwright, desktop                                                           | Edit, prose, undo, redo, Plot; a survivor only if a UI path reaches one.                                                                                                                                                          |
+| Device                 | Android slot AVD, manual, non-blocking                                        | If the read is platform-split: History on Android shows prose after an edit, and after an undo and a redo.                                                                                                                        |
+
+Mutation checks named under the criteria are run and recorded in the PR
+body: the iteration rule, the in-flight guard, the branch key, each
+hook call site, the cache's registration (criterion 7), the host's
+invalidation, and, if the E2E has a survivor, its registration check.
+
+## Open questions
+
+- **The read's mechanism.** Neither platform sets WAL or has a read
+  transaction; the desktop bridge has `query`, `exec` and a write-only
+  `transaction(ops)` (`electron/preload.ts:34-38`). Options:
+  - A read batch. On desktop, drizzle's sqlite-proxy takes a second,
+    batch callback behind `db.batch([...])` and maps its rows (drizzle
+    docs, verified), so one new IPC channel runs the reads in
+    Electron main in one synchronous handler. On native, expo-sqlite's
+    synchronous reads with no `await` between them can't interleave
+    with `withTransactionSync`. That is inferred, and drizzle's batch
+    docs don't list the expo driver, so planning confirms it
+    (criterion 3).
+  - One statement returning the chain and the row, whose mapping back to
+    field names is then hand-written.
+  - Reading under the row's key lock, as every delta-logged write and
+    reversal takes it (`lib/actions/delta/key-lock.ts`); a held-copy
+    seed would need its holder's key too, and a populate waits behind a
+    long reversal.
+  - A checked read: chain, then row, then the chain's head again,
+    retrying on a change.
+
+  One finding narrows the choice. A reversal, a redo or a write-back
+  that commits mid-walk evicts its branch after its commit: the eviction
+  clears what the walk already wrote, or the in-flight guard keeps it
+  from writing or rejecting, so the read only has to guard forward
+  writes. Those still matter twice: a new update between the halves
+  shifts the newest delta's `new`, and a link row's own delete between
+  them makes a live target read as missing with no delete in its chain,
+  which rejects and is then remembered as a failure.
+
+- **The prose vocabulary.** Canon gives one example sentence and the
+  iteration rule. Wording for the field kinds under Scope is undesigned,
+  and 6.7's planning offers the design route (milestone
+  [Open questions](../milestone.md#open-questions)). Questions it meets:
+  where the vocabulary lands in canon (`world.md → History tab` holds
+  the link-row wording today; `delta-log-row.md → Summary` is the other
+  candidate); what an update renders when every path restates its value
+  (empty, which drops the summary line, or the field-name summary); refs
+  as names, read as link-row names are (working set first, then the
+  stored row, then the latest delete payload, within the tab's branch),
+  with an id that reads nowhere; long text (`description`, `body`) on
+  both sides under the two-line clamp; and whether to reuse the close
+  review's value helpers despite its arrow format.
+- **Writes with no delta.** A reversal's ref clear (a place's parent, a
+  character's faction: `reverse-replay.ts:756-768`), the views a
+  reversal nulls on a kept relationship (`:580-590`), and redo's ref
+  restore (`redo.ts:347-363`) change a row and log nothing. Eviction
+  keeps entries from going stale across them, but a walk seeded from
+  such a row shows the newest delta on that path as having written the
+  cleared value. Default: accept, and say so in canon's Walk algorithm;
+  planning may instead stop the walk at the path.
+- **Does a UI path leave a survivor?** CTRL-Z reaches a World save only
+  when nothing but passes sits above it, and a rollback or CTRL-Z of a
+  turn keeps a pass's facts
+  ([Reverse-replay](../../../../generation-pipeline.md#reverse-replay)),
+  so the write that survives the edit's undo has to be a pass's. Which
+  classifier writes the chosen field from a mock reply (the periodic
+  classifier's reply in `e2e/tests/periodic-classifier.spec.ts` writes
+  happenings and new characters, not a character's `state`), and
+  whether the turn that triggers it is undone first, decides whether
+  criterion 11 gains its survivor step.
+- **The in-flight guard's mechanism** (left open by R3): a per-branch
+  generation counter checked when a walk settles, or tracked in-flight
+  walks dropped on eviction. Either meets criterion 5.
+- **The warn's kind.** `LogSubsystem` has no `history` member
+  (`lib/diagnostics/kinds.ts:1-13`). Planning picks an existing one or
+  adds one, with its inventory line.
+- **React Compiler and `peek`.** That a bare `peek` in render stays
+  memoized after the entry lands is inferred, not tested; reading
+  through the query sidesteps it either way.
+- **A reversal outside the bracket.** Admission refusal
+  (`lib/actions/turns/submit-turn.ts:200`) and boot recovery reverse
+  outside `bracketProseReversal`, which bumps `settleCount`. Eviction
+  refreshes a mounted row's prose either way; whether History's row list
+  refreshes after an admission refusal was not traced and is M4's
+  behavior.
+
+## Implementation notes
+
+_Populated at finish: notable deviations from the plan and resolved
+developer decisions._
