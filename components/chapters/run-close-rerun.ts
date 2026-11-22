@@ -19,7 +19,6 @@ import {
   pipelineErrorDetail,
   type ChainEnd,
 } from '@/lib/pipeline'
-import type { OpenStory } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -135,16 +134,13 @@ export async function runCloseRerun(args: {
   branchId: string
   chapterId: string
   preview: CloseRerunPreview
-  story: OpenStory
   /** startCloseRerun's: the chain's first run reserved, so every refusal is past. */
   onStarted?: () => void
 }): Promise<RerunStartStep> {
-  const { branchId, chapterId, preview, story, onStarted } = args
+  const { branchId, chapterId, preview, onStarted } = args
   let start: CloseRerunStart
   try {
-    start = await startCloseRerun(branchId, chapterId, expectedOf(preview), story, ctx, {
-      onStarted,
-    })
+    start = await startCloseRerun(branchId, chapterId, expectedOf(preview), ctx, { onStarted })
   } catch (error) {
     // A replay failure's message is fixed: log its cause, and whether its write landed.
     const replay = describeDeltaReplayError(error)

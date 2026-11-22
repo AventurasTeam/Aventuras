@@ -424,8 +424,7 @@ function RerunConfirmHost({
   const { preview } = target
 
   const confirm = () => {
-    const story = currentStoryStore.getCurrentStory()
-    if (pendingRef.current || story == null || story.branchId !== branchId) return
+    if (pendingRef.current || currentStoryStore.getCurrentStory()?.branchId !== branchId) return
     pendingRef.current = true
     setPending(true)
     setHeldInFlight(false)
@@ -435,7 +434,7 @@ function RerunConfirmHost({
       if (chapterOverlaysStore.getState().rerunConfirm === request)
         chapterOverlaysStore.closeRerunConfirm({ reopen: false })
     }
-    void runCloseRerun({ branchId, chapterId, preview, story, onStarted }).then((step) => {
+    void runCloseRerun({ branchId, chapterId, preview, onStarted }).then((step) => {
       pendingRef.current = false
       setPending(false)
       onStarting(request, false)

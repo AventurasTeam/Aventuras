@@ -157,7 +157,7 @@ function expectedOf(preview: CloseRerunPreview): CloseRerunExpected {
   }
 }
 
-type StartOpts = { onStarted?: () => void; steps?: readonly ScriptedStep[]; story?: OpenStory }
+type StartOpts = { onStarted?: () => void; steps?: readonly ScriptedStep[] }
 
 // The close used up its script, so the re-run's model is scripted again from its first step.
 function start(
@@ -166,7 +166,7 @@ function start(
   opts: StartOpts = {},
 ): Promise<CloseRerunStart> {
   script(generateToolStepMock, opts.steps ?? [STAND_IN_STEP])
-  return startCloseRerun(h.fx.branchId, chapterId, expected, opts.story ?? openStory(), h.fx.ctx, {
+  return startCloseRerun(h.fx.branchId, chapterId, expected, h.fx.ctx, {
     onStarted: opts.onStarted,
   })
 }
@@ -372,7 +372,6 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
       c.h.fx.branchId,
       c.chapterId,
       expected,
-      openStory(),
       { ...c.h.fx.ctx, db },
       { onStarted },
     )
@@ -387,17 +386,16 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     const c = await closed()
     await turnSince(c.h)
     const expected = expectedOf(await previewOf(c))
-    const story = openStory()
     const before = await snapshot(c.h)
 
     // A pass left `running` with none live holds the branch.
     await setClassifierStatus(c.h.fx, { state: 'running', processedThrough: endPosition(c.h) })
-    expect(await start(c, expected, { story })).toEqual({
+    expect(await start(c, expected)).toEqual({
       outcome: 'rejected',
       blockedBy: CLASSIFIER_HELD,
     })
     currentStoryStore.__reset()
-    expect(await start(c, expected, { story })).toEqual({
+    expect(await start(c, expected)).toEqual({
       outcome: 'rejected',
       blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen,
     })
@@ -463,32 +461,13 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
     await turnSince(c.h)
     const expected = expectedOf(await previewOf(c))
     const open = openStory()
-    const story: OpenStory = {
+    currentStoryStore.set({
       ...open,
       settings: { ...open.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
-    }
-    currentStoryStore.set(story)
-    const before = await snapshot(c.h)
-
-    expect(await start(c, expected, { story })).toMatchObject({
-      status: 'rejected',
-      code: CLOSE_RERUN_REFUSAL.closeOwed,
-    })
-    await expectNothingChanged(c.h, before)
-  })
-
-  it("refuses close-owed by the open story's auto-close settings, not a stale story it was handed", async () => {
-    const c = await closed()
-    await turnSince(c.h)
-    const expected = expectedOf(await previewOf(c))
-    const stale = openStory()
-    currentStoryStore.set({
-      ...stale,
-      settings: { ...stale.settings, chapterAutoClose: true, chapterTokenThreshold: 1 },
     })
     const before = await snapshot(c.h)
 
-    expect(await start(c, expected, { story: stale })).toMatchObject({
+    expect(await start(c, expected)).toMatchObject({
       status: 'rejected',
       code: CLOSE_RERUN_REFUSAL.closeOwed,
     })
@@ -637,8 +616,8 @@ describe('startCloseRerun holds the gate from its preview to the re-run', () => 
     script(generateToolStepMock, [STAND_IN_STEP])
 
     const results = await Promise.all([
-      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, openStory(), c.h.fx.ctx),
-      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, openStory(), c.h.fx.ctx),
+      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, c.h.fx.ctx),
+      startCloseRerun(c.h.fx.branchId, c.chapterId, expected, c.h.fx.ctx),
     ])
 
     const ends = results.filter((result): result is ChainEnd => 'result' in result)

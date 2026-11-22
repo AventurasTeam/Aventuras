@@ -363,13 +363,12 @@ type RerunStartArgs = {
 /**
  * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
  * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or
- * the chain's origin throws. `story` is unread: settings come from the store's open story.
+ * the chain's origin throws. Settings come from the store's open story.
  */
 export async function startCloseRerun(
   branchId: string,
   chapterId: string,
   expected: CloseRerunExpected,
-  story: OpenStory,
   ctx: DbCtx,
   /**
    * onStarted fires once, when the chain's first run reserves (after the mark ends); never on a

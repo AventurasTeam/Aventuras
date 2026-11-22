@@ -11,7 +11,6 @@ import {
   type RollbackCounts,
 } from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -21,7 +20,6 @@ import {
   type ChainEnd,
   type PipelineError,
 } from '@/lib/pipeline'
-import type { OpenStory } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import { expectedOf, rerunEndNotice, rerunStartOutcome, runCloseRerun } from './run-close-rerun'
@@ -116,24 +114,7 @@ const END = {
   passAborted: { kind: PERIODIC_CLASSIFIER_KIND, result: { ...RUN, outcome: 'aborted' } },
 } as const satisfies Record<string, ChainEnd>
 
-const STORY: OpenStory = {
-  storyId: 'story_1',
-  branchId: 'br_1',
-  definition: storyDefinitionSchema.parse({
-    mode: 'adventure',
-    leadEntityId: 'char_kael',
-    narration: 'second',
-    genre: { label: 'Fantasy', promptBody: '' },
-    tone: { label: 'Wry', promptBody: '' },
-    setting: '',
-    calendarSystemId: 'gregorian',
-    worldTimeOrigin: { year: 0 },
-  }),
-  settings: STORY_SETTINGS_DEFAULTS,
-}
-
-const rerun = () =>
-  runCloseRerun({ branchId: 'br_1', chapterId: 'chap_2', preview: PREVIEW, story: STORY })
+const rerun = () => runCloseRerun({ branchId: 'br_1', chapterId: 'chap_2', preview: PREVIEW })
 
 let info: MockInstance<typeof toast.info>
 let warning: MockInstance<typeof toast.warning>
@@ -305,7 +286,6 @@ describe('runCloseRerun', () => {
         branchId: 'br_1',
         chapterId: 'chap_2',
         preview: PREVIEW,
-        story: STORY,
         onStarted,
       }),
     ).toStrictEqual({ step: 'ended' })
@@ -316,7 +296,6 @@ describe('runCloseRerun', () => {
         shortcut: { targetEntryId: 'entry_58', counts: COUNTS },
         reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
       },
-      STORY,
       { db: expect.anything(), runInTransaction: expect.any(Function) },
       { onStarted },
     )

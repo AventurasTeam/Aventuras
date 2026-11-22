@@ -438,7 +438,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     openRerun({ fromReview: true })
     const props = await confirmShown()
     act(() => props.onConfirm())
-    act(() => actions.start.mock.calls[0]?.[5]?.onStarted?.())
+    act(() => actions.start.mock.calls[0]?.[4]?.onStarted?.())
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(chapterOverlaysStore.getState().review).toBeNull()
     await act(async () => release(END.committed))
@@ -447,7 +447,6 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
       'br_1',
       'chap_2',
       { shortcut: null, reversal: PREVIEW.reversal },
-      expect.objectContaining({ branchId: 'br_1' }),
       { db: {}, runInTransaction: expect.any(Function) },
       { onStarted: expect.any(Function) },
     )
@@ -473,7 +472,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     const opened = chapterOverlaysStore.getState().rerunConfirm
     expect(opened).not.toBeNull()
 
-    act(() => actions.start.mock.calls[0]?.[5]?.onStarted?.())
+    act(() => actions.start.mock.calls[0]?.[4]?.onStarted?.())
     expect(chapterOverlaysStore.getState().rerunConfirm).toBe(opened)
     expect(confirmView.mounted).toBe(true)
 
@@ -631,7 +630,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(actions.start).toHaveBeenCalledTimes(1)
 
     // startCloseRerun's onStarted: the chain's first run reserved.
-    act(() => actions.start.mock.calls[0]?.[5]?.onStarted?.())
+    act(() => actions.start.mock.calls[0]?.[4]?.onStarted?.())
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(confirmView.mounted).toBe(false)
 
@@ -689,18 +688,6 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(confirmView.props?.pending).toBe(false)
     expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.countsChanged'))
     expect(chapterOverlaysStore.getState().rerunConfirm).not.toBeNull()
-  })
-
-  it('starts on the open story as it stands at the press', async () => {
-    actions.start.mockResolvedValue(END.committed)
-    renderHost()
-    openRerun()
-    const props = await confirmShown()
-    const live = { ...story('br_1'), settings: { ...STORY_SETTINGS_DEFAULTS } }
-    act(() => currentStoryStore.set(live))
-    act(() => props.onConfirm())
-    await waitFor(() => expect(actions.start).toHaveBeenCalledTimes(1))
-    expect(actions.start.mock.calls[0]?.[3]).toBe(live)
   })
 
   it('a close landing after a start refused in flight toasts not-latest itself', async () => {
