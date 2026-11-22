@@ -124,3 +124,11 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/chapters/review-window.tsx`), so every open logs the
   dialog's "Missing Description" warning; `main` logs it too. Raised by
   Slice 5.13's Task 29 smoke (2026-11-22).
+- **The delete and rollback confirms' disabled reasons don't show on
+  Android.** Their confirm actions are plain `Button`s with
+  `disabledReason` (`components/chapters/chapter-delete-confirm.tsx`,
+  `components/reader/rollback-confirm.tsx`), which on native is only an
+  accessibility hint, so the run blocking an in-flight refusal goes
+  unnamed there. The re-run confirm renders its actions through
+  `ReasonButton`, which shows the reason under a disabled button; both
+  confirms predate it. Raised by Slice 5.13's PR 3 review (2026-11-22).
