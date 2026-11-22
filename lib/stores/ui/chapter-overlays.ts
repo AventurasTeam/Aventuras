@@ -111,8 +111,14 @@ function guarded(proceed: () => void): void {
 export const chapterOverlaysStore = {
   useOverlays: <T>(selector: (s: ChapterOverlaysState) => T): T => useStore(store, selector),
   getState: (): ChapterOverlaysState => store.getState(),
-  openReviewWindow: (input: { chapterId: string }): void =>
-    store.setState({ review: reviewOf(input.chapterId) }),
+  /**
+   * Refused while a re-run request is held: its confirm mounts once its read lands, and never
+   * stacks over the window.
+   */
+  openReviewWindow: (input: { chapterId: string }): void => {
+    if (store.getState().rerunConfirm != null) return
+    store.setState({ review: reviewOf(input.chapterId) })
+  },
   closeReviewWindow: (): void => store.setState({ review: null }),
   /** Runs the current surface's guard before holding the request, so no trigger skips it. */
   openCloseModal: ({ branchId, endEntryId }: CloseModalRequest): void =>

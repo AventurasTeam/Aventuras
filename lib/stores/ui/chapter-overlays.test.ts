@@ -334,6 +334,21 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
     expect(chapterOverlaysStore.getState().review).toBeNull()
   })
 
+  // The confirm mounts only once its first read lands, so the window could open in between.
+  it('refuses to open the review window while a request is held, and opens it once none is', () => {
+    chapterOverlaysStore.openRerunConfirm({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
+    const before = chapterOverlaysStore.getState()
+    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    expect(chapterOverlaysStore.getState()).toBe(before)
+
+    chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      chapterId: 'chap_hero_2',
+      actionId: 'act_close_2',
+    })
+  })
+
   it('closing with no request held changes nothing', () => {
     chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
     const before = chapterOverlaysStore.getState()
