@@ -1197,7 +1197,8 @@ the re-run starts:
   highest-position non-system entry strictly before `B`, the earliest
   turn with an entry written after that close (a reply regenerated since
   taking its player's action with it) — auto-named `Ch. <seq> re-run`,
-  switches `stories.current_branch_id` to the new branch, and starts the
+  switches `stories.current_branch_id` to the new branch in the fork's
+  own transaction, and starts the
   re-run there for the same `chapterId`. For an auto-close or head
   manual close `N` is `chapter.end_entry_id`; for an earlier manual
   close with pre-close open-region turns before `B`, `N` is the last
@@ -1207,8 +1208,8 @@ the re-run starts:
   [`data-model.md → Branch model`](../data-model.md#branch-model)).
   Every start refusal — pre-flight, chapter still the latest with a
   close, counts, no close owed on the post-fork region, plus fork's own
-  pre-conditions (idle gate, `classifier_status.state !== 'running'`, no
-  pending embedder swap) — is checked on `parent` before the fork
+  refusals (idle gate, no pending embedder swap, no unfinished run the
+  copy would carry) — is checked on `parent` before the fork
   commits. Fork+switch and re-run are two actions: if the re-run is
   cancelled, fails, or crashes, the new branch stays with its copied
   prior close restored via the journal, ready to retry with zero turns

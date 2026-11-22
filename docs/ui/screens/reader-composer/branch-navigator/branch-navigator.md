@@ -72,9 +72,20 @@ the full identity load — see
 is required at creation time.
 
 Click anywhere on the row body (anywhere except the action icons)
-→ switch active branch, close the navigator. Reader reloads
-showing the new branch's content + the chip's count badge updates
-to reflect the new current.
+→ switch to that branch and close the navigator; the current
+branch's row only closes it. A switch writes
+`stories.current_branch_id`, loads the branch, and replaces the
+story's whole screen stack with a fresh reader on it, so Back lands on
+the Story List, and the composer's unsent draft doesn't carry, with no
+prompt. The chip's count badge reflects the new current. From the
+press to that navigation the reader holds its gated controls and its
+ways out (Actions, the settings entry), so nothing starts on the old
+branch while the new one loads. A load that fails puts the pointer
+back and leaves the reader where it was, and so does a switch whose
+reader loses focus or unmounts before the new branch shows. A switch
+isn't a story open: the
+[story-open upgrade prompt](../../../../memory/retrieval.md#the-story-open-upgrade-prompt)
+doesn't fire again.
 
 ### Row actions — inline icons
 
@@ -113,10 +124,10 @@ and putting the answer first costs nothing.
 
 ### During generation — switch / delete / create blocked
 
-While the
+While the generation gate is closed — a run going, any phase the
 [generation-status pill](../../../principles.md#top-bar-design-rule)
-is active (any phase it shows, a memory update and a chapter close
-included), branch lifecycle operations are **paused**:
+shows and a suggestion refresh included, a turn pending in its queue,
+or a reversal — branch lifecycle operations are **paused**:
 
 - **Switch** — row body click is non-interactive. Rows render at
   reduced opacity. A small banner at the top of the navigator
@@ -126,6 +137,9 @@ included), branch lifecycle operations are **paused**:
   chapter close from the pill's Cancel, which moves it to the next
   turn. Switching isn't a head reversal, so it doesn't interrupt one
   ([`principles.md → Edit restrictions during in-flight generation`](../../../principles.md#edit-restrictions-during-in-flight-generation)).
+  A branch held until a restart, by a re-run whose abort couldn't take
+  itself back, pauses nothing: switching away from it and back stays
+  live.
 - **Delete** — `×` icon hidden across all rows during generation
   (same hide rule used for the current branch). It also hides while
   an embedder swap is pending on the story, which embeds across the
@@ -142,9 +156,12 @@ included), branch lifecycle operations are **paused**:
 `branches.name` and doesn't touch branch state or interfere with
 the in-flight pipeline.
 
-The `stories.current_branch_id` mutation is what generation
-depends on, so blocking switching is the load-bearing protection.
-The other restrictions are conservative consistency: if you can't
+Runs don't read `stories.current_branch_id`: each keeps the branch
+it started on. Switching pauses because a switch replaces the reader
+that a run streams into and is cancelled from, and because a turn
+could otherwise start on the old branch while the new one loads; the
+switch action refuses under the gate too, as the backstop to the
+paused rows. The other restrictions are conservative consistency: if you can't
 switch, allowing delete/create produces a UI where some lifecycle
 ops work mid-generation and others don't, which is more confusing
 than blocking them as a set.
@@ -265,15 +282,19 @@ modal centered over the reader:
 
 ### After confirm
 
-1. New `branches` row written with `parent_branch_id = <current>`,
-   `fork_entry_id = <triggering entry id>`, `name = <input>`.
-2. Branch-scoped rows materialized per the
-   [hard-fork copy procedure](../../../../data-model.md#branch-model).
-3. `stories.current_branch_id` updates to the new branch.
-4. Reader reloads on the new branch (content is byte-identical up
-   to the fork point). The chip's count badge increments and now
-   shows; `Esc → Esc` cycle of "open navigator → see new branch
-   highlighted" is the user's mental confirmation.
+1. One transaction writes the new `branches` row
+   (`parent_branch_id = <current>`,
+   `fork_entry_id = <triggering entry id>`, `name = <input>`),
+   materializes the branch-scoped rows per the
+   [hard-fork copy procedure](../../../../data-model.md#branch-model),
+   and points `stories.current_branch_id` at the new branch.
+2. A fresh reader on the new branch replaces the story's screen
+   stack, as a [switch](#per-row-anatomy) does (content is
+   byte-identical up to the fork point). From the confirm to that
+   navigation the reader holds its gated controls and its ways out.
+   The chip's count badge increments and now shows; `Esc → Esc`
+   cycle of "open navigator → see new branch highlighted" is the
+   user's mental confirmation.
 
 No toast — the chip update + reader being on the new branch is
 self-evidence.

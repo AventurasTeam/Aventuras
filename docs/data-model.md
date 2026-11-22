@@ -466,20 +466,18 @@ out of our way to drop).
 Branching is a **hard fork** — the new branch is fully standalone,
 including its change history. Semantically, forking `parent` from a
 non-system entry `N` produces the exact state, delta log, and journal
-set of **snapshotting `parent` (minus `probe_captures` and any
-`kind='system'` tail entry) and rolling back to `N`**, leaving `parent`
+set of **snapshotting `parent` (minus `probe_captures`, `pipeline_runs`
+and any `kind='system'` tail entry) and rolling back to `N`**, leaving `parent`
 and its in-memory redo stack untouched; the new branch starts with an
 empty one.
 
 **Pre-conditions (refused before any write):** generation on `parent` is
 idle
 ([`branch-navigator.md → During generation`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)),
-`parent.classifier_status.state !== 'running'` (a branch held by an
-unrecovered orphan pass cannot be forked, or resetting status on the
-child would bake uncommitted orphan deltas into it with no recovery
-marker), no embedder swap is pending on the story, and `N` exists on
+no embedder swap is pending on the story, and `N` exists on
 `parent` with `N.kind !== 'system'` (UI exposes fork on `opening` and
-`ai_reply`). Fork runs under `parent`'s exclusive branch write lock.
+`ai_reply`). An unfinished run refuses once the plan exists (step 1).
+Fork runs under `parent`'s exclusive branch write lock.
 
 **Single-transaction execution (plan-on-parent, execute-on-child).**
 Let `B` be the earliest non-system entry on `parent` with
@@ -499,13 +497,37 @@ Let `B` be the earliest non-system entry on `parent` with
    `translation` — survives with its delta unless the closure pulls it
    in. A `ReversalIntegrityError` aborts before any SQL runs. When `B`
    does not exist, the plan is empty.
+
+   **An unfinished run refuses the fork.** `pipeline_runs` doesn't
+   copy, so a run's writes carried into the child would have no marker
+   there to recover them. For each row on `parent` with `finished_at`
+   NULL — an orphan boot couldn't reverse, or a run whose abort couldn't
+   take itself back — the fork refuses, before any SQL runs, when:
+   - a delta survives into the copy under the run's `action_id` (every
+     one does when `B` does not exist). A create the plan re-owns isn't
+     one: it changes hands on the child as recovery would leave it on
+     `parent`;
+   - the run's journal survives (the four-case table below); or
+   - the run is a close's re-run whose reversal committed
+     (`rerun_chapter_id` set) and the plan keeps its chapter, which would
+     leave the chapter with its earlier close half undone and nothing to
+     restore it.
+
+   A fork from an entry before the orphan's earliest anchor prunes all
+   of it: before the user's action for a turn, the window's first entry
+   for a pass, the chapter's end entry for a close or its re-run, the
+   refreshed entry for a suggestion refresh. An orphan anchored on the
+   opening (a branch's first pass, a refresh of the opening's chips)
+   leaves no such entry, since every fork keeps the opening. A held
+   branch takes the same test: its re-run's marker is open.
+
 2. **Copy + rewind in one atomic transaction.** Inside one
    `runInTransaction` batch:
    - Insert the `branches` row (`parent_branch_id = parent`,
      `fork_entry_id = N`, idle `classifier_status` with clamped
      `processedThrough` below).
    - Copy domain tables per the manifest below (excluding
-     `kind='system'` entries and `probe_captures`).
+     `kind='system'` entries, `probe_captures` and `pipeline_runs`).
    - Copy only **surviving** `deltas` (all rows when `B` does not exist;
      otherwise excluding the plan's full prune set
      `(set.rows \ reowned) ∪ prunedHolders ∪ strandedWrites`, so
@@ -536,25 +558,26 @@ way at fork unless flagged otherwise. The Duplicate column is a
 [story duplicate](#story-duplicate), which copies a branch into a new
 story as it stands, with no rewind; the Notes describe the fork:
 
-| Table                     | Fork                    | Duplicate          | Notes                                                                                                                                                                                                                                                                                                                       |
-| ------------------------- | ----------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `story_entries`           | Copy non-system, rewind | Copy all rows      | Copy `kind != 'system'` rows (a parent's tail system error card never copies); the rewind removes `B..head`.                                                                                                                                                                                                                |
-| `entities`                | Copy current rows       | Copy current rows  | Per-branch state after rewind reflects state at entry N.                                                                                                                                                                                                                                                                    |
-| `lore`                    | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `threads`                 | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `happenings`              | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `happening_involvements`  | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `happening_awareness`     | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `character_relationships` | Copy current rows       | Copy current rows  | Branch-scoped per the schema.                                                                                                                                                                                                                                                                                               |
-| `chapters`                | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `branch_era_flips`        | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                           |
-| `translations`            | Copy current rows       | Copy current rows  | Composite PK includes `branch_id`; translations fork with branches.                                                                                                                                                                                                                                                         |
-| `entry_assets`            | Copy current, rewind    | Copy current rows  | Rewind removes rows for `B..head`; surviving rows point at the same `assets[id]` on disk (share-by-reference).                                                                                                                                                                                                              |
-| `assets`                  | Share by reference      | Share by reference | Hard-fork for narrative data; shared-by-reference for binary media. See [Cleanup on delete — trash-can pattern](#assets-images--future-media).                                                                                                                                                                              |
-| `*_vec` (embeddings)      | Copy post-rewind        | Copy all rows      | Copied last inside the same transaction with synthesized `pk = <newBranchId>:<id>:<model_id>`, filtered to surviving rows on the new branch so removed rows' vectors are never written or scanned. Storage-optimization followup parked.                                                                                    |
-| `probe_captures`          | **Not copied**          | **Not copied**     | The only branch-scoped table the fork skips. A capture is meaningful only against the candidate pool that existed when it was written, and a fork immediately diverges that pool; the new branch starts empty. See [probe.md → Branch fork and capture portability](./memory/probe.md#branch-fork-and-capture-portability). |
-| `deltas`                  | Copy survivors          | Copy all rows      | Surviving deltas only (source-blind survival-anchor predicate minus the reversal plan's full prune set), then surviving-delta updates (prior-value rewrites, held-delete payload patches, re-owned creates) apply on the new branch. Composite PK `(branch_id, id)` keeps delta IDs verbatim.                               |
-| `reversal_journals`       | Copy survivors          | Copy all rows      | Copied only when the re-run's group survives and no rewind sweeps from below its first `log_position` (four-case table above).                                                                                                                                                                                              |
+| Table                     | Fork                    | Duplicate          | Notes                                                                                                                                                                                                                                                                                                                        |
+| ------------------------- | ----------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `story_entries`           | Copy non-system, rewind | Copy all rows      | Copy `kind != 'system'` rows (a parent's tail system error card never copies); the rewind removes `B..head`.                                                                                                                                                                                                                 |
+| `entities`                | Copy current rows       | Copy current rows  | Per-branch state after rewind reflects state at entry N.                                                                                                                                                                                                                                                                     |
+| `lore`                    | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `threads`                 | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `happenings`              | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `happening_involvements`  | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `happening_awareness`     | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `character_relationships` | Copy current rows       | Copy current rows  | Branch-scoped per the schema.                                                                                                                                                                                                                                                                                                |
+| `chapters`                | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `branch_era_flips`        | Copy current rows       | Copy current rows  | —                                                                                                                                                                                                                                                                                                                            |
+| `translations`            | Copy current rows       | Copy current rows  | Composite PK includes `branch_id`; translations fork with branches.                                                                                                                                                                                                                                                          |
+| `entry_assets`            | Copy current, rewind    | Copy current rows  | Rewind removes rows for `B..head`; surviving rows point at the same `assets[id]` on disk (share-by-reference).                                                                                                                                                                                                               |
+| `assets`                  | Share by reference      | Share by reference | Hard-fork for narrative data; shared-by-reference for binary media. See [Cleanup on delete — trash-can pattern](#assets-images--future-media).                                                                                                                                                                               |
+| `*_vec` (embeddings)      | Copy post-rewind        | Copy all rows      | Copied last inside the same transaction with synthesized `pk = <newBranchId>:<id>:<model_id>`, filtered to surviving rows on the new branch so removed rows' vectors are never written or scanned. Storage-optimization followup parked.                                                                                     |
+| `probe_captures`          | **Not copied**          | **Not copied**     | Skipped by both copies, like `pipeline_runs`. A capture is meaningful only against the candidate pool that existed when it was written, and a fork immediately diverges that pool; the new branch starts empty. See [probe.md → Branch fork and capture portability](./memory/probe.md#branch-fork-and-capture-portability). |
+| `deltas`                  | Copy survivors          | Copy all rows      | Surviving deltas only (source-blind survival-anchor predicate minus the reversal plan's full prune set), then surviving-delta updates (prior-value rewrites, held-delete payload patches, re-owned creates) apply on the new branch. Composite PK `(branch_id, id)` keeps delta IDs verbatim.                                |
+| `reversal_journals`       | Copy survivors          | Copy all rows      | Copied only when the re-run's group survives and no rewind sweeps from below its first `log_position` (four-case table above).                                                                                                                                                                                               |
+| `pipeline_runs`           | **Not copied**          | **Not copied**     | Run bookkeeping, not story state: a copy starts with no run history. An unfinished run's writes never copy either: fork and duplicate refuse a copy that would carry them.                                                                                                                                                   |
 
 If a branch-scoped table is added to the schema later, it MUST get a
 row here in the same commit, with both its Fork and its Duplicate
@@ -608,20 +631,23 @@ the story's first included: under the hard fork no branch depends on
 another, so being first is a label. The delete is one transaction of
 per-table deletes scoped by the branch, the set
 [story deletion](#story-deletion) runs — every branch-scoped table,
-`reversal_journals` included, and the branch's vec0 rows by their
+`reversal_journals` included, every `pipeline_runs` row that names the
+branch, finished or not, and the branch's vec0 rows by their
 `branch_id` column — then re-parents the branch's children to its own parent, null
 when it had none, then deletes the `branches` row. No DB-level
 `ON DELETE` cascade exists. A child's `fork_entry_id` stays: the child
 holds that entry itself, copied with its id. The removed
 `entry_assets` rows trash their assets under the cross-story count
 ([Assets](#assets-images--future-media)). The branch's in-memory
-records go with it: `generationStore`'s `deferred`, `pendingClose` and
-`pendingRerun`, and its redo stack. The delete waits on the generation
-gate, and refuses while an embedder swap is pending on the story, since
-the swap embeds across the story's branches and would write vectors
-for one that's gone. A held branch (`classifier_status.state` is
-`'running'`) can be deleted: its orphan pass's deltas go with it, and
-boot recovery's unfinished run then reverses nothing. Nothing undoes a
+records go with it: `generationStore`'s `deferred`, `pendingClose`,
+`pendingRerun` and `heldBranches`, and its redo stack. The delete
+refuses while the generation gate is closed, on any branch, and while
+an embedder swap is pending on the story, since the swap embeds across
+the story's branches and would write vectors for one that's gone. A
+held branch can be deleted, whether an unrecovered orphan holds it
+(`classifier_status.state` is `'running'`) or a re-run's failed abort
+does (`heldBranches`): the orphan's deltas, journal and run row go with
+it, so the next boot finds nothing of it to recover. Nothing undoes a
 branch delete; the confirm counts what it loses
 ([`branch-navigator.md → Delete confirm`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#delete-confirm)).
 
@@ -1423,7 +1449,7 @@ that needs a lead and has none every action that starts a turn refuses
 A pass or a close runs regardless; its context treats a missing lead
 as absent.
 
-**At most one lead per branch, held by the writers.** Four logged
+**At most one lead per branch, held by the writers.** Three logged
 writes touch the flag, each one user group:
 
 - **Set** turns every flagged row on the branch off, then the new lead
@@ -1432,8 +1458,6 @@ writes touch the flag, each one user group:
   doesn't need a lead.
 - **Deleting the lead** takes the flag with the row. The delete's undo
   record holds the row, flag included, so CTRL-Z restores the lead.
-- **A collision merge** whose disappearing row is the lead turns the
-  survivor's flag on in the merge's group.
 
 Story creation writes the flag unlogged: the wizard flags its lead's
 cast row in the root branch, the floor like the rest of the cast. No
@@ -1444,6 +1468,18 @@ on. Because a set clears every flagged row, it repairs a double; a
 reader finding two logs an error and reads the branch as having no
 lead. A lead the classifier retires, or one the user stages or retires,
 stays the lead; only setting one requires `active`.
+
+**A merge never removes a character the branch's entries name.** A
+character is held when it carries the flag or an entry on the branch is
+stamped with it (below). The collision dialog fixes a held row as the
+one that survives, and the merge refuses a held losing row as the
+backstop (`lead-entity`); a pair whose rows are both held can't merge,
+and the user renames one or keeps them distinct
+([`world.md → Merge`](./ui/screens/world/world.md#merge)). So no merge
+moves the flag: a lead kept as the surviving row keeps it, and a
+surviving row that isn't the lead stays unflagged. A former lead counts
+as the current one does: merged away, it would leave every turn written
+under it naming a row that's gone.
 
 **A lead change is a World edit.** Its deltas carry no entry, so
 rollback and regenerate sweep a change made after their target, and
@@ -1467,7 +1503,9 @@ Save & regenerate stamps the new reply with the lead then, and the
 user's action keeps its own stamp; the wizard stamps the opening. An
 edit keeps the stamp, a fork copies it, and undo or rollback removes it
 with its entry. A stamp naming a deleted character stays, and no name
-is kept with it: readers resolve the name, so a rename shows. Readers
+is kept with it: readers resolve the name, so a rename shows. Since no
+merge removes a stamped character, a stamp names a missing row only
+after a delete. Readers
 of past turns mark where the lead changes
 ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
 
@@ -1527,8 +1565,9 @@ transaction; **referenced/shared resources survive.**
   (`story_entries`, `entities`, `character_relationships`, `lore`, `threads`,
   `happenings`, `happening_involvements`, `happening_awareness`, `chapters`,
   `branch_era_flips`, `translations`, `probe_captures`, `deltas`,
-  `reversal_journals`, `entry_assets`), plus story-scoped `pipeline_runs` and
-  `wizard_sessions` and the `branches` themselves, then the `stories` row. The cascade enumerates **every** table
+  `reversal_journals`, `entry_assets`, `pipeline_runs`), plus, by story,
+  `pipeline_runs` rows that name no branch and `wizard_sessions`, and the
+  `branches` themselves, then the `stories` row. The cascade enumerates **every** table
   even when empty, so future content cannot be orphaned. No DB-level
   `ON DELETE` cascade exists; the action layer deletes child→parent.
 - **Referenced (survives):** `vault_calendars` is a shared vault resource —
@@ -1586,11 +1625,12 @@ list's Duplicate dialog starts it
   rows point at them. Rows the story references by id outside itself (vault
   calendars, packs, provider profiles) stay references.
 
-**Refused before any write** when the story is a draft; when a copied branch's
-`classifier_status.state` is `'running'`, an unrecovered orphan pass whose
-uncommitted writes would bake into the copy with no recovery marker, the
-fork's reason; when an embedder swap is pending on the story; or when a run is
-registered on any of its branches.
+**Refused before any write** when the story is a draft; when a copied branch
+has an unfinished run (a `pipeline_runs` row with `finished_at` NULL), whose
+writes would bake into the copy with no marker to recover them; when a copied
+branch's `classifier_status.state` is `'running'`, a hold the copy would
+inherit, since a duplicate copies the status verbatim; when an embedder swap is
+pending on the story; or when a run is registered on any of its branches.
 
 **One transaction, no lock.** One `runInTransaction` batch of
 `INSERT … SELECT`: the `stories` row, then `branches` in `created_at` order
@@ -2907,7 +2947,8 @@ had never been written, since an undo reverts only its own write
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 Forward writes only ever append; only a reversal prunes or edits, and
 what it edits is a delete's payload, a kept create's owner or a
-surviving delta's prior value. A
+surviving delta's prior value; a redo of it puts back what it pruned
+and edited. A
 close's re-run also journals what its reversal prunes and writes, so
 undoing the re-run writes the close it replaced back, or undoes the
 chapter's close altogether when the journal can't be written back
@@ -3222,9 +3263,10 @@ just update the row.
 with an FK to `branches.id`, so only a branch-scoped row can be
 described by a delta at all. Everything above that scope is deltaless
 by construction: the `stories` row (`definition`, `settings`, and the
-identity columns), the `branches` registry itself, `pipeline_runs`,
-`wizard_sessions`, and the unscoped `app_settings`, `vault_calendars`
-and `assets`. The delta log is a branch's narrative history; story
+identity columns), the `branches` registry itself, `wizard_sessions`,
+and the unscoped `app_settings`, `vault_calendars`
+and `assets`. `pipeline_runs` names a branch but is deltaless too: it's
+run bookkeeping, not story state. The delta log is a branch's narrative history; story
 definition is authoring config that sits above any one branch, so it
 has no place in it.
 

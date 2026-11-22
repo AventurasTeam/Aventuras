@@ -279,7 +279,8 @@ no branch to scope by (`system.table.ts:44-54`).
 - **One read, three rules.** 6.1 exports the unfinished run rows of a
   branch. Story duplicate refuses a copied branch that has one. Fork
   refuses when a delta of an unfinished run would survive into the
-  copy, or its journal would, judged against the plan's prune set; this
+  copy, or its journal would, or, for a re-run whose reversal
+  committed, its chapter would, judged against the plan's prune set; this
   replaces canon's blanket refusal of a parent whose
   `classifier_status.state` is `'running'`, and keeps the
   recovery-failure policy's branch "from an entry before the orphan".
@@ -860,12 +861,13 @@ resolves the rest.
   character; C7's predicate default for the survivor copy; C10's rule
   for where the two-flags error is logged; C12's narrower gate on 6.1;
   and the "second to land" criteria. Read them all at slice planning.
-- **Canon batch.** Four rulings were made at promotion (2026-11-22) and
-  are not yet in canon. One `aventuras-design` pass lands them before
-  the tasks they govern start (C12). The fork's precise refusal (R1)
-  rests on `lib/actions/delta`, so that pass checks it against the code
-  before the canon commit. What each ruling is, and the canon it
-  changes:
+- **Canon batch: landed 2026-11-22.** Four rulings were made at
+  promotion (2026-11-22), and one `aventuras-design` pass landed them,
+  so the tasks C12 gates can start. Its check of R1 against
+  `lib/actions/delta` added a third fork refusal, approved the same day:
+  an unfinished re-run whose reversal committed, when the plan keeps its
+  chapter. A create the plan re-owns doesn't count as carried. What each
+  ruling is, and the canon it changed:
   - **R1, unrecovered runs (C2).** `pipeline_runs` gains a branch;
     recovery scopes by it; a duplicate refuses a branch with an
     unfinished run; a fork refuses only when the copy would carry one;
@@ -873,8 +875,8 @@ resolves the rest.
     `generation-pipeline.md` (Invariants' `actionId` bullet,
     Recovery-failure policy, Startup recovery pass, the `pipeline_runs`
     table under Crash recovery, Multi-run txState's "both records" and
-    "nothing clears"); `data-model.md` (the `pipeline_runs` diagram
-    row; Branch model's pre-conditions, its manifest, which gains a
+    "nothing clears"); `data-model.md` (Branch model's pre-conditions
+    and plan step, its manifest, which gains a
     `pipeline_runs` row and whose `probe_captures` row says "the only
     branch-scoped table the fork skips", and Deleting a branch; Story
     deletion, which calls `pipeline_runs` story-scoped; Story
@@ -893,15 +895,24 @@ resolves the rest.
     `current_branch_id` mutation, and After confirm);
     `reader-composer.md` (Loaded-set model's branch switch, the Edge
     cases line that a refresh aborts on a switch, the composer draft);
-    `principles.md`, if its in-flight rule names the switch.
+    `principles.md` (What's gated gains branch delete; a branch held
+    until a restart still lets the user switch away); the held re-run's
+    error toast now reads "this branch can't be changed", and its string
+    in code changes with 6.4, which makes switching live.
   - **R3, diff-cache eviction (C9).** A reversal, a redo and a journal
     write-back evict their branch's entries. Canon: `architecture.md`, Delta history diff resolution (Cache shape and lifecycle;
-    Concurrency, rollback, error path).
+    Concurrency, rollback, error path); the two lines that say only a
+    reversal rewrites a prior value (`generation-pipeline.md`,
+    Reverse-replay; `data-model.md`, the delta log) say a redo puts it
+    back.
   - **R4, stamped characters and merges (C10).** A character that the
     lead flag or an entry's stamp names survives a merge it is in; no
     merge passes the flag. Canon: `data-model.md`, The lead (four
     writers become three; the merge bullet); `world.md`, Merge (the surviving-row picker and the flag line);
-    `principles.md`, Mode, lead, and narration, if it names the merge.
+    `patterns/collision-resolve.md` (the default canonical and Merge's
+    submit rule); `reader-composer.md`'s undo-target row for a lead
+    write. `principles.md`, Mode, lead, and narration, doesn't name the
+    merge.
 - **Sizes.** 6.6 is planned at 19, and delete and duplicate share only
   the refusal read and the branch read. If its plan skeleton passes 20
   it splits in two, branch delete and story duplicate. The redo map

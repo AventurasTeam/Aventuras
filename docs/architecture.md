@@ -1581,9 +1581,11 @@ populateBatch(deltas: Delta[]): Promise<void>      // groups by branch and targe
 LRU eviction, hard cap **2000 entries**. Conservative estimate
 ~500 bytes per entry, ~1 MB at cap. Process lifetime; no
 persistence. Cold every launch by design, and cleared otherwise only
-by a reversal, which evicts its own branch's entries of every row
-whose deltas it replays or rewrites: an update's old and new hold
-until a reversal rewrites a surviving delta's prior value
+by a reversal, a redo or a journal write-back, each evicting every
+entry of its branch
+([Concurrency, rollback, error path](#concurrency-rollback-error-path)):
+an update's old and new hold until one of them rewrites a surviving
+delta's prior value
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
 
 **Entries key on `(branch_id, delta.id)`.** A delta's id repeats
@@ -1646,14 +1648,22 @@ read snapshot is the entire concurrency contract. New deltas
 committing after a walk completes don't affect cached entries: a
 forward write never changes an earlier delta's `(old, new)`.
 
-A reversal is the one invalidation. It deletes the deltas it
-replays and rewrites the prior values of surviving later deltas on
-the rows it touches
-([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)),
-so it evicts every cached entry on those rows on its branch, as
-[Cache shape and lifecycle](#cache-shape-and-lifecycle) says. An
-entry for a deleted delta needs nothing more: nothing reads it,
-since the delta renders on no surface anymore.
+Three writes invalidate, each on one branch: a reversal, which
+deletes the deltas it replays and rewrites the prior values of
+surviving later deltas on the rows it touches
+([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback));
+a redo, which puts both back; and a re-run's journal write-back,
+which restores the close's rows and deltas the re-run's reversal
+took. Each evicts every cached entry of its branch, not only those
+on the rows it touched, so the cache needs no list of what a write
+reached. The eviction is a post-commit hook the action layer owns
+and the cache registers with, so the delta layer never imports the
+cache. It fires after the transaction commits and before the store
+sync, which can throw; a transaction that rolls back evicts nothing.
+A fork, a story duplicate and a branch delete evict nothing
+([Cache shape and lifecycle](#cache-shape-and-lifecycle)). An entry
+for a deleted delta needs nothing more: nothing reads it, since the
+delta renders on no surface anymore.
 
 Single renderer process at v1; cross-window coordination would
 require IPC and is out of scope until multi-window support

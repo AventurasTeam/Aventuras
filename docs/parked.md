@@ -916,10 +916,11 @@ runtime registry and throws `unknown target_table` when it misses, so
 an orphan written by a build that carried a domain the running build
 does not is unreversible by any retry. For a pass's orphan, boot then
 leaves its branch `running` indefinitely
-(`resetStuckClassifierRunState`), so it takes no turns and cannot be
-forked: every Send fails with the recovery error
+(`resetStuckClassifierRunState`), so it takes no turns and no fork
+leaves it behind: every Send fails with the recovery error
 ([`memory/classifier.md → Failure policy`](./memory/classifier.md#failure-policy)),
-and fork refuses a held branch
+a fork whose copy would carry the orphan refuses, and one from before it
+must reverse the orphan's deltas on the copy, which fails the same way
 ([`data-model.md → Branch model`](./data-model.md#branch-model)). Reaching it requires running a build older than its own
 data — a downgrade, or a domain renamed without a migration. Not
 corruption, and not otherwise reachable. Of the other reversal
@@ -3528,8 +3529,8 @@ text?" confirm gate. Toast is lighter-weight and uses the existing
 more explicit. Surface on user reports.
 
 A failed or cancelled turn's text shares the gap once it goes back to
-the draft: a draft doesn't survive a restart, nor a reader closed
-under the dispatch
+the draft: a draft doesn't survive a restart or a branch switch, nor a
+reader closed under the dispatch
 ([`reader-composer.md → Custody of the turn's text`](./ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
 Persisting drafts closes both.
 

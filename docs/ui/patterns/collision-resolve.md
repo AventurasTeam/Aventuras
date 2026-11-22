@@ -76,7 +76,12 @@ type CollisionResolveDialogProps = {
 
 The caller sorts by `createdAt` before passing, matching the spec's
 "older = default canonical" rule. The dialog never reorders
-internally — caller data is the source of truth.
+internally — caller data is the source of truth. A row the branch's
+entries name, by the lead flag or an entry's lead stamp, overrides
+that default: the caller marks which rows are held, a held row is the
+canonical and the picker can't change it, and with both rows held the
+pair can't merge
+([`world.md → Merge`](../screens/world/world.md#merge)).
 
 The header, the reason line and the basis line follow
 [`world.md → Resolve dialog`](../screens/world/world.md#resolve-dialog).
@@ -307,14 +312,17 @@ Transition rules:
   in practice the dialog is keyed by entity ids so unmount handles
   most cases.
 
-Initial state: `canonicalId` = `defaultCanonicalId`, `fromOther`
-empty, and `deselectedTags = []` and `deselectedKeywords = []`.
+Initial state: `canonicalId` = `defaultCanonicalId` (the held row
+when one row is held, else A), `fromOther` empty, and
+`deselectedTags = []` and `deselectedKeywords = []`.
 
 ### Submit-enabled rules
 
-- **Merge** — always enabled once the canonical is picked. Init
-  defaults canonical to A, so this is true from open. The user
-  cannot get stuck in an un-submittable state.
+- **Merge** — enabled once the canonical is picked, unless both
+  rows are held: then Merge is unavailable and the dialog opens on
+  Rename. Init defaults the canonical, so otherwise this is true
+  from open, and the user cannot get stuck in an un-submittable
+  state.
 - **Rename** — enabled when a name changed, both trimmed names are
   non-empty, and they no longer match by name
   ([Resolution shape](#resolution-shape)). A case-only change still

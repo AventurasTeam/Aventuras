@@ -1088,6 +1088,17 @@ row tends to have more accumulated state (relations, lore
 links, history), so absorbing the newer one into it preserves
 more by default.
 
+**A row the branch's entries name survives.** When one row of the
+pair is the branch's lead, or an entry on the branch is stamped with
+it as its lead
+([`data-model.md → The lead`](../../../data-model.md#the-lead)), the
+picker is fixed to that row whatever its age, and a line under it
+reads `<name> is or was this branch's lead, so this row stays.` When
+both rows are, the pair can't merge: `Merge into one` is unavailable,
+the dialog opens on `Rename one`, and a line under the paths reads
+`Both have been this branch's lead, so they can't merge. Rename one or
+keep them distinct.`
+
 Below the picker, a **per-field resolution table** lists fields
 that diverge between the two:
 
@@ -1231,12 +1242,14 @@ The primary button echoes the canonical pick, its side as well as
 its name, to keep the destructive direction obvious: the two names
 match by construction.
 
-When the non-canonical is the branch's lead, the canonical becomes the
-lead in the merge's group
+No merge moves the lead flag: a lead kept as the canonical keeps it,
+and a canonical that isn't the lead stays unflagged
 ([`data-model.md → The lead`](../../../data-model.md#the-lead)).
 
 The merge refuses, with the reason inline and nothing written, when
-the canonical location descends from the
+the non-canonical is the branch's lead or an entry on the branch is
+stamped with it (`lead-entity`, the backstop to the fixed picker), and
+when the canonical location descends from the
 non-canonical through another location (`parent-cycle`: rewriting
 that location's parent to the canonical would make the canonical its
 own ancestor — picking the other row as canonical merges cleanly).

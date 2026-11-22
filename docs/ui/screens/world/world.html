@@ -323,6 +323,12 @@
   .canon-picker { display: flex; gap: 6px; padding: 6px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 3px; margin-bottom: 14px; }
   .canon-picker .seg { flex: 1; padding: 8px 10px; text-align: center; cursor: pointer; border-radius: 2px; font-size: 12px; color: var(--ink-muted); border: 1px solid transparent; }
   .canon-picker .seg.active { background: var(--bg-region); color: var(--ink); border-color: var(--line); }
+  /* A row the lead flag or an entry's stamp names survives (world.md → Merge): the picker is fixed to it. */
+  .canon-picker.locked .seg { cursor: default; }
+  .canon-picker.locked .seg:not(.active) { opacity: 0.5; }
+  .held-note { font-size: 11px; color: var(--ink-muted); margin: -8px 0 14px; }
+  .resolve-path-btn:disabled { opacity: 0.45; cursor: default; }
+  .paths-note { padding: 6px 18px 0; font-size: 11px; color: var(--ink-muted); }
   .field-grid { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 0 14px; font-size: 12px; }
   .field-grid .h { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); padding: 0 0 6px; border-bottom: 1px solid var(--line-soft); }
   .field-grid .row-l { color: var(--ink-muted); padding: 8px 0; border-bottom: 1px dotted var(--line-soft); }
@@ -600,6 +606,12 @@
     <button class="rb-btn" data-pair="keyword">via keyword</button>
     <button class="rb-btn" data-pair="place">same place parent</button>
     <button class="rb-btn" data-pair="duplicate">chapter close duplicate</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">held:</span>
+    <button class="rb-btn active" data-held="none">neither</button>
+    <button class="rb-btn" data-held="one">newer is or was lead</button>
+    <button class="rb-btn" data-held="both">both</button>
   </div>
   <span class="rb-note">click a row · tab · ⓘ help · + new menu &middot; flip viewport via 1/2/3</span>
 </div>
@@ -1471,6 +1483,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
       <button class="resolve-path-btn" data-path="rename">Rename one</button>
       <button class="resolve-path-btn" data-path="keep">Keep as distinct</button>
     </div>
+    <div class="paths-note" id="paths-note" hidden>Both have been this branch&rsquo;s lead, so they can&rsquo;t merge. Rename one or keep them distinct.</div>
 
     <!-- MERGE body — canonical picker + per-field grid + relations summary -->
     <div class="resolve-body active" data-path="merge">
@@ -1482,6 +1495,7 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
           <span class="newer-name">Kael</span> &middot; Newer &middot; just now
         </div>
       </div>
+      <div class="held-note" id="held-note" hidden><span class="newer-name">Kael</span> is or was this branch&rsquo;s lead, so this row stays.</div>
       <!-- Only fields that diverge between the two rows render here.
            Identical values aren't surfaced (no decision to make). -->
       <div class="field-grid">
@@ -1784,7 +1798,11 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     overlay?.classList.toggle('open', r !== 'closed');
     if (r !== 'closed') setResolvePath(r);
   }
+  // A held row (the lead flag, or an entry on the branch stamped with it) survives a merge: one held
+  // row fixes the picker to it, two take Merge away (world.md → Merge).
+  let held = 'none';
   function setResolvePath(p) {
+    if (p === 'merge' && held === 'both') p = 'rename';
     document.querySelectorAll('.resolve-path-btn').forEach(b => b.classList.toggle('active', b.dataset.path === p));
     document.querySelectorAll('.resolve-body').forEach(b => b.classList.toggle('active', b.dataset.path === p));
     document.querySelectorAll('[data-resolve]').forEach(b => b.classList.toggle('active', b.dataset.resolve === p));
@@ -1885,8 +1903,19 @@ The orbit cycle is 240 days. The three moons align once per cycle, and on that d
     if (lbl) lbl.textContent = mergeLabel();
   }
   document.querySelectorAll('.canon-picker .seg').forEach(s => {
-    s.addEventListener('click', () => setCanonical(s.dataset.canon));
+    s.addEventListener('click', () => { if (held !== 'one') setCanonical(s.dataset.canon); });
   });
+  function setHeld(h) {
+    held = h;
+    document.querySelectorAll('.rb-btn[data-held]').forEach(b => b.classList.toggle('active', b.dataset.held === h));
+    document.getElementById('canon-picker').classList.toggle('locked', h === 'one');
+    document.getElementById('held-note').hidden = h !== 'one';
+    document.getElementById('paths-note').hidden = h !== 'both';
+    document.querySelector('.resolve-path-btn[data-path="merge"]').disabled = h === 'both';
+    setCanonical(h === 'one' ? 'B' : 'A');
+    if (h === 'both' && document.querySelector('.resolve-path-btn.active')?.dataset.path === 'merge') setResolvePath('rename');
+  }
+  document.querySelectorAll('.rb-btn[data-held]').forEach(b => b.addEventListener('click', () => setHeld(b.dataset.held)));
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && document.getElementById('resolve-overlay')?.classList.contains('open')) {

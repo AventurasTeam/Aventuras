@@ -599,7 +599,7 @@ type TxState = {
   deferred: ReadonlyMap<string /* branchId */, { pass?: true; close?: true }> // interrupted runs, run before that branch's next turn; in memory only; the orchestrator records it, and Send or a close entry's Retry clears a close no longer owed
   pendingClose: ReadonlyMap<string /* branchId */, { endEntryId: string }> // a manual close's pick, owed once phase 0's passes catch up; a close the threshold owes keeps none
   pendingRerun: ReadonlyMap<string /* branchId */, { chapterId: string }> // a close's re-run, for its chain's life, whatever ends it; never owed
-  heldBranches: ReadonlyMap<string /* branchId */, { storyId: string | null }> // a re-run whose abort's reversal didn't commit holds its branch until a restart; in memory only
+  heldBranches: ReadonlyMap<string /* branchId */, { storyId: string | null }> // a re-run whose abort's reversal didn't commit holds its branch until a restart or the branch's delete; in memory only
 }
 
 type PendingTurn = { readonly branchId: string } // identity is the token, so a stale end can't free another turn's mark
@@ -635,7 +635,8 @@ records and clears nothing. Other writers only
 clear: Send, or a close entry's `Retry`, clears its branch's `close`
 slot when `closeOwed` reads false, as after a rollback below the
 threshold ([chainsTo on predecessor](#chainsto-on-predecessor)), and
-deleting a story drops both records for each of its branches. A newly recorded
+deleting a story or a branch drops every record of each branch it removes,
+`pendingRerun` and `heldBranches` included. A newly recorded
 deferral emits `run_deferred` on the bus naming the slot it recorded,
 which raises that slot's toast.
 
@@ -669,8 +670,9 @@ branch runs as that chapter's re-run
 back: the reversal failed without committing, so the re-run's writes,
 its journal and its open marker are boot recovery's
 ([Recovery-failure policy](#recovery-failure-policy)). The orchestrator
-writes it in the update that removes the run, and nothing clears it: a
-restart drops it with the rest of `txState`.
+writes it in the update that removes the run, and only a delete of its
+branch or its story clears it; a restart drops it with the rest of
+`txState`.
 
 ### Gate derivation as a selector
 
@@ -1203,6 +1205,10 @@ CREATE TABLE pipeline_runs (
   action_id   TEXT NOT NULL,
   story_id    TEXT NULL,       -- populated at beginRun from calling context;
                                -- NULL for hypothetical non-story-scoped runs
+  branch_id   TEXT NULL REFERENCES branches(id),
+                               -- the run's branch, set at beginRun;
+                               -- NULL for a run with no story, or a row
+                               -- written before the column
   started_at  INTEGER NOT NULL,
   finished_at INTEGER NULL,
   outcome     TEXT    NULL,   -- 'completed' | 'aborted' | 'failed' | 'recovered'
@@ -1211,7 +1217,7 @@ CREATE TABLE pipeline_runs (
 ```
 
 - `beginRun` writes the row with `finished_at = NULL` and populates
-  `story_id` from the run's calling context.
+  `story_id` and `branch_id` from the run's calling context.
 - `commitRun` / `abortRun` set `finished_at` and `outcome`.
   `abortRun` writes them inside the reversal's own transaction, so a
   reversal that rolls back leaves the row open for the
@@ -1248,7 +1254,12 @@ Atomicity windows worth being honest about:
   reversal that can't commit either leaves the orphan to boot.
 
 Rows are kept after `finished_at` is set — diagnostic surface (run
-history, recovery audit). Pruning policy is a future concern.
+history, recovery audit). Pruning policy is a future concern. A branch
+delete removes the rows that name the branch, finished ones too, since
+`branch_id` is a foreign key
+([`data-model.md → Branch model`](./data-model.md#branch-model)), and a
+story delete removes the story's
+([Story deletion](./data-model.md#story-deletion)).
 
 #### Startup recovery pass
 
@@ -1297,11 +1308,17 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
   for (const orphan of orphans) {
     try {
       const settled = { reversed: false }
+      // The orphan's branch scopes its group, journal and chapter reads; a row written
+      // before branch_id existed has none and reads by the id alone.
       // The marker write joins the reversal's transaction, so it never claims a
       // reversal that rolled back. An orphan that reversed nothing and wrote no
       // journal back is deleted instead: it has no diagnostic value.
       const result = await reverseRunGroup(
-        { actionId: orphan.action_id, branchId: null, rerunChapterId: orphan.rerun_chapter_id },
+        {
+          actionId: orphan.action_id,
+          branchId: orphan.branch_id,
+          rerunChapterId: orphan.rerun_chapter_id,
+        },
         (anything) => {
           settled.reversed = anything
           return [
@@ -1493,8 +1510,10 @@ nothing but a held branch stops a turn. That write can be one the
 reversal would break, and
 [Reverse-replay](#reverse-replay) refuses the reversal as `write-back`
 on each boot. The orphan's writes stay, and for a pass its branch
-takes no turns; a branch from an entry before the orphan starts idle
-and can.
+takes no turns; a fork from an entry before the orphan's earliest
+anchor leaves them behind and starts idle, so it can, unless the orphan
+anchors on the opening
+([`data-model.md → Branch model`](./data-model.md#branch-model)).
 
 ### `chainsTo` on predecessor
 
@@ -1755,7 +1774,11 @@ pipeline-failure path handles it) and startup `recoverInFlightRuns`
 (catches `DeltaReplayError` directly and routes to the recovery-failure
 policy above), call `reverseRunGroup` instead: it reverses any other
 run's group exactly as this does, and a close's re-run's with its
-journal written back or its close undone (below). They pass their
+journal written back or its close undone (below). It reads the group,
+the journal and the chapter on the branch it's given: abort passes the
+run's, and recovery the marker's, which a marker written before
+`branch_id` existed doesn't have, so its reads go by the id alone. They
+pass their
 `pipeline_runs` marker write as its `settleOps`, which hears whether
 anything was reversed or written back, so the marker commits or rolls
 back with the reversal and a re-run that stopped before its first own
@@ -1835,7 +1858,8 @@ delta, and the keyword authors a close reads
 credit a restored term to the write that added it. A survivor the
 rewrite leaves restating its field keeps the key, since a payload's
 keys say who wrote a field: a user edit stays the user's. Only a
-reversal rewrites a prior value, and it never deletes a survivor.
+reversal rewrites a prior value, and it never deletes a survivor; a
+redo of it puts the original back.
 
 The field-by-field record can't tell one user write apart: removing a
 whole record, as World's Save drops an emptied `stackables`, records
@@ -3017,11 +3041,13 @@ to any of these alongside whatever causes the relaxation.
   ([`data-model.md → Branch model`](./data-model.md#branch-model)), so a
   past action's id can name a group on several branches, and a lookup
   of a past action scopes by branch, as `reversal_journals`'
-  `(branch_id, action_id)` key does. A live or orphaned run's id names
-  deltas on one branch only, since fork and duplicate refuse while a
-  run is registered or a branch is held, so reverse-replay of a run —
-  an abort, a failed turn's own rollback, boot recovery — selects by
-  the id alone.
+  `(branch_id, action_id)` key does. A live or orphaned run's deltas
+  and journal sit on its own branch only: neither copy runs while a run
+  is registered, and both refuse a copy that would carry an unfinished
+  run's writes. Reverse-replay of a run — an abort, a failed turn's own
+  rollback, boot recovery — still reads on the run's branch, which its
+  marker records, since a re-run's chapter id repeats on every copy; a
+  marker written before `branch_id` existed reads by the id alone.
 - **Chained transitions are synchronous.** Relies on Zustand's
   setState being synchronous; if the state library swaps and the
   property breaks, the no-user-edit-window guarantee breaks too.

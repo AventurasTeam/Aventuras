@@ -276,7 +276,7 @@ probe_captures {
 }
 ```
 
-Branch-scoped, but the only branch-scoped table a fork skips — see
+Branch-scoped, but a fork skips it, as it does `pipeline_runs` — see
 the branch-copy manifest under
 [`data-model.md` → Branch model](../data-model.md#branch-model).
 **Captures are NOT delta-logged** — they're diagnostic, not story

@@ -333,7 +333,8 @@ mid-flight. A pass is never an undo target; CTRL-Z steps over it.
 
 User-origin mutations to: story entries, entities (fields, status,
 state, `injection_mode`), happenings, awareness links, lore,
-threads, branch operations (rollback, switch, branch creation),
+threads, branch operations (rollback, switch, branch creation and
+delete),
 chapter metadata edits (title, theme, summary, keywords), chapter
 delete and re-run, translations, story settings, app settings that feed
 `generationContext`, calendar swap, lead switch, mode switch,
@@ -449,7 +450,9 @@ committing holds its branch until the app restarts, with no pill and no
 Cancel, and every editable control on that branch, Send included,
 disables with it
 ([`chapter-close.md → Re-running a close`](../memory/chapter-close.md#re-running-a-close)).
-Leaving the story stays open, since nothing runs.
+Leaving the story stays open, since nothing runs, and so does switching
+to another branch
+([`branch-navigator.md → During generation`](./screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)).
 
 Suggestion refresh is a hard-gate run too, and may run beside a pass
 or a close, but not beside a close's re-run: while a re-run's chain

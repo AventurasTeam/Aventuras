@@ -398,7 +398,7 @@ it replaces stands. An interrupt or Cancel toasts
 warning `Re-run failed. Chapter 5's close is as it was.` with its
 reason. Either one whose undo of the re-run fails without committing
 toasts the error
-`The re-run couldn't be undone. Restart the app to restore chapter 5's close; until then, the story can't be changed.`
+`The re-run couldn't be undone. Restart the app to restore chapter 5's close; until then, this branch can't be changed.`
 instead, and the branch is held until then
 ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)). A commit leaves the banner's done state as a close's does,
 `Chapter 5's close re-ran [Review] [×]`, a warning when tasks stopped
@@ -586,7 +586,7 @@ deltas, or from the redo snapshot's, and the first match wins:
 | `chapter_close` with a `chapters` create                                       | chapter N's close                                                                                                                                     | unseen |
 | `chapter_close` with a `chapters` update and no create                         | chapter N's re-run                                                                                                                                    | unseen |
 | `chapter_close` with no `chapters` delta, the work a divider-only removal kept | the kept close work at entry #N, the end entry its deltas anchor on                                                                                   | unseen |
-| A user group writing `is_lead`, besides a delete or a merge                    | making `<name>` the lead, the row it sets; removing `<name>` as lead, the row it clears, when it sets none                                            | unseen |
+| A user group writing `is_lead`, besides a delete                               | making `<name>` the lead, the row it sets; removing `<name>` as lead, the row it clears, when it sets none                                            | unseen |
 | Any other user group on one row besides entries                                | adding, deleting or your edit to `<name>`, by the delta's op                                                                                          | unseen |
 | Any other user group on several rows                                           | your changes to `<name>` and N more, `<name>` being the first row besides entries it wrote                                                            | unseen |
 | Anything else                                                                  | the latest change                                                                                                                                     | unseen |
@@ -976,9 +976,9 @@ wrapped twice; a non-empty draft wins and the user is told the text
 was dropped rather than losing it silently. A reader closed under the
 dispatch has no composer to take the text, and nothing claims it was
 restored. A branch left under `Dismiss` or a regenerate drops the text
-too, since one composer serves every branch and its draft is now the
-other branch's; no toast tells the user, and a warning in the log
-records the drop.
+too: a switch mounts a fresh reader whose composer starts empty, and
+the text belongs to the branch left. No toast tells the user, and a
+warning in the log records the drop.
 
 A pass or close entry's `Retry` whose work commits, or a close's that
 finds no close owed or whose pick can no longer end a chapter, clears the entry through `Dismiss` only when the composer can take its text back, and asks
@@ -1030,7 +1030,7 @@ stayed, to be undone before sending again, and the branch reloads.
 
 This leaves a failed turn's text under the same custody as any unsent
 draft, including the same limit: composer input is pre-submit state
-and does not survive a restart, the wart the
+and does not survive a restart or a branch switch, the wart the
 [restore-draft mechanism](../../../parked.md#restore-draft-mechanism-for-tap-after-typing-on-suggestion-chips)
 entry tracks. Closing that gap means persisting drafts generally, not
 giving failure entries a second storage role.
@@ -1297,10 +1297,12 @@ not a deletion.
   periodic classifier on classifier-fold); the suggestions field
   stays undefined and the strip falls back to empty-state ⟳
   Generate.
-- **Branch switch with chips in flight.** Per-turn pipelines commit
-  before a branch switch fires (existing reader transaction
-  behavior). A `suggestion-refresh` in flight aborts on branch
-  switch — non-transactional, cancellable.
+- **Branch switch with chips in flight.** A switch waits for every
+  run, a `suggestion-refresh` included: the navigator pauses its rows
+  while one holds the gate
+  ([`branch-navigator.md → During generation`](./branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)).
+  The reader still aborts a refresh in flight when it unmounts, as a
+  backstop.
 - **A reversal fired while a re-roll is in flight.** The refresh
   holds the reader's edit gate (`hard-gate`), so undo, redo, entry
   edit and rollback all reject for its duration, and Send and the
@@ -1508,10 +1510,13 @@ reload of the reader's document resets the slice to the tail too,
 leaving the window as it is
 ([`reader-document.md → Failure and recovery`](../../patterns/reader-document.md#failure-and-recovery)).
 
-**Branch switch.** Resets the window to the recent ~50 entries of
-the new branch, and the slice with it, scrolled to bottom. An open
-inline edit with a dirty draft is guarded first, per
-[Inline edit session](#inline-edit-session).
+**Branch switch.** Mounts a fresh reader on the new branch,
+replacing the story's screen stack
+([`branch-navigator.md → Per-row anatomy`](./branch-navigator/branch-navigator.md#per-row-anatomy)):
+its window is the recent ~50 entries, and the slice with it, scrolled
+to bottom. An open inline edit with a dirty draft is guarded first,
+per [Inline edit session](#inline-edit-session); the composer's unsent
+draft doesn't carry.
 
 ### Autoscroll
 

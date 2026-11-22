@@ -59,10 +59,9 @@ shipped rollback.
 - [`data-model.md → Branch model`](../../../../data-model.md#branch-model),
   whole: the definition, pre-conditions, the single-transaction
   execution, the four journal cases, the manifest, `classifier_status`
-  at fork and the primary-key paragraph. Read the pre-conditions as R1's
-  canon pass leaves them: until it lands they still refuse a parent
-  whose `classifier_status.state` is `'running'`, the blanket refusal
-  this slice replaces (C2).
+  at fork and the primary-key paragraph. R1's canon pass replaced the
+  blanket refusal of a parent whose `classifier_status.state` is
+  `'running'` with step 1's unfinished-run refusal (C2).
 - [`data-model.md → Survival anchor`](../../../../data-model.md#survival-anchor):
   the window predicate `resolveSweep` builds.
 - [`data-model.md → Entry mutability & rollback`](../../../../data-model.md#entry-mutability--rollback),
@@ -255,7 +254,10 @@ typed refusal. It lives in `lib/actions` (suggested:
   - **`N` is missing** on the parent, **or is `system`**.
   - **An unfinished run the copy would carry** (R1, C2): for an
     unfinished run row of the parent, from 6.1's read, a delta of that
-    run the plan doesn't prune, or its journal the plan doesn't drop.
+    run the plan doesn't prune or re-own, its journal the plan doesn't
+    drop, or, for a re-run whose reversal committed (`rerun_chapter_id`
+    set), its chapter the plan keeps
+    ([`data-model.md → Branch model`](../../../../data-model.md#branch-model)).
     This replaces canon's blanket refusal of a parent whose
     `classifier_status.state` is `'running'`. A fork from an entry
     before the run's writes goes ahead.
@@ -556,8 +558,11 @@ files named are suggestions the plan may rename, with this doc amended.
    registered hard-gate run, a pending turn, a reversal in progress, a
    pending swap, `N` missing, `N` `system`, an unfinished run whose
    delta would survive, an unfinished re-run whose journal would
-   survive, a `B` with no create delta, and a closure that refuses as a
-   `ReversalIntegrityError`.
+   survive, an unfinished re-run whose reversal committed, with no
+   delta of its own and its journal dropped, forked at its chapter's
+   end, a `B` with no create delta, and a closure that refuses as a
+   `ReversalIntegrityError`. An unfinished run whose only surviving
+   delta is a create the plan re-owns doesn't refuse.
 5. The same file: the unfinished run of (4), forked from an entry
    before every entry its writes are anchored on, succeeds, and the
    child holds none of its deltas. A parent in `heldBranches` forked
@@ -738,12 +743,15 @@ files named are suggestions the plan may rename, with this doc amended.
     `bracketProseReversal` does: a fork refuses under the gate.
   - Which "idle" holds across stories: `isUserEditBlocked` counts a run
     on any story.
-- **R1, reading "survives" from the plan.** A delta of the run in
-  `plan.prunedDeltas` doesn't survive. A re-owned create does, under a
-  new `action_id` (`reverse-replay.ts:182-186`), so recovery can't find
-  it by the run's id; whether it counts as carried is open. A journal
-  survives unless `plan.droppedJournals` holds it. A run row with no
-  delta and no journal carries nothing.
+- **R1, reading "survives" from the plan.** Settled by the canon pass
+  ([`data-model.md → Branch model`](../../../../data-model.md#branch-model)).
+  A delta of the run in `plan.prunedDeltas` doesn't survive. A
+  re-owned create doesn't count as carried: it takes a new `action_id`
+  (`reverse-replay.ts:182-186`), as recovery on the parent would leave
+  it. A journal survives unless `plan.droppedJournals` holds it. A
+  re-run marker with `rerun_chapter_id` set carries its chapter's state
+  even with no delta and no journal, so its chapter surviving the plan
+  refuses.
 - **How the seed runs an action.** How `scripts/seed` and the on-device
   reseed run the fork's core. `scripts/seed/index.ts`'s `--overlay` path already loads the
   action layer, but every E2E spec runs `pnpm db:seed`, so its load
