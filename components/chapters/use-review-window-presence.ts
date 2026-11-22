@@ -54,15 +54,12 @@ export function useReviewWindowPresence({
     return () => latest.current.afterExit.clear()
   }, [reopenHeld])
 
+  // Ends the exit itself, not through the held run: a reopen requested before its hold registered
+  // would otherwise wait for a dismissal that already fired.
   const onExited = useCallback(() => {
-    const { afterExit: held, isRequestedNow: requestedNow } = latest.current
     setPresentedId(null)
-    if (requestedNow()) {
-      held.runHeld()
-      return
-    }
-    setShown(null)
     setExitingId(null)
+    if (!latest.current.isRequestedNow()) setShown(null)
   }, [])
   const onPresented = useCallback((id: string) => setPresentedId(id), [])
   const open = requested != null && requested.id !== exitingId

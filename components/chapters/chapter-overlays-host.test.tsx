@@ -741,6 +741,21 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(view.mounts).toBe(1)
   })
 
+  it('reopened as its phone exit ends, before the reopen renders, opens once the exit has ended', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    const { onExited } = shown()
+
+    act(() => {
+      chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' })
+      onExited?.()
+    })
+
+    expect(shown().open).toBe(true)
+    expect(view.mounts).toBe(1)
+  })
+
   it("a direct close while the window is closed doesn't drop the reopen held behind it", async () => {
     view.phone = true
     const props = await openReady()
