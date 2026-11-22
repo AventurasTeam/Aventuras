@@ -66,8 +66,7 @@ function openMigratedTo(tags: readonly string[]): DatabaseSync {
 
 const T = 1_767_225_600_000
 
-// Spaced, in a key order no serializer would pick, with non-ASCII text: the rebuild must copy the
-// stored text, not a re-serialization of it.
+// Spaced as no JSON serializer writes it, so a rebuild that re-serializes the payload changes it.
 const DELETE_PAYLOAD =
   '{"name": "Øren Vále",  "id": "char_oren", "branchId": "br_x", "kind": "character", ' +
   '"status": "active", "relationships": [{"id": "rel_oren_mira", "branchId": "br_x", ' +
@@ -94,7 +93,11 @@ const BACKFILL_CASES: [label: string, runId: string, branchId: string | null][] 
   ['an unfinished run with deltas on X', 'run_turn_x', 'br_x'],
   ['an unfinished re-run with a journal on Y and no delta', 'run_rerun_y', 'br_y'],
   ['an unfinished re-run whose chapter is on Z, with no delta or journal', 'run_rerun_z', 'br_z'],
-  ['an unfinished re-run naming no chapter, with no delta or journal', 'run_rerun_lost', null],
+  [
+    "an unfinished re-run naming a chapter that isn't there, with no delta or journal",
+    'run_rerun_lost',
+    null,
+  ],
   ['an unfinished run with none of the three', 'run_bare', null],
   ['a finished run with deltas', 'run_turn_done', null],
   ['a finished close with deltas', 'run_close_z', null],
@@ -321,8 +324,8 @@ describe.each(RUNNERS)(
 )
 
 describe('the M6 migration steps on disk', () => {
-  // Android looks each step up by its bundle key, not its filename: a step missing from the
-  // bundle crashes boot there while desktop, reading the folder, boots fine.
+  // Android looks each step up by its journal idx in the bundle, not its filename: a step missing
+  // from the bundle, or bound to another step's file, breaks boot there while desktop boots fine.
   it('are wired into the native bundle, the backfill right after the rebuild', () => {
     const tags = migrationTags()
     const key = tagEnding(KEY_STEP)
@@ -330,8 +333,11 @@ describe('the M6 migration steps on disk', () => {
     expect(tags.indexOf(backfill)).toBe(tags.indexOf(key) + 1)
     const bundle = readFileSync(`${MIGRATIONS_DIR}/migrations.js`, 'utf8')
     for (const tag of [key, backfill]) {
-      expect(bundle).toContain(`./${tag}.sql'`)
-      expect(bundle).toMatch(new RegExp(`^\\s*m${tag.slice(0, 4)},\\s*$`, 'm'))
+      const entry = journalEntries().find((e) => e.tag === tag)
+      if (entry === undefined) throw new Error(`no journal entry for ${tag}`)
+      const name = `m${String(entry.idx).padStart(4, '0')}`
+      expect(bundle).toMatch(new RegExp(`^import ${name} from '\\./${tag}\\.sql'$`, 'm'))
+      expect(bundle).toMatch(new RegExp(`^\\s*${name},\\s*$`, 'm'))
     }
   })
 
