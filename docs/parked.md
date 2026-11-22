@@ -1120,6 +1120,16 @@ then keep its `'aborted'` outcome. Relabelling the outcome alone is
 the wrong remedy: the reader resyncs only on `'failed'`, so `'aborted'`
 without the resync leaves the stale rows showing.
 
+The reader's undo, redo and rollback say `Please try again.` on that
+failure, as for any throw (`useReaderUndo`'s guard, the rollback's
+`runAction`), though the reversal landed: trying again undoes or redoes
+the next group back, which after a re-run's CTRL-Z is usually the close
+it just restored. A re-run's undone close keeps its own warning. The
+chapter delete, the re-run's shortcut, regenerate and the prose edit
+already re-hydrate on that failure, so the branch-wide resync would
+replace four per-caller copies. Folded in from triage 2026-11-22,
+raised by Slice 5.13's reviews.
+
 Parked 2026-09-13 from the PR #513 review; a delta-patched store
 gaining a synchronous subscriber or patch logic that can throw
 (validation, a must-exist invariant), or anything starting to read

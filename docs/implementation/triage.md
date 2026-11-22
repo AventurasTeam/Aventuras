@@ -61,19 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A committed undo whose store sync fails says to try again.** The
-  reader's undo handler shows `Couldn't undo. Please try again.`
-  (`locales/en/reader.json`, `useReaderUndo`'s guard) for any thrown
-  undo, including a `DeltaReplayError` at `store-sync`, where the
-  database change landed (a re-run's undone close excepted: it shows its
-  close-undone warning). Trying again undoes the next group back; after
-  a re-run's CTRL-Z that is the close it just restored. Pre-existing for
-  every undo; raised by Slice 5.13's reviews (2026-11-21). The reader's
-  rollback has the same shape: `runAction` toasts `reader:rollbackFailed`
-  for a committed sweep whose store sync threw, and nothing re-hydrates
-  the branch, so the removed entries stay on screen; the chapter delete
-  and the re-run's shortcut re-hydrate in that case (Slice 5.13's closing
-  review, 2026-11-22).
 - **The review window's dialog has no description.** Its `DialogContent`
   carries a title and no `DialogDescription` or `aria-describedby`
   (`components/chapters/review-window.tsx`), so every open logs the
