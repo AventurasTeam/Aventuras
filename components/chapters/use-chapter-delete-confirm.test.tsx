@@ -553,6 +553,64 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(toast.error).toHaveBeenCalledWith(BLOCKED)
   })
 
+  it('closes on an in-flight refusal once a removal the screen lost focus under ends', async () => {
+    const { result, rerender, remove } = setup()
+    await openOn(result)
+    const removal = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    rerender({ active: false })
+    await act(async () => {
+      removal.resolve(refusal('in-flight'))
+      await confirming
+    })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('closes on an in-flight refusal once a removal the review window opened over ends', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    const removal = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    await act(async () => {
+      removal.resolve(refusal('in-flight'))
+      await confirming
+    })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('stays open on an in-flight refusal when focus came back before the removal ended', async () => {
+    const { result, rerender, remove } = setup()
+    await openOn(result)
+    const removal = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    rerender({ active: false })
+    rerender({ active: true })
+    await act(async () => {
+      removal.resolve(refusal('in-flight'))
+      await confirming
+    })
+
+    expect(result.current.target).toEqual(expect.objectContaining({ preview: PREVIEW }))
+  })
+
   it('dismisses and confirms again after a refused removal', async () => {
     const { result, remove } = setup()
     await openOn(result)
