@@ -386,8 +386,8 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
   // Read synchronously, so a second press returns before it reaches startCloseRerun.
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
-  // An in-flight refusal holds the confirm actions while the story is busy. Not until a settle: a
-  // pending turn's mark ends with none.
+  // An in-flight refusal holds the confirm actions while the story is busy: a pending turn's mark
+  // can end with no run, and so with no settle.
   const [heldInFlight, setHeldInFlight] = useState(false)
   if (heldInFlight && !storyBusy) setHeldInFlight(false)
 

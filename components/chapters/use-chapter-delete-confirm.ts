@@ -214,7 +214,8 @@ export function useChapterDeleteConfirm({
   // A Stack keeps the Timeline mounted under a pushed screen: its reads would toast over that
   // screen, and the confirm would reopen on return with a preview nothing kept current. The
   // review window takes the screen the same way, and on phone its Sheet would cover the confirm.
-  // Re-checked as a removal ends: an in-flight refusal keeps a target no dismissal could drop meanwhile.
+  // Re-checked as a removal ends: an in-flight refusal keeps a target no dismissal could drop
+  // meanwhile.
   useEffect(() => {
     if (!pending && (!active || reviewOpen)) dismiss()
   }, [active, reviewOpen, pending, dismiss])
