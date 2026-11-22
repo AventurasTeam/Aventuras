@@ -154,9 +154,3 @@ slice-planning gate forces its resolution before that slice is planned.
   recurs about 143 times across the repo. A shared helper in
   `lib/utils.ts` is a repo-wide change. Raised by Slice 5.13's closing
   review's simplifier pass (2026-11-22).
-- **The overlay host's test suites copy their run helpers.**
-  `chapter-overlays-host.test.tsx`, `-rerun.test.tsx` and
-  `-close-modal.test.tsx` each define `settleRun` and `gateRun`; a shared
-  overlay-host fixture would hold them, with each file's `vi.mock` setup
-  staying in the file. Raised by Slice 5.13's closing review's
-  simplifier pass (2026-11-22).

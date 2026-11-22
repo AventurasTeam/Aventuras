@@ -4246,7 +4246,10 @@ what the edit does. Routed from triage 2026-11-07. The 2026-11-14 pass
 gave the close's test helpers one home each and found more not yet
 counted here, unverified: `runDeltas` in about seven test files,
 `idsWithTurns` and `START_CONFIG` in five or six, `seedCharacter` in
-four, and several `apply` variants.
+four, and several `apply` variants. Recounted 2026-11-22: a `RunState`
+by hand in 45 test, story and fixture files, and a `StoreChapter`
+literal in 13; the chapter overlay host's three suites share
+`components/chapters/__tests__/overlay-host-fixture.tsx`.
 
 #### The mock LLM's token count has no run guard
 
