@@ -285,6 +285,23 @@ describe('useCloseRerunConfirm: staying true', () => {
     expect(result.current.target).toEqual({ chapterId: 'chap_2', preview: FRESH })
   })
 
+  it('keeps a preview the host replaces over a refusal read before it', async () => {
+    const { result, loadPreview } = setup()
+    await openOn(result)
+    const reading = deferred<CloseRerunReadRefusal>()
+    loadPreview.mockReturnValueOnce(reading.promise)
+    settleARun()
+
+    // One act: the read lands before the replacement renders.
+    await act(async () => {
+      result.current.replace(FRESH)
+      reading.resolve(refusal('close-owed'))
+    })
+
+    expect(result.current.target).toEqual({ chapterId: 'chap_2', preview: FRESH })
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('re-reads a replaced preview at the next settle', async () => {
     const { result, loadPreview } = setup()
     await openOn(result)

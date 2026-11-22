@@ -76,7 +76,13 @@ export function useCloseRerunConfirm({
   replace: (preview: CloseRerunPreview) => void
   dismiss: () => void
 } {
-  const [held, setHeld] = useState<HeldTarget | null>(null)
+  const [held, setHeldState] = useState<HeldTarget | null>(null)
+  // Written with the state, so a read landing before the next render sees a replacement.
+  const heldNow = useRef<HeldTarget | null>(null)
+  const setHeld = useCallback((next: HeldTarget | null) => {
+    heldNow.current = next
+    setHeldState(next)
+  }, [])
   const openRequest = useRef(0)
   const latest = useRef({ loadPreview })
   useEffect(() => {
@@ -107,7 +113,7 @@ export function useCloseRerunConfirm({
       }
       setHeld({ chapterId: opening, preview: result, countedAtSettle: counted })
     },
-    [branchId],
+    [branchId, setHeld],
   )
 
   useSettleReread({
@@ -126,6 +132,9 @@ export function useCloseRerunConfirm({
           })
           return
         }
+        // A preview the host replaced since (counts-changed) was read after this one began.
+        const now = heldNow.current
+        if (now?.chapterId !== chapterId || now.preview !== shown) return
         const result = read.value
         if ('status' in result) {
           logReadRefusal(branchId, chapterId, result.code)
@@ -133,24 +142,23 @@ export function useCloseRerunConfirm({
           toast.error(t(refusalCopy(result.code)))
           return
         }
-        // A preview the host replaced since (counts-changed) was read after this one began.
-        setHeld((prev) =>
-          prev?.chapterId === chapterId && prev.preview === shown
-            ? { ...prev, preview: result }
-            : prev,
-        )
+        setHeld({ ...now, preview: result })
       })
     },
   })
 
-  const replace = useCallback((preview: CloseRerunPreview) => {
-    setHeld((prev) => (prev == null ? prev : { ...prev, preview }))
-  }, [])
+  const replace = useCallback(
+    (preview: CloseRerunPreview) => {
+      const now = heldNow.current
+      if (now != null) setHeld({ ...now, preview })
+    },
+    [setHeld],
+  )
 
   const dismiss = useCallback(() => {
     openRequest.current += 1
     setHeld(null)
-  }, [])
+  }, [setHeld])
 
   useEffect(() => {
     if (!active) dismiss()
