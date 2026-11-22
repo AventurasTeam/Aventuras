@@ -22,8 +22,10 @@ type Shortcut = NonNullable<CloseRerunPreview['shortcut']>
 export type CloseRerunConfirmProps = {
   open: boolean
   preview: CloseRerunPreview
-  /** The gate's reason while a run blocks; the actions disable with it. Hidden while `pending`:
-   * the start trips the gate itself, so it would read as some other run. */
+  /**
+   * Why the actions disable: a run's gate reason, a close owed, or an in-flight refusal's hold.
+   * Hidden while `pending`: the start trips the gate itself, so it would read as some other run.
+   */
   blockedReason?: string
   /** A start is in flight; every button disables, and an Esc does nothing. */
   pending: boolean
@@ -108,7 +110,7 @@ export function CloseRerunConfirm({
             </Button>
           </AlertDialogCancel>
           {/* Plain buttons: AlertDialogAction would also request close, dismissing the confirm
-              before the start settles. The owner closes it on the result. */}
+              before the start settles; the host closes it as the chain starts or refuses. */}
           {shortcut != null ? (
             <>
               <ReasonButton

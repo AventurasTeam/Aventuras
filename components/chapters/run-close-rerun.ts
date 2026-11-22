@@ -84,14 +84,17 @@ const LASTING_REFUSALS: ReadonlySet<string> = new Set([
   CLASSIFIER_HELD,
 ])
 
-// As the delete and rollback confirms: it stays open, held by the gate, and says why nothing ran.
+// As the delete and rollback confirms: it stays open and says why nothing ran; the host holds its
+// actions while the story stays busy.
 const keepOpen = (): Outcome => ({
   step: { step: 'keep-open' },
   notice: { severity: 'error', message: t('reader:actions.blockedWhileGenerating') },
   logCode: null,
 })
 
-/** chapter-timeline.md → Re-run a close: what each result of `startCloseRerun` does to the confirm. */
+/**
+ * chapter-timeline.md → Re-run a close: what each result of `startCloseRerun` does to the confirm.
+ */
 export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number): Outcome {
   if ('result' in start)
     return { step: { step: 'ended' }, notice: rerunEndNotice(start, chapterNumber), logCode: null }

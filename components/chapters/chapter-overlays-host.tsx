@@ -246,7 +246,6 @@ function ReviewHost({
   const awareness = happeningAwarenessStore.useAwareness((rows) => rows)
   const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
   const rerunReason = useRerunDisabledReason(storyId, branchId)
-  // Re-run… sits on the latest chapter's window only.
   const latest = chaptersStore.useChapters(
     (rows) => chaptersStore.selectLatest(rows)?.id === chapterId,
   )
