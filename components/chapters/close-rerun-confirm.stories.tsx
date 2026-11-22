@@ -308,7 +308,8 @@ export const FooterRow: Story = {
     ])
     for (const rect of rects) expect(Math.abs(rect.top - rects[0]!.top)).toBeLessThan(1)
     expect(Math.abs(Math.max(...rects.map((r) => r.right)) - content.right)).toBeLessThan(1)
-    expect(rects.reduce((sum, r) => sum + r.width, 0)).toBeLessThan(content.width)
+    // Buttons grown to fill the row would start at the content's left edge.
+    expect(Math.min(...rects.map((r) => r.left))).toBeGreaterThan(content.left + 1)
   },
 }
 
