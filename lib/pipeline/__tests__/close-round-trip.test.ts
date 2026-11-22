@@ -331,6 +331,10 @@ async function rerunCommitted(h: CloseHarness): Promise<CommittedRerun> {
     state: await worldState(h.fx),
     log: await deltasOf(h.fx, actionId),
   }
+  expect(
+    rerun.log.some((d) => !isDivider(d)),
+    'the re-run landed nothing',
+  ).toBe(true)
   await embedCreated(h.fx, rerun.log)
   committedReruns.set(h, [...(committedReruns.get(h) ?? []), rerun])
   return rerun
