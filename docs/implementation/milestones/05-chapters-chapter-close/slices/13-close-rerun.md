@@ -242,7 +242,8 @@ set:
   since no set takes from it.
 
 A divider-only removal takes only the chapter row's deltas and the stamps,
-so the journal stays, as canon keeps it. Its closure takes every write to
+so the journal stays, as canon keeps it, unless it takes the group's last
+delta (a re-run that wrote only its report). Its closure takes every write to
 the removed row whatever its source (`writesTo`,
 `lib/actions/delta/row-closure.ts:96-120`), a card Save's `user_edit`
 `updateChapter` included (`lib/chapters/chapter-draft.ts:86`), which is why
@@ -1259,4 +1260,51 @@ change amends the scope above.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **The confirm's counts are taken as after the shortcut (developer
+  decisions at PR 2's review).** The preview leaves out only the deltas
+  both the re-run's set and the shortcut's set hold (by delta id, not
+  row), judges survivors and ref clears with the shortcut's deltas
+  treated as reversed (an optional `reversedFirst` input that only the
+  preview passes), and counts a close-created lore row whose delete the
+  shortcut reverses. The closure's own reads stay on the state before
+  the shortcut; that gap is parked
+  ([`parked.md → A re-run confirm's counts read before its shortcut`](../../../../parked.md#a-re-run-confirms-counts-read-before-its-shortcut)).
+- **Recovery's order stays as canon has it (developer decision at PR
+  1's review).** When a newer orphan's reversal fails without
+  committing, an older re-run on its branch can lose its close for
+  good, or an older pass's work can come back on a later boot; that is
+  parked with its fix
+  ([`parked.md → Recovery order after an orphan's failure on a re-run's branch`](../../../../parked.md#recovery-order-after-an-orphans-failure-on-a-re-runs-branch)).
+- **The abort's outcome rides a new port member.** `reverseRunGroup`
+  carries the delta count and the journal's outcome;
+  `reverseReplayDeltas` keeps `Promise<number>` for `submitTurn`
+  (the Scope above said its return type changes).
+- **A committed reversal whose store sync fails keeps its outcome.**
+  CTRL-Z of a re-run whose close was undone shows the close-undone
+  warning even when only the store sync failed, and a recovery failure
+  whose reversal committed with the close undone renders as the
+  reversed close does (canon's chapter-close line plus the close-undone
+  line; provisional).
+- **The planner reads a journal's group only when the set takes from
+  it,** so a branch holding a journal doesn't scan its log on every
+  reversal; reads by `action_id` still scan, filed to triage.
+- **The review window's phone Sheet holds a reopen until its exit
+  ends (provisional).** The shared `Sheet` drops a `present()` sent
+  while it is still dismissing, so the confirm's `Cancel` during the
+  slide-out reopens the window only once `onDismissed` fires; the host
+  marks an exit only for a Sheet that presented. The primitive's gap
+  is in triage for its other users.
+- **For M6.1:** recovery finds a journal by `action_id` alone, and the
+  run-group read has no branch filter; both are unique in M5 and need
+  `(branch_id, id)` scoping once a fork copies journals with their
+  groups. The `reversal_journals` fork row in `data-model.md` still
+  keys on the group's first log position; the shipped write-back
+  measures from the floor (the first position is the floor plus one).
+- **Redo stays one stack until M6.** Canon now rules a stack per
+  branch; a re-run's CTRL-Z clears today's single stack.
+- **Monitors.** The planner's drop clause (b) never dropped a journal a
+  round-trip arm keeps, so it stays as planned. The round trip grew
+  from 264 to 610 tests (about 6 s to 18 s locally); CI's unit shards
+  stayed inside main's recent range, so the file is not split.
+- **The Android measure (AC 34) is pending:** no Fold was attached
+  during the run. The functional smoke ran on a slot emulator.
