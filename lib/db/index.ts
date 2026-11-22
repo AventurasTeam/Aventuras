@@ -274,6 +274,7 @@ export {
   type BranchCopyArgs,
   type BranchCopyTable,
   type BranchCopyTableName,
+  type CopiedIn,
   type CopyBranches,
   type CopyMode,
   type CopyPredicate,

@@ -15,7 +15,7 @@ import { ensureVecTablesSql, knnQuery, packFloat32, type VecTargetKind } from '.
 import { branches, deltas, entities, lore, storyEntries, threads } from '../schema'
 import type { NewEntity, SqlOp } from '../types'
 import { branchCopyOps, tableCopyOps, type BranchCopyArgs, type CopyPredicate } from './copier'
-import { BRANCH_COPY_MANIFEST, type BranchCopyTableName } from './manifest'
+import { BRANCH_COPY_MANIFEST, type BranchCopyTableName, type CopiedIn } from './manifest'
 import { vecCopyOps } from './vec-copy'
 
 const COPY = 'br_c'
@@ -60,7 +60,7 @@ function branchRowOp(id: string): SqlOp {
 }
 
 function duplicateOps(
-  where?: Partial<Record<BranchCopyTableName, CopyPredicate>>,
+  where?: Partial<Record<CopiedIn<'duplicate'>, CopyPredicate>>,
 ): Promise<SqlOp[]> {
   return branchCopyOps(t.db, { from: fx.branchId, to: COPY, mode: 'duplicate', where })
 }
@@ -269,6 +269,30 @@ describe('branchCopyOps', () => {
       } as unknown as BranchCopyArgs
       await expect(branchCopyOps(t.db, untyped), missing).rejects.toThrow(missing)
     }
+  })
+
+  it('takes no predicate for a table its mode skips', () => {
+    const duplicate: BranchCopyArgs = {
+      from: fx.branchId,
+      to: COPY,
+      mode: 'duplicate',
+      // @ts-expect-error a duplicate copies no capture, so nothing would read the predicate
+      where: { probe_captures: 'all' },
+    }
+    const fork: BranchCopyArgs = {
+      from: fx.branchId,
+      to: COPY,
+      mode: 'fork',
+      where: {
+        story_entries: 'all',
+        deltas: 'all',
+        reversal_journals: 'all',
+        // @ts-expect-error a fork copies no run record, so nothing would read the predicate
+        pipeline_runs: 'all',
+      },
+    }
+    for (const args of [duplicate, fork])
+      expect(tableCopyOps(t.db, args).map(tableOf), args.mode).toEqual(DUPLICATE_TABLES)
   })
 
   it('fails on the foreign key without a branches row and writes nothing', async () => {

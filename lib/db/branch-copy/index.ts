@@ -3,6 +3,7 @@ export {
   BRANCH_COPY_MANIFEST,
   type BranchCopyTable,
   type BranchCopyTableName,
+  type CopiedIn,
   type CopyMode,
   type DuplicateCopy,
   type ForkCopy,

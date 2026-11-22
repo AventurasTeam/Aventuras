@@ -28,6 +28,15 @@ export type CopyMode = 'fork' | 'duplicate'
 export type ForkCopy = 'copy' | 'copy-non-system' | 'copy-survivors' | 'skip'
 export type DuplicateCopy = 'copy' | 'skip'
 
+export const FORK_FILTERS = {
+  copy: false,
+  'copy-non-system': true,
+  'copy-survivors': true,
+  skip: false,
+} as const satisfies Record<ForkCopy, boolean>
+
+type ForkFilter = { [C in ForkCopy]: (typeof FORK_FILTERS)[C] extends true ? C : never }[ForkCopy]
+
 export type BranchCopyTable = SQLiteTable & { branchId: SQLiteColumn }
 
 export type BranchCopyTableName =
@@ -58,7 +67,7 @@ export type ManifestRow = {
  * data-model.md → Branch model's manifest, in copy order: a fork's predicate may read a table
  * copied earlier in the batch, so deltas and journals copy after every domain table.
  */
-export const BRANCH_COPY_MANIFEST: Readonly<Record<BranchCopyTableName, ManifestRow>> = {
+export const BRANCH_COPY_MANIFEST = {
   story_entries: { table: storyEntries, fork: 'copy-non-system', duplicate: 'copy' },
   entities: { table: entities, fork: 'copy', duplicate: 'copy' },
   character_relationships: { table: characterRelationships, fork: 'copy', duplicate: 'copy' },
@@ -77,7 +86,16 @@ export const BRANCH_COPY_MANIFEST: Readonly<Record<BranchCopyTableName, Manifest
   pipeline_runs: { table: pipelineRuns, fork: 'skip', duplicate: 'skip' },
   deltas: { table: deltas, fork: 'copy-survivors', duplicate: 'copy' },
   reversal_journals: { table: reversalJournals, fork: 'copy-survivors', duplicate: 'copy' },
-}
+} as const satisfies Readonly<Record<BranchCopyTableName, ManifestRow>>
+
+type Manifest = typeof BRANCH_COPY_MANIFEST
+
+/** The tables a mode copies, so the only ones a predicate may name. */
+export type CopiedIn<M extends CopyMode> = {
+  [T in BranchCopyTableName]: Manifest[T][M] extends 'skip' ? never : T
+}[BranchCopyTableName]
 
 /** The tables a fork must filter, so the copier requires a predicate for each. */
-export type ForkFilteredTable = 'story_entries' | 'deltas' | 'reversal_journals'
+export type ForkFilteredTable = {
+  [T in BranchCopyTableName]: Manifest[T]['fork'] extends ForkFilter ? T : never
+}[BranchCopyTableName]

@@ -1,13 +1,19 @@
 import { getTableColumns, getTableName } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { dbSchema } from '../schema'
-import { BRANCH_COPY_MANIFEST, type BranchCopyTableName } from './manifest'
+import {
+  BRANCH_COPY_MANIFEST,
+  type BranchCopyTableName,
+  type CopiedIn,
+  type CopyMode,
+  type ForkFilteredTable,
+} from './manifest'
 
 const names = Object.keys(BRANCH_COPY_MANIFEST) as BranchCopyTableName[]
 
-function valuesIn(mode: 'fork' | 'duplicate'): Record<string, string> {
+function valuesIn(mode: CopyMode): Record<string, string> {
   return Object.fromEntries(names.map((name) => [name, BRANCH_COPY_MANIFEST[name][mode]]))
 }
 
@@ -65,6 +71,15 @@ describe('BRANCH_COPY_MANIFEST', () => {
       deltas: 'copy-survivors',
       reversal_journals: 'copy-survivors',
     })
+  })
+
+  it('derives the tables a predicate may name, and those a fork must filter, from the values', () => {
+    type Skipped = 'probe_captures' | 'pipeline_runs'
+    expectTypeOf<CopiedIn<'duplicate'>>().toEqualTypeOf<Exclude<BranchCopyTableName, Skipped>>()
+    expectTypeOf<CopiedIn<'fork'>>().toEqualTypeOf<Exclude<BranchCopyTableName, Skipped>>()
+    expectTypeOf<ForkFilteredTable>().toEqualTypeOf<
+      'story_entries' | 'deltas' | 'reversal_journals'
+    >()
   })
 
   // A fork's predicate may read a table copied earlier in its batch.

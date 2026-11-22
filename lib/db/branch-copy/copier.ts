@@ -3,9 +3,11 @@ import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
 import type { DbCtx, SqlOp } from '../types'
 import {
   BRANCH_COPY_MANIFEST,
+  FORK_FILTERS,
   type BranchCopyTable,
   type BranchCopyTableName,
-  type ForkCopy,
+  type CopiedIn,
+  type CopyMode,
   type ForkFilteredTable,
   type ManifestRow,
 } from './manifest'
@@ -14,16 +16,14 @@ import { vecCopyOps, type CopyBranches } from './vec-copy'
 /** A table's filter; `'all'` copies the table unfiltered. */
 export type CopyPredicate = SQL | 'all'
 
+type CopyWhere<M extends CopyMode> = Partial<Record<CopiedIn<M>, CopyPredicate>>
+
 type TableCopyArgs = CopyBranches &
   (
-    | {
-        readonly mode: 'duplicate'
-        readonly where?: Partial<Record<BranchCopyTableName, CopyPredicate>>
-      }
+    | { readonly mode: 'duplicate'; readonly where?: CopyWhere<'duplicate'> }
     | {
         readonly mode: 'fork'
-        readonly where: Record<ForkFilteredTable, CopyPredicate> &
-          Partial<Record<BranchCopyTableName, CopyPredicate>>
+        readonly where: Record<ForkFilteredTable, CopyPredicate> & CopyWhere<'fork'>
       }
   )
 
@@ -34,8 +34,6 @@ type TableCopyArgs = CopyBranches &
  * holds (C3).
  */
 export type BranchCopyArgs = TableCopyArgs & { readonly between?: readonly SqlOp[] }
-
-const FORK_FILTERS: ReadonlySet<ForkCopy> = new Set<ForkCopy>(['copy-non-system', 'copy-survivors'])
 
 // All in SQL: a JS round trip would re-serialize the JSON columns canon copies verbatim.
 function tableCopyOp(
@@ -64,10 +62,10 @@ export function tableCopyOps(db: DbCtx['db'], args: TableCopyArgs): SqlOp[] {
     BranchCopyTableName,
     ManifestRow,
   ][]) {
-    const copy = args.mode === 'fork' ? row.fork : row.duplicate
+    const copy = row[args.mode]
     if (copy === 'skip') continue
     // The type requires it; an untyped caller would copy the system tail or the pruned deltas.
-    if (FORK_FILTERS.has(copy) && where[name] === undefined)
+    if (FORK_FILTERS[copy] && where[name] === undefined)
       throw new Error(`branchCopyOps: a fork must pass a predicate for ${name}`)
     ops.push(tableCopyOp(db, row.table, args, where[name]))
   }
