@@ -19,6 +19,7 @@ import {
   lore,
   pipelineRuns,
   probeCaptures,
+  reversalJournals,
   sourceHash,
   stories,
   storyEntries,
@@ -28,6 +29,7 @@ import {
   ensureVecTablesSql,
   isVecFamilyTable,
   vaultCalendars,
+  type RerunJournal,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
@@ -40,6 +42,16 @@ import {
 } from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
+
+const emptyJournal = (chapterId: string): RerunJournal => ({
+  version: 1,
+  chapterId,
+  chapterNumber: 1,
+  floor: 1,
+  rows: [],
+  deltas: [],
+  journals: [],
+})
 
 async function setup() {
   const { db, sqlite, runInTransaction } = await createTestDb()
@@ -79,6 +91,12 @@ async function setup() {
       actionId: `act_${id}`,
       storyId: id,
       startedAt: 1,
+    })
+    await db.insert(reversalJournals).values({
+      actionId: `act_rerun_${id}`,
+      branchId: `br_${id}`,
+      journal: emptyJournal(`chapter_${id}`),
+      createdAt: 1,
     })
   }
   // Shared vault calendar must survive.
@@ -128,6 +146,9 @@ describe('deleteStory', () => {
     expect((await db.select().from(storyEntries)).map((r) => r.branchId)).toEqual(['br_survivor'])
     expect((await db.select().from(entities)).map((r) => r.branchId)).toEqual(['br_survivor'])
     expect((await db.select().from(pipelineRuns)).map((r) => r.storyId)).toEqual(['survivor'])
+    expect((await db.select().from(reversalJournals)).map((r) => r.branchId)).toEqual([
+      'br_survivor',
+    ])
     // Shared vault calendar untouched.
     expect((await db.select().from(vaultCalendars)).length).toBe(1)
     // Store reflects the delete.
@@ -229,10 +250,11 @@ describe('deleteStory', () => {
       translations,
       probeCaptures,
       deltas,
+      reversalJournals,
       entryAssets,
     ]) {
       const rows = await db.select().from(t)
-      // None belonged to the victim branch; survivor's (none seeded) remain absent.
+      // Only the survivor's rows remain, the seeded journal among them.
       expect(rows.every((r) => !('branchId' in r) || r.branchId !== 'br_victim')).toBe(true)
     }
   })

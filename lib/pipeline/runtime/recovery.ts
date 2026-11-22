@@ -1,10 +1,10 @@
-import { asc, eq, isNull } from 'drizzle-orm'
+import { desc, eq, isNull, sql } from 'drizzle-orm'
 
 import type { IntegrityRefusal } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import { describeReplayError, reverseReplayDeltas } from './action-port'
+import { describeReplayError, reverseRunGroup } from './action-port'
 
 export type RecoveredRun = {
   runId: string
@@ -12,6 +12,8 @@ export type RecoveredRun = {
   actionId: string
   storyId: string | null
   deltas: number
+  /** A close's re-run whose journal couldn't be written back: its chapter's close was undone. */
+  closeUndone?: true
 }
 export type RecoveryFailure = {
   runId: string
@@ -21,6 +23,11 @@ export type RecoveryFailure = {
   error: unknown
   /** Set when the reversal was refused as an integrity error, which every boot meets again. */
   refusal: IntegrityRefusal | null
+  /**
+   * Its reversal committed with a re-run's close undone, and only the store sync then failed; the
+   * marker is settled, so this report is the only word of it.
+   */
+  closeUndone?: true
 }
 export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailure[] }
 /**
@@ -37,44 +44,68 @@ export type BootRecoveryReport = RecoveryReport & {
 // Per-orphan failures are logged and reported, so one bad orphan can't block the rest; an
 // uncommitted one keeps its marker open for the next boot. Only the orphan query itself can throw.
 export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
+  // Newest first, as undo goes: a close's re-run may have journaled an older orphan's rows. A pass
+  // and its successor can start in one millisecond, so insertion order breaks the tie.
   const orphans = await ctx.db
     .select()
     .from(pipelineRuns)
     .where(isNull(pipelineRuns.finishedAt))
-    .orderBy(asc(pipelineRuns.startedAt))
+    .orderBy(desc(pipelineRuns.startedAt), desc(sql`rowid`))
 
   const reversed: RecoveredRun[] = []
   const failures: RecoveryFailure[] = []
 
   for (const orphan of orphans) {
     try {
-      // Marker rides the reversal's transaction: never claims an uncommitted reversal.
-      const count = await reverseReplayDeltas(orphan.actionId, ctx, (deltaCount) => [
-        deltaCount === 0
-          ? ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.runId, orphan.runId)).toSQL()
-          : ctx.db
-              .update(pipelineRuns)
-              .set({ finishedAt: Date.now(), outcome: 'recovered' })
-              .where(eq(pipelineRuns.runId, orphan.runId))
-              .toSQL(),
-      ])
-      if (count === 0) continue
+      const settled = { reversed: false }
+      // Marker rides the reversal's transaction: never claims an uncommitted reversal. An orphan
+      // with nothing reversed or written back is deleted.
+      const result = await reverseRunGroup(
+        { actionId: orphan.actionId, branchId: null, rerunChapterId: orphan.rerunChapterId },
+        ctx,
+        (anything) => {
+          settled.reversed = anything
+          return [
+            anything
+              ? ctx.db
+                  .update(pipelineRuns)
+                  .set({ finishedAt: Date.now(), outcome: 'recovered' })
+                  .where(eq(pipelineRuns.runId, orphan.runId))
+                  .toSQL()
+              : ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.runId, orphan.runId)).toSQL(),
+          ]
+        },
+      )
+      if (!settled.reversed) continue
+      const closeUndone = result.journal === 'undone' && result.chapterNumber !== null
       reversed.push({
         runId: orphan.runId,
         kind: orphan.kind,
         actionId: orphan.actionId,
         storyId: orphan.storyId,
-        deltas: count,
+        deltas: result.deltas,
+        ...(closeUndone ? { closeUndone: true as const } : {}),
       })
-      logger.debug('pipeline.recovered', { runId: orphan.runId, kind: orphan.kind, deltas: count })
+      logger.debug('pipeline.recovered', {
+        runId: orphan.runId,
+        kind: orphan.kind,
+        deltas: result.deltas,
+        journal: result.journal,
+      })
     } catch (e) {
+      const described = describeReplayError(e)
+      const closeUndone =
+        described?.committed === true &&
+        described.journal === 'undone' &&
+        typeof described.chapterNumber === 'number'
       failures.push({
         runId: orphan.runId,
         kind: orphan.kind,
         actionId: orphan.actionId,
         storyId: orphan.storyId,
         error: e,
-        refusal: describeReplayError(e)?.refusal ?? null,
+        refusal: described?.refusal ?? null,
+        ...(closeUndone ? { closeUndone: true as const } : {}),
       })
       logger.error('pipeline.recovery_failed', {
         runId: orphan.runId,

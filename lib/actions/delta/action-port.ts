@@ -6,6 +6,7 @@ import {
   settleUserWrites,
 } from './apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from './branch-write-lock'
+import { reverseRunGroup } from './rerun-journal'
 import { describeDeltaReplayError, reverseReplayDeltas } from './reverse-replay'
 import { readRowGuard } from './row-guard'
 import { userDeletedHappeningLink } from './user-precedence'
@@ -21,6 +22,7 @@ export function deltaActionPort(): DeltaActionPort {
     readRowGuard,
     userDeletedHappeningLink,
     reverseReplayDeltas,
+    reverseRunGroup,
     describeReplayError: describeDeltaReplayError,
     settleUserWrites,
     holdBranchWriteExclusive,

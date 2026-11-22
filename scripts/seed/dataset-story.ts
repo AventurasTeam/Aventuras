@@ -125,6 +125,7 @@ export const DATASET_SEED_LEFT_OUT: Record<string, string> = {
   vault_calendars: "app-level: the default seed's apply",
   assets: "app-level, naming files outside the database: the default seed's apply",
   pipeline_runs: 'the run log; recovery reads only an unfinished run, and a seeded run is finished',
+  reversal_journals: "a close re-run's undo half; no seeded chapter has been re-run",
   probe_captures: "a probe's diagnostic captures, not story state",
   wizard_sessions: 'wizard drafts, which no finished story keeps',
 }

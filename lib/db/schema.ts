@@ -9,7 +9,13 @@ import {
 import { lore } from './lore/lore.table'
 import { branchEraFlips, branches, stories } from './stories/stories.table'
 import { chapters, storyEntries } from './story-entries/story-entries.table'
-import { deltas, pipelineRuns, probeCaptures, vaultCalendars } from './system/system.table'
+import {
+  deltas,
+  pipelineRuns,
+  probeCaptures,
+  reversalJournals,
+  vaultCalendars,
+} from './system/system.table'
 import { threads } from './threads/threads.table'
 import { translations } from './translations/translations.table'
 import { wizardSessions } from './wizard-sessions/wizard-sessions.table'
@@ -30,6 +36,7 @@ export {
   lore,
   pipelineRuns,
   probeCaptures,
+  reversalJournals,
   stories,
   storyEntries,
   threads,
@@ -59,5 +66,6 @@ export const dbSchema = {
   appSettings,
   pipelineRuns,
   deltas,
+  reversalJournals,
   wizardSessions,
 }

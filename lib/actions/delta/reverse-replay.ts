@@ -1,12 +1,13 @@
-import { and, desc, eq, getTableColumns, inArray } from 'drizzle-orm'
+import { and, desc, eq, getTableColumns, inArray, sql } from 'drizzle-orm'
 import type { ZodType } from 'zod'
 
-import type { Delta, LocationState, SqlOp } from '@/lib/db'
+import type { Delta, LocationState, ReversalJournalRow, SqlOp } from '@/lib/db'
 import {
   chunked,
   deltas,
   embeddedFieldsForTable,
   isEmbeddedSourceTable,
+  reversalJournals,
   rowsPerInsert,
 } from '@/lib/db'
 import { deepEqual } from '@/lib/deep-equal'
@@ -17,6 +18,7 @@ import type { DbCtx } from '../types'
 import { capturedChildren, vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { applyUndoPayload } from './delta-encoding'
 import { deletedRow, heldKey, type HeldRow } from './held-rows'
+import { journalsToDrop, type JournalHead } from './journal-drop'
 import { withKeyLocks } from './key-lock'
 import { liveLinkFilter, type LiveLinkFilter } from './live-link-filter'
 import type { RefPath } from './live-refs'
@@ -33,7 +35,12 @@ import {
   type SurvivorEdit,
 } from './own-write'
 import { resolveByTable, whereForDelta, type StorePatch, type TableEntry } from './registry'
-import { DeltaReplayError, ReversalIntegrityError, type IntegrityRefusal } from './replay-errors'
+import {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  type IntegrityRefusal,
+  type JournalOutcome,
+} from './replay-errors'
 import {
   reversalLockKeys,
   selectReversalSet,
@@ -52,12 +59,20 @@ export {
 } from './replay-errors'
 
 /** What the pipeline port needs from a replay failure; `undefined` hands any other error back. */
-export function describeDeltaReplayError(
-  e: unknown,
-): { detail: string; committed: boolean; refusal: IntegrityRefusal | null } | undefined {
+export function describeDeltaReplayError(e: unknown):
+  | {
+      detail: string
+      committed: boolean
+      refusal: IntegrityRefusal | null
+      journal?: JournalOutcome
+      chapterNumber?: number | null
+    }
+  | undefined {
   if (!(e instanceof DeltaReplayError)) return undefined
   const refusal = e instanceof ReversalIntegrityError ? e.refusal : null
-  return { detail: String(e.cause), committed: e.committed, refusal }
+  const journal =
+    e.journal === undefined ? {} : { journal: e.journal, chapterNumber: e.chapterNumber ?? null }
+  return { detail: String(e.cause), committed: e.committed, refusal, ...journal }
 }
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
@@ -89,9 +104,73 @@ export type ReversePlan = {
    * the payload it writes (generation-pipeline.md → Reverse-replay).
    */
   survivorRewrites: SurvivorRewrite[]
+  /** Every delta the prunes remove, whole, as logged before the reversal. */
+  prunedDeltas: readonly Delta[]
+  /** Creates the reversal re-owns rather than prunes, as logged before. */
+  reownedDeltas: readonly Delta[]
+  /** Held-delete holders whose undo_payload the ops rewrite, as logged before. */
+  rewrittenHolders: readonly Delta[]
+  /** reversal_journals rows the planner drops (generation-pipeline.md → Reverse-replay), whole. */
+  droppedJournals: readonly ReversalJournalRow[]
+  /** Their deletes, apart from pruneOps: a fork's copy omits them. */
+  journalOps: SqlOp[]
 }
 
 export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
+
+// JSON paths only: the planner never parses a journal's before-images.
+async function journalHeadsOf(set: ReversalSet, ctx: DbCtx): Promise<JournalHead[]> {
+  const heads = await ctx.db
+    .select({
+      actionId: reversalJournals.actionId,
+      chapterId: sql<string>`json_extract(${reversalJournals.journal}, '$.chapterId')`,
+      floor: sql<number>`json_extract(${reversalJournals.journal}, '$.floor')`,
+    })
+    .from(reversalJournals)
+    .where(eq(reversalJournals.branchId, set.branchId))
+  return heads
+}
+
+// generation-pipeline.md → Reverse-replay: a reversal that would leave a re-run's write-back
+// inexact drops its journal, in the planner every reversal shares.
+async function journalDropsOf(
+  set: ReversalSet,
+  ctx: DbCtx,
+  heads: readonly JournalHead[],
+  touched: { removed: readonly Delta[]; rewritten: readonly Delta[] },
+): Promise<Pick<ReversePlan, 'droppedJournals' | 'journalOps'>> {
+  if (heads.length === 0) return { droppedJournals: [], journalOps: [] }
+  // Only a set that removes a delta of a group can empty it; the read has no action_id index.
+  const emptiable = heads
+    .filter((head) => touched.removed.some((d) => d.actionId === head.actionId))
+    .map((head) => head.actionId)
+  const groupRows =
+    emptiable.length === 0
+      ? []
+      : ((await ctx.db
+          .select()
+          .from(deltas)
+          .where(
+            and(eq(deltas.branchId, set.branchId), inArray(deltas.actionId, emptiable)),
+          )) as Delta[])
+  const groups = new Map<string, Delta[]>()
+  for (const d of groupRows) {
+    const group = groups.get(d.actionId)
+    if (group) group.push(d)
+    else groups.set(d.actionId, [d])
+  }
+  const dropped = journalsToDrop({ heads, groups, ...touched }).map((head) => head.actionId)
+  if (dropped.length === 0) return { droppedJournals: [], journalOps: [] }
+  const droppedRows = () =>
+    and(eq(reversalJournals.branchId, set.branchId), inArray(reversalJournals.actionId, dropped))
+  return {
+    droppedJournals: (await ctx.db
+      .select()
+      .from(reversalJournals)
+      .where(droppedRows())) as ReversalJournalRow[],
+    journalOps: [ctx.db.delete(reversalJournals).where(droppedRows()).toSQL()],
+  }
+}
 
 /**
  * The reversal of a closed set, unexecuted, for a caller committing it inside its own transaction.
@@ -103,6 +182,7 @@ export async function buildReverseAndPrunePlan(
   ctx: DbCtx,
   options: ReversalOptions,
 ): Promise<ReversePlan> {
+  const heads = await journalHeadsOf(set, ctx)
   const built = await buildUndoOps(set, ctx, options)
   const reownOrPrune = (r: Delta): SqlOp => {
     const keptBy = built.reowned.get(r.id)
@@ -114,11 +194,23 @@ export async function buildReverseAndPrunePlan(
           .where(eq(deltas.id, r.id))
           .toSQL()
   }
+  const logged = [...set.rows, ...built.prunedHolders, ...built.strandedWrites]
+  const prunedDeltas = logged.filter((d) => !built.reowned.has(d.id))
+  const reownedDeltas = logged.filter((d) => built.reowned.has(d.id))
+  const journals = await journalDropsOf(set, ctx, heads, {
+    removed: [...prunedDeltas, ...reownedDeltas],
+    rewritten: [...built.rewrittenHolders, ...built.survivorRewrites.map(({ delta }) => delta)],
+  })
   return {
     ops: built.ops,
-    pruneOps: [...set.rows, ...built.prunedHolders, ...built.strandedWrites].map(reownOrPrune),
+    pruneOps: logged.map(reownOrPrune),
     patches: built.patches,
     survivorRewrites: built.survivorRewrites,
+    prunedDeltas,
+    reownedDeltas,
+    rewrittenHolders: built.rewrittenHolders,
+    droppedJournals: journals.droppedJournals,
+    journalOps: journals.journalOps,
   }
 }
 
@@ -189,6 +281,8 @@ type BuiltUndo = {
   /** Writes outside the set to a row-keeping row the reversal leaves absent. */
   strandedWrites: Delta[]
   survivorRewrites: SurvivorRewrite[]
+  /** The holders whose payload the walk's held copies rewrite, as logged before. */
+  rewrittenHolders: Delta[]
 }
 
 // A null partial on a schema-backed column means the column itself was null pre-change — no
@@ -239,7 +333,12 @@ function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<stri
 function settleHeldCopies(
   copies: ReadonlyMap<string, HeldCopy>,
   ctx: DbCtx,
-): { payloadOps: SqlOp[]; pruned: Delta[]; rewritten: Map<string, Record<string, unknown>> } {
+): {
+  payloadOps: SqlOp[]
+  pruned: Delta[]
+  rewritten: Map<string, Record<string, unknown>>
+  rewrittenHolders: Delta[]
+} {
   const byHolder = new Map<string, HeldCopy[]>()
   for (const copy of copies.values()) {
     const group = byHolder.get(copy.held.holder.id)
@@ -249,6 +348,7 @@ function settleHeldCopies(
   const payloadOps: SqlOp[] = []
   const pruned: Delta[] = []
   const rewritten = new Map<string, Record<string, unknown>>()
+  const rewrittenHolders: Delta[] = []
   for (const group of byHolder.values()) {
     const { holder } = group[0].held
     if (group.some((c) => c.held.place === 'target' && c.removed)) {
@@ -257,11 +357,12 @@ function settleHeldCopies(
     }
     const payload = rebuiltPayload(holder, group)
     rewritten.set(holder.id, payload)
+    rewrittenHolders.push(holder)
     payloadOps.push(
       ctx.db.update(deltas).set({ undoPayload: payload }).where(eq(deltas.id, holder.id)).toSQL(),
     )
   }
-  return { payloadOps, pruned, rewritten }
+  return { payloadOps, pruned, rewritten, rewrittenHolders }
 }
 
 // A write left targeting a gone row would CTRL-Z to nothing. Redo restores none of them, so CTRL-Z
@@ -698,7 +799,7 @@ async function buildUndoOps(
   for (const clear of set.refClears) await clearRef(walk, clear)
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
-  const { payloadOps, pruned, rewritten } = settleHeldCopies(walk.heldCopies, ctx)
+  const { payloadOps, pruned, rewritten, rewrittenHolders } = settleHeldCopies(walk.heldCopies, ctx)
   const strandedWrites = await strandedWritesOf(ctx, set, walk.rowStates, walk.heldCopies)
   const [stranded] = strandedWrites
   if (options.keepRedoExact && stranded)
@@ -727,10 +828,11 @@ async function buildUndoOps(
     prunedHolders: pruned,
     strandedWrites,
     survivorRewrites,
+    rewrittenHolders,
   }
 }
 
-// The closure takes every other write to a reversed create's row, so these are the ones that kept it.
+// The closure takes every other write to a reversed create's row; these are the ones that kept it.
 function laterUserEdits(walk: UndoWalk, create: Delta): Delta[] {
   return walk.chains.survivors(create).filter((d) => d.source === 'user_edit')
 }
@@ -763,6 +865,14 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
   return keeping.reduce((oldest, e) => (e.logPosition < oldest.logPosition ? e : oldest))
 }
 
+/** What a caller adds to a reversal's own transaction; undefined adds nothing. */
+export type ReverseCommitHooks = {
+  /** Read inside the key locks after planning; its ops lead the transaction. */
+  opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
+  /** Emitted after the plan's patches, under the same store-sync stage. */
+  patchesAfter?: readonly PatchEmission[]
+}
+
 export async function reverseAndPruneDeltaRows(
   set: ReversalSet,
   ctx: DbCtx,
@@ -770,16 +880,34 @@ export async function reverseAndPruneDeltaRows(
   extraOps: readonly SqlOp[] = [],
   /** Hears the plan before its transaction runs, as a redo snapshot reads its rewrites. */
   onPlan: (plan: ReversePlan) => void = () => {},
+  hooks: ReverseCommitHooks = {},
 ): Promise<number> {
-  if (set.rows.length === 0 && extraOps.length === 0) return 0
+  const { opsFromPlan, patchesAfter } = hooks
+  // A hook still commits on an empty set: a re-run that reversed nothing journals all the same.
+  if (
+    set.rows.length === 0 &&
+    extraOps.length === 0 &&
+    opsFromPlan === undefined &&
+    patchesAfter === undefined
+  )
+    return 0
   const actionId = set.rows[0]?.actionId ?? 'rollback'
   return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
     try {
       const plan = await buildReverseAndPrunePlan(set, ctx, options)
-      patches = plan.patches
+      patches = [...plan.patches, ...(patchesAfter ?? [])]
       onPlan(plan)
-      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...extraOps])
+      // Canon writes a journal before the plan's ops; a write-back's extraOps re-insert deltas at
+      // positions the prunes free, so they stay last.
+      const leading = opsFromPlan ? await opsFromPlan(plan) : []
+      await ctx.runInTransaction([
+        ...leading,
+        ...plan.ops,
+        ...plan.pruneOps,
+        ...plan.journalOps,
+        ...extraOps,
+      ])
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
@@ -793,6 +921,13 @@ export async function reverseAndPruneDeltaRows(
   })
 }
 
+// A refusal already names what it refused and committed nothing; wrapping would hide it.
+export function replayFailure(e: unknown, actionId: string): DeltaReplayError {
+  return e instanceof ReversalIntegrityError
+    ? e
+    : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
+}
+
 /**
  * Reverses and prunes in one transaction, as CTRL-Z does: unpruned rows would read as the undo head
  * (data-model.md → Entry mutability & rollback). `settleOps(deltaCount)` ops join it, even at 0.
@@ -804,22 +939,32 @@ export async function reverseReplayDeltas(
   ctx: DbCtx,
   settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
 ): Promise<number> {
-  // A refusal already names what it refused and committed nothing; wrapping would hide it.
-  const fail = (e: unknown): DeltaReplayError =>
-    e instanceof ReversalIntegrityError
-      ? e
-      : new DeltaReplayError('Reverse-replay failed', { cause: e, actionId, stage: 'transaction' })
-  let set: ReversalSet
+  let group: Delta[]
   try {
-    const rows = (await ctx.db
+    group = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    // An empty seed runs no query, so its branch is never read.
-    set = await selectReversalSet(ctx, { branchId: rows[0]?.branchId ?? '', target: rows })
   } catch (e) {
-    throw fail(e)
+    throw replayFailure(e, actionId)
+  }
+  return reverseReplayGroup(actionId, group, ctx, settleOps)
+}
+
+/** `reverseReplayDeltas` over the action's group as the caller read it, newest first. */
+export async function reverseReplayGroup(
+  actionId: string,
+  group: readonly Delta[],
+  ctx: DbCtx,
+  settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
+): Promise<number> {
+  let set: ReversalSet
+  try {
+    // An empty seed runs no query, so its branch is never read.
+    set = await selectReversalSet(ctx, { branchId: group[0]?.branchId ?? '', target: group })
+  } catch (e) {
+    throw replayFailure(e, actionId)
   }
   return withKeyLocks(reversalLockKeys(set), async () => {
     let patches: PatchEmission[]
@@ -829,9 +974,9 @@ export async function reverseReplayDeltas(
 
       const plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       patches = plan.patches
-      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...settle])
+      await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
     } catch (e) {
-      throw fail(e)
+      throw replayFailure(e, actionId)
     }
     // Action layer owns the patch: invert in the held-branch store after the tx.
     emitCommittedPatches(patches, actionId)

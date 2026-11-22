@@ -90,7 +90,6 @@ const SENTENCES = {
     entryTime: 'reader:undo.redoMenu.entryTime',
     suggestionRefresh: 'reader:undo.redoMenu.suggestionRefresh',
     close: 'reader:undo.redoMenu.close',
-    rerun: 'reader:undo.redoMenu.rerun',
     keptClose: 'reader:undo.redoMenu.keptClose',
     created: 'reader:undo.redoMenu.created',
     deleted: 'reader:undo.redoMenu.deleted',
@@ -105,7 +104,6 @@ const SENTENCES = {
     entryTime: 'reader:undo.redoNotice.entryTime',
     suggestionRefresh: 'reader:undo.redoNotice.suggestionRefresh',
     close: 'reader:undo.redoNotice.close',
-    rerun: 'reader:undo.redoNotice.rerun',
     keptClose: 'reader:undo.redoNotice.keptClose',
     created: 'reader:undo.redoNotice.created',
     deleted: 'reader:undo.redoNotice.deleted',
@@ -117,6 +115,7 @@ const SENTENCES = {
 
 type SentenceKey = keyof (typeof SENTENCES)['menu']
 type TitleKey = keyof (typeof SENTENCES)['title']
+type RedoKey = keyof (typeof SENTENCES)['redoMenu']
 type FullPlace = Exclude<UndoPlace, 'title'>
 type Params = Record<string, string | number>
 
@@ -156,6 +155,10 @@ function phraseOf(description: UndoDescription, names: UndoNames): Phrase {
   }
 }
 
+function isRedoKey(key: SentenceKey): key is RedoKey {
+  return key in SENTENCES.redoMenu
+}
+
 /**
  * The sentence an undo or redo target reads as in `place`: the menu label or the notice. A target
  * whose names can't be read falls to `the latest change`, which an Undo label closes with `…`.
@@ -166,6 +169,11 @@ export function undoTargetText(
   place: FullPlace,
 ): string {
   const phrase = phraseOf(description, names) ?? { key: 'latest', params: {} }
+  if (place === 'redoMenu' || place === 'redoNotice') {
+    // A re-run's undo pushes no redo group (data-model.md → Entry mutability & rollback).
+    const key: RedoKey = isRedoKey(phrase.key) ? phrase.key : 'latest'
+    return t(SENTENCES[place][key], key === phrase.key ? phrase.params : {})
+  }
   return t(SENTENCES[place][phrase.key], phrase.params)
 }
 

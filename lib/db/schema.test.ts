@@ -1,7 +1,15 @@
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
-import { appSettings, branches, dbSchema, pipelineRuns, stories, storyEntries } from './schema'
+import {
+  appSettings,
+  branches,
+  dbSchema,
+  pipelineRuns,
+  reversalJournals,
+  stories,
+  storyEntries,
+} from './schema'
 
 describe('schema', () => {
   it('keeps every column key clear of the payload-metadata prefix', () => {
@@ -35,6 +43,7 @@ describe('schema', () => {
         'lore',
         'pipelineRuns',
         'probeCaptures',
+        'reversalJournals',
         'stories',
         'storyEntries',
         'threads',
@@ -83,6 +92,19 @@ describe('schema', () => {
     expect(getTableConfig(pipelineRuns).columns.find((c) => c.name === 'outcome')?.notNull).toBe(
       false,
     )
+  })
+
+  it('pipeline_runs.rerun_chapter_id is a nullable text column', () => {
+    const column = getTableConfig(pipelineRuns).columns.find((c) => c.name === 'rerun_chapter_id')
+    expect(column?.notNull).toBe(false)
+    expect(column?.getSQLType()).toBe('text')
+  })
+
+  it('reversal_journals is keyed on (branch_id, action_id) with a branch FK', () => {
+    const { primaryKeys, foreignKeys } = getTableConfig(reversalJournals)
+    expect(primaryKeys).toHaveLength(1)
+    expect(primaryKeys[0].columns.map((c) => c.name).sort()).toEqual(['action_id', 'branch_id'])
+    expect(foreignKeys).toHaveLength(1)
   })
 
   it('app_settings is keyed on id', () => {

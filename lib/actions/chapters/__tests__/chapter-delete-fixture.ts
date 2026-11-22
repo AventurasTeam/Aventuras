@@ -2,11 +2,13 @@ import { and, asc, desc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, expect, vi, type Mock } from 'vitest'
 
 import type { generateStructured } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   chapters,
   deltas,
   entities,
   lore,
+  pipelineRuns,
   storyEntries,
   threads,
   type Chapter,
@@ -105,6 +107,42 @@ export const MERGED_DESCRIPTION =
   'Wren carries a sealed letter to the reeve of Low Ashby, its courier seal unbroken.'
 
 export const CLOSE_LORE_ID = 'lore_harrow_ferry'
+
+export const WREN: Omit<NewEntity, 'branchId'> = {
+  id: 'char_wren',
+  kind: 'character',
+  name: 'Wren',
+  description: 'A courier carrying a sealed letter.',
+  status: 'active',
+  injectionMode: 'auto',
+  createdAt: SEEDED_AT,
+  updatedAt: SEEDED_AT,
+}
+
+/** The inn pair a merge joins: ASKED at the first reply, TOLD at the second. */
+export const ASKED = {
+  id: 'hap_asked',
+  title: 'Asking after the night ferry',
+  description: 'At the inn, Wren asks the innkeeper whether the ferry still runs at night.',
+} as const
+
+export const TOLD = {
+  id: 'hap_told',
+  title: 'The ferry runs on Tobin’s word',
+  description: 'The innkeeper tells Wren the night ferry runs only when old Tobin says it runs.',
+} as const
+
+export const MERGED_HAPPENING =
+  'At the inn, Wren asks after the night ferry and hears it runs only when old Tobin says it runs.'
+
+/** ASKED's cast, which a merge's delete of ASKED captures. */
+export const ASKED_CAST = [
+  { id: 'hinv_asked_tobin', entityId: TOBIN.id, role: 'ferryman' },
+  { id: 'hinv_asked_wren', entityId: WREN.id, role: 'asks' },
+] as const
+
+/** The involvement a merge under `actionId` carries Wren onto TOLD with. */
+export const mergeCopyId = (actionId: string): string => `hinv_${actionId}_wren`
 
 export type WorldRows = { entities: Entity[]; lore: Lore[]; threads: Thread[] }
 
@@ -211,18 +249,27 @@ export async function openClosed(): Promise<ClosedChapter> {
   return closeOn(fx, fx.replyIds[END_REPLY])
 }
 
+/** Lands `actions` as one group under `actionId`, anchored on E, as a close's tool does. */
+export async function writeUnderAction(
+  c: ClosedChapter,
+  actionId: string,
+  actions: readonly PipelineAction[],
+): Promise<void> {
+  const outcome = await applyDeltaActionGroupWithOutcomes(
+    actions,
+    { actionId, branchId: c.fx.branchId, entryId: c.endEntryId },
+    c.fx.ctx,
+  )
+  if (outcome.status !== 'ok' || outcome.outcomes.some((one) => one.status !== 'landed'))
+    throw new Error(`writes under ${actionId} refused: ${JSON.stringify(outcome)}`)
+}
+
 /** Lands `actions` as one group under the close's action, anchored on E, as a close's tool does. */
 export async function writeUnderClose(
   c: ClosedChapter,
   actions: readonly PipelineAction[],
 ): Promise<void> {
-  const outcome = await applyDeltaActionGroupWithOutcomes(
-    actions,
-    { actionId: c.actionId, branchId: c.fx.branchId, entryId: c.endEntryId },
-    c.fx.ctx,
-  )
-  if (outcome.status !== 'ok' || outcome.outcomes.some((one) => one.status !== 'landed'))
-    throw new Error(`close writes refused: ${JSON.stringify(outcome)}`)
+  await writeUnderAction(c, c.actionId, actions)
 }
 
 /** Lands one write under its own action, as a pass, a turn or a user's save does. */
@@ -236,6 +283,116 @@ export async function writeLater(
     fx.ctx,
   )
   if (result.status !== 'ok') throw new Error(`${at.actionId} refused: ${result.reason}`)
+}
+
+/** The report under `actionId`, a close's last write: what a re-run's report phase logs (C4). */
+export async function writeCloseReport(c: ClosedChapter, actionId: string): Promise<void> {
+  await writeLater(
+    c.fx,
+    {
+      kind: 'updateChapter',
+      source: 'chapter_close',
+      payload: {
+        branchId: c.fx.branchId,
+        id: c.chapter.id,
+        patch: { closeReport: { version: 1, actionId, calls: [], stopped: [], noToolCalls: true } },
+      },
+    },
+    { actionId, entryId: c.endEntryId },
+  )
+}
+
+/** An open pipeline_runs marker, as a run the process died in leaves it. */
+export async function seedRunMarker(
+  fx: CloseFixture,
+  marker: { runId: string; actionId: string; startedAt: number; kind?: string },
+): Promise<void> {
+  await fx.ctx.db.insert(pipelineRuns).values({
+    runId: marker.runId,
+    kind: marker.kind ?? CHAPTER_CLOSE_KIND,
+    actionId: marker.actionId,
+    storyId: fx.storyId,
+    startedAt: marker.startedAt,
+  })
+}
+
+/** Wren, the inn pair and their casts, by a pass: Tobin in both casts, Wren in ASKED's alone. */
+export async function seedHappeningPair(fx: CloseFixture): Promise<void> {
+  const { branchId } = fx
+  await seedPassWrite(fx, {
+    kind: 'createEntity',
+    source: 'periodic_classifier',
+    payload: { entry: { ...WREN, branchId } },
+  })
+  const anchored = [
+    [ASKED, fx.replyIds[0]],
+    [TOLD, fx.replyIds[1]],
+  ] as const
+  for (const [row, occurredAtEntryId] of anchored)
+    await seedPassWrite(fx, {
+      kind: 'createHappening',
+      source: 'periodic_classifier',
+      payload: {
+        entry: {
+          ...row,
+          branchId,
+          occurredAtEntryId,
+          commonKnowledge: 0,
+          createdAt: SEEDED_AT,
+          updatedAt: SEEDED_AT,
+        },
+      },
+    })
+  const casts = [
+    ...ASKED_CAST.map((cast) => ({ ...cast, happeningId: ASKED.id })),
+    { id: 'hinv_told_tobin', entityId: TOBIN.id, role: 'ferryman', happeningId: TOLD.id },
+  ]
+  for (const cast of casts)
+    await seedPassWrite(fx, {
+      kind: 'createHappeningInvolvement',
+      source: 'periodic_classifier',
+      payload: { entry: { ...cast, branchId } },
+    })
+}
+
+/** merge_happenings's writes: TOLD takes the merged text and Wren; ASKED goes with its cast. */
+export async function writeHappeningMerge(
+  fx: CloseFixture,
+  at: { actionId: string; entryId: string },
+): Promise<void> {
+  const { branchId } = fx
+  const outcome = await applyDeltaActionGroupWithOutcomes(
+    [
+      {
+        kind: 'updateHappening',
+        source: 'chapter_close',
+        payload: {
+          branchId,
+          id: TOLD.id,
+          patch: { description: MERGED_HAPPENING },
+          proseEntryId: null,
+        },
+      },
+      {
+        kind: 'createHappeningInvolvement',
+        source: 'chapter_close',
+        payload: {
+          entry: {
+            id: mergeCopyId(at.actionId),
+            branchId,
+            happeningId: TOLD.id,
+            entityId: WREN.id,
+            role: 'asks',
+          },
+        },
+      },
+      { kind: 'deleteHappening', source: 'chapter_close', payload: { branchId, id: ASKED.id } },
+    ],
+    { actionId: at.actionId, branchId, entryId: at.entryId },
+    fx.ctx,
+  )
+  if (outcome.status !== 'ok' || outcome.outcomes.some((one) => one.status !== 'landed'))
+    throw new Error(`merge under ${at.actionId} refused: ${JSON.stringify(outcome)}`)
 }
 
 export const loreCreate = (branchId: string, id: string, title: string): PipelineAction => ({

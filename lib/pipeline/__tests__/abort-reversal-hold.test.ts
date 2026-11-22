@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { withBranchWriteShared } from '@/lib/actions/delta/branch-write-lock'
 import { DeltaReplayError } from '@/lib/actions/delta/replay-errors'
-import { reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { reverseRunGroup } from '@/lib/actions/delta/rerun-journal'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { happenings } from '@/lib/db'
 import {
@@ -138,12 +138,12 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     const finished = new Promise<void>((resolve) => {
       finish = resolve
     })
-    const slowReverse: DeltaActionPort['reverseReplayDeltas'] = async (...args) => {
+    const slowReverse: DeltaActionPort['reverseRunGroup'] = async (...args) => {
       entered()
       await finished
-      return reverseReplayDeltas(...args)
+      return reverseRunGroup(...args)
     }
-    configurePort({ reverseReplayDeltas: slowReverse })
+    configurePort({ reverseRunGroup: slowReverse })
     const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, 'pass')
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
@@ -184,7 +184,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
   it('releases the hold when the reversal fails and boot recovery owns the run', async () => {
     const { ctx } = await makeHarness()
     configurePort({
-      reverseReplayDeltas: (actionId) =>
+      reverseRunGroup: ({ actionId }) =>
         Promise.reject(
           new DeltaReplayError('Reverse-replay failed', {
             cause: new Error('forced'),
@@ -204,7 +204,7 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
 
   it('releases the hold when the reversal throws something the orchestrator does not recognise', async () => {
     const { ctx } = await makeHarness()
-    configurePort({ reverseReplayDeltas: () => Promise.reject(new Error('not a replay error')) })
+    configurePort({ reverseRunGroup: () => Promise.reject(new Error('not a replay error')) })
     const { landed } = defineRun(PERIODIC_CLASSIFIER_KIND, 'pass')
     const run = startPipeline(PERIODIC_CLASSIFIER_KIND, ctx)
     await landed
@@ -226,4 +226,123 @@ describe("an interruptible run's abort reversal and the branch write lock", () =
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(await grantedWithin('a write after the thrown reversal')).toBe('granted')
   })
+})
+
+// generation-pipeline.md → Reverse-replay: a re-run whose journal couldn't be written back says so.
+describe("an abort's journal outcome", () => {
+  beforeEach(() => {
+    resetSingletons()
+  })
+  afterEach(() => {
+    resetSingletons()
+  })
+
+  async function abortWith(reverse: DeltaActionPort['reverseRunGroup']): Promise<unknown> {
+    const { ctx } = await makeHarness()
+    configurePort({ reverseRunGroup: reverse })
+    const { landed } = defineRun('rerun-stand-in')
+    const run = startPipeline('rerun-stand-in', ctx)
+    await landed
+    abortRuns()
+    return within(run.origin, 'abort')
+  }
+
+  it('asks for the run group by its action and branch', async () => {
+    const asked: unknown[] = []
+    await abortWith(async (args) => {
+      asked.push(args)
+      return { deltas: 0, journal: null, chapterNumber: null }
+    })
+
+    expect(asked).toEqual([{ actionId: expect.any(String), branchId: 'b1' }])
+  })
+
+  it('marks the aborted run closeUndone when its reversal undid the close', async () => {
+    expect(
+      await abortWith(async () => ({ deltas: 2, journal: 'undone', chapterNumber: 3 })),
+    ).toMatchObject({ outcome: 'aborted', closeUndone: true })
+  })
+
+  it.each([
+    ['restored', { deltas: 2, journal: 'restored', chapterNumber: null }],
+    ['undone with no chapter left', { deltas: 1, journal: 'undone', chapterNumber: null }],
+    ['with no journal', { deltas: 1, journal: null, chapterNumber: null }],
+  ] as const)(
+    'leaves an aborted run unmarked when its reversal ended %s',
+    async (_name, reversal) => {
+      const result = await abortWith(async () => reversal)
+
+      expect(result).toMatchObject({ outcome: 'aborted' })
+      expect(result).not.toHaveProperty('closeUndone')
+    },
+  )
+
+  it('marks a failed run closeUndone when only the store sync after an undone close failed', async () => {
+    const result = await abortWith(({ actionId }) =>
+      Promise.reject(
+        new DeltaReplayError('Post-commit patch sync failed', {
+          cause: new Error('store sync boom'),
+          actionId,
+          stage: 'store-sync',
+          journal: 'undone',
+          chapterNumber: 3,
+        }),
+      ),
+    )
+
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      closeUndone: true,
+      error: {
+        kind: 'orchestrator',
+        detail: 'post-commit store sync failed: Error: store sync boom',
+      },
+    })
+  })
+
+  it('leaves a failed run unmarked when its reversal never committed', async () => {
+    const result = await abortWith(({ actionId }) =>
+      Promise.reject(
+        new DeltaReplayError('Reverse-replay failed', {
+          cause: new Error('forced'),
+          actionId,
+          stage: 'transaction',
+          journal: 'undone',
+          chapterNumber: 3,
+        }),
+      ),
+    )
+
+    expect(result).toMatchObject({ outcome: 'failed' })
+    expect(result).not.toHaveProperty('closeUndone')
+  })
+
+  it.each([
+    ['a restored journal', { journal: 'restored' }],
+    ['no journal', {}],
+    ['an undone close with no chapter left', { journal: 'undone', chapterNumber: null }],
+  ] as const)(
+    'leaves a failed run unmarked when only the store sync failed after %s',
+    async (_name, payload) => {
+      const result = await abortWith(({ actionId }) =>
+        Promise.reject(
+          new DeltaReplayError('Post-commit patch sync failed', {
+            cause: new Error('store sync boom'),
+            actionId,
+            stage: 'store-sync',
+            ...payload,
+          }),
+        ),
+      )
+
+      expect(result).toMatchObject({
+        outcome: 'failed',
+        error: {
+          kind: 'orchestrator',
+          detail: 'post-commit store sync failed: Error: store sync boom',
+        },
+      })
+      expect(result).not.toHaveProperty('closeUndone')
+    },
+  )
 })

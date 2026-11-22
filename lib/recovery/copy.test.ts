@@ -59,6 +59,26 @@ describe('formatRecoveryReport', () => {
     )
   })
 
+  // generation-pipeline.md → Recovery modal: a re-run whose journal couldn't be written back.
+  it('adds the fallback line after the close’s for a re-run whose close was undone', () => {
+    expect(
+      formatRecoveryReport(
+        report({ ...recovered('chapter-close', 'story_1'), closeUndone: true }),
+        { story_1: 'Mornstone' },
+      ),
+    ).toBe(
+      "An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
+    )
+  })
+
+  it('adds no line for a re-run whose journal was written back', () => {
+    expect(
+      formatRecoveryReport(report(recovered('chapter-close', 'story_1')), { story_1: 'Mornstone' }),
+    ).toBe(
+      'An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact.',
+    )
+  })
+
   // generation-pipeline.md → Recovery modal: a pass holds its branch's turns; it isn't background.
   it('formats a named periodic-classifier recovery', () => {
     expect(
@@ -176,6 +196,35 @@ describe('failure copy', () => {
         expect(text).toMatch(/your story content is intact/i)
         expect(text).not.toContain('restart')
       }
+  })
+
+  // generation-pipeline.md → Recovery modal: the reversal committed and only the store sync failed,
+  // so the close reads as the reversed one does, not as a failed reversal.
+  it('renders a failure whose reversal committed as the reversed close, plus the fallback line', () => {
+    const undone: RecoveryFailure = { ...failed('chapter-close', 'story_1'), closeUndone: true }
+    expect(formatRecoveryReport(failureReport(undone), { story_1: 'Mornstone' })).toBe(
+      "An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
+    )
+    expect(formatRecoveryReport(failureReport({ ...undone, storyId: null }), {})).toBe(
+      "An interrupted shutdown was detected. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
+    )
+  })
+
+  it('adds no fallback line to a failure that undid no close', () => {
+    expect(
+      formatRecoveryReport(failureReport(failed('chapter-close', 'story_1')), {
+        story_1: 'Mornstone',
+      }),
+    ).toBe(
+      'An interrupted background update in Mornstone could not be undone. Your story content is intact, and restarting the app retries automatically.',
+    )
+    expect(
+      formatRecoveryReport(failureReport(failed('chapter-close', 'story_1', 'write-back')), {
+        story_1: 'Mornstone',
+      }),
+    ).toBe(
+      'An interrupted background update in Mornstone could not be undone without breaking later changes. Your story content is intact.',
+    )
   })
 
   it('keeps the hold for a classifier refusal, and its story name', () => {

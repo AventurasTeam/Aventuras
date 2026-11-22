@@ -8,6 +8,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 
+import type { RerunJournal } from './rerun-journal'
 import { branches } from '../stories/stories.table'
 
 export const probeCaptures = sqliteTable(
@@ -48,6 +49,8 @@ export const pipelineRuns = sqliteTable('pipeline_runs', {
   startedAt: integer('started_at').notNull(),
   finishedAt: integer('finished_at'),
   outcome: text('outcome', { enum: ['completed', 'aborted', 'failed', 'recovered'] }),
+  // Set in a re-run's reversal transaction, so recovery knows it even once the journal is gone.
+  rerunChapterId: text('rerun_chapter_id'),
 })
 
 export const deltas = sqliteTable(
@@ -87,3 +90,19 @@ export const deltas = sqliteTable(
     uniqueIndex('deltas_log_position_uniq').on(t.branchId, t.logPosition),
   ],
 )
+
+// Not delta-logged: the undo half of a close re-run's group (data-model.md → Diagram).
+export const reversalJournals = sqliteTable(
+  'reversal_journals',
+  {
+    actionId: text('action_id').notNull(),
+    branchId: text('branch_id')
+      .notNull()
+      .references(() => branches.id),
+    journal: text('journal', { mode: 'json' }).notNull().$type<RerunJournal>(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.branchId, t.actionId] })],
+)
+
+export type ReversalJournalRow = typeof reversalJournals.$inferSelect

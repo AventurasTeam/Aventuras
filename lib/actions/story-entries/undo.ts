@@ -6,10 +6,22 @@ import { entriesStore, generationStore, selectMemoryRun, undoRedoStore } from '@
 import { selectUndoTarget } from '@/lib/undo'
 
 import { resolveInvalidationForDeltas, type InvalidationOutcome } from './classifier-facts'
-import { logReversalRefused, resolveSweep } from './operational'
+import { resolveSweep } from './operational'
 import { bracketProseReversal } from './prose-reversal'
+import { logReversalRefused } from '../delta/commit-new-action'
 import { applyRedo, prepareUndo, type RedoSnapshot } from '../delta/redo'
-import { DeltaReplayError, ReversalIntegrityError } from '../delta/reverse-replay'
+import {
+  logCloseUndone,
+  rerunWriteBack,
+  withCloseGroups,
+  withJournalOutcome,
+  type RerunWriteBack,
+} from '../delta/rerun-journal'
+import {
+  DeltaReplayError,
+  ReversalIntegrityError,
+  reverseAndPruneDeltaRows,
+} from '../delta/reverse-replay'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
 
@@ -26,7 +38,11 @@ export type UndoRejectionCode =
   | 'target-moved'
 
 export type UndoResult =
-  | { status: 'ok' }
+  | {
+      status: 'ok'
+      /** A re-run's undo with no journal to write back undid the close too (Reverse-replay). */
+      closeUndone?: { chapterNumber: number }
+    }
   | { status: 'rejected'; code: UndoRejectionCode; reason: string }
 
 /**
@@ -156,6 +172,12 @@ async function undoBracketed(
   // Admitted past the gate to undo the turn; a target that moved during the interrupt is gated.
   if (throughInterrupt && target.kind !== 'turn') return GATED
 
+  if (target.kind === 'group') {
+    const writeBack = await rerunWriteBack({ actionId: target.actionId, branchId, group }, ctx)
+    if (writeBack.outcome !== 'none')
+      return undoRerun({ branchId, actionId: target.actionId, group }, writeBack, ctx)
+  }
+
   let set: ReversalSet
   let clampOps: readonly SqlOp[]
   if (target.kind === 'turn') {
@@ -185,6 +207,43 @@ async function undoBracketed(
   }
   undoRedoStore.pushRedoGroup(undo.group)
   return { status: 'ok' }
+}
+
+// generation-pipeline.md → Reverse-replay: a re-run's undo takes no redo snapshot and clears the
+// stack, since a later edit's snapshot there can hold the re-run's values.
+async function undoRerun(
+  { branchId, actionId, group }: { branchId: string; actionId: string; group: readonly Delta[] },
+  writeBack: Exclude<RerunWriteBack, { outcome: 'none' }>,
+  ctx: DbCtx,
+): Promise<UndoResult> {
+  const invalidation = await resolveInvalidationForDeltas(branchId, group, ctx)
+  if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
+  const target = writeBack.outcome === 'undone' ? withCloseGroups(group, writeBack.seed) : group
+  const set = await selectReversalSet(ctx, { branchId, target, sweep: invalidation.rows })
+  try {
+    await reverseAndPruneDeltaRows(
+      set,
+      ctx,
+      { keepRedoExact: false },
+      [...invalidation.clampOps, ...writeBack.ops],
+      undefined,
+      writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
+    )
+  } catch (e) {
+    // Committed: only the store sync failed, so the re-run is undone all the same, and the error
+    // says how its journal ended.
+    if (e instanceof DeltaReplayError && e.committed) {
+      undoRedoStore.clear()
+      logCloseUndone(actionId, writeBack)
+      throw withJournalOutcome(e, actionId, writeBack)
+    }
+    throw e
+  }
+  undoRedoStore.clear()
+  logCloseUndone(actionId, writeBack)
+  return writeBack.outcome === 'undone' && writeBack.chapterNumber !== null
+    ? { status: 'ok', closeUndone: { chapterNumber: writeBack.chapterNumber } }
+    : { status: 'ok' }
 }
 
 export async function redoLastAction(

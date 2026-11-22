@@ -48,6 +48,33 @@ describe('ReversalIntegrityError', () => {
   })
 })
 
+describe('describeDeltaReplayError and a re-run journal', () => {
+  it('carries a re-run group’s journal outcome for the pipeline port', () => {
+    const e = new DeltaReplayError('Post-commit patch sync failed', {
+      cause: 'boom',
+      actionId: 'act_rerun',
+      stage: 'store-sync',
+      journal: 'undone',
+      chapterNumber: 2,
+    })
+
+    expect(describeDeltaReplayError(e)).toEqual({
+      detail: 'boom',
+      committed: true,
+      refusal: null,
+      journal: 'undone',
+      chapterNumber: 2,
+    })
+  })
+
+  it('leaves the journal fields off any other failure', () => {
+    const e = new DeltaReplayError('tx', { cause: 'x', actionId: 'act_1', stage: 'transaction' })
+
+    expect(describeDeltaReplayError(e)).not.toHaveProperty('journal')
+    expect(describeDeltaReplayError(e)).not.toHaveProperty('chapterNumber')
+  })
+})
+
 describe('reverse-replay re-exports', () => {
   it('hands existing importers the same classes', () => {
     expect(ReexportedReplayError).toBe(DeltaReplayError)

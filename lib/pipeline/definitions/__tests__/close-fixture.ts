@@ -1,3 +1,5 @@
+import type { DatabaseSync } from 'node:sqlite'
+
 import { and, eq, sql } from 'drizzle-orm'
 
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
@@ -26,6 +28,8 @@ import type { ChapterMetadata } from '../chapter-metadata-schema'
 
 export type CloseFixture = {
   ctx: DbCtx
+  /** ctx's handle, for a test that counts the statements a path runs. */
+  sqlite: DatabaseSync
   storyId: string
   branchId: string
   /** Every entry in position order, the opening first. */
@@ -370,7 +374,7 @@ export async function openCloseFixture(opts?: {
   // unregistered, and undoTargetOf throws on an unregistered table.
   __resetRegistrationGuard()
   registerAllDomains()
-  const { db, runInTransaction } = await createTestDb()
+  const { db, sqlite, runInTransaction } = await createTestDb()
   const ctx: DbCtx = { db, runInTransaction }
   await db.insert(stories).values({
     id: STORY_ID,
@@ -446,6 +450,7 @@ export async function openCloseFixture(opts?: {
 
   return {
     ctx,
+    sqlite,
     storyId: STORY_ID,
     branchId: BRANCH_ID,
     entries,

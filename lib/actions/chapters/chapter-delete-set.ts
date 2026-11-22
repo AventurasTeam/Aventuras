@@ -1,10 +1,11 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 
-import { chapters, deltas, type Chapter, type Delta } from '@/lib/db'
+import { chapters, type Chapter, type Delta } from '@/lib/db'
 
+import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
+import { logReversalRefused } from '../delta/commit-new-action'
 import { ReversalIntegrityError } from '../delta/replay-errors'
 import { selectReversalSet, type ReversalSet } from '../delta/row-closure'
-import { logReversalRefused } from '../story-entries/operational'
 import type { DbCtx } from '../types'
 
 /** `'whole'` reverses the close groups; `'divider-only'` the row, its report and its stamps. */
@@ -38,9 +39,6 @@ export type ChapterDeleteSet = {
   /** Every delta of the chapter's close groups, newest first. */
   groups: readonly Delta[]
 }
-
-// C1: a close writes no entries, so its rows on these are the chapter row, its report and stamps.
-const DIVIDER_TABLES: ReadonlySet<string> = new Set(['chapters', 'story_entries'])
 
 function refused(code: ChapterDeleteReadRefusal['code'], reason: string): ChapterDeleteReadRefusal {
   return { status: 'rejected', code, reason }
@@ -82,37 +80,12 @@ export async function resolveChapterDeleteSet(
       `chapter ${chapter.sequenceNumber} is not the latest; ${latest.sequenceNumber} is`,
     )
 
-  // The row's chapter_close groups: the close's, and each re-run's once re-runs exist (M5.13).
-  const groupIds = await ctx.db
-    .selectDistinct({ actionId: deltas.actionId })
-    .from(deltas)
-    .where(
-      and(
-        eq(deltas.branchId, branchId),
-        eq(deltas.targetTable, 'chapters'),
-        eq(deltas.targetId, chapterId),
-        eq(deltas.source, 'chapter_close'),
-      ),
-    )
-  if (groupIds.length === 0)
+  const groups = await readChapterCloseGroups(branchId, chapterId, ctx)
+  if (groups.length === 0)
     return refused(
       CHAPTER_DELETE_REFUSAL.noClose,
       `no close wrote chapter ${branchId}:${chapterId}`,
     )
-
-  const groups = (await ctx.db
-    .select()
-    .from(deltas)
-    .where(
-      and(
-        eq(deltas.branchId, branchId),
-        inArray(
-          deltas.actionId,
-          groupIds.map((group) => group.actionId),
-        ),
-      ),
-    )
-    .orderBy(desc(deltas.logPosition))) as Delta[]
   const target = mode === 'whole' ? groups : groups.filter((d) => DIVIDER_TABLES.has(d.targetTable))
   try {
     const set = await selectReversalSet(ctx, { branchId, target })

@@ -25,7 +25,7 @@ import {
   describeReplayError,
   holdBranchWriteExclusive,
   releaseBranchWriteExclusive,
-  reverseReplayDeltas,
+  reverseRunGroup,
   settleUserWrites,
 } from './action-port'
 import { checkConcurrencyContract } from './concurrency'
@@ -464,19 +464,31 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
       .set({ finishedAt: Date.now(), outcome: settled })
       .where(eq(pipelineRuns.runId, run.runId))
   let reversalFailed = false
+  // A close's re-run whose journal couldn't be written back: its close was undone instead.
+  let closeUndone = false
   // generation-pipeline.md → Branch write lock: a rollback preview's reads never straddle a pass's
   // or a close's reversal. Its writes took no hold: under the gate no user write meets them.
   if (run.interruptible) await holdBranchWriteExclusive(run.branchId, run.actionId)
   try {
     // Marker rides the reversal's transaction: never records an uncommitted reversal.
-    await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcomeOf()).toSQL()])
+    const reversal = await reverseRunGroup(
+      { actionId: run.actionId, branchId: run.branchId },
+      ctx,
+      () => [markerOp(outcomeOf()).toSQL()],
+    )
+    closeUndone = reversal.journal === 'undone' && reversal.chapterNumber !== null
   } catch (e) {
     // An error it doesn't recognise counts as uncommitted: the marker rides the reversal's
     // transaction, so boot recovery reads the truth either way, and the run must still end here.
-    const replayFailure = describeReplayError(e) ?? { committed: false, detail: messageOf(e) }
+    const described = describeReplayError(e)
+    const replayFailure = described ?? { committed: false, detail: messageOf(e) }
     const stage = replayFailure.committed ? 'post-commit store sync' : 'reverse-replay'
     failure = { kind: 'orchestrator', detail: `${stage} failed: ${replayFailure.detail}` }
     reversalFailed = !replayFailure.committed
+    closeUndone =
+      described?.committed === true &&
+      described.journal === 'undone' &&
+      typeof described.chapterNumber === 'number'
   } finally {
     // An uncommitted reversal releases it too: recovery owns those writes, and a held lock
     // would stall every write to the branch until boot.
@@ -519,9 +531,10 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     })
   run.resolveTerminal()
   const { runId, actionId } = run
+  const undone = closeUndone ? { closeUndone: true as const } : {}
   return failure === undefined
-    ? { runId, actionId, outcome: 'aborted' }
-    : { runId, actionId, outcome: 'failed', error: failure }
+    ? { runId, actionId, outcome: 'aborted', ...undone }
+    : { runId, actionId, outcome: 'failed', error: failure, ...undone }
 }
 
 type PhaseOutcome = { kind: 'completed' } | { kind: 'aborted'; cause: AbortCause }

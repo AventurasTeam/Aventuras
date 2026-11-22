@@ -18,7 +18,8 @@ import { realDeltaActionPort } from '@/lib/pipeline/__tests__/harness'
 import { passChainsTo } from '@/lib/pipeline/definitions/memory-chain'
 import { generationStore, type DeferredWorkKind, type RunState } from '@/lib/stores'
 
-import { DeltaReplayError, reverseReplayDeltas } from '../../delta/reverse-replay'
+import { reverseRunGroup } from '../../delta/rerun-journal'
+import { DeltaReplayError } from '../../delta/reverse-replay'
 
 /** One run of the stand-in pass, holding after its write. */
 export type HeldPass = {
@@ -213,16 +214,16 @@ export function failReversalsOf(stand: {
 }): void {
   configureDeltaActionPort({
     ...realDeltaActionPort(),
-    reverseReplayDeltas: (actionId, ...rest) =>
-      stand.runs.some((run) => run.actionId === actionId)
+    reverseRunGroup: (args, ...rest) =>
+      stand.runs.some((run) => run.actionId === args.actionId)
         ? Promise.reject(
             new DeltaReplayError('Reverse-replay failed', {
               cause: new Error('database is locked'),
-              actionId,
+              actionId: args.actionId,
               stage: 'transaction',
             }),
           )
-        : reverseReplayDeltas(actionId, ...rest),
+        : reverseRunGroup(args, ...rest),
   })
 }
 

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   __redoGroupForTest,
+  DeltaReplayError,
   type readUndoImpact,
   type readUndoTarget,
   type redoLastAction,
@@ -105,6 +106,22 @@ const CLOSE: UndoTargetRead = {
   ],
   entryPositions: {},
 }
+
+const RERUN: UndoTargetRead = {
+  actionId: 'act_rerun',
+  deltas: [
+    delta({
+      actionId: 'act_rerun',
+      source: 'chapter_close',
+      op: 'update',
+      targetTable: 'chapters',
+      targetId: 'ch3',
+    }),
+  ],
+  entryPositions: {},
+}
+
+const CLOSE_UNDONE: UndoResult = { status: 'ok', closeUndone: { chapterNumber: 3 } }
 
 let toasts: ToastItem[] = []
 
@@ -705,5 +722,152 @@ describe('useReaderUndo — the reversal meter', () => {
     expect(ticks).toHaveBeenCalledTimes(1)
     expect(cleared).toHaveBeenCalledWith(ticks.mock.results[0].value)
     expect(measured()).toEqual([])
+  })
+})
+
+// reader-composer.md → Undo and redo: an undo that raises its own warning shows it instead.
+describe('useReaderUndo — a re-run undone with no journal to write back', () => {
+  it.each(['menu', 'keyboard'] as const)(
+    'shows the warning instead of the notice, from the %s',
+    async (origin) => {
+      actions.readUndoTarget.mockResolvedValue(RERUN)
+      actions.undoLastAction.mockResolvedValue(CLOSE_UNDONE)
+      const r = render()
+      act(() => r.result.current.undo(origin))
+      await settle()
+      act(() => r.result.current.confirm?.props.onConfirm())
+      await settle()
+
+      expect(actions.undoLastAction).toHaveBeenCalledWith('b1', ctx, {
+        expectedActionId: 'act_rerun',
+      })
+      expect(
+        toasts.map(({ severity, message, action }) => ({ severity, message, action })),
+      ).toEqual([
+        {
+          severity: 'warning',
+          message: "Chapter 3's earlier close couldn't be restored, so its close was undone.",
+          action: undefined,
+        },
+      ])
+    },
+  )
+
+  it('dismisses an older notice, whose Redo the undo cleared', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts.map((item) => item.message)).toEqual(['Undid the turn at entry #2'])
+
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    actions.undoLastAction.mockResolvedValue(CLOSE_UNDONE)
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    expect(toasts.map((item) => item.severity)).toEqual(['warning'])
+  })
+})
+
+// A store sync that failed after the undo committed: the close is undone whatever the error says.
+describe('useReaderUndo — a re-run undone, then its store sync fails', () => {
+  const syncFailure = (outcome: {
+    journal?: 'restored' | 'undone'
+    chapterNumber?: number | null
+  }) =>
+    new DeltaReplayError('store sync boom', {
+      cause: 'store sync boom',
+      actionId: 'act_rerun',
+      stage: 'store-sync',
+      ...outcome,
+    })
+
+  async function undoRerunThrowing(error: Error) {
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    actions.undoLastAction.mockRejectedValue(error)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+  }
+
+  beforeEach(() => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => false })
+  })
+  afterEach(() => __resetDiagnosticsGate())
+
+  const shown = () => toasts.map(({ severity, message }) => ({ severity, message }))
+
+  it('shows the close-undone warning for a committed undone outcome, and logs the failure', async () => {
+    await undoRerunThrowing(syncFailure({ journal: 'undone', chapterNumber: 3 }))
+
+    expect(shown()).toEqual([
+      {
+        severity: 'warning',
+        message: "Chapter 3's earlier close couldn't be restored, so its close was undone.",
+      },
+    ])
+    expect(
+      getDiagnosticsSnapshot()
+        .logEntries.filter(({ kind }) => kind === 'reader.undo_failed')
+        .map(({ level, fields }) => ({ level, fields })),
+    ).toEqual([
+      { level: 'error', fields: { branchId: 'b1', committed: true, error: 'store sync boom' } },
+    ])
+  })
+
+  it('dismisses an older notice, whose Redo the undo cleared', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts).toHaveLength(1)
+
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    actions.undoLastAction.mockRejectedValue(syncFailure({ journal: 'undone', chapterNumber: 3 }))
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    expect(toasts.map((item) => item.severity)).toEqual(['warning'])
+  })
+
+  it.each([
+    [
+      'an undo that never committed',
+      new DeltaReplayError('x', { cause: 'x', actionId: 'a', stage: 'transaction' }),
+    ],
+    [
+      'an undone outcome on an undo that never committed',
+      new DeltaReplayError('x', {
+        cause: 'x',
+        actionId: 'a',
+        stage: 'transaction',
+        journal: 'undone',
+        chapterNumber: 3,
+      }),
+    ],
+    ['a committed restore', syncFailure({ journal: 'restored', chapterNumber: null })],
+    [
+      'a committed restore naming a chapter',
+      syncFailure({ journal: 'restored', chapterNumber: 3 }),
+    ],
+    [
+      'a committed undone outcome naming no chapter',
+      syncFailure({ journal: 'undone', chapterNumber: null }),
+    ],
+    ['a committed failure carrying no outcome', syncFailure({})],
+    ['an error that is no replay failure', new Error('boom')],
+  ])('keeps the generic failure for %s', async (_label, error) => {
+    await undoRerunThrowing(error)
+
+    expect(shown()).toEqual([{ severity: 'error', message: "Couldn't undo. Please try again." }])
   })
 })

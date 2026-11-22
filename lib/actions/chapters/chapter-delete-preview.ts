@@ -6,6 +6,7 @@ import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { generationStore, type OpenStory } from '@/lib/stores'
 
 import { resolveChapterDeleteSet, type ChapterDeleteReadRefusal } from './chapter-delete-set'
+import { DIVIDER_TABLES } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { restoringUpdates } from '../delta/reverse-replay'
 import type { ReversalSet } from '../delta/row-closure'
@@ -131,8 +132,7 @@ function changesOf(
 // An update a later write replaced in every field, list term and count restores nothing.
 function countsNowhere(d: Delta, restoring: ReadonlySet<string>): boolean {
   return (
-    d.targetTable === 'story_entries' ||
-    d.targetTable === 'chapters' ||
+    DIVIDER_TABLES.has(d.targetTable) ||
     isRetrievalBumpOnly(d.op, d.undoPayload) ||
     (d.op === 'update' && !restoring.has(d.id))
   )

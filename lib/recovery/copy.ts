@@ -10,8 +10,8 @@ import {
 
 export type RecoveryStoryNames = Readonly<Record<string, string>>
 
-function formatRun(run: RecoveredRun, storyName: string | undefined): string {
-  switch (run.kind) {
+function runLine(kind: string, storyName: string | undefined): string {
+  switch (kind) {
     case PER_TURN_KIND:
       return storyName
         ? t('crashRecovery.perTurnNamed', { storyName })
@@ -31,10 +31,29 @@ function formatRun(run: RecoveredRun, storyName: string | undefined): string {
   }
 }
 
+// generation-pipeline.md → Recovery modal: a re-run whose journal couldn't be written back says so,
+// whether the run reversed cleanly or only its store sync failed.
+const withCloseUndone = (line: string, closeUndone: true | undefined): string =>
+  closeUndone ? `${line} ${t('crashRecovery.closeUndone')}` : line
+
+function formatRun(run: RecoveredRun, storyName: string | undefined): string {
+  return withCloseUndone(runLine(run.kind, storyName), run.closeUndone)
+}
+
+function formatFailure(
+  failure: RecoveryFailure,
+  storyName: string | undefined,
+  isHeld: (storyId: string | null) => boolean,
+): string {
+  // A closeUndone failure committed its reversal and only the store sync failed: a reversed close.
+  if (failure.closeUndone) return withCloseUndone(runLine(failure.kind, storyName), true)
+  return failureLine(failure, storyName, isHeld)
+}
+
 // A pass failure holds its branch only while the boot left the branch `running` (Send refuses until
 // a later boot frees it), so the copy promises a stop only then. An integrity refusal recurs every
 // boot: no retry.
-function formatFailure(
+function failureLine(
   failure: RecoveryFailure,
   storyName: string | undefined,
   isHeld: (storyId: string | null) => boolean,
