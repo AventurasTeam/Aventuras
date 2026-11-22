@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 
 import {
   CLOSE_RERUN_REFUSAL,
+  DeltaReplayError,
   MANUAL_CLOSE_REFUSAL,
   STORY_ENTRY_REJECTION,
   type CloseRerunPreview,
@@ -356,4 +357,28 @@ describe('runCloseRerun', () => {
     })
     expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
   })
+
+  it.each([
+    ['transaction', false],
+    ['store-sync', true],
+  ] as const)(
+    "logs a replay failure at %s by its cause and whether it committed, not its wrapper's message",
+    async (stage, committed) => {
+      actions.start.mockRejectedValue(
+        new DeltaReplayError('reverse replay failed', {
+          cause: new Error('UNIQUE constraint failed'),
+          actionId: 'act_sweep',
+          stage,
+        }),
+      )
+      expect(await rerun()).toStrictEqual({ step: 'refused' })
+      expect(logError).toHaveBeenCalledExactlyOnceWith('app.close_rerun_start_threw', {
+        branchId: 'br_1',
+        chapterId: 'chap_2',
+        error: 'Error: UNIQUE constraint failed',
+        committed,
+      })
+      expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
+    },
+  )
 })

@@ -2,6 +2,7 @@ import { keepsConfirmOpen } from '@/components/reader/confirm-refusal'
 import { describeCloseFailure, retryRefusalText } from '@/components/reader/system-entry-actions'
 import {
   CLOSE_RERUN_REFUSAL,
+  describeDeltaReplayError,
   MANUAL_CLOSE_REFUSAL,
   startCloseRerun,
   STORY_ENTRY_REJECTION,
@@ -142,10 +143,13 @@ export async function runCloseRerun(args: {
       onStarted,
     })
   } catch (error) {
+    // A replay failure's message is fixed: log its cause, and whether its write landed.
+    const replay = describeDeltaReplayError(error)
     logger.error('app.close_rerun_start_threw', {
       branchId,
       chapterId,
-      error: error instanceof Error ? error.message : String(error),
+      error: replay?.detail ?? (error instanceof Error ? error.message : String(error)),
+      ...(replay != null && { committed: replay.committed }),
     })
     toast.error(t('chapters:rerunNotice.startFailed'))
     return { step: 'refused' }
