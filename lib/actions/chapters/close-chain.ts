@@ -15,7 +15,13 @@ import {
   type PreflightFailedStart,
   type RejectedStart,
 } from '@/lib/pipeline'
-import { currentStoryStore, generationStore, isStoryBusy, type OpenStory } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  isStoryBusy,
+  type OpenStory,
+  type PendingTurn,
+} from '@/lib/stores'
 
 import { BRANCH_NOT_OPEN } from '../refusal-codes'
 import type { DbCtx } from '../types'
@@ -38,14 +44,18 @@ export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD):
   blockedBy,
 })
 
+/** The caller's own pending mark on the branch, as `bracketPendingTurn` hands its body. */
+export type OwnPendingMark = { readonly mark: PendingTurn; readonly end: () => void }
+
 type CloseChainOpts = {
   /** Runs after the held check, before the unprocessed count; a refusal ends the start. */
   validate?: () => Promise<RejectedStart | null>
   /** Runs in the synchronous section before the reserve; a failure starts nothing. */
   preflight?: (open: OpenStory) => ConfigResolverError | null
+  /** Fires at the reserve, after `pendingMark` ends. */
   onReserved?: () => void
-  /** The caller holds a pending mark on this branch, which `onReserved` releases. */
-  ownsPendingMark?: true
+  /** The busy check skips this mark alone, and the reserve ends it. */
+  pendingMark?: OwnPendingMark
 }
 
 // A variable takes no excess-property check, so only an explicit `undefined` keeps a pre-flight out.
@@ -93,13 +103,9 @@ export async function startCloseChain(
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return refused(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   if (isStorySwapPending(open.storyId)) return refused(MANUAL_CLOSE_REFUSAL.swapPending)
-  const busy = isStoryBusy(
-    generationStore.getTxState(),
-    open.storyId,
-    branchId,
-    opts?.ownsPendingMark ? { ignorePendingTurns: true } : undefined,
-  )
-  if (busy) return refused(MANUAL_CLOSE_REFUSAL.busy)
+  const tx = generationStore.getTxState()
+  if (isStoryBusy(tx, open.storyId, branchId, { ownMark: opts?.pendingMark?.mark }))
+    return refused(MANUAL_CLOSE_REFUSAL.busy)
   if (generationStore.getSettleCount() !== settled) return refused(MANUAL_CLOSE_REFUSAL.busy)
   const failed = opts?.preflight?.(open)
   if (failed) return { outcome: 'preflight-failed', error: failed }
@@ -109,7 +115,10 @@ export async function startCloseChain(
     branchId,
     db: ctx.db,
     runInTransaction: ctx.runInTransaction,
-    onReserved: opts?.onReserved,
+    onReserved: () => {
+      opts?.pendingMark?.end()
+      opts?.onReserved?.()
+    },
   })
   return 'outcome' in ran ? ran : ran.end
 }

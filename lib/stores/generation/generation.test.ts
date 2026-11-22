@@ -177,11 +177,15 @@ describe('isStoryBusy', () => {
     expect(isStoryBusy(tx([], { reversalInProgress: true }), 's1', 'b1')).toBe(true)
   })
   // generation-pipeline.md → Gate derivation as a selector: a re-run's start holds its own mark.
-  it("ignores the branch's pending turns for the mark's holder, but never a run or a reversal", () => {
-    const pending = { pendingTurns: new Set([{ branchId: 'b1' }]) }
-    const own = { ignorePendingTurns: true } as const
+  it("skips the holder's own mark, but never another mark on the branch, a run or a reversal", () => {
+    const mark = { branchId: 'b1' }
+    const pending = { pendingTurns: new Set([mark]) }
+    const own = { ownMark: mark }
     expect(isStoryBusy(tx([], pending), 's1', 'b1')).toBe(true)
     expect(isStoryBusy(tx([], pending), 's1', 'b1', own)).toBe(false)
+    expect(
+      isStoryBusy(tx([], { pendingTurns: new Set([mark, { branchId: 'b1' }]) }), 's1', 'b1', own),
+    ).toBe(true)
     expect(isStoryBusy(tx([run('run_turn', 'per-turn')], pending), 's1', 'b1', own)).toBe(true)
     expect(isStoryBusy(tx([], { ...pending, reversalInProgress: true }), 's1', 'b1', own)).toBe(
       true,
@@ -753,6 +757,24 @@ describe('pending turns', () => {
     generationStore.finishRun('run_1')
     generationStore.setReversalInProgress(true)
     expect(pending()).toEqual(['b1'])
+  })
+
+  it('hands the body its own mark, which only its end releases, beside another on the branch', async () => {
+    const other = holdTurn('b1')
+    const marks = () => generationStore.getTxState().pendingTurns
+    await generationStore.bracketPendingTurn('b1', async (_endEarly, own) => {
+      expect(marks().has(own.mark)).toBe(true)
+      expect(isStoryBusy(generationStore.getTxState(), 's1', 'b1', { ownMark: own.mark })).toBe(
+        true,
+      )
+      other.endEarly()
+      expect(isStoryBusy(generationStore.getTxState(), 's1', 'b1', { ownMark: own.mark })).toBe(
+        false,
+      )
+      own.end()
+      expect(marks().size).toBe(0)
+    })
+    await other.settle()
   })
 })
 

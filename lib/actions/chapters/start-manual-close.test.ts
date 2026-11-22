@@ -914,8 +914,9 @@ describe('startCloseChain', () => {
     expect(generationStore.getTxState().pendingRerun.has(f.branchId)).toBe(false)
   })
 
-  it("passes the caller's own pending mark, which onReserved ends, and refuses it otherwise", async () => {
+  it("passes the caller's own pending mark, ending it before onReserved, and refuses it otherwise", async () => {
     const reserved = reserveAndCancel()
+    const marksAtReserve: number[] = []
 
     expect(
       await generationStore.bracketPendingTurn(f.branchId, () =>
@@ -923,11 +924,11 @@ describe('startCloseChain', () => {
       ),
     ).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
 
-    const end = await generationStore.bracketPendingTurn(f.branchId, (endMark) =>
+    const end = await generationStore.bracketPendingTurn(f.branchId, (_endEarly, own) =>
       startCloseChain(f.branchId, f.ctx, {
-        ownsPendingMark: true,
+        pendingMark: own,
         onReserved: () => {
-          endMark()
+          marksAtReserve.push(generationStore.getTxState().pendingTurns.size)
           reserved.onReserved()
         },
       }),
@@ -935,13 +936,34 @@ describe('startCloseChain', () => {
 
     expect(reserved.slots).toEqual([[CHAPTER_CLOSE_KIND, 'close']])
     expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND })
-    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    expect(marksAtReserve).toEqual([0])
+  })
+
+  it("refuses another start's mark on the branch, though it skips its own", async () => {
+    let release!: () => void
+    const foreign = generationStore.bracketPendingTurn(
+      f.branchId,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    const reserved = reserveAndCancel()
+
+    const result = await generationStore.bracketPendingTurn(f.branchId, (_endEarly, own) =>
+      startCloseChain(f.branchId, f.ctx, { pendingMark: own, onReserved: reserved.onReserved }),
+    )
+    release()
+    await foreign
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
+    expect(reserved.slots).toEqual([])
   })
 
   it('still refuses a run on the story or a reversal under its own mark', async () => {
     const own = () =>
-      generationStore.bracketPendingTurn(f.branchId, () =>
-        startCloseChain(f.branchId, f.ctx, { ownsPendingMark: true }),
+      generationStore.bracketPendingTurn(f.branchId, (_endEarly, mark) =>
+        startCloseChain(f.branchId, f.ctx, { pendingMark: mark }),
       )
 
     generationStore.setReversalInProgress(true)

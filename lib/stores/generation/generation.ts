@@ -46,6 +46,9 @@ export type RunState = {
 /** A turn admitted on its branch but not yet registered as a run; identity is the token. */
 export type PendingTurn = { readonly branchId: string }
 
+/** A bracket body's own mark, which `isStoryBusy` can skip, and the idempotent end releasing it. */
+export type PendingMark = { readonly mark: PendingTurn; readonly end: () => void }
+
 /** A manual close's pick (C14). A close owed by the threshold keeps no record. */
 export type PendingClose = { readonly endEntryId: string }
 
@@ -87,16 +90,16 @@ export function runBlocksHeadReversal(run: RunState, branchId: string): boolean 
 }
 
 // Pending turns and reversals hold no run yet, so leaving the story waits on them too; a start
-// holding the branch's own mark (`ignorePendingTurns`) waits only on the rest.
+// holding its own mark (`ownMark`) skips that one, never another on the branch.
 export function isStoryBusy(
   txState: TxState,
   storyId: string,
   branchId: string,
-  opts?: { ignorePendingTurns?: true },
+  opts?: { ownMark?: PendingTurn },
 ): boolean {
   if (txState.reversalInProgress) return true
-  if (!opts?.ignorePendingTurns)
-    for (const turn of txState.pendingTurns) if (turn.branchId === branchId) return true
+  for (const turn of txState.pendingTurns)
+    if (turn.branchId === branchId && turn !== opts?.ownMark) return true
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
 }
 
@@ -170,10 +173,13 @@ type GenerationState = {
   /** C6: replaces the stored run with a copy carrying `progress`; no-op for an unknown run. */
   setCloseProgress: (runId: string, progress: CloseProgress) => void
   setReversalInProgress: (value: boolean) => void
-  /** Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner. */
+  /**
+   * Marks a turn pending on `branchId` until `body` settles; `body` may end the mark sooner.
+   * `own.end` is `endEarly`.
+   */
   bracketPendingTurn: <T>(
     branchId: string,
-    body: (endEarly: () => void) => Promise<T>,
+    body: (endEarly: () => void, own: PendingMark) => Promise<T>,
   ) => Promise<T>
   __reset: () => void
 }
@@ -323,7 +329,7 @@ const store = createStore<GenerationState>()((set) => ({
         return { txState: { ...s.txState, pendingTurns } }
       })
     try {
-      return await body(end)
+      return await body(end, { mark: turn, end })
     } finally {
       set((s) => {
         if (!s.turnBodies.has(turn)) return s

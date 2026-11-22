@@ -35,7 +35,12 @@ import {
 } from '@/lib/stores'
 
 import { ownEntryTokens, reversalImpactOf } from './chapter-delete-preview'
-import { MANUAL_CLOSE_REFUSAL, refused as refusedStart, startCloseChain } from './close-chain'
+import {
+  MANUAL_CLOSE_REFUSAL,
+  refused as refusedStart,
+  startCloseChain,
+  type OwnPendingMark,
+} from './close-chain'
 import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { logReversalRefused } from '../delta/commit-new-action'
@@ -380,11 +385,11 @@ export async function startCloseRerun(
   ensureChapterClosePipelineRegistered()
   const failed = closePreflight(open)
   if (failed) return { outcome: 'preflight-failed', error: failed }
-  return generationStore.bracketPendingTurn(branchId, (endMark) =>
+  return generationStore.bracketPendingTurn(branchId, (_endEarly, own) =>
     startUnderMark(
       { branchId, chapterId, expected, story: open, onStarted: opts?.onStarted },
       ctx,
-      endMark,
+      own,
     ),
   )
 }
@@ -392,7 +397,7 @@ export async function startCloseRerun(
 async function startUnderMark(
   args: RerunStartArgs,
   ctx: DbCtx,
-  endMark: () => void,
+  own: OwnPendingMark,
 ): Promise<CloseRerunStart> {
   const { branchId, chapterId, expected, story } = args
   const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
@@ -414,10 +419,9 @@ async function startUnderMark(
   const record = generationStore.getTxState().pendingRerun.get(branchId)
   try {
     return await startCloseChain(branchId, ctx, {
-      ownsPendingMark: true,
+      pendingMark: own,
       preflight: closePreflight,
       onReserved: () => {
-        endMark()
         // A throw here would escape the orchestrator's reserve and leave the run registered.
         try {
           args.onStarted?.()
