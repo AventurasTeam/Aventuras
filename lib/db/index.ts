@@ -267,7 +267,19 @@ export {
   vecTableName,
   vectorsByIdQuery,
 } from './embeddings'
-export { vecCopyStatement, type CopyBranches, type VecCopyTables } from './branch-copy'
+export {
+  BRANCH_COPY_MANIFEST,
+  vecCopyStatement,
+  type BranchCopyTable,
+  type BranchCopyTableName,
+  type CopyBranches,
+  type CopyMode,
+  type DuplicateCopy,
+  type ForkCopy,
+  type ForkFilteredTable,
+  type ManifestRow,
+  type VecCopyTables,
+} from './branch-copy'
 export {
   emptyCastDraft,
   emptyWorkingState,
