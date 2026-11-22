@@ -1,6 +1,6 @@
-import type { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 
-import { getTableColumns, sql } from 'drizzle-orm'
+import { getTableColumns, ne, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { createTestDb } from '../__tests__/test-db'
@@ -11,10 +11,12 @@ import {
   type CopyFixture,
   type TestDb,
 } from '../__tests__/two-branch'
-import { branches, deltas, entities, storyEntries } from '../schema'
-import type { SqlOp } from '../types'
+import { ensureVecTablesSql, knnQuery, packFloat32, type VecTargetKind } from '../embeddings'
+import { branches, deltas, entities, lore, storyEntries, threads } from '../schema'
+import type { NewEntity, SqlOp } from '../types'
 import { branchCopyOps, type BranchCopyArgs, type CopyPredicate } from './copier'
 import { BRANCH_COPY_MANIFEST, type BranchCopyTableName } from './manifest'
+import { vecCopyOps } from './vec-copy'
 
 const COPY = 'br_c'
 
@@ -99,7 +101,8 @@ describe('branchCopyOps', () => {
         .run(RAW_JSON, fx.branchId, value)
     const sourceBefore = branchSnapshot(t.sqlite, fx.branchId)
 
-    await t.runInTransaction([branchRowOp(COPY), ...duplicateOps()])
+    const vectorOps = await vecCopyOps(t.db, { from: fx.branchId, to: COPY })
+    await t.runInTransaction([branchRowOp(COPY), ...duplicateOps(), ...vectorOps])
 
     for (const table of DUPLICATE_TABLES) {
       const source = rowsOf(t.sqlite, table, fx.branchId)
@@ -288,5 +291,240 @@ describe('branchCopyOps', () => {
 
     expect(branchSnapshot(t.sqlite, fx.branchId)).toEqual(source)
     expect(branchSnapshot(t.sqlite, COPY)).toEqual(copy)
+  })
+})
+
+const FAMILY_TABLES = [
+  'entities_vec',
+  'lore_vec',
+  'happenings_vec',
+  'threads_vec',
+  'chapter_summaries_vec',
+].flatMap((family) => [4, 8, 384].map((dim) => `${family}_${dim}`))
+
+// The route's statements per family table: one self-insert.
+const OPS_PER_FAMILY = 1
+
+type VecRow = { pk: string; modelId: string; id: string; sourceHash: string; embedding: string }
+
+/** Every family table's rows on the branch, keyed by table; a table holding none is left out. */
+function vecRowsOf(sqlite: DatabaseSync, branchId: string): Record<string, VecRow[]> {
+  const out: Record<string, VecRow[]> = {}
+  for (const table of FAMILY_TABLES) {
+    const rows = sqlite
+      .prepare(
+        `SELECT pk, model_id AS modelId, id, source_hash AS sourceHash, hex(embedding) AS embedding FROM ${table} WHERE branch_id = ? ORDER BY pk`,
+      )
+      .all(branchId) as VecRow[]
+    if (rows.length > 0) out[table] = rows
+  }
+  return out
+}
+
+type PlantedVector = {
+  pk: string
+  modelId: string
+  id: string
+  sourceHash: string
+  vector: readonly number[]
+}
+
+// Raw, so a row can carry the pre-widen key no writer emits any more.
+function plantVector(sqlite: DatabaseSync, table: string, row: PlantedVector): void {
+  sqlite
+    .prepare(
+      `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, 'br_a', ?, ?, ?, ?)`,
+    )
+    .run(row.pk, row.modelId, row.id, row.sourceHash, packFloat32(new Float32Array(row.vector)))
+}
+
+const AT = 1_800_000_000_000
+
+const item = (id: string, name: string): NewEntity => ({
+  id,
+  branchId: 'br_a',
+  kind: 'item',
+  name,
+  status: 'active',
+  injectionMode: 'auto',
+  createdAt: AT,
+  updatedAt: AT,
+})
+
+/**
+ * br_a's vector sources and vectors: two dim families under two models, one row keyed as before
+ * the key widened, one whose entity a predicate leaves off the copy, one on a thread none copies.
+ */
+async function seedVectors(target: TestDb): Promise<{ chapterId: string }> {
+  for (const dim of [4, 8]) for (const ddl of ensureVecTablesSql(dim)) target.sqlite.exec(ddl)
+  await target.db
+    .insert(entities)
+    .values([item('ent_vec_kept', 'Brass key'), item('ent_vec_left', 'Tin cup')])
+  await target.db.insert(lore).values({
+    id: 'lore_vec_kept',
+    branchId: 'br_a',
+    title: 'The toll road',
+    injectionMode: 'auto',
+    createdAt: AT,
+    updatedAt: AT,
+  })
+  await target.db.insert(threads).values({
+    id: 'thr_vec_gone',
+    branchId: 'br_a',
+    title: 'The second seal',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: AT,
+    updatedAt: AT,
+  })
+  const chapter = target.sqlite
+    .prepare("SELECT id FROM chapters WHERE branch_id = 'br_a' ORDER BY id LIMIT 1")
+    .get() as { id: string } | undefined
+  if (!chapter) throw new Error('seedCopyFixture left br_a no chapter')
+  const planted: [string, PlantedVector][] = [
+    [
+      'entities_vec_4',
+      {
+        pk: 'br_a:ent_vec_kept:model-x',
+        modelId: 'model-x',
+        id: 'ent_vec_kept',
+        sourceHash: '0000000a',
+        vector: [1, 0, 0, 0],
+      },
+    ],
+    [
+      'entities_vec_4',
+      {
+        pk: 'br_a:ent_vec_kept',
+        modelId: 'model-y',
+        id: 'ent_vec_kept',
+        sourceHash: '0000000b',
+        vector: [0, 1, 0, 0],
+      },
+    ],
+    [
+      'lore_vec_8',
+      {
+        pk: 'br_a:lore_vec_kept:model-y',
+        modelId: 'model-y',
+        id: 'lore_vec_kept',
+        sourceHash: '0000000c',
+        vector: [0, 0, 1, 0, 0, 0, 0, 0],
+      },
+    ],
+    [
+      'chapter_summaries_vec_4',
+      {
+        pk: `br_a:${chapter.id}:model-x`,
+        modelId: 'model-x',
+        id: chapter.id,
+        sourceHash: '0000000d',
+        vector: [0, 0, 1, 0],
+      },
+    ],
+    [
+      'entities_vec_8',
+      {
+        pk: 'br_a:ent_vec_left:model-x',
+        modelId: 'model-x',
+        id: 'ent_vec_left',
+        sourceHash: '0000000e',
+        vector: [0, 0, 0, 0, 1, 0, 0, 0],
+      },
+    ],
+    [
+      'threads_vec_4',
+      {
+        pk: 'br_a:thr_vec_gone:model-x',
+        modelId: 'model-x',
+        id: 'thr_vec_gone',
+        sourceHash: '0000000f',
+        vector: [0, 0, 0, 1],
+      },
+    ],
+  ]
+  for (const [table, row] of planted) plantVector(target.sqlite, table, row)
+  return { chapterId: chapter.id }
+}
+
+describe('vecCopyOps', () => {
+  it('builds the route’s statements for every family table and none for a shadow table', async () => {
+    for (const dim of [4, 8]) for (const ddl of ensureVecTablesSql(dim)) t.sqlite.exec(ddl)
+    // vec0's shadow tables sit beside each family in sqlite_master and reject DML.
+    const shadows = t.sqlite
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'entities_vec_4_*'",
+      )
+      .all()
+    expect(shadows.length).toBeGreaterThan(0)
+
+    const ops = await vecCopyOps(t.db, { from: 'br_a', to: 'br_c' })
+
+    const targets = ops.flatMap((op) => /INSERT INTO (\w+)\s*\(\s*pk\b/.exec(op.sql)?.[1] ?? [])
+    expect([...targets].sort()).toEqual([...FAMILY_TABLES].sort())
+    expect(ops).toHaveLength(FAMILY_TABLES.length * OPS_PER_FAMILY)
+    expect(
+      ops.filter((op) => /_vec_\d+_(info|chunks|rowids|vector_chunks\d+)\b/.test(op.sql)),
+    ).toEqual([])
+  })
+
+  it('copies each family’s vectors whose source the copy holds, keyed for br_c, in the table copy’s batch', async () => {
+    const { chapterId } = await seedVectors(t)
+    const before = vecRowsOf(t.sqlite, 'br_a')
+    // The seed itself holds no vectors: every row below is one this test planted.
+    expect(Object.keys(before).sort()).toEqual([
+      'chapter_summaries_vec_4',
+      'entities_vec_4',
+      'entities_vec_8',
+      'lore_vec_8',
+      'threads_vec_4',
+    ])
+
+    const vectorOps = await vecCopyOps(t.db, { from: 'br_a', to: 'br_c' })
+    await t.runInTransaction([
+      branchRowOp(COPY),
+      ...duplicateOps({
+        entities: ne(entities.id, 'ent_vec_left'),
+        // No thread copies, so threads_vec_4's source holds no br_c row.
+        threads: sql`false`,
+      }),
+      ...vectorOps,
+    ])
+
+    const copied = (table: string, pk: string, newPk: string): VecRow => {
+      const row = before[table]?.find((r) => r.pk === pk)
+      if (!row) throw new Error(`br_a holds no ${table} row ${pk}`)
+      return { ...row, pk: newPk }
+    }
+    expect(vecRowsOf(t.sqlite, 'br_c')).toEqual({
+      chapter_summaries_vec_4: [
+        copied('chapter_summaries_vec_4', `br_a:${chapterId}:model-x`, `br_c:${chapterId}:model-x`),
+      ],
+      entities_vec_4: [
+        copied('entities_vec_4', 'br_a:ent_vec_kept:model-x', 'br_c:ent_vec_kept:model-x'),
+        copied('entities_vec_4', 'br_a:ent_vec_kept', 'br_c:ent_vec_kept:model-y'),
+      ],
+      lore_vec_8: [
+        copied('lore_vec_8', 'br_a:lore_vec_kept:model-y', 'br_c:lore_vec_kept:model-y'),
+      ],
+    })
+    expect(countOn(t.sqlite, 'threads', 'br_c')).toBe(0)
+    expect(vecRowsOf(t.sqlite, 'br_a')).toEqual(before)
+
+    const nearest = (kind: VecTargetKind, dim: number, modelId: string, vector: number[]) => {
+      const q = knnQuery(kind, dim, {
+        branchId: 'br_c',
+        modelId,
+        k: 5,
+        vector: packFloat32(new Float32Array(vector)),
+      })
+      return (
+        t.sqlite.prepare(q.sql).all(...(q.params as SQLInputValue[])) as { id: string }[]
+      ).map((row) => row.id)
+    }
+    expect(nearest('entity', 4, 'model-x', [1, 0, 0, 0])).toEqual(['ent_vec_kept'])
+    expect(nearest('entity', 4, 'model-y', [0, 1, 0, 0])).toEqual(['ent_vec_kept'])
+    expect(nearest('chapter', 4, 'model-x', [0, 0, 1, 0])).toEqual([chapterId])
+    expect(nearest('entity', 8, 'model-x', [0, 0, 0, 0, 1, 0, 0, 0])).toEqual([])
   })
 })

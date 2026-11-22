@@ -1,4 +1,11 @@
-import type { SqlOp } from '../types'
+import {
+  familyTablesFor,
+  listVecFamilyTables,
+  SOURCE_TABLES,
+  VEC_FAMILIES,
+  type VecTargetKind,
+} from '../embeddings'
+import type { DbCtx, SqlOp } from '../types'
 
 export type VecCopyTables = { readonly vecTable: string; readonly sourceTable: string }
 export type CopyBranches = { readonly from: string; readonly to: string }
@@ -28,4 +35,18 @@ WHERE branch_id = ?
   AND EXISTS (SELECT 1 FROM ${sourceTable} s WHERE s.branch_id = ? AND s.id = ${vecTable}.id)`,
     params: [branches.to, branches.to, branches.from, branches.to],
   }
+}
+
+/**
+ * Every vec0 family table's copy ops, flattened in family order, run after the table copy; the
+ * family list is read now, before the caller's batch, so a family table created after this read
+ * is missed (C3).
+ */
+export async function vecCopyOps(db: DbCtx['db'], branches: CopyBranches): Promise<SqlOp[]> {
+  const listed = await listVecFamilyTables(db)
+  return (Object.keys(VEC_FAMILIES) as VecTargetKind[]).flatMap((kind) =>
+    familyTablesFor(kind, listed).map((vecTable) =>
+      vecCopyStatement({ vecTable, sourceTable: SOURCE_TABLES[kind] }, branches),
+    ),
+  )
 }
