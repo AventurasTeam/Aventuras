@@ -112,8 +112,8 @@ export const chapterOverlaysStore = {
   useOverlays: <T>(selector: (s: ChapterOverlaysState) => T): T => useStore(store, selector),
   getState: (): ChapterOverlaysState => store.getState(),
   /**
-   * Refused while a re-run request is held: its confirm mounts once its read lands, and never
-   * stacks over the window. Returns whether the window opened.
+   * Refused while a re-run request is held (its confirm mounts once its read lands). Returns
+   * whether the window opened.
    */
   openReviewWindow: (input: { chapterId: string }): boolean => {
     if (store.getState().rerunConfirm != null) return false
@@ -128,9 +128,8 @@ export const chapterOverlaysStore = {
     ),
   closeCloseModal: (): void => store.setState({ closeModal: null }),
   /**
-   * From the review window the window closes first, so the guard's dialog never sits over it, and
-   * the request remembers it. A guard Cancel holds no request, so the window stays closed. A press
-   * made during the window's exit is dropped, as a row press is.
+   * From the review window it closes first, so the guard's dialog never sits over it, and the
+   * request remembers that. A guard Cancel leaves it closed; a press during its exit is dropped.
    */
   openRerunConfirm: ({
     branchId,

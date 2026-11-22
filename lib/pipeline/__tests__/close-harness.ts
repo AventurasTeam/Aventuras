@@ -512,7 +512,6 @@ export function closedChapterId(h: CloseHarness): string {
   return defined(chapter, 'the close made no chapter').id
 }
 
-/** The latest re-run's run marker. */
 export async function rerunMarker(h: CloseHarness): Promise<PipelineRun | undefined> {
   const actionId = defined(h.rerunActionId(), 'the re-run never reserved')
   const [row] = await h.fx.ctx.db

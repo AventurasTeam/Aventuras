@@ -1,10 +1,7 @@
 /** `transaction`: nothing landed. `store-sync`: the DB write landed, the in-memory sync threw. */
 export type ReplayFailureStage = 'transaction' | 'store-sync'
 
-/**
- * How a re-run journal ended its group's reversal (generation-pipeline.md → Reverse-replay): written
- * back, or the chapter's close undone with it.
- */
+/** How a re-run journal ended its group's reversal (generation-pipeline.md → Reverse-replay). */
 export type JournalOutcome = { journal: 'restored' } | { journal: 'undone'; chapterNumber: number }
 
 type ReplayFailure = { cause: unknown; actionId: string } & (

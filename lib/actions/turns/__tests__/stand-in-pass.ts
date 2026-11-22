@@ -227,10 +227,7 @@ export function failReversalsOf(stand: {
   })
 }
 
-/**
- * A gate-holding run in slot `interruptible`, with no pipeline behind it, for refusal tests; only
- * `abortRun` ends it.
- */
+/** Gate-holding run with no pipeline behind it, for refusal tests; only `abortRun` ends it. */
 export function registerStoreOnlyRun(
   kind: string,
   branchId: string,

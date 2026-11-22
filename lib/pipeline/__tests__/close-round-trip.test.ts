@@ -1359,8 +1359,8 @@ async function seedCounted(fx: CloseFixture): Promise<void> {
   await seedRetrievals(fx, wren, 1)
 }
 
-// No embedder runs in the suite: this stands in for the range embed with the seeded cluster, and
-// embeds its rows. A re-run's embed reaches a row its reversal brought back, which a stop must sweep.
+// Stands in for the range embed (no embedder runs here): seeds the cluster and embeds its rows,
+// including one a reversal brought back, which a stop must sweep.
 function clustered(ids: readonly string[]): SlotEntry<'happenings'> {
   return {
     kind: 'code',

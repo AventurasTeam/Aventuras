@@ -85,9 +85,8 @@ export type ReversalSeed = {
   /** Rows reversed because prose moved; redo leaves them and what only they reach to re-derive. */
   readonly sweep?: readonly Delta[]
   /**
-   * Deltas another reversal takes back before this one: the ref clears read as after them. The
-   * closure doesn't; it is selected against the current state. Passing it types the set as a
-   * `CountedReversalSet`, which no reversal takes.
+   * Deltas another reversal takes back first: ref clears read as after them, the closure doesn't.
+   * Types the set as a `CountedReversalSet`, which no reversal takes.
    */
   readonly reversedFirst?: readonly Delta[]
 }
