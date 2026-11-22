@@ -524,8 +524,9 @@ each side, the pending miss (summary showing), and the failed walk
     `pnpm electron:compile` first if the bridge changed.
 12. **If 6.1 has landed:** `lib/history/diff-walk.test.ts` holds the
     database-seeded test that two branches holding one delta id, with
-    different payloads, get distinct entries (C9). It fails with
-    `branch_id` dropped from the walk's chain read.
+    different payloads, get distinct entries (C9), seeded with 6.1's
+    `cloneBranch`. It fails with `branch_id` dropped from the walk's
+    chain read.
 13. **If 6.8 has landed:** `lib/history/diff-prose.test.ts` holds a case
     for the `isLead` flag's prose, set and cleared, under 6.8's label.
 14. **Canon.** Each edit under Scope is in the PR, and

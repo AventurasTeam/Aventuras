@@ -713,6 +713,18 @@ change amends the scope above.
   prunes, so a deleted branch's settled entry stays. A deleted branch's
   id can't come back, which is what the lesson guards against. Default:
   leave it.
+- **Run rows with no branch.** 6.1's backfill stamps only unfinished run
+  rows, so finished rows written before 6.1 keep a null `branch_id`.
+  Step 3's delete by branch can't find them: a deleted branch's old
+  finished rows outlive it, until `deleteStory`'s story-wide delete
+  (`lib/actions/stories/delete-story.ts:76`). Nothing reads a finished
+  row (recovery reads unfinished ones,
+  `lib/pipeline/runtime/recovery.ts:59-63`), a null foreign key isn't
+  checked, so the `branches` delete still
+  succeeds, and boot recovery settles an unfinished null row before any
+  delete can run. Default: leave them. R1 has branch delete remove the
+  branch's run rows, and these name no branch; its canon pass should say
+  so.
 
 ## Implementation notes
 

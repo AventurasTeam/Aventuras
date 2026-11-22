@@ -13,7 +13,7 @@
   ops, its copy and its harness) and [Slice 6.6](./06-delete-duplicate.md)
   (the copier, the manifest and the run-record read). No edge with
   [Slice 6.7](./07-diff-cache.md): the second of the two to land writes
-  the cache's two-branch key test (C9). No edge with
+  the walk's database-seeded two-branch test (C9). No edge with
   [Slice 6.8](./08-per-branch-lead.md): the second of the two to land
   regenerates its migrations (C4).
 
@@ -447,8 +447,10 @@ other has landed":
 
 - With [Slice 6.7](./07-diff-cache.md) (C9): the database-seeded test
   that two branches holding one delta id, with different payloads, get
-  distinct cache entries, in 6.7's cache test file, seeded with
-  `cloneBranch`. It can't be seeded before the composite key.
+  distinct entries from the walk, in `lib/history/diff-walk.test.ts`,
+  seeded with `cloneBranch`. It can't be seeded before the composite key.
+  The cache's key on branch and delta id is 6.7's own in-memory test,
+  which injects its walk and so never reaches the database.
 - With [Slice 6.8](./08-per-branch-lead.md) (C4): this slice's
   generated step regenerated from main's snapshot, its hand-written step
   renumbered after 6.8's, and its bundle entries added.
@@ -660,10 +662,11 @@ remains.
 **The rest.**
 
 - `rerun-journal.ts:240-241` names no milestone.
-- If [Slice 6.7](./07-diff-cache.md) has landed: its cache test file
-  holds the database-seeded test that two branches holding one delta
-  id, with different payloads, get distinct entries, and the test goes
-  red when the cache key drops the branch.
+- If [Slice 6.7](./07-diff-cache.md) has landed:
+  `lib/history/diff-walk.test.ts` holds the database-seeded test that
+  two branches holding one delta id, with different payloads, get
+  distinct entries, seeded with `cloneBranch`, and the test goes red when
+  the walk's chain read drops `branch_id`.
 - If [Slice 6.8](./08-per-branch-lead.md) has landed: this slice's
   generated step is regenerated from main's snapshot, its hand-written
   step is numbered after 6.8's steps, `migrations.js` lists every step
