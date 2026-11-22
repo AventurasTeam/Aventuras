@@ -63,11 +63,17 @@ function startHolds(branchId: string): boolean {
 export function useCloseRerunConfirm({
   branchId,
   active,
+  pending,
   loadPreview,
 }: {
   branchId: string
   /** The host holds the confirm's request; losing it dismisses as `dismiss` does. */
   active: boolean
+  /**
+   * The host's start is in flight, from the press, before any mark: its result decides the
+   * confirm, so no re-read starts or lands.
+   */
+  pending: () => boolean
   loadPreview: (chapterId: string) => Promise<CloseRerunPreview | CloseRerunReadRefusal>
 }): {
   target: CloseRerunConfirmTarget | null
@@ -84,9 +90,9 @@ export function useCloseRerunConfirm({
     setHeldState(next)
   }, [])
   const openRequest = useRef(0)
-  const latest = useRef({ loadPreview })
+  const latest = useRef({ loadPreview, pending })
   useEffect(() => {
-    latest.current = { loadPreview }
+    latest.current = { loadPreview, pending }
   })
 
   const open = useCallback(
@@ -122,10 +128,11 @@ export function useCloseRerunConfirm({
         ? null
         : { key: `${branchId}:${held.chapterId}`, countedAtSettle: held.countedAtSettle },
     onSettle: (isLive) => {
-      if (held == null || startHolds(branchId)) return
+      const startOwns = () => latest.current.pending() || startHolds(branchId)
+      if (held == null || startOwns()) return
       const { chapterId, preview: shown } = held
       void attempt(() => latest.current.loadPreview(chapterId)).then((read) => {
-        if (!isLive() || startHolds(branchId)) return
+        if (!isLive() || startOwns()) return
         if (!read.ok) {
           logger.error('app.close_rerun_recount_failed', {
             branchId,

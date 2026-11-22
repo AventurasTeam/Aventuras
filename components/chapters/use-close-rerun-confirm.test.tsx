@@ -74,12 +74,19 @@ function settleARun() {
 
 function setup() {
   const loadPreview = vi.fn<LoadPreview>(async () => PREVIEW)
+  // The host's start, in flight from the press until its result.
+  const start = { pending: false }
   const { result, rerender, unmount } = renderHook(
     ({ active }: { active: boolean }) =>
-      useCloseRerunConfirm({ branchId: 'br_1', active, loadPreview }),
+      useCloseRerunConfirm({
+        branchId: 'br_1',
+        active,
+        pending: () => start.pending,
+        loadPreview,
+      }),
     { initialProps: { active: true } },
   )
-  return { result, rerender, unmount, loadPreview }
+  return { result, rerender, unmount, loadPreview, start }
 }
 
 async function openOn(result: { current: Hook }, chapterId = 'chap_2') {
@@ -344,6 +351,40 @@ describe('useCloseRerunConfirm: staying true', () => {
 
     expect(result.current.target?.preview).toEqual(PREVIEW)
   })
+
+  // The start awaits the held check before it takes its mark: only the host knows it began.
+  it("reads nothing for a settle while the host's start is in flight, before any mark", async () => {
+    const { result, loadPreview, start } = setup()
+    await openOn(result)
+    start.pending = true
+
+    settleARun()
+
+    expect(loadPreview).toHaveBeenCalledTimes(1)
+    expect(result.current.target?.preview).toEqual(PREVIEW)
+  })
+
+  it.each([
+    ['fresh counts', RECOUNTED],
+    ['a not-latest refusal', refusal('not-latest')],
+  ] as const)(
+    "drops a re-read with %s that lands once the host's start is in flight",
+    async (_name, read) => {
+      const { result, loadPreview, start } = setup()
+      await openOn(result)
+      const reading = deferred<CloseRerunPreview | CloseRerunReadRefusal>()
+      loadPreview.mockReturnValueOnce(reading.promise)
+      settleARun()
+
+      start.pending = true
+      await act(async () => {
+        reading.resolve(read)
+      })
+
+      expect(result.current.target).toEqual({ chapterId: 'chap_2', preview: PREVIEW })
+      expect(toast.error).not.toHaveBeenCalled()
+    },
+  )
 
   // The shortcut's prose reversal settles under the start's pending mark.
   it('reads nothing for a settle under a pending mark on the branch', async () => {

@@ -354,6 +354,8 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
   const storyBusy = generationStore.useGeneration(
     (s) => storyId != null && isStoryBusy(s.txState, storyId, branchId),
   )
+  // Read synchronously, so a second press returns before it reaches startCloseRerun.
+  const pendingRef = useRef(false)
   const {
     target,
     open: openPreview,
@@ -361,6 +363,7 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
   } = useCloseRerunConfirm({
     branchId,
     active: true,
+    pending: () => pendingRef.current,
     loadPreview: (id) => readRerunPreview(branchId, id),
   })
   // Through a ref, so the mount's one read never re-runs on a new callback identity.
@@ -383,8 +386,6 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
     if (answered && target == null) chapterOverlaysStore.closeRerunConfirm({ reopen: false })
   }, [answered, target])
 
-  // Read synchronously, so a second press returns before it reaches startCloseRerun.
-  const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
   // An in-flight refusal holds the confirm actions while the story is busy: a pending turn's mark
   // can end with no run, and so with no settle.

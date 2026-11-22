@@ -647,6 +647,33 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
   })
 
+  // startCloseRerun awaits the held check before its mark: a settle there is the start's to judge.
+  it('re-reads nothing for a run settling while the start is in flight, so only its result speaks', async () => {
+    let release: (start: unknown) => void = () => {}
+    actions.start.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirm())
+    actions.preview.mockResolvedValue({ status: 'rejected', code: 'not-latest', reason: 'x' })
+
+    settleRun()
+    await flush()
+    expect(actions.preview).toHaveBeenCalledTimes(1)
+    expect(confirmView.mounted).toBe(true)
+    expect(error).not.toHaveBeenCalled()
+
+    await act(async () => release({ status: 'rejected', code: 'not-latest', reason: 'x' }))
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunConfirm.notLatest'))
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+  })
+
   it('not-latest closes the confirm with its own toast', async () => {
     const error = vi.spyOn(toast, 'error').mockReturnValue('')
     actions.start.mockResolvedValue({ status: 'rejected', code: 'not-latest', reason: 'x' })
