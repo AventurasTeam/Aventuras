@@ -507,8 +507,9 @@ close's until this slice.
   `Re-run failed. Chapter <N>'s close is as it was.` with the reason as
   5.6's failure copy gives one; either with `closeUndone`, warning,
   `Chapter <N>'s earlier close couldn't be restored, so its close was undone.`
-  instead. A catch-up pass that ends the chain raises its own pass toast,
-  as today.
+  instead, and either whose undo didn't commit (`unreversed`), error,
+  the restart line (Implementation notes). A catch-up pass that ends the
+  chain raises its own pass toast, as today.
 
 **The action** (`lib/actions/chapters/close-rerun.ts`, exported from
 `lib/actions`).
@@ -563,12 +564,14 @@ close's until this slice.
   the reserve. Nothing commits before step 4:
   1. The manual close's start refusals, read up front as
      `startCloseChain` reads them: the branch not open, a pending
-     embedder swap, a busy story (`story-busy`) and a held branch.
+     embedder swap, a busy story (`story-busy`) and a held branch, and
+     a branch held until restart (`rerun-held`).
   2. 5.10's pre-flight over the chain's snapshot; a failure resolves
      `{ outcome: 'preflight-failed', error }`, which the host toasts.
   3. Under the mark, the preview's refusals, then `counts-changed`
      against `expected` (the shortcut's target and counts, the
-     reversal's counts), carrying the fresh preview.
+     reversal's counts), carrying the fresh preview, then the memory
+     pass's pre-flight when a catch-up pass will run.
   4. With turns since, the rollback's sweep (`sweepToEntry`) with the
      confirm's counts, in its own prose-reversal bracket inside the
      mark; a refusal ends the start.
@@ -673,7 +676,9 @@ close's until this slice.
   blocking run's tooltip, falling back to that string only once no gate
   reason remains (`chapter-overlays-host.tsx`'s `rerunReason ?? held`);
   `close-owed` toasts `Close the open chapter first.`, an embedder swap
-  or a held branch the manual close's copy, and other refusals a failure,
+  or a held branch the manual close's copy, `rerun-held` the restart
+  line, a catch-up pass's pre-flight the memory pass's settings copy,
+  and other refusals a failure,
   each closing it. A refused or failed first preview read from the
   review window reopens the window.
 
@@ -1324,4 +1329,35 @@ change amends the scope above.
   from 264 to 610 tests (about 6 s to 18 s locally); CI's unit shards
   stayed inside main's recent range, so the file is not split.
 - **The Android measure (AC 34) is pending:** no Fold was attached
-  during the run. The functional smoke ran on a slot emulator.
+  during the run. The functional smoke ran on a slot emulator. When it
+  runs it adds a many-journals case (developer decision at the slice
+  review): every reversal reads each journal row on its branch
+  (`reverse-replay.ts`, `journalHeadsOf`), so it also times a reversal
+  on a branch holding 30, then 100, committed re-run journals the size
+  of the dataset close's, beside the review's desktop benchmark (30
+  journals of 230 KB: 5.8 ms a reversal; 100: 18.5 ms; 30 of 920 KB:
+  29.9 ms). The schema keeps no `chapter_id` or `floor` column until
+  that measure asks for one.
+- **A re-run whose own undo fails holds its branch until restart
+  (developer decision at the slice review).** A Cancel, failed call or
+  interrupting head reversal whose reversal doesn't commit leaves the
+  re-run's writes, journal and open marker for boot recovery, and any
+  write to the branch before then could turn the write-back into an
+  undone close. The run's end sets `heldBranches` in the generation
+  store (in memory, so the restart drops it), and the edit gate, head
+  reversals, every run start, a reversal past its interrupt, Send and
+  the re-run's start all refuse; the branch's controls and the notice
+  (`chapters:rerunNotice.unreversed`) say a restart restores the close.
+  A pass's or a close's failed abort still lifts its gate, and a failed
+  completed-marker write stays as triage files it.
+- **The re-run's CTRL-Z confirm names an undone close (same review).**
+  `readUndoImpact` runs the write-back's own decision (`closeUndoneBy`,
+  the read-only half of `rerunWriteBack`) and the confirm adds a line
+  when the earlier close can't be restored; the warning after the undo
+  stays for a state that changes past the confirm.
+- **The start pre-flights a catch-up pass (same review).** Under the
+  mark and before the sweep, when an entry through the chapter's end is
+  unprocessed (`unprocessedThroughChapter`, the chain's own count), the
+  memory pass's pre-flight runs, and its failure resolves
+  `preflight-failed`; the host toasts the memory pass's settings copy,
+  since the close's names the lore agent.

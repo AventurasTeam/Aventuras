@@ -396,7 +396,11 @@ a close's progress and moves nothing to the next turn, since the close
 it replaces stands. An interrupt or Cancel toasts
 `Re-run cancelled. Chapter 5's close is as it was.`, and a failure the
 warning `Re-run failed. Chapter 5's close is as it was.` with its
-reason. A commit leaves the banner's done state as a close's does,
+reason. Either one whose undo of the re-run fails without committing
+toasts the error
+`The re-run couldn't be undone. Restart the app to restore chapter 5's close; until then, the story can't be changed.`
+instead, and the branch is held until then
+([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)). A commit leaves the banner's done state as a close's does,
 `Chapter 5's close re-ran [Review] [×]`, a warning when tasks stopped
 early. CTRL-Z is refused while it runs, and
 Cancel stops it.
@@ -539,7 +543,9 @@ to undo, activation keeps its "Nothing to undo" toast.
     lines the
     [chapter delete confirm](../chapter-timeline/chapter-timeline.md#delete-a-chapter)
     uses: the lore rows it removes, your edits included, and the other
-    changes it reverses;
+    changes it reverses. A re-run whose earlier close can't be restored,
+    by the check its undo itself runs, adds a line saying the undo takes
+    chapter N's close too, since that earlier close can't be restored;
   - otherwise, up to five of the group's rows as History names them
     (the row, then what changed), and "and N more".
 
@@ -561,7 +567,8 @@ something to redo. A re-run's undo can't be redone
 so its notice has none. A newer undo's notice replaces the older one,
 so the toast's Redo is always the top of the reader branch's redo stack. An undo that
 raises its own warning, such as a re-run undone with no journal to
-write back, shows that warning instead.
+write back, shows that warning instead; it stays for a re-run whose
+close turned unrestorable after its confirm read.
 
 A redo shows `Redid <target>`, with no action. Redo never confirms,
 since it restores what the user just undid and the undo's notice named

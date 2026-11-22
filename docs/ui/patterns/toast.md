@@ -33,7 +33,9 @@ Used by:
   when the clipboard write fails
   ([`entry-card.md → System entry`](./entry-card.md#system-entry)).
   A chapter close's re-run cancelled, info severity, or failed, warning
-  severity, with no action, both saying the close is as it was; and a
+  severity, with no action, both saying the close is as it was; either
+  whose own undo failed, error severity, saying the re-run couldn't be
+  undone and a restart restores the close; and a
   re-run undone with no journal to write back, warning severity, saying
   the earlier close couldn't be restored. An undo that landed, info
   severity, `Undid <target>` with a Redo action when the undo left

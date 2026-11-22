@@ -333,7 +333,13 @@ generation pipeline is in flight:
   they recount as runs settle, and the start refuses `counts-changed`
   with the fresh counts. If a close landed while it was open, the re-run
   is refused with a toast, as the delete is. Every refusal comes before
-  the turns go or any branch is created. If the rollback lands but the
+  the turns go or any branch is created, a catch-up pass's settings
+  included: when the chapter's end is still unprocessed, a failing
+  memory-pass setting refuses with that pass's settings copy. A branch
+  held until a restart, after a re-run's undo failed, refuses with the
+  restart line its disabled actions show
+  ([`principles.md → Affordance loci`](../../principles.md#affordance-loci)).
+  If the rollback lands but the
   screens can't follow it, the branch reloads and the confirm closes
   with the start-failed toast, or asks to reopen the story if the reload
   fails too.

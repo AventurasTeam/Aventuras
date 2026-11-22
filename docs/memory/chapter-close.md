@@ -1222,8 +1222,12 @@ the re-run starts:
   stay gone even if the re-run then fails or is cancelled. Every refusal
   is checked before it commits — the manual close's start refusals
   first: pre-flight, the chapter still the latest with a close, the
-  counts, and a close owed on the region the rollback leaves. Then the
-  rollback commits and the re-run starts, two actions.
+  counts, a close owed on the region the rollback leaves, and a branch
+  held until a restart (below). When an entry through the chapter's end
+  is unprocessed, so the chain will open with a catch-up pass, the
+  memory pass's pre-flight runs too, and its failure refuses with the
+  memory pass's own settings copy. Then the rollback commits and the
+  re-run starts, two actions.
 
 Under either path, no turn sits after the close once the re-run begins:
 nothing the reversal yields to comes from a turn, and the re-run reads
@@ -1272,13 +1276,30 @@ close, as a close's review does.
 
 **Nothing is owed after it**, since the close it replaces stands:
 
-| Outcome                         | Result                                                                           |
-| ------------------------------- | -------------------------------------------------------------------------------- |
-| Commits                         | Its report replaces the close's; CTRL-Z brings the close back, else undoes it    |
-| Cancel, or a head reversal      | The group reverses and the journal restores the close; nothing deferred          |
-| A call that fails after retries | The same, and the toast gives the reason                                         |
-| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run               |
-| Crash                           | Boot recovery reverses the group and restores the journal, else undoes the close |
+| Outcome                         | Result                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| Commits                         | Its report replaces the close's; CTRL-Z brings the close back, else undoes it            |
+| Cancel, or a head reversal      | The group reverses and the journal restores the close; nothing deferred                  |
+| A call that fails after retries | The same, and the toast gives the reason                                                 |
+| A catch-up pass fails           | The chain ends as a failed pass's does, and the re-run doesn't run                       |
+| Any of these whose undo fails   | Nothing is undone; the branch is held until a restart, whose recovery restores the close |
+| Crash                           | Boot recovery reverses the group and restores the journal, else undoes the close         |
+
+**A re-run whose own undo fails.** A Cancel, a failed call or a head
+reversal that interrupts it reverses the re-run's group and writes the
+journal back in one transaction. When that transaction fails without
+committing, the re-run's writes, its journal and its open marker stay
+for boot recovery, which finishes the reversal. Any write to the branch
+before then could break that: a delta above the journal's floor turns
+the write-back into an undone close, and a CTRL-Z, a later close, a
+delete or another re-run in between leaves the next boot undoing a
+close the user kept, or writing a deleted one's lore back. So the branch is held until the app restarts: every write
+on it refuses, turns, CTRL-Z and redo, rollbacks, edits, closes,
+deletes and re-runs alike, its controls saying a restart restores the
+chapter's close, and the re-run's notice says the same instead of
+calling the close as it was. The hold is in memory, so the restart that
+runs boot recovery drops it
+([`generation-pipeline.md → Recovery-failure policy`](../generation-pipeline.md#recovery-failure-policy)).
 
 **Head reversals.** Regenerate interrupts a running close with no
 confirm because nothing of it has committed; if it commits as the
