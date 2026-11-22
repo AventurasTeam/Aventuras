@@ -398,7 +398,9 @@ async function commitRun(
     }
     return { tx: await abortRun(run, ctx, { reason: 'phase-failure', error, threw: true }) }
   }
-  generationStore.finishRun(run.runId, successor)
+  // A cancel landing during the write still commits the run, and chains nothing.
+  const next = aborted() ? undefined : successor
+  generationStore.finishRun(run.runId, next)
   turnCaptureSink.endTurn(run.actionId, 'completed')
   logger.debug(
     'pipeline.run_complete',
@@ -407,7 +409,7 @@ async function commitRun(
   )
   emitRunComplete(run, 'completed')
   run.resolveTerminal()
-  return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor }
+  return { tx: { runId: run.runId, actionId: run.actionId, outcome: 'completed' }, successor: next }
 }
 
 async function runHook(

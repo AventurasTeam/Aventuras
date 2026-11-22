@@ -455,6 +455,42 @@ describe('chained transition', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
 
+  // The marker is written under the gate, after chainsTo: a cancel landing during that write
+  // still commits the run, and chains nothing.
+  it('chains nothing for a run cancelled while its completed marker is written', async () => {
+    const { db, ctx } = await makeHarness()
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: noop }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: () => entryThen('entry_pred', { status: 'completed' }) }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+    const cancelling = new Proxy(ctx.db, {
+      get(target, prop, receiver) {
+        if (prop === 'update')
+          return (table: typeof pipelineRuns) => {
+            if (table === pipelineRuns)
+              for (const run of generationStore.getTxState().runs.values())
+                run.abortController.abort()
+            return target.update(table)
+          }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+    const starts: string[] = []
+    const off = pipelineEventBus.subscribe('run_start', (e) => starts.push(e.kind))
+
+    const result = expectRan(await runPipeline('pred', { ...ctx, db: cancelling }))
+    off()
+
+    expect(result.outcome).toBe('completed')
+    const rows = await db.select().from(pipelineRuns)
+    expect(rows.map((r) => [r.kind, r.outcome])).toEqual([['pred', 'completed']])
+    expect(starts).toEqual(['pred'])
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
   const failingChains: [string, NonNullable<Pipeline['chainsTo']>][] = [
     [
       'throws',
