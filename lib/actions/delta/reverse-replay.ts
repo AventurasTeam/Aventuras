@@ -39,8 +39,7 @@ import { resolveByTable, whereForDelta, type StorePatch, type TableEntry } from 
 import {
   DeltaReplayError,
   ReversalIntegrityError,
-  type IntegrityRefusal,
-  type JournalOutcome,
+  type DescribedReplayError,
 } from './replay-errors'
 import {
   reversalLockKeys,
@@ -61,20 +60,11 @@ export {
 } from './replay-errors'
 
 /** What the pipeline port needs from a replay failure; `undefined` hands any other error back. */
-export function describeDeltaReplayError(e: unknown):
-  | {
-      detail: string
-      committed: boolean
-      refusal: IntegrityRefusal | null
-      journal?: JournalOutcome
-      chapterNumber?: number | null
-    }
-  | undefined {
+export function describeDeltaReplayError(e: unknown): DescribedReplayError | undefined {
   if (!(e instanceof DeltaReplayError)) return undefined
   const refusal = e instanceof ReversalIntegrityError ? e.refusal : null
-  const journal =
-    e.journal === undefined ? {} : { journal: e.journal, chapterNumber: e.chapterNumber ?? null }
-  return { detail: String(e.cause), committed: e.committed, refusal, ...journal }
+  const rerun = e.rerun === undefined ? {} : { rerun: e.rerun }
+  return { detail: String(e.cause), committed: e.committed, refusal, ...rerun }
 }
 
 export type PatchEmission = { table: string; branchId: string; patch: StorePatch }
