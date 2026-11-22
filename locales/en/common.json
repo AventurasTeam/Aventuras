@@ -61,7 +61,8 @@
     "updatingMemory": "Updating memory. Cancel to edit.",
     "chapterClose": "Chapter close in progress. Cancel to edit.",
     "chapterCloseRerun": "Re-running the chapter's close. Cancel to edit.",
-    "suggestionRefresh": "Refreshing suggestions. Cancel to edit."
+    "suggestionRefresh": "Refreshing suggestions. Cancel to edit.",
+    "rerunHeld": "A re-run couldn't be undone. Restart the app to restore its chapter's close."
   },
   "deleteUndoHint": "You can undo this from the reader's menu, or with Cmd/Ctrl-Z.",
   "contextWindowSource": {

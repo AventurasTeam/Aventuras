@@ -32,6 +32,7 @@ function tx(fields: Partial<TxState> = {}, ...runs: RunState[]): TxState {
     deferred: new Map(),
     pendingClose: new Map(),
     pendingRerun: new Map(),
+    heldBranches: new Map(),
     ...fields,
   }
 }

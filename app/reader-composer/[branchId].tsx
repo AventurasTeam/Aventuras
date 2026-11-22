@@ -186,9 +186,11 @@ import {
   entitiesStore,
   entriesStore,
   generationStore,
+  isBranchHeld,
   isHeadReversalBlocked,
   isUserEditBlocked,
   readerRailStore,
+  RERUN_HELD,
   rehydrateStories,
   storiesStore,
 } from '@/lib/stores'
@@ -300,7 +302,7 @@ export default function ReaderComposerRoute() {
   // The document renders a slice of the window (reader-composer.md → Loaded-set model).
   const slice = useReaderSlice(branchId, entries, db)
 
-  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
+  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState, branchId))
   // Narrower than editBlocked: a pass or a close alone lets the head reversals through, each
   // interrupting it (principles.md → Edit restrictions during in-flight generation).
   const headReversalGateHeld = generationStore.useGeneration((s) =>
@@ -794,8 +796,11 @@ export default function ReaderComposerRoute() {
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
   const headReversalBlocked = headReversalGateHeld || dispatchInFlight
   const editGate = editGateOf({ editBlocked: actionsBlocked, headReversalBlocked })
+  // A branch held until restart has no run to name; its controls name the hold.
   const gateRunKind = generationStore.useGeneration((s) =>
-    selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
+    isBranchHeld(s.txState, branchId)
+      ? RERUN_HELD
+      : selectStorySettingsGenerationRunKind(s.txState, storyId ?? undefined),
   )
   const gateReason = generationGateReason(actionsBlocked, gateRunKind)
   // Beside a pass the pill names the pass, but a head reversal waits on the run it can't interrupt.

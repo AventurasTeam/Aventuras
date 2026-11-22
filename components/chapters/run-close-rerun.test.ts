@@ -21,7 +21,7 @@ import {
   type ChainEnd,
   type PipelineError,
 } from '@/lib/pipeline'
-import { currentStoryStore, resetAllStores, type OpenStory } from '@/lib/stores'
+import { currentStoryStore, RERUN_HELD, resetAllStores, type OpenStory } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import { expectedOf, rerunEndNotice, rerunStartOutcome, runCloseRerun } from './run-close-rerun'
@@ -100,6 +100,15 @@ const END = {
   abortedUndone: {
     kind: CHAPTER_CLOSE_KIND,
     result: { ...RUN, outcome: 'aborted', closeUndone: true },
+  },
+  failedUnreversed: {
+    kind: CHAPTER_CLOSE_KIND,
+    result: {
+      ...RUN,
+      outcome: 'failed',
+      error: { kind: 'orchestrator', detail: 'reverse-replay failed: disk I/O error' },
+      unreversed: true,
+    },
   },
   failedUndone: {
     kind: CHAPTER_CLOSE_KIND,
@@ -212,6 +221,12 @@ describe('rerunEndNotice', () => {
       'warning',
       t('chapters:rerunNotice.undone', { number: 2 }),
     ],
+    [
+      "stopped with a reversal that didn't commit",
+      END.failedUnreversed,
+      'error',
+      t('chapters:rerunNotice.unreversed', { number: 2 }),
+    ],
   ] as const)('speaks for a re-run %s', (_name, end, severity, message) => {
     expect(rerunEndNotice(end, 2)).toStrictEqual({ severity, message })
   })
@@ -261,8 +276,9 @@ describe('rerunStartOutcome', () => {
   it.each([
     [EMBEDDER_SWAP_REFUSAL, t('reader:actions.blockedWhileSwapping')],
     [CLASSIFIER_HELD, t('reader:systemEntry.closeRetryBlocked')],
+    [RERUN_HELD, t('generationGate.rerunHeld')],
   ] as const)(
-    "closes on %s with the manual close's copy for it, logging the code",
+    'closes on %s with the copy for a refusal that outlasts the press, logging the code',
     (code, message) => {
       expect(rerunStartOutcome({ outcome: 'rejected', blockedBy: code }, 2)).toStrictEqual({
         step: { step: 'refused' },

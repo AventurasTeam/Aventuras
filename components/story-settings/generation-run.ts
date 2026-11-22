@@ -9,7 +9,9 @@ import {
   awaitRunTerminal,
   generationStore,
   interruptMemoryRuns,
+  isBranchHeld,
   isUserEditBlocked,
+  RERUN_HELD,
   runBlocksHeadReversal,
   type RunState,
   type TxState,
@@ -76,6 +78,13 @@ export function selectHeadReversalRunKind(txState: TxState, branchId: string): s
   )
 }
 
+/** A hold until restart on the scope's branch, or on any branch of its story when it names none. */
+export function selectGateHeld(txState: TxState, scope: PillScope): boolean {
+  if (scope.branchId != null) return isBranchHeld(txState, scope.branchId)
+  for (const held of txState.heldBranches.values()) if (held.storyId === scope.storyId) return true
+  return false
+}
+
 /** A re-run on `branchId`: refuses CTRL-Z while it runs; with a row's chapter id it is
  * `rerunHoldsReversal`, which the reader document can't read itself. */
 export function selectRerunRunning(txState: TxState, branchId: string): boolean {
@@ -101,6 +110,7 @@ export function generationGateReason(
   if (runKind === CHAPTER_CLOSE_KIND) return t('generationGate.chapterClose')
   if (runKind === CHAPTER_CLOSE_RERUN) return t('generationGate.chapterCloseRerun')
   if (runKind === SUGGESTION_REFRESH_KIND) return t('generationGate.suggestionRefresh')
+  if (runKind === RERUN_HELD) return t('generationGate.rerunHeld')
   return t('generationGate.inFlight')
 }
 
@@ -134,8 +144,11 @@ export function useStoryGenerationGate(
   const beforeTurn = generationStore.useGeneration(
     (s) => pillRun(s.txState, { storyId, branchId })?.beforeTurn ?? false,
   )
-  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const gateReason = generationGateReason(editBlocked, activeRunKind)
+  const held = generationStore.useGeneration((s) =>
+    selectGateHeld(s.txState, { storyId, branchId }),
+  )
+  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState)) || held
+  const gateReason = generationGateReason(editBlocked, held ? RERUN_HELD : activeRunKind)
   const cancelPillRun = useCallback(
     () => cancelPillRunIn({ storyId, branchId }),
     [storyId, branchId],

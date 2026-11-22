@@ -20,7 +20,7 @@ import {
   pipelineErrorDetail,
   type ChainEnd,
 } from '@/lib/pipeline'
-import { currentStoryStore } from '@/lib/stores'
+import { currentStoryStore, RERUN_HELD } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -58,6 +58,9 @@ export function rerunEndNotice(end: ChainEnd, chapterNumber: number): RerunNotic
   const number = chapterNumber
   if (result.closeUndone === true)
     return { severity: 'warning', message: t('chapters:rerunNotice.undone', { number }) }
+  // Its writes wait for boot recovery, and the branch is held until then.
+  if (result.outcome === 'failed' && result.unreversed === true)
+    return { severity: 'error', message: t('chapters:rerunNotice.unreversed', { number }) }
   if (result.outcome === 'aborted')
     return { severity: 'info', message: t('chapters:rerunNotice.cancelled', { number }) }
   const reason = firstLine(pipelineErrorDetail(result.error))
@@ -107,6 +110,8 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
         logCode: 'preflight-failed',
       }
     if (keepsConfirmOpen(start.blockedBy)) return keepOpen()
+    if (start.blockedBy === RERUN_HELD)
+      return refusedWith(t('generationGate.rerunHeld'), start.blockedBy)
     if (LASTING_REFUSALS.has(start.blockedBy))
       return refusedWith(
         retryRefusalText(start.blockedBy, 'reader:systemEntry.closeRetryBlocked'),
