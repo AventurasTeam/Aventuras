@@ -31,7 +31,7 @@ describe('captures do not cross branches', () => {
     for (const id of ['pc_1', 'pc_2'])
       await writeProbeCapture({ runInTransaction }, captureInput({ id, branchId: 'br_a' }))
 
-    await runInTransaction(branchCopyOps(db, { from: 'br_a', to: 'br_c', mode: 'duplicate' }))
+    await runInTransaction(await branchCopyOps(db, { from: 'br_a', to: 'br_c', mode: 'duplicate' }))
 
     const count = (branchId: string) =>
       sqlite.prepare('SELECT count(*) AS n FROM probe_captures WHERE branch_id = ?').get(branchId)

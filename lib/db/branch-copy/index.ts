@@ -1,4 +1,4 @@
-export { vecCopyOps, vecCopyStatement, type CopyBranches, type VecCopyTables } from './vec-copy'
+export { vecCopyStatement, type CopyBranches, type VecCopyTables } from './vec-copy'
 export {
   BRANCH_COPY_MANIFEST,
   type BranchCopyTable,

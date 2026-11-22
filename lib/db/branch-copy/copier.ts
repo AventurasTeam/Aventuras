@@ -9,16 +9,12 @@ import {
   type ForkFilteredTable,
   type ManifestRow,
 } from './manifest'
-import type { CopyBranches } from './vec-copy'
+import { vecCopyOps, type CopyBranches } from './vec-copy'
 
 /** A table's filter; `'all'` copies the table unfiltered. */
 export type CopyPredicate = SQL | 'all'
 
-/**
- * `where`: per table, a SQL fragment with its own binds, ANDed into that table's copy; evaluated
- * in-statement, so it reads the batch as earlier ops left it. A fork passes one per filtered table.
- */
-export type BranchCopyArgs = CopyBranches &
+type TableCopyArgs = CopyBranches &
   (
     | {
         readonly mode: 'duplicate'
@@ -30,6 +26,14 @@ export type BranchCopyArgs = CopyBranches &
           Partial<Record<BranchCopyTableName, CopyPredicate>>
       }
   )
+
+/**
+ * `where`: per table, a SQL fragment with its own binds, ANDed into that table's copy; evaluated
+ * in-statement, so it reads the batch as earlier ops left it. A fork passes one per filtered table.
+ * `between`: ops run after the rows copy and before the vectors, which copy only for rows `to` then
+ * holds (C3).
+ */
+export type BranchCopyArgs = TableCopyArgs & { readonly between?: readonly SqlOp[] }
 
 const FORK_FILTERS: ReadonlySet<ForkCopy> = new Set<ForkCopy>(['copy-non-system', 'copy-survivors'])
 
@@ -53,11 +57,7 @@ function tableCopyOp(
     .toSQL()
 }
 
-/**
- * The table ops of a branch copy, in manifest order, for the caller's batch; the caller inserts the
- * `branches` row first.
- */
-export function branchCopyOps(db: DbCtx['db'], args: BranchCopyArgs): SqlOp[] {
+export function tableCopyOps(db: DbCtx['db'], args: TableCopyArgs): SqlOp[] {
   const where: Partial<Record<BranchCopyTableName, CopyPredicate>> = args.where ?? {}
   const ops: SqlOp[] = []
   for (const [name, row] of Object.entries(BRANCH_COPY_MANIFEST) as [
@@ -72,4 +72,14 @@ export function branchCopyOps(db: DbCtx['db'], args: BranchCopyArgs): SqlOp[] {
     ops.push(tableCopyOp(db, row.table, args, where[name]))
   }
   return ops
+}
+
+/**
+ * A branch copy's ops for the caller's batch, after its `branches` row: the tables in manifest
+ * order, then `between`, then the vectors. A family table created after this call is missed (C3).
+ */
+export async function branchCopyOps(db: DbCtx['db'], args: BranchCopyArgs): Promise<SqlOp[]> {
+  const tableOps = tableCopyOps(db, args)
+  const vectorOps = await vecCopyOps(db, args)
+  return [...tableOps, ...(args.between ?? []), ...vectorOps]
 }

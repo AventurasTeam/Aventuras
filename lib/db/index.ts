@@ -270,7 +270,6 @@ export {
 export {
   BRANCH_COPY_MANIFEST,
   branchCopyOps,
-  vecCopyOps,
   vecCopyStatement,
   type BranchCopyArgs,
   type BranchCopyTable,

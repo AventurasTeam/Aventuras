@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 
-import { getTableColumns, ne, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, ne, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { createTestDb } from '../__tests__/test-db'
@@ -14,7 +14,7 @@ import {
 import { ensureVecTablesSql, knnQuery, packFloat32, type VecTargetKind } from '../embeddings'
 import { branches, deltas, entities, lore, storyEntries, threads } from '../schema'
 import type { NewEntity, SqlOp } from '../types'
-import { branchCopyOps, type BranchCopyArgs, type CopyPredicate } from './copier'
+import { branchCopyOps, tableCopyOps, type BranchCopyArgs, type CopyPredicate } from './copier'
 import { BRANCH_COPY_MANIFEST, type BranchCopyTableName } from './manifest'
 import { vecCopyOps } from './vec-copy'
 
@@ -59,7 +59,9 @@ function branchRowOp(id: string): SqlOp {
     .toSQL()
 }
 
-function duplicateOps(where?: Partial<Record<BranchCopyTableName, CopyPredicate>>): SqlOp[] {
+function duplicateOps(
+  where?: Partial<Record<BranchCopyTableName, CopyPredicate>>,
+): Promise<SqlOp[]> {
   return branchCopyOps(t.db, { from: fx.branchId, to: COPY, mode: 'duplicate', where })
 }
 
@@ -101,8 +103,7 @@ describe('branchCopyOps', () => {
         .run(RAW_JSON, fx.branchId, value)
     const sourceBefore = branchSnapshot(t.sqlite, fx.branchId)
 
-    const vectorOps = await vecCopyOps(t.db, { from: fx.branchId, to: COPY })
-    await t.runInTransaction([branchRowOp(COPY), ...duplicateOps(), ...vectorOps])
+    await t.runInTransaction([branchRowOp(COPY), ...(await duplicateOps())])
 
     for (const table of DUPLICATE_TABLES) {
       const source = rowsOf(t.sqlite, table, fx.branchId)
@@ -129,7 +130,7 @@ describe('branchCopyOps', () => {
   })
 
   it('names every column of each table in copy order, binding the new branch in branch_id', () => {
-    const ops = duplicateOps()
+    const ops = tableCopyOps(t.db, { from: fx.branchId, to: COPY, mode: 'duplicate' })
     expect(ops.map(tableOf)).toEqual(DUPLICATE_TABLES)
     ops.forEach((op, i) => {
       const name = DUPLICATE_TABLES[i]
@@ -148,7 +149,7 @@ describe('branchCopyOps', () => {
   })
 
   it("leaves a fork's trailing system entry out through its story_entries predicate", async () => {
-    const ops = branchCopyOps(t.db, {
+    const fork: BranchCopyArgs = {
       from: fx.branchId,
       to: COPY,
       mode: 'fork',
@@ -157,10 +158,10 @@ describe('branchCopyOps', () => {
         deltas: 'all',
         reversal_journals: 'all',
       },
-    })
-    expect(ops.map(tableOf)).toEqual(DUPLICATE_TABLES)
+    }
+    expect(tableCopyOps(t.db, fork).map(tableOf)).toEqual(DUPLICATE_TABLES)
 
-    await t.runInTransaction([branchRowOp(COPY), ...ops])
+    await t.runInTransaction([branchRowOp(COPY), ...(await branchCopyOps(t.db, fork))])
 
     const entryIds = (branchId: string) =>
       (
@@ -225,7 +226,7 @@ describe('branchCopyOps', () => {
     )
     expect(logged.filter(kept).map(({ id }) => id)).toContain('delta_on_live_entity')
 
-    await t.runInTransaction([branchRowOp(COPY), ...duplicateOps({ deltas: targetOnCopy })])
+    await t.runInTransaction([branchRowOp(COPY), ...(await duplicateOps({ deltas: targetOnCopy }))])
 
     const copied = (
       t.sqlite.prepare('SELECT id FROM deltas WHERE branch_id = ?').all(COPY) as { id: string }[]
@@ -245,16 +246,16 @@ describe('branchCopyOps', () => {
     cloneBranch(t.sqlite, fx.branchId, 'br_x')
     const always = sql`0 = 1 or 1 = 1`
 
-    await t.runInTransaction([branchRowOp(COPY), ...duplicateOps({ deltas: always })])
+    await t.runInTransaction([branchRowOp(COPY), ...(await duplicateOps({ deltas: always }))])
 
     expect(rowsOf(t.sqlite, 'deltas', COPY)).toEqual(rowsOf(t.sqlite, 'deltas', fx.branchId))
   })
 
-  it('refuses a fork missing a predicate for a table it filters', () => {
+  it('refuses a fork missing a predicate for a table it filters', async () => {
     const partial = { story_entries: 'all', deltas: 'all' } as const
     // @ts-expect-error a fork names a predicate for every table it filters
     const typed: BranchCopyArgs = { from: fx.branchId, to: COPY, mode: 'fork', where: partial }
-    expect(() => branchCopyOps(t.db, typed)).toThrow(/reversal_journals/)
+    await expect(branchCopyOps(t.db, typed)).rejects.toThrow(/reversal_journals/)
 
     for (const missing of FORK_FILTERED) {
       const where = Object.fromEntries(
@@ -266,14 +267,14 @@ describe('branchCopyOps', () => {
         mode: 'fork',
         where,
       } as unknown as BranchCopyArgs
-      expect(() => branchCopyOps(t.db, untyped), missing).toThrow(missing)
+      await expect(branchCopyOps(t.db, untyped), missing).rejects.toThrow(missing)
     }
   })
 
   it('fails on the foreign key without a branches row and writes nothing', async () => {
     const sourceBefore = branchSnapshot(t.sqlite, fx.branchId)
 
-    await expect(t.runInTransaction(duplicateOps())).rejects.toThrow(
+    await expect(t.runInTransaction(await duplicateOps())).rejects.toThrow(
       /FOREIGN KEY constraint failed/,
     )
 
@@ -283,11 +284,13 @@ describe('branchCopyOps', () => {
   })
 
   it('fails a second copy into the filled branch on its key and leaves both branches as they were', async () => {
-    await t.runInTransaction([branchRowOp(COPY), ...duplicateOps()])
+    await t.runInTransaction([branchRowOp(COPY), ...(await duplicateOps())])
     const source = branchSnapshot(t.sqlite, fx.branchId)
     const copy = branchSnapshot(t.sqlite, COPY)
 
-    await expect(t.runInTransaction(duplicateOps())).rejects.toThrow(/UNIQUE constraint failed/)
+    await expect(t.runInTransaction(await duplicateOps())).rejects.toThrow(
+      /UNIQUE constraint failed/,
+    )
 
     expect(branchSnapshot(t.sqlite, fx.branchId)).toEqual(source)
     expect(branchSnapshot(t.sqlite, COPY)).toEqual(copy)
@@ -467,8 +470,10 @@ describe('vecCopyOps', () => {
       ops.filter((op) => /_vec_\d+_(info|chunks|rowids|vector_chunks\d+)\b/.test(op.sql)),
     ).toEqual([])
   })
+})
 
-  it('copies each family’s vectors whose source the copy holds, keyed for br_c, in the table copy’s batch', async () => {
+describe('branchCopyOps vectors', () => {
+  it('copies, after the rows, each family’s vectors whose source the copy holds, keyed for br_c', async () => {
     const { chapterId } = await seedVectors(t)
     const before = vecRowsOf(t.sqlite, 'br_a')
     // The seed itself holds no vectors: every row below is one this test planted.
@@ -480,15 +485,13 @@ describe('vecCopyOps', () => {
       'threads_vec_4',
     ])
 
-    const vectorOps = await vecCopyOps(t.db, { from: 'br_a', to: 'br_c' })
     await t.runInTransaction([
       branchRowOp(COPY),
-      ...duplicateOps({
+      ...(await duplicateOps({
         entities: ne(entities.id, 'ent_vec_left'),
         // No thread copies, so threads_vec_4's source holds no br_c row.
         threads: sql`false`,
-      }),
-      ...vectorOps,
+      })),
     ])
 
     const copied = (table: string, pk: string, newPk: string): VecRow => {
@@ -526,5 +529,36 @@ describe('vecCopyOps', () => {
     expect(nearest('entity', 4, 'model-y', [0, 1, 0, 0])).toEqual(['ent_vec_kept'])
     expect(nearest('chapter', 4, 'model-x', [0, 0, 1, 0])).toEqual([chapterId])
     expect(nearest('entity', 8, 'model-x', [0, 0, 0, 0, 1, 0, 0, 0])).toEqual([])
+  })
+
+  it('runs between after the rows copy and before the vectors, so a row it removes takes none', async () => {
+    await seedVectors(t)
+    const dropKept = t.db
+      .delete(entities)
+      .where(and(eq(entities.branchId, COPY), eq(entities.id, 'ent_vec_kept')))
+      .toSQL()
+
+    await t.runInTransaction([
+      branchRowOp(COPY),
+      ...(await branchCopyOps(t.db, {
+        from: fx.branchId,
+        to: COPY,
+        mode: 'duplicate',
+        between: [dropKept],
+      })),
+    ])
+
+    // ent_vec_kept reached br_c before between removed it; its sibling stayed.
+    expect(
+      t.sqlite
+        .prepare("SELECT id FROM entities WHERE branch_id = ? AND id GLOB 'ent_vec_*' ORDER BY id")
+        .all(COPY),
+    ).toEqual([{ id: 'ent_vec_left' }])
+    expect(Object.keys(vecRowsOf(t.sqlite, COPY)).sort()).toEqual([
+      'chapter_summaries_vec_4',
+      'entities_vec_8',
+      'lore_vec_8',
+      'threads_vec_4',
+    ])
   })
 })
