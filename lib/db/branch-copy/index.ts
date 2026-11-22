@@ -9,3 +9,4 @@ export {
   type ForkFilteredTable,
   type ManifestRow,
 } from './manifest'
+export { branchCopyOps, type BranchCopyArgs, type CopyPredicate } from './copier'

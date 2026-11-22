@@ -269,11 +269,14 @@ export {
 } from './embeddings'
 export {
   BRANCH_COPY_MANIFEST,
+  branchCopyOps,
   vecCopyStatement,
+  type BranchCopyArgs,
   type BranchCopyTable,
   type BranchCopyTableName,
   type CopyBranches,
   type CopyMode,
+  type CopyPredicate,
   type DuplicateCopy,
   type ForkCopy,
   type ForkFilteredTable,
