@@ -126,6 +126,7 @@ export type {
   DeferredWork,
   DeferredWorkKind,
   PendingClose,
+  PendingMark,
   PendingRerun,
   PendingTurn,
   RunSlot,

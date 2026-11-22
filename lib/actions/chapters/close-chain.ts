@@ -20,7 +20,7 @@ import {
   generationStore,
   isStoryBusy,
   type OpenStory,
-  type PendingTurn,
+  type PendingMark,
 } from '@/lib/stores'
 
 import { BRANCH_NOT_OPEN } from '../refusal-codes'
@@ -44,9 +44,6 @@ export const refused = (blockedBy: ManualCloseRefusal | typeof CLASSIFIER_HELD):
   blockedBy,
 })
 
-/** The caller's own pending mark on the branch, as `bracketPendingTurn` hands its body. */
-export type OwnPendingMark = { readonly mark: PendingTurn; readonly end: () => void }
-
 type CloseChainOpts = {
   /** Runs after the held check, before the unprocessed count; a refusal ends the start. */
   validate?: () => Promise<RejectedStart | null>
@@ -55,7 +52,7 @@ type CloseChainOpts = {
   /** Fires at the reserve, after `pendingMark` ends. */
   onReserved?: () => void
   /** The busy check skips this mark alone, and the reserve ends it. */
-  pendingMark?: OwnPendingMark
+  pendingMark?: PendingMark
 }
 
 // A variable takes no excess-property check, so only an explicit `undefined` keeps out a

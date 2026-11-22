@@ -32,15 +32,11 @@ import {
   generationStore,
   isStoryBusy,
   type OpenStory,
+  type PendingMark,
 } from '@/lib/stores'
 
 import { ownEntryTokens, reversalImpactOf } from './chapter-delete-preview'
-import {
-  MANUAL_CLOSE_REFUSAL,
-  refused as refusedStart,
-  startCloseChain,
-  type OwnPendingMark,
-} from './close-chain'
+import { MANUAL_CLOSE_REFUSAL, refused as refusedStart, startCloseChain } from './close-chain'
 import { DIVIDER_TABLES, readChapterCloseGroups } from './close-groups'
 import { withBranchWriteShared } from '../delta/branch-write-lock'
 import { logReversalRefused } from '../delta/commit-new-action'
@@ -404,7 +400,7 @@ export async function startCloseRerun(
 async function startUnderMark(
   args: RerunStartArgs,
   ctx: DbCtx,
-  own: OwnPendingMark,
+  own: PendingMark,
 ): Promise<CloseRerunStart> {
   const { branchId, chapterId, expected, story } = args
   const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
