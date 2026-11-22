@@ -19,6 +19,26 @@ describe('DeltaReplayError', () => {
     expect(sync.committed).toBe(true)
     expect(tx.committed).toBe(false)
   })
+
+  it('takes a re-run outcome only on a committed store-sync failure', () => {
+    const rerun = { journal: 'undone', chapterNumber: 2 } as const
+    const sync = new DeltaReplayError('sync', {
+      cause: 'x',
+      actionId: 'a',
+      stage: 'store-sync',
+      rerun,
+    })
+    const tx = new DeltaReplayError('tx', {
+      cause: 'x',
+      actionId: 'a',
+      stage: 'transaction',
+      // @ts-expect-error nothing committed, so no journal was restored or close undone
+      rerun,
+    })
+
+    expect(sync.rerun).toEqual(rerun)
+    expect(tx.rerun).toBeUndefined()
+  })
 })
 
 describe('ReversalIntegrityError', () => {
@@ -54,24 +74,27 @@ describe('describeDeltaReplayError and a re-run journal', () => {
       cause: 'boom',
       actionId: 'act_rerun',
       stage: 'store-sync',
-      journal: 'undone',
-      chapterNumber: 2,
+      rerun: { journal: 'undone', chapterNumber: 2 },
     })
 
     expect(describeDeltaReplayError(e)).toEqual({
       detail: 'boom',
       committed: true,
       refusal: null,
-      journal: 'undone',
-      chapterNumber: 2,
+      rerun: { journal: 'undone', chapterNumber: 2 },
     })
   })
 
-  it('leaves the journal fields off any other failure', () => {
-    const e = new DeltaReplayError('tx', { cause: 'x', actionId: 'act_1', stage: 'transaction' })
+  it('leaves the outcome off any other failure', () => {
+    const tx = new DeltaReplayError('tx', { cause: 'x', actionId: 'act_1', stage: 'transaction' })
+    const sync = new DeltaReplayError('sync', {
+      cause: 'x',
+      actionId: 'act_1',
+      stage: 'store-sync',
+    })
 
-    expect(describeDeltaReplayError(e)).not.toHaveProperty('journal')
-    expect(describeDeltaReplayError(e)).not.toHaveProperty('chapterNumber')
+    expect(describeDeltaReplayError(tx)).not.toHaveProperty('rerun')
+    expect(describeDeltaReplayError(sync)).not.toHaveProperty('rerun')
   })
 })
 

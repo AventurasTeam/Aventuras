@@ -477,7 +477,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
       ctx,
       () => [markerOp(outcomeOf()).toSQL()],
     )
-    closeUndone = reversal.journal === 'undone' && reversal.chapterNumber !== null
+    closeUndone = reversal.journal === 'undone'
   } catch (e) {
     // An error it doesn't recognise counts as uncommitted: the marker rides the reversal's
     // transaction, so boot recovery reads the truth either way, and the run must still end here.
@@ -486,10 +486,7 @@ async function abortRun(run: RunState, ctx: RunCtx, cause: AbortCause): Promise<
     const stage = replayFailure.committed ? 'post-commit store sync' : 'reverse-replay'
     failure = { kind: 'orchestrator', detail: `${stage} failed: ${replayFailure.detail}` }
     reversalFailed = !replayFailure.committed
-    closeUndone =
-      described?.committed === true &&
-      described.journal === 'undone' &&
-      typeof described.chapterNumber === 'number'
+    closeUndone = described?.rerun?.journal === 'undone'
   } finally {
     // An uncommitted reversal releases it too: recovery owns those writes, and a held lock
     // would stall every write to the branch until boot.

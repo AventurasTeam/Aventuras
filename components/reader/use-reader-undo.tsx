@@ -101,10 +101,9 @@ async function timedReversal(
  * gone all the same, so it reads as the undo that landed. Any other failure is not this.
  */
 function closeUndoneBySyncFailure(e: unknown): UndoResult | null {
-  const failure = describeDeltaReplayError(e)
-  if (failure?.committed !== true || failure.journal !== 'undone' || failure.chapterNumber == null)
-    return null
-  return { status: 'ok', closeUndone: { chapterNumber: failure.chapterNumber } }
+  const rerun = describeDeltaReplayError(e)?.rerun
+  if (rerun?.journal !== 'undone') return null
+  return { status: 'ok', closeUndone: { chapterNumber: rerun.chapterNumber } }
 }
 
 /**

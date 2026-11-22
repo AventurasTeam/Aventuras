@@ -251,7 +251,7 @@ describe("an abort's journal outcome", () => {
     const asked: unknown[] = []
     await abortWith(async (args) => {
       asked.push(args)
-      return { deltas: 0, journal: null, chapterNumber: null }
+      return { deltas: 0, journal: null }
     })
 
     expect(asked).toEqual([{ actionId: expect.any(String), branchId: 'b1' }])
@@ -264,9 +264,8 @@ describe("an abort's journal outcome", () => {
   })
 
   it.each([
-    ['restored', { deltas: 2, journal: 'restored', chapterNumber: null }],
-    ['undone with no chapter left', { deltas: 1, journal: 'undone', chapterNumber: null }],
-    ['with no journal', { deltas: 1, journal: null, chapterNumber: null }],
+    ['restored', { deltas: 2, journal: 'restored' }],
+    ['with no journal', { deltas: 1, journal: null }],
   ] as const)(
     'leaves an aborted run unmarked when its reversal ended %s',
     async (_name, reversal) => {
@@ -284,8 +283,7 @@ describe("an abort's journal outcome", () => {
           cause: new Error('store sync boom'),
           actionId,
           stage: 'store-sync',
-          journal: 'undone',
-          chapterNumber: 3,
+          rerun: { journal: 'undone', chapterNumber: 3 },
         }),
       ),
     )
@@ -307,8 +305,6 @@ describe("an abort's journal outcome", () => {
           cause: new Error('forced'),
           actionId,
           stage: 'transaction',
-          journal: 'undone',
-          chapterNumber: 3,
         }),
       ),
     )
@@ -318,9 +314,8 @@ describe("an abort's journal outcome", () => {
   })
 
   it.each([
-    ['a restored journal', { journal: 'restored' }],
+    ['a restored journal', { rerun: { journal: 'restored' } }],
     ['no journal', {}],
-    ['an undone close with no chapter left', { journal: 'undone', chapterNumber: null }],
   ] as const)(
     'leaves a failed run unmarked when only the store sync failed after %s',
     async (_name, payload) => {

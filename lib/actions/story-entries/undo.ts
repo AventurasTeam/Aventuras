@@ -219,13 +219,14 @@ async function undoRerun(
   const invalidation = await resolveInvalidationForDeltas(branchId, group, ctx)
   if (invalidation.status === 'unreadable') return unreadableScopeRejection(invalidation.deltaId)
   const target = writeBack.outcome === 'undone' ? withCloseGroups(group, writeBack.seed) : group
+  const ops = writeBack.outcome === 'alone' ? [] : writeBack.ops
   const set = await selectReversalSet(ctx, { branchId, target, sweep: invalidation.rows })
   try {
     await reverseAndPruneDeltaRows(
       set,
       ctx,
       { keepRedoExact: false },
-      [...invalidation.clampOps, ...writeBack.ops],
+      [...invalidation.clampOps, ...ops],
       undefined,
       writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
     )
@@ -241,7 +242,7 @@ async function undoRerun(
   }
   undoRedoStore.clear()
   logCloseUndone(actionId, writeBack)
-  return writeBack.outcome === 'undone' && writeBack.chapterNumber !== null
+  return writeBack.outcome === 'undone'
     ? { status: 'ok', closeUndone: { chapterNumber: writeBack.chapterNumber } }
     : { status: 'ok' }
 }

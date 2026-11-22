@@ -18,7 +18,7 @@ import type { DbCtx } from '../types'
 import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { readCurrentRow } from './redo'
 import { resolveByTable, whereForDelta, type TableDescriptor } from './registry'
-import { DeltaReplayError } from './replay-errors'
+import { DeltaReplayError, type JournalOutcome } from './replay-errors'
 import {
   replayFailure,
   reverseAndPruneDeltaRows,
@@ -164,10 +164,12 @@ export type RerunWriteBack =
       /** The journal row's delete, when one exists. */
       ops: readonly SqlOp[]
       chapterId: string
-      chapterNumber: number | null
+      chapterNumber: number
       /** Why no write-back: the group is no longer whole, or no journal holds it. */
       journal: 'not-whole' | 'missing'
     }
+  /** No journal and no chapter row left: the group reverses alone, undoing no close. */
+  | { outcome: 'alone'; chapterId: string }
 
 type UndoneClose = Extract<RerunWriteBack, { outcome: 'undone' }>
 
@@ -322,42 +324,54 @@ async function shapedChapterId(
 
 async function undoneClose(
   ctx: DbCtx,
-  undone: Omit<UndoneClose, 'outcome' | 'seed'> & { actionId: string; branchId: string | null },
+  undone: Omit<UndoneClose, 'outcome' | 'seed'> & { branchId: string },
 ): Promise<UndoneClose> {
-  const seed =
-    undone.branchId === null
-      ? []
-      : await readChapterCloseGroups(undone.branchId, undone.chapterId, ctx)
-  const { chapterId, chapterNumber, ops, journal } = undone
+  const { branchId, chapterId, chapterNumber, ops, journal } = undone
+  const seed = await readChapterCloseGroups(branchId, chapterId, ctx)
   return { outcome: 'undone', seed, ops, chapterId, chapterNumber, journal }
 }
 
-/** Call once the reversal committed: a refused or rolled-back one undid no close. */
+/** Call once the reversal committed: a refused or rolled-back one undid nothing. */
 export function logCloseUndone(actionId: string, writeBack: RerunWriteBack): void {
-  if (writeBack.outcome !== 'undone') return
-  const { chapterId, chapterNumber, journal } = writeBack
+  if (writeBack.outcome !== 'undone' && writeBack.outcome !== 'alone') return
+  const { chapterNumber, journal } =
+    writeBack.outcome === 'undone' ? writeBack : { chapterNumber: null, journal: 'missing' }
   logger.warn(
     'action_layer.rerun_close_undone',
-    { chapterId, chapterNumber, journal },
+    { chapterId: writeBack.chapterId, chapterNumber, journal },
     { actionId },
   )
 }
 
+/** What a committed reversal tells its caller; null when it restored no journal and undid no close. */
+function journalOutcomeOf(
+  writeBack: Exclude<RerunWriteBack, { outcome: 'none' }>,
+): JournalOutcome | null {
+  switch (writeBack.outcome) {
+    case 'restored':
+      return { journal: 'restored' }
+    case 'undone':
+      return { journal: 'undone', chapterNumber: writeBack.chapterNumber }
+    case 'alone':
+      return null
+  }
+}
+
 /**
- * A committed store-sync failure of a re-run's reversal, now carrying how its journal ended, so an
- * undone close never reads as restored. `logCloseUndone` stays the caller's, once per commit.
+ * A committed store-sync failure of a re-run's reversal, rebuilt to carry how its journal ended, so
+ * an undone close never reads as restored. `logCloseUndone` stays the caller's, once per commit.
  */
 export function withJournalOutcome(
   e: DeltaReplayError,
   actionId: string,
   writeBack: Exclude<RerunWriteBack, { outcome: 'none' }>,
 ): DeltaReplayError {
+  const rerun = journalOutcomeOf(writeBack)
   return new DeltaReplayError(e.message, {
     cause: e.cause,
     actionId,
     stage: 'store-sync',
-    journal: writeBack.outcome,
-    chapterNumber: writeBack.outcome === 'undone' ? writeBack.chapterNumber : null,
+    ...(rerun === null ? {} : { rerun }),
   })
 }
 
@@ -385,7 +399,6 @@ export async function rerunWriteBack(
     if (await groupIsWhole(journal.floor, branchId, group, ctx))
       return { outcome: 'restored', ...(await writeBackOps(found, actionId, ctx)) }
     return undoneClose(ctx, {
-      actionId,
       chapterId: journal.chapterId,
       branchId,
       chapterNumber: journal.chapterNumber,
@@ -404,21 +417,18 @@ export async function rerunWriteBack(
         ? eq(chapters.id, chapterId)
         : and(eq(chapters.branchId, knownBranch), eq(chapters.id, chapterId)),
     )
+  if (!chapter) return { outcome: 'alone', chapterId }
   return undoneClose(ctx, {
-    actionId,
     chapterId,
-    branchId: chapter?.branchId ?? null,
-    chapterNumber: chapter?.sequenceNumber ?? null,
+    branchId: chapter.branchId,
+    chapterNumber: chapter.sequenceNumber,
     ops: [],
     journal: 'missing',
   })
 }
 
-export type RunGroupReversal = {
-  deltas: number
-  journal: 'restored' | 'undone' | null
-  chapterNumber: number | null
-}
+/** How many deltas a run group's reversal took, and how a re-run's journal ended. */
+export type RunGroupReversal = { deltas: number } & (JournalOutcome | { journal: null })
 
 // The fallback's set: the group and the chapter's close groups, once each, newest first.
 export function withCloseGroups(group: readonly Delta[], seed: readonly Delta[]): Delta[] {
@@ -455,10 +465,9 @@ export async function reverseRunGroup(
   }
   if (writeBack.outcome === 'none') {
     const reversed = await reverseReplayGroup(actionId, group, ctx, (count) => settleOps(count > 0))
-    return { deltas: reversed, journal: null, chapterNumber: null }
+    return { deltas: reversed, journal: null }
   }
-  const journal = writeBack.outcome
-  const chapterNumber = writeBack.outcome === 'undone' ? writeBack.chapterNumber : null
+  const ops = writeBack.outcome === 'alone' ? [] : writeBack.ops
   let set: ReversalSet
   let settle: readonly SqlOp[]
   try {
@@ -468,7 +477,7 @@ export async function reverseRunGroup(
       branchId: target[0]?.branchId ?? args.branchId ?? '',
       target,
     })
-    settle = settleOps(set.rows.length > 0 || writeBack.ops.length > 0)
+    settle = settleOps(set.rows.length > 0 || ops.length > 0)
   } catch (e) {
     throw replayFailure(e, actionId)
   }
@@ -478,7 +487,7 @@ export async function reverseRunGroup(
       set,
       ctx,
       { keepRedoExact: false },
-      [...writeBack.ops, ...settle],
+      [...ops, ...settle],
       undefined,
       writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
     )
@@ -488,5 +497,5 @@ export async function reverseRunGroup(
     throw withJournalOutcome(e, actionId, writeBack)
   }
   logCloseUndone(actionId, writeBack)
-  return { deltas: reversed, journal, chapterNumber }
+  return { deltas: reversed, ...(journalOutcomeOf(writeBack) ?? { journal: null }) }
 }

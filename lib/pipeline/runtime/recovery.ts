@@ -77,7 +77,7 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
         },
       )
       if (!settled.reversed) continue
-      const closeUndone = result.journal === 'undone' && result.chapterNumber !== null
+      const closeUndone = result.journal === 'undone'
       reversed.push({
         runId: orphan.runId,
         kind: orphan.kind,
@@ -94,10 +94,7 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
       })
     } catch (e) {
       const described = describeReplayError(e)
-      const closeUndone =
-        described?.committed === true &&
-        described.journal === 'undone' &&
-        typeof described.chapterNumber === 'number'
+      const closeUndone = described?.rerun?.journal === 'undone'
       failures.push({
         runId: orphan.runId,
         kind: orphan.kind,

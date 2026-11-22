@@ -720,7 +720,7 @@ async function reverseWithWriteBack(
     set,
     fx.ctx,
     { keepRedoExact: false },
-    writeBack.outcome === 'none' ? [] : writeBack.ops,
+    writeBack.outcome === 'none' || writeBack.outcome === 'alone' ? [] : writeBack.ops,
     undefined,
     writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
   )
@@ -968,7 +968,7 @@ describe('rerunWriteBack', () => {
     expect(await deltasOf(c.fx, c.actionId)).toEqual([])
   })
 
-  it('reverses the group alone, with no number, when the marker names a chapter whose row and journal are gone', async () => {
+  it('reverses the group alone when the marker names a chapter whose row and journal are gone', async () => {
     const c = await openClosed()
     await writeCloseWork(c)
     await reverseForRerun(c)
@@ -984,12 +984,8 @@ describe('rerunWriteBack', () => {
     ).toEqual({ outcome: 'none' })
 
     expect(await reverseWithWriteBack(c.fx, RERUN, c.chapter.id)).toEqual({
-      outcome: 'undone',
-      seed: [],
-      ops: [],
+      outcome: 'alone',
       chapterId: c.chapter.id,
-      chapterNumber: null,
-      journal: 'missing',
     })
 
     expect(await deltasOf(c.fx, RERUN)).toEqual([])
@@ -1104,7 +1100,7 @@ describe('reverseRunGroup', () => {
         heard.push(reversed)
         return [settleMarker(c.fx, RERUN)]
       }),
-    ).toEqual({ deltas: 0, journal: 'restored', chapterNumber: null })
+    ).toEqual({ deltas: 0, journal: 'restored' })
 
     expect(heard).toEqual([true])
     expect(await fullState(c.fx)).toEqual(before)
@@ -1125,7 +1121,6 @@ describe('reverseRunGroup', () => {
     expect(await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx)).toEqual({
       deltas: 5,
       journal: 'restored',
-      chapterNumber: null,
     })
 
     expect(await fullState(c.fx)).toEqual(before)
@@ -1151,7 +1146,6 @@ describe('reverseRunGroup', () => {
     expect(await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx)).toEqual({
       deltas: 0,
       journal: 'restored',
-      chapterNumber: null,
     })
 
     expect(await fullState(c.fx)).toEqual(before)
@@ -1186,6 +1180,33 @@ describe('reverseRunGroup', () => {
     ])
   })
 
+  it('reverses a group alone when its chapter and journal are gone, undoing no close', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+    expect(await removeChapter(c.fx.branchId, c.chapter.id, 'divider-only', c.fx.ctx)).toEqual({
+      status: 'ok',
+    })
+    await c.fx.ctx.db.delete(reversalJournals).where(eq(reversalJournals.actionId, RERUN))
+
+    expect(
+      await reverseRunGroup(
+        { actionId: RERUN, branchId: c.fx.branchId, rerunChapterId: c.chapter.id },
+        c.fx.ctx,
+      ),
+    ).toEqual({ deltas: 1, journal: null })
+
+    expect(await deltasOf(c.fx, RERUN)).toEqual([])
+    expect(undoneLogs()).toEqual([
+      {
+        level: 'warn',
+        fields: { chapterId: c.chapter.id, chapterNumber: null, journal: 'missing' },
+        actionId: RERUN,
+      },
+    ])
+  })
+
   it('reverses a group that is no re-run as reverseReplayDeltas does', async () => {
     const c = await openClosed()
     await writeLater(
@@ -1197,7 +1218,6 @@ describe('reverseRunGroup', () => {
     expect(await reverseRunGroup({ actionId: 'act_pass', branchId: null }, c.fx.ctx)).toEqual({
       deltas: 1,
       journal: null,
-      chapterNumber: null,
     })
 
     expect((await entityOf(c.fx, TOBIN.id))?.description).toBe(TOBIN.description)
@@ -1238,7 +1258,7 @@ describe('reverseRunGroup', () => {
           c.fx.ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.actionId, 'act_empty')).toSQL(),
         ]
       }),
-    ).toEqual({ deltas: 0, journal: null, chapterNumber: null })
+    ).toEqual({ deltas: 0, journal: null })
 
     expect(heard).toEqual([false])
     expect(
@@ -1264,8 +1284,7 @@ describe('reverseRunGroup', () => {
       detail: 'Error: store sync boom',
       committed: true,
       refusal: null,
-      journal: 'restored',
-      chapterNumber: null,
+      rerun: { journal: 'restored' },
     })
     expect(await fullState(c.fx)).toEqual(before)
   })
@@ -1291,8 +1310,7 @@ describe('reverseRunGroup', () => {
       detail: 'Error: store sync boom',
       committed: true,
       refusal: null,
-      journal: 'undone',
-      chapterNumber: c.chapter.sequenceNumber,
+      rerun: { journal: 'undone', chapterNumber: c.chapter.sequenceNumber },
     })
     expect(await chapterRows(c.fx)).toEqual([])
     expect(undoneLogs().map((log) => log.level)).toEqual(['warn'])

@@ -323,8 +323,7 @@ describe('CTRL-Z of a re-run', () => {
       detail: 'Error: store sync boom',
       committed: true,
       refusal: null,
-      journal: 'undone',
-      chapterNumber: 1,
+      rerun: { journal: 'undone', chapterNumber: 1 },
     })
     expect(await chapterRows(c.fx)).toEqual([])
   })
@@ -343,8 +342,7 @@ describe('CTRL-Z of a re-run', () => {
       detail: 'Error: store sync boom',
       committed: true,
       refusal: null,
-      journal: 'restored',
-      chapterNumber: null,
+      rerun: { journal: 'restored' },
     })
   })
 
