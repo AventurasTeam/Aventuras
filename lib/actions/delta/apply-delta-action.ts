@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 import type { SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
@@ -220,7 +220,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
   const [row] = await ctx.db
     .select({ lp: deltas.logPosition })
     .from(deltas)
-    .where(eq(deltas.id, deltaId))
+    .where(and(eq(deltas.branchId, branchId), eq(deltas.id, deltaId)))
   // The transaction has committed and the store is patched, so the write stands
   // whatever the readback says. Reporting a failure here would tell the user a
   // durable edit was lost, and they would redo it into a second delta.

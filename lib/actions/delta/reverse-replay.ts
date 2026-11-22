@@ -178,11 +178,14 @@ export async function buildReverseAndPrunePlan(
   const reownOrPrune = (r: Delta): SqlOp => {
     const keptBy = built.reowned.get(r.id)
     return keptBy === undefined
-      ? ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL()
+      ? ctx.db
+          .delete(deltas)
+          .where(and(eq(deltas.branchId, r.branchId), eq(deltas.id, r.id)))
+          .toSQL()
       : ctx.db
           .update(deltas)
           .set({ source: 'user_edit', entryId: null, actionId: keptBy })
-          .where(eq(deltas.id, r.id))
+          .where(and(eq(deltas.branchId, r.branchId), eq(deltas.id, r.id)))
           .toSQL()
   }
   const logged = [...set.rows, ...built.prunedHolders, ...built.strandedWrites]
@@ -360,7 +363,11 @@ function settleHeldCopies(
     rewritten.set(holder.id, payload)
     rewrittenHolders.push(holder)
     payloadOps.push(
-      ctx.db.update(deltas).set({ undoPayload: payload }).where(eq(deltas.id, holder.id)).toSQL(),
+      ctx.db
+        .update(deltas)
+        .set({ undoPayload: payload })
+        .where(and(eq(deltas.branchId, holder.branchId), eq(deltas.id, holder.id)))
+        .toSQL(),
     )
   }
   return { payloadOps, pruned, rewritten, rewrittenHolders }
@@ -815,7 +822,11 @@ async function buildUndoOps(
   walk.ops.push(...payloadOps)
   for (const { delta, payload } of survivorRewrites)
     walk.ops.push(
-      ctx.db.update(deltas).set({ undoPayload: payload }).where(eq(deltas.id, delta.id)).toSQL(),
+      ctx.db
+        .update(deltas)
+        .set({ undoPayload: payload })
+        .where(and(eq(deltas.branchId, delta.branchId), eq(deltas.id, delta.id)))
+        .toSQL(),
     )
 
   // One vec0 scan per family table, not per row: each statement scans the whole table.
