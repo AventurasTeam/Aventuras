@@ -185,7 +185,7 @@ describe('branchCopyOps', () => {
     const [{ top }] = t.sqlite
       .prepare('SELECT max(log_position) AS top FROM deltas WHERE branch_id = ?')
       .all(fx.branchId) as { top: number }[]
-    // A write to a row the source still holds: kept only if the copy holds that row when deltas copy.
+    // A write to a row the source still holds: kept only if the copy holds it when deltas copy.
     await t.db.insert(deltas).values({
       id: 'delta_on_live_entity',
       branchId: fx.branchId,

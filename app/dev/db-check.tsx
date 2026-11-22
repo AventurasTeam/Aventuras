@@ -254,7 +254,7 @@ export default function DbCheckDevRoute() {
       .finally(() => setRunning(false))
   }, [])
 
-  // On press only: a dev-mode double mount effect would race two runs over one set of scratch tables.
+  // On press only: an effect double-mounts in dev, racing two runs over one set of scratch tables.
   const runCopy = useCallback(() => {
     setCopyRunning(true)
     runBranchCopyChecks()

@@ -19,9 +19,8 @@ function assertPlainIdentifier(name: string): void {
 }
 
 /**
- * One vec0 family table's copy of `from`'s vectors into `to`, filtered to rows `to`'s source
- * table holds. `pk` is rebuilt from the columns in `vecRowPk`'s shape, since a row written before
- * the key widened holds `branchId:id`; no predicate reads `pk`, which vec0 answers with no rows.
+ * Copies `from`'s vectors into `to` for ids in `to`'s source table. Rebuilds `pk` per `vecRowPk`,
+ * as pre-widen rows hold `branchId:id`. No predicate reads `pk`: vec0 answers one with no rows.
  */
 export function vecCopyStatement(tables: VecCopyTables, branches: CopyBranches): SqlOp {
   const { vecTable, sourceTable } = tables
@@ -38,9 +37,8 @@ WHERE branch_id = ?
 }
 
 /**
- * Every vec0 family table's copy ops, flattened in family order, run after the table copy; the
- * family list is read now, before the caller's batch, so a family table created after this read
- * is missed (C3).
+ * Every family table's copy ops, to run after the table copy. The family list is read now, before
+ * the caller's batch, so a family table created after this read is missed (C3).
  */
 export async function vecCopyOps(db: DbCtx['db'], branches: CopyBranches): Promise<SqlOp[]> {
   const listed = await listVecFamilyTables(db)

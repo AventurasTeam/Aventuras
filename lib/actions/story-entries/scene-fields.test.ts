@@ -156,9 +156,8 @@ const MIRA = 'char_m'
 const TURN = 'act_turn'
 
 /**
- * e1 is the user_action, e2 the reply taking char_a and the cast it brings in to LOC_B, logged as
- * submit-turn and the per-turn pipeline log them: each create anchors on its own entry, the fold's
- * writes on none.
+ * e1 the user_action, e2 the reply taking char_a and its incoming cast to LOC_B, as submit-turn and
+ * the per-turn pipeline log them: each create anchors on its own entry, the fold's writes on none.
  */
 async function seedTurn(db: TestDb, ctx: DbCtx, cast: NewEntity[] = [character(MIRA, LOC_C)]) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })

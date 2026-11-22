@@ -297,9 +297,8 @@ describe('deleteStory', () => {
   })
 
   it('cascade covers exactly the schema branch-scoped tables (no future orphans)', () => {
-    // Every table carrying a branch_id, run bookkeeping included, dies with its story, so it
-    // MUST be in the cascade. This guards against a table being dropped from BRANCH_SCOPED
-    // or a new branch-scoped table being added to the schema without wiring the cascade.
+    // Every branch_id table, run bookkeeping included, dies with its story: MUST be cascaded.
+    // Catches one dropped from BRANCH_SCOPED, or a new one added without wiring the cascade.
     const schemaBranchTables = (Object.values(dbSchema) as SQLiteTable[])
       .filter((t) => 'branchId' in getTableColumns(t))
       .map(getTableName)

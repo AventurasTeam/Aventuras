@@ -396,7 +396,6 @@ describe("restores stamp their row target's branch", () => {
     updatedAt: 1,
   })
 
-  // Every branch a row with this id sits on.
   const branchesHolding = (table: string, id: string): unknown[] =>
     (
       stamp.sqlite.prepare(`SELECT branch_id FROM ${table} WHERE id = ?`).all(id) as {

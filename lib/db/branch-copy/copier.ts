@@ -15,9 +15,8 @@ import type { CopyBranches } from './vec-copy'
 export type CopyPredicate = SQL | 'all'
 
 /**
- * `where`: per table, a SQL fragment carrying its own binds, ANDed into that table's copy and
- * evaluated inside the statement, so it reads the batch as the ops before it left it. A fork must
- * pass one for each table it filters.
+ * `where`: per table, a SQL fragment with its own binds, ANDed into that table's copy; evaluated
+ * in-statement, so it reads the batch as earlier ops left it. A fork passes one per filtered table.
  */
 export type BranchCopyArgs = CopyBranches &
   (
@@ -45,7 +44,7 @@ function tableCopyOp(
     column === table.branchId ? sql`${to}` : sql`${column}`,
   )
   const ofSource = eq(table.branchId, from)
-  // Parenthesized: drizzle's and() isn't, and a predicate's top-level OR would reach other branches.
+  // Parenthesized, unlike drizzle's and(): a predicate's top-level OR would reach other branches.
   const where =
     predicate === undefined || predicate === 'all' ? ofSource : sql`${ofSource} and (${predicate})`
   return db

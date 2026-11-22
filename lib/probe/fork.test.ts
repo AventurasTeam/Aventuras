@@ -25,7 +25,7 @@ describe('captures do not cross branches', () => {
     expect(onSiblingBranch).toMatchObject({ n: 0 })
   })
 
-  // data-model.md → Branch model: captures copy in neither mode. br_c is st_2's, as a duplicate's is.
+  // data-model.md → Branch model: no mode copies captures. br_c is st_2's, as a duplicate's is.
   it('copies no capture into a duplicate and leaves the source both of its own', async () => {
     const { db, sqlite, runInTransaction } = await seededDb()
     for (const id of ['pc_1', 'pc_2'])

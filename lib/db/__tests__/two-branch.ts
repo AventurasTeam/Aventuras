@@ -82,9 +82,8 @@ function copyRows(sqlite: DatabaseSync, table: BranchTable, from: string, to: st
 }
 
 /**
- * Copies `from`'s rows onto `to` as a branch copy does: `branch_id` flipped, every other column,
- * JSON text included, as stored, so a copied payload still names `from`. Inserts `to`'s branches
- * row when absent; copies no pipeline_runs row and no vector.
+ * Copies `from`'s rows onto `to` as a branch copy does, JSON text as stored, so a copied payload
+ * still names `from`. Adds `to`'s branches row if absent; copies no pipeline_runs row or vector.
  */
 export function cloneBranch(sqlite: DatabaseSync, from: string, to: string): void {
   if (sqlite.prepare('SELECT 1 FROM "branches" WHERE "id" = ?').get(from) === undefined)
@@ -173,10 +172,9 @@ const character = (id: string, name: string, over: Partial<NewEntity> = {}): New
 })
 
 /**
- * Story `s_two`, branch `br_a`: a row in every cloned table, a turn, a pass's world, a user's
- * edits, a close, a character delete whose payload captured one relationship and one awareness
- * row, then a finished re-run of that close whose journal stands and whose group heads the log,
- * two captures, and a trailing system entry. No vectors.
+ * `s_two`/`br_a`: a row in every cloned table; a turn, a pass's world, user edits, a close; a
+ * character delete capturing one relationship and one awareness row; a finished re-run of the close
+ * whose journal stands and group heads the log; two captures; a trailing system entry. No vectors.
  */
 export async function seedCopyFixture(t: TestDb): Promise<CopyFixture> {
   registerAllDomains()

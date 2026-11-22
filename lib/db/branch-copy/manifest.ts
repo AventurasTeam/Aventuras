@@ -22,9 +22,8 @@ import {
 export type CopyMode = 'fork' | 'duplicate'
 
 /**
- * `copy-non-system` and `copy-survivors` name the filter a fork applies (no `kind = 'system'`
- * entries; only the deltas and journals its rewind keeps); the fork's caller passes it as the
- * table's predicate.
+ * `copy-non-system` and `copy-survivors` are fork filters (no `kind = 'system'` entries; only the
+ * deltas and journals the rewind keeps), passed by the fork's caller as the table's predicate.
  */
 export type ForkCopy = 'copy' | 'copy-non-system' | 'copy-survivors' | 'skip'
 export type DuplicateCopy = 'copy' | 'skip'
@@ -72,7 +71,7 @@ export const BRANCH_COPY_MANIFEST: Readonly<Record<BranchCopyTableName, Manifest
   branch_era_flips: { table: branchEraFlips, fork: 'copy', duplicate: 'copy' },
   translations: { table: translations, fork: 'copy', duplicate: 'copy' },
   entry_assets: { table: entryAssets, fork: 'copy', duplicate: 'copy' },
-  // probe.md → Branch fork and capture portability: a capture means something only against the pool it was written over.
+  // probe.md → Branch fork and capture portability: a capture is meaningful only on its branch.
   probe_captures: { table: probeCaptures, fork: 'skip', duplicate: 'skip' },
   // A run's marker belongs to the branch it ran on, and run_id is a global key.
   pipeline_runs: { table: pipelineRuns, fork: 'skip', duplicate: 'skip' },

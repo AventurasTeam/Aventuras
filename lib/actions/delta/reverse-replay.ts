@@ -658,7 +658,7 @@ function undoDelete(walk: UndoWalk, target: UndoTarget, liveLinks: LiveLinkFilte
     const { table: childTable } = childEntry.descriptor
     const childKey = branchKeyOf(childEntry.descriptor)
     const embedded = isEmbeddedSourceTable(childTableName)
-    // Copies: the payload's row objects are shared with the set's deltas, redo snapshots and journals.
+    // Copies: payload row objects are shared with the set's deltas, redo snapshots and journals.
     const restoredChildren: Record<string, unknown>[] = childRows.map((childRow) => ({
       ...childRow,
       ...(childKey === undefined ? {} : { [childKey]: target.branchId }),
