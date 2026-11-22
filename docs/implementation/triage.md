@@ -93,13 +93,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the branch, so the removed entries stay on screen; the chapter delete
   and the re-run's shortcut re-hydrate in that case (Slice 5.13's closing
   review, 2026-11-22).
-- **The inline editor's Save and Cancel disable with no reason.** While
-  the edit gate holds them (`editOff` in
-  `components/compounds/entry-card.tsx`), both buttons render disabled
-  with no `disabledReason`, so neither the web tooltip nor the native
-  hint names the run; `Save & regenerate` names the gate when a gate
-  holds it. Pre-existing; raised by Slice 5.13's closing review
-  (2026-11-22).
 - **A committed reversal at boot whose store sync fails reads as
   retryable.** `recoverInFlightRuns` records the throw as a recovery
   failure, and the modal's `incomplete*` copy says the update "could not

@@ -757,6 +757,42 @@ export const PristineDraftDuringPassNamesNoGate: StoryT = {
   },
 }
 
+/** An editor the gate holds names it on both saves; Cancel writes nothing, so it stays live. */
+export const EditDuringRunNamesTheGate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: true,
+    reversalDisabled: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async ({ args }) => {
+    const save = await screen.findByRole('button', { name: t('save') })
+    const saveAndRegen = screen.getByRole('button', {
+      name: t('reader:entryCard.saveAndRegenerate'),
+    })
+    expect(save).toBeDisabled()
+    expect(saveAndRegen).toBeDisabled()
+    const tooltips = screen.getAllByTitle(PASS_REASON)
+    expect(tooltips).toHaveLength(2)
+    expect(tooltips.some((tip) => tip.contains(save))).toBe(true)
+    expect(tooltips.some((tip) => tip.contains(saveAndRegen))).toBe(true)
+
+    const cancel = screen.getByRole('button', { name: t('cancel') })
+    expect(cancel).not.toBeDisabled()
+    await userEvent.click(cancel)
+    await waitFor(() => expect(args.onCancelEdit).toHaveBeenCalledTimes(1))
+  },
+}
+
 export const NoWorldTime: StoryT = {
   ...wrap,
   args: {
