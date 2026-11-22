@@ -20,7 +20,7 @@ function assertPlainIdentifier(name: string): void {
 
 /**
  * Copies `from`'s vectors into `to` for ids in `to`'s source table. Rebuilds `pk` per `vecRowPk`,
- * as pre-widen rows hold `branchId:id`. No predicate reads `pk`: vec0 answers one with no rows.
+ * as pre-widen rows hold `branchId:id`.
  */
 export function vecCopyStatement(tables: VecCopyTables, branches: CopyBranches): SqlOp {
   const { vecTable, sourceTable } = tables

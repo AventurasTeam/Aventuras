@@ -40,7 +40,7 @@ const DUPLICATE_TABLES: readonly BranchCopyTableName[] = [
 
 const FORK_FILTERED = ['story_entries', 'deltas', 'reversal_journals'] as const
 
-// Stored text no drizzle write produces: odd spacing, keys out of order, non-ASCII.
+// Only the spacing and newline catch a JSON re-serialization, which keeps key order and non-ASCII.
 const RAW_JSON = '{ "zeta" :  "ž – 日本",\n  "alpha": [2, 1] }'
 
 let t: TestDb
@@ -329,9 +329,6 @@ const FAMILY_TABLES = [
   'chapter_summaries_vec',
 ].flatMap((family) => [4, 8, 384].map((dim) => `${family}_${dim}`))
 
-// The route's statements per family table: one self-insert.
-const OPS_PER_FAMILY = 1
-
 type VecRow = { pk: string; modelId: string; id: string; sourceHash: string; embedding: string }
 
 /** Every family table's rows on the branch, keyed by table; a table holding none is left out. */
@@ -475,9 +472,10 @@ async function seedVectors(target: TestDb): Promise<{ chapterId: string }> {
 }
 
 describe('vecCopyOps', () => {
-  it('builds the route’s statements for every family table and none for a shadow table', async () => {
+  it('builds one self-insert per family table and none for a shadow table', async () => {
     for (const dim of [4, 8]) for (const ddl of ensureVecTablesSql(dim)) t.sqlite.exec(ddl)
-    // vec0's shadow tables sit beside each family in sqlite_master and reject DML.
+    // vec0's shadow tables sit beside each family in sqlite_master; they are its internal storage,
+    // so an op against one would corrupt the family.
     const shadows = t.sqlite
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name GLOB 'entities_vec_4_*'",
@@ -489,7 +487,7 @@ describe('vecCopyOps', () => {
 
     const targets = ops.flatMap((op) => /INSERT INTO (\w+)\s*\(\s*pk\b/.exec(op.sql)?.[1] ?? [])
     expect([...targets].sort()).toEqual([...FAMILY_TABLES].sort())
-    expect(ops).toHaveLength(FAMILY_TABLES.length * OPS_PER_FAMILY)
+    expect(ops).toHaveLength(FAMILY_TABLES.length)
     expect(
       ops.filter((op) => /_vec_\d+_(info|chunks|rowids|vector_chunks\d+)\b/.test(op.sql)),
     ).toEqual([])

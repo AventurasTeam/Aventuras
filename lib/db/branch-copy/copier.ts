@@ -30,6 +30,8 @@ type TableCopyArgs = CopyBranches &
 /**
  * `where`: per table, a SQL fragment with its own binds, ANDed into that table's copy; evaluated
  * in-statement, so it reads the batch as earlier ops left it. A fork passes one per filtered table.
+ * A subquery over the table it filters aliases it and names the inner columns through the alias:
+ * drizzle writes `"table"."col"`, which binds to the inner row if unaliased, else to the copied row.
  * `between`: ops run after the rows copy and before the vectors, which copy only for rows `to` then
  * holds (C3).
  */
