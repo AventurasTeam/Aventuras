@@ -127,7 +127,7 @@ export function useStoryGenerationGate(
   editBlocked: boolean
   gateReason: string | undefined
   beforeTurn: boolean
-  /** Ends the pill's run; an interruptible one (pass, close) is deferred to the next Send. */
+  /** Ends the pill's run; an interruptible pass or close is deferred to the next Send, a re-run defers nothing. */
   cancelPillRun: () => void
 } {
   const activeRunKind = generationStore.useGeneration((s) =>
