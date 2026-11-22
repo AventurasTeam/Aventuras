@@ -148,6 +148,13 @@
       "when": 1795264509549,
       "tag": "0020_reversal_journals",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1795367816888,
+      "tag": "0021_m6_deltas_key",
+      "breakpoints": true
     }
   ]
 }

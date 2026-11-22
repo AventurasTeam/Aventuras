@@ -1,3 +1,4 @@
+import { getTableName } from 'drizzle-orm'
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
@@ -5,6 +6,7 @@ import {
   appSettings,
   branches,
   dbSchema,
+  deltas,
   pipelineRuns,
   reversalJournals,
   stories,
@@ -98,6 +100,25 @@ describe('schema', () => {
     const column = getTableConfig(pipelineRuns).columns.find((c) => c.name === 'rerun_chapter_id')
     expect(column?.notNull).toBe(false)
     expect(column?.getSQLType()).toBe('text')
+  })
+
+  it('pipeline_runs.branch_id is a nullable text column whose one foreign key is to branches.id', () => {
+    const { columns, foreignKeys } = getTableConfig(pipelineRuns)
+    const column = columns.find((c) => c.name === 'branch_id')
+    expect(column?.notNull).toBe(false)
+    expect(column?.getSQLType()).toBe('text')
+    expect(foreignKeys).toHaveLength(1)
+    const reference = foreignKeys[0].reference()
+    expect(reference.columns.map((c) => c.name)).toEqual(['branch_id'])
+    expect(getTableName(reference.foreignTable)).toBe('branches')
+    expect(reference.foreignColumns.map((c) => c.name)).toEqual(['id'])
+  })
+
+  it('deltas is keyed on (branch_id, id), with no key on id alone', () => {
+    const { primaryKeys, columns } = getTableConfig(deltas)
+    expect(primaryKeys).toHaveLength(1)
+    expect(primaryKeys[0].columns.map((c) => c.name)).toEqual(['branch_id', 'id'])
+    expect(columns.find((c) => c.name === 'id')?.primary).toBe(false)
   })
 
   it('reversal_journals is keyed on (branch_id, action_id) with a branch FK', () => {

@@ -51,12 +51,14 @@ export const pipelineRuns = sqliteTable('pipeline_runs', {
   outcome: text('outcome', { enum: ['completed', 'aborted', 'failed', 'recovered'] }),
   // Set in a re-run's reversal transaction, so recovery knows it even once the journal is gone.
   rerunChapterId: text('rerun_chapter_id'),
+  // Null only on rows older than the column: the backfill fills the unfinished ones it can.
+  branchId: text('branch_id').references(() => branches.id),
 })
 
 export const deltas = sqliteTable(
   'deltas',
   {
-    id: text('id').primaryKey(),
+    id: text('id').notNull(),
     branchId: text('branch_id')
       .notNull()
       .references(() => branches.id),
@@ -86,6 +88,7 @@ export const deltas = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
     index('deltas_chain_idx').on(t.branchId, t.targetId, t.logPosition),
     uniqueIndex('deltas_log_position_uniq').on(t.branchId, t.logPosition),
   ],
