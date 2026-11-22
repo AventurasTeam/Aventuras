@@ -51,7 +51,15 @@ import { useReviewWindowPresence } from './use-review-window-presence'
 
 const ctx = { db, runInTransaction }
 
-const reviewRequested = () => chapterOverlaysStore.getState().review != null
+// `reviewChapter`'s rule, not the bare request: a desktop exit reports before the prune clears it.
+const reviewRequested = () => {
+  const { review } = chapterOverlaysStore.getState()
+  if (review == null) return false
+  const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
+  return (
+    reportChapter(chaptersStore.getById(review.chapterId), openBranchId, review.actionId) != null
+  )
+}
 
 type ReviewSources = {
   report: CloseReport

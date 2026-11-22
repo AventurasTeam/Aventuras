@@ -966,11 +966,11 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     await openReady()
     act(() => chaptersStore.patch('br_1', { op: 'delete', id: 'chap_2' }))
     expect(chapterOverlaysStore.getState().review).toBeNull()
-    expect(shown().open).toBe(false)
+    expect(view.mounted).toBe(false)
 
     act(() => chaptersStore.patch('br_1', { op: 'create', id: 'chap_2', row: { ...chapter() } }))
     expect(chapterOverlaysStore.getState().review).toBeNull()
-    expect(shown().open).toBe(false)
+    expect(view.mounted).toBe(false)
   })
 
   it('clears the id when the chapter loses its report', async () => {
@@ -979,6 +979,7 @@ describe('ChapterOverlaysHost — the derived rule', () => {
       chaptersStore.patch('br_1', { op: 'update', id: 'chap_2', columns: { closeReport: null } }),
     )
     expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(view.mounted).toBe(false)
   })
 
   it('renders nothing and keeps no id for a chapter not in the store', () => {
@@ -993,6 +994,7 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     await openReady()
     act(() => openStory('br_2'))
     expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(view.mounted).toBe(false)
   })
 
   it("keeps the open branch's close result and clears another branch's", () => {
