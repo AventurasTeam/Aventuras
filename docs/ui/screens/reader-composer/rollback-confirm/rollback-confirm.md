@@ -222,19 +222,21 @@ mechanism rather than the hover-preview.
   reverses, so a set the log cannot close
   ([`generation-pipeline.md → Reverse-replay`](../../../../generation-pipeline.md#reverse-replay))
   opens no modal and shows the rollback-failed toast instead. A refusal
-  only the commit raises shows the same toast with the modal still open,
-  except `counts-changed`, which has its own toast ([Counts](#counts)).
+  only the commit raises shows the same toast, and the modal, closed by
+  the press, re-opens at once on the same target, except
+  `counts-changed`, which has its own toast ([Counts](#counts)).
 - **A run starting under an open modal** — the modal's confirm disables
   when the target row's ↻ or × would: a closed gate, or a re-run on a
   stamped entry. If a run starts between its last enabled
   render and the press, the commit refuses as in flight: a toast says
-  `Unavailable while generating.` and the modal stays open, its confirm
-  disabled with the blocking run's tooltip
+  `Unavailable while generating.` and the modal, closed by the press,
+  re-opens at once, its confirm disabled with the blocking run's tooltip
   ([`principles.md → Affordance loci`](../../../principles.md#affordance-loci)).
-  The Timeline's
+  It closes in both modes: a regenerate must, since its action resolves
+  only once the whole turn has run. The Timeline's
   [delete](../../chapter-timeline/chapter-timeline.md#delete-a-chapter)
   and [re-run](../../chapter-timeline/chapter-timeline.md#re-run-a-close)
-  confirms do the same.
+  confirms stay open instead: they confirm through plain buttons.
 - **During generation** — per
   [branch-navigator → during generation](../branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked),
   the per-entry `×` is disabled while any pipeline phase is active, so

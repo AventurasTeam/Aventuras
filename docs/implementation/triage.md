@@ -93,12 +93,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the branch, so the removed entries stay on screen; the chapter delete
   and the re-run's shortcut re-hydrate in that case (Slice 5.13's closing
   review, 2026-11-22).
-- **The rollback modal's "stays open" misses the regenerate mode.**
-  `rollback-confirm.md → A run starting under an open modal` says the
-  modal stays open on an in-flight refusal; a regenerate-mode confirm
-  closes before its stream starts and reopens on a refusal
-  (`app/reader-composer/[branchId].tsx`, `confirmRollback`). Raised by
-  Slice 5.13's Task 28 review (2026-11-21).
 - **The review window's dialog has no description.** Its `DialogContent`
   carries a title and no `DialogDescription` or `aria-describedby`
   (`components/chapters/review-window.tsx`), so every open logs the
