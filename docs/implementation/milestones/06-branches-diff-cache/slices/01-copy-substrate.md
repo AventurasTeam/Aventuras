@@ -387,9 +387,9 @@ reverses under either anchor:
 
 - `firstLocationWrites`
   (`lib/actions/story-entries/pre-entry-locations.ts:22-46`), which
-  `scene-fields.ts:88` calls on the tail only. Its create lookup now
-  finds a `user_action` tail's create, so writes logged under that turn's
-  action with no anchor would join the result. The shipped lookup
+  `scene-fields.ts:88` calls on the tail only. Unfiltered, its create
+  lookup would find a `user_action` tail's create, so writes logged
+  under that turn's action with no anchor would join the result. The shipped lookup
   excludes the `user_edit` create (`ne(deltas.source, 'user_edit')`), so
   `firstLocationWrites` keeps its earlier result. See
   [Implementation notes](#implementation-notes).
@@ -658,8 +658,8 @@ remains.
   tail with an entity move logged under its turn's action and no anchor,
   removing that character from the scene leaves the move uncounted, so
   `firstLocationWrites` returns what it returned before the anchor. This
-  is the default under [Implementation notes](#implementation-notes); if
-  the plan overturns it, the criterion changes with it.
+  is the decision recorded under
+  [Implementation notes](#implementation-notes).
 - `lib/actions/story-entries/operational.test.ts` and
   `lib/actions/delta/later-turn.test.ts` pass unchanged.
 
@@ -712,33 +712,25 @@ answers are in [Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
-**Device checks.** `app/dev/db-check.tsx`, "Branch copy checks", run
-2026-11-22:
-
-- Desktop, Electron dev app: SQLite 3.51.2, sqlite-vec v0.1.9. Vector
-  copy: passed (copied `probe_b:v1:m1` and `probe_b:v2:m2` with their
-  columns and bytes, the orphan stayed behind, a KNN on `probe_b` found
-  both). Temp table created, filled, emptied and dropped inside one
-  batch: passed (`t1`, `t2` moved).
-- Android, dev client on Aventuras_Slot_2 (emulator-5556): SQLite
-  3.50.3, sqlite-vec v0.1.7-alpha.2. Vector copy: passed (the same two
-  rows, columns and bytes, the same KNN). Temp table inside one batch:
-  passed (`t1`, `t2` moved).
-
-Both passing, the vectors take the single statement per family and C3's
-temp-table fallback isn't built. The temp-table answer stands for
+**Device checks.** `app/dev/db-check.tsx`, "Branch copy checks",
+2026-11-22: the vector copy and the temp-table batch both pass in the
+desktop dev app (SQLite 3.51.2, sqlite-vec v0.1.9) and in the Android
+dev client on the slot AVD (SQLite 3.50.3, sqlite-vec v0.1.7-alpha.2).
+So the vectors take the single statement per family and C3's temp-table
+fallback isn't built. The temp-table answer stands for
 [Slice 6.3](./03-fork-core.md)'s survivor exclusion: a plain temp table
 can be created, filled, emptied and dropped inside one batch on both
-platforms. The optional boot check also passed: this branch's build,
-opened once over the slot AVD's existing dev database, applied both new
-migrations at boot, kept the rows, and left the foreign keys clean.
+platforms.
 
 **Copier contract for 6.3 and 6.6.** The copier parenthesizes each
 predicate before ANDing it to the branch condition: drizzle's `and()`
 doesn't, and a predicate's top-level `OR` would reach other branches.
 Drizzle writes a predicate's columns as `"table"."col"`, so a predicate
-whose subquery reads the table it filters must alias the inner table, or
-its references bind to the outer row. Both fail silently in a fork's
+whose subquery reads the table it filters must alias the inner table and
+name the inner columns through that alias: unaliased, the predicate's
+references to the row being copied bind to the subquery's row, and an
+inner column written through drizzle after aliasing binds to the row
+being copied. Both fail silently in a fork's
 survivor predicate. In `fork` mode the copier requires a predicate for
 `story_entries`, `deltas` and `reversal_journals`, by type and at
 runtime (`'all'` copies one unfiltered): the manifest names a fork's
@@ -780,16 +772,14 @@ suffixes, not their numbers, so a regeneration must keep both names.
   canon landed before the gated recovery work; the plan came in at 16
   tasks, so the copier stayed here.
 
-**Carried forward.** One branch read 6.3's split of read and write
-branches must decide, the branch redo's survivor restore takes from the
-set (`redo.ts:110`), is in
+**Carried forward.** 6.3's split of read and write branches must decide
+one branch this slice leaves on the set: redo's survivor restore takes
+`set.branchId` (`redo.ts:110`). It is in
 [Slice 6.3's Open questions](./03-fork-core.md#open-questions).
 
-**Second to land.** At the final rebase (`e981d8922`), neither
-[Slice 6.7](./07-diff-cache.md) nor [Slice 6.8](./08-per-branch-lead.md) had
-landed. If either merges before this PR, this PR takes that slice's job before
-it merges: for 6.8, regenerate this slice's generated step (the `deltas`
-rebuild and the `pipeline_runs` column) from main's snapshot, renumber the
-hand-written backfill after it with a journal `when` above every earlier
-entry's, and add both bundle entries (C4); for 6.7, write the database-seeded
-two-branch walk test in `lib/history/diff-walk.test.ts` (C9).
+**Second to land.** Neither [Slice 6.7](./07-diff-cache.md) nor
+[Slice 6.8](./08-per-branch-lead.md) had landed at this slice's final
+rebase (`e981d8922`), so the jobs C4 and C9 give the second of each pair
+are theirs. A regenerated step keeps its journal `when` above every
+earlier entry's: drizzle skips an entry whose `when` isn't above the last
+applied one.
