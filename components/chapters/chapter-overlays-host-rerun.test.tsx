@@ -453,6 +453,35 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     )
   })
 
+  it("a start's reserve and result leave a request opened since alone", async () => {
+    let release: (start: unknown) => void = () => {}
+    actions.start.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    )
+    vi.spyOn(toast, 'error').mockReturnValue('')
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirm())
+    act(() => openStory('br_2'))
+    act(() => openStory('br_1'))
+    openRerun()
+    await confirmShown()
+    const opened = chapterOverlaysStore.getState().rerunConfirm
+    expect(opened).not.toBeNull()
+
+    act(() => actions.start.mock.calls[0]?.[5]?.onStarted?.())
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBe(opened)
+    expect(confirmView.mounted).toBe(true)
+
+    await act(async () => release({ status: 'rejected', code: 'integrity', reason: 'x' }))
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBe(opened)
+    expect(confirmView.mounted).toBe(true)
+  })
+
   it('a Cancel pressed before the confirm re-renders pending is ignored', async () => {
     actions.start.mockImplementation(() => new Promise<ChainEnd>(() => {}))
     await openReady()
