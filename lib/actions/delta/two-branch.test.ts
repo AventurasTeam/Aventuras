@@ -116,7 +116,7 @@ const character = (id: string, over: Partial<NewEntity> = {}): NewEntity => ({
   ...over,
 })
 
-// The user's later view keeps the pass's pair, so reversing the pass re-owns its create; the
+// The user's later edit keeps the pass's pair, so reversing the pass re-owns its create; the
 // delete of char_p holds the pair in its payload, which the reversal rewrites.
 async function seedHeldPair(): Promise<void> {
   await openOnA()

@@ -369,7 +369,7 @@ export function withJournalOutcome(
 
 type WriteBackArgs = {
   actionId: string
-  /** Null for a run marker that records no branch (C2): the reads then go by id alone. */
+  /** Null for a run marker that records no branch (M6 C2): the reads then go by id alone. */
   branchId: string | null
   /** The group's deltas, newest first, as the caller read them. */
   group: readonly Delta[]
