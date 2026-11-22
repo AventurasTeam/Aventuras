@@ -167,6 +167,12 @@ describe('branchCopyOps', () => {
       ).map(({ id }) => id)
     expect(entryIds(fx.branchId)).toContain(fx.systemEntryId)
     expect(entryIds(COPY)).toEqual(entryIds(fx.branchId).filter((id) => id !== fx.systemEntryId))
+    // 'all' copies the whole table: a fork at the tail keeps every delta and journal.
+    for (const table of ['deltas', 'reversal_journals']) {
+      const source = rowsOf(t.sqlite, table, fx.branchId)
+      expect(source.length, table).toBeGreaterThan(0)
+      expect(rowsOf(t.sqlite, table, COPY), table).toEqual(source)
+    }
   })
 
   it('leaves out exactly the deltas a correlated predicate names, reading tables copied before them', async () => {
