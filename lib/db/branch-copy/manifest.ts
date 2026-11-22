@@ -72,7 +72,7 @@ export const BRANCH_COPY_MANIFEST: Readonly<Record<BranchCopyTableName, Manifest
   branch_era_flips: { table: branchEraFlips, fork: 'copy', duplicate: 'copy' },
   translations: { table: translations, fork: 'copy', duplicate: 'copy' },
   entry_assets: { table: entryAssets, fork: 'copy', duplicate: 'copy' },
-  // probe.md → Branch fork: a capture means something only against the pool it was written over.
+  // probe.md → Branch fork and capture portability: a capture means something only against the pool it was written over.
   probe_captures: { table: probeCaptures, fork: 'skip', duplicate: 'skip' },
   // A run's marker belongs to the branch it ran on, and run_id is a global key.
   pipeline_runs: { table: pipelineRuns, fork: 'skip', duplicate: 'skip' },

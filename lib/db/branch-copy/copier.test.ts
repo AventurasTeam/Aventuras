@@ -20,7 +20,7 @@ import { vecCopyOps } from './vec-copy'
 
 const COPY = 'br_c'
 
-// Written from canon's manifest, in its copy order: deltas and journals after every other table.
+// The code manifest's copy order, not canon's table's: deltas and journals after every table.
 const DUPLICATE_TABLES: readonly BranchCopyTableName[] = [
   'story_entries',
   'entities',

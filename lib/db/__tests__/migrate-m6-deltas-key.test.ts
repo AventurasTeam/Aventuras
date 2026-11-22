@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { applyMigration, MIGRATIONS_DIR, migrationTags } from './test-db'
 
-// By name, not number: whichever of this slice and another lands second renumbers its steps.
+// By name, not number: a migration that lands first renumbers these steps.
 const KEY_STEP = '_m6_deltas_key'
 const BACKFILL_STEP = '_m6_pipeline_runs_branch'
 
