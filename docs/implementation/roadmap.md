@@ -2081,30 +2081,23 @@ own.
   desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
   (2026-08-08), whose desktop half is now canon.
 
-- **M9.5 — Reversal selection reads the whole branch log, and an
-  abort's lookup scans every branch.** `loadHeldRows` in
-  `lib/actions/delta/held-rows.ts` filters on `op = 'delete'` and
-  JSON-decodes every delete payload each time a reversal set is
-  selected: every CTRL-Z, redo, prose edit, rollback and its preview,
-  abort and boot recovery. CTRL-Z also loads the branch's whole log,
-  payloads included, to pick its target (`recentDeltaRows` in
-  `lib/actions/story-entries/undo.ts`), and while a pass runs
-  `undoLastAction` reads it twice: once before the gate decides, once
-  in the reversal bracket. `reverseReplayDeltas`'s
-  `WHERE action_id = ?` in `lib/actions/delta/reverse-replay.ts`
-  matches no index, so abort and boot recovery scan `deltas` across
-  every story. The only `deltas` indexes are `(branch_id, log_position)`
-  and `(branch_id, target_id, log_position)` (`lib/db/system/system.table.ts`,
+- **M9.5 — Reversal selection decodes every delete payload.**
+  `loadHeldRows` in `lib/actions/delta/held-rows.ts` filters on
+  `op = 'delete'` and JSON-decodes every delete payload each time a
+  reversal set is selected: every CTRL-Z, redo, prose edit, rollback
+  and its preview, abort and boot recovery. The only `deltas` indexes
+  are `(branch_id, log_position)` and
+  `(branch_id, target_id, log_position)` (`lib/db/system/system.table.ts`,
   migration `0001_striped_prism.sql`), and the log grows every turn
-  (awareness bumps add update deltas). Fine at today's lengths and not
-  measured. A fix is one migration (an `action_id` or
-  `(branch_id, action_id)` index, and a partial
-  `(branch_id, log_position) WHERE op = 'delete'`) plus a bounded head
-  read for CTRL-Z's target, measured on a bench beside
-  `bench/retrieval-cost.test.ts`. Raised in the reversal-integrity PR's
-  review (2026-10-05); the two wider scans were found when it was
-  routed, and the double read during a pass by the gated classifier
-  slice's task reviews (2026-10-21).
+  (awareness bumps add update deltas). Not measured. A fix is a partial
+  `(branch_id, log_position) WHERE op = 'delete'` index, measured on
+  `pnpm bench:undo`. The reads by `action_id` (an abort's and boot
+  recovery's group, CTRL-Z's head group, a re-run's journal group) scan
+  without an index too, but cost 1.7 ms at 60k deltas on that bench
+  (2026-11-22), and `deltas` takes no `action_id` index: settled by the
+  2026-11-07 triage pass and again at Slice 5.13's planning. That pass
+  also cut CTRL-Z's whole-log read, 187 ms at 60k, to its head group.
+  Raised in the reversal-integrity PR's review (2026-10-05).
 - **M9.5 — SQLite never gathers table statistics.** Nothing runs `ANALYZE` or
   `PRAGMA optimize` (`lib/db`, `electron/`), so the planner picks
   indexes without statistics. Measured while planning 4.2c's History

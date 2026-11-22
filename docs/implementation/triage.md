@@ -61,18 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Reads of a delta group by `action_id` scan the log.** `deltas` has
-  no index on `action_id`, so every group read by action walks the
-  branch's log, or the whole table where the read has no branch filter:
-  `reverseRunGroup`'s group read (`lib/actions/delta/rerun-journal.ts`,
-  no branch filter, every abort and recovery), `reverseReplayDeltas`'s
-  (no branch filter, a refused Send's reversal), `refuseWriteBack`'s
-  group read, and the planner's journal-group read when a reversal takes
-  from a re-run's group. Raised by Slice 5.13's reviews (2026-11-21),
-  which narrowed the planner's read to the groups a set takes from; an
-  index, or a branch filter on the abort read (the abort already passes
-  its branch), is the fix. Worth measuring on a long branch before
-  choosing.
 - **A reversal's error names the newest delta's action, not the
   reversed one.** `reverseAndPruneDeltaRows` labels its
   `DeltaReplayError` with `set.rows[0]?.actionId ?? 'rollback'`, so a
