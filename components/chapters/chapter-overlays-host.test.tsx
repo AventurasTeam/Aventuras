@@ -700,14 +700,13 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(reads.report).toHaveBeenCalledTimes(1)
   })
 
-  it('reopened during a phone exit, waits for the exit, then opens again without remounting', async () => {
+  // The Sheet holds the present until its slide-out ends (`ReopenDuringExit` in sheet.stories).
+  it('reopened during a phone exit, opens again at once without remounting', async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
     openWindow()
-    // The Sheet is still sliding out: presenting it now would drop the reopen.
-    expect(shown().open).toBe(false)
-    expect(chapterOverlaysStore.getState().review).not.toBeNull()
+    expect(shown().open).toBe(true)
     act(() => shown().onExited?.())
     expect(shown().open).toBe(true)
     expect(view.mounted).toBe(true)
@@ -729,20 +728,21 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(view.mounts).toBe(1)
   })
 
-  it("a direct close while the window is closed doesn't drop the reopen held behind it", async () => {
+  it("a close reported by the render that closed the window doesn't close a reopen", async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))
+    const closedRender = shown()
     openWindow()
 
-    act(() => shown().onOpenChange(false))
+    act(() => closedRender.onOpenChange(false))
     act(() => shown().onExited?.())
 
     expect(chapterOverlaysStore.getState().review).not.toBeNull()
     expect(shown().open).toBe(true)
   })
 
-  it('a window closed again while the reopen was held stays closed once its exit ends', async () => {
+  it('a window reopened and closed again during its exit stays closed once the exit ends', async () => {
     view.phone = true
     const props = await openReady()
     act(() => props.onOpenChange(false))

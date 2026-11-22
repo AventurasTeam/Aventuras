@@ -408,7 +408,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(shown().open).toBe(true)
   })
 
-  it("on phone, the confirm's Cancel during the window's slide-out reopens it after the exit", async () => {
+  it("on phone, the confirm's Cancel during the window's slide-out reopens it", async () => {
     view.phone = true
     const guard = vi.fn<(proceed: () => void) => void>()
     surfaceWith(guard)
@@ -419,7 +419,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
 
     act(() => props.onCancel())
     expect(chapterOverlaysStore.getState().review).not.toBeNull()
-    expect(shown().open).toBe(false)
+    expect(shown().open).toBe(true)
     act(() => shown().onExited?.())
     expect(shown().open).toBe(true)
   })
