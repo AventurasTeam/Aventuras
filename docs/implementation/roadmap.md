@@ -1671,8 +1671,8 @@ own.
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
   On native the reason shows nowhere, `ReasonTooltip` being a no-op there,
-  unless a host writes a visible line under the button, as three M5 hosts
-  do; the same pass decides whether every disabled button shows one
+  unless a host writes a visible line under the button, as `ReasonButton`
+  does at eight call sites in six files; the same pass decides whether every disabled button shows one
   ([Slice 5.10 → Implementation notes](./milestones/05-chapters-chapter-close/slices/10-two-starts.md#implementation-notes)).
   The same pass owns focus: RN Web maps `disabled` to the native
   attribute, so a control that disables under focus drops it to
@@ -1697,7 +1697,15 @@ own.
   dialog's clipboard `SourceButton`, which takes a reason but doesn't
   pass it to `Button`. The Actions menu's rows show the native line
   (`components/compounds/actions-menu-row.tsx`). Widened from triage
-  2026-11-21.
+  2026-11-21. The Timeline's delete confirm and the reader's rollback
+  confirm show no native line either, though the re-run confirm on the
+  same flow does; about 26 plain `Button` sites with a reason render
+  natively (counted 2026-11-22). Inside the reader's DOM component
+  (`components/reader/reader-document.tsx`, `'use dom'`) Android runs
+  RN Web, so the entry card's reasons reach neither a hint nor a line
+  there, and `ReasonButton`, which draws its line only off web, can't
+  help. Widened from triage 2026-11-22, raised by Slice 5.13's
+  reviews.
 - **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
