@@ -201,13 +201,25 @@ describe('failure copy', () => {
   // generation-pipeline.md → Recovery modal: the reversal committed and only the store sync failed,
   // so the close reads as the reversed one does, not as a failed reversal.
   it('renders a failure whose reversal committed as the reversed close, plus the fallback line', () => {
-    const undone: RecoveryFailure = { ...failed('chapter-close', 'story_1'), closeUndone: true }
+    const undone: RecoveryFailure = {
+      ...failed('chapter-close', 'story_1'),
+      refusal: null,
+      closeUndone: true,
+    }
     expect(formatRecoveryReport(failureReport(undone), { story_1: 'Mornstone' })).toBe(
       "An interrupted shutdown was detected in Mornstone. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
     )
     expect(formatRecoveryReport(failureReport({ ...undone, storyId: null }), {})).toBe(
       "An interrupted shutdown was detected. The chapter-close pass was reverted; your story content is intact. The chapter's earlier close couldn't be restored, so its close was undone.",
     )
+  })
+
+  it('types a failure whose reversal committed as refusing nothing', () => {
+    const refused = failed('chapter-close', 'story_1', 'write-back')
+    // @ts-expect-error a committed reversal refused nothing
+    const undone: RecoveryFailure = { ...refused, closeUndone: true }
+
+    expect(undone.refusal).toBe('write-back')
   })
 
   it('adds no fallback line to a failure that undid no close', () => {

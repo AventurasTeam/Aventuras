@@ -21,14 +21,22 @@ export type RecoveryFailure = {
   actionId: string
   storyId: string | null
   error: unknown
-  /** Set when the reversal was refused as an integrity error, which every boot meets again. */
-  refusal: IntegrityRefusal | null
-  /**
-   * Its reversal committed with a re-run's close undone, and only the store sync then failed; the
-   * marker is settled, so this report is the only word of it.
-   */
-  closeUndone?: true
-}
+} & (
+  | {
+      /** Set when the reversal was refused as an integrity error, which every boot meets again. */
+      refusal: IntegrityRefusal | null
+      closeUndone?: never
+    }
+  | {
+      /** A committed reversal refused nothing. */
+      refusal: null
+      /**
+       * Its reversal committed with a re-run's close undone, and only the store sync then failed;
+       * the marker is settled, so this report is the only word of it.
+       */
+      closeUndone: true
+    }
+)
 export type RecoveryReport = { reversed: RecoveredRun[]; failures: RecoveryFailure[] }
 /**
  * What boot tells the user: the report, plus the stories whose branch it left held (classifier
@@ -101,8 +109,9 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
         actionId: orphan.actionId,
         storyId: orphan.storyId,
         error: e,
-        refusal: described?.refusal ?? null,
-        ...(closeUndone ? { closeUndone: true as const } : {}),
+        ...(closeUndone
+          ? { refusal: null, closeUndone: true as const }
+          : { refusal: described?.refusal ?? null }),
       })
       logger.error('pipeline.recovery_failed', {
         runId: orphan.runId,
