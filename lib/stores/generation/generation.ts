@@ -152,7 +152,7 @@ type GenerationState = {
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
   /** Removes the run, swapping in `successor` atomically; clears its deferral, a close's pending
-   * close, and (no successor) the pending re-run. */
+   * close, and, for a pass or close with no successor, the pending re-run. */
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. `'aborted'` defers an interruptible pass or close; `'failed'`/`'unwound'`

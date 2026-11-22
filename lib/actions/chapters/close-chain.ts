@@ -58,13 +58,15 @@ type CloseChainOpts = {
   pendingMark?: OwnPendingMark
 }
 
-// A variable takes no excess-property check, so only an explicit `undefined` keeps a pre-flight out.
+// A variable takes no excess-property check, so only an explicit `undefined` keeps out a
+// pre-flight.
 type UnpreflightedOpts = Omit<CloseChainOpts, 'preflight'> & { preflight?: undefined }
 
 /**
- * Starts the pass (under a pending re-run, only entries through its chapter's end) or the close;
- * resolves with the chain's end, the refusal, or a pre-flight failure. Rejects when the origin or
- * pre-flight throws, as `startChain` does: a caller must handle it.
+ * Starts the pass while entries are unprocessed (under a pending re-run, counted through its
+ * chapter's end only), else the close; resolves with the chain's end, the refusal, or a pre-flight
+ * failure. Rejects when the origin or pre-flight throws, as `startChain` does: a caller must
+ * handle it.
  */
 export function startCloseChain(
   branchId: string,

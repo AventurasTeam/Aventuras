@@ -303,7 +303,9 @@ export type CloseRerunExpected = {
   reversal: CloseRerunPreview['reversal']
 }
 
-/** The counts moved since the confirm opened; `preview` is the confirm read again under the mark. */
+/**
+ * The counts moved since the confirm opened; `preview` is the confirm read again under the mark.
+ */
 export type CloseRerunCountsChanged = {
   status: 'rejected'
   code: 'counts-changed'
@@ -360,8 +362,8 @@ type RerunStartArgs = {
 
 /**
  * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
- * A pending mark spans preview, shortcut and the chain's reserve. Rejects when the sweep or the
- * chain's origin throws. `story` is unread: settings come from the store's open story.
+ * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or
+ * the chain's origin throws. `story` is unread: settings come from the store's open story.
  */
 export async function startCloseRerun(
   branchId: string,
@@ -369,7 +371,10 @@ export async function startCloseRerun(
   expected: CloseRerunExpected,
   story: OpenStory,
   ctx: DbCtx,
-  /** onStarted fires once, when the chain's first run reserves (after the mark ends); never on a refusal. */
+  /**
+   * onStarted fires once, when the chain's first run reserves (after the mark ends); never on a
+   * refusal.
+   */
   opts?: { onStarted?: () => void },
 ): Promise<CloseRerunStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
