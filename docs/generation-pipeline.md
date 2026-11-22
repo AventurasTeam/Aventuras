@@ -1294,7 +1294,7 @@ async function recoverInFlightRuns(): Promise<RecoveryReport> {
         },
       )
       if (!settled.reversed) continue
-      const closeUndone = result.journal === 'undone' && result.chapterNumber !== null
+      const closeUndone = result.journal === 'undone'
       reversed.push({
         runId: orphan.run_id,
         kind: orphan.kind,
