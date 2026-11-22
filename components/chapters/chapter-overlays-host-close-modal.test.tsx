@@ -64,6 +64,7 @@ vi.mock('@/hooks/use-entry-index', () => ({
 
 // The real views pull RN-Web chrome the unit project can't load; the host's props are the seam.
 vi.mock('./review-window', () => ({ ReviewWindow: () => null }))
+vi.mock('./close-rerun-confirm', () => ({ CloseRerunConfirm: () => null }))
 
 const modalView = vi.hoisted(() => ({
   props: null as CloseChapterModalViewProps | null,

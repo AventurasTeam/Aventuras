@@ -8,6 +8,7 @@ import { ChapterInProgressCard } from '@/components/chapters/chapter-in-progress
 import { chapterTimelineData } from '@/components/chapters/chapter-timeline-data'
 import { ChapterTimelineHeader } from '@/components/chapters/chapter-timeline-header'
 import { useChapterDeleteConfirm } from '@/components/chapters/use-chapter-delete-confirm'
+import { useRerunDisabledReason } from '@/components/chapters/use-rerun-disabled-reason'
 import { useTimelineEditing } from '@/components/chapters/use-timeline-editing'
 import { useTimelineTimeRanges } from '@/components/chapters/use-timeline-time-ranges'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
@@ -54,6 +55,7 @@ export default function ChapterTimelineRoute(): ReactElement {
   const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =
     useStoryGenerationGate(storyId ?? undefined, branchId)
   const chapterProgress = useChapterProgress(storyId)
+  const rerunDisabledReason = useRerunDisabledReason(storyId ?? undefined, branchId)
 
   const chapterRows = chaptersStore.useChapters((m) => m)
   const entryIndex = useEntryIndex(branchId)
@@ -185,6 +187,10 @@ export default function ChapterTimelineRoute(): ReactElement {
                   onJump={() => jump(card.row.startEntryId)}
                   onReview={() => chapterOverlaysStore.openReviewWindow({ chapterId: card.row.id })}
                   onDelete={() => guard(() => void deleteConfirm.open(card.row.id))}
+                  onRerun={() =>
+                    chapterOverlaysStore.openRerunConfirm({ branchId, chapterId: card.row.id })
+                  }
+                  rerunDisabledReason={rerunDisabledReason}
                 />
               ))}
               <ChapterInProgressCard

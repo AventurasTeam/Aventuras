@@ -57,6 +57,9 @@
     "regenerate": "Regenerate summary",
     "regenerateLandsLater": "Regenerating a summary lands in a later milestone",
     "review": "Review changes",
+    "rerun": "Re-run close…",
+    "rerunFromReview": "Re-run…",
+    "closeOpenFirst": "Close the open chapter first.",
     "delete": "Delete…"
   },
   "inProgress": {
@@ -104,6 +107,38 @@
     "notLatest": "This is no longer the latest chapter.",
     "failed": "Couldn't delete the chapter.",
     "resyncFailed": "The chapter was deleted, but the Timeline couldn't refresh. Reopen the story."
+  },
+  "rerunConfirm": {
+    "title": "Re-run chapter {{number}}'s close?",
+    "framing": "This reverses what the close did to the world and runs it again on {{model}}. The chapter, its title and summary stay.",
+    "framingNoModel": "This reverses what the close did to the world and runs it again. The chapter, its title and summary stay.",
+    "noChanges": "The close changed nothing in the world.",
+    "turnsFollowed": "{{count}} turn followed this close:",
+    "turnsFollowed_other": "{{count}} turns followed this close:",
+    "entries": "{{count}} entry ({{first}})",
+    "entries_other": "{{count}} entries ({{first}}–{{last}})",
+    "worldChanges": "{{count}} world-state change",
+    "worldChanges_other": "{{count}} world-state changes",
+    "rollbackWarning": "Roll back & re-run removes them for good, even if the re-run fails or you cancel it.",
+    "cost": "A close is the costliest call the app makes: this one reads {{count, number}} token of story.",
+    "cost_other": "A close is the costliest call the app makes: this one reads {{count, number}} tokens of story.",
+    "undoLine": "CTRL-Z brings this close back until your next turn, edit or rollback.",
+    "cancel": "Cancel",
+    "rerun": "Re-run close",
+    "rollbackAndRerun": "Roll back & re-run",
+    "rerunOnBranch": "Re-run on new branch",
+    "rerunOnBranchLater": "Re-running on a new branch lands in a later milestone",
+    "notLatest": "This is no longer the latest chapter.",
+    "closeOwed": "Close the open chapter first.",
+    "readFailed": "Couldn't read what a re-run would change."
+  },
+  "rerunNotice": {
+    "cancelled": "Re-run cancelled. Chapter {{number}}'s close is as it was.",
+    "failed": "Re-run failed. Chapter {{number}}'s close is as it was.",
+    "failedWithReason": "Re-run failed ({{reason}}). Chapter {{number}}'s close is as it was.",
+    "undone": "Chapter {{number}}'s earlier close couldn't be restored, so its close was undone.",
+    "countsChanged": "The counts changed while this was open. Check them before confirming.",
+    "startFailed": "Couldn't start the re-run."
   },
   "review": {
     "title": "Review — Chapter {{number}}: {{title}}",

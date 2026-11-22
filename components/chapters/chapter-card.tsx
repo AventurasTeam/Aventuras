@@ -48,6 +48,10 @@ export type ChapterCardProps = {
   onJump: () => void
   /** `Review changes`, shown when the row has a close report. */
   onReview: () => void
+  /** The latest card's `Re-run close…`, on a chapter a close wrote; the route opens the confirm. */
+  onRerun: () => void
+  /** Why `Re-run close…` is disabled: the gate's reason in flight, else a close owed. */
+  rerunDisabledReason?: string
   /** The latest card's `Delete…`; the route guards it and opens the confirm. */
   onDelete: () => void
 }
@@ -67,12 +71,16 @@ function moreActions({
   latest,
   hasCloseReport,
   onReview,
+  onRerun,
+  rerunDisabledReason,
   onDelete,
   blockedReason,
 }: Gate & {
   latest: boolean
   hasCloseReport: boolean
   onReview: () => void
+  onRerun: () => void
+  rerunDisabledReason?: string
   onDelete: () => void
 }): OverflowMenuEntry[] {
   return [
@@ -94,6 +102,18 @@ function moreActions({
           },
         ]
       : []),
+    // An AlertDialog, not a Sheet: on phone it opens over the menu's dismissing Sheet.
+    ...(latest && hasCloseReport
+      ? [
+          {
+            key: 'rerun',
+            label: t('chapters:actions.rerun'),
+            disabled: rerunDisabledReason != null,
+            disabledReason: rerunDisabledReason,
+            onPress: onRerun,
+          },
+        ]
+      : []),
     ...(latest
       ? destructiveEntry('delete', t('chapters:actions.delete'), {
           onPress: onDelete,
@@ -112,6 +132,8 @@ export function ChapterCard({
   hotkeysEnabled,
   onJump,
   onReview,
+  onRerun,
+  rerunDisabledReason,
   onDelete,
 }: ChapterCardProps): ReactElement {
   const isPhone = useTier() === 'phone'
@@ -154,6 +176,8 @@ export function ChapterCard({
               isPhone={isPhone}
               onJump={onJump}
               onReview={onReview}
+              onRerun={onRerun}
+              rerunDisabledReason={rerunDisabledReason}
               onDelete={onDelete}
               blockedReason={blockedReason}
             />
@@ -305,6 +329,8 @@ function ActionRow({
   isPhone,
   onJump,
   onReview,
+  onRerun,
+  rerunDisabledReason,
   onDelete,
   blockedReason,
 }: Gate & {
@@ -313,9 +339,19 @@ function ActionRow({
   isPhone: boolean
   onJump: () => void
   onReview: () => void
+  onRerun: () => void
+  rerunDisabledReason?: string
   onDelete: () => void
 }) {
-  const more = moreActions({ latest, hasCloseReport, onReview, onDelete, blockedReason })
+  const more = moreActions({
+    latest,
+    hasCloseReport,
+    onReview,
+    onRerun,
+    rerunDisabledReason,
+    onDelete,
+    blockedReason,
+  })
   return (
     <View className="flex-row flex-wrap items-center gap-2">
       <Button

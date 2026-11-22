@@ -80,6 +80,7 @@ export const ClosingBeforeTurn: Story = {
       beforeTurn: true,
       currentPhase: 'agent',
       closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
+      interruptible: 'close',
     }),
     onCancel: fn(),
   },
@@ -97,6 +98,7 @@ export const ClosingTask: Story = {
       beforeTurn: false,
       currentPhase: 'agent',
       closeProgress: { task: 'identity', part: 1, index: 3, total: 7 },
+      interruptible: 'close',
     }),
     onCancel: fn(),
   },
@@ -121,6 +123,7 @@ export const PhoneClosingTask: Story = {
       beforeTurn: false,
       currentPhase: 'agent',
       closeProgress: { task: 'lifecycle', part: 3, index: 16, total: 17 },
+      interruptible: 'close',
     }),
     onCancel: fn(),
   },
@@ -133,6 +136,24 @@ export const PhoneClosingTask: Story = {
       ),
     )
     expect(screen.getByText(args.label)).toBeVisible()
+  },
+}
+
+// A re-run names its reversal step; Cancel interrupts it as a close's does.
+export const RerunReversing: Story = {
+  args: {
+    kind: 'run',
+    label: closeBannerLabel({
+      beforeTurn: false,
+      currentPhase: 'reversal',
+      interruptible: 'rerun',
+    }),
+    onCancel: fn(),
+  },
+  play: async ({ args }) => {
+    expect(screen.getByText("Reversing the chapter's close…")).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(runArgs(args).onCancel).toHaveBeenCalledTimes(1))
   },
 }
 
@@ -212,5 +233,32 @@ export const PhoneClosedWarning: Story = {
     )
     expect(screen.getByRole('button', { name: t('chrome.closeResult.review') })).toBeVisible()
     expect(screen.getByText(STOPPED_LABEL)).toBeVisible()
+  },
+}
+
+const RERUN_LABEL = t('chrome.closeResult.rerun', { number: 5 })
+
+/** A re-run that committed: its own line, the same Review and dismiss. */
+export const ClosedRerun: Story = {
+  args: { kind: 'closed', tone: 'info', label: RERUN_LABEL, onReview: fn(), onDismiss: fn() },
+  play: async ({ args }) => {
+    const done = closedArgs(args)
+    const banner = screen.getByTestId('memory-run-banner')
+    expect(banner).toHaveClass('border-info')
+    expect(within(banner).getByRole('status')).toHaveTextContent("Chapter 5's close re-ran")
+    await userEvent.click(
+      within(banner).getByRole('button', { name: t('chrome.closeResult.review') }),
+    )
+    await waitFor(() => expect(done.onReview).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** A re-run whose tasks stopped early: the warning tone, its own line. */
+export const ClosedRerunWarning: Story = {
+  args: { kind: 'closed', tone: 'warning', label: RERUN_LABEL, onReview: fn(), onDismiss: fn() },
+  play: async () => {
+    const banner = screen.getByTestId('memory-run-banner')
+    expect(banner).toHaveClass('border-warning')
+    expect(within(banner).getByRole('status')).toHaveTextContent("Chapter 5's close re-ran")
   },
 }

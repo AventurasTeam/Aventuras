@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useSyncExternalStore } from 'react'
-import { expect, fn, screen, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { externalCell } from '@/components/story-settings/external-cell'
 import type { RollbackCounts } from '@/lib/actions'
+import { t } from '@/lib/i18n'
 
 import { RollbackConfirmModal, type RollbackConfirmModalProps } from './rollback-confirm'
 
@@ -76,6 +77,32 @@ export const SingleEntryNoChapter: Story = {
       dialog,
       [COPY.rollbackBody, '1 entry', '3 world-state changes', COPY.rollbackIrreversible],
       [REOPENED_LINE, REMOVED_LINE],
+    )
+  },
+}
+
+const BLOCKED_REASON = t('generationGate.chapterCloseRerun')
+
+/** Its reversal is held (a re-run reaching the entry, a turn): the confirm disables, Cancel stays. */
+export const Blocked: Story = {
+  args: {
+    open: true,
+    targetEntryNumber: 47,
+    counts: counts({ entries: 1, worldStateChanges: 3 }),
+    blockedReason: BLOCKED_REASON,
+  },
+  play: async ({ args }) => {
+    await findDialog(COPY.rollbackTitle)
+    const confirm = screen.getByRole('button', { name: 'Delete entries' })
+    // Past user-event's pointer-events check, so only the disabled wiring stops the press.
+    await userEvent.click(confirm, { pointerEventsCheck: 0 })
+    expect(args.onConfirm).not.toHaveBeenCalled()
+    expect(args.onOpenChange).not.toHaveBeenCalled()
+    expect(confirm).toHaveAttribute('aria-disabled', 'true')
+    expect(confirm.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
     )
   },
 }

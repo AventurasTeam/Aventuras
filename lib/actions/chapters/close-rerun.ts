@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, gte, lt, ne, sql } from 'drizzle-orm'
 
 import { modelConfigOf, resolveModel } from '@/lib/ai'
-import { chapterProgressOf, thresholdMet } from '@/lib/chapters'
+import { chapterProgressOf, isCloseOwed } from '@/lib/chapters'
 import {
   chapters,
   deltas,
@@ -227,10 +227,12 @@ async function closeOwedAfter(
     (row) => shortcutFrom === null || row.position < shortcutFrom,
   )
   const pick = generationStore.getTxState().pendingClose.get(branchId)
-  if (pick !== undefined && region.some((row) => row.id === pick.endEntryId)) return true
-  return (
-    settings.chapterAutoClose &&
-    thresholdMet(chapterProgressOf(region, settings.chapterTokenThreshold))
+  // The preview's rule, not closeOwed's any-pick: a pick the shortcut removes owes nothing.
+  const pickSurvives = pick !== undefined && region.some((row) => row.id === pick.endEntryId)
+  return isCloseOwed(
+    chapterProgressOf(region, settings.chapterTokenThreshold),
+    settings.chapterAutoClose,
+    pickSurvives,
   )
 }
 

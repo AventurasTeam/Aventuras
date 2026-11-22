@@ -40,17 +40,32 @@ export function rowGateReason(
 /**
  * principles.md → Edit restrictions during in-flight generation: through an `interruptible` gate,
  * ↻ and × on every row and the head turn's pencil stay live; any other pencil keeps the whole gate.
+ * A re-run holds a stamped row's ↻ and × whatever the gate lets through.
  */
 export function rowReversalFlags(args: {
   rowId: string
   headTurnIds: ReadonlySet<string>
   editGate: EditGate
+  /** `rerunHoldsReversal` for this row's entry: a re-run runs and the entry has a chapter id. */
+  reversalHeld?: boolean
 }): { editDisabled: boolean; reversalDisabled: boolean } {
   const closed = args.editGate === 'closed'
   return {
     editDisabled: args.headTurnIds.has(args.rowId) ? closed : args.editGate !== 'open',
-    reversalDisabled: closed,
+    reversalDisabled: closed || args.reversalHeld === true,
   }
+}
+
+/** The reader's Undo: a re-run refuses every CTRL-Z, so Undo holds then, naming the pill's run
+ * where no run blocks head reversals. */
+export function undoHold(args: {
+  headReversalBlocked: boolean
+  rerunRunning: boolean
+  reasons: { gate: string | undefined; headReversal: string | undefined }
+}): { blocked: boolean; reason: string | undefined } {
+  if (args.headReversalBlocked) return { blocked: true, reason: args.reasons.headReversal }
+  if (args.rerunRunning) return { blocked: true, reason: args.reasons.gate }
+  return { blocked: false, reason: args.reasons.headReversal }
 }
 
 /**

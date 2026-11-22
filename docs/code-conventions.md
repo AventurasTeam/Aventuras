@@ -164,7 +164,8 @@ access, so it is restricted with `no-restricted-properties` in
 the orchestrator and the prose-reversal bracket, since a stray caller
 can leave the hard gate or the reversal barrier stuck. The close's
 record mutators (`setPendingClose`, `clearPendingClose`,
-`clearDeferredClose`, `dropBranchRecords`) belong to the files that
+`setPendingRerun`, `clearPendingRerun`, `clearDeferredClose`,
+`dropBranchRecords`) belong to the files that
 write those records (`lib/actions/chapters/**`, `delete-story.ts`,
 `chapter-close-boundary.ts` and `memory-chain.ts`), and
 `clearPendingClose` also to the prose-reversal bracket, since a stray

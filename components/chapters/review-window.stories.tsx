@@ -1,12 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useEffect, useRef, useState } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { expect, fn, screen, spyOn, userEvent, waitFor, within } from 'storybook/test'
 
 import { formatEntryRef } from '@/lib/entry-refs'
 import type { CloseReview, CloseReviewChange, CloseReviewNotApplied } from '@/lib/history'
 import { t } from '@/lib/i18n'
+import type { StoreChapter } from '@/lib/stores'
 
 import { ReviewWindow, type ReviewWindowState } from './review-window'
+import { useReviewWindowPresence } from './use-review-window-presence'
 
 // CI runs plays several times slower than local; every post-interaction wait uses this.
 const WAIT = { timeout: 5000 }
@@ -163,11 +166,16 @@ type HarnessProps = {
   status: ReviewWindowState['status']
   review: CloseReview
   onOpenChange: (open: boolean) => void
+  onExited: () => void
   onRetry: () => void
   onRowPress: (key: string) => void
   onEntryLink: (key: string) => void
   /** Keys of rows whose target the host found gone. */
   unpressable: readonly string[]
+  /** The host offers `Re-run…` on the latest chapter's window only. */
+  latest: boolean
+  onRerun: () => void
+  rerunDisabledReason?: string
 }
 
 function stateOf(
@@ -185,10 +193,14 @@ function ReviewWindowHarness({
   status,
   review,
   onOpenChange,
+  onExited,
   onRetry,
   onRowPress,
   onEntryLink,
   unpressable,
+  latest,
+  onRerun,
+  rerunDisabledReason,
 }: HarnessProps) {
   const { height } = useWindowDimensions()
   // gorhom's container fills its parent, so a detent is a share of this stage's height.
@@ -197,7 +209,10 @@ function ReviewWindowHarness({
       <ReviewWindow
         open
         onOpenChange={onOpenChange}
+        onExited={onExited}
         title={TITLE}
+        onRerun={latest ? onRerun : undefined}
+        rerunDisabledReason={rerunDisabledReason}
         state={stateOf(status, review, onRetry)}
         pressOf={(row) =>
           row.pressTo == null || unpressable.includes(row.key)
@@ -217,6 +232,87 @@ function ReviewWindowHarness({
   )
 }
 
+/** The host's close: the window's own Done flips `open`, and `onExited` reports its exit's end. */
+function ExitHarness({ onExited }: { onExited: () => void }) {
+  const { height } = useWindowDimensions()
+  const [open, setOpen] = useState(true)
+  return (
+    <View style={{ height }}>
+      <ReviewWindow
+        open={open}
+        onOpenChange={setOpen}
+        onExited={onExited}
+        title={TITLE}
+        state={{ status: 'ready', review: FULL }}
+        pressOf={() => undefined}
+        entryLinkOf={() => undefined}
+      />
+    </View>
+  )
+}
+
+const REQUESTED = { id: 'chap_trail', sequenceNumber: 2, title: 'The Trail North' } as StoreChapter
+const REOPEN_AFTER_MS = 80
+// The reopen's request, so a story can prove it landed before the exit it means to wait for.
+const reopenRequested = fn()
+
+/** The host's mount: `Re-run…` then `Cancel` clears the request, and it returns mid slide-out. */
+function ReopenHarness({
+  onExited,
+  closeBeforePresent = false,
+}: {
+  onExited: () => void
+  /** Closes the window in its first effect, before the Sheet presents, then asks for it again. */
+  closeBeforePresent?: boolean
+}) {
+  const { height } = useWindowDimensions()
+  const [requested, setRequested] = useState<StoreChapter | null>(REQUESTED)
+  const requestedNow = useRef(requested != null)
+  const markRequested = (next: StoreChapter | null) => {
+    requestedNow.current = next != null
+    setRequested(next)
+  }
+  const presence = useReviewWindowPresence({
+    requested,
+    isRequestedNow: () => requestedNow.current,
+    onClose: () => markRequested(null),
+  })
+  useEffect(() => {
+    if (!closeBeforePresent) return
+    markRequested(null)
+    const timer = setTimeout(() => markRequested(REQUESTED), REOPEN_AFTER_MS)
+    return () => clearTimeout(timer)
+    // Once, at mount: the close lands before the Sheet's deferred present.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <View style={{ height }}>
+      {presence.shown == null ? null : (
+        <ReviewWindow
+          open={presence.open}
+          onOpenChange={presence.onOpenChange}
+          onExited={() => {
+            presence.onExited()
+            onExited()
+          }}
+          onPresented={() => presence.onPresented(presence.shown!.id)}
+          onRerun={() => {
+            markRequested(null)
+            setTimeout(() => {
+              reopenRequested()
+              markRequested(REQUESTED)
+            }, REOPEN_AFTER_MS)
+          }}
+          title={TITLE}
+          state={{ status: 'ready', review: FULL }}
+          pressOf={() => undefined}
+          entryLinkOf={() => undefined}
+        />
+      )}
+    </View>
+  )
+}
+
 const meta: Meta<typeof ReviewWindowHarness> = {
   title: 'Compounds/Chapters/ReviewWindow',
   component: ReviewWindowHarness,
@@ -227,10 +323,13 @@ const meta: Meta<typeof ReviewWindowHarness> = {
     status: 'ready',
     review: FULL,
     onOpenChange: fn(),
+    onExited: fn(),
     onRetry: fn(),
     onRowPress: fn(),
     onEntryLink: fn(),
     unpressable: [],
+    latest: true,
+    onRerun: fn(),
   },
 }
 export default meta
@@ -513,5 +612,131 @@ export const Phone390Sheet: Story = {
 
     await userEvent.click(done)
     await waitFor(() => expect(args.onOpenChange).toHaveBeenCalledWith(false), WAIT)
+  },
+}
+
+/** Desktop: the Dialog has no exit animation, so `onExited` runs as it closes. */
+export const ExitEndsAsItCloses: Story = {
+  render: (args) => <ExitHarness onExited={args.onExited} />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+    expect(screen.queryByRole('dialog', { name: TITLE })).toBeNull()
+  },
+}
+
+/** Phone: `onExited` waits for the Sheet's slide-out, so the host keeps the window mounted until then. */
+export const Phone390ExitAfterSlideOut: Story = {
+  globals: PHONE,
+  render: (args) => <ExitHarness onExited={args.onExited} />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }))
+    expect(args.onExited).not.toHaveBeenCalled()
+    await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+const RERUN = 'Re-run…'
+
+/** The latest chapter's window: `Re-run…` before Done, live, firing the host's press alone. */
+export const Rerun: Story = {
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    const done = within(dialog).getByRole('button', { name: 'Done' })
+    expect(rerun).not.toHaveAttribute('aria-disabled', 'true')
+    expectInOrder([rerun, done])
+    await userEvent.click(rerun)
+    await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
+    expect(args.onOpenChange).not.toHaveBeenCalled()
+  },
+}
+
+/** An earlier chapter's window has no `Re-run…`. */
+export const NoRerunOnAnEarlierChapter: Story = {
+  args: { latest: false },
+  play: async () => {
+    const dialog = await findWindow()
+    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeVisible()
+    expect(within(dialog).queryByRole('button', { name: RERUN })).toBeNull()
+  },
+}
+
+/** A run in flight disables `Re-run…` with the gate's reason. */
+export const RerunBlocked: Story = {
+  args: { rerunDisabledReason: t('generationGate.inFlight') },
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    expect(rerun).toHaveAttribute('aria-disabled', 'true')
+    expect(rerun.closest('[title]')).toHaveAttribute('title', t('generationGate.inFlight'))
+    await userEvent.click(rerun, { pointerEventsCheck: 0 })
+    expect(args.onRerun).not.toHaveBeenCalled()
+  },
+}
+
+/** A close owed disables `Re-run…` with the card's tooltip. */
+export const RerunCloseOwed: Story = {
+  args: { rerunDisabledReason: 'Close the open chapter first.' },
+  play: async () => {
+    const dialog = await findWindow()
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    expect(rerun).toHaveAttribute('aria-disabled', 'true')
+    expect(rerun.closest('[title]')).toHaveAttribute('title', 'Close the open chapter first.')
+  },
+}
+
+/** Phone: `Re-run…` sits above Done in the Sheet and fires the host's press. */
+export const Phone390Rerun: Story = {
+  globals: PHONE,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const heading = within(dialog).getByRole('heading', { name: TITLE, level: 2 })
+    await settledTop(heading)
+    const rerun = within(dialog).getByRole('button', { name: RERUN })
+    expectInOrder([rerun, within(dialog).getByRole('button', { name: 'Done' })])
+    await userEvent.click(rerun)
+    await waitFor(() => expect(args.onRerun).toHaveBeenCalledTimes(1), WAIT)
+  },
+}
+
+/** Phone: a reopen during the Sheet's slide-out waits for its exit, then the window comes back. */
+export const Phone390ReopensDuringSlideOut: Story = {
+  globals: PHONE,
+  render: (args) => <ReopenHarness onExited={args.onExited} />,
+  beforeEach: () => {
+    reopenRequested.mockClear()
+  },
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
+    await userEvent.click(within(dialog).getByRole('button', { name: RERUN }))
+
+    // The slide-out ends first; the held reopen then presents the window again.
+    await waitFor(() => expect(args.onExited).toHaveBeenCalledTimes(1), WAIT)
+    // A slide-out shorter than the delay would end before the reopen, and prove nothing here.
+    expect(reopenRequested).toHaveBeenCalledTimes(1)
+    const exited = (args.onExited as ReturnType<typeof fn>).mock.invocationCallOrder[0]
+    expect(reopenRequested.mock.invocationCallOrder[0]).toBeLessThan(exited)
+    const reopened = await findWindow()
+    const top = await settledTop(within(reopened).getByRole('heading', { name: TITLE, level: 2 }))
+    expect(top).toBeLessThan(window.innerHeight * 0.2)
+    expect(within(reopened).getByRole('button', { name: 'Done' })).toBeVisible()
+  },
+}
+
+/** Phone: a window closed before its Sheet presents leaves no exit to wait for; asking again opens it. */
+export const Phone390ClosedBeforePresent: Story = {
+  globals: PHONE,
+  render: (args) => <ReopenHarness onExited={args.onExited} closeBeforePresent />,
+  play: async ({ args }) => {
+    const dialog = await findWindow()
+    const top = await settledTop(within(dialog).getByRole('heading', { name: TITLE, level: 2 }))
+    expect(top).toBeLessThan(window.innerHeight * 0.2)
+    expect(within(dialog).getByRole('button', { name: 'Done' })).toBeVisible()
+    expect(args.onExited).not.toHaveBeenCalled()
   },
 }

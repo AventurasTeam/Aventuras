@@ -1,6 +1,6 @@
 import { and, eq, gt, lte, ne, sql } from 'drizzle-orm'
 
-import { CHAPTER_CLOSE_KIND, chapterProgressOf, thresholdMet } from '@/lib/chapters'
+import { CHAPTER_CLOSE_KIND, chapterProgressOf, isCloseOwed } from '@/lib/chapters'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND, shouldCadenceFire } from '@/lib/classifier'
 import {
   branches,
@@ -136,13 +136,15 @@ export async function closeOwed(
   story: Pick<OpenStory, 'branchId' | 'settings'>,
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<boolean> {
-  if (generationStore.getTxState().pendingClose.has(story.branchId)) return true
-  if (!story.settings.chapterAutoClose) return false
-  const progress = chapterProgressOf(
-    await openRegionSeries(story.branchId, ctx),
-    story.settings.chapterTokenThreshold,
+  const manualPending = generationStore.getTxState().pendingClose.has(story.branchId)
+  const autoClose = story.settings.chapterAutoClose
+  // The region decides nothing with a pick pending or auto-close off, so it isn't read then.
+  const series = manualPending || !autoClose ? [] : await openRegionSeries(story.branchId, ctx)
+  return isCloseOwed(
+    chapterProgressOf(series, story.settings.chapterTokenThreshold),
+    autoClose,
+    manualPending,
   )
-  return thresholdMet(progress)
 }
 
 // The run's story while it is open on the run's branch: whose settings every chain read uses.

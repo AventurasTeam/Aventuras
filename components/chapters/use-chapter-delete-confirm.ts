@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { keepsConfirmOpen } from '@/components/reader/confirm-refusal'
+import { useSettleReread } from '@/hooks/use-settle-reread'
 import {
   CHAPTER_DELETE_REFUSAL,
   DeltaReplayError,
@@ -23,7 +25,11 @@ export type ChapterDeleteConfirmTarget = {
 
 export function chapterDeleteRefusalCopy(
   code: ChapterDeleteRefusalCode,
-): 'chapters:deleteConfirm.notLatest' | 'chapters:deleteConfirm.failed' {
+):
+  | 'chapters:deleteConfirm.notLatest'
+  | 'chapters:deleteConfirm.failed'
+  | 'reader:actions.blockedWhileGenerating' {
+  if (keepsConfirmOpen(code)) return 'reader:actions.blockedWhileGenerating'
   return code === CHAPTER_DELETE_REFUSAL.notLatest
     ? 'chapters:deleteConfirm.notLatest'
     : 'chapters:deleteConfirm.failed'
@@ -87,7 +93,6 @@ export function useChapterDeleteConfirm({
   // Read synchronously, so a second press returns before it reaches removeChapter's own refusal.
   const pendingRef = useRef(false)
   const openRequest = useRef(0)
-  const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const reviewOpen = chapterOverlaysStore.useOverlays((s) => s.review != null)
   // The re-read effect's cleanup is what drops a stale read, so the host's fresh callbacks each
   // render must not re-run it: they ride in a ref.
@@ -97,7 +102,6 @@ export function useChapterDeleteConfirm({
   })
 
   const chapterId = target?.chapterId ?? null
-  const countedAtSettle = target?.countedAtSettle ?? null
 
   const open = useCallback(
     async (opening: string) => {
@@ -128,35 +132,33 @@ export function useChapterDeleteConfirm({
     [branchId],
   )
 
-  useEffect(() => {
-    if (chapterId == null || countedAtSettle == null || settleCount <= countedAtSettle)
-      return undefined
-    // A removal's own reversal settles under it: its result closes the confirm, not a re-read.
-    if (pendingRef.current) return undefined
-    let live = true
-    void attempt(() => latest.current.loadPreview(chapterId)).then((read) => {
-      if (!live || pendingRef.current) return
-      if (!read.ok) {
-        logger.error('app.chapter_delete_recount_failed', {
-          branchId,
-          chapterId,
-          error: messageOf(read.error),
-        })
-        return
-      }
-      const result = read.value
-      if ('status' in result) {
-        logReadRefusal(branchId, chapterId, result.code)
-        setTarget(null)
-        toast.error(t(chapterDeleteRefusalCopy(result.code)))
-        return
-      }
-      setTarget((prev) => (prev?.chapterId === chapterId ? { ...prev, preview: result } : prev))
-    })
-    return () => {
-      live = false
-    }
-  }, [branchId, chapterId, countedAtSettle, settleCount])
+  useSettleReread({
+    targetKey: chapterId == null ? null : `${branchId}:${chapterId}`,
+    countedAtSettle: target?.countedAtSettle ?? null,
+    onSettle: (isLive) => {
+      // A removal's own reversal settles under it: its result closes the confirm, not a re-read.
+      if (pendingRef.current || chapterId == null) return
+      void attempt(() => latest.current.loadPreview(chapterId)).then((read) => {
+        if (!isLive() || pendingRef.current) return
+        if (!read.ok) {
+          logger.error('app.chapter_delete_recount_failed', {
+            branchId,
+            chapterId,
+            error: messageOf(read.error),
+          })
+          return
+        }
+        const result = read.value
+        if ('status' in result) {
+          logReadRefusal(branchId, chapterId, result.code)
+          setTarget(null)
+          toast.error(t(chapterDeleteRefusalCopy(result.code)))
+          return
+        }
+        setTarget((prev) => (prev?.chapterId === chapterId ? { ...prev, preview: result } : prev))
+      })
+    },
+  })
 
   const confirm = useCallback(
     async (mode: ChapterDeleteMode) => {
@@ -164,34 +166,38 @@ export function useChapterDeleteConfirm({
       pendingRef.current = true
       setPending(true)
       const removal = await attempt(() => latest.current.remove(chapterId, mode))
-      setTarget(null)
       if (removal.ok) {
         const result = removal.value
+        // An in-flight refusal leaves the confirm open; the gate now holds its actions.
+        if (result.status !== 'rejected' || !keepsConfirmOpen(result.code)) setTarget(null)
         if (result.status === 'rejected') toast.error(t(chapterDeleteRefusalCopy(result.code)))
-      } else if (removal.error instanceof DeltaReplayError && removal.error.committed) {
-        // The delete landed and only its store sync failed: a re-hydrate drops the stale card.
-        logger.warn('app.chapter_delete_sync_failed', {
-          branchId,
-          chapterId,
-          error: failureOf(removal.error),
-        })
-        const resynced = await attempt(() => latest.current.resync())
-        if (!resynced.ok) {
-          logger.error('app.chapter_delete_resync_failed', {
+      } else {
+        setTarget(null)
+        if (removal.error instanceof DeltaReplayError && removal.error.committed) {
+          // The delete landed and only its store sync failed: a re-hydrate drops the stale card.
+          logger.warn('app.chapter_delete_sync_failed', {
             branchId,
             chapterId,
-            error: messageOf(resynced.error),
+            error: failureOf(removal.error),
           })
-          toast.error(t('chapters:deleteConfirm.resyncFailed'))
+          const resynced = await attempt(() => latest.current.resync())
+          if (!resynced.ok) {
+            logger.error('app.chapter_delete_resync_failed', {
+              branchId,
+              chapterId,
+              error: messageOf(resynced.error),
+            })
+            toast.error(t('chapters:deleteConfirm.resyncFailed'))
+          }
+        } else {
+          logger.error('app.chapter_delete_threw', {
+            branchId,
+            chapterId,
+            mode,
+            error: failureOf(removal.error),
+          })
+          toast.error(t('chapters:deleteConfirm.failed'))
         }
-      } else {
-        logger.error('app.chapter_delete_threw', {
-          branchId,
-          chapterId,
-          mode,
-          error: failureOf(removal.error),
-        })
-        toast.error(t('chapters:deleteConfirm.failed'))
       }
       pendingRef.current = false
       setPending(false)
@@ -208,9 +214,11 @@ export function useChapterDeleteConfirm({
   // A Stack keeps the Timeline mounted under a pushed screen: its reads would toast over that
   // screen, and the confirm would reopen on return with a preview nothing kept current. The
   // review window takes the screen the same way, and on phone its Sheet would cover the confirm.
+  // Re-checked as a removal ends: an in-flight refusal keeps a target no dismissal could drop
+  // meanwhile.
   useEffect(() => {
-    if (!active || reviewOpen) dismiss()
-  }, [active, reviewOpen, dismiss])
+    if (!pending && (!active || reviewOpen)) dismiss()
+  }, [active, reviewOpen, pending, dismiss])
   // An unmount renders no `active` false first, so it drops a pending read here; a removal's
   // continuation outlives the screen by design.
   useEffect(

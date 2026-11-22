@@ -23,6 +23,7 @@ type Hook = ReturnType<typeof useChapterDeleteConfirm>
 
 const NOT_LATEST = 'This is no longer the latest chapter.'
 const FAILED = "Couldn't delete the chapter."
+const BLOCKED = 'Unavailable while generating.'
 const RESYNC_FAILED =
   "The chapter was deleted, but the Timeline couldn't refresh. Reopen the story."
 
@@ -261,7 +262,8 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
     })
 
     expect(result.current.target).toBeNull()
-    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2' })
+    // No chapter row in this test, so the window holds no report.
+    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2', actionId: null })
   })
 
   it('closes when the review window opens over it, and stays closed after the window goes', async () => {
@@ -536,6 +538,79 @@ describe('useChapterDeleteConfirm: the removal', () => {
     expect(toast.error).toHaveBeenCalledWith(NOT_LATEST)
   })
 
+  // A run started since the last enabled render: the gate now holds the confirm's actions.
+  it('keeps the confirm open and says why on an in-flight refusal', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce(refusal('in-flight'))
+
+    await act(async () => {
+      await result.current.confirm('whole')
+    })
+
+    expect(result.current.target).toEqual(expect.objectContaining({ preview: PREVIEW }))
+    expect(result.current.pending).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith(BLOCKED)
+  })
+
+  it('closes on an in-flight refusal once a removal the screen lost focus under ends', async () => {
+    const { result, rerender, remove } = setup()
+    await openOn(result)
+    const removal = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    rerender({ active: false })
+    await act(async () => {
+      removal.resolve(refusal('in-flight'))
+      await confirming
+    })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('closes on an in-flight refusal once a removal the review window opened over ends', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    const removal = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    await act(async () => {
+      removal.resolve(refusal('in-flight'))
+      await confirming
+    })
+
+    expect(result.current.target).toBeNull()
+  })
+
+  it('stays open on an in-flight refusal when focus came back before the removal ended', async () => {
+    const { result, rerender, remove } = setup()
+    await openOn(result)
+    const removal = deferred<RemoveChapterResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let confirming!: Promise<void>
+    act(() => {
+      confirming = result.current.confirm('whole')
+    })
+
+    rerender({ active: false })
+    rerender({ active: true })
+    await act(async () => {
+      removal.resolve(refusal('in-flight'))
+      await confirming
+    })
+
+    expect(result.current.target).toEqual(expect.objectContaining({ preview: PREVIEW }))
+  })
+
   it('dismisses and confirms again after a refused removal', async () => {
     const { result, remove } = setup()
     await openOn(result)
@@ -693,8 +768,12 @@ describe('chapterDeleteRefusalCopy', () => {
     expect(chapterDeleteRefusalCopy('not-latest')).toBe('chapters:deleteConfirm.notLatest')
   })
 
+  it('says a run is in flight', () => {
+    expect(chapterDeleteRefusalCopy('in-flight')).toBe('reader:actions.blockedWhileGenerating')
+  })
+
   it('reports every other refusal as a failed delete', () => {
-    for (const code of ['in-flight', 'not-found', 'no-close', 'integrity'] as const)
+    for (const code of ['not-found', 'no-close', 'integrity'] as const)
       expect(chapterDeleteRefusalCopy(code)).toBe('chapters:deleteConfirm.failed')
   })
 })

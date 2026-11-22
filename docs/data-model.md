@@ -285,10 +285,10 @@ erDiagram
     reversal_journals {
         text action_id PK "the close re-run's action_id, whose group this journal belongs to"
         text branch_id FK "composite PK with action_id"
-        json journal "before-images of every row and delta row the re-run's reversal touched: whole row, or absent. Written in the reversal's transaction, written back when the re-run's group reverses, if still exact. See generation-pipeline.md → Reverse-replay"
+        json journal "the chapter's id and number, the floor (the highest log_position the reversal leaves), the before-images of every row and delta row the re-run's reversal touched (whole row, or absent), and every earlier journal row it dropped. Written in the reversal's transaction, written back when the re-run's group reverses, if still exact. See generation-pipeline.md → Reverse-replay"
         integer created_at
     }
-    %% Not delta-logged: the undo half of one delta group. Goes with the group: a rollback or delete taking the group drops it, and so does a sweep from below the group that spares it; a later re-run's journal holds it as a before-image. Copies on fork per the Branch-copy manifest (Branch model).
+    %% Not delta-logged: the undo half of one delta group. Goes with the group: a sweep that removes any of the group's deltas outside chapters and story_entries, removes or rewrites a delta at or below its floor other than the chapter row's or a stamp, or removes the group's last delta drops it; a later re-run's journal holds it as a before-image. Copies on fork per the Branch-copy manifest (Branch model).
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -3114,23 +3114,27 @@ autoincrement primitive (`AUTOINCREMENT` is table-global, not
 partitioned), so the assignment lives in the delta-creating
 mutator, not as a column default.
 
-A **redo's** re-insert is the exception: the restored delta takes back
-the slot it held before the undo. Every delta-logged write clears its
-branch's redo stack, and the redo's bracket keeps writers out while it runs, so
-nothing can have logged into that slot since the undo freed it. Log
-order so stays the order the writes were first made: a pass on an
-earlier turn that logged above a turn before the undo still sits above
-it after the redo, and reversal precedence, which reads a user write as
-later than a machine write by position
+A **redo's** re-insert and a close's re-run's **journal write-back** are
+the exceptions: each restored delta takes back the slot it held before.
+For redo, every delta-logged write clears its branch's redo stack, and
+the redo's bracket keeps writers out while it runs, so nothing can have
+logged into that slot since the undo freed it. Log order so stays the
+order the writes were first made: a pass on an earlier turn that logged
+above a turn before the undo still sits above it after the redo, and
+reversal precedence, which reads a user write as later than a machine
+write by position
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
 judges a restored write exactly as it did before the undo. A following
 CTRL-Z still reaches the restored group first, since only
 periodic-classifier groups, which CTRL-Z steps over, can sit above it.
-A writer that bypassed the stack clear would collide on the uniqueness
-backstop below, failing the redo whole rather than misordering the log.
+For the write-back, the re-run's own reversal in the same transaction
+frees every position its deltas took, and its check requires nothing
+foreign above the floor, so the journaled deltas' slots are free. A
+writer that bypassed either would collide on the uniqueness backstop
+below, failing the restore whole rather than misordering the log.
 
 Invariant: increasing within branch in the order the writes were
-first made; a redo restores a position rather than taking a new one.
+first made; a redo or a journal write-back restores a position rather than taking a new one.
 Gaps are fine
 (rollback, fork copy, delete deltas — so gaps occur naturally; the
 `>=`, `<`, `MAX` operations all tolerate them), but duplicates

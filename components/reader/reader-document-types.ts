@@ -84,6 +84,9 @@ export type ReaderSurfaceProps = {
   editGate: EditGate
   /** The tooltip on the row controls `editGate` disables; undefined while it is `open`. */
   gateReason?: string
+  /** A re-run holds ↻ and × on every chapter-stamped row (`rerunHoldsReversal`), disabled with
+   * `gateReason` whatever `editGate` allows. */
+  stampedReversalsHeld?: boolean
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */
   systemFixLabel?: string

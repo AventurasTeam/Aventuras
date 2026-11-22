@@ -103,3 +103,42 @@ slice-planning gate forces its resolution before that slice is planned.
   restart. No caller throws today; `startCloseRerun` is the first to pass
   a host-supplied callback through it. Raised by Slice 5.13's Task 17
   review (2026-11-21).
+- **The shared `Sheet` drops a `present()` sent while it is still
+  dismissing.** An `open` that flips back to true within the slide-out
+  (about 0.7 s on web) leaves the sheet open in React and nothing on
+  screen: no scrim, its Escape and Back handlers still swallow presses,
+  and the next close calls `dismiss()` on a dismissed modal
+  (`components/ui/sheet.tsx`, the `open` effect). Slice 5.13 holds its own
+  review-window reopen until `onDismissed`
+  (`use-review-window-presence.ts`); other consumers that reopen a Sheet
+  on a timer or after a cancelled confirm are unchecked. Raised by Slice
+  5.13's Task 26 review (2026-11-21).
+- **The rollback modal's "stays open" misses the regenerate mode.**
+  `rollback-confirm.md → A run starting under an open modal` says the
+  modal stays open on an in-flight refusal; a regenerate-mode confirm
+  closes before its stream starts and reopens on a refusal
+  (`app/reader-composer/[branchId].tsx`, `confirmRollback`). Raised by
+  Slice 5.13's Task 28 review (2026-11-21).
+- **The review window's dialog has no description.** Its `DialogContent`
+  carries a title and no `DialogDescription` or `aria-describedby`
+  (`components/chapters/review-window.tsx`), so every open logs the
+  dialog's "Missing Description" warning; `main` logs it too. Raised by
+  Slice 5.13's Task 29 smoke (2026-11-22).
+- **The delete and rollback confirms' disabled reasons don't show on
+  Android.** Their confirm actions are plain `Button`s with
+  `disabledReason` (`components/chapters/chapter-delete-confirm.tsx`,
+  `components/reader/rollback-confirm.tsx`), which on native is only an
+  accessibility hint, so the run blocking an in-flight refusal goes
+  unnamed there. The re-run confirm renders its actions through
+  `ReasonButton`, which shows the reason under a disabled button; both
+  confirms predate it. Raised by Slice 5.13's PR 3 review (2026-11-22).
+- **A refused Send whose own reversal fails uncommitted leaves its
+  `user_action` unreported to settle-keyed re-reads.** A rejected
+  admission reverses the Send's `user_action` with `reverseReplayDeltas`
+  (`lib/actions/turns/submit-turn.ts`, after `startTurn`); if that throws
+  uncommitted, the entry stands and only an error is logged. A pending
+  turn's end bumps no `settleCount`, and that reversal raises no
+  `reversalInProgress`, so a re-read keyed on the count alone (an open
+  re-run confirm's turns since, an open rollback confirm's entry counts)
+  doesn't see it until the next settle; readers keyed on the entry tail
+  do. Raised by Slice 5.13's PR 3 review (2026-11-22).

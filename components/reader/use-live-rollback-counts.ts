@@ -1,8 +1,6 @@
-import { useEffect, useRef } from 'react'
-
+import { useSettleReread } from '@/hooks/use-settle-reread'
 import type { RollbackCounts, StoryEntryRejection } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
-import { generationStore } from '@/lib/stores'
 
 /**
  * Recounts an open rollback or regenerate confirm whenever the settle count exceeds the
@@ -20,45 +18,35 @@ export function useLiveRollbackCounts({
   load: (branchId: string, targetId: string) => Promise<RollbackCounts | StoryEntryRejection>
   onCounts: (counts: RollbackCounts) => void
 }): void {
-  const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const targetId = target?.targetId ?? null
-  const countedAtSettle = target?.countedAtSettle ?? null
-  // The recount effect's cleanup is what drops a stale recount, so a host's fresh callbacks
-  // each render must not re-run it: they ride in a ref.
-  const latest = useRef({ load, onCounts })
-  useEffect(() => {
-    latest.current = { load, onCounts }
-  })
-
-  useEffect(() => {
-    if (targetId == null || countedAtSettle == null || settleCount <= countedAtSettle)
-      return undefined
-    let live = true
-    latest.current.load(branchId, targetId).then(
-      (result) => {
-        if (!live) return
-        if ('status' in result) {
-          logger.warn('reader.rollback_recount_rejected', {
+  useSettleReread({
+    targetKey: targetId == null ? null : `${branchId}:${targetId}`,
+    countedAtSettle: target?.countedAtSettle ?? null,
+    onSettle: (isLive) => {
+      if (targetId == null) return
+      load(branchId, targetId).then(
+        (result) => {
+          if (!isLive()) return
+          if ('status' in result) {
+            logger.warn('reader.rollback_recount_rejected', {
+              branchId,
+              entryId: targetId,
+              code: result.code,
+              reason: result.reason,
+            })
+            return
+          }
+          onCounts(result)
+        },
+        (error: unknown) => {
+          if (!isLive()) return
+          logger.error('reader.rollback_recount_failed', {
             branchId,
             entryId: targetId,
-            code: result.code,
-            reason: result.reason,
+            error: error instanceof Error ? error.message : String(error),
           })
-          return
-        }
-        latest.current.onCounts(result)
-      },
-      (error: unknown) => {
-        if (!live) return
-        logger.error('reader.rollback_recount_failed', {
-          branchId,
-          entryId: targetId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      },
-    )
-    return () => {
-      live = false
-    }
-  }, [branchId, targetId, countedAtSettle, settleCount])
+        },
+      )
+    },
+  })
 }

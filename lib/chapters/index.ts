@@ -10,6 +10,7 @@ export {
 export type { ChapterDraft, ChapterDraftRow, ChapterIssue } from './chapter-draft'
 export { closeAfterDelete } from './close-after-delete'
 export type { ChapterDeleteAfter } from './close-after-delete'
+export { isCloseOwed } from './close-owed'
 export { closeCandidates, closeCandidateWindow } from './close-candidates'
 export type { CloseCandidate } from './close-candidates'
 export { CHAPTER_CLOSE_KIND, CHAPTER_CLOSE_RERUN } from './kind'

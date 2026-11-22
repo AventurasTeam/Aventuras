@@ -67,6 +67,8 @@ import {
   headTurnIdsOf,
   inlineEditSaveGate,
   rowGateReason,
+  rowReversalFlags,
+  undoHold,
 } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
@@ -89,7 +91,10 @@ import {
   type StreamingTokens,
 } from '@/components/reader/streaming-tokens'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
-import { suggestionRefreshBlocked } from '@/components/reader/suggestion-refresh-gate'
+import {
+  suggestionRefreshBlocked,
+  suggestionRefreshHoldReason,
+} from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
   closeResolvedEntry,
@@ -118,6 +123,7 @@ import {
   generationGateReason,
   headReversalGateReason,
   selectHeadReversalRunKind,
+  selectRerunRunning,
   selectStorySettingsGenerationRunKind,
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -299,6 +305,12 @@ export default function ReaderComposerRoute() {
   // interrupting it (principles.md → Edit restrictions during in-flight generation).
   const headReversalGateHeld = generationStore.useGeneration((s) =>
     isHeadReversalBlocked(s.txState, branchId),
+  )
+  // A re-run refuses CTRL-Z and holds every stamped row's ↻ and ×; the document applies it per row.
+  const rerunRunning = generationStore.useGeneration((s) => selectRerunRunning(s.txState, branchId))
+  // ⟳ alone, through a re-run's whole chain; a string or undefined, so the selector is stable.
+  const refreshHoldReason = generationStore.useGeneration((s) =>
+    suggestionRefreshHoldReason(s.txState, branchId),
   )
   // Set around this route's submitTurn, whose pending mark alone holds the gaps around its runs.
   const [sendPending, setSendPending] = useState(false)
@@ -813,6 +825,18 @@ export default function ReaderComposerRoute() {
     [editRequests],
   )
   const editHeadTurnIds = useMemo(() => headTurnIdsOf(entries, tailEntryId), [entries, tailEntryId])
+  // An open confirm's reversal is held as its row's ↻ or × is, so a confirm a refusal re-opened
+  // can't press into the run that refused it.
+  const rollbackBlockedReason =
+    rollback != null &&
+    rowReversalFlags({
+      rowId: rollback.targetId,
+      headTurnIds: editHeadTurnIds,
+      editGate,
+      reversalHeld: rerunRunning && rows.get(rollback.targetId)?.chapterId != null,
+    }).reversalDisabled
+      ? rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason })
+      : undefined
   const {
     guard,
     navigateGuarded,
@@ -1691,14 +1715,16 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
-    // Undo of the turn is a head reversal, live through a pass; the action refuses any other
-    // target with `gated`. Redo never is one, so it keeps the whole gate. An open editor holds
-    // both, the gate's reason outranking its own.
+    // Undo of the turn is a head reversal, live through a pass; the action refuses any other target
+    // with `gated`, and every target while a re-run runs. Redo never is one: whole gate. An open
+    // editor holds both, the gate's reason outranking its own.
     const held = t('reader:editFocus.held')
-    const undo = heldControl(headReversalBlocked, editorOpen, {
-      gate: headReversalReason,
-      held,
+    const undoGate = undoHold({
+      headReversalBlocked,
+      rerunRunning,
+      reasons: { gate: gateReason, headReversal: headReversalReason },
     })
+    const undo = heldControl(undoGate.blocked, editorOpen, { gate: undoGate.reason, held })
     const redo = heldControl(actionsBlocked, editorOpen, { gate: gateReason, held })
     return {
       id: 'reader',
@@ -1738,6 +1764,7 @@ export default function ReaderComposerRoute() {
     actionsBlocked,
     headReversalBlocked,
     headReversalReason,
+    rerunRunning,
     gateReason,
     editorOpen,
     entries.length,
@@ -1794,6 +1821,7 @@ export default function ReaderComposerRoute() {
     editingRow,
     editGate,
     gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
+    stampedReversalsHeld: rerunRunning,
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     cutOffFixLabel: cutOffFix?.label,
@@ -1939,7 +1967,8 @@ export default function ReaderComposerRoute() {
               categories={suggestionCategories}
               errorMessage={stripErrorMessage}
               errorFix={guardedStripFix}
-              canRefresh={canRefreshSuggestions}
+              canRefresh={canRefreshSuggestions && refreshHoldReason == null}
+              refreshDisabledReason={refreshHoldReason}
               onTapChip={handleTapChip}
               onRefresh={handleRefreshSuggestions}
               onCancel={handleCancelSuggestions}
@@ -1994,6 +2023,7 @@ export default function ReaderComposerRoute() {
           targetEntryNumber={rollback.targetNumber}
           counts={rollback.counts}
           variant={rollback.mode}
+          blockedReason={rollbackBlockedReason}
           onConfirm={() =>
             runAction(confirmRollback(), {
               event:

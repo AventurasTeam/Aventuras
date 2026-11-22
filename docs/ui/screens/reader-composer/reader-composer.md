@@ -1259,6 +1259,13 @@ spinner **instead of** the ⟳ Generate button for the turn's
 duration, rather than offering to generate the very thing the
 running turn produces.
 
+**⟳ during a close's re-run.** While a re-run's chain holds the branch,
+its catch-up pass included, ⟳ disables with the re-run's tooltip,
+`Re-running the chapter's close. Cancel to edit.`, and a refresh
+started any other way is refused. The chips stay live: a tap inserts
+text and writes nothing, so it can't log above the re-run's floor
+([`principles.md → Affordance loci`](../../principles.md#affordance-loci)).
+
 **Orphan categories.** A chip whose stored `categoryId` no longer
 resolves (user deleted the category since emission) renders with
 category label `(removed)`, neutral fallback color from the palette,

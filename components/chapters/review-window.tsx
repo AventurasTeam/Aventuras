@@ -1,8 +1,9 @@
 import { TriangleAlert } from 'lucide-react-native'
-import type { ReactElement } from 'react'
+import { useEffect, useRef, type ReactElement } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { DeltaLogRow, type Delta, type DeltaOp } from '@/components/compounds/delta-log-row'
+import { ReasonButton } from '@/components/compounds/reason-button'
 import {
   Accordion,
   AccordionContent,
@@ -42,6 +43,14 @@ export type EntryLink = { label: string; onPress: () => void }
 export type ReviewWindowProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Runs once a close has finished: after the phone Sheet's slide-out, at once above phone. */
+  onExited?: () => void
+  /** Phone only: the Sheet has presented, so its dismissal will report `onExited`. */
+  onPresented?: () => void
+  /** `Re-run…` in the footer; absent, no button (the host gives it on the latest chapter's only). */
+  onRerun?: () => void
+  /** Why `Re-run…` is disabled: the gate's reason in flight, else a close owed. */
+  rerunDisabledReason?: string
   /** `Review — Chapter <N>: <title>`, built by the host. */
   title: string
   state: ReviewWindowState
@@ -56,12 +65,20 @@ type RowCallbacks = Pick<ReviewWindowProps, 'pressOf' | 'entryLinkOf'> & { isPho
 export function ReviewWindow({
   open,
   onOpenChange,
+  onExited,
+  onPresented,
+  onRerun,
+  rerunDisabledReason,
   title,
   state,
   pressOf,
   entryLinkOf,
 }: ReviewWindowProps): ReactElement {
   const isPhone = useTier() === 'phone'
+  // The Dialog has no exit animation, so above phone the exit ends as it closes.
+  useEffect(() => {
+    if (!open && !isPhone) onExited?.()
+  }, [open, isPhone, onExited])
   const list = (
     <ContextScrollView
       testID="review-window-list"
@@ -77,12 +94,26 @@ export function ReviewWindow({
       <Text>{t('chapters:review.done')}</Text>
     </Button>
   )
+  const rerun =
+    onRerun == null ? null : (
+      <ReasonButton
+        layout={isPhone ? 'stretch' : 'start'}
+        variant="secondary"
+        disabled={rerunDisabledReason != null}
+        disabledReason={rerunDisabledReason}
+        onPress={onRerun}
+      >
+        <Text>{t('chapters:actions.rerunFromReview')}</Text>
+      </ReasonButton>
+    )
   if (isPhone) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={title}>
-        <SheetContent size="tall" className="gap-4">
+        <SheetContent size="tall" className="gap-4" onDismissed={onExited}>
+          <PresentedSignal onPresented={onPresented} />
           <Heading level={2}>{title}</Heading>
           {list}
+          {rerun}
           {done}
         </SheetContent>
       </Sheet>
@@ -97,10 +128,22 @@ export function ReviewWindow({
           </DialogTitle>
         </DialogHeader>
         {list}
-        <DialogFooter>{done}</DialogFooter>
+        <DialogFooter>
+          {rerun}
+          {done}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
+}
+
+// gorhom mounts a modal's children only once it presents, and a presented sheet reports its exit.
+function PresentedSignal({ onPresented }: { onPresented?: () => void }): null {
+  const onPresentedAtMount = useRef(onPresented)
+  useEffect(() => {
+    onPresentedAtMount.current?.()
+  }, [])
+  return null
 }
 
 function ReviewBody({ state, ...rows }: RowCallbacks & { state: ReviewWindowState }): ReactElement {

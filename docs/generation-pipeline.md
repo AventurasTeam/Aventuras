@@ -59,6 +59,7 @@ interface Pipeline {
   affordance: 'invisible' | 'pill-only' | 'pill-and-banner'
   gateBehavior: 'hard-gate' | 'no-gate' // 'scoped-gate' deferred; no v1 kind declares 'no-gate'
   interruptible?: 'pass' | 'close' // a head reversal or Cancel ends me and defers me, in this txState.deferred slot, to the next turn; a close's re-run defers nothing, and holds a reversal reaching its chapter; see Prose reversals and the interrupt
+  runSlot?: (branchId: string) => 'pass' | 'close' | 'rerun' | null // read at each reserve, a chained successor's included: the slot the run takes in place of `interruptible`, or null to take that one; the close's reads `pendingRerun`
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState, ctx) => string | null | Promise<string | null> // awaited at commit while the run holds the gate; sources its own deps
   onPreflightFailure?: (ctx, error: PipelineError) => Promise<void> // pre-flight halts before phase 0, so only this hook ever sees that failure
@@ -129,6 +130,7 @@ type PipelineEvent =
       actionId: string
       beforeTurn: boolean // Send's work before the turn (RunState.beforeTurn), its chained successors included
       outcome: 'completed' | 'aborted' | 'failed'
+      rerun?: true // a close's re-run, whose slot is 'rerun'; absent on every other run
       error?: PipelineError
     }
   | { type: 'phase_start'; runId: string; name: string }
@@ -491,6 +493,17 @@ them. Routing either through `delta_emitted` would append undo rows
 for embeddings that a CTRL-Z must not remove. Each takes
 `ctx.runInTransaction` rather than the module-global handle, so its
 writes and the run's reads cannot land on different databases.
+
+**One carve-out for a phase that reverses.** A close's re-run reverses
+the chapter's lore work in its `reversal` phase, before its tasks write
+([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
+That reversal prunes deltas and writes `reversal_journals`, which the
+rule above keeps from every phase. It runs through the action port's
+`reverseCloseForRerun`, under the branch write lock held exclusive
+([Branch write lock](#branch-write-lock)), as one action-layer
+transaction with the journal it writes
+([Reverse-replay](#reverse-replay)). No other phase reverses, prunes or
+journals.
 
 ### Abort
 
@@ -1178,7 +1191,8 @@ CREATE TABLE pipeline_runs (
                                -- NULL for hypothetical non-story-scoped runs
   started_at  INTEGER NOT NULL,
   finished_at INTEGER NULL,
-  outcome     TEXT    NULL    -- 'completed' | 'aborted' | 'failed' | 'recovered'
+  outcome     TEXT    NULL,   -- 'completed' | 'aborted' | 'failed' | 'recovered'
+  rerun_chapter_id TEXT NULL  -- a close's re-run once its reversal committed: its chapter
 )
 ```
 
@@ -1188,14 +1202,21 @@ CREATE TABLE pipeline_runs (
   `abortRun` writes them inside the reversal's own transaction, so a
   reversal that rolls back leaves the row open for the
   [startup recovery pass](#startup-recovery-pass) to retry.
+- A close's re-run sets `rerun_chapter_id` in its `reversal` phase's
+  transaction, beside its journal. Recovery reads it to know the run for
+  a re-run exactly: with its journal, the write-back runs as usual; with
+  none (an abort's write-back that failed, then a sweep that dropped the
+  journal before the next boot), it takes the fallback, undoing the
+  close with the recovery modal's re-run line, or, with no chapter row
+  left, reverses the group alone.
 
 Atomicity windows worth being honest about:
 
 - Between start marker and first delta — nothing to reverse, just
   delete the row. A close's re-run is the exception once its reversal
   has committed: its journal sits under the run's `actionId` with no
-  delta of the run's own, and recovery writes it back, or undoes the
-  close when it can't
+  delta of the run's own, and its marker carries `rerun_chapter_id`, so
+  recovery writes the journal back, or undoes the close when it can't
   ([Reverse-replay](#reverse-replay)).
 - Between consecutive deltas — standard reverse-replay path.
 - Between the final delta and the `commitRun` marker UPDATE —
@@ -1246,36 +1267,47 @@ Invocation contract:
 async function recoverInFlightRuns(): Promise<RecoveryReport> {
   const orphans = await db.query(
     // Newest first, as undo goes: a close's re-run may have journaled an older orphan's rows.
-    'SELECT * FROM pipeline_runs WHERE finished_at IS NULL ORDER BY started_at DESC',
+    // A pass and its chained successor can share a started_at; rowid breaks the tie.
+    'SELECT * FROM pipeline_runs WHERE finished_at IS NULL ORDER BY started_at DESC, rowid DESC',
   )
   const reversed: RecoveredRun[] = []
   const failures: RecoveryFailure[] = []
 
   for (const orphan of orphans) {
     try {
+      const settled = { reversed: false }
       // The marker write joins the reversal's transaction, so it never claims a
-      // reversal that rolled back. A pre-first-delta orphan's row is deleted
-      // instead: it has no diagnostic value.
-      const deltaCount = await reverseReplayDeltas(orphan.action_id, (count) => [
-        count === 0
-          ? { sql: 'DELETE FROM pipeline_runs WHERE run_id = ?', params: [orphan.run_id] }
-          : {
-              sql: "UPDATE pipeline_runs SET finished_at = ?, outcome = 'recovered' WHERE run_id = ?",
-              params: [Date.now(), orphan.run_id],
-            },
-      ])
-      if (deltaCount === 0) continue
+      // reversal that rolled back. An orphan that reversed nothing and wrote no
+      // journal back is deleted instead: it has no diagnostic value.
+      const result = await reverseRunGroup(
+        { actionId: orphan.action_id, branchId: null, rerunChapterId: orphan.rerun_chapter_id },
+        (anything) => {
+          settled.reversed = anything
+          return [
+            anything
+              ? {
+                  sql: "UPDATE pipeline_runs SET finished_at = ?, outcome = 'recovered' WHERE run_id = ?",
+                  params: [Date.now(), orphan.run_id],
+                }
+              : { sql: 'DELETE FROM pipeline_runs WHERE run_id = ?', params: [orphan.run_id] },
+          ]
+        },
+      )
+      if (!settled.reversed) continue
+      const closeUndone = result.journal === 'undone' && result.chapterNumber !== null
       reversed.push({
         runId: orphan.run_id,
         kind: orphan.kind,
         actionId: orphan.action_id,
         storyId: orphan.story_id,
-        deltas: deltaCount,
+        deltas: result.deltas,
+        ...(closeUndone ? { closeUndone: true } : {}),
       })
       logger.debug('pipeline.recovered', {
         runId: orphan.run_id,
         kind: orphan.kind,
-        deltas: deltaCount,
+        deltas: result.deltas,
+        journal: result.journal,
       })
     } catch (e) {
       failures.push({ runId: orphan.run_id, kind: orphan.kind, error: e })
@@ -1383,6 +1415,10 @@ So this is not an observability-only state:
   was refused as an integrity error (`ReversalIntegrityError`): every
   boot refuses that one again, so its copy says the update could not
   be undone without breaking later changes and promises no retry.
+- A failure whose reversal committed with a re-run's close undone, and
+  only the store sync then failed, renders as the reversed close does:
+  the chapter-close copy plus the close-undone line. Its marker is
+  settled, so that report is the only word of it, and no retry follows.
 
 A failure of the pass itself is the query that lists the orphans
 throwing, the one thing the per-orphan catch can't hold. Boot logs
@@ -1836,38 +1872,63 @@ row, which a re-run adds to.
 lore work, every delta in those groups except those on `chapters` and
 `story_entries`, with a delete's set and plan, pruning as a delete
 does. In the same transaction, before the plan's ops run, it writes a
-journal: the before-image of every row the plan writes, whole or
-absent, and of every delta row it prunes or edits (the pruned deltas, a
-held delete's rewritten payload, a re-owned create, a survivor's
-rewritten prior value). The journal is one
-`reversal_journals` row keyed by the re-run's `action_id`. Whenever the
-re-run's group reverses, by CTRL-Z, an abort or crash recovery, the
-same transaction writes the journal back after the group's own deltas
-reverse, found by the `actionId` even when the group logged no delta
-of its own, as when a re-run stops between its reversal and its first
-write: each row and delta row to its before-image, a delta at its
-first log position, every embedded row it writes flagged stale and
-every row it removes swept from the vector tables, its store patches
-after the group's own, and the journal row goes.
+journal: the chapter's id and number, the floor, the before-image of
+every row the plan writes, whole or absent, and of every delta row it
+prunes or edits (the pruned deltas, a held delete's rewritten payload, a
+re-owned create, a survivor's rewritten prior value), and every earlier
+journal row the plan drops, whole. The floor is the highest
+`log_position` the reversal leaves on the branch, read before the
+transaction over the deltas the plan doesn't prune; under the gate the
+re-run's own writes start at the floor plus one. The journal is one
+`reversal_journals` row keyed by the re-run's `action_id`, and a close
+that changed nothing in the world still gets one, empty but for the
+chapter and the floor, so an abort can tell "reversed nothing" from
+"never reversed". Whenever the re-run's group reverses, by CTRL-Z, an
+abort or crash recovery, the same transaction writes the journal back
+after the group's own deltas reverse, found by the `actionId` even when
+the group logged no delta of its own, as when a re-run stops between
+its reversal and its first write: each row and delta row to its
+before-image, a delta at its first log position, every embedded row it
+writes flagged stale and every row it removes swept from the vector
+tables, its store patches after the group's own, and the journal row
+goes.
 
-The write-back is exact only while nothing but the re-run's own
-writes and their undo touched what the journal covers. So it checks
-that the group is whole and that no delta outside it sits above the
-group's first log position, and a reversal that sweeps from below that
-position while sparing the group, such as a rollback or regenerate of a
-turn between the chapter's end and the re-run, drops the journal, in
-the planner every sweep shares. When the journal is gone or the check
-fails, the re-run's reversal takes the chapter's other close groups
-with it, as a delete does: the close is undone altogether, and a toast
-says `Chapter <N>'s earlier close couldn't be restored, so its close was undone.` (the recovery modal's re-run line after a crash). Boot
-recovery takes orphans newest first, so a re-run's write-back runs
-before any older orphan it journaled. A reversal that takes the group
-otherwise, a rollback into the chapter or a delete, takes the journal
-with it; a divider-only removal leaves the group's lore deltas and so
-its journal; a later re-run's journal holds this one's row as a
+The write-back is exact only while nothing but the re-run's own writes
+and their undo touched what the journal covers. So, before any op, it
+checks that the journal row is present, that no delta outside the group
+sits above the floor, and that the group's deltas fill every position
+from the floor plus one to its highest: positions are `MAX + 1` and a
+close keeps a stopped task's writes, so a whole group is consecutive.
+The planner every sweep shares drops a re-run's journal when the
+sweep's set:
+
+- removes any of that re-run's deltas outside `chapters` and
+  `story_entries`: a rollback into the chapter, a delete, a later
+  re-run's own reversal, or a rollback past the chapter's end whose
+  closure reaches a row the re-run wrote;
+- removes or rewrites a delta at or below the floor that is neither a
+  delta on the chapter's own `chapters` row, whatever its source, nor a
+  `chapter_close` stamp on `story_entries`: a rollback or regenerate of
+  a turn between the chapter's end and the re-run; or
+- removes the group's last remaining delta.
+
+A divider-only removal takes only the chapter row's deltas and the
+stamps, a card Save's rename of the row included, so the journal stays
+and the write-back then restores the first close's lore without a
+divider, unless that removal takes the group's last delta (a re-run that
+wrote only its report, whose group is that one delta). When the journal is gone or the check fails, the re-run's
+reversal takes the chapter's other close groups with it, as a delete
+does, and deletes the journal row: the close is undone altogether, and a
+toast says
+`Chapter <N>'s earlier close couldn't be restored, so its close was undone.`
+(the recovery modal's re-run line after a crash). With no journal and
+no chapter row left, a divider-only removal and then a sweep that
+dropped the journal, the group reverses alone. Boot recovery takes
+orphans newest first, so a re-run's write-back runs before any older
+orphan it journaled. A later re-run's journal holds this one's row as a
 before-image. CTRL-Z of a re-run isn't redoable, and it clears its
-branch's redo stack, since a later edit's snapshot there can hold the re-run's
-values
+branch's redo stack, since a later edit's snapshot there can hold the
+re-run's values
 ([`memory/chapter-close.md → Re-running a close`](./memory/chapter-close.md#re-running-a-close)).
 
 **Restored rows always stamp the executing branch's `branch_id`.**
@@ -2830,15 +2891,18 @@ anchor for committed positions.
 Every `applyDeltaAction` and `applyDeltaActionGroupWithOutcomes` (which
 `applyDeltaActionGroup` wraps) takes a per-branch
 write lock in shared mode, inside the entry metadata lock and before
-its row keys. Two reversals take it exclusive: a prose reversal around
-its sweep, once the interrupt has ended any pass or close, and an
+its row keys. Three reversals take it exclusive: a prose reversal
+around its sweep, once the interrupt has ended any pass or close; an
 `interruptible` run's abort around its own reverse-replay, which the
 orchestrator holds under the run's `actionId` through the action port
-(`holdBranchWriteExclusive` / `releaseBranchWriteExclusive`). Boot
+(`holdBranchWriteExclusive` / `releaseBranchWriteExclusive`); and a
+close's re-run's `reversal` phase around its journaled reversal, held
+the same way, which checks the run's abort signal once the hold is
+granted, so a Cancel that landed while it queued costs no reversal. Boot
 recovery runs before any branch loads. The rollback preview writes
 nothing but takes the lock shared around its set selection and the
-counts it reads from that set, so neither reversal can land between
-those reads; the chapter delete preview holds it the same way. The
+counts it reads from that set, so no reversal can land between those
+reads; the chapter delete and re-run previews hold it the same way. The
 rollback preview leaves a running pass's or close's own rows out of
 every count, since confirming interrupts that run and its abort
 reverses them before the sweep; the set keeps them, so a run that

@@ -295,7 +295,8 @@ fails at pre-flight too; unknown passes.
 - The close's run-scoped state sits behind typed accessors in
   `lib/pipeline/definitions/close-intermediates.ts`, whose keys stay
   private: the range, `{ chapterId, startEntryId, endEntryId }`, the
-  ledger and, from 5.5a, the close-wide id map. Phases read the range
+  ledger and, from 5.5a, the close-wide id map; the parked model config
+  `metadata` resolves once, and a re-run's floor. Phases read the range
   from SQL by these ids. 5.8 adds its parts and 5.9 its clusters there,
   each as an accessor.
 - A failed phase returns `{ status: 'failed', error }`
@@ -546,9 +547,11 @@ banner is the only place phone names the wait). Phase 0's passes keep
 the pass's labels: `Updating memory before your turn…` under Send, whose
 `beforeTurn` each successor inherits from the chain's start, and
 `Updating memory…` outside one. Until 5.5a lands, a close shows only the
-phase labels. A re-run (5.13) shows the same labels and count, plus its
-own label for the `reversal` phase, which a close's no-op pass through
-that phase never shows.
+phase labels. A re-run (5.13) shows a close's labels and count from its
+`agent` phase on, its own label for the `reversal` phase,
+`Reversing the chapter's close…`, which a close's no-op pass through
+that phase never shows, and plain `Closing chapter…` in `boundary` and
+`metadata`, since neither chooses an end nor writes a summary then.
 
 ### C7 — Chapter overlays
 
@@ -559,7 +562,7 @@ builds on it. Consumers: 5.3, 5.7, 5.13.
 `lib/stores/ui/chapter-overlays.ts` exposes
 `openCloseModal({ branchId, endEntryId? })` and
 `openReviewWindow({ chapterId })`, and from 5.13, which provides it,
-`openRerunConfirm({ branchId, chapterId })`, and one host for all,
+`openRerunConfirm({ branchId, chapterId, fromReview? })`, and one host for all,
 `ChapterOverlaysHost` in `components/chapters/chapter-overlays-host.tsx`,
 mounts at the app root beside `MemoryRunToasts` (`app/_layout.tsx:116-117`).
 The commit banner's `Review` opens the window from whichever in-story
@@ -570,7 +573,9 @@ per-route mount would touch every in-story route.
   itself, and the commit banner's done state goes with its chapter by
   the same rule, so a stale `Review` opens nothing. A re-run's commit, or
   its undo, changes the row's `closeReportActionId`, and the window
-  closes the same way. The re-run confirm stacks over the window.
+  closes the same way. From the window, `Re-run…` closes it first and
+  opens the re-run confirm alone after the guard, never over it; the
+  confirm's `Cancel` reopens it.
 - A row press goes through the current surface's guard. A root host
   doesn't hold one, and `useSurfaceNavigate` reuses a mounted screen
   with `setParams`, so a press over a dirty World pane could swap the
@@ -863,7 +868,8 @@ with a reason, per canon's "unbuilt disables, not hides", as in M4. Each
 flip is a line or two. `Review changes` is the exception: canon hides it
 on a chapter no close wrote, so it ships hidden. 5.13 adds
 `Re-run close…` and the review window's `Re-run…` to hosts already on
-main, so neither flips.
+main, so neither flips. Its confirm's `Re-run on new branch` waits on
+M6.3's fork, so it renders disabled until M6.3 flips it.
 
 | Flip                          | Provider | Host |
 | ----------------------------- | -------- | ---- |
@@ -872,6 +878,7 @@ main, so neither flips.
 | `Close chapter…`              | 5.10     | 5.7  |
 | `Delete…`                     | 5.12     | 5.7  |
 | `Review changes`, from hidden | 5.11     | 5.7  |
+| `Re-run on new branch`        | M6.3     | 5.13 |
 
 ## Definition of done
 
@@ -980,9 +987,11 @@ main, so neither flips.
   own either: C4's `survivor` and refused rows, C5's boundaries rule, C7's
   default guard, C11's merge protection and start-row rule, C14's result
   and C15's `refetch()`. Read them all at slice planning.
-- **Sizes.** 5.13, added 2026-11-13, is estimated at 22 to 23 tasks;
-  the developer kept it one slice (2026-11-14), run as a two-PR stack,
-  since a split frees no dependency edge.
+- **Sizes.** 5.13, added 2026-11-13, was estimated at 22 to 23 tasks
+  and planned at 29 (2026-11-21); the developer kept it one slice, run
+  as a three-PR stack by layer under CodeRabbit's file cap (the journal
+  substrate; the run, the action and the round trip; the UI, the E2E
+  and canon), since a split frees no dependency edge.
   5.5a, 5.8 and 5.10 sit close to the ceiling, at 16 to 20
   tasks, on estimates that grew by about a tenth through the audit. Check
   each at its plan skeleton.

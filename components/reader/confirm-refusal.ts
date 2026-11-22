@@ -1,4 +1,6 @@
 import {
+  CHAPTER_DELETE_REFUSAL,
+  MANUAL_CLOSE_REFUSAL,
   STORY_ENTRY_REJECTION,
   type CountsChangedRejection,
   type RegenerateRejectionCode,
@@ -49,12 +51,29 @@ export function regenerateRefusalToast(
   return regenerateRefusalCopy(refusal)
 }
 
+// A run that started between the confirm's last enabled render and the press: the confirm stays
+// open, held while that run holds its action, rather than closing on a failure.
+const IN_FLIGHT_CODES: ReadonlySet<string> = new Set([
+  CHAPTER_DELETE_REFUSAL.inFlight,
+  STORY_ENTRY_REJECTION.inFlight,
+  MANUAL_CLOSE_REFUSAL.busy,
+  'generation-in-flight' satisfies RegenerateRejectionCode,
+])
+
+/** The delete, rollback and re-run confirms' one rule for an in-flight refusal. */
+export function keepsConfirmOpen(code: string): boolean {
+  return IN_FLIGHT_CODES.has(code)
+}
+
 export function rollbackRefusalCopy(
   refusal: RollbackRefusal,
-): 'reader:rollbackCountsChanged' | 'reader:rollbackFailed' {
-  return refusal.code === STORY_ENTRY_REJECTION.countsChanged
-    ? 'reader:rollbackCountsChanged'
-    : 'reader:rollbackFailed'
+):
+  | 'reader:rollbackCountsChanged'
+  | 'reader:actions.blockedWhileGenerating'
+  | 'reader:rollbackFailed' {
+  if (refusal.code === STORY_ENTRY_REJECTION.countsChanged) return 'reader:rollbackCountsChanged'
+  if (keepsConfirmOpen(refusal.code)) return 'reader:actions.blockedWhileGenerating'
+  return 'reader:rollbackFailed'
 }
 
 /**

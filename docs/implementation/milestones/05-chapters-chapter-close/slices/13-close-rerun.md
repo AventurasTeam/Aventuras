@@ -187,7 +187,7 @@ re-run, and how `Re-run…` meets the surface guard from the review window.
 
 **The journaled reversal** (`lib/actions/delta/rerun-journal.ts`).
 
-- `ReversePlan` (`lib/actions/delta/reverse-replay.ts:61`) gains what the
+- `ReversePlan` (`lib/actions/delta/reverse-replay.ts:89`) gains what the
   journal needs and doesn't expose today: the ids of the delta rows its
   `pruneOps` remove or re-own (the set's rows, `prunedHolders` and
   `strandedWrites`), the held-delete holders whose payload its `ops`
@@ -199,15 +199,15 @@ re-run, and how `Re-run…` meets the surface guard from the review window.
      a divider-only removal's seed, through `selectReversalSet`.
   2. `buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })`.
   3. The before-images, read before the transaction: a whole row per
-     `(table, id)` in the plan's `patches` (`currentRow` in
-     `lib/actions/delta/redo.ts:87` reads one; it is module-private and
-     gains an export), the delta rows by the ids
+     `(table, id)` in the plan's `patches` (`readCurrentRow` in
+     `lib/actions/delta/redo.ts:127` reads one; it was `currentRow`,
+     module-private, and gains an export), the delta rows by the ids
      above, and any journal row the plan drops. `runInTransaction` takes
      `SqlOp[]` and returns nothing (`lib/db/types.ts`), so no read can
      happen inside it; the reads are safe because the run holds the gate
      and the phase holds the branch exclusive.
-  4. The floor, from the plan, before the transaction: the highest
-     position whose delta the plan doesn't prune. A plain
+  4. The floor, before the transaction: `MAX(log_position)` over the
+     branch's deltas whose ids the plan doesn't prune. A plain
      `MAX(log_position)` read before the transaction counts a top delta the
      plan prunes, such as a user edit on a close-created row above the
      close's report: it reads one too high, and a bound taken from it would
@@ -230,17 +230,23 @@ set:
 - takes any of that re-run's deltas outside `chapters` and
   `story_entries`, whole (a rollback into the chapter, a delete, a later
   re-run's own reversal) or in part (a rollback past E whose closure
-  reaches a row created after E that the re-run wrote); or
-- prunes or edits a delta below that journal's floor that is neither a
-  delta on the chapter's own `chapters` row, whatever its source, nor one
-  of its stamps (a rollback or regenerate of a turn between the chapter's
-  end and the re-run).
+  reaches a row created after E that the re-run wrote);
+- prunes or edits a delta at or below that journal's floor that is
+  neither a delta on the chapter's own `chapters` row, whatever its
+  source, nor a `chapter_close` stamp (a rollback or regenerate of a turn
+  between the chapter's end and the re-run); or
+- takes the group's last remaining delta: at least one of its deltas,
+  leaving none. A report-only re-run after a divider-only removal would
+  otherwise leave a journal no CTRL-Z reaches; a group already empty
+  mid-run, between the reversal and its first write, matches nothing,
+  since no set takes from it.
 
 A divider-only removal takes only the chapter row's deltas and the stamps,
-so the journal stays, as canon keeps it. Its closure takes every write to
+so the journal stays, as canon keeps it, unless it takes the group's last
+delta (a re-run that wrote only its report). Its closure takes every write to
 the removed row whatever its source (`writesTo`,
-`lib/actions/delta/row-closure.ts:91-111`), a card Save's `user_edit`
-`updateChapter` included (`lib/chapters/chapter-draft.ts:87`), which is why
+`lib/actions/delta/row-closure.ts:96-120`), a card Save's `user_edit`
+`updateChapter` included (`lib/chapters/chapter-draft.ts:86`), which is why
 the exemption covers the row's every delta: the journal never covers the
 `chapters` row, so pruning them can't make the write-back inexact. One rule in the shared
 planner covers every reversal: CTRL-Z, `rollbackToEntry`, `sweepFrom`'s
@@ -266,7 +272,7 @@ transaction that drops it.
   a divider, as kept work does.
 - **The ops,** after the group's own reversal and prunes in the same
   transaction (`reverseAndPruneDeltaRows` runs `extraOps` after its
-  `pruneOps`, `reverse-replay.ts:727`):
+  `pruneOps`, `reverse-replay.ts:917`):
   - delete each row whose before-image is absent, and sweep its vectors
     (`vecSweepIdsOps`);
   - upsert each other row whole, with `embedding_stale = 1` on every
@@ -286,7 +292,9 @@ transaction that drops it.
 - **Without the journal, or on a failed check,** the caller's set becomes
   the group plus the chapter's other close groups (C13's read), through
   `selectReversalSet`, undoing the close as
-  `removeChapter`'s `'whole'` mode does, and the outcome is `undone` with
+  `removeChapter`'s `'whole'` mode does, with the journal row's delete
+  when one exists, so no orphaned journal stays, and the outcome is
+  `undone` with
   the chapter's number, from the journal, else from the row read before
   the reversal. A group with no chapter
   row left (a divider-only removal took it, then a sweep dropped the
@@ -297,7 +305,7 @@ transaction that drops it.
 
 **The paths that reverse a re-run's group.**
 
-- **An abort.** `reverseReplayDeltas` (`reverse-replay.ts:745`) calls the
+- **An abort.** `reverseReplayDeltas` (`reverse-replay.ts:945`) calls the
   write-back; its zero-delta early return doesn't apply when a journal is
   found. `abortRun` already holds the branch exclusive for any truthy
   `interruptible` (`orchestrator.ts`). Its return type changes, here and on
@@ -319,6 +327,11 @@ transaction that drops it.
   - `RecoveredRun` gains `closeUndone?: true`, and `formatRun`
     (`lib/recovery/copy.ts`) adds canon's line after the close's:
     `The chapter's earlier close couldn't be restored, so its close was undone.`
+  - the re-run's marker carries `rerun_chapter_id` from its reversal's
+    transaction, so recovery knows a re-run exactly: with no journal (a
+    failed abort's write-back, then a sweep that dropped it) it takes the
+    fallback and reports `closeUndone`, or reverses the group alone with
+    no chapter row left.
 - **CTRL-Z** (`lib/actions/story-entries/undo.ts`). A re-run's group is a
   `group` target, as a close's, recognised as the write-back recognises
   one.
@@ -328,7 +341,7 @@ transaction that drops it.
   - It calls `undoRedoStore.clear()` after the commit, also when only the
     store sync failed, as `commitNewAction` does. A later edit's redo
     snapshot can hold the re-run's values, and redo writes an update's whole
-    `rowBeforeUndo` back (`redo.ts:278-291`), which would resurrect them
+    `rowBeforeUndo` back (`redo.ts:329-333`), which would resurrect them
     with no delta behind them.
   - `UndoResult`'s `ok` arm gains `closeUndone?: { chapterNumber }`, and
     the reader's undo handler (`app/reader-composer/[branchId].tsx`) raises
@@ -372,7 +385,7 @@ transaction that drops it.
 **The close pipeline under a re-run** (C2).
 
 - `reversal`, a new member of `CLOSE_PHASE`
-  (`lib/pipeline/definitions/intermediates.ts:18`), listed between
+  (`lib/pipeline/definitions/intermediates.ts:25`), listed between
   `metadata` and `agent` in `chapter-close.ts`, its phase in
   `chapter-close-reversal.ts`. On a close it returns `completed` at once.
   Under a re-run it holds the branch write lock exclusive under the run's
@@ -382,7 +395,7 @@ transaction that drops it.
   reversal, calls `reverseCloseForRerun`, and parks the floor in a new
   `close-intermediates.ts` accessor. A user write dispatched before the run
   reserved has already settled: `driveOrigin` awaits `settleUserWrites`
-  after `beginRun` for every hard-gate origin (`orchestrator.ts:651-653`),
+  after `beginRun` for every hard-gate origin (`orchestrator.ts:670`),
   and the gate holds across a chained successor's handoff. A throw fails
   the run, and its abort finds the journal or none. `generation-pipeline.md → Branch write lock`
   names it as a third exclusive holder, so a rollback preview's reads never
@@ -406,7 +419,7 @@ transaction that drops it.
   `components/compounds/use-memory-run-banner.ts`) gains
   `chrome.memoryBanner.closingReversal`, shown for `reversal` only when the
   run's slot is `'rerun'`. `runNode` sets the phase on every close
-  (`orchestrator.ts:319`), so a close keeps the metadata label through its
+  (`orchestrator.ts:323`), so a close keeps the metadata label through its
   no-op `reversal`. Under a re-run, `boundary` and `metadata` show the plain
   `Closing chapter…`, since neither chooses an end nor writes a summary
   then. A re-run is never before a turn. C6 names the label.
@@ -435,7 +448,7 @@ This slice extends them:
   beside `hasCloseReport`, projected the same way in
   `lib/stores/chapters/chapter-store-projection.ts`: on create, and on an
   update only when `closeReport` is a key of `columns`. The hydrate select
-  (`lib/actions/stories/operational.ts:172`) reads
+  (`lib/actions/stories/operational.ts:173`) reads
   `json_extract(close_report, '$.actionId')`. C4's store test walks a
   re-run's commit and its CTRL-Z too.
 - `loadCloseDeltas` (`lib/history/close-read.ts`) gains a lower bound and
@@ -449,6 +462,11 @@ This slice extends them:
   its CTRL-Z. `CloseResult` gains `actionId` and `rerun`, and the host
   clears it by the same rule, so a re-run's done state replaces a close's
   and its CTRL-Z clears it.
+- `ReviewWindow` stays mounted with `open={false}` through the phone
+  Sheet's exit, its reads off, and the host unmounts it once the exit
+  ends (`onExited`), in one rework with the prune and the remembered
+  window's reopen. Above phone the Dialog has no exit animation, so it
+  unmounts as it closes.
 - **While a re-run runs,** the window shows the first close's report: the
   row's report and `closeReportActionId` don't change until the re-run
   commits, and the window closes then. Once the `reversal` phase has
@@ -493,8 +511,10 @@ close's until this slice.
 - `getCloseRerunPreview(branchId, chapterId, story, ctx)` reads everything
   under one `withBranchWriteShared` hold, as `getChapterDeletePreview`
   does, and returns a `CloseRerunPreview` or the refusal:
-  - **Refusals:** `in-flight`, `not-found`, `not-latest` and `no-close`, as
-    5.12's preview gives them, and `close-owed` on the region the shortcut
+  - **Refusals:** `not-found`, `not-latest`, `no-close` and `integrity`,
+    as 5.12's preview gives them (never `in-flight`: `Re-run close`
+    disables while the gate is closed), and `close-owed` on the region
+    the shortcut
     would leave: a pending manual close whose end entry survives it, or,
     with auto-close on, that region at the threshold with a reply (C10).
   - **Turns since:** a `story_entries` create above the first log
@@ -509,9 +529,15 @@ close's until this slice.
     (`lib/actions/delta/branch-write-lock.ts:1-2`), and an exclusive
     request queued between the two holds deadlocks them.
   - **The reversal's counts,** as 5.12's preview counts its set
-    (`createdLore`, `otherChanges`, `your edits included`), over the
-    re-run's set less every row the shortcut's set holds, so the confirm
-    never counts a change twice.
+    (`createdLore`, `otherChanges`, `your edits included`), taken as after
+    the shortcut's rollback: only the deltas both the re-run's set and
+    the shortcut's set hold are left out, by delta id and not by row, so
+    the confirm never counts a change twice; survivors and ref clears are
+    judged with the shortcut's deltas treated as reversed, and a
+    close-created lore row whose delete the shortcut reverses counts. The
+    closure-side cases the confirm still reads before the shortcut are
+    parked
+    ([`parked.md → A re-run confirm's counts read before its shortcut`](../../../../parked.md#a-re-run-confirms-counts-read-before-its-shortcut)).
   - **Cost:** `tokens`, the `content_tokens` sum over the chapter's
     non-system entries, which is what the parts read; `model`, what
     `lore-mgmt` resolves to for the story, the story's override included.
@@ -525,21 +551,27 @@ close's until this slice.
   pruned the close's into the journal. So a delete after a re-run, and a
   second re-run, count the re-run's lore creates whose rows still
   stand.
-- `startCloseRerun(branchId, chapterId, expected, story, ctx)`, nothing
-  committed before step 4:
-  1. The manual close's start refusals, read up front: the gate
-     (`in-flight`), the branch not open, a pending embedder swap, a busy
-     story and a held branch. `startCloseChain` re-checks them after the
-     shortcut, against a run starting in between.
+- `startCloseRerun(branchId, chapterId, expected, story, ctx)`, shaped as
+  `regenerateTurn` is: one admission, and a pending mark
+  (`generationStore.bracketPendingTurn`) held from before the shortcut
+  until the chain reserves, so no start lands between the shortcut and
+  the reserve. Nothing commits before step 4:
+  1. The manual close's start refusals, read up front as
+     `startCloseChain` reads them: the branch not open, a pending
+     embedder swap, a busy story (`story-busy`) and a held branch.
   2. 5.10's pre-flight over the chain's snapshot; a failure resolves
      `{ outcome: 'preflight-failed', error }`, which the host toasts.
-  3. The preview's refusals, then `counts-changed` against `expected` (the
-     shortcut's target and counts, the reversal's counts), carrying the
-     fresh preview.
-  4. With turns since, `rollbackToEntry(target, { expectedCounts })` in
-     its own bracket; a refusal ends the start.
-  5. `setPendingRerun`, then `startCloseChain` in a `try`/`finally` that
-     clears the record, outside any bracket.
+  3. Under the mark, the preview's refusals, then `counts-changed`
+     against `expected` (the shortcut's target and counts, the
+     reversal's counts), carrying the fresh preview.
+  4. With turns since, the rollback's sweep (`sweepToEntry`) with the
+     confirm's counts, in its own prose-reversal bracket inside the
+     mark; a refusal ends the start.
+  5. `setPendingRerun` under the mark, then `startCloseChain` told the
+     mark is its own (`ownsPendingMark`), with the pre-flight again and
+     an `onReserved` that releases the mark. The store clears
+     `pendingRerun` in the update that ends the chain's last run; a
+     `finally` here is the backstop for a refused start.
 
   It resolves with the chain's end and its kind (`ChainEnd`), or the
   refusal, so the host can tell a re-run's end from a catch-up pass's.
@@ -567,23 +599,25 @@ close's until this slice.
   `components/story-settings/generation-run.ts` tell a re-run from a close
   by its slot, so every disabled control names it.
 - CTRL-Z stays refused while a re-run runs: `undoLastAction`'s gated pass
-  skips the running run and refuses any target but a turn (`undo.ts:84-92`),
+  skips the running run and refuses any target but a turn (`undo.ts:135-144`),
   and the head under a re-run is never a turn. Since every press is
-  refused, the reader's Undo entry (`disabled: headReversalBlocked`,
-  `app/reader-composer/[branchId].tsx:1578`) disables while a `'rerun'` run
+  refused, the reader's Undo entry (`undoGate.blocked`,
+  `app/reader-composer/[branchId].tsx:1727`) disables while a `'rerun'` run
   holds the branch, with the re-run's tooltip, as principles has a blocked
   control do.
-- **The suggestion strip's ⟳** (default under
-  [Open questions](#open-questions)): one pure predicate,
+- **The suggestion strip's ⟳**: one pure predicate,
   `refreshHeldByRerun(txState, branchId)` in `lib/stores/generation`
-  beside `rerunHoldsReversal`, exported from `lib/stores`. The reader
-  route's strip `disabled` (`app/reader-composer/[branchId].tsx:1784`)
-  reads it, with the re-run's tooltip, and `refreshSuggestions`
-  (`lib/actions/suggestions/refresh-suggestions.ts`) refuses with a
-  rejected start, never a throw, logging no delta. Otherwise a refresh's
-  chip delta would sit above the floor and turn the re-run's CTRL-Z into
-  an undone close; the refresh's `blockedBy` lets it start beside a close
-  (`suggestion-refresh.ts:260`).
+  beside `rerunHoldsReversal`, exported from `lib/stores`, true while
+  `pendingRerun` holds the branch, the re-run's catch-up pass included:
+  a refresh started beside the pass would run on into the re-run, since
+  chained successors skip admission. Only ⟳ disables, through the
+  strip's `canRefresh` and a `refreshDisabledReason` tooltip with the
+  re-run's copy; chip taps, which write nothing, stay live.
+  `refreshSuggestions` (`lib/actions/suggestions/refresh-suggestions.ts`)
+  refuses with a rejected start, never a throw, logging no delta.
+  Otherwise a refresh's chip delta would sit above the floor and turn the
+  re-run's CTRL-Z into an undone close; the refresh's `blockedBy` lets
+  it start beside a close.
 
 **The confirm and its entry points.**
 
@@ -591,15 +625,22 @@ close's until this slice.
   AlertDialog per canon's sketch, props in and no store reads, so stories
   run without a database. Title, framing with the model, the count lines
   or `The close changed nothing in the world.`, the shortcut's block when
-  turns followed, the cost line with the token count, the CTRL-Z line,
-  `Cancel` and `Re-run close` (default CTA). A count line at zero is left
-  out, as the delete confirm leaves it. `Re-run close` disables while the
-  gate is closed. Copy goes in the `chapters` namespace.
+  turns followed, the cost line with the token count, the CTRL-Z line. A
+  count line at zero is left out, as the delete confirm leaves it. With
+  no turns since, the footer is `Cancel` and `Re-run close` (default
+  CTA). When turns followed it is canon's three buttons: `Cancel`,
+  `Roll back & re-run` (destructive, the shortcut) and
+  `Re-run on new branch`, rendered disabled with its lands-later tooltip
+  until M6.3 (C16); the block leaves out the fork's sentence and keeps
+  the line that the turns go for good. The confirm actions disable while
+  the gate is closed. Copy goes in the `chapters` namespace.
 - `useCloseRerunConfirm` in `components/chapters/` holds the preview and
-  re-reads it when `settleCount` moves, as `useChapterDeleteConfirm` does,
-  drops a stale read, and closes the confirm with the refusal's toast on a
-  refused re-read.
-- **The host.** `openRerunConfirm({ branchId, chapterId })` in
+  re-reads it when `settleCount` moves, through `useSettleReread` in
+  `hooks/`, the settle effect alone it shares with
+  `useLiveRollbackCounts` and `useChapterDeleteConfirm`; each keeps its
+  own skip, refusal handling and log events. It drops a stale read, and
+  closes the confirm with the refusal's toast on a refused re-read.
+- **The host.** `openRerunConfirm({ branchId, chapterId, fromReview? })` in
   `chapterOverlaysStore` (C7, provided here) runs the registered surface's
   guard before the confirm opens, as `openCloseModal` does, since a re-run
   starts a close run
@@ -619,6 +660,11 @@ close's until this slice.
   confirm on the fresh preview with rollback's toast,
   `The counts changed while this was open. Check them before confirming.`;
   `not-latest` toasts `This is no longer the latest chapter.` and closes;
+  a refusal for a run in flight toasts `Unavailable while generating.`
+  and keeps the confirm open with its actions disabled, as the delete and
+  the reader's rollback confirms do; the disabled actions carry the
+  blocking run's tooltip, falling back to that string only once no gate
+  reason remains (`chapter-overlays-host.tsx`'s `rerunReason ?? held`);
   other refusals toast a failure and close.
 
 - **The card.** `Re-run close…` in `chapter-card.tsx`'s `moreActions`,
@@ -630,14 +676,15 @@ close's until this slice.
   the route's `useChapterProgress` return and `pendingClose`. `closeOwed`
   (`memory-chain.ts`) calls it, and 5.12's `closeAfterDelete` takes its
   `closes-next-send` arm from it, which today restates the same rule, so
-  the rule keeps one copy. From the
-  phone's `⋯` the confirm opens once the menu's Sheet has dismissed,
-  through 5.11's late-dismiss path. `ChapterCard` stays props-only.
+  the rule keeps one copy. From the phone's `⋯` it opens its guard and
+  confirm at once, as `Delete…` does, over the menu's dismissing Sheet:
+  5.11's late-dismiss path is for an entry that opens a Sheet of its own.
+  `ChapterCard` stays props-only.
 - **The review window.** `Re-run…` beside `Done` in the `ReviewWindow`
   footer, on the latest chapter's window only, with the card's disabled
   rules and tooltips, calling `openRerunConfirm` as above. On phone the
-  window's Sheet dismisses before the guard and the confirm, so no surface
-  stacks.
+  window's Sheet starts its slide-out before the guard and the confirm,
+  which may open over it while it exits, never on it.
 - Neither button flips (C16): both land on hosts already on main, live.
 
 **Canon, in the same commits.**
@@ -662,6 +709,15 @@ close's until this slice.
   stacking line in its `Mobile expression`, and the re-run confirm's
   comment and stacking in `chapter-timeline.html`. The wireframe already
   shows the confirm, the card's action and the footer button.
+- `generation-pipeline.md → Writes`: the `reversal` phase's carve-out;
+  `Crash recovery via pipeline_runs marker table`: `rerun_chapter_id`,
+  recovery's order and its settle.
+- `data-model.md → Entry mutability & rollback`: the write-back beside
+  redo as restoring a log position.
+- `rollback-confirm.md → Edge cases`: the in-flight keep-open, which the
+  delete and re-run confirms share.
+- `alert-dialog.md`'s Used-by line for the re-run confirm.
+- The milestone's C7 line, C16's flip row and Sizes.
 
 **Tests and the measure.** The round-trip arms (C9), the unit and
 component tests, the E2E and the Android measure, as
@@ -706,8 +762,10 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 
 **The journal and its write-back.**
 
-1. `lib/actions/delta/rerun-journal.test.ts`, on a close group built as
-   `close-reversal.test.ts` builds one, with a lore create, an entity
+1. `lib/actions/delta/rerun-journal.test.ts`, on a close group built with
+   5.12's `lib/actions/chapters/__tests__/chapter-delete-fixture.ts` and a
+   `merge_happenings` helper lifted from the round trip's `seedInnPair`,
+   with a lore create, an entity
    update, a `merge_happenings` that deleted a loser with its involvements,
    and a later `user_edit` on the created lore row: after
    `reverseCloseForRerun`, the lore row is gone, the entity field and the
@@ -759,16 +817,18 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     `recovered`. Two orphans, a pass whose commit marker failed and a
     re-run that journaled its deltas, recover newest first and leave the
     pass reversed whole. A re-run whose check fails is reported with
-    `closeUndone: true`.
+    `closeUndone: true`, and so is a marker carrying `rerun_chapter_id`
+    with neither journal nor delta, which takes the fallback.
 11. `lib/recovery/copy.test.ts`: a `closeUndone` run adds the fallback
     line after the close's; a restored one doesn't.
-12. `lib/actions/story-entries/undo.test.ts`: after a re-run, CTRL-Z
+12. `lib/actions/story-entries/undo-rerun.test.ts`: after a re-run, CTRL-Z
     leaves `undoRedoStore` empty, also when a mocked store sync throws
     after the commit; a re-run, an edit, CTRL-Z, CTRL-Z, then redo returns
-    `nothing-to-apply` and the edit's value is absent; CTRL-Z during a
+    `nothing-to-apply` and the edit's value is absent; the fallback
+    returns `closeUndone` with the chapter's number. CTRL-Z during a
     re-run, after its `reversal` commits, returns `gated` with the log
-    unchanged; the fallback returns `closeUndone` with the chapter's
-    number.
+    unchanged, in `lib/pipeline/__tests__/rerun-chain.test.ts`, which
+    holds a live chain.
 
 **The round trip (C9).**
 
@@ -810,7 +870,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 
 19. `lib/actions/chapters/close-rerun.test.ts`, refusals before the
     shortcut, each leaving the `story_entries` count and the log as they
-    were: `in-flight`, `not-latest`, `no-close`, `close-owed` (a pending
+    were: `story-busy` for a busy story, `not-latest`, `no-close`,
+    `close-owed` (a pending
     manual close, and auto-close at the threshold after the shortcut),
     `preflight-failed` with `toolCalling` off, and `counts-changed`
     carrying the fresh preview.
@@ -829,8 +890,9 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 22. `lib/stores/generation/rerun-holds.test.ts`, a literal table: a
     stamped target under a `'rerun'` run is held; an unstamped one isn't;
     a stamped one under a close or a pass isn't. `refreshHeldByRerun` reads
-    true under a `'rerun'` run on the branch and false under a close, a
-    pass, or a re-run on another branch.
+    true while `pendingRerun` holds the branch, a catch-up pass of the
+    re-run's chain included, and false under a close, a pass with no
+    record, or a record on another branch.
 23. `lib/actions/story-entries/operational.test.ts` and
     `lib/actions/turns/regenerate-turn.test.ts`: during a re-run,
     `rollbackToEntry` to a stamped entry and `regenerateTurn` of the end
@@ -839,14 +901,16 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     open-region entry interrupts the re-run, whose abort restores the
     close, then lands.
 24. `lib/actions/suggestions/refresh-suggestions.test.ts`: during a
-    `'rerun'` run `refreshSuggestions` resolves a rejected start, starts no
-    run and logs no delta; during a `'close'` run it starts.
+    re-run, and during its catch-up pass, `refreshSuggestions` resolves a
+    rejected start, starts no run and logs no delta; during a close it
+    starts.
 25. `components/story-settings/generation-run.test.tsx`: a re-run's gate
     reason is `Re-running the chapter's close. Cancel to edit.` and a
-    close's keeps its own. The reader's strip `disabled` and its Undo entry
-    read the re-run's hold: both disable during a re-run, with that
-    reason, and stay enabled during a close (a reader-route test, or the
-    pure helpers the route reads).
+    close's keeps its own. The strip's ⟳ (`canRefresh`) and the reader's
+    Undo entry read the re-run's hold: both disable during a re-run, with
+    that reason, chip taps stay live, and both stay enabled during a
+    close (the pure helpers the route reads); each row's ↻ and × disable
+    on a stamped entry under a re-run.
 
 **The review and notices.**
 
@@ -878,9 +942,11 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
 **UI.**
 
 30. `components/chapters/close-rerun-confirm.stories.tsx`, play: with turns
-    since (the block and its counts), without (no block), the close
-    changed nothing (the one line), and `Blocked` with `Re-run close`
-    disabled; `Re-run close` fires the start.
+    since (the block and its counts; `Cancel`, `Roll back & re-run`, and
+    `Re-run on new branch` disabled with its tooltip), without (no block;
+    `Cancel` and `Re-run close`), the close changed nothing (the one
+    line), and `Blocked` with the confirm actions disabled;
+    `Re-run close` and `Roll back & re-run` fire the start.
 31. `components/chapters/use-close-rerun-confirm.test.tsx`: a settle
     re-reads the preview, a stale read is dropped, and a refused re-read
     closes the confirm with its toast.
@@ -895,7 +961,8 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
     latest chapter whose close wrote a seeded change, driving the UI and
     asserting the DB:
     - from the card with turns since: the confirm shows the shortcut's
-      block; confirming removes those entries, and the re-run's scripted
+      block and three buttons, `Re-run on new branch` disabled;
+      `Roll back & re-run` removes those entries, and the re-run's scripted
       tool write lands under a new `action_id` with the report's
       `actionId` equal to it; the banner then reads
       `Chapter <N>'s close re-ran`;
@@ -903,21 +970,22 @@ Unit paths run with `pnpm vitest run --project unit <path>`.
       deltas at their `log_position`s and the seeded change's value, with no
       `reversal_journals` row;
     - from the review window's `Re-run…` with no turns since: the window
-      closes and the confirm opens alone, with no block; its `Cancel`
+      closes and the confirm opens alone, with no block and two buttons;
+      its `Cancel`
       reopens the window; `Re-run…` again and confirming commits the
       re-run, and CTRL-Z restores the close the same way.
 
 **Measure and gates.**
 
-34. The journaled reversal's commit and the write-back, timed on the Fold's
-    release build as 5.5a's Write-burst measure times a burst, over a full
-    close group with lore writes: the group 5.10's reversal-cost item builds
-    from its full `pnpm probe:close` run on 5.2's dataset chapter, not a
-    close the `chapter-metadata` lane wrote alone, whose seed is empty.
-    Implementation notes record the times beside 5.2's 1.1 s stamp burst
-    and 5.5a's group, with the seed's delta count outside `chapters` and
-    `story_entries` and the journal's size in bytes, and the bar set at
-    planning holds (default under [Open questions](#open-questions)).
+34. The journaled reversal's commit and the re-run's CTRL-Z, timed on the
+    Fold's release build: the `reversal` phase's commit behind a
+    temporary mark, and the CTRL-Z, the group's own reversal with the
+    write-back, through `timedReversal`. The group is
+    `pnpm db:seed:dataset`'s close (224 deltas, 89 outside `chapters` and
+    `story_entries`). Implementation notes record the times beside 5.10's
+    399 ms CTRL-Z and 5.2's 1.1 s stamp burst, with the seed's delta count
+    and the journal's size in bytes, and neither stalls the JS thread over
+    500 ms.
 35. `pnpm lint`, `pnpm typecheck`, `tsc -p electron/tsconfig.json`,
     `pnpm lint:docs`, `pnpm format:check`, `pnpm compiler:check` and
     `pnpm test:run` pass, and `pnpm test:e2e -- chapter-close-rerun` passes
@@ -998,12 +1066,18 @@ change amends the scope above.
   which reads any group with no bound to get wrong and speeds
   `reverseReplayDeltas` and CTRL-Z's group read, at an index write per
   delta on every burst.
+
+  Settled at planning (2026-11-21): the default, with no index.
+
 - **What bar does the Android measure hold?** Default: 5.5a's hard bar, no
   JS-thread stall over 500 ms, for the reversal's commit and for the
   write-back each, on the Fold's release build, with wall time reported
   beside 5.10's full-group CTRL-Z. 5.2's 1.1 s is the miss that bar
   replaced, so it is the reference, not the bar. A miss reopens how the
   before-images are read and built, not the journal.
+
+  Settled at planning (2026-11-21): no JS-thread stall over 500 ms for the reversal's commit and for the re-run's CTRL-Z, on the dataset seed's close.
+
 - **What does "the group is whole" mean?** Canon has the write-back check
   that the group is whole, and keeps the journal after a divider-only
   removal, which prunes the re-run's report update. Reading "whole" as
@@ -1013,6 +1087,9 @@ change amends the scope above.
   the group's other deltas, and the check reads the group's deltas as
   consecutive from the floor with nothing foreign above it. Canon's
   Reverse-replay gains that reading.
+
+  Settled at planning (2026-11-21): the default, with a third drop clause for the group's last remaining delta, and the fallback deletes the journal row.
+
 - **Does a suggestion refresh run during a re-run?** Canon lets one run
   beside a close, and the strip's ⟳ stays enabled while an interruptible run
   holds the gate (`disabled={headReversalBlocked}` in the reader route). Its
@@ -1022,6 +1099,9 @@ change amends the scope above.
   strip and `refreshSuggestions` both read, and canon says so. The other
   option narrows the check to deltas on what the journal covers and to the
   positions it re-inserts, which keeps ⟳ at the cost of a harder check.
+
+  Settled at planning (2026-11-21): no; ⟳ alone is held while `pendingRerun` holds the branch, the catch-up pass included.
+
 - **How does `Re-run…` meet the surface guard from the review window?**
   Canon has the confirm stack over the window, with its `Cancel` returning
   to the review
@@ -1039,6 +1119,9 @@ change amends the scope above.
   does. If the default holds, this slice's PR edits those canon lines and
   the wireframe. The other option keeps the window open and has the host
   render the guard's dialog, which no slice has designed.
+
+  Settled at planning (2026-11-21): the default; canon and the wireframe are amended.
+
 - **Does the close resolve its model once?** The metadata phase cuts the
   parts from its own settings snapshot (`chapter-close-metadata-call.ts`)
   and the agent phase reads a later one (`chapter-close-agent.ts`), and
@@ -1053,6 +1136,9 @@ change amends the scope above.
   option accepts the failed close as today. Raised in 5.8's task and slice
   reviews; routed from triage 2026-11-14, whose pass made the target one
   `CLOSE_TARGET`.
+
+  Settled at planning (2026-11-21): the default.
+
 - **What can't be restored?** A re-run whose abort left its reversal
   uncommitted drops the gate (`abortRun`), and a later reversal can then
   drop its journal. If the re-run had written nothing, recovery has no
@@ -1061,6 +1147,9 @@ change amends the scope above.
   transaction and then a sweep from below the re-run before the next boot.
   The other option keeps a dropped journal as a void row, which keeps the
   group recognisable at the cost of a canon change to "drops".
+
+  Settled at planning (2026-11-21): nothing silently; a nullable `pipeline_runs.rerun_chapter_id`, written in the reversal's transaction, lets recovery take the fallback.
+
 - **Where does the reversal plumbing live once the re-run calls it?**
   `lib/actions/chapters` imports `commitNewAction` and
   `logReversalRefused` from `../story-entries/operational`, and the
@@ -1068,6 +1157,9 @@ change amends the scope above.
   reversal plumbing. Default: move them under `lib/actions/delta/` in
   this slice, which drops the chapters-on-story-entries dependency.
   Raised in Slice 5.12's final review.
+
+  Settled at planning (2026-11-21): the default.
+
 - **Does the commit arm hold the result at `delta_emitted`, not re-read on
   `run_complete`?** 5.11 re-reads the branch's latest report on
   `run_complete`. The report phase's `delta_emitted` carries `branchId`,
@@ -1077,10 +1169,13 @@ change amends the scope above.
   `delta_emitted`. It removes the run, nothing, done gap on the banner
   (about two DB round trips, during which the bar collapses), the
   failed-read fallback's guess and the open-branch guess (`run_complete`
-  carries no `branchId`, `lib/pipeline/types.ts:76-85`), at a cost: it
+  carries no `branchId`, `lib/pipeline/types.ts:93-103`), at a cost: it
   relies on C4's `close_report`-last write, it replaces the old result
   just before commit, the `actionId` and failed-read tests are rewritten,
   and undo and redo don't emit on that bus. Raised in 5.11's review.
+
+  Settled at planning (2026-11-21): no, the re-read stays; `run_complete` gains `rerun?: true`.
+
 - **What do this slice's re-run arms meet from 5.9?** Two things 5.9
   shipped. First, the later-bump case in
   `lib/pipeline/__tests__/close-round-trip.test.ts` overrides `armExpect`
@@ -1102,6 +1197,9 @@ change amends the scope above.
   reversal through an event). Raised in 5.9's slice review; routed from
   triage 2026-11-14; the count half reframed 2026-11-15 by the
   undo-own-write design, which retired 3d's count-bump edge.
+
+  Settled at planning (2026-11-21): the default; `FLAG_CASE`'s key pin widens too.
+
 - **What does a confirm say for an `in-flight` refusal?** `removeChapter`'s
   `in-flight` refusal (a run started between the last enabled render and
   the press) closes the chapter-delete confirm with the generic
@@ -1109,10 +1207,13 @@ change amends the scope above.
   or keeping the confirm open, would say what happened; the re-run
   confirm gets the same refusal and is specced to toast a failure and
   close. Default: one answer for both confirms, keeping the confirm open
-  with `reader:actions.blockedWhileGenerating` as its reason. Raised in
+  with `reader:actions.blockedWhileGenerating` as its message. Raised in
   Slice 5.12's review of Task 12 and its final review (the same entry's
   log-naming edge was fixed in the 2026-11-14 triage pass); routed from
   triage 2026-11-14.
+
+  Settled at planning (2026-11-21): the delete, re-run and reader rollback confirms all stay open on an in-flight refusal, toasting `reader:actions.blockedWhileGenerating` while their confirm action stays disabled with the blocking run's tooltip; only the re-run confirm falls back to that string once no gate reason remains.
+
 - **Does the re-run confirm share the settle re-read?** The re-read effect
   in `components/chapters/use-chapter-delete-confirm.ts` repeats
   `components/reader/use-live-rollback-counts.ts`'s shape: a
@@ -1125,6 +1226,9 @@ change amends the scope above.
   extract the shared hook into `hooks/` with the third copy. Raised in
   Slice 5.12's slice review (the simplifier pass); routed from triage
   2026-11-14.
+
+  Settled at planning (2026-11-21): only the shared settle effect is extracted, as `useSettleReread` in `hooks/`.
+
 - **Does the review window animate its close?** `ChapterOverlaysHost`
   unmounts `ReviewWindow` as soon as the review id clears, so the Sheet on
   phone vanishes in one frame, skipping its slide-out (the web Dialog has
@@ -1134,6 +1238,9 @@ change amends the scope above.
   slice reworks that host's close-and-reopen lifecycle. Default: keep it
   mounted through the Sheet's exit as part of that rework. Raised in
   5.11's review; routed from triage 2026-11-14.
+
+  Settled at planning (2026-11-21): yes, here.
+
 - **Does `regenerateTurn` require its expected counts?**
   `regenerateTurn(…, opts?: { expectedCounts?: RollbackCounts })`
   (`lib/actions/turns/regenerate-turn.ts`) predates Slice 5.12, which
@@ -1149,6 +1256,55 @@ change amends the scope above.
   each needs its interleaving checked). Raised in Slice 5.12's slice
   review; routed from triage 2026-11-14.
 
+  Settled at planning (2026-11-21): its opts become required as `{ expectedCounts: RollbackCounts | undefined }`, an explicit `undefined` opting out, after `startCloseChain`'s overload.
+
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **The confirm's counts are taken as after the shortcut (developer
+  decisions at PR 2's review).** The preview leaves out only the deltas
+  both the re-run's set and the shortcut's set hold (by delta id, not
+  row), judges survivors and ref clears with the shortcut's deltas
+  treated as reversed (an optional `reversedFirst` input that only the
+  preview passes), and counts a close-created lore row whose delete the
+  shortcut reverses. The closure's own reads stay on the state before
+  the shortcut; that gap is parked
+  ([`parked.md → A re-run confirm's counts read before its shortcut`](../../../../parked.md#a-re-run-confirms-counts-read-before-its-shortcut)).
+- **Recovery's order stays as canon has it (developer decision at PR
+  1's review).** When a newer orphan's reversal fails without
+  committing, an older re-run on its branch can lose its close for
+  good, or an older pass's work can come back on a later boot; that is
+  parked with its fix
+  ([`parked.md → Recovery order after an orphan's failure on a re-run's branch`](../../../../parked.md#recovery-order-after-an-orphans-failure-on-a-re-runs-branch)).
+- **The abort's outcome rides a new port member.** `reverseRunGroup`
+  carries the delta count and the journal's outcome;
+  `reverseReplayDeltas` keeps `Promise<number>` for `submitTurn`
+  (the Scope above said its return type changes).
+- **A committed reversal whose store sync fails keeps its outcome.**
+  CTRL-Z of a re-run whose close was undone shows the close-undone
+  warning even when only the store sync failed, and a recovery failure
+  whose reversal committed with the close undone renders as the
+  reversed close does (canon's chapter-close line plus the close-undone
+  line; provisional).
+- **The planner reads a journal's group only when the set takes from
+  it,** so a branch holding a journal doesn't scan its log on every
+  reversal; reads by `action_id` still scan, filed to triage.
+- **The review window's phone Sheet holds a reopen until its exit
+  ends (provisional).** The shared `Sheet` drops a `present()` sent
+  while it is still dismissing, so the confirm's `Cancel` during the
+  slide-out reopens the window only once `onDismissed` fires; the host
+  marks an exit only for a Sheet that presented. The primitive's gap
+  is in triage for its other users.
+- **For M6.1:** recovery finds a journal by `action_id` alone, and the
+  run-group read has no branch filter; both are unique in M5 and need
+  `(branch_id, id)` scoping once a fork copies journals with their
+  groups. The `reversal_journals` fork row in `data-model.md` still
+  keys on the group's first log position; the shipped write-back
+  measures from the floor (the first position is the floor plus one).
+- **Redo stays one stack until M6.** Canon now rules a stack per
+  branch; a re-run's CTRL-Z clears today's single stack.
+- **Monitors.** The planner's drop clause (b) never dropped a journal a
+  round-trip arm keeps, so it stays as planned. The round trip grew
+  from 264 to 610 tests (about 6 s to 18 s locally); CI's unit shards
+  stayed inside main's recent range, so the file is not split.
+- **The Android measure (AC 34) is pending:** no Fold was attached
+  during the run. The functional smoke ran on a slot emulator.

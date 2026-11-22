@@ -10,7 +10,9 @@ import {
   generationStore,
   interruptMemoryRuns,
   selectMemoryRun,
+  type CloseResult,
   type RunState,
+  type StoreChapter,
 } from '@/lib/stores'
 
 export type MemoryRunBannerState =
@@ -26,18 +28,26 @@ export type MemoryRunBannerState =
 /**
  * C6: a close's banner label; in `agent` it names the task last started. The run keeps
  * `closeProgress` to its end; the label stops reading it at `report`. Under Send each label
- * says the wait is for the user's turn, the only place it says so on phone.
+ * says the wait is for the user's turn, the only place it says so on phone. A re-run names its
+ * reversal; its boundary and metadata neither choose an end nor write a summary.
  */
 export function closeBannerLabel(
-  run: Pick<RunState, 'beforeTurn' | 'currentPhase' | 'closeProgress'>,
+  run: Pick<RunState, 'beforeTurn' | 'currentPhase' | 'closeProgress' | 'interruptible'>,
 ): string {
+  if (run.interruptible === 'rerun') {
+    if (run.currentPhase === CLOSE_PHASE.reversal) return t('chrome.memoryBanner.closingReversal')
+    if (run.currentPhase === CLOSE_PHASE.boundary || run.currentPhase === CLOSE_PHASE.metadata)
+      return t('chrome.memoryBanner.closing')
+  }
   const turn = run.beforeTurn
   switch (run.currentPhase) {
     case CLOSE_PHASE.boundary:
       return t(
         turn ? 'chrome.memoryBanner.beforeTurnBoundary' : 'chrome.memoryBanner.closingBoundary',
       )
+    // A close's reversal returns at once, so the metadata label stands through it.
     case CLOSE_PHASE.metadata:
+    case CLOSE_PHASE.reversal:
       return t(
         turn ? 'chrome.memoryBanner.beforeTurnMetadata' : 'chrome.memoryBanner.closingMetadata',
       )
@@ -67,9 +77,19 @@ function bannerLabel(run: RunState): string | null {
   return null
 }
 
+function closedLabel(
+  result: CloseResult,
+  chapter: Pick<StoreChapter, 'title' | 'sequenceNumber'>,
+): string {
+  if (result.rerun) return t('chrome.closeResult.rerun', { number: chapter.sequenceNumber })
+  return result.stoppedTasks === 0
+    ? t('chrome.closeResult.closed', { title: chapter.title })
+    : t('chrome.closeResult.stopped', { count: result.stoppedTasks })
+}
+
 /**
- * The open branch's running pass or close (Cancel defers it to the next Send); else its last close
- * of this open until reviewed, dismissed or reversed, only while that chapter is the latest.
+ * The open branch's running pass or close (Cancel defers it to the next Send); else its last close or
+ * re-run of this open until reviewed, dismissed or reversed, only while that chapter is the latest.
  */
 export function useMemoryRunBanner(): MemoryRunBannerState | null {
   const branchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
@@ -96,10 +116,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   return {
     kind: 'closed',
     tone: stoppedTasks === 0 ? 'info' : 'warning',
-    label:
-      stoppedTasks === 0
-        ? t('chrome.closeResult.closed', { title: held.title })
-        : t('chrome.closeResult.stopped', { count: stoppedTasks }),
+    label: closedLabel(result, held),
     onReview: () => {
       chapterOverlaysStore.openReviewWindow({ chapterId })
       clear()

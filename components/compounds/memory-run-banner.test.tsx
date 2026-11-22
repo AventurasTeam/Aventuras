@@ -111,9 +111,41 @@ function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
   }
 }
 
-function holdResult(stoppedTasks = 0, branchId = 'branch-1', chapterId = 'chap_2'): void {
+function holdResult(
+  stoppedTasks = 0,
+  branchId = 'branch-1',
+  chapterId = 'chap_2',
+  actionId = 'act_close_2',
+): void {
   const openSeq = currentStoryStore.getOpenSeq()
-  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
+  chapterOverlaysStore.showCloseResult({
+    branchId,
+    openSeq,
+    chapterId,
+    actionId,
+    rerun: false,
+    stoppedTasks,
+  })
+}
+
+// As a re-run's commit lands: its report update patches the row, then the outcome hook holds it.
+function holdRerun(stoppedTasks = 0): void {
+  chaptersStore.patch('branch-1', {
+    op: 'update',
+    id: 'chap_2',
+    columns: {
+      closeReport: { version: 1, actionId: 'act_rerun', calls: [], stopped: [], noToolCalls: true },
+    },
+  })
+  const openSeq = currentStoryStore.getOpenSeq()
+  chapterOverlaysStore.showCloseResult({
+    branchId: 'branch-1',
+    openSeq,
+    chapterId: 'chap_2',
+    actionId: 'act_rerun',
+    rerun: true,
+    stoppedTasks,
+  })
 }
 
 afterEach(() => {
@@ -176,6 +208,19 @@ describe('useMemoryRunBanner', () => {
     )
     const { result } = renderHook(() => useMemoryRunBanner())
     expect(result.current?.label).toBe('Before your turn: 3 of 7 — Identity…')
+  })
+
+  it("labels the open branch's re-run by its slot as its phases move", () => {
+    openStory()
+    const rerunning = close({ interruptible: 'rerun', currentPhase: 'metadata' })
+    generationStore.startRun(rerunning)
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(result.current?.label).toBe('Closing chapter…')
+
+    act(() => {
+      generationStore.setCurrentPhase(rerunning.runId, 'reversal')
+    })
+    expect(result.current?.label).toBe("Reversing the chapter's close…")
   })
 
   it('shows nothing for an interruptible run of a kind with no banner', () => {
@@ -319,7 +364,10 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
 
     act(() => closedBanner(result.current).onReview())
 
-    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2' })
+    expect(chapterOverlaysStore.getState().review).toEqual({
+      chapterId: 'chap_2',
+      actionId: 'act_close_2',
+    })
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
     expect(result.current).toBeNull()
   })
@@ -379,14 +427,54 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
   })
 })
 
+describe("useMemoryRunBanner — a committed re-run's done state", () => {
+  it("names the chapter's re-run in the info tone", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdRerun()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current)).toMatchObject({
+      tone: 'info',
+      label: "Chapter 2's close re-ran",
+    })
+  })
+
+  it('keeps its own line in the warning tone when a task stopped early', () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdRerun(2)
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current)).toMatchObject({
+      tone: 'warning',
+      label: "Chapter 2's close re-ran",
+    })
+  })
+
+  it("replaces a close's done state", () => {
+    openStory()
+    chaptersStore.hydrate('branch-1', [chapter()])
+    holdResult()
+    const { result } = renderHook(() => useMemoryRunBanner())
+    expect(closedBanner(result.current).label).toBe('Chapter closed: The Keep Leans Closer')
+
+    act(() => holdRerun())
+    expect(closedBanner(result.current).label).toBe("Chapter 2's close re-ran")
+  })
+})
+
 describe('useMemoryRunBanner — an older close result beside a newer close', () => {
   const OLD = 'Chapter closed: Old Chapter'
 
   function holdOld(): void {
     chaptersStore.hydrate('branch-1', [
-      chapter({ id: 'chap_1', sequenceNumber: 1, title: 'Old Chapter' }),
+      chapter({
+        id: 'chap_1',
+        sequenceNumber: 1,
+        title: 'Old Chapter',
+        closeReportActionId: 'act_close_1',
+      }),
     ])
-    holdResult(0, 'branch-1', 'chap_1')
+    holdResult(0, 'branch-1', 'chap_1', 'act_close_1')
   }
 
   // The new close's row lands at its metadata phase, before the report that marks it closed.
@@ -425,7 +513,13 @@ describe('useMemoryRunBanner — an older close result beside a newer close', ()
         op: 'update',
         id: 'chap_2',
         columns: {
-          closeReport: { version: 1, actionId: 'a', calls: [], stopped: [], noToolCalls: true },
+          closeReport: {
+            version: 1,
+            actionId: 'act_close_2',
+            calls: [],
+            stopped: [],
+            noToolCalls: true,
+          },
         },
       })
     })
@@ -482,11 +576,15 @@ describe('closeBannerLabel', () => {
   it.each([
     ['boundary', 'Closing chapter: choosing where it ends…'],
     ['metadata', 'Closing chapter: writing its summary…'],
+    // A close's reversal returns at once: the metadata label stands through it.
+    ['reversal', 'Closing chapter: writing its summary…'],
     ['agent', 'Closing chapter: reviewing the chapter…'],
     ['report', 'Closing chapter: finishing up…'],
     ['', 'Closing chapter…'],
   ])('labels phase %j', (currentPhase, label) => {
-    expect(closeBannerLabel({ beforeTurn: false, currentPhase })).toBe(label)
+    expect(closeBannerLabel({ beforeTurn: false, currentPhase, interruptible: 'close' })).toBe(
+      label,
+    )
   })
 
   it.each([
@@ -503,6 +601,7 @@ describe('closeBannerLabel', () => {
         beforeTurn: false,
         currentPhase: 'agent',
         closeProgress: { task, part, index, total: 7 },
+        interruptible: 'close',
       }),
     ).toBe(`Closing chapter: ${index} of 7 — ${name}…`)
   })
@@ -511,13 +610,41 @@ describe('closeBannerLabel', () => {
     ['', undefined, 'Closing chapter before your turn…'],
     ['boundary', undefined, 'Before your turn: choosing where the chapter ends…'],
     ['metadata', undefined, "Before your turn: writing the chapter's summary…"],
+    ['reversal', undefined, "Before your turn: writing the chapter's summary…"],
     ['agent', undefined, 'Before your turn: reviewing the chapter…'],
     ['agent', IDENTITY, 'Before your turn: 3 of 7 — Identity…'],
     ['report', IDENTITY, 'Before your turn: finishing the chapter…'],
   ] as const)(
     'reads before your turn under Send in phase %j, with its progress',
     (currentPhase, closeProgress, label) => {
-      expect(closeBannerLabel({ beforeTurn: true, currentPhase, closeProgress })).toBe(label)
+      expect(
+        closeBannerLabel({ beforeTurn: true, currentPhase, closeProgress, interruptible: 'close' }),
+      ).toBe(label)
     },
   )
+
+  // C6: a re-run neither chooses an end nor writes a summary, and never runs before a turn.
+  it.each([
+    ['', 'Closing chapter…'],
+    ['boundary', 'Closing chapter…'],
+    ['metadata', 'Closing chapter…'],
+    ['reversal', "Reversing the chapter's close…"],
+    ['agent', 'Closing chapter: reviewing the chapter…'],
+    ['report', 'Closing chapter: finishing up…'],
+  ])("labels a re-run's phase %j", (currentPhase, label) => {
+    expect(closeBannerLabel({ beforeTurn: false, currentPhase, interruptible: 'rerun' })).toBe(
+      label,
+    )
+  })
+
+  it("counts a re-run's tasks as a close's", () => {
+    expect(
+      closeBannerLabel({
+        beforeTurn: false,
+        currentPhase: 'agent',
+        closeProgress: IDENTITY,
+        interruptible: 'rerun',
+      }),
+    ).toBe('Closing chapter: 3 of 7 — Identity…')
+  })
 })

@@ -6,6 +6,7 @@ import {
   inlineEditSaveGate,
   rowGateReason,
   rowReversalFlags,
+  undoHold,
 } from './row-reversal-flags'
 
 function entry(id: string, kind: string) {
@@ -102,6 +103,27 @@ describe('rowReversalFlags', () => {
         reversalDisabled: false,
       })
   })
+
+  // chapter-close.md → Re-running a close: a reversal reaching the re-run's chapter is held.
+  it("holds a stamped row's ↻ and × under a re-run and leaves its pencil to the gate", () => {
+    expect(
+      rowReversalFlags({ rowId: 'e5', headTurnIds, editGate: 'interruptible', reversalHeld: true }),
+    ).toEqual({ editDisabled: false, reversalDisabled: true })
+    expect(
+      rowReversalFlags({ rowId: 'e2', headTurnIds, editGate: 'interruptible', reversalHeld: true }),
+    ).toEqual({ editDisabled: true, reversalDisabled: true })
+  })
+
+  it("leaves an open-region row's reversals live under a re-run, to interrupt it", () => {
+    expect(
+      rowReversalFlags({
+        rowId: 'e5',
+        headTurnIds,
+        editGate: 'interruptible',
+        reversalHeld: false,
+      }),
+    ).toEqual({ editDisabled: false, reversalDisabled: false })
+  })
 })
 
 describe('rowGateReason', () => {
@@ -152,5 +174,34 @@ describe('inlineEditSaveGate', () => {
     expect(
       inlineEditSaveGate({ entryId: 'e2', headTurnIds: head, editGate: 'open', reasons }),
     ).toEqual({ disabled: false, reason: undefined })
+  })
+})
+
+describe('undoHold', () => {
+  const reasons = { gate: 'Re-running the close…', headReversal: 'Waiting on the turn…' }
+
+  // CTRL-Z is refused while a re-run runs, so its menu entry disables, naming the pill's run.
+  it('holds Undo through a re-run, with the gate reason', () => {
+    expect(undoHold({ headReversalBlocked: false, rerunRunning: true, reasons })).toEqual({
+      blocked: true,
+      reason: reasons.gate,
+    })
+  })
+
+  it('leaves Undo live through a close or a pass, which it interrupts', () => {
+    expect(
+      undoHold({
+        headReversalBlocked: false,
+        rerunRunning: false,
+        reasons: { gate: 'Chapter close in progress. Cancel to edit.', headReversal: undefined },
+      }),
+    ).toEqual({ blocked: false, reason: undefined })
+  })
+
+  it("names the head reversals' blocker first", () => {
+    expect(undoHold({ headReversalBlocked: true, rerunRunning: true, reasons })).toEqual({
+      blocked: true,
+      reason: reasons.headReversal,
+    })
   })
 })

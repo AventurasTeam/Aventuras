@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useMemoryRunBanner } from '@/components/compounds/use-memory-run-banner'
+import type { CloseRerunPreview } from '@/lib/actions'
 import { createQueryClient } from '@/lib/cache'
 import {
   STORY_SETTINGS_DEFAULTS,
@@ -16,6 +18,7 @@ import {
 import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import type { CloseReview, CloseReviewChange, CloseReviewLookup } from '@/lib/history'
+import { t } from '@/lib/i18n'
 import { makeEntity, makeLore } from '@/lib/list-modules/__tests__/fixtures'
 import {
   chapterOverlaysStore,
@@ -34,6 +37,7 @@ import {
 } from '@/lib/stores'
 
 import { ChapterOverlaysHost } from './chapter-overlays-host'
+import type { CloseRerunConfirmProps } from './close-rerun-confirm'
 import type { ReviewWindowProps } from './review-window'
 
 const reads = vi.hoisted(() => ({
@@ -41,12 +45,14 @@ const reads = vi.hoisted(() => ({
   deltas: vi.fn(),
   kinds: vi.fn(),
   build: vi.fn(),
+  series: vi.fn(),
 }))
 
 // The runtime `db` is a bridge client; the host only passes it to the mocked reads.
 vi.mock('@/lib/db', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   db: {},
+  openRegionSeries: reads.series,
 }))
 
 // The close-failure copy's module also holds a hook on expo-router, which the unit project can't load.
@@ -58,6 +64,13 @@ vi.mock('@/lib/history', async (importOriginal) => ({
   loadCloseDeltas: reads.deltas,
   readDeletedEntityKinds: reads.kinds,
   buildCloseReview: reads.build,
+}))
+
+const actions = vi.hoisted(() => ({ preview: vi.fn(), start: vi.fn() }))
+vi.mock('@/lib/actions', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getCloseRerunPreview: actions.preview,
+  startCloseRerun: actions.start,
 }))
 
 const hostNavigate = vi.hoisted(() => vi.fn<(path: string) => void>())
@@ -111,15 +124,62 @@ vi.mock('@/hooks/use-entry-index', async () => {
   }
 })
 
-// The real view pulls RN-Web chrome the unit project can't load; the host's props are the seam.
-const view = vi.hoisted(() => ({ props: null as ReviewWindowProps | null, renders: 0 }))
-vi.mock('./review-window', () => ({
-  ReviewWindow: (props: ReviewWindowProps) => {
-    view.props = props
-    view.renders += 1
-    return null
-  },
+// The real views pull RN-Web chrome the unit project can't load; the host's props are the seam.
+const view = vi.hoisted(() => ({
+  props: null as ReviewWindowProps | null,
+  renders: 0,
+  mounted: false,
+  mounts: 0,
+  phone: false,
+  presents: true,
 }))
+vi.mock('@/hooks/use-tier', () => ({ useTier: () => (view.phone ? 'phone' : 'desktop') }))
+vi.mock('./review-window', async () => {
+  const { useEffect } = await import('react')
+  return {
+    ReviewWindow: (props: ReviewWindowProps) => {
+      view.props = props
+      view.renders += 1
+      // The real window: above phone its exit ends as it closes; on phone the Sheet reports it.
+      const { open, onExited, onPresented } = props
+      useEffect(() => {
+        if (!open && !view.phone) onExited?.()
+      }, [open, onExited])
+      // A phone Sheet's children mount once it presents; a close before that leaves no exit.
+      useEffect(() => {
+        if (open && view.phone && view.presents) onPresented?.()
+      }, [open, onPresented])
+      useEffect(() => {
+        view.mounted = true
+        view.mounts += 1
+        return () => {
+          view.mounted = false
+        }
+      }, [])
+      return null
+    },
+  }
+})
+
+const confirmView = vi.hoisted(() => ({
+  props: null as CloseRerunConfirmProps | null,
+  mounted: false,
+}))
+vi.mock('./close-rerun-confirm', async () => {
+  const { useEffect } = await import('react')
+  return {
+    CloseRerunConfirm: (props: CloseRerunConfirmProps) => {
+      confirmView.props = props
+      useEffect(() => {
+        confirmView.mounted = true
+        return () => {
+          confirmView.mounted = false
+        }
+      }, [])
+      return null
+    },
+  }
+})
 vi.mock('./close-chapter-modal-view', () => ({ CloseChapterModalView: () => null }))
 
 const REPORT: CloseReport = {
@@ -195,28 +255,6 @@ const REVIEW: CloseReview = {
     { area: 'charactersAndFactions', rows: [KAEL] },
     { area: 'placesAndItems', rows: [MILL] },
   ],
-}
-
-function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
-  return {
-    id: 'chap_2',
-    branchId: 'br_1',
-    sequenceNumber: 2,
-    title: 'The Keep Leans Closer',
-    summary: '',
-    theme: '',
-    keywords: [],
-    startEntryId: 'entry_40',
-    endEntryId: 'entry_58',
-    tokenCount: 0,
-    closedAt: 1,
-    embeddingStale: 0,
-    createdAt: 1,
-    updatedAt: 1,
-    hasCloseReport: true,
-    closeReportActionId: 'act_close_2',
-    ...over,
-  }
 }
 
 function story(branchId: string): OpenStory {
@@ -298,10 +336,93 @@ async function openReady(): Promise<ReviewWindowProps> {
   return shown()
 }
 
-function holdResult(branchId: string, stoppedTasks = 0, chapterId = 'chap_2'): void {
-  const openSeq = currentStoryStore.getOpenSeq()
-  chapterOverlaysStore.showCloseResult({ branchId, openSeq, chapterId, stoppedTasks })
+function chapter(over: Partial<StoreChapter> = {}): StoreChapter {
+  return {
+    id: 'chap_2',
+    branchId: 'br_1',
+    sequenceNumber: 2,
+    title: 'The Keep Leans Closer',
+    summary: '',
+    theme: '',
+    keywords: [],
+    startEntryId: 'entry_40',
+    endEntryId: 'entry_58',
+    tokenCount: 0,
+    closedAt: 1,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    hasCloseReport: true,
+    closeReportActionId: 'act_close_2',
+    ...over,
+  }
 }
+
+function holdResult(
+  over: {
+    branchId?: string
+    chapterId?: string
+    actionId?: string
+    rerun?: boolean
+    stoppedTasks?: number
+  } = {},
+): void {
+  chapterOverlaysStore.showCloseResult({
+    branchId: 'br_1',
+    openSeq: currentStoryStore.getOpenSeq(),
+    chapterId: 'chap_2',
+    actionId: 'act_close_2',
+    rerun: false,
+    stoppedTasks: 0,
+    ...over,
+  })
+}
+
+const RERUN_REPORT: CloseReport = {
+  ...REPORT,
+  actionId: 'act_rerun_2',
+  stopped: [{ task: 'identity', part: 1, reason: 'budget' }],
+}
+
+const PREVIEW: CloseRerunPreview = {
+  chapterNumber: 2,
+  model: 'gemma-4-26b',
+  tokens: 24_310,
+  reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
+  shortcut: null,
+}
+
+function gateRun(): RunState {
+  return {
+    runId: 'run_gate',
+    kind: 'per-turn',
+    gateBehavior: 'hard-gate',
+    interruptible: null,
+    beforeTurn: false,
+    actionId: 'act_gate',
+    storyId: 'story_1',
+    branchId: 'br_1',
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  }
+}
+
+function openRerun(input: { fromReview?: boolean } = {}): void {
+  act(() =>
+    chapterOverlaysStore.openRerunConfirm({ branchId: 'br_1', chapterId: 'chap_2', ...input }),
+  )
+}
+
+async function confirmShown(): Promise<CloseRerunConfirmProps> {
+  await waitFor(() => expect(confirmView.mounted).toBe(true))
+  if (confirmView.props == null) throw new Error('the re-run confirm is not rendered')
+  return confirmView.props
+}
+
+const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 
 beforeEach(() => {
   resetAllStores()
@@ -314,6 +435,15 @@ beforeEach(() => {
   reads.deltas.mockReset().mockResolvedValue(DELTAS)
   reads.kinds.mockReset().mockResolvedValue(new Map([['loc_mill', 'location']]))
   reads.build.mockReset().mockReturnValue(REVIEW)
+  reads.series.mockReset().mockResolvedValue([])
+  view.mounted = false
+  view.mounts = 0
+  view.phone = false
+  view.presents = true
+  confirmView.props = null
+  confirmView.mounted = false
+  actions.preview.mockReset().mockResolvedValue(PREVIEW)
+  actions.start.mockReset()
   openStory()
   chaptersStore.hydrate('br_1', [chapter()])
   entitiesStore.hydrate('br_1', [makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael' })])
@@ -541,12 +671,167 @@ describe('ChapterOverlaysHost — the review', () => {
     expect(reads.deltas).not.toHaveBeenCalled()
   })
 
-  it('closes on onOpenChange(false)', async () => {
+  it('closes on onOpenChange(false), staying mounted until its exit ends', async () => {
+    view.phone = true
     const props = await openReady()
-    view.renders = 0
     act(() => props.onOpenChange(false))
     expect(chapterOverlaysStore.getState().review).toBeNull()
-    expect(view.renders).toBe(0)
+    expect(shown().open).toBe(false)
+    expect(view.mounted).toBe(true)
+    expect(view.mounts).toBe(1)
+
+    act(() => shown().onExited?.())
+    expect(view.mounted).toBe(false)
+  })
+
+  it('reads nothing while it exits', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    settleRun()
+    await flush()
+    expect(reads.report).toHaveBeenCalledTimes(1)
+  })
+
+  it('reopened during a phone exit, waits for the exit, then opens again without remounting', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+    // The Sheet is still sliding out: presenting it now would drop the reopen.
+    expect(shown().open).toBe(false)
+    expect(chapterOverlaysStore.getState().review).not.toBeNull()
+    act(() => shown().onExited?.())
+    expect(shown().open).toBe(true)
+    expect(view.mounted).toBe(true)
+    expect(view.mounts).toBe(1)
+  })
+
+  it('reopened as its phone exit ends, before the reopen renders, opens once the exit has ended', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    const { onExited } = shown()
+
+    act(() => {
+      chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' })
+      onExited?.()
+    })
+
+    expect(shown().open).toBe(true)
+    expect(view.mounts).toBe(1)
+  })
+
+  it("a direct close while the window is closed doesn't drop the reopen held behind it", async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+
+    act(() => shown().onOpenChange(false))
+    act(() => shown().onExited?.())
+
+    expect(chapterOverlaysStore.getState().review).not.toBeNull()
+    expect(shown().open).toBe(true)
+  })
+
+  it('a window closed again while the reopen was held stays closed once its exit ends', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+    act(() => chapterOverlaysStore.closeReviewWindow())
+
+    act(() => shown().onExited?.())
+
+    expect(view.mounted).toBe(false)
+  })
+
+  it('a phone window closed before its Sheet presented leaves no exit to wait for', async () => {
+    view.phone = true
+    view.presents = false
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    expect(view.mounted).toBe(false)
+
+    openWindow()
+    expect(shown().open).toBe(true)
+  })
+
+  it('a window reopened after a held exit, then closed before it presents, leaves no exit to wait for', async () => {
+    view.phone = true
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    openWindow()
+    // The held reopen opens as the exit ends, but its Sheet never gets to present.
+    view.presents = false
+    act(() => shown().onExited?.())
+    expect(shown().open).toBe(true)
+
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    expect(view.mounted).toBe(false)
+
+    openWindow()
+    expect(shown().open).toBe(true)
+  })
+
+  it("a chapter presented before another's window replaced it is not taken for presented when asked for again", async () => {
+    view.phone = true
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    view.presents = false
+    openWindow('chap_2')
+    openWindow('chap_1')
+
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    expect(view.mounted).toBe(false)
+
+    openWindow('chap_1')
+    expect(shown().open).toBe(true)
+  })
+
+  it('above phone, a reopen opens at once: the window exits as it closes', async () => {
+    const props = await openReady()
+    act(() => props.onOpenChange(false))
+    expect(view.mounted).toBe(false)
+    openWindow()
+    expect(shown().open).toBe(true)
+  })
+
+  it("another chapter's window opened during an exit opens at once", async () => {
+    view.phone = true
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    openWindow('chap_2')
+    expect(shown().open).toBe(true)
+    expect(shown().title).toBe('Review — Chapter 2: The Keep Leans Closer')
+  })
+
+  it('a chapter whose exit was left behind opens at once when its window is asked for again', async () => {
+    view.phone = true
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    openWindow('chap_2')
+    // The first window's exit never reports: its host unmounted with the switch.
+    openWindow('chap_1')
+    expect(shown().open).toBe(true)
   })
 })
 
@@ -662,11 +947,11 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     await openReady()
     act(() => chaptersStore.patch('br_1', { op: 'delete', id: 'chap_2' }))
     expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(view.mounted).toBe(false)
 
-    view.renders = 0
     act(() => chaptersStore.patch('br_1', { op: 'create', id: 'chap_2', row: { ...chapter() } }))
     expect(chapterOverlaysStore.getState().review).toBeNull()
-    expect(view.renders).toBe(0)
+    expect(view.mounted).toBe(false)
   })
 
   it('clears the id when the chapter loses its report', async () => {
@@ -675,6 +960,7 @@ describe('ChapterOverlaysHost — the derived rule', () => {
       chaptersStore.patch('br_1', { op: 'update', id: 'chap_2', columns: { closeReport: null } }),
     )
     expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(view.mounted).toBe(false)
   })
 
   it('renders nothing and keeps no id for a chapter not in the store', () => {
@@ -689,32 +975,35 @@ describe('ChapterOverlaysHost — the derived rule', () => {
     await openReady()
     act(() => openStory('br_2'))
     expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(view.mounted).toBe(false)
   })
 
   it("keeps the open branch's close result and clears another branch's", () => {
     renderHost()
-    act(() => holdResult('br_1'))
+    act(() => holdResult())
     expect(chapterOverlaysStore.getState().closeResult).toEqual({
       branchId: 'br_1',
       openSeq: 0,
       chapterId: 'chap_2',
+      actionId: 'act_close_2',
+      rerun: false,
       stoppedTasks: 0,
     })
 
-    act(() => holdResult('br_2'))
+    act(() => holdResult({ branchId: 'br_2' }))
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
   })
 
   it('clears a held close result when its chapter reverses', () => {
     renderHost()
-    act(() => holdResult('br_1', 1))
+    act(() => holdResult({ stoppedTasks: 1 }))
     act(() => chaptersStore.patch('br_1', { op: 'delete', id: 'chap_2' }))
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
   })
 
   it('clears a held close result when another branch opens', () => {
     renderHost()
-    act(() => holdResult('br_1'))
+    act(() => holdResult())
     act(() => openStory('br_2'))
     expect(chapterOverlaysStore.getState().closeResult).toBeNull()
   })
@@ -722,7 +1011,7 @@ describe('ChapterOverlaysHost — the derived rule', () => {
   it('clears a held close result when the story is left and opened again on the same branch', () => {
     act(() => reopenStory())
     renderHost()
-    act(() => holdResult('br_1'))
+    act(() => holdResult())
     expect(chapterOverlaysStore.getState().closeResult).not.toBeNull()
 
     act(() => reopenStory())
@@ -731,20 +1020,138 @@ describe('ChapterOverlaysHost — the derived rule', () => {
 
   it("keeps a newer close's result in the same open", () => {
     renderHost()
-    act(() => holdResult('br_1'))
+    act(() => holdResult())
     act(() =>
       chaptersStore.patch('br_1', {
         op: 'create',
         id: 'chap_3',
-        row: chapter({ id: 'chap_3', sequenceNumber: 3 }),
+        row: chapter({ id: 'chap_3', sequenceNumber: 3, closeReportActionId: 'act_close_3' }),
       }),
     )
-    act(() => holdResult('br_1', 1, 'chap_3'))
+    act(() => holdResult({ chapterId: 'chap_3', actionId: 'act_close_3', stoppedTasks: 1 }))
     expect(chapterOverlaysStore.getState().closeResult).toEqual({
       branchId: 'br_1',
       openSeq: 0,
       chapterId: 'chap_3',
+      actionId: 'act_close_3',
+      rerun: false,
       stoppedTasks: 1,
     })
+  })
+
+  // AC 29: the re-run's report update lands with its action, then the outcomes hook holds its result.
+  it("a re-run's commit closes the window and replaces a close's done state; its CTRL-Z clears it", async () => {
+    const banner = renderHook(() => useMemoryRunBanner())
+    await openReady()
+    act(() => holdResult())
+    expect(banner.result.current?.kind).toBe('closed')
+
+    act(() =>
+      chaptersStore.patch('br_1', {
+        op: 'update',
+        id: 'chap_2',
+        columns: { closeReport: RERUN_REPORT },
+      }),
+    )
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(shown().open).toBe(false)
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+
+    act(() => holdResult({ actionId: 'act_rerun_2', rerun: true, stoppedTasks: 1 }))
+    expect(chapterOverlaysStore.getState().closeResult).not.toBeNull()
+    expect(banner.result.current).toMatchObject({
+      kind: 'closed',
+      tone: 'warning',
+      label: t('chrome.closeResult.rerun', { number: 2 }),
+    })
+
+    act(() =>
+      chaptersStore.patch('br_1', { op: 'update', id: 'chap_2', columns: { closeReport: REPORT } }),
+    )
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+    expect(banner.result.current).toBeNull()
+  })
+})
+
+describe('ChapterOverlaysHost — Re-run… and its reasons', () => {
+  it("offers Re-run… on the latest chapter's window, and none on an earlier one", async () => {
+    chaptersStore.hydrate('br_1', [
+      chapter({ id: 'chap_1', sequenceNumber: 1, closeReportActionId: 'act_close_1' }),
+      chapter(),
+    ])
+    renderHost()
+    openWindow('chap_1')
+    await waitFor(() => expect(view.props?.state.status).toBe('ready'))
+    expect(shown().onRerun).toBeUndefined()
+
+    act(() => chapterOverlaysStore.closeReviewWindow())
+    openWindow('chap_2')
+    await waitFor(() => expect(shown().onRerun).toBeDefined())
+  })
+
+  it('Re-run… closes the window and holds the request, remembering the window', async () => {
+    await openReady()
+    act(() => shown().onRerun!())
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(chapterOverlaysStore.getState().rerunConfirm).toStrictEqual({
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      reopenReview: true,
+    })
+  })
+
+  it('names the run in flight over a close owed, then the close owed, then nothing', async () => {
+    await openReady()
+    const run = gateRun()
+    act(() => generationStore.setPendingClose('br_1', { endEntryId: 'entry_70' }))
+    act(() => generationStore.startRun(run))
+    expect(shown().rerunDisabledReason).toBe(t('generationGate.inFlight'))
+
+    act(() => generationStore.finishRun(run.runId))
+    await waitFor(() =>
+      expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
+    )
+
+    act(() => generationStore.clearPendingClose('br_1'))
+    expect(shown().rerunDisabledReason).toBeUndefined()
+  })
+
+  it('disables Re-run… while auto-close owes a close on the open region', async () => {
+    // STORY_SETTINGS_DEFAULTS: auto-close on at 24,000 tokens; the region crosses it with a reply.
+    reads.series.mockResolvedValue([
+      { id: 'entry_59', kind: 'user_action', position: 59, tokens: 12_000 },
+      { id: 'entry_60', kind: 'ai_reply', position: 60, tokens: 12_000 },
+    ])
+    await openReady()
+    await waitFor(() =>
+      expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
+    )
+  })
+
+  it('gives no reason once auto-close is off, though the open region is past the threshold', async () => {
+    reads.series.mockResolvedValue([
+      { id: 'entry_59', kind: 'user_action', position: 59, tokens: 12_000 },
+      { id: 'entry_60', kind: 'ai_reply', position: 60, tokens: 12_000 },
+    ])
+    await openReady()
+    await waitFor(() =>
+      expect(shown().rerunDisabledReason).toBe(t('chapters:actions.closeOpenFirst')),
+    )
+
+    act(() =>
+      currentStoryStore.set({
+        ...story('br_1'),
+        settings: { ...STORY_SETTINGS_DEFAULTS, chapterAutoClose: false },
+      }),
+    )
+    await waitFor(() => expect(shown().rerunDisabledReason).toBeUndefined())
+  })
+
+  it("disables the confirm's actions with the same reason while a close is owed", async () => {
+    renderHost()
+    openRerun()
+    await confirmShown()
+    act(() => generationStore.setPendingClose('br_1', { endEntryId: 'entry_70' }))
+    expect(confirmView.props?.blockedReason).toBe(t('chapters:actions.closeOpenFirst'))
   })
 })

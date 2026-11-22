@@ -33,6 +33,9 @@ export const memoryBanner = {
   // A committed close's done state, in the same bar; dismiss is icon-only.
   closed: (page: Page, title: string): Locator =>
     banner(page).getByText(t('chrome.closeResult.closed', { title }), { exact: true }),
+  // A committed re-run's done state, in the same bar.
+  rerun: (page: Page, number: number): Locator =>
+    banner(page).getByText(t('chrome.closeResult.rerun', { number }), { exact: true }),
   review: (page: Page): Locator =>
     banner(page).getByRole('button', { name: t('chrome.closeResult.review'), exact: true }),
   dismiss: (page: Page): Locator =>

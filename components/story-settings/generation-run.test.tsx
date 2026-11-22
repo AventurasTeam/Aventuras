@@ -2,14 +2,17 @@
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { CHAPTER_CLOSE_KIND, CHAPTER_CLOSE_RERUN } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { generationStore, type RunState, type TxState } from '@/lib/stores'
+import { generationStore, rerunHoldsReversal, type RunState, type TxState } from '@/lib/stores'
 
 import {
   generationGateReason,
   headReversalGateReason,
+  runGateKind,
   selectHeadReversalRunKind,
+  selectRerunRunning,
   selectStorySettingsGenerationRunKind,
   storyPillPhase,
   storySettingsGenerationPhase,
@@ -48,6 +51,18 @@ function run(kind: string, options: RunOptions = {}): RunState {
 function pass(options: Pick<RunOptions, 'storyId' | 'branchId' | 'beforeTurn'> = {}): RunState {
   return run(PERIODIC_CLASSIFIER_KIND, { ...options, interruptible: 'pass' })
 }
+
+// A close reserved while pendingRerun holds its branch: chapter-close's runSlot gives it 'rerun'.
+function rerun(options: Pick<RunOptions, 'storyId' | 'branchId'> = {}): RunState {
+  return run(CHAPTER_CLOSE_KIND, { ...options, interruptible: 'rerun' })
+}
+
+function close(options: Pick<RunOptions, 'storyId' | 'branchId'> = {}): RunState {
+  return run(CHAPTER_CLOSE_KIND, { ...options, interruptible: 'close' })
+}
+
+const RERUN_REASON = "Re-running the chapter's close. Cancel to edit."
+const CLOSE_REASON = 'Chapter close in progress. Cancel to edit.'
 
 function tx(...runs: RunState[]): TxState {
   return {
@@ -353,5 +368,73 @@ describe("useStoryGenerationGate's cancelPillRun", () => {
 
     await vi.waitFor(() => expect(opened.abortController.signal.aborted).toBe(true))
     expect(left.abortController.signal.aborted).toBe(false)
+  })
+})
+
+describe('runGateKind', () => {
+  it('names a re-run by its slot and any other run by its kind', () => {
+    expect(runGateKind(rerun())).toBe(CHAPTER_CLOSE_RERUN)
+    expect(runGateKind(close())).toBe(CHAPTER_CLOSE_KIND)
+    expect(runGateKind(pass())).toBe(PERIODIC_CLASSIFIER_KIND)
+    expect(runGateKind(run(PER_TURN_KIND))).toBe(PER_TURN_KIND)
+  })
+})
+
+describe('a re-run at the gate', () => {
+  it("names the re-run in the pill's kind and its reason, and a close as a close", () => {
+    const kind = selectStorySettingsGenerationRunKind(tx(rerun()), 'story-1')
+    expect(kind).toBe(CHAPTER_CLOSE_RERUN)
+    expect(generationGateReason(true, kind)).toBe(RERUN_REASON)
+    expect(
+      generationGateReason(true, selectStorySettingsGenerationRunKind(tx(close()), 'story-1')),
+    ).toBe(CLOSE_REASON)
+  })
+
+  // A re-run is interruptible on its own branch, so it blocks no head reversal there.
+  it("blocks no head reversal on its own branch, and names itself to another branch's", () => {
+    expect(selectHeadReversalRunKind(tx(rerun()), 'branch-1')).toBeNull()
+    expect(selectHeadReversalRunKind(tx(rerun({ branchId: 'branch-2' })), 'branch-1')).toBe(
+      CHAPTER_CLOSE_RERUN,
+    )
+  })
+
+  // principles.md → Affordance loci: a re-run holding a reversal names the pill's run.
+  it('names the re-run where no run blocks the head reversals', () => {
+    expect(headReversalGateReason(true, { headReversal: null, pill: CHAPTER_CLOSE_RERUN })).toBe(
+      RERUN_REASON,
+    )
+  })
+
+  it('shows the pill as a chapter close', () => {
+    expect(storySettingsGenerationPhase(CHAPTER_CLOSE_RERUN)).toBe('closing-chapter')
+    expect(storyPillPhase(CHAPTER_CLOSE_RERUN)).toBe('closing-chapter')
+  })
+
+  it("gives the screens' gate the re-run's kind and reason while it runs", () => {
+    generationStore.startRun(rerun())
+    let gate: Gate | undefined
+    render(<GateProbe storyId="story-1" branchId="branch-1" onResult={(g) => (gate = g)} />)
+    expect(gate?.activeRunKind).toBe(CHAPTER_CLOSE_RERUN)
+    expect(gate?.editBlocked).toBe(true)
+    expect(gate?.gateReason).toBe(RERUN_REASON)
+  })
+})
+
+describe('selectRerunRunning', () => {
+  // The reader holds a row's ↻ and × on this plus a stamped entry; must equal rerunHoldsReversal.
+  it.each([
+    ['rerun', 'chap_2', true],
+    ['rerun', null, false],
+    ['close', 'chap_2', false],
+    ['pass', 'chap_2', false],
+  ] as const)('under a %s run, a target in chapter %j is held: %s', (slot, chapterId, held) => {
+    const state = tx(slot === 'pass' ? pass() : run(CHAPTER_CLOSE_KIND, { interruptible: slot }))
+    expect(selectRerunRunning(state, 'branch-1') && chapterId != null).toBe(held)
+    expect(rerunHoldsReversal(state, 'branch-1', { chapterId })).toBe(held)
+  })
+
+  it("reads false for another branch's re-run, and with no run", () => {
+    expect(selectRerunRunning(tx(rerun({ branchId: 'branch-2' })), 'branch-1')).toBe(false)
+    expect(selectRerunRunning(tx(), 'branch-1')).toBe(false)
   })
 })
