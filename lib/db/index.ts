@@ -267,6 +267,7 @@ export {
   vecTableName,
   vectorsByIdQuery,
 } from './embeddings'
+export { vecCopyStatement, type CopyBranches, type VecCopyTables } from './branch-copy'
 export {
   emptyCastDraft,
   emptyWorkingState,
