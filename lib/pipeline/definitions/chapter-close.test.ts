@@ -307,10 +307,7 @@ describe('openCloseFixture', () => {
         .sort(),
     )
     expect(new Set(creates.map((d) => d.actionId)).size).toBe(6)
-    for (const create of creates) {
-      const kind = f.entries.find((e) => e.id === create.targetId)!.kind
-      expect(create.entryId, create.targetId).toBe(kind === 'ai_reply' ? create.targetId : null)
-    }
+    for (const create of creates) expect(create.entryId, create.targetId).toBe(create.targetId)
     expect(await readClassifierStatus(f.branchId, f.ctx)).toMatchObject({
       state: 'idle',
       processedThrough: 13,

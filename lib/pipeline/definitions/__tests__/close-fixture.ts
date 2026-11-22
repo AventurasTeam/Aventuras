@@ -216,8 +216,8 @@ export async function writeTurnEntry(
       },
       actionId,
       branchId: f.branchId,
-      // As a turn logs them: the action unanchored, the reply anchored on itself.
-      entryId: entry.kind === 'ai_reply' ? entry.id : null,
+      // As a turn logs it: anchored on the entry it creates.
+      entryId: entry.id,
     },
     f.ctx,
   )

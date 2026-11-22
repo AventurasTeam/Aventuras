@@ -492,8 +492,8 @@ describe('updateEntrySceneFields', () => {
     const ctx = { db, runInTransaction }
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    const [opening] = entryRows()
-    await db.insert(storyEntries).values(opening)
+    const [reply] = entryRows()
+    await db.insert(storyEntries).values(reply)
     const rows = [
       character('char_a', LOC_A),
       character(MIRA, LOC_C),

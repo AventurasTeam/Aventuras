@@ -1830,7 +1830,7 @@ describe('narrative fold — creates', () => {
         },
         actionId: TURN_ACTION,
         branchId: 'b1',
-        entryId: null,
+        entryId: USER_ACTION_ID,
       },
       turnCtx(),
     )
