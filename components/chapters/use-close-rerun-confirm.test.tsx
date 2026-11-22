@@ -89,10 +89,12 @@ function setup() {
   return { result, rerender, unmount, loadPreview, start }
 }
 
-async function openOn(result: { current: Hook }, chapterId = 'chap_2') {
+async function openOn(result: { current: Hook }, chapterId = 'chap_2'): Promise<boolean> {
+  let opened = false
   await act(async () => {
-    await result.current.open(chapterId)
+    opened = await result.current.open(chapterId)
   })
+  return opened
 }
 
 beforeEach(() => {
@@ -109,7 +111,7 @@ afterEach(() => {
 describe('useCloseRerunConfirm: opening', () => {
   it('opens on the preview', async () => {
     const { result, loadPreview } = setup()
-    await openOn(result)
+    expect(await openOn(result)).toBe(true)
     expect(loadPreview).toHaveBeenCalledWith('chap_2')
     expect(result.current.target).toEqual({ chapterId: 'chap_2', preview: PREVIEW })
     expect(toast.error).not.toHaveBeenCalled()
@@ -124,7 +126,7 @@ describe('useCloseRerunConfirm: opening', () => {
   ] as const)('opens nothing and toasts a %s refusal', async (code, copy) => {
     const { result, loadPreview } = setup()
     loadPreview.mockResolvedValueOnce(refusal(code))
-    await openOn(result)
+    expect(await openOn(result)).toBe(false)
     expect(result.current.target).toBeNull()
     expect(toast.error).toHaveBeenCalledWith(copy)
   })
@@ -148,7 +150,7 @@ describe('useCloseRerunConfirm: opening', () => {
   it('opens nothing, logs and toasts when the opening read throws', async () => {
     const { result, loadPreview } = setup()
     loadPreview.mockRejectedValueOnce(new Error('database is locked'))
-    await openOn(result)
+    expect(await openOn(result)).toBe(false)
     expect(result.current.target).toBeNull()
     expect(logger.error).toHaveBeenCalledWith('app.close_rerun_preview_threw', {
       branchId: 'br_1',
@@ -162,15 +164,17 @@ describe('useCloseRerunConfirm: opening', () => {
     const { result, loadPreview } = setup()
     const older = deferred<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(older.promise).mockResolvedValueOnce(RECOUNTED)
-    let first!: Promise<void>
+    let first!: Promise<boolean>
     act(() => {
       first = result.current.open('chap_2')
     })
     await openOn(result, 'chap_3')
+    let olderOpened: boolean | undefined
     await act(async () => {
       older.resolve(PREVIEW)
-      await first
+      olderOpened = await first
     })
+    expect(olderOpened).toBe(false)
     expect(result.current.target).toEqual({ chapterId: 'chap_3', preview: RECOUNTED })
   })
 
@@ -178,7 +182,7 @@ describe('useCloseRerunConfirm: opening', () => {
     const { result, loadPreview } = setup()
     const opening = deferred<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(opening.promise).mockResolvedValueOnce(RECOUNTED)
-    let pendingOpen!: Promise<void>
+    let pendingOpen!: Promise<boolean>
     act(() => {
       pendingOpen = result.current.open('chap_2')
     })
@@ -197,7 +201,7 @@ describe('useCloseRerunConfirm: opening', () => {
     const { result, rerender, loadPreview } = setup()
     const pending = deferred<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(pending.promise)
-    let opening!: Promise<void>
+    let opening!: Promise<boolean>
     act(() => {
       opening = result.current.open('chap_2')
     })

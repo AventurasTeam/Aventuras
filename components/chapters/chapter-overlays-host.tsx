@@ -371,20 +371,23 @@ function RerunConfirmHost({ request }: { request: RerunConfirmRequest }): ReactE
   useEffect(() => {
     openRef.current = openPreview
   })
-  const [answered, setAnswered] = useState(false)
+  const [opened, setOpened] = useState(false)
   useEffect(() => {
     let live = true
-    void openRef.current(chapterId).then(() => {
-      if (live) setAnswered(true)
+    void openRef.current(chapterId).then((held) => {
+      if (!live) return
+      // A first read that opens nothing (the hook toasts why) ran nothing: a Cancel.
+      if (held) setOpened(true)
+      else chapterOverlaysStore.closeRerunConfirm({ reopen: true })
     })
     return () => {
       live = false
     }
   }, [chapterId])
-  // A refused or failed first read opens nothing (the hook toasts it); a refused re-read closes it.
+  // A refused re-read closes it; the confirm showed, so the window stays closed.
   useEffect(() => {
-    if (answered && target == null) chapterOverlaysStore.closeRerunConfirm({ reopen: false })
-  }, [answered, target])
+    if (opened && target == null) chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+  }, [opened, target])
 
   const [pending, setPending] = useState(false)
   // An in-flight refusal holds the confirm actions while the story is busy: a pending turn's mark

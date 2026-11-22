@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { CloseRerunPreview } from '@/lib/actions'
+import type { CloseRerunPreview, CloseRerunReadRefusal } from '@/lib/actions'
 import { createQueryClient } from '@/lib/cache'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
@@ -12,6 +12,7 @@ import {
   type CloseReport,
   type Delta,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import type { CloseReview } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { CHAPTER_CLOSE_KIND, type ChainEnd } from '@/lib/pipeline'
@@ -236,6 +237,8 @@ const FRESH: CloseRerunPreview = {
   ...PREVIEW,
   reversal: { createdLore: { count: 3, userEdited: true }, otherChanges: 31 },
 }
+
+const CLOSE_OWED: CloseRerunReadRefusal = { status: 'rejected', code: 'close-owed', reason: 'x' }
 
 const RUN = { runId: 'run_rerun', actionId: 'act_rerun_2' }
 const END = {
@@ -527,6 +530,50 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
     expect(confirmView.mounted).toBe(false)
     expect(show).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['is refused', () => actions.preview.mockResolvedValue(CLOSE_OWED)],
+    ['throws', () => actions.preview.mockRejectedValue(new Error('database is locked'))],
+  ] as const)(
+    'a first read that %s brings back the window Re-run… closed, as a Cancel does',
+    async (_name, failRead) => {
+      vi.spyOn(toast, 'error').mockReturnValue('')
+      vi.spyOn(logger, 'error').mockImplementation(() => {})
+      await openReady()
+      failRead()
+      openRerun({ fromReview: true })
+      await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+      expect(confirmView.mounted).toBe(false)
+      expect(chapterOverlaysStore.getState().review).toStrictEqual({
+        chapterId: 'chap_2',
+        actionId: 'act_close_2',
+      })
+      expect(shown().open).toBe(true)
+    },
+  )
+
+  it('a first read refused from the card opens no window', async () => {
+    vi.spyOn(toast, 'error').mockReturnValue('')
+    actions.preview.mockResolvedValue(CLOSE_OWED)
+    renderHost()
+    openRerun()
+    await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+  })
+
+  it('a refused re-read closes the confirm and leaves the window Re-run… closed closed', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
+    await openReady()
+    openRerun({ fromReview: true })
+    await confirmShown()
+    actions.preview.mockResolvedValue(CLOSE_OWED)
+
+    settleRun()
+    await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunConfirm.closeOwed'))
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(shown().open).toBe(false)
   })
 
   it("disables every button while the start runs, and closes once the re-run's chain holds the branch", async () => {
