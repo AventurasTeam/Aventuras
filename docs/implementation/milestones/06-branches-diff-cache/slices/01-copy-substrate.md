@@ -753,5 +753,18 @@ remains.
 
 ## Implementation notes
 
+**Device checks.** `app/dev/db-check.tsx`, "Branch copy checks", run
+2026-11-22:
+
+- Desktop, Electron dev app: SQLite 3.51.2, sqlite-vec v0.1.9. Vector
+  copy: passed (copied `probe_b:v1:m1` and `probe_b:v2:m2` with their
+  columns and bytes, the orphan stayed behind, a KNN on `probe_b` found
+  both). Temp table created, filled, emptied and dropped inside one
+  batch: passed (`t1`, `t2` moved).
+- Android, dev client on Aventuras_Slot_2 (emulator-5556): SQLite
+  3.50.3, sqlite-vec v0.1.7-alpha.2. Vector copy: passed (the same two
+  rows, columns and bytes, the same KNN). Temp table inside one batch:
+  passed (`t1`, `t2` moved).
+
 _Populated at finish: notable deviations from the plan and resolved
 developer decisions._
