@@ -78,10 +78,10 @@ slice-planning gate forces its resolution before that slice is planned.
 - **The rollback's create-delta lookup still hedges on `entry_id`.**
   `lib/actions/story-entries/operational.ts:255-256` says the lookup by
   `target_id` works "whether or not foreground deltas stamp entry_id".
-  That is settled: the `user_action` create is anchored on its entry
-  (`lib/actions/story-entries/pre-entry-locations.ts:22`), so the hedge
-  reads as an open question it no longer is. Found by M6.1's final
-  review (2026-11-22).
+  M6.1's anchor settled that: the `user_action` create is stamped with
+  its entry (`lib/actions/turns/submit-turn.ts:180`), so the hedge reads
+  as an open question it no longer is. Found by M6.1's final review
+  (2026-11-22).
 
 - **The vec0 shadow-table list is incomplete.**
   `lib/db/embeddings/vec-tables.ts:16-18` names four shadow tables;

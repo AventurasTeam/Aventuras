@@ -359,7 +359,7 @@ after it merges. One proposed shape is a synchronous
   answers with no rows (`lib/db/embeddings/ops.ts:73-76`). The source
   table comes from `SOURCE_TABLES` (`lib/db/embeddings/stale.ts:20-26`),
   so `chapter_summaries_vec_*` reads `chapters`. Every model's rows copy
-  (see [Open questions](#open-questions)).
+  (see [Implementation notes](#implementation-notes)).
 
   The family list is read before the batch, so a family table created
   between the listing and the batch is missed, and with it the first
@@ -389,8 +389,10 @@ reverses under either anchor:
   (`lib/actions/story-entries/pre-entry-locations.ts:22-46`), which
   `scene-fields.ts:88` calls on the tail only. Its create lookup now
   finds a `user_action` tail's create, so writes logged under that turn's
-  action with no anchor join the result. See
-  [Open questions](#open-questions).
+  action with no anchor would join the result. The shipped lookup
+  excludes the `user_edit` create (`ne(deltas.source, 'user_edit')`), so
+  `firstLocationWrites` keeps its earlier result. See
+  [Implementation notes](#implementation-notes).
 - `laterTurnDeltas` (`lib/actions/delta/later-turn.ts:94-98`): no change.
   It filters writes on the guarded rows, which are never
   `story_entries`, and either anchor keeps a later turn's write.
@@ -656,8 +658,8 @@ remains.
   tail with an entity move logged under its turn's action and no anchor,
   removing that character from the scene leaves the move uncounted, so
   `firstLocationWrites` returns what it returned before the anchor. This
-  is the default under [Open questions](#open-questions); if the plan
-  overturns it, the criterion changes with it.
+  is the default under [Implementation notes](#implementation-notes); if
+  the plan overturns it, the criterion changes with it.
 - `lib/actions/story-entries/operational.test.ts` and
   `lib/actions/delta/later-turn.test.ts` pass unchanged.
 
@@ -727,12 +729,9 @@ Both passing, the vectors take the single statement per family and C3's
 temp-table fallback isn't built. The temp-table answer stands for
 [Slice 6.3](./03-fork-core.md)'s survivor exclusion: a plain temp table
 can be created, filled, emptied and dropped inside one batch on both
-platforms. The optional boot check also ran: this branch's build, opened
-once over the slot AVD's existing dev database (21 migrations, 217
-deltas, one finished run), applied both new steps at boot: 23
-migrations, `deltas` keyed `(branch_id, id)` with both indexes, 217
-deltas kept, `foreign_key_check` empty, the finished run's `branch_id`
-left null as the backfill leaves finished rows.
+platforms. The optional boot check also passed: this branch's build,
+opened once over the slot AVD's existing dev database, applied both new
+migrations at boot, kept the rows, and left the foreign keys clean.
 
 **Copier contract for 6.3 and 6.6.** The copier parenthesizes each
 predicate before ANDing it to the branch condition: drizzle's `and()`
@@ -775,13 +774,15 @@ suffixes, not their numbers, so a regeneration must keep both names.
   only a failed transaction leaves it, which the next boot retries.
 - The marker's foreign key holds: one fixture needed a seeded `branches`
   row (`b2` in `abort-reversal-hold.test.ts`), and no key was loosened.
-- The contract wording was read against the code at planning and held;
-  the work found one read C1 lists under neither slice (carried forward
-  below). R1's canon landed before the gated recovery work; the plan
-  came in at 16 tasks, so the copier stayed here.
+- The contract wording was read against the code at planning and held.
+  `undoDelete`'s liveness read stays on the delta's branch, as C1 says;
+  the call C1 cites at `:629` now sits at `reverse-replay.ts:646`. R1's
+  canon landed before the gated recovery work; the plan came in at 16
+  tasks, so the copier stayed here.
 
-**Carried forward.** Two branch reads 6.3's split of read and write
-branches must decide are in
+**Carried forward.** One branch read 6.3's split of read and write
+branches must decide, the branch redo's survivor restore takes from the
+set (`redo.ts:110`), is in
 [Slice 6.3's Open questions](./03-fork-core.md#open-questions).
 
 **Second to land.** At the final rebase (`e981d8922`), neither

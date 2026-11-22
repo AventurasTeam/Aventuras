@@ -532,7 +532,7 @@ describe('updateEntrySceneFields', () => {
       },
       'e2',
     )
-    // A write of the turn's run that outlived it (its reversal failed), unanchored as the fold logs.
+    // A write of the turn's run that outlived it (its reversal failed), unanchored like the fold's.
     await log(
       {
         kind: 'updateEntityLocationTracking',
