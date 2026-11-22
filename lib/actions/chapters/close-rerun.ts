@@ -448,7 +448,7 @@ async function startUnderMark(
       pendingMark: own,
       preflight: closePreflight,
       onReserved: () => {
-        // A throw here would escape the orchestrator's reserve and leave the run registered.
+        // A throw here would unwind the re-run it just reserved; a confirm failing to close mustn't.
         try {
           args.onStarted?.()
         } catch (e) {

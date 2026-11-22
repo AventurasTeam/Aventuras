@@ -118,14 +118,6 @@ slice-planning gate forces its resolution before that slice is planned.
   close altogether once a turn has logged above the re-run's floor.
   Pre-existing for every run kind; the re-run adds the second outcome.
   Raised by Slice 5.13's closing review (2026-11-22).
-- **A throwing `onReserved` leaves its run registered.** The
-  orchestrator calls `reserveRun`, and the caller's `onReserved` inside
-  it, outside `driveOrigin`'s try and unwind
-  (`lib/pipeline/runtime/orchestrator.ts`), so a callback that throws
-  after the run registers leaves a hard-gate run no path removes until a
-  restart. No caller throws today; `startCloseRerun` is the first to pass
-  a host-supplied callback through it. Raised by Slice 5.13's Task 17
-  review (2026-11-21).
 - **The rollback modal's "stays open" misses the regenerate mode.**
   `rollback-confirm.md → A run starting under an open modal` says the
   modal stays open on an in-flight refusal; a regenerate-mode confirm

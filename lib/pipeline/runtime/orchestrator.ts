@@ -121,11 +121,9 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
 // Synchronous reservation: place the run in txState before any await, so the
 // concurrency check that precedes it can't be raced by a second start of a
 // mutually-blocking kind slipping in across an await boundary.
-function reserveRun(kind: string, ctx: RunCtx): RunState {
-  const run = newRunState(kind, ctx)
+function reserveRun(run: RunState, ctx: RunCtx): void {
   generationStore.startRun(run)
   ctx.onReserved?.()
-  return run
 }
 
 function emitRunComplete(
@@ -673,9 +671,11 @@ async function driveOrigin(kind: string, ctx: RunCtx): Promise<OriginDriven> {
     )
   }
   // reserveRun registers synchronously right after the loop's 'start' (race-free for
-  // the common path); beginRun then persists the marker and emits run_start.
-  const run = reserveRun(kind, ctx)
+  // the common path); beginRun then persists the marker and emits run_start. Inside the try, a
+  // store listener or onReserved that throws unwinds the run it registered.
+  const run = newRunState(kind, ctx)
   try {
+    reserveRun(run, ctx)
     await beginRun(run, ctx)
     // A user write checks the gate before locking its rows: one passing just before reserveRun can
     // commit under this run's reads. A successor needs no settle: the gate held across the handoff.

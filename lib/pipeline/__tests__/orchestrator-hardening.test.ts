@@ -423,6 +423,42 @@ describe('orchestrator hardening', () => {
     expect(result.error?.kind).toBe('orchestrator')
   })
 
+  it('unwinds a run whose onReserved throws, so it holds no gate', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({
+      kind: 'reservethrow',
+      phases: [{ name: 'p', run: completesCleanly }],
+      ...base,
+    })
+    const onReserved = () => {
+      throw new Error('host threw')
+    }
+
+    await expect(runPipeline('reservethrow', { ...ctx, onReserved })).rejects.toThrow('host threw')
+
+    expect(generationStore.getTxState().runs.size).toBe(0)
+    expect(expectRan(await runPipeline('reservethrow', ctx)).outcome).toBe('completed')
+  })
+
+  it('unwinds a run whose registration a store listener throws on', async () => {
+    const { ctx } = await makeHarness()
+    definePipeline({ kind: 'listenthrow', phases: [{ name: 'p', run: completesCleanly }], ...base })
+    let armed = true
+    const off = generationStore.subscribe(() => {
+      if (!armed || generationStore.getTxState().runs.size === 0) return
+      armed = false
+      throw new Error('listener threw')
+    })
+
+    try {
+      await expect(runPipeline('listenthrow', ctx)).rejects.toThrow('listener threw')
+    } finally {
+      off()
+    }
+
+    expect(generationStore.getTxState().runs.size).toBe(0)
+  })
+
   it('a marker-write failure on commit finishes cleanly without leaking state', async () => {
     const { ctx } = await makeHarness()
     definePipeline({ kind: 'commitfail', phases: [{ name: 'p', run: completesCleanly }], ...base })
