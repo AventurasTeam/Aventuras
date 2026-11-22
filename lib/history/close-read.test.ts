@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ZodError } from 'zod'
 
 import { redoLastAction, saveChapter, startManualClose, undoLastAction } from '@/lib/actions'
-import type { generateStructured } from '@/lib/ai'
+import type { generateStructured, generateToolStep } from '@/lib/ai'
 import { chapterDraftFrom } from '@/lib/chapters'
 import {
   branches,
@@ -21,6 +21,17 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { dbSchema } from '@/lib/db/schema'
+import {
+  closedChapterId,
+  defined,
+  installCloseHarnessHooks,
+  openHarness,
+  STAND_IN_INPUT,
+  STAND_IN_STEP,
+  TOBIN,
+  type CloseMocks,
+} from '@/lib/pipeline/__tests__/close-harness'
+import { standInSlots } from '@/lib/pipeline/__tests__/close-stand-in'
 import { expectRan, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import {
   metadataReplyResult,
@@ -36,13 +47,15 @@ import {
   readLatestCloseReport,
 } from './close-read'
 
-const { generateStructuredMock } = vi.hoisted(() => ({
+const { generateStructuredMock, generateToolStepMock } = vi.hoisted(() => ({
   generateStructuredMock: vi.fn<typeof generateStructured>(),
+  generateToolStepMock: vi.fn<typeof generateToolStep>(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   generateStructured: generateStructuredMock,
+  generateToolStep: generateToolStepMock,
 }))
 
 beforeEach(() => {
@@ -441,5 +454,54 @@ describe("loadCloseDeltas's query plan", () => {
     )
     expect(sent[1]!.params.slice(1, 3)).toEqual([10, 11])
     expect(rows).not.toContain('USE TEMP B-TREE')
+  })
+})
+
+describe('loadCloseDeltas over a re-run (AC 27)', () => {
+  const mocks: CloseMocks = {
+    generateStructured: generateStructuredMock,
+    generateToolStep: generateToolStepMock,
+  }
+  installCloseHarnessHooks(mocks)
+
+  it("reads the re-run's group from its first position, a field the close also wrote holding its value from before any close", async () => {
+    // The close and its re-run each write a lore row and Tobin's description (close-stand-in.ts).
+    const h = await openHarness(
+      { slots: standInSlots, steps: [STAND_IN_STEP], merge: false },
+      mocks,
+    )
+    await h.close()
+    const chapterId = closedChapterId(h)
+    const end = await h.rerun(chapterId)
+    expect(end.result.outcome).toBe('completed')
+    const rerun = end.result.actionId
+    const report = defined(
+      (await readCloseReport(h.fx.ctx.db, h.fx.branchId, chapterId)) ?? undefined,
+      'the re-run wrote no report',
+    )
+    expect(report.actionId).toBe(rerun)
+    const first = defined(report.firstLogPosition, 'the re-run recorded no first position')
+
+    const read = await loadCloseDeltas(h.fx.ctx.db, h.fx.branchId, chapterId, rerun, first)
+
+    expect(read.map((d) => [d.targetTable, d.op])).toEqual([
+      ['lore', 'create'],
+      ['entities', 'update'],
+      ['chapters', 'update'],
+    ])
+    expect(read[0]!.logPosition).toBe(first)
+    const tobin = read[1]!
+    expect(tobin.targetId).toBe(TOBIN.id)
+    // The re-run's reversal put the close's write back first, so this one records the value
+    // before any close, not the close's.
+    expect(tobin.undoPayload).toMatchObject({ description: TOBIN.description })
+    expect(TOBIN.description).not.toBe(STAND_IN_INPUT.description)
+    // Unbounded, the chapter row's deltas under the action frame the report update alone.
+    expect(
+      (await loadCloseDeltas(h.fx.ctx.db, h.fx.branchId, chapterId, rerun)).map((d) => [
+        d.targetTable,
+        d.op,
+      ]),
+    ).toEqual([['chapters', 'update']])
   })
 })

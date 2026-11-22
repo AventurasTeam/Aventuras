@@ -22,7 +22,7 @@ export {
   ensureChapterClosePipelineRegistered,
 } from './definitions/chapter-close'
 export { closingChapterId } from './definitions/closing-chapter'
-export { CLOSE_PHASE } from './definitions/intermediates'
+export { CLOSE_PHASE, CLOSE_TARGET } from './definitions/intermediates'
 export {
   CLASSIFIER_HELD,
   closeOwed,
@@ -30,6 +30,7 @@ export {
   owedWorkAtSend,
   readClassifierStatus,
   unprocessedEntryCount,
+  unprocessedThroughChapter,
 } from './definitions/memory-chain'
 export { runClassifierPass } from './definitions/classifier-pass'
 export {

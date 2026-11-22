@@ -28,6 +28,8 @@ const RECORD_MUTATORS = [
   'clearPendingClose',
   'clearDeferredClose',
   'dropBranchRecords',
+  'setPendingRerun',
+  'clearPendingRerun',
 ]
 
 // eslint.config.js's record-writer block; prose reversal's clearPendingClose is its own block.
@@ -93,6 +95,8 @@ describe('generationStore mutator lint', () => {
       clearPendingClose: true,
       clearDeferredClose: true,
       dropBranchRecords: true,
+      setPendingRerun: true,
+      clearPendingRerun: true,
     })
   })
 
@@ -115,6 +119,8 @@ describe('generationStore mutator lint', () => {
       clearPendingClose: false,
       clearDeferredClose: true,
       dropBranchRecords: true,
+      setPendingRerun: true,
+      clearPendingRerun: true,
     })
   })
 
@@ -128,6 +134,8 @@ describe('generationStore mutator lint', () => {
         clearPendingClose: false,
         clearDeferredClose: false,
         dropBranchRecords: false,
+        setPendingRerun: false,
+        clearPendingRerun: false,
         startRun: true,
         setCloseProgress: true,
       })

@@ -126,6 +126,7 @@ function chapter(id: string, sequenceNumber: number): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: true,
+    closeReportActionId: 'act_close',
   }
 }
 

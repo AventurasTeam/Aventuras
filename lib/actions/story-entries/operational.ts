@@ -5,7 +5,7 @@ import { chapters, chunked, deltas, entryMetadataSchema, storyEntries } from '@/
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
 import { isRetrievalBumpOnly } from '@/lib/row-signals'
-import { entriesStore, generationStore, selectMemoryRun } from '@/lib/stores'
+import { entriesStore, generationStore, rerunHoldsReversal, selectMemoryRun } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
 import { withBranchWriteShared } from '../delta/branch-write-lock'
@@ -226,6 +226,12 @@ export type CountsChangedRejection = {
   counts: RollbackCounts
 }
 
+const targetNotFound = (branchId: string, targetId: string): StoryEntryRejection => ({
+  status: 'rejected',
+  reason: `target ${branchId}:${targetId} not found`,
+  code: STORY_ENTRY_REJECTION.notFound,
+})
+
 async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
@@ -235,12 +241,7 @@ async function resolveRollbackWindow(
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, targetId)))
-  if (!target)
-    return {
-      status: 'rejected',
-      reason: `target ${branchId}:${targetId} not found`,
-      code: STORY_ENTRY_REJECTION.notFound,
-    }
+  if (!target) return targetNotFound(branchId, targetId)
   if (target.kind === 'opening')
     return {
       status: 'rejected',
@@ -426,6 +427,51 @@ export async function getRollbackCounts(
   })
 }
 
+/**
+ * The rollback's sweep, for a caller already inside its prose-reversal bracket: resolved, counted
+ * against the counts the user confirmed, and committed as a new action.
+ */
+export async function sweepToEntry(
+  branchId: string,
+  targetId: string,
+  ctx: DbCtx,
+  expectedCounts: RollbackCounts,
+): Promise<
+  { status: 'ok'; counts: RollbackCounts } | StoryEntryRejection | CountsChangedRejection
+> {
+  const swept = await resolveSweep(branchId, targetId, ctx)
+  if ('status' in swept) return swept
+  const counts = await rollbackCountsOf(swept, ctx)
+  // Compared with the set the commit reverses, so the consent covers exactly what goes.
+  if (!sameRollbackCounts(counts, expectedCounts))
+    return {
+      status: 'rejected',
+      code: STORY_ENTRY_REJECTION.countsChanged,
+      reason: 'rollback counts changed since the confirm opened',
+      counts,
+    }
+  try {
+    await commitNewAction(swept.set, ctx, swept.clampOps)
+  } catch (e) {
+    if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
+    throw e
+  }
+  return { status: 'ok', counts }
+}
+
+// What the re-run hold reads; null for a missing row.
+async function entryChapterOf(
+  branchId: string,
+  id: string,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<{ chapterId: string | null } | null> {
+  const [row] = await ctx.db
+    .select({ chapterId: storyEntries.chapterId })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
+  return row ?? null
+}
+
 export async function rollbackToEntry(
   branchId: string,
   targetId: string,
@@ -436,25 +482,18 @@ export async function rollbackToEntry(
 > {
   // A head reversal: a pass or a close holding the gate is interrupted, not waited for.
   if (generationStore.isHeadReversalBlocked(branchId)) return inFlightRejection()
+  const target = await entryChapterOf(branchId, targetId, ctx)
+  // Refused before the bracket: a missing row reads unstamped, so it would interrupt a re-run.
+  if (!target) return targetNotFound(branchId, targetId)
+  // Past the read, synchronously with the bracket's entry: a turn reserved during it refuses, and
+  // a re-run holds a rollback into its chapter until it ends.
+  if (
+    generationStore.isHeadReversalBlocked(branchId) ||
+    rerunHoldsReversal(generationStore.getTxState(), branchId, target)
+  )
+    return inFlightRejection()
 
-  return bracketProseReversal(branchId, ctx, async () => {
-    const swept = await resolveSweep(branchId, targetId, ctx)
-    if ('status' in swept) return swept
-    const counts = await rollbackCountsOf(swept, ctx)
-    // Compared with the set the commit reverses, so the consent covers exactly what goes.
-    if (!sameRollbackCounts(counts, expectedCounts))
-      return {
-        status: 'rejected',
-        code: STORY_ENTRY_REJECTION.countsChanged,
-        reason: 'rollback counts changed since the confirm opened',
-        counts,
-      }
-    try {
-      await commitNewAction(swept.set, ctx, swept.clampOps)
-    } catch (e) {
-      if (e instanceof ReversalIntegrityError) return reversalRefused(branchId, e)
-      throw e
-    }
-    return { status: 'ok', counts }
-  })
+  return bracketProseReversal(branchId, ctx, () =>
+    sweepToEntry(branchId, targetId, ctx, expectedCounts),
+  )
 }

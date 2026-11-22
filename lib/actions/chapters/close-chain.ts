@@ -9,6 +9,7 @@ import {
   readClassifierStatus,
   startChain,
   unprocessedEntryCount,
+  unprocessedThroughChapter,
   type ChainEnd,
   type ConfigResolverError,
   type PreflightFailedStart,
@@ -43,15 +44,17 @@ type CloseChainOpts = {
   /** Runs in the synchronous section before the reserve; a failure starts nothing. */
   preflight?: (open: OpenStory) => ConfigResolverError | null
   onReserved?: () => void
+  /** The caller holds a pending mark on this branch, which `onReserved` releases. */
+  ownsPendingMark?: true
 }
 
 // A variable takes no excess-property check, so only an explicit `undefined` keeps a pre-flight out.
 type UnpreflightedOpts = Omit<CloseChainOpts, 'preflight'> & { preflight?: undefined }
 
 /**
- * Starts the pass (entries unprocessed) or the close; resolves with the chain's end, the refusal,
- * or, given a pre-flight, its failure. Rejects when the origin or the pre-flight throws, as
- * `startChain` does: a caller must handle it.
+ * Starts the pass (under a pending re-run, only entries through its chapter's end) or the close;
+ * resolves with the chain's end, the refusal, or a pre-flight failure. Rejects when the origin or
+ * pre-flight throws, as `startChain` does: a caller must handle it.
  */
 export function startCloseChain(
   branchId: string,
@@ -78,14 +81,25 @@ export async function startCloseChain(
   const invalid = await opts?.validate?.()
   if (invalid) return invalid
   const { processedThrough } = await readClassifierStatus(branchId, ctx)
-  const unprocessed = (await unprocessedEntryCount(branchId, processedThrough, ctx)) > 0
+  // A re-run catches up through its chapter's end only (generation-pipeline.md → chainsTo on
+  // predecessor).
+  const rerun = generationStore.getTxState().pendingRerun.get(branchId)
+  const unprocessed =
+    (rerun
+      ? await unprocessedThroughChapter(branchId, rerun.chapterId, processedThrough, ctx)
+      : await unprocessedEntryCount(branchId, processedThrough, ctx)) > 0
 
   // No await from here to the reserve, so no swap or run can start in between.
   const open = currentStoryStore.getCurrentStory()
   if (open?.branchId !== branchId) return refused(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   if (isStorySwapPending(open.storyId)) return refused(MANUAL_CLOSE_REFUSAL.swapPending)
-  if (isStoryBusy(generationStore.getTxState(), open.storyId, branchId))
-    return refused(MANUAL_CLOSE_REFUSAL.busy)
+  const busy = isStoryBusy(
+    generationStore.getTxState(),
+    open.storyId,
+    branchId,
+    opts?.ownsPendingMark ? { ignorePendingTurns: true } : undefined,
+  )
+  if (busy) return refused(MANUAL_CLOSE_REFUSAL.busy)
   if (generationStore.getSettleCount() !== settled) return refused(MANUAL_CLOSE_REFUSAL.busy)
   const failed = opts?.preflight?.(open)
   if (failed) return { outcome: 'preflight-failed', error: failed }

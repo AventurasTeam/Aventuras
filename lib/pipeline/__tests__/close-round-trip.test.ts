@@ -1,9 +1,9 @@
-import type { AssistantModelMessage, ToolCallPart } from 'ai'
-import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { and, asc, eq, max } from 'drizzle-orm'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { ChapterDeleteMode } from '@/lib/actions/chapters/chapter-delete-set'
 import { removeChapter } from '@/lib/actions/chapters/remove-chapter'
+import { saveChapter } from '@/lib/actions/chapters/save-chapter'
 import { startManualClose } from '@/lib/actions/chapters/start-manual-close'
 import {
   applyDeltaAction,
@@ -14,18 +14,10 @@ import { shownCounts } from '@/lib/actions/story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '@/lib/actions/story-entries/operational'
 import { redoLastAction, undoLastAction } from '@/lib/actions/story-entries/undo'
 import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
-import type {
-  GenerateStructuredResult,
-  generateStructured,
-  generateToolStep,
-  ToolStep,
-  ToolStepCall,
-  ToolStepResult,
-} from '@/lib/ai'
-import { cutChapterParts } from '@/lib/chapters'
+import type { generateStructured, generateToolStep } from '@/lib/ai'
+import { CHAPTER_CLOSE_KIND, chapterDraftFrom } from '@/lib/chapters'
 import {
   chapters,
-  characterRelationships,
   deltas,
   emptyEntityState,
   entities,
@@ -33,30 +25,56 @@ import {
   happeningInvolvements,
   happenings,
   lore,
+  pipelineRuns,
+  reversalJournals,
   storyEntries,
   threads,
+  vecRowPk,
+  type Chapter,
   type Delta,
-  type EntityState,
   type HappeningAwareness,
+  type RerunJournal,
 } from '@/lib/db'
 import {
+  CLOSE_PHASE,
   configureDeltaActionPort,
   pipelineEventBus,
+  recoverInFlightRuns,
+  type ChainEnd,
   type PhaseEmittedEvent,
   type PhaseResult,
-  type TxResult,
 } from '@/lib/pipeline'
-import { interruptMemoryRuns } from '@/lib/stores'
+import { generationStore, interruptMemoryRuns, undoRedoStore } from '@/lib/stores'
 
-import { standInSlots, standInTool } from './close-stand-in'
-import { expectRan, realDeltaActionPort, resetSingletons } from './harness'
 import {
-  metadataReplyResult,
+  branchLog,
+  CHARACTER_ID,
+  closedChapterId,
+  defined,
+  deltasOf,
+  END_REPLY,
+  installCloseHarnessHooks,
+  openHarness,
+  script,
+  seedEntity,
+  STAND_IN_INPUT,
+  TOBIN,
+  worldState,
+  type CloseCase,
+  type CloseHarness,
+  type CloseMocks,
+  type SeedEntity,
+  type WorldState,
+} from './close-harness'
+import { standInSlots, standInTool } from './close-stand-in'
+import { expectRan, realDeltaActionPort, resetSingletons, within } from './harness'
+import {
   openCloseFixture,
+  queryAllOn,
   twoPartWindow,
+  writeTurnEntry,
   type CloseFixture,
 } from '../definitions/__tests__/close-fixture'
-import { chapterPartSummarySchema } from '../definitions/chapter-metadata-schema'
 import { awarenessTask, resetRetrievalStep } from '../definitions/close-agent/close-awareness'
 import { embedRangeStep } from '../definitions/close-agent/close-happenings'
 import { normalizeStackablesStep } from '../definitions/close-agent/close-stackables'
@@ -88,210 +106,12 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
   generateToolStep: generateToolStepMock,
 }))
 
-beforeEach(() => {
-  resetSingletons()
-  generateStructuredMock.mockReset()
-  generateStructuredMock.mockResolvedValue(metadataReplyResult())
-  generateToolStepMock.mockReset()
-})
-
-afterEach(() => {
-  __setCloseAgentSlots(undefined)
-  resetSingletons()
-  vi.restoreAllMocks()
-})
-
-// The third of six replies (position 7): turns lie on both sides of the close.
-const END_REPLY = 2
-
-const CHARACTER_ID = 'char_5b0d2c1e-7f3a-4e8b-9c6d-2a1f0e9b8c7d'
-
-// t3 is position 3, before E: a group anchored on the cited turn would survive the rollback to E.
-const STAND_IN_INPUT = {
-  id: 'c1',
-  description: 'The Harrow ferryman, who poled Wren across the river at night for a courier price.',
-  title: 'The Harrow ferry',
-  body: 'Old Tobin runs the ferry at Harrow when he chooses to, and the Syndicate taxes every crossing.',
-  turns: ['t3'],
-  why: 'Tobin is the ferryman Wren finds at the landing.',
+const MOCKS: CloseMocks = {
+  generateStructured: generateStructuredMock,
+  generateToolStep: generateToolStepMock,
 }
 
-type ScriptedStep = { calls: readonly Omit<ToolStepCall, 'toolCallId'>[] }
-
-const USAGE: ToolStep['usage'] = {
-  inputTokens: 1_000,
-  inputTokenDetails: { noCacheTokens: 1_000, cacheReadTokens: 0, cacheWriteTokens: 0 },
-  outputTokens: 50,
-  outputTokenDetails: { textTokens: 50, reasoningTokens: 0 },
-  totalTokens: 1_050,
-}
-
-const DONE = 'Nothing more to write.'
-
-function stepResult(step: ScriptedStep, n: number): ToolStepResult {
-  const calls: ToolStepCall[] = step.calls.map((call, i) => ({
-    ...call,
-    toolCallId: `call_${n}_${i + 1}`,
-  }))
-  const message: AssistantModelMessage = {
-    role: 'assistant',
-    content:
-      calls.length === 0
-        ? [{ type: 'text', text: DONE }]
-        : calls.map((call): ToolCallPart => ({ type: 'tool-call', ...call })),
-  }
-  return {
-    status: 'ok',
-    step: {
-      calls,
-      invalidCalls: [],
-      responseMessages: [message],
-      text: calls.length === 0 ? DONE : '',
-      finishReason: calls.length === 0 ? 'stop' : 'tool-calls',
-      usage: USAGE,
-    },
-    recoverable: [],
-  }
-}
-
-// Every step past the script replies with no tool call, which ends the task.
-function script(steps: readonly ScriptedStep[]): void {
-  let sent = 0
-  generateToolStepMock.mockImplementation(async () => {
-    sent += 1
-    return stepResult(steps[sent - 1] ?? { calls: [] }, sent)
-  })
-}
-
-const WORLD_TABLES = [
-  'chapters',
-  'entities',
-  'lore',
-  'threads',
-  'happenings',
-  'happening_involvements',
-  'happening_awareness',
-  'character_relationships',
-] as const
-type WorldTable = (typeof WORLD_TABLES)[number]
-
-const isWorldTable = (table: string): table is WorldTable =>
-  (WORLD_TABLES as readonly string[]).includes(table)
-
-/** Every table a close tool writes, keyed by delta `target_table`, and the entries a chapter stamps. */
-type WorldState = {
-  rows: Record<WorldTable, readonly { id: string }[]>
-  stamped: readonly { id: string; chapterId: string | null }[]
-}
-
-async function worldState(fx: CloseFixture): Promise<WorldState> {
-  const { db } = fx.ctx
-  const b = fx.branchId
-  return {
-    rows: {
-      chapters: await db
-        .select()
-        .from(chapters)
-        .where(eq(chapters.branchId, b))
-        .orderBy(asc(chapters.id)),
-      entities: await db
-        .select()
-        .from(entities)
-        .where(eq(entities.branchId, b))
-        .orderBy(asc(entities.id)),
-      lore: await db.select().from(lore).where(eq(lore.branchId, b)).orderBy(asc(lore.id)),
-      threads: await db
-        .select()
-        .from(threads)
-        .where(eq(threads.branchId, b))
-        .orderBy(asc(threads.id)),
-      happenings: await db
-        .select()
-        .from(happenings)
-        .where(eq(happenings.branchId, b))
-        .orderBy(asc(happenings.id)),
-      happening_involvements: await db
-        .select()
-        .from(happeningInvolvements)
-        .where(eq(happeningInvolvements.branchId, b))
-        .orderBy(asc(happeningInvolvements.id)),
-      happening_awareness: await db
-        .select()
-        .from(happeningAwareness)
-        .where(eq(happeningAwareness.branchId, b))
-        .orderBy(asc(happeningAwareness.id)),
-      character_relationships: await db
-        .select()
-        .from(characterRelationships)
-        .where(eq(characterRelationships.branchId, b))
-        .orderBy(asc(characterRelationships.id)),
-    },
-    stamped: await db
-      .select({ id: storyEntries.id, chapterId: storyEntries.chapterId })
-      .from(storyEntries)
-      .where(and(eq(storyEntries.branchId, b), isNotNull(storyEntries.chapterId)))
-      .orderBy(asc(storyEntries.position)),
-  }
-}
-
-async function branchLog(fx: CloseFixture): Promise<Delta[]> {
-  return (await fx.ctx.db
-    .select()
-    .from(deltas)
-    .where(eq(deltas.branchId, fx.branchId))
-    .orderBy(asc(deltas.logPosition))) as Delta[]
-}
-
-async function deltasOf(fx: CloseFixture, actionId: string): Promise<Delta[]> {
-  return (await fx.ctx.db
-    .select()
-    .from(deltas)
-    .where(and(eq(deltas.branchId, fx.branchId), eq(deltas.actionId, actionId)))
-    .orderBy(desc(deltas.logPosition))) as Delta[]
-}
-
-type SeedEntity = {
-  id: string
-  kind: 'character' | 'location' | 'item' | 'faction'
-  name: string
-  description: string
-  status: 'active' | 'retired'
-  state?: EntityState
-}
-
-const TOBIN: SeedEntity = {
-  id: CHARACTER_ID,
-  kind: 'character',
-  name: 'Tobin',
-  description: 'The ferryman at Harrow.',
-  status: 'active',
-}
-
-// A pass's create anchored on the first reply: both rollbacks below spare it.
-async function seedEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
-  const result = await applyDeltaAction(
-    {
-      action: {
-        kind: 'createEntity',
-        source: 'periodic_classifier',
-        payload: {
-          entry: {
-            ...seed,
-            branchId: fx.branchId,
-            injectionMode: 'auto',
-            createdAt: 1_767_225_700_000,
-            updatedAt: 1_767_225_700_000,
-          },
-        },
-      },
-      actionId: `act_close_seed_${seed.name.toLowerCase()}`,
-      branchId: fx.branchId,
-      entryId: fx.replyIds[0],
-    },
-    fx.ctx,
-  )
-  if (result.status !== 'ok') throw new Error(`round trip: seed refused: ${result.reason}`)
-}
+installCloseHarnessHooks(MOCKS)
 
 // A later turn's create: anchored on the fourth reply (position 9, past E) under that turn's action.
 async function seedLaterEntity(fx: CloseFixture, seed: SeedEntity): Promise<void> {
@@ -414,139 +234,6 @@ async function seedWorld(fx: CloseFixture): Promise<void> {
   await putInScene(fx, fx.replyIds[1], [TOBIN.id])
 }
 
-type CloseHarness = {
-  readonly fx: CloseFixture
-  /** E: the case's close ends on the third reply of six. */
-  readonly endEntryId: string
-  /** The state before the close ran. */
-  readonly before: WorldState
-  /** The branch's whole delta log before the close ran: other actions' deltas only. */
-  readonly beforeLog: readonly Delta[]
-  /** Runs the close to completion; a case must land at least one group past the metadata's. */
-  close: () => Promise<void>
-  /**
-   * Starts the close and calls `act` once the first group its case's `abortOn` admits lands;
-   * resolves with the run.
-   */
-  closeActingOnToolGroup: (act: () => void) => Promise<TxResult>
-  /** The group `act` ran on, if it ran. */
-  actedOn: () => ToolGroup | undefined
-  /** The close's action, once it started. */
-  actionId: () => string
-  /** The state and the close's own log as the close completed. */
-  closed: () => { state: WorldState; log: Delta[] }
-  /** Rolls the branch back to `targetId`, which goes with every entry after it. */
-  rollBack: (targetId: string) => Promise<void>
-  /** The entry a rollback took the branch back to, if one ran. */
-  rolledBackTo: () => string | undefined
-}
-
-type ToolGroup = { kinds: readonly PipelineAction['kind'][]; landed: boolean }
-
-const landedAny = (outcome: GroupOutcome | undefined): boolean =>
-  outcome?.status === 'ok' && outcome.outcomes.some((one) => one.status === 'landed')
-
-function defined<T>(value: T | undefined, what: string): T {
-  if (value === undefined) throw new Error(`round trip: ${what}`)
-  return value
-}
-
-// A code step's group reads to the bus as a tool's, so a case with one names the kinds to act on.
-const firesAbort = (c: RoundTripCase, group: ToolGroup): boolean =>
-  c.abortOn === undefined || group.kinds.some((kind) => c.abortOn?.includes(kind) === true)
-
-async function openHarness(c: RoundTripCase): Promise<CloseHarness> {
-  const fx = await openCloseFixture(
-    c.partWindow === undefined ? undefined : { loreWindow: c.partWindow },
-  )
-  await seedEntity(fx, TOBIN)
-  await c.seed?.(fx)
-  if (c.partWindow !== undefined) {
-    await expectCutBeforeEnd(fx, c.partWindow)
-    answerPartCalls()
-  }
-  __setCloseAgentSlots(c.slots())
-  script(c.steps)
-  // The bus hears every group the orchestrator dispatched, refused or not; the port has its outcome.
-  let lastOutcome: GroupOutcome | undefined
-  configureDeltaActionPort({
-    ...realDeltaActionPort(),
-    applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
-      lastOutcome = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
-      return lastOutcome
-    },
-  })
-  const toolGroups: ToolGroup[] = []
-  let onToolGroup: (() => void) | undefined
-  let actedOn: ToolGroup | undefined
-  // The metadata group is the one with the create.
-  pipelineEventBus.subscribe('delta_group_emitted', (event) => {
-    const group: ToolGroup = {
-      kinds: event.actions.map((a) => a.kind),
-      landed: landedAny(lastOutcome),
-    }
-    if (group.kinds.includes('createChapter')) return
-    toolGroups.push(group)
-    const act = onToolGroup
-    if (act === undefined || !group.landed || !firesAbort(c, group)) return
-    onToolGroup = undefined
-    actedOn = group
-    act()
-  })
-  const endEntryId = fx.replyIds[END_REPLY]
-  const before = await worldState(fx)
-  const beforeLog = await branchLog(fx)
-  let actionId: string | undefined
-  let closed: { state: WorldState; log: Delta[] } | undefined
-  let rolledBackTo: string | undefined
-  const start = async (): Promise<TxResult> => {
-    const tx = expectRan(await startManualClose(fx.branchId, endEntryId, fx.ctx))
-    actionId = tx.actionId
-    return tx
-  }
-  return {
-    fx,
-    endEntryId,
-    before,
-    beforeLog,
-    close: async () => {
-      const tx = await start()
-      expect(tx).toMatchObject({ outcome: 'completed' })
-      expect(
-        toolGroups.some((group) => group.landed),
-        'the case landed nothing',
-      ).toBe(true)
-      const log = await deltasOf(fx, tx.actionId)
-      if (c.merge)
-        expect(
-          log.some((d) => d.op === 'delete'),
-          'a merge case deletes the row it absorbs',
-        ).toBe(true)
-      // A table the snapshot misses would let a reversal leave rows behind unseen.
-      const unlisted = new Set(
-        log.map((d) => d.targetTable).filter((t) => t !== 'story_entries' && !isWorldTable(t)),
-      )
-      expect([...unlisted], 'close deltas on tables the snapshot misses').toEqual([])
-      closed = { state: await worldState(fx), log }
-    },
-    closeActingOnToolGroup: (act) => {
-      onToolGroup = act
-      return start()
-    },
-    actedOn: () => actedOn,
-    actionId: () => defined(actionId, 'the close has not started'),
-    closed: () => defined(closed, 'the close has not completed'),
-    rollBack: async (targetId) => {
-      const counts = await shownCounts(fx.branchId, targetId, fx.ctx)
-      expect(
-        await rollbackToEntry(fx.branchId, targetId, fx.ctx, { expectedCounts: counts }),
-      ).toEqual({ status: 'ok', counts })
-      rolledBackTo = targetId
-    },
-    rolledBackTo: () => rolledBackTo,
-  }
-}
-
 async function undoClose(h: CloseHarness): Promise<void> {
   // C9: a hold redo can't restore refuses as `integrity`, with `held-in-redo` in its reason.
   expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
@@ -593,14 +280,30 @@ function dividerRemoved(closed: { state: WorldState; log: Delta[] }): {
   }
 }
 
-function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState; log: Delta[] } {
+type ArmExpected = {
+  state: WorldState
+  /** The close's own log. */
+  log: Delta[]
+  /** The log of the re-run that stands, under 'after-rerun'; every other re-run's is empty. */
+  rerunLog: readonly Delta[]
+}
+
+const isDivider = (d: Delta): boolean =>
+  d.targetTable === 'chapters' || d.targetTable === 'story_entries'
+
+function expectedAfter(h: CloseHarness, arm: RoundTripArm): ArmExpected {
   switch (arm.expect) {
     case 'before-close':
-      return { state: h.before, log: [] }
+      return { state: h.before, log: [], rerunLog: [] }
     case 'after-close':
-      return h.closed()
+      return { ...h.closed(), rerunLog: [] }
     case 'divider-removed':
-      return dividerRemoved(h.closed())
+      return { ...dividerRemoved(h.closed()), rerunLog: [] }
+    case 'after-rerun': {
+      // The re-run's reversal took the close's lore work into its journal; the divider stays.
+      const rerun = latestRerun(h)
+      return { state: rerun.state, log: h.closed().log.filter(isDivider), rerunLog: rerun.log }
+    }
     default: {
       const _exhaustive: never = arm.expect
       return _exhaustive
@@ -608,27 +311,266 @@ function expectedAfter(h: CloseHarness, arm: RoundTripArm): { state: WorldState;
   }
 }
 
-type RoundTripCase = {
+/** A re-run that committed: its action, and the world and its own log as it committed. */
+type CommittedRerun = { actionId: string; state: WorldState; log: Delta[] }
+
+const committedReruns = new WeakMap<CloseHarness, CommittedRerun[]>()
+
+/** Re-runs the close's chapter to its commit, snapshots it, and embeds what it created. */
+async function rerunCommitted(h: CloseHarness): Promise<CommittedRerun> {
+  const end = await h.rerun(closedChapterId(h))
+  expect(end, 'the re-run committed').toMatchObject({
+    kind: CHAPTER_CLOSE_KIND,
+    result: { outcome: 'completed' },
+  })
+  const { actionId } = end.result
+  const rerun: CommittedRerun = {
+    actionId,
+    state: await worldState(h.fx),
+    log: await deltasOf(h.fx, actionId),
+  }
+  await embedCreated(h.fx, rerun.log)
+  committedReruns.set(h, [...(committedReruns.get(h) ?? []), rerun])
+  return rerun
+}
+
+function latestRerun(h: CloseHarness): CommittedRerun {
+  return defined(committedReruns.get(h)?.at(-1), 'no re-run committed')
+}
+
+// Every re-run the arm started: one that aborted or crashed reserved an action all the same.
+function rerunIdsOf(h: CloseHarness): string[] {
+  const ids = new Set((committedReruns.get(h) ?? []).map((rerun) => rerun.actionId))
+  const latest = h.rerunActionId()
+  if (latest !== undefined) ids.add(latest)
+  return [...ids]
+}
+
+// The migrated dim family. The fixture has no embedder, so nothing else writes these tables.
+const VEC_TABLES: Readonly<Record<string, string>> = {
+  entities: 'entities_vec_384',
+  lore: 'lore_vec_384',
+  happenings: 'happenings_vec_384',
+  threads: 'threads_vec_384',
+}
+const STAND_IN_EMBEDDER = 'round-trip-embedder'
+const ZERO_VECTOR = JSON.stringify(new Array<number>(384).fill(0))
+
+async function liveIds(fx: CloseFixture, table: string): Promise<Set<unknown>> {
+  const rows = await queryAllOn(fx.ctx.db)(`SELECT id FROM ${table} WHERE branch_id = ?`, [
+    fx.branchId,
+  ])
+  return new Set(rows.map(([id]) => id))
+}
+
+// The drain embeds what a re-run created once it commits; a reversal deleting the row must sweep it.
+async function embedCreated(fx: CloseFixture, log: readonly Delta[]): Promise<void> {
+  const query = queryAllOn(fx.ctx.db)
+  for (const [table, vecTable] of Object.entries(VEC_TABLES)) {
+    const live = await liveIds(fx, table)
+    for (const d of log)
+      if (d.op === 'create' && d.targetTable === table && live.has(d.targetId))
+        await query(
+          `INSERT INTO ${vecTable} (pk, branch_id, model_id, id, source_hash, embedding) VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            vecRowPk(fx.branchId, d.targetId, STAND_IN_EMBEDDER),
+            fx.branchId,
+            STAND_IN_EMBEDDER,
+            d.targetId,
+            'stand-in',
+            ZERO_VECTOR,
+          ],
+        )
+  }
+}
+
+/** Each vector whose row is gone, as `table:id`. */
+async function strayVectors(fx: CloseFixture): Promise<string[]> {
+  const query = queryAllOn(fx.ctx.db)
+  const stray: string[] = []
+  for (const [table, vecTable] of Object.entries(VEC_TABLES)) {
+    const live = await liveIds(fx, table)
+    for (const [id] of await query(`SELECT id FROM ${vecTable} WHERE branch_id = ?`, [fx.branchId]))
+      if (!live.has(id)) stray.push(`${vecTable}:${String(id)}`)
+  }
+  return stray
+}
+
+async function journalsOn(fx: CloseFixture) {
+  return fx.ctx.db.select().from(reversalJournals).where(eq(reversalJournals.branchId, fx.branchId))
+}
+
+// Armed after the close, whose phases carry the same names.
+function interruptAfter(phase: string, branchId: string): void {
+  const off = pipelineEventBus.subscribe('phase_complete', (event) => {
+    if (event.name !== phase) return
+    off()
+    void interruptMemoryRuns(branchId)
+  })
+}
+
+// A stopped re-run writes its journal back: nothing says the close was undone, and nothing defers.
+function expectStopped(h: CloseHarness, end: ChainEnd, outcome: 'aborted' | 'failed'): void {
+  expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome } })
+  expect(end.result).not.toHaveProperty('closeUndone')
+  expect(generationStore.getTxState().deferred.has(h.fx.branchId), 'a re-run defers nothing').toBe(
+    false,
+  )
+  expect(generationStore.getTxState().pendingRerun.has(h.fx.branchId)).toBe(false)
+}
+
+async function chapterRow(h: CloseHarness): Promise<Chapter> {
+  const [row] = await h.fx.ctx.db
+    .select()
+    .from(chapters)
+    .where(and(eq(chapters.branchId, h.fx.branchId), eq(chapters.id, closedChapterId(h))))
+  return defined(row, 'the chapter row is gone')
+}
+
+// A Timeline card Save: one user_edit on the chapter row.
+async function renameChapter(h: CloseHarness, title: string): Promise<void> {
+  const row = await chapterRow(h)
+  expect(await saveChapter({ row, draft: { ...chapterDraftFrom(row), title } }, h.fx.ctx)).toEqual({
+    status: 'ok',
+    id: row.id,
+  })
+}
+
+// The process dies at the re-run's first group, before it lands or once it has; a restart's
+// recovery then finds the re-run's marker open.
+async function crashRerunAndRecover(h: CloseHarness, landed: boolean): Promise<void> {
+  await h.close()
+  let crash = (): void => {}
+  const crashed = new Promise<void>((resolve) => {
+    crash = resolve
+  })
+  let firstGroup: GroupOutcome | undefined
+  configureDeltaActionPort({
+    ...realDeltaActionPort(),
+    applyDeltaActionGroupWithOutcomes: async (actions, args, ctx) => {
+      if (landed) firstGroup = await applyDeltaActionGroupWithOutcomes(actions, args, ctx)
+      crash()
+      return new Promise<never>(() => {})
+    },
+  })
+  void h.rerun(closedChapterId(h))
+  await within(crashed, "the re-run's first group")
+  const rerun = defined(h.rerunActionId(), 'the re-run never reserved')
+
+  // The port can refuse or no-op a group without throwing: the arm's premise is its own to check.
+  if (landed) {
+    expect(
+      firstGroup?.status === 'ok' && firstGroup.outcomes.some((one) => one.status === 'landed'),
+      "the re-run's first group landed",
+    ).toBe(true)
+    expect(
+      (await deltasOf(h.fx, rerun)).length,
+      "the re-run's own writes before the crash",
+    ).toBeGreaterThan(0)
+  } else {
+    expect(await deltasOf(h.fx, rerun), 'no re-run write before the crash').toEqual([])
+  }
+
+  // A restart: memory gone, the real port back.
+  resetSingletons()
+  const report = await recoverInFlightRuns(h.fx.ctx)
+
+  expect(report.failures).toEqual([])
+  expect(report.reversed).toMatchObject([{ kind: CHAPTER_CLOSE_KIND, actionId: rerun }])
+  expect(report.reversed[0]).not.toHaveProperty('closeUndone')
+  const [marker] = await h.fx.ctx.db
+    .select()
+    .from(pipelineRuns)
+    .where(eq(pipelineRuns.actionId, rerun))
+  expect(marker).toMatchObject({ outcome: 'recovered', rerunChapterId: closedChapterId(h) })
+}
+
+function pastEnd(h: CloseHarness) {
+  return defined(
+    h.fx.entries[h.fx.entries.findIndex((e) => e.id === h.endEntryId) + 1],
+    'no entry follows E',
+  )
+}
+
+// A turn taken after the close: its creates sit above the close's group, below a later re-run's.
+async function turnAfterClose(h: CloseHarness): Promise<string> {
+  const position = defined(h.fx.entries.at(-1), 'the fixture has no entry').position + 1
+  const action = `entry_between_${position}`
+  await writeTurnEntry(h.fx, 'act_turn_between', {
+    id: action,
+    position,
+    kind: 'user_action',
+    content: 'I ask Tobin whether the toll house keeps a ledger.',
+  })
+  await writeTurnEntry(h.fx, 'act_turn_between', {
+    id: `entry_between_${position + 1}`,
+    position: position + 1,
+    kind: 'ai_reply',
+    content: 'Tobin spits. Every crossing is written down, he says, and every name.',
+  })
+  return action
+}
+
+// The turn is the arm's own, not the fixture's, so the runner's kept-by-rollback can't place it.
+async function rollBackUntracked(h: CloseHarness, targetId: string): Promise<void> {
+  const counts = await shownCounts(h.fx.branchId, targetId, h.fx.ctx)
+  expect(
+    await rollbackToEntry(h.fx.branchId, targetId, h.fx.ctx, { expectedCounts: counts }),
+  ).toEqual({ status: 'ok', counts })
+}
+
+const passesAbove = new WeakMap<CloseHarness, Delta>()
+
+// A pass's write above the re-run, by hand: the fixture's watermark sits at the tail, so a real
+// pass reads nothing to write. On the last reply's metadata, which no case's close writes.
+async function passAbove(h: CloseHarness): Promise<Delta> {
+  const { db } = h.fx.ctx
+  const reply = defined(h.fx.replyIds.at(-1), 'the fixture has no reply')
+  const [top] = await db
+    .select({ position: max(deltas.logPosition) })
+    .from(deltas)
+    .where(eq(deltas.branchId, h.fx.branchId))
+  const [entry] = await db
+    .select({ metadata: storyEntries.metadata })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, h.fx.branchId), eq(storyEntries.id, reply)))
+  const pass: Delta = {
+    id: 'delta_pass_above_rerun',
+    branchId: h.fx.branchId,
+    entryId: reply,
+    actionId: 'act_pass_above_rerun',
+    logPosition: defined(top?.position ?? undefined, 'the log is empty') + 1,
+    source: 'periodic_classifier',
+    targetTable: 'story_entries',
+    targetId: reply,
+    op: 'update',
+    undoPayload: { metadata: defined(entry?.metadata ?? undefined, `no metadata on ${reply}`) },
+    encodingVersion: 1,
+    createdAt: 1_767_225_900_000,
+  }
+  await db.insert(deltas).values(pass)
+  passesAbove.set(h, pass)
+  return pass
+}
+
+type RoundTripCase = CloseCase & {
   name: string
-  slots: () => CloseAgentSlots
-  /** Rows the case's tools need, written before the state the arms compare against. */
-  seed?: (fx: CloseFixture) => Promise<void>
-  steps: ScriptedStep[]
-  merge: boolean
-  /** lore-mgmt's window for this case, so the fixture's range cuts into parts. */
-  partWindow?: number
-  /** Kinds whose landed group the abort arm fires on; absent: any landed non-metadata group. */
-  abortOn?: readonly PipelineAction['kind'][]
   /** An arm's own expected world, in place of the shared before/closed comparison. */
   armExpect?: Partial<Record<string, (h: CloseHarness) => Promise<void>>>
   /** An arm's own expected log of the close, in place of the shared one. */
   armLog?: Partial<Record<string, (h: CloseHarness) => readonly Delta[]>>
+  /** An arm's own expected log of the re-run that stands, in place of its snapshot. */
+  armRerunLog?: Partial<Record<string, (h: CloseHarness) => readonly Delta[]>>
 }
+
+type ArmExpect = 'before-close' | 'after-close' | 'divider-removed' | 'after-rerun'
 
 type RoundTripArm = {
   name: string
   run: (h: CloseHarness) => Promise<void>
-  expect: 'before-close' | 'after-close' | 'divider-removed'
+  expect: ArmExpect
+  /** Deltas the arm wrote itself that stand once it ends, after the other actions' kept ones. */
+  kept?: (h: CloseHarness) => readonly Delta[]
 }
 
 const STAND_IN_CASE: RoundTripCase = {
@@ -712,50 +654,6 @@ const lifecycleSlots = perPartSlots(lifecycleTask)
 
 // E is position 7: part 1 holds t1-t5 and part 2 E's turn, t6-t7, so part-2 calls cite t7.
 const PART_WINDOW = twoPartWindow(7)
-
-const PART_SUMMARY: GenerateStructuredResult<{ summary: string }> = {
-  status: 'ok',
-  value: { summary: 'Wren reaches Harrow and finds the night ferry.' },
-  recoverable: [],
-}
-
-// A part call answers the part shape; the merge, and a one-part close, the metadata.
-function answerPartCalls(): void {
-  generateStructuredMock.mockImplementation(
-    async (_target, _prompt, schema) =>
-      ((schema as unknown) === chapterPartSummarySchema
-        ? PART_SUMMARY
-        : metadataReplyResult()) as never,
-  )
-}
-
-// The case's window comes from the fixture's prose; the cut must agree with the counts it stored.
-async function expectCutBeforeEnd(fx: CloseFixture, window: number): Promise<void> {
-  const endIndex = fx.entries.findIndex((entry) => entry.id === fx.replyIds[END_REPLY])
-  const stored = await fx.ctx.db
-    .select({ id: storyEntries.id, kind: storyEntries.kind, tokens: storyEntries.contentTokens })
-    .from(storyEntries)
-    .where(
-      and(
-        eq(storyEntries.branchId, fx.branchId),
-        lte(storyEntries.position, fx.entries[endIndex]!.position),
-      ),
-    )
-    .orderBy(asc(storyEntries.position))
-  const cuts = cutChapterParts(
-    stored.map(({ id, kind, tokens }) => ({ id, kind, tokens: tokens ?? 0 })),
-    window,
-  )
-  // E's turn (the player's turn before it) goes with E: a part never ends on a player's turn.
-  expect(fx.entries[endIndex - 1]!.kind).toBe('user_action')
-  expect(
-    cuts.map(({ part, startEntryId, endEntryId }) => [part, startEntryId, endEntryId]),
-    "the case window cuts the chapter just before E's turn",
-  ).toEqual([
-    [1, fx.entries[0]!.id, fx.entries[endIndex - 2]!.id],
-    [2, fx.entries[endIndex - 1]!.id, fx.entries[endIndex]!.id],
-  ])
-}
 
 function withoutEntity(state: WorldState, id: string): WorldState {
   return {
@@ -1123,27 +1021,39 @@ const RETIRE_CASE: RoundTripCase = {
   merge: false,
 }
 
+// The flag stays on Tobin, dormant, once its partner's turn goes.
+async function expectTobinFlagDormant(h: CloseHarness): Promise<void> {
+  const [tobin] = await h.fx.ctx.db
+    .select()
+    .from(entities)
+    .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, TOBIN.id)))
+  expect(tobin).toMatchObject({
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: FERRYMAN.id,
+    nameCollisionReason: 'duplicate',
+  })
+}
+
 const FLAG_CASE: RoundTripCase = {
   name: 'flag_duplicate whose partner a later turn created',
   slots: lifecycleSlots,
   seed: seedLaterFerryman,
   steps: [{ calls: [{ toolName: 'flag_duplicate', input: FLAG_DUPLICATE }] }],
   merge: false,
-  // Both rollbacks take the turn that created the partner; the flag stays on Tobin, dormant.
+  // Every rollback takes the turn that created the partner, after a re-run as after the close.
   armExpect: {
     'a rollback past E': async (h) => {
       expect(await worldState(h.fx)).toEqual(withoutEntity(h.closed().state, FERRYMAN.id))
-      const [tobin] = await h.fx.ctx.db
-        .select()
-        .from(entities)
-        .where(and(eq(entities.branchId, h.fx.branchId), eq(entities.id, TOBIN.id)))
-      expect(tobin).toMatchObject({
-        nameCollisionFlag: 1,
-        nameCollisionPartnerId: FERRYMAN.id,
-        nameCollisionReason: 'duplicate',
-      })
+      await expectTobinFlagDormant(h)
     },
     'a rollback to E': async (h) => {
+      expect(await worldState(h.fx)).toEqual(withoutEntity(h.before, FERRYMAN.id))
+    },
+    'a rollback past E after a re-run': async (h) => {
+      expect(await worldState(h.fx)).toEqual(withoutEntity(latestRerun(h).state, FERRYMAN.id))
+      await expectTobinFlagDormant(h)
+    },
+    'a rollback to E after a re-run': async (h) => {
       expect(await worldState(h.fx)).toEqual(withoutEntity(h.before, FERRYMAN.id))
     },
   },
@@ -1574,6 +1484,18 @@ const CHAPTER_WIDE_CASE: RoundTripCase = {
   abortOn: ['deleteHappening'],
 }
 
+// The close's undo, or the re-run's, puts ASKED's row back; then the bumps go with the turns past E.
+async function expectLaterBumpsGone(h: CloseHarness): Promise<void> {
+  expect(await worldState(h.fx)).toEqual(
+    withAwarenessCount(
+      withAwarenessCount(h.before, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+      TOLD.id,
+      TOBIN.id,
+      TOLD_TOBIN_COUNT,
+    ),
+  )
+}
+
 const LATER_BUMP_CASE: RoundTripCase = {
   name: 'merge_happenings and the reset over rows a later turn’s retrieval bumped',
   slots: mergeThenResetSlots,
@@ -1582,17 +1504,8 @@ const LATER_BUMP_CASE: RoundTripCase = {
   merge: true,
   abortOn: ['deleteHappening'],
   armExpect: {
-    // The close's undo puts ASKED's row back, then the bumps go with the turns past E.
-    'a rollback to E': async (h) => {
-      expect(await worldState(h.fx)).toEqual(
-        withAwarenessCount(
-          withAwarenessCount(h.before, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
-          TOLD.id,
-          TOBIN.id,
-          TOLD_TOBIN_COUNT,
-        ),
-      )
-    },
+    'a rollback to E': expectLaterBumpsGone,
+    'a rollback to E after a re-run': expectLaterBumpsGone,
   },
   armLog: {
     // The close stands, so each bump's undo lowers the count after it by one: on the copy of the
@@ -1602,6 +1515,17 @@ const LATER_BUMP_CASE: RoundTripCase = {
       withMergePriorCount(
         h,
         withHeldCount(h.closed().log, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
+        TOLD.id,
+        TOBIN.id,
+        TOLD_TOBIN_COUNT,
+      ),
+  },
+  armRerunLog: {
+    // The re-run stands as the close did, and its own merge holds the copy and the prior count.
+    'a rollback past E after a re-run': (h) =>
+      withMergePriorCount(
+        h,
+        withHeldCount(latestRerun(h).log, ASKED.id, TOBIN.id, ASKED_TOBIN_COUNT),
         TOLD.id,
         TOBIN.id,
         TOLD_TOBIN_COUNT,
@@ -1792,12 +1716,171 @@ const ARMS: readonly RoundTripArm[] = [
       expect(await redoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
     },
   },
+  {
+    name: 'CTRL-Z of a re-run',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      // A rename undone after the re-run leaves a redo group a re-run's undo must not keep.
+      await renameChapter(h, 'The Night Ferry')
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+      expect(undoRedoStore.hasRedo(), 'the rename waits in redo').toBe(true)
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+      expect(undoRedoStore.hasRedo(), 'CTRL-Z of a re-run clears redo').toBe(false)
+    },
+  },
+  {
+    name: 'an abort of a re-run before its first write',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      interruptAfter(CLOSE_PHASE.reversal, h.fx.branchId)
+      expectStopped(h, await h.rerun(closedChapterId(h)), 'aborted')
+    },
+  },
+  {
+    name: 'an abort of a re-run after its first write',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      h.onNextToolGroup(() => {
+        void interruptMemoryRuns(h.fx.branchId)
+      })
+      const end = await h.rerun(closedChapterId(h))
+      defined(h.actedOn(), 'the abort never fired: no group abortOn admits landed in the re-run')
+      expectStopped(h, end, 'aborted')
+    },
+  },
+  {
+    name: 'crash recovery of a re-run before its first write',
+    expect: 'after-close',
+    run: (h) => crashRerunAndRecover(h, false),
+  },
+  {
+    name: 'crash recovery of a re-run after its first write',
+    expect: 'after-close',
+    run: (h) => crashRerunAndRecover(h, true),
+  },
+  {
+    name: 'a rollback to E after a re-run',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      await h.rollBack(h.endEntryId)
+    },
+  },
+  {
+    name: 'a rollback past E after a re-run',
+    expect: 'after-rerun',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      // The fixture's turns sit below the close, so the rollback sweeps from below the floor too.
+      await h.rollBack(pastEnd(h).id)
+    },
+  },
+  {
+    name: 'a rollback of a turn between E and a re-run, then CTRL-Z',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      const turn = await turnAfterClose(h)
+      await rerunCommitted(h)
+      await rollBackUntracked(h, turn)
+      expect(await journalsOn(h.fx), 'the rollback dropped the journal').toEqual([])
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({
+        status: 'ok',
+        closeUndone: { chapterNumber: 1 },
+      })
+    },
+  },
+  {
+    name: 'a pass above a re-run, then CTRL-Z',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      await passAbove(h)
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({
+        status: 'ok',
+        closeUndone: { chapterNumber: 1 },
+      })
+    },
+    kept: (h) => [defined(passesAbove.get(h), 'no pass wrote above the re-run')],
+  },
+  {
+    name: 'delete the chapter after a re-run',
+    expect: 'before-close',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      await removeTheChapter(h, 'whole')
+    },
+  },
+  {
+    name: 'remove the divider only after a re-run, then CTRL-Z',
+    expect: 'divider-removed',
+    run: async (h) => {
+      await h.close()
+      await rerunCommitted(h)
+      await removeTheChapter(h, 'divider-only')
+      expect(await journalsOn(h.fx), 'the divider-only removal kept the journal').toHaveLength(1)
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+    },
+  },
+  {
+    name: 'a card rename, a re-run, the divider removed, then CTRL-Z',
+    expect: 'divider-removed',
+    run: async (h) => {
+      await h.close()
+      await renameChapter(h, 'The Night Ferry')
+      const renames = async () =>
+        (await branchLog(h.fx)).filter(
+          (d) => d.source === 'user_edit' && d.targetTable === 'chapters',
+        )
+      expect(await renames(), 'the rename logged one user_edit').toHaveLength(1)
+      await rerunCommitted(h)
+      await removeTheChapter(h, 'divider-only')
+      expect(await renames(), 'the removal took the rename below the floor').toEqual([])
+      expect(await journalsOn(h.fx), 'and kept the journal').toHaveLength(1)
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+    },
+  },
+  {
+    name: 'a second re-run, then CTRL-Z of each',
+    expect: 'after-close',
+    run: async (h) => {
+      await h.close()
+      const first = await rerunCommitted(h)
+      const second = await rerunCommitted(h)
+      const journals = await journalsOn(h.fx)
+      expect(journals, 'one journal on the branch').toHaveLength(1)
+      const [held] = journals
+      expect(held?.actionId, "the second re-run's journal").toBe(second.actionId)
+      expect(
+        (held?.journal as RerunJournal | undefined)?.journals.map((row) => row.actionId),
+        "the second re-run's journal holds the first's",
+      ).toEqual([first.actionId])
+
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+      expect(await worldState(h.fx), "the first re-run's world").toEqual(first.state)
+      expect(await deltasOf(h.fx, first.actionId), "the first re-run's log").toEqual(first.log)
+      expect(
+        (await journalsOn(h.fx)).map((row) => row.actionId),
+        "the first re-run's journal is back",
+      ).toEqual([first.actionId])
+
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+    },
+  },
 ]
 
 // Tuples: a `$name` title is cut at about 40 characters, out of `-t`'s reach.
 describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_name, c) => {
   it.each(ARMS)('$name leaves the database $expect', async (arm) => {
-    const h = await openHarness(c)
+    const h = await openHarness(c, MOCKS)
 
     await arm.run(h)
 
@@ -1809,17 +1892,54 @@ describe.each(CASES.map((c) => [c.name, c] as const))('the round trip of %s', (_
     expect(await deltasOf(h.fx, h.actionId())).toEqual(
       ownLog === undefined ? expected.log : ownLog(h),
     )
+    const reruns = rerunIdsOf(h)
+    const standing = arm.expect === 'after-rerun' ? latestRerun(h).actionId : undefined
+    const ownRerunLog = c.armRerunLog?.[arm.name]
+    for (const rerun of reruns)
+      expect(await deltasOf(h.fx, rerun), `the log of re-run ${rerun}`).toEqual(
+        rerun !== standing ? [] : ownRerunLog === undefined ? expected.rerunLog : ownRerunLog(h),
+      )
     const target = h.rolledBackTo()
-    const others = (await branchLog(h.fx)).filter((d) => d.actionId !== h.actionId())
-    expect(others, "other actions' deltas").toEqual(
-      target === undefined ? h.beforeLog : keptByRollback(h, target),
-    )
+    const ours = new Set([h.actionId(), ...reruns])
+    const others = (await branchLog(h.fx)).filter((d) => !ours.has(d.actionId))
+    expect(others, "other actions' deltas").toEqual([
+      ...(target === undefined ? h.beforeLog : keptByRollback(h, target)),
+      ...(arm.kept?.(h) ?? []),
+    ])
+    // WorldState reads neither.
+    expect(await journalsOn(h.fx), 'reversal_journals').toEqual([])
+    expect(await strayVectors(h.fx), 'vectors whose row is gone').toEqual([])
   })
 })
 
+// C9: a re-run of a merge merges the same rows again; its CTRL-Z then trades the close back, with
+// no hold redo can't restore.
+describe.each(CASES.filter((c) => c.merge).map((c) => [c.name, c] as const))(
+  'a re-run re-merging what %s merged',
+  (_name, c) => {
+    it('deletes the same rows again, and CTRL-Z restores the close with no held-in-redo refusal', async () => {
+      const h = await openHarness(c, MOCKS)
+      await h.close()
+      const deleted = (log: readonly Delta[]) =>
+        log
+          .filter((d) => d.op === 'delete')
+          .map((d) => `${d.targetTable}:${d.targetId}`)
+          .sort()
+      const merged = deleted(h.closed().log)
+      expect(merged, 'the close merged').not.toEqual([])
+
+      const rerun = await rerunCommitted(h)
+
+      expect(deleted(rerun.log)).toEqual(merged)
+      expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
+      expect(await worldState(h.fx)).toEqual(h.closed().state)
+    })
+  },
+)
+
 describe('a chapter delete over a record the close normalized', () => {
   it("keeps a later pass's write to the record whole", async () => {
-    const h = await openHarness(NORMALIZATION_CASE)
+    const h = await openHarness(NORMALIZATION_CASE, MOCKS)
     await h.close()
     const later = { gold: 2, arrow: 1 }
     const written = await applyDeltaAction(
@@ -1849,7 +1969,7 @@ describe('a chapter delete over a record the close normalized', () => {
 
 describe('the stand-in task', () => {
   it('lands its create and its update as one group on E, and the report records the call', async () => {
-    const h = await openHarness(STAND_IN_CASE)
+    const h = await openHarness(STAND_IN_CASE, MOCKS)
     const toolGroups: { kinds: string[]; entryId: string }[] = []
     pipelineEventBus.subscribe('delta_group_emitted', (event) => {
       if (event.actions.some((a) => a.kind === 'createChapter')) return
@@ -1920,7 +2040,7 @@ describe('the stand-in task', () => {
     await seedEntity(fx, faction)
     await seedEntity(fx, TOBIN)
     __setCloseAgentSlots(standInSlots())
-    script(STAND_IN_CASE.steps)
+    script(generateToolStepMock, STAND_IN_CASE.steps)
 
     const tx = expectRan(await startManualClose(fx.branchId, fx.replyIds[END_REPLY], fx.ctx))
 
@@ -1959,7 +2079,7 @@ describe('the stand-in task', () => {
 
 describe('a merge of a row this close already wrote', () => {
   it('is refused, deletes nothing, and leaves the earlier update standing', async () => {
-    const h = await openHarness(ABSORBED_WROTE_CASE)
+    const h = await openHarness(ABSORBED_WROTE_CASE, MOCKS)
 
     await h.close()
 
@@ -2024,11 +2144,26 @@ describe('the round trip table', () => {
   it("names only real arms in a case's own expectations", () => {
     const arms = new Set(ARMS.map((arm) => arm.name))
     for (const c of CASES)
-      for (const name of [...Object.keys(c.armExpect ?? {}), ...Object.keys(c.armLog ?? {})])
+      for (const name of [
+        ...Object.keys(c.armExpect ?? {}),
+        ...Object.keys(c.armLog ?? {}),
+        ...Object.keys(c.armRerunLog ?? {}),
+      ])
         expect(arms.has(name), `${c.name}: ${name}`).toBe(true)
-    expect(Object.keys(FLAG_CASE.armExpect ?? {})).toEqual(['a rollback past E', 'a rollback to E'])
-    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual(['a rollback to E'])
+    expect(Object.keys(FLAG_CASE.armExpect ?? {})).toEqual([
+      'a rollback past E',
+      'a rollback to E',
+      'a rollback past E after a re-run',
+      'a rollback to E after a re-run',
+    ])
+    expect(Object.keys(LATER_BUMP_CASE.armExpect ?? {})).toEqual([
+      'a rollback to E',
+      'a rollback to E after a re-run',
+    ])
     expect(Object.keys(LATER_BUMP_CASE.armLog ?? {})).toEqual(['a rollback past E'])
+    expect(Object.keys(LATER_BUMP_CASE.armRerunLog ?? {})).toEqual([
+      'a rollback past E after a re-run',
+    ])
   })
 
   it('runs every production code step that writes deltas in some case (C9)', () => {
@@ -2047,7 +2182,7 @@ describe('the round trip table', () => {
 // A round trip passes whatever a case wrote: these pin that each case wrote what it is named for.
 describe('each new case lands what it names', () => {
   async function closedHarness(c: RoundTripCase): Promise<CloseHarness> {
-    const h = await openHarness(c)
+    const h = await openHarness(c, MOCKS)
     await h.close()
     return h
   }
@@ -2072,7 +2207,7 @@ describe('each new case lands what it names', () => {
   }
 
   it('normalization, the merge and the reset: the abort acts on the merge’s group, past normalization’s', async () => {
-    const h = await openHarness(CHAPTER_WIDE_CASE)
+    const h = await openHarness(CHAPTER_WIDE_CASE, MOCKS)
 
     const tx = await h.closeActingOnToolGroup(() => {
       void interruptMemoryRuns(h.fx.branchId)
@@ -2085,7 +2220,7 @@ describe('each new case lands what it names', () => {
   })
 
   it('the full order: the abort acts on the reset’s group, after every other group landed', async () => {
-    const h = await openHarness(FULL_ORDER_CASE)
+    const h = await openHarness(FULL_ORDER_CASE, MOCKS)
 
     const tx = await h.closeActingOnToolGroup(() => {
       void interruptMemoryRuns(h.fx.branchId)
@@ -2099,7 +2234,7 @@ describe('each new case lands what it names', () => {
   async function closedWithGroups(
     c: RoundTripCase,
   ): Promise<{ h: CloseHarness; groups: string[][] }> {
-    const h = await openHarness(c)
+    const h = await openHarness(c, MOCKS)
     const groups: string[][] = []
     pipelineEventBus.subscribe('delta_group_emitted', (event) => {
       if (event.actions.some((a) => a.kind === 'createChapter')) return

@@ -1516,8 +1516,8 @@ export default function ReaderComposerRoute() {
       { refreshGuidance: composerRef.current?.getDraft().text ?? '' },
       ctx,
     )
-      // 'rejected' is the self-block a second ⟳ hits while one runs, and
-      // 'aborted' is a cancel or a branch switch — neither is a failure.
+      // 'rejected' is the self-block a second ⟳ hits while one runs, or a
+      // re-run's hold; 'aborted' is a cancel or a branch switch. Neither fails.
       .then((result) => {
         if (result.outcome === 'failed') fail(result.error)
       })

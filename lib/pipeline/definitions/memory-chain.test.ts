@@ -13,6 +13,7 @@ import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
+  chapters,
   pipelineRuns,
   stories,
   storyEntries,
@@ -39,6 +40,7 @@ import {
   perTurnChainsTo,
   readClassifierStatus,
   unprocessedEntryCount,
+  unprocessedThroughChapter,
 } from './memory-chain'
 import { PER_TURN_KIND } from './per-turn'
 import { ensurePeriodicClassifierPipelineRegistered } from './periodic-classifier'
@@ -537,6 +539,120 @@ describe('passChainsTo', () => {
     await seedEntries(db, 2)
     generationStore.setPendingClose('b1', { endEntryId: 'e2' })
     setOpen()
+
+    expect(await passChainsTo(passRun(), ctx)).toBeNull()
+  })
+})
+
+// Seven entries with a system row among them; the chapter ends on the fifth, so E is position 5.
+async function seedClosedChapter(db: Db): Promise<void> {
+  const kinds = [
+    'user_action',
+    'ai_reply',
+    'system',
+    'user_action',
+    'ai_reply',
+    'user_action',
+    'ai_reply',
+  ] as const
+  for (const [i, kind] of kinds.entries())
+    await db.insert(storyEntries).values({
+      id: `e${i + 1}`,
+      branchId: 'b1',
+      position: i + 1,
+      kind,
+      content: `entry ${i + 1}`,
+      createdAt: i + 1,
+    })
+  await db.insert(chapters).values({
+    id: 'chap_1',
+    branchId: 'b1',
+    sequenceNumber: 1,
+    title: 'The crossing',
+    summary: 'Wren crosses at night.',
+    theme: 'passage',
+    startEntryId: 'e1',
+    endEntryId: 'e5',
+    tokenCount: 0,
+    closedAt: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+}
+
+describe('unprocessedThroughChapter', () => {
+  it("counts classifiable entries past the watermark through the chapter's end only", async () => {
+    const { db, ctx } = await makeHarness()
+    // b2 holds an entry id-matching the chapter's end (far past it), and one within range.
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'other', createdAt: 1 })
+    for (const [id, position] of [
+      ['e5', 99],
+      ['x1', 1],
+    ] as const)
+      await db.insert(storyEntries).values({
+        id,
+        branchId: 'b2',
+        position,
+        kind: 'user_action',
+        content: 'elsewhere',
+        createdAt: 1,
+      })
+    await seedClosedChapter(db)
+
+    expect(await unprocessedThroughChapter('b1', 'chap_1', null, ctx)).toBe(4)
+    expect(await unprocessedThroughChapter('b1', 'chap_1', 2, ctx)).toBe(2)
+    expect(await unprocessedThroughChapter('b1', 'chap_1', 5, ctx)).toBe(0)
+    expect(await unprocessedThroughChapter('b1', 'chap_1', 7, ctx)).toBe(0)
+    expect(await unprocessedThroughChapter('b1', 'chap_unknown', null, ctx)).toBe(0)
+    // Chapter is read on the asked branch, never by id alone: b2 has entries, not the chapter.
+    expect(await unprocessedThroughChapter('b2', 'chap_1', null, ctx)).toBe(0)
+  })
+})
+
+// generation-pipeline.md → chainsTo on predecessor: a re-run catches up through its chapter's end.
+describe('the chain under a re-run', () => {
+  it('names a catch-up pass while an entry through the end is unprocessed, though no close is owed', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedClosedChapter(db)
+    await setStatus(db, { processedThrough: 2 })
+    openStory(50)
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+
+    expect(await nextMemoryRun(turnRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+    expect(await passChainsTo(passRun(), ctx)).toBe(PERIODIC_CLASSIFIER_KIND)
+  })
+
+  it('names the re-run once nothing through the end is unprocessed, whatever lies past it', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedClosedChapter(db)
+    await setStatus(db, { processedThrough: 5 })
+    openStory(50)
+    expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
+    expect(await passChainsTo(passRun(), ctx)).toBeNull()
+
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+
+    expect(await nextMemoryRun(turnRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+    expect(await passChainsTo(passRun(), ctx)).toBe(CHAPTER_CLOSE_KIND)
+  })
+
+  it('names nothing on a held branch, and chains nothing after a pass started alone', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedClosedChapter(db)
+    openStory(50)
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+
+    expect(await passChainsTo(passRun({ inputs: { alone: true } }), ctx)).toBeNull()
+    await setStatus(db, { state: 'running', processedThrough: 2 })
+    expect(await nextMemoryRun(turnRun(), ctx)).toBeNull()
+  })
+
+  it('reads no re-run held on another branch', async () => {
+    const { db, ctx } = await makeHarness()
+    await seedClosedChapter(db)
+    await setStatus(db, { processedThrough: 5 })
+    openStory(50)
+    generationStore.setPendingRerun('b2', { chapterId: 'chap_1' })
 
     expect(await passChainsTo(passRun(), ctx)).toBeNull()
   })

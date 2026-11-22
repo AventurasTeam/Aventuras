@@ -65,7 +65,7 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
       else kinds.set(id, kind)
     }
     const [deltas, deleted] = await Promise.all([
-      loadCloseDeltas(db, branchId, chapterId, report.actionId),
+      loadCloseDeltas(db, branchId, chapterId, report.actionId, report.firstLogPosition),
       absent.length > 0 ? readDeletedEntityKinds(db, branchId, absent) : null,
     ])
     if (deleted != null) for (const [id, kind] of deleted) kinds.set(id, kind)

@@ -846,4 +846,111 @@ describe('startCloseChain', () => {
     >()
     expectTypeOf(unpreflighted).returns.resolves.toEqualTypeOf<ChainEnd | RejectedStart>()
   })
+
+  // A chapter ending on the third reply (position 7 of 13); no stamp is read on this path.
+  async function insertClosedChapter(): Promise<string> {
+    const chapterId = 'chap_rerun'
+    await f.ctx.db.insert(chapters).values({
+      id: chapterId,
+      branchId: f.branchId,
+      sequenceNumber: 1,
+      title: 'The crossing',
+      summary: 'Wren crosses at night.',
+      theme: 'passage',
+      startEntryId: f.entries[0]!.id,
+      endEntryId: f.replyIds[2]!,
+      tokenCount: 0,
+      closedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    return chapterId
+  }
+
+  // Reads the run the start reserves, then cancels it before its pre-flight: no model is called.
+  function reserveAndCancel(): { slots: [string, string | null][]; onReserved: () => void } {
+    const slots: [string, string | null][] = []
+    return {
+      slots,
+      onReserved: () => {
+        for (const run of generationStore.getTxState().runs.values())
+          slots.push([run.kind, run.interruptible])
+        void interruptMemoryRuns(f.branchId)
+      },
+    }
+  }
+
+  it("starts a re-run's catch-up pass while an entry through its chapter's end is unprocessed", async () => {
+    const chapterId = await insertClosedChapter()
+    await setClassifierStatus(f, { state: 'idle', processedThrough: 5 })
+    generationStore.setPendingRerun(f.branchId, { chapterId })
+    const reserved = reserveAndCancel()
+
+    const end = await within(
+      startCloseChain(f.branchId, f.ctx, { onReserved: reserved.onReserved }),
+      'the start',
+    )
+
+    expect(reserved.slots).toEqual([[PERIODIC_CLASSIFIER_KIND, 'pass']])
+    expect(end).toMatchObject({ kind: PERIODIC_CLASSIFIER_KIND, result: { outcome: 'aborted' } })
+    expect(generationStore.getTxState().deferred.get(f.branchId)).toEqual({ pass: true })
+    expect(generationStore.getTxState().pendingRerun.has(f.branchId)).toBe(false)
+  })
+
+  it("starts the re-run with nothing through its chapter's end unprocessed, whatever lies past it", async () => {
+    const chapterId = await insertClosedChapter()
+    await setClassifierStatus(f, { state: 'idle', processedThrough: 7 })
+    generationStore.setPendingRerun(f.branchId, { chapterId })
+    const reserved = reserveAndCancel()
+
+    const end = await within(
+      startCloseChain(f.branchId, f.ctx, { onReserved: reserved.onReserved }),
+      'the start',
+    )
+
+    expect(reserved.slots).toEqual([[CHAPTER_CLOSE_KIND, 'rerun']])
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'aborted' } })
+    expect(generationStore.getTxState().deferred.has(f.branchId)).toBe(false)
+    expect(generationStore.getTxState().pendingRerun.has(f.branchId)).toBe(false)
+  })
+
+  it("passes the caller's own pending mark, which onReserved ends, and refuses it otherwise", async () => {
+    const reserved = reserveAndCancel()
+
+    expect(
+      await generationStore.bracketPendingTurn(f.branchId, () =>
+        startCloseChain(f.branchId, f.ctx),
+      ),
+    ).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
+
+    const end = await generationStore.bracketPendingTurn(f.branchId, (endMark) =>
+      startCloseChain(f.branchId, f.ctx, {
+        ownsPendingMark: true,
+        onReserved: () => {
+          endMark()
+          reserved.onReserved()
+        },
+      }),
+    )
+
+    expect(reserved.slots).toEqual([[CHAPTER_CLOSE_KIND, 'close']])
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND })
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  it('still refuses a run on the story or a reversal under its own mark', async () => {
+    const own = () =>
+      generationStore.bracketPendingTurn(f.branchId, () =>
+        startCloseChain(f.branchId, f.ctx, { ownsPendingMark: true }),
+      )
+
+    generationStore.setReversalInProgress(true)
+    expect(await own()).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
+    generationStore.setReversalInProgress(false)
+
+    ensurePerTurnPipelineRegistered()
+    holdStoryWithTurn()
+    expect(await own()).toEqual({ outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy })
+    expect(closeRuns()).toBe(0)
+  })
 })

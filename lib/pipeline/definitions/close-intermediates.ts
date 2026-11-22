@@ -1,3 +1,4 @@
+import type { ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
 
 import { CloseIds } from './close-agent/ids'
@@ -10,6 +11,8 @@ const PARTS_KEY = 'closeParts'
 const LEDGER_KEY = 'closeLedger'
 const IDS_KEY = 'closeIds'
 const CLUSTERS_KEY = 'closeClusters'
+const FLOOR_KEY = 'closeFloor'
+const MODEL_CONFIG_KEY = 'closeModelConfig'
 
 export function setCloseRange(intermediates: Record<string, unknown>, range: CloseRange): void {
   intermediates[RANGE_KEY] = range
@@ -105,4 +108,34 @@ export function closeClusterOf(
   happeningId: string,
 ): readonly string[] | undefined {
   return closeClustersOf(intermediates).find((cluster) => cluster.includes(happeningId))
+}
+
+/** A re-run's floor, parked by `reversal`: the highest log position its reversal left. */
+export function setCloseFloor(intermediates: Record<string, unknown>, floor: number): void {
+  intermediates[FLOOR_KEY] = floor
+}
+
+/** Undefined on a close, which reverses nothing. */
+export function closeFloorOf(intermediates: Readonly<Record<string, unknown>>): number | undefined {
+  return intermediates[FLOOR_KEY] as number | undefined
+}
+
+/** C2 → metadata: the lore-mgmt config whose window cut the parts, which every later call runs on. */
+export function setCloseModelConfig(
+  intermediates: Record<string, unknown>,
+  config: ResolveModelConfig,
+): void {
+  intermediates[MODEL_CONFIG_KEY] = config
+}
+
+/** The parked config, or the failure the agent phase returns without it. */
+export function requireCloseModelConfig(
+  ctx: Pick<PhaseContext, 'intermediates'>,
+): ResolveModelConfig | PhaseFailure {
+  return (
+    (ctx.intermediates[MODEL_CONFIG_KEY] as ResolveModelConfig | undefined) ?? {
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'chapter-close: no close model config' },
+    }
+  )
 }

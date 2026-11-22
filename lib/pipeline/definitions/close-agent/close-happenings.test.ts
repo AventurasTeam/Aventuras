@@ -25,9 +25,19 @@ import { CloseIds } from './ids'
 import { __setCloseAgentSlots, type CodeStepContext } from './slots'
 import type { CloseTaskDef } from './task'
 import type { PhaseContext, PhaseResult } from '../../types'
-import { openCloseFixture, queryAllOn, type CloseFixture } from '../__tests__/close-fixture'
+import {
+  openCloseFixture,
+  queryAllOn,
+  storeModelConfig,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { closeClustersOf, setCloseParts, setCloseRange } from '../close-intermediates'
+import {
+  closeClustersOf,
+  setCloseModelConfig,
+  setCloseParts,
+  setCloseRange,
+} from '../close-intermediates'
 
 const { refreshEmbeddingStatusMock } = vi.hoisted(() => ({ refreshEmbeddingStatusMock: vi.fn() }))
 
@@ -845,6 +855,7 @@ describe("the clusters on the close's context", () => {
     setCloseParts(phase.intermediates, [
       { part: 1, startEntryId: fx.entries[0]!.id, endEntryId: endEntryId(), tokens: 0 },
     ])
+    setCloseModelConfig(phase.intermediates, storeModelConfig())
 
     const gen = closeAgentPhase(phase)
     let next = await gen.next(undefined)

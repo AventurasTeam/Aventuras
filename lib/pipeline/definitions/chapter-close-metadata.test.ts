@@ -4,6 +4,7 @@ import type { ActionOutcome, GroupOutcome, PipelineAction } from '@/lib/actions/
 import type { ResolveModelConfig } from '@/lib/ai'
 import type { ModelProfile, OpenRegionRow, ProviderInstance, StoryEntry } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
+import { generationStore } from '@/lib/stores'
 
 import { createPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { closeMetadataPhase, closeSeriesThrough, closeWindowTokens } from './chapter-close-metadata'
@@ -14,7 +15,7 @@ import type {
   requestChapterMetadata,
 } from './chapter-close-metadata-call'
 import { normalizeChapterMetadata } from './chapter-metadata-schema'
-import { closePartsOf, setCloseRange } from './close-intermediates'
+import { closePartsOf, requireCloseModelConfig, setCloseRange } from './close-intermediates'
 import type { CloseRange } from './intermediates'
 import type { PhaseContext, PhaseEmittedEvent, PipelineError } from '../types'
 
@@ -221,6 +222,11 @@ const stampOf = (id: string): PipelineAction => ({
   source: 'chapter_close',
   payload: { branchId: 'b1', id, chapterId: 'chap_new' },
 })
+
+const NO_MODEL_CONFIG = {
+  status: 'failed',
+  error: { kind: 'orchestrator', detail: 'chapter-close: no close model config' },
+}
 
 describe('closeSeriesThrough', () => {
   const series: OpenRegionRow[] = [
@@ -631,6 +637,30 @@ describe('closeMetadataPhase', () => {
       expect(requestMock).not.toHaveBeenCalled()
       expect(closePartsOf(ctx.intermediates)).toBeUndefined()
     })
+
+    it('parks the config whose window it cut by, for the agent', async () => {
+      insertEntries(ROWS)
+      const inputs = inputsWith({
+        providers: [provider('prov_local', { 'lore-model': 100 })],
+      })
+      readInputsMock.mockReturnValue(inputs)
+      callReturns({ status: 'ok', metadata: METADATA })
+
+      const ctx = phaseCtx()
+      await drain(ctx)
+
+      expect(requireCloseModelConfig(ctx)).toBe(inputs.modelConfig)
+    })
+
+    it('parks no config when lore-mgmt resolves to no model', async () => {
+      insertEntries(ROWS)
+      readInputsMock.mockReturnValue(inputsWith({ assignments: {} }))
+
+      const ctx = phaseCtx()
+      await drain(ctx)
+
+      expect(requireCloseModelConfig(ctx)).toEqual(NO_MODEL_CONFIG)
+    })
   })
 })
 
@@ -681,5 +711,108 @@ describe('closeWindowTokens', () => {
         phaseName: 'metadata',
       },
     })
+  })
+})
+
+describe('closeMetadataPhase under a re-run', () => {
+  // The re-run's chapter is closed: e1 to e7 carry its stamp, e8 and e9 are the open region.
+  const STAMPED = ROWS.map(
+    (row): Row => (row.position <= 7 ? { ...row, chapterId: 'chap_old' } : row),
+  )
+  const CHAPTER_RANGE: CloseRange = { chapterId: 'chap_old', startEntryId: 'e1', endEntryId: 'e7' }
+  const WINDOW_100 = { providers: [provider('prov_local', { 'lore-model': 100 })] }
+
+  beforeEach(() => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_old' })
+  })
+
+  afterEach(() => {
+    generationStore.__reset()
+  })
+
+  it("cuts the chapter's stamped entries for the current window, with no call and no group", async () => {
+    insertEntries(STAMPED)
+    const inputs = inputsWith(WINDOW_100)
+    readInputsMock.mockReturnValue(inputs)
+    const ctx = phaseCtx({ range: CHAPTER_RANGE })
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(groupOf(events)).toBeUndefined()
+    expect(requestMock).not.toHaveBeenCalled()
+    expect(closePartsOf(ctx.intermediates)).toEqual(FOUR_PARTS)
+    expect(requireCloseModelConfig(ctx)).toBe(inputs.modelConfig)
+  })
+
+  // C5: a row stored with no count reads as 0, as the open region reads it.
+  it('reads a stamped row stored with no count as 0 in its part', async () => {
+    insertEntries(STAMPED.map((row): Row => (row.id === 'e3' ? { ...row, tokens: null } : row)))
+    readInputsMock.mockReturnValue(inputsWith(WINDOW_100))
+    const ctx = phaseCtx({ range: CHAPTER_RANGE })
+
+    await drain(ctx)
+
+    // By turn: 40 with 8+0, then 9+31, then 7+29.
+    expect(closePartsOf(ctx.intermediates)).toEqual([
+      { part: 1, startEntryId: 'e1', endEntryId: 'e3', tokens: 48 },
+      { part: 2, startEntryId: 'e4', endEntryId: 'e5', tokens: 40 },
+      { part: 3, startEntryId: 'e6', endEntryId: 'e7', tokens: 36 },
+    ])
+  })
+
+  it('fails as config-resolver, parking no parts and no config, when lore-mgmt resolves to no model', async () => {
+    insertEntries(STAMPED)
+    readInputsMock.mockReturnValue(inputsWith({ assignments: {} }))
+    const ctx = phaseCtx({ range: CHAPTER_RANGE })
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'no-profile-assigned',
+        target: 'lore-mgmt',
+        phaseName: 'metadata',
+      },
+    })
+    expect(events).toEqual([])
+    expect(closePartsOf(ctx.intermediates)).toBeUndefined()
+    expect(requireCloseModelConfig(ctx)).toEqual(NO_MODEL_CONFIG)
+  })
+
+  it("fails as phase-logic, parking nothing, when the chapter's range holds no entry", async () => {
+    insertEntries(STAMPED)
+    const ctx = phaseCtx({ range: { ...CHAPTER_RANGE, endEntryId: 'e_gone' } })
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'phase-logic',
+        phaseName: 'metadata',
+        detail: "chapter-close: chapter chap_old's range holds no entry",
+      },
+    })
+    expect(events).toEqual([])
+    expect(closePartsOf(ctx.intermediates)).toBeUndefined()
+    expect(requireCloseModelConfig(ctx)).toEqual(NO_MODEL_CONFIG)
+  })
+
+  // Also the precondition of the no-group assertion above: the same rows' close does write.
+  it("runs a close's metadata call while only another branch's re-run holds", async () => {
+    generationStore.__reset()
+    generationStore.setPendingRerun('b2', { chapterId: 'chap_other' })
+    insertEntries(ROWS)
+    callReturns({ status: 'ok', metadata: METADATA })
+
+    const { events, result } = await drain(phaseCtx())
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(requestMock).toHaveBeenCalledOnce()
+    expect(groupOf(events)?.actions[0]).toMatchObject({ kind: 'createChapter' })
   })
 })

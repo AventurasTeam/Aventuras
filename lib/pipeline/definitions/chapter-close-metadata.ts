@@ -4,10 +4,15 @@ import type { GroupOutcome, PipelineAction } from '@/lib/actions/types'
 import { generationWindow, resolveModel, type ResolveModelConfig } from '@/lib/ai'
 import { cutChapterParts } from '@/lib/chapters'
 import { chapters, openRegionSeries, type DbCtx, type OpenRegionRow } from '@/lib/db'
+import { generationStore } from '@/lib/stores'
 
-import { readMetadataInputs, requestChapterMetadata } from './chapter-close-metadata-call'
-import { requireCloseRange, setCloseParts } from './close-intermediates'
-import { CLOSE_TARGET, CLOSE_PHASE } from './intermediates'
+import {
+  readCloseRangeEntries,
+  readMetadataInputs,
+  requestChapterMetadata,
+} from './chapter-close-metadata-call'
+import { requireCloseRange, setCloseModelConfig, setCloseParts } from './close-intermediates'
+import { CLOSE_TARGET, CLOSE_PHASE, type CloseRange } from './intermediates'
 import { emitDeltaGroup } from '../runtime/emit-group'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineError } from '../types'
 
@@ -71,10 +76,39 @@ function notApplied(actions: readonly PipelineAction[], outcome: GroupOutcome): 
   return null
 }
 
+// chapter-close.md → Re-running a close, Run order step 3: cut the chapter's stamped entries for
+// the current model; the row and metadata stay, so nothing is called or written.
+async function cutRerunParts(
+  ctx: PhaseContext,
+  range: CloseRange,
+  config: ResolveModelConfig,
+): Promise<PhaseResult> {
+  const window = closeWindowTokens(config)
+  if (!window.ok) return { status: 'failed', error: window.error }
+  const entries = await readCloseRangeEntries(ctx.db, ctx.branchId, range)
+  if (entries.length === 0)
+    return {
+      status: 'failed',
+      error: {
+        kind: 'phase-logic',
+        phaseName: CLOSE_PHASE.metadata,
+        detail: `chapter-close: chapter ${range.chapterId}'s range holds no entry`,
+      },
+    }
+  setCloseModelConfig(ctx.intermediates, config)
+  // C5: a row stored with no count reads as 0, as the open region reads it.
+  const cut = entries.map((entry) => ({
+    id: entry.id,
+    kind: entry.kind,
+    tokens: entry.contentTokens ?? 0,
+  }))
+  setCloseParts(ctx.intermediates, cutChapterParts(cut, window.tokens))
+  return { status: 'completed' }
+}
+
 /**
- * chapter-close.md → Phase 2: the range cut into parts (Parts), the metadata call, then the row and
- * a stamp per entry through the end as one group, in C1's order, every delta anchored on the end
- * entry.
+ * chapter-close.md → Phase 2: cut parts, call for metadata, then the row and a stamp per entry as
+ * one group in C1's order, anchored on the end entry. A re-run only cuts its parts.
  */
 export async function* closeMetadataPhase(
   ctx: PhaseContext,
@@ -83,6 +117,8 @@ export async function* closeMetadataPhase(
   if ('status' in range) return range
   const inputs = readMetadataInputs(ctx)
   if ('status' in inputs) return inputs
+  if (generationStore.getTxState().pendingRerun.has(ctx.branchId))
+    return await cutRerunParts(ctx, range, inputs.modelConfig)
 
   // Unstamped until the group, so the open region still holds the whole range.
   const region = await openRegionSeries(ctx.branchId, ctx)
@@ -99,6 +135,7 @@ export async function* closeMetadataPhase(
     }
   const window = closeWindowTokens(inputs.modelConfig)
   if (!window.ok) return { status: 'failed', error: window.error }
+  setCloseModelConfig(ctx.intermediates, inputs.modelConfig)
   const parts = cutChapterParts(series, window.tokens)
   setCloseParts(ctx.intermediates, parts)
 

@@ -68,6 +68,7 @@ function txOf(...runs: RunState[]): TxState {
     pendingTurns: new Set(),
     deferred: new Map(),
     pendingClose: new Map(),
+    pendingRerun: new Map(),
   }
 }
 

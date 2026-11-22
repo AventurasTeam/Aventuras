@@ -1,6 +1,5 @@
 import type { GroupOutcome } from '@/lib/actions/types'
-import { modelConfigOf } from '@/lib/ai'
-import { appSettingsStore, currentStoryStore } from '@/lib/stores'
+import { currentStoryStore } from '@/lib/stores'
 
 import { readCloseRangeEntries } from './chapter-close-metadata-call'
 import { CloseLedgerWriter } from './close-agent/ledger'
@@ -18,6 +17,7 @@ import type { CloseTaskDef } from './close-agent/task'
 import {
   closeClusterOf,
   closeIdsOf,
+  requireCloseModelConfig,
   requireCloseParts,
   requireCloseRange,
   seedCloseLedger,
@@ -129,9 +129,9 @@ export async function* closeAgentPhase(
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
     }
-  // Read before the first await, while the check above still holds.
-  const settings = appSettingsStore.getAppSettings()
-  const config = modelConfigOf(settings, open.settings)
+  // The metadata phase's: every call runs on the model the parts were cut for.
+  const config = requireCloseModelConfig(ctx)
+  if ('status' in config) return config
   const ids = closeIdsOf(ctx.intermediates)
   const ledger = new CloseLedgerWriter(ledgerRecord, (id) => ids.nameOfId(id), ctx.actionId)
   const entries = await readCloseRangeEntries(ctx.db, ctx.branchId, range)

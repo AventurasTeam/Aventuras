@@ -29,51 +29,82 @@ const ROW = {
   updatedAt: 100,
 }
 
+const NO_REPORT = { hasCloseReport: false, closeReportActionId: null }
+
 describe('projectChapterPatch', () => {
-  it('drops the report from a created row, flagging that it had one', () => {
+  it('drops the report from a created row, keeping that it had one and the action that wrote it', () => {
     expect(
       projectChapterPatch({ op: 'create', id: 'chap_1', row: { ...ROW, closeReport: REPORT } }),
-    ).toStrictEqual({ op: 'create', id: 'chap_1', row: { ...ROW, hasCloseReport: true } })
-  })
-
-  it('flags a create row with a null report, or none, as having none', () => {
-    expect(
-      projectChapterPatch({ op: 'create', id: 'chap_1', row: { ...ROW, closeReport: null } }),
-    ).toStrictEqual({ op: 'create', id: 'chap_1', row: { ...ROW, hasCloseReport: false } })
-    expect(projectChapterPatch({ op: 'create', id: 'chap_1', row: ROW })).toStrictEqual({
+    ).toStrictEqual({
       op: 'create',
       id: 'chap_1',
-      row: { ...ROW, hasCloseReport: false },
+      row: { ...ROW, hasCloseReport: true, closeReportActionId: 'act_close' },
     })
   })
 
-  it('turns an update writing a report into the flag, keeping the other columns', () => {
+  it('reads a create row with a null report, or none, as having none', () => {
+    expect(
+      projectChapterPatch({ op: 'create', id: 'chap_1', row: { ...ROW, closeReport: null } }),
+    ).toStrictEqual({ op: 'create', id: 'chap_1', row: { ...ROW, ...NO_REPORT } })
+    expect(projectChapterPatch({ op: 'create', id: 'chap_1', row: ROW })).toStrictEqual({
+      op: 'create',
+      id: 'chap_1',
+      row: { ...ROW, ...NO_REPORT },
+    })
+  })
+
+  // A row the store already shaped, as a test or a redo of a store row hands the patcher.
+  it("keeps a store-shaped create's own flag and action", () => {
+    const row = { ...ROW, hasCloseReport: true, closeReportActionId: 'act_rerun' }
+    expect(projectChapterPatch({ op: 'create', id: 'chap_1', row })).toStrictEqual({
+      op: 'create',
+      id: 'chap_1',
+      row,
+    })
+  })
+
+  it("lets a create's report win over a store-shaped action it also carries", () => {
+    expect(
+      projectChapterPatch({
+        op: 'create',
+        id: 'chap_1',
+        row: { ...ROW, closeReportActionId: 'act_stale', closeReport: REPORT },
+      }),
+    ).toStrictEqual({
+      op: 'create',
+      id: 'chap_1',
+      row: { ...ROW, hasCloseReport: true, closeReportActionId: 'act_close' },
+    })
+  })
+
+  it('turns an update writing a report into the flag and its action, keeping the other columns', () => {
     expect(
       projectChapterPatch({
         op: 'update',
         id: 'chap_1',
-        columns: { closeReport: REPORT, title: 'Black Dog' },
+        columns: { closeReport: { ...REPORT, actionId: 'act_rerun' }, title: 'Black Dog' },
       }),
     ).toStrictEqual({
       op: 'update',
       id: 'chap_1',
-      columns: { title: 'Black Dog', hasCloseReport: true },
+      columns: { title: 'Black Dog', hasCloseReport: true, closeReportActionId: 'act_rerun' },
     })
   })
 
   // An undo of the report's write restores null.
-  it('clears the flag on an update writing a null report', () => {
+  it('clears both on an update writing a null report', () => {
     expect(
       projectChapterPatch({ op: 'update', id: 'chap_1', columns: { closeReport: null } }),
-    ).toStrictEqual({ op: 'update', id: 'chap_1', columns: { hasCloseReport: false } })
+    ).toStrictEqual({ op: 'update', id: 'chap_1', columns: NO_REPORT })
   })
 
-  // A title save carries no closeReport key: deriving the flag here would clear a real report's.
-  it('leaves the flag out of an update that does not write the report', () => {
+  // A title save carries no closeReport key: deriving either here would clear a real report's.
+  it('leaves both out of an update that does not write the report', () => {
     const patch = { op: 'update' as const, id: 'chap_1', columns: { title: 'Black Dog' } }
     const projected = projectChapterPatch(patch)
     expect(projected).toStrictEqual(patch)
     expect(projected.op === 'update' && 'hasCloseReport' in projected.columns).toBe(false)
+    expect(projected.op === 'update' && 'closeReportActionId' in projected.columns).toBe(false)
   })
 
   it('passes a delete through', () => {

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -19,6 +19,7 @@ import {
   generationStore,
   interruptMemoryRuns,
   type DeferredWorkKind,
+  type RunSlot,
 } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
@@ -377,5 +378,78 @@ describe('deferred work', () => {
     expect(expectRan(await start.origin).outcome).toBe('aborted')
     expect(generationStore.getTxState().deferred.size).toBe(0)
     expect(seen.map((e) => e.type)).toEqual(['run_complete'])
+  })
+})
+
+// generation-pipeline.md → Multi-run txState: a close reserved while a re-run holds its branch
+// runs in the 'rerun' slot, which defers nothing.
+describe("a run's slot", () => {
+  beforeEach(() => {
+    resetSingletons()
+    entrySeq = 0
+  })
+  afterEach(() => resetSingletons())
+
+  function defineSlotted(runSlot: (branchId: string) => RunSlot | null): void {
+    definePipeline({
+      kind: 'slotted-close',
+      phases: [{ name: 'close', run: writesThenHolds }],
+      affordance: 'pill-and-banner',
+      gateBehavior: 'hard-gate',
+      interruptible: 'close',
+      runSlot,
+      concurrencyPolicy: { blockedBy: ['slotted-close'] },
+    })
+  }
+
+  const heldSlots = () =>
+    [...generationStore.getTxState().runs.values()].map((run) => run.interruptible)
+
+  it("reserves in the slot runSlot names for the run's branch, else in the pipeline's own", async () => {
+    const { ctx } = await makeHarness()
+    const runSlot = vi.fn<(branchId: string) => RunSlot | null>(() => 'rerun')
+    defineSlotted(runSlot)
+
+    const rerun = await startHeld('slotted-close', ctx)
+    expect(heldSlots()).toEqual(['rerun'])
+    expect(runSlot).toHaveBeenCalledWith('b1')
+    rerun.finish({ status: 'completed' })
+    expect(expectRan(await rerun.start.origin).outcome).toBe('completed')
+
+    runSlot.mockReturnValue(null)
+    const close = await startHeld('slotted-close', ctx)
+    expect(heldSlots()).toEqual(['close'])
+    close.finish({ status: 'completed' })
+    expect(expectRan(await close.start.origin).outcome).toBe('completed')
+  })
+
+  it('reports a re-run on run_complete; its interrupt defers nothing and ends the chain', async () => {
+    const { ctx } = await makeHarness()
+    defineSlotted(() => 'rerun')
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_held' })
+    const seen = recordTerminalEvents()
+
+    const { start } = await startHeld('slotted-close', ctx)
+    await interruptMemoryRuns('b1')
+
+    expect(expectRan(await start.origin).outcome).toBe('aborted')
+    expect(seen).toEqual([
+      expect.objectContaining({ type: 'run_complete', outcome: 'aborted', rerun: true }),
+    ])
+    expect(generationStore.getTxState().deferred.size).toBe(0)
+    expect(generationStore.getTxState().pendingRerun.has('b1')).toBe(false)
+  })
+
+  it('names no re-run on a run outside one', async () => {
+    const { ctx } = await makeHarness()
+    defineSlotted(() => null)
+    const seen = recordTerminalEvents()
+
+    const { start, finish } = await startHeld('slotted-close', ctx)
+    finish({ status: 'completed' })
+    await start.origin
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).not.toHaveProperty('rerun')
   })
 })

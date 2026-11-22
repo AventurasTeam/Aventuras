@@ -98,7 +98,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     runId: generateId('run'),
     kind,
     gateBehavior: pipeline.gateBehavior,
-    interruptible: pipeline.interruptible ?? null,
+    interruptible: pipeline.runSlot?.(ctx.branchId) ?? pipeline.interruptible ?? null,
     beforeTurn: ctx.beforeTurn ?? false,
     actionId: ctx.actionId ?? generateId('act'),
     storyId: ctx.storyId,
@@ -134,6 +134,7 @@ function emitRunComplete(
     actionId: run.actionId,
     beforeTurn: run.beforeTurn,
     outcome,
+    ...(run.interruptible === 'rerun' ? { rerun: true as const } : {}),
     ...(error ? { error } : {}),
   })
 }

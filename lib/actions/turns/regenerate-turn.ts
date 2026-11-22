@@ -11,7 +11,7 @@ import {
   type RejectedStart,
   type TxResult,
 } from '@/lib/pipeline'
-import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
+import { entriesStore, generationStore, rerunHoldsReversal, undoRedoStore } from '@/lib/stores'
 
 import {
   DeltaReplayError,
@@ -115,11 +115,15 @@ async function sweepFrom(
   return { status: 'ok' }
 }
 
+/**
+ * `expectedCounts` are the counts the regenerate confirm showed; the sweep refuses
+ * `counts-changed` when its set moved since. `undefined` sweeps with no consent check.
+ */
 export async function regenerateTurn(
   ids: { storyId: string; branchId: string },
   replyEntryId: string,
   ctx: DbCtx,
-  opts?: { expectedCounts?: RollbackCounts },
+  opts: { expectedCounts: RollbackCounts | undefined },
 ): Promise<RegenerateTurnResult> {
   ensurePerTurnPipelineRegistered()
 
@@ -164,9 +168,13 @@ export async function regenerateTurn(
         if (origin == null || origin.kind !== 'user_action')
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
-        // Re-checked past the reads, synchronously with the mark and the bracket below: a reversal
-        // opened during them would otherwise throw this one out of its bracket as re-entry.
-        if (generationStore.isHeadReversalBlocked(ids.branchId)) return IN_FLIGHT_REJECTION
+        // Re-checked past the reads, synchronously with the mark: a reversal opened during them
+        // would throw this one out of its bracket as re-entry. A re-run holds its end reply.
+        if (
+          generationStore.isHeadReversalBlocked(ids.branchId) ||
+          rerunHoldsReversal(generationStore.getTxState(), ids.branchId, target)
+        )
+          return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
           let swept:
             | { status: 'ok' }
@@ -178,7 +186,7 @@ export async function regenerateTurn(
               // This interrupt can leave the branch held: a pass whose reversal didn't commit.
               (await isClassifierHeld(ids.branchId, ctx))
                 ? HELD_REJECTION
-                : sweepFrom(ids.branchId, replyEntryId, ctx, opts?.expectedCounts),
+                : sweepFrom(ids.branchId, replyEntryId, ctx, opts.expectedCounts),
             )
           } catch (error) {
             if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()

@@ -1558,6 +1558,30 @@ recovery loop, where one bad orphan can't block the rest. **Revisit
 signal:** a recovery failure report on a re-run's chain. Parked
 2026-11-21 from Slice 5.13's PR review (developer).
 
+#### A re-run confirm's counts read before its shortcut
+
+A re-run's confirm counts what the re-run reverses as it stands after
+the rollback shortcut removes the turns since: its preview leaves out
+the deltas the shortcut reverses, judges survivors, created lore and
+ref clears as after them
+([`chapter-timeline.md → Re-run a close`](./ui/screens/chapter-timeline/chapter-timeline.md#re-run-a-close)).
+The rest of the re-run's reversal set is still selected against the
+state before the shortcut, so the confirm can differ from what 5.12's
+delete preview reads after the rollback when a turn since keeps,
+references or deletes a row the close created: the closure's
+by-reference removals and its user-kept rows, and copies held in a
+turn's delete payload (a turn creates a character in a faction the
+close created and a user edit deletes her: the confirm reads 3 changes,
+the post-rollback delete preview 2). The cost line's token count also
+reads the chapter's entries before a shortcut that removes its end
+reply. Only the confirm's numbers diverge: the re-run itself runs on
+the state the shortcut leaves. The structural fix computes the preview
+on the post-shortcut state by construction, which needs a read inside a
+transaction across the desktop IPC proxy and expo-sqlite; today
+`runInTransaction` takes writes only. **Revisit signal:** a re-run
+confirm's counts visibly differing from what the re-run did. Parked
+2026-11-21 from Slice 5.13's Task 16 review (developer).
+
 ### Memory pipeline (parked)
 
 #### A failed store refresh after a swap hides its marker from the guard

@@ -160,7 +160,10 @@ async function deferAPass(ctx: RunCtx, pass: StandInPass, via: 'regenerate' | 'c
   }
   const reply = branchEntries('b1').find((e) => e.kind === 'ai_reply')
   if (!reply) throw new Error('the turn left no reply')
-  const regen = await within(regenerateTurn(IDS, reply.id, ctx), 'the regenerate')
+  const regen = await within(
+    regenerateTurn(IDS, reply.id, ctx, { expectedCounts: undefined }),
+    'the regenerate',
+  )
   expect(regen.status).toBe('ran')
   return held
 }

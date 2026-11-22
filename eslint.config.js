@@ -36,8 +36,15 @@ const RUN_MUTATORS = generationStoreMutators(
 
 // A stray write makes the next Send start a close nobody owes, or skip one that is owed.
 const CLOSE_RECORD_MUTATORS = generationStoreMutators(
-  ['setPendingClose', 'clearPendingClose', 'clearDeferredClose', 'dropBranchRecords'],
-  "Only a close's record writers write pendingClose or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
+  [
+    'setPendingClose',
+    'clearPendingClose',
+    'clearDeferredClose',
+    'dropBranchRecords',
+    'setPendingRerun',
+    'clearPendingRerun',
+  ],
+  "Only a close's record writers write pendingClose, pendingRerun or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
 )
 
 const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(

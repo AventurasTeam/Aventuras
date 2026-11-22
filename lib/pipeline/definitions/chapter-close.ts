@@ -1,10 +1,12 @@
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { generationStore } from '@/lib/stores'
 
 import { closeAgentPhase } from './chapter-close-agent'
 import { closeBoundaryPhase } from './chapter-close-boundary'
 import { closeMetadataPhase } from './chapter-close-metadata'
 import { closeReportPhase } from './chapter-close-report'
+import { closeReversalPhase } from './chapter-close-reversal'
 import { CLOSE_PHASE, CLOSE_TARGET } from './intermediates'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
@@ -30,12 +32,15 @@ export function ensureChapterClosePipelineRegistered(): void {
       phases: [
         { name: CLOSE_PHASE.boundary, run: closeBoundaryPhase, resolves: CHAPTER_CLOSE_RESOLVES },
         { name: CLOSE_PHASE.metadata, run: closeMetadataPhase, resolves: CHAPTER_CLOSE_RESOLVES },
+        { name: CLOSE_PHASE.reversal, run: closeReversalPhase },
         { name: CLOSE_PHASE.agent, run: closeAgentPhase, resolves: CHAPTER_CLOSE_AGENT_RESOLVES },
         { name: CLOSE_PHASE.report, run: closeReportPhase },
       ],
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
       interruptible: 'close',
+      runSlot: (branchId) =>
+        generationStore.getTxState().pendingRerun.has(branchId) ? 'rerun' : null,
       concurrencyPolicy: {
         blockedBy: [
           PER_TURN_KIND,

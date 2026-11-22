@@ -5,7 +5,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { __resetRegistrationGuard, registerAllDomains } from '@/lib/actions/delta/registrations'
 import { loadOpenStory } from '@/lib/actions/stories/operational'
-import type { GenerateStructuredResult } from '@/lib/ai'
+import { modelConfigOf, type GenerateStructuredResult, type ResolveModelConfig } from '@/lib/ai'
 import {
   branches,
   entities,
@@ -21,7 +21,12 @@ import {
   type StoryMode,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { hydrateAppSettings, resetAllStores } from '@/lib/stores'
+import {
+  appSettingsStore,
+  currentStoryStore,
+  hydrateAppSettings,
+  resetAllStores,
+} from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
 import type { ChapterMetadata } from '../chapter-metadata-schema'
@@ -87,6 +92,14 @@ export const METADATA_REPLY: ChapterMetadata = {
 
 export function metadataReplyResult(): GenerateStructuredResult<ChapterMetadata> {
   return { status: 'ok', value: METADATA_REPLY, recoverable: [] }
+}
+
+/** lore-mgmt's config as the stores hold it: what the metadata phase parks for the agent. */
+export function storeModelConfig(): ResolveModelConfig {
+  return modelConfigOf(
+    appSettingsStore.getAppSettings(),
+    currentStoryStore.getCurrentStory()?.settings,
+  )
 }
 
 // lore-mgmt and the classifier on separate profiles, so a test can tell whose timeout bounds a call.

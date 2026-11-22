@@ -37,10 +37,11 @@ import {
   openCloseFixture,
   putSceneCharacter,
   setStoryMode,
+  storeModelConfig,
   type CloseFixture,
 } from '../__tests__/close-fixture'
 import { closeAgentPhase } from '../chapter-close-agent'
-import { setCloseParts, setCloseRange } from '../close-intermediates'
+import { setCloseModelConfig, setCloseParts, setCloseRange } from '../close-intermediates'
 
 vi.mock('@/lib/ai', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -2258,6 +2259,7 @@ function threadsClosePhase(fx: CloseFixture): PhaseContext {
   setCloseParts(intermediates, [
     { part: 1, startEntryId: range.startEntryId, endEntryId: range.endEntryId, tokens: 0 },
   ])
+  setCloseModelConfig(intermediates, storeModelConfig())
   return {
     actionId,
     abortSignal: new AbortController().signal,

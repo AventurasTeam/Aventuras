@@ -1,6 +1,6 @@
 import { APICallError } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 import { getModel } from '@/lib/ai/model'
@@ -633,5 +633,161 @@ describe('refineBoundaryReply', () => {
     expect(z.toJSONSchema(refineBoundaryReply(new Set(['t1', 't2', 't3'])))).toEqual(
       z.toJSONSchema(chapterBoundarySchema),
     )
+  })
+})
+
+// Chapter 1 ends on e3 and chapter 2 on e5, each stamped; e6 and e7 are the open region.
+const AFTER_TWO_CHAPTERS = [
+  row('e1', 1, 'opening', 'chap_1'),
+  row('e2', 2, 'user_action', 'chap_1'),
+  row('e3', 3, 'ai_reply', 'chap_1'),
+  row('e4', 4, 'user_action', 'chap_2'),
+  row('e5', 5, 'ai_reply', 'chap_2'),
+  row('e6', 6, 'user_action'),
+  row('e7', 7, 'ai_reply'),
+]
+
+function insertChapterRow(
+  branchId: string,
+  id: string,
+  sequenceNumber: number,
+  startEntryId: string,
+  endEntryId: string,
+): void {
+  phaseDb.sqlite
+    .prepare(
+      `INSERT INTO chapters (id, branch_id, sequence_number, title, summary, theme,
+         start_entry_id, end_entry_id, token_count, closed_at, created_at, updated_at)
+       VALUES (?, ?, ?, 'A chapter', 'What happened.', 'a crossing', ?, ?, 10, 1, 1, 1)`,
+    )
+    .run(id, branchId, sequenceNumber, startEntryId, endEntryId)
+}
+
+function logChapterWrite(
+  branchId: string,
+  logPosition: number,
+  chapterId: string,
+  source: string,
+  op: 'create' | 'update',
+): void {
+  phaseDb.sqlite
+    .prepare(
+      `INSERT INTO deltas (id, branch_id, entry_id, action_id, log_position, source,
+         target_table, target_id, op, undo_payload, created_at)
+       VALUES (?, ?, NULL, ?, ?, ?, 'chapters', ?, ?, NULL, 1)`,
+    )
+    .run(
+      `delta_${branchId}_${logPosition}`,
+      branchId,
+      `act_${source}_${chapterId}`,
+      logPosition,
+      source,
+      chapterId,
+      op,
+    )
+}
+
+const chapterRowsOn = (branchId: string): number =>
+  (
+    phaseDb.sqlite
+      .prepare('SELECT COUNT(*) AS n FROM chapters WHERE branch_id = ?')
+      .get(branchId) as { n: number }
+  ).n
+
+const rerunRefused = (detail: string) => ({
+  status: 'failed',
+  error: { kind: 'phase-logic', phaseName: CLOSE_PHASE.boundary, detail },
+})
+
+describe('closeBoundaryPhase under a re-run', () => {
+  beforeEach(() => {
+    hydrateEntries(phaseDb, 'b1', AFTER_TWO_CHAPTERS)
+    insertChapterRow('b1', 'chap_1', 1, 'e1', 'e3')
+    insertChapterRow('b1', 'chap_2', 2, 'e4', 'e5')
+    logChapterWrite('b1', 1, 'chap_1', 'chapter_close', 'create')
+    logChapterWrite('b1', 2, 'chap_2', 'chapter_close', 'create')
+    // Another branch of the one database: a fork's chapter shares chap_2's id and sits past b1's
+    // latest number, with a close's write on it; its range and e-ids are not b1's.
+    insertChapterRow('b2', 'chap_2', 3, 'x1', 'x2')
+    insertChapterRow('b2', 'chap_b2_only', 4, 'x3', 'x4')
+    logChapterWrite('b2', 1, 'chap_2', 'chapter_close', 'create')
+    // The open region's own pick, which a re-run never reads.
+    generationStore.setPendingClose('b1', { endEntryId: 'e7' })
+  })
+
+  afterEach(() => {
+    phaseDb.sqlite.exec('DELETE FROM deltas; DELETE FROM chapters')
+  })
+
+  it("parks the latest chapter's own range from its row, with no call and no write", async () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_2' })
+    const ctx = phaseCtx()
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(closeRangeOf(ctx.intermediates)).toEqual({
+      chapterId: 'chap_2',
+      startEntryId: 'e4',
+      endEntryId: 'e5',
+    })
+    expect(getModel).not.toHaveBeenCalled()
+    expect(chapterRowsOn('b1')).toBe(2)
+    expect(pickOn('b1')).toEqual({ endEntryId: 'e7' })
+  })
+
+  it('fails on a chapter no longer the latest, leaving the pick', async () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_1' })
+    const ctx = phaseCtx()
+
+    const { events, result } = await drain(ctx)
+
+    expect(result).toEqual(rerunRefused('chapter-close: chapter 1 is not the latest; 2 is'))
+    expect(events).toEqual([])
+    expect(ctx.intermediates).toEqual({})
+    expect(pickOn('b1')).toEqual({ endEntryId: 'e7' })
+  })
+
+  it('fails on a chapter no close wrote, whatever else wrote its row', async () => {
+    phaseDb.sqlite.exec("DELETE FROM deltas WHERE target_id = 'chap_2' AND branch_id = 'b1'")
+    logChapterWrite('b1', 3, 'chap_2', 'user_edit', 'update')
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_2' })
+    const ctx = phaseCtx()
+
+    const { result } = await drain(ctx)
+
+    expect(result).toEqual(rerunRefused('chapter-close: no close wrote chapter chap_2'))
+    expect(ctx.intermediates).toEqual({})
+  })
+
+  it('fails on a chapter only another branch holds, whatever number it carries there', async () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_b2_only' })
+    const ctx = phaseCtx()
+
+    const { result } = await drain(ctx)
+
+    expect(result).toEqual(
+      rerunRefused('chapter-close: no chapter chap_b2_only to re-run on branch b1'),
+    )
+    expect(ctx.intermediates).toEqual({})
+  })
+
+  it('fails on a chapter the branch no longer holds', async () => {
+    generationStore.setPendingRerun('b1', { chapterId: 'chap_gone' })
+    const ctx = phaseCtx()
+
+    const { result } = await drain(ctx)
+
+    expect(result).toEqual(
+      rerunRefused('chapter-close: no chapter chap_gone to re-run on branch b1'),
+    )
+    expect(ctx.intermediates).toEqual({})
+  })
+
+  it("leaves this branch's close to its pick while another branch's re-run holds", async () => {
+    generationStore.setPendingRerun('b2', { chapterId: 'chap_2' })
+
+    await expectEndsOn(phaseCtx(), { startEntryId: 'e6', endEntryId: 'e7' })
   })
 })

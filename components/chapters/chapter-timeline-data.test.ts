@@ -36,6 +36,7 @@ function chapter(sequenceNumber: number, branchId = 'br_1'): StoreChapter {
     createdAt: 1,
     updatedAt: 1,
     hasCloseReport: false,
+    closeReportActionId: null,
   }
 }
 

@@ -186,6 +186,8 @@ convention, and the expectation that subsystems route through
   `pending_close_check_failed` (warn: a prose reversal could not read
   whether a manual close pick's end entry survived, so the pick is kept
   for the boundary to refuse),
+  `close_rerun_on_started_threw` (warn: a re-run start's host callback
+  threw as the chain reserved; the re-run runs on),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /

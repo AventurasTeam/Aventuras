@@ -112,12 +112,15 @@ export {
   runBlocksHeadReversal,
   selectMemoryRun,
 } from './generation/generation'
+export { refreshHeldByRerun, rerunHoldsReversal } from './generation/rerun-holds'
 export type {
   CloseProgress,
   DeferredWork,
   DeferredWorkKind,
   PendingClose,
+  PendingRerun,
   PendingTurn,
+  RunSlot,
   RunState,
   TxState,
 } from './generation/generation'

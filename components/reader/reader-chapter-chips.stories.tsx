@@ -36,6 +36,7 @@ const closedChapter = (sequenceNumber: number): StoreChapter => ({
   createdAt: 1,
   updatedAt: 1,
   hasCloseReport: false,
+  closeReportActionId: null,
 })
 
 const ARGS: ReaderChapterChipsProps = {

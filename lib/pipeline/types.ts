@@ -10,7 +10,13 @@ import type {
 import type { DbCtx, PromptSections, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
-import type { AppSettingsSnapshot, CloseProgress, DeferredWorkKind, RunState } from '@/lib/stores'
+import type {
+  AppSettingsSnapshot,
+  CloseProgress,
+  DeferredWorkKind,
+  RunSlot,
+  RunState,
+} from '@/lib/stores'
 
 /** The resolver's failures, and pre-flight's refusal of a model flagged off for tool calling. */
 export type ConfigFailureKind = ResolveFailureKind | 'tool-calling-off'
@@ -92,6 +98,8 @@ export type PipelineEvent =
       /** Send's work before the turn (RunState.beforeTurn), chained successors included. */
       beforeTurn: boolean
       outcome: 'completed' | 'aborted' | 'failed'
+      /** A close's re-run, whose slot is `rerun`; absent on every other run. */
+      rerun?: true
       error?: PipelineError
     }
   | { type: 'phase_start'; runId: string; name: string }
@@ -200,6 +208,11 @@ export type Pipeline = {
   gateBehavior: 'hard-gate' | 'no-gate'
   /** A head reversal or Cancel ends me and defers me, in this slot, to the branch's next Send. */
   interruptible?: DeferredWorkKind
+  /**
+   * Read at each reserve, a chained successor's included: the slot the run takes in place of
+   * `interruptible`, or null to take that one.
+   */
+  runSlot?: (branchId: string) => RunSlot | null
   concurrencyPolicy: ConcurrencyPolicy
   /** Awaited at commit while the run still holds the gate; the swap after it stays synchronous. */
   chainsTo?: (run: RunState, ctx: DbCtx) => string | null | Promise<string | null>

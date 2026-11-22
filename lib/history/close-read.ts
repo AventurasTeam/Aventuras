@@ -41,13 +41,15 @@ export async function readCloseReport(
 /**
  * C1: the close's deltas but its stamps, in log order. No `action_id` index, so the chapter row's
  * first and last deltas under the action bound a `deltas_log_position_uniq` range read; redo keeps
- * positions.
+ * positions. A re-run writes no chapter row, so its report's `firstLogPosition` (C4) is the lower
+ * bound and its report update the upper.
  */
 export async function loadCloseDeltas(
   db: Db,
   branchId: string,
   chapterId: string,
   actionId: string,
+  firstLogPosition?: number,
 ): Promise<Delta[]> {
   const [range] = await db
     .select({ first: min(deltas.logPosition), last: max(deltas.logPosition) })
@@ -67,7 +69,7 @@ export async function loadCloseDeltas(
     .where(
       and(
         eq(deltas.branchId, branchId),
-        between(deltas.logPosition, range.first, range.last),
+        between(deltas.logPosition, firstLogPosition ?? range.first, range.last),
         eq(deltas.actionId, actionId),
         ne(deltas.targetTable, 'story_entries'),
       ),
