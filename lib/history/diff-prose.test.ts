@@ -351,3 +351,188 @@ describe('diffProse — no wording falls back to the field-name summary', () => 
     expect(diffProse(entryOf({ name: 7 }, { name: 'Kael' }), ENTITIES)).toBeNull()
   })
 })
+
+describe('diffProse — term lists', () => {
+  it("names only the list in old's keys: canon's iteration-rule example", () => {
+    expect(
+      diffProse(entryOf({ state: { traits: ['brave'] } }, { state: KAEL_STATE }), ENTITIES),
+    ).toBe('Traits: added "former soldier"')
+  })
+
+  it("reads canon's change-prose example whole", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: 'A wary ranger.', state: { traits: ['brave'], voice: 'low' } },
+          {
+            description: 'A wary ranger. He once served the crown before the war.',
+            state: KAEL_STATE,
+          },
+        ),
+        ENTITIES,
+      ),
+    ).toBe(
+      'Description: "A wary ranger." → "A wary ranger. He once served the crown…"; Traits: added "former soldier"; Voice: "low" → "gravelly"',
+    )
+  })
+
+  it("reads added in the new list's order, then removed in the old list's order", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['loyal', 'brave'] } },
+          { state: { ...KAEL_STATE, traits: ['brave', 'former soldier', 'scarred'] } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: added "former soldier", "scarred", removed "loyal"')
+  })
+
+  it("reads several removed terms in the old list's order", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['proud', 'loyal', 'brave'] } },
+          { state: { ...KAEL_STATE, traits: ['brave'] } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: removed "proud", "loyal"')
+  })
+
+  it("respells normalized tags in the new list's order", () => {
+    expect(
+      diffProse(
+        entryOf({ tags: ['eldra', 'iron pact'] }, { tags: ['Iron Pact', 'Eldra'] }),
+        contextOf('lore'),
+      ),
+    ).toBe('Tags: respelled "iron pact" as "Iron Pact", "eldra" as "Eldra"')
+  })
+
+  it('matches a state list exactly: a case change is an add and a remove', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { drives: ['Find the crown'] } },
+          { state: { ...KAEL_STATE, drives: ['find the crown'] } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Drives: added "find the crown", removed "Find the crown"')
+  })
+
+  it('renders nothing for a reorder alone', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['former soldier', 'brave'] } },
+          { state: { ...KAEL_STATE, traits: ['brave', 'former soldier'] } },
+        ),
+        ENTITIES,
+      ),
+    ).toBeNull()
+  })
+
+  it('names a duplicated term once', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['brave'] } },
+          { state: { ...KAEL_STATE, traits: ['brave', 'scarred', 'scarred'] } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: added "scarred"')
+  })
+
+  it('spells a duplicated normalized term as its first occurrence', () => {
+    expect(diffProse(entryOf({ tags: [] }, { tags: ['Eldra', 'eldra'] }), contextOf('lore'))).toBe(
+      'Tags: added "Eldra"',
+    )
+  })
+
+  it('cuts a term over 40 characters at a word end, and shows one of 40 whole', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['brave'] } },
+          {
+            state: {
+              ...KAEL_STATE,
+              traits: [
+                'brave',
+                'the oath sworn beneath the broken keep at midnight',
+                'an unbroken oath sworn beneath the keeps',
+              ],
+            },
+          },
+        ),
+        ENTITIES,
+      ),
+    ).toBe(
+      'Traits: added "the oath sworn beneath the broken keep…", "an unbroken oath sworn beneath the keeps"',
+    )
+  })
+
+  it('reads an agenda absent before as an empty list', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { agenda: null } },
+          { state: { standing: 'feared', agenda: ['take the pass'] } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Agenda: added "take the pass"')
+  })
+})
+
+describe('diffProse — quantities', () => {
+  it("reads each of the old partial's keys, none for a key a side lacks", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { stackables: { gold: 250, arrows: null } } },
+          { state: { ...KAEL_STATE, stackables: { gold: 200, arrows: 12 } } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Quantities: gold 250 → 200, arrows none → 12')
+  })
+
+  it('reads every key of the new record as an addition when the old was null', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { stackables: null } },
+          { state: { ...KAEL_STATE, stackables: { gold: 5, rope: 1 } } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Quantities: gold none → 5, rope none → 1')
+  })
+
+  it('reads a removed key as none', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { stackables: { torches: 3 } } },
+          { state: { ...KAEL_STATE, stackables: {} } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Quantities: torches 3 → none')
+  })
+
+  it('renders nothing for a key whose counts match', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { stackables: { gold: 5 } } },
+          { state: { ...KAEL_STATE, stackables: { gold: 5 } } },
+        ),
+        ENTITIES,
+      ),
+    ).toBeNull()
+  })
+})

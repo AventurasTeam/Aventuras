@@ -1,3 +1,4 @@
+import { termChanges, termKeyOf, termMatchOf, type TermMatch } from '@/lib/actions'
 import { INJECTION_MODES, THREAD_STATUSES } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { isJsonObject } from '@/lib/json-object'
@@ -177,6 +178,108 @@ function flagChange({ old, new: next }: At): Change {
   return changed(flagText(before), flagText(after))
 }
 
+const isTermList = (value: unknown): value is readonly string[] =>
+  Array.isArray(value) && value.every((item) => typeof item === 'string')
+
+// An absent list is [], as world.md → Change prose compares it.
+function listOf(value: unknown): readonly string[] | undefined {
+  if (value == null) return []
+  return isTermList(value) ? value : undefined
+}
+
+function cutTerm(term: string): string {
+  const chars = Array.from(oneLine(term))
+  if (chars.length <= LONG_TEXT_MAX) return chars.join('')
+  const head = chars.slice(0, LONG_TEXT_MAX).join('')
+  const wordEnd = chars[LONG_TEXT_MAX] === ' ' ? head.length : head.lastIndexOf(' ')
+  return `${wordEnd > 0 ? head.slice(0, wordEnd) : head}${ellipsis()}`
+}
+
+// A list is a set: a duplicate is one term, spelled as its first occurrence.
+function firstSpellings(list: readonly string[], match: TermMatch): Map<string, string> {
+  const byKey = new Map<string, string>()
+  for (const term of list) {
+    const key = termKeyOf(term, match)
+    if (!byKey.has(key)) byKey.set(key, term)
+  }
+  return byKey
+}
+
+// Added and respelled follow the new list's order, removed the old list's; a reorder is no change.
+function listParts(
+  before: readonly string[],
+  after: readonly string[],
+  match: TermMatch,
+  show: (term: string) => string,
+): Change {
+  const changes = termChanges(before, after, match)
+  if (changes.size === 0) return SAME
+  const was = firstSpellings(before, match)
+  const now = firstSpellings(after, match)
+  const added: string[] = []
+  const respelled: string[] = []
+  for (const [key, term] of now) {
+    const change = changes.get(key)
+    if (change === 'added') added.push(show(term))
+    else if (change === 'respelled')
+      respelled.push(
+        t('history:prose.respelledPair', { old: show(was.get(key) ?? term), new: show(term) }),
+      )
+  }
+  const removed = [...was]
+    .filter(([key]) => changes.get(key) === 'removed')
+    .map(([, term]) => show(term))
+  const separator = t('history:prose.listSeparator')
+  const parts: string[] = []
+  if (added.length > 0)
+    parts.push(t('history:prose.added', { terms: added.join(separator), count: added.length }))
+  if (removed.length > 0)
+    parts.push(
+      t('history:prose.removed', { terms: removed.join(separator), count: removed.length }),
+    )
+  if (respelled.length > 0)
+    parts.push(
+      t('history:prose.respelled', { pairs: respelled.join(separator), count: respelled.length }),
+    )
+  return parts.join(separator)
+}
+
+function termListChange({ path, old, new: next }: At, context: ProseContext): Change {
+  const before = listOf(old)
+  const after = listOf(next)
+  if (before === undefined || after === undefined) return null
+  const [column, ...inner] = path.split('.')
+  const match = termMatchOf(context.table, column, inner.length > 0 ? inner : undefined)
+  if (match === undefined) return null
+  return listParts(before, after, match, (term) => quoted(cutTerm(term)))
+}
+
+const isCount = (value: unknown): value is number | null | undefined =>
+  value == null || typeof value === 'number'
+
+const countText = (count: number | null | undefined) => (count == null ? none() : String(count))
+
+// A key's null in the old partial is a key absent before; a null partial is a record absent before.
+function recordChange({ old, new: next }: At): Change {
+  const after = next ?? {}
+  if (!isJsonObject(after)) return null
+  let before: Readonly<Record<string, unknown>> | null
+  if (old == null) before = null
+  else if (isJsonObject(old)) before = old
+  else return null
+  const parts: string[] = []
+  for (const key of Object.keys(before ?? after)) {
+    const was = before !== null && Object.hasOwn(before, key) ? before[key] : null
+    const now = Object.hasOwn(after, key) ? after[key] : null
+    if (!isCount(was) || !isCount(now)) return null
+    if ((was ?? null) === (now ?? null)) continue
+    parts.push(
+      t('history:prose.quantity', { name: key, change: changed(countText(was), countText(now)) }),
+    )
+  }
+  return parts.length === 0 ? SAME : parts.join(t('history:prose.listSeparator'))
+}
+
 function changeOf(kind: ProseFieldKind, at: At, context: ProseContext): Change {
   switch (kind) {
     case 'text':
@@ -188,7 +291,9 @@ function changeOf(kind: ProseFieldKind, at: At, context: ProseContext): Change {
     case 'flag':
       return flagChange(at)
     case 'termList':
+      return termListChange(at, context)
     case 'record':
+      return recordChange(at)
     case 'rowRef':
     case 'refList':
     case 'entryRef':
