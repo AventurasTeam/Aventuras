@@ -112,13 +112,6 @@ function pairIds(resolution: CollisionResolution): readonly [string, string] {
   }
 }
 
-function branchRows<T extends { branchId: string }>(
-  rows: ReadonlyMap<string, T>,
-  branchId: string,
-): T[] {
-  return [...rows.values()].filter((r) => r.branchId === branchId)
-}
-
 // Every miss reports as not-found: the pair the dialog showed no longer exists as asked.
 function missRefusal(lookup: CollisionPairMiss): Refusal {
   switch (lookup.miss) {
@@ -147,7 +140,7 @@ function buildResolution(
 ): Built {
   const gated = gateRefusal()
   if (gated) return gated
-  const branchEntities = branchRows(entitiesStore.getEntities(), branchId)
+  const branchEntities = [...entitiesStore.getEntities(branchId).values()]
   const lookup = collisionPairOf(branchEntities, pairIds(resolution))
   if ('miss' in lookup) return missRefusal(lookup)
   const { pair } = lookup
@@ -162,10 +155,10 @@ function buildResolution(
         deselectedTags: resolution.deselectedTags,
         deselectedKeywords: resolution.deselectedKeywords,
         branchEntities,
-        happenings: branchRows(happeningsStore.getHappenings(), branchId),
-        awareness: branchRows(happeningAwarenessStore.getAwareness(), branchId),
-        involvements: branchRows(happeningInvolvementsStore.getInvolvements(), branchId),
-        relationships: branchRows(characterRelationshipsStore.getRelationshipRows(), branchId),
+        happenings: [...happeningsStore.getHappenings(branchId).values()],
+        awareness: [...happeningAwarenessStore.getAwareness(branchId).values()],
+        involvements: [...happeningInvolvementsStore.getInvolvements(branchId).values()],
+        relationships: [...characterRelationshipsStore.getRelationshipRows(branchId).values()],
         story,
         tail,
         newId: generateId,

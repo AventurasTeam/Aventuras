@@ -41,9 +41,7 @@ async function deleteEntityLocked(
   head: HeadTurn<StoryEntry> | null,
   ctx: DbCtx,
 ): Promise<RowDeleteResult> {
-  const branchEntities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === branchId,
-  )
+  const branchEntities = [...entitiesStore.getEntities(branchId).values()]
   const target = branchEntities.find((e) => e.id === id)
   if (target == null) {
     const reason = `entity ${id} not found`

@@ -103,9 +103,7 @@ async function updateEntrySceneFieldsLocked(
   const previousMetadata = previousEntry?.metadata
   const actionId = generateId('act')
 
-  const branchEntities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === branchId,
-  )
+  const branchEntities = [...entitiesStore.getEntities(branchId).values()]
   // The editor offers places only; the action layer holds the line for any other caller. A scene
   // already at an id that names no place keeps it until it is changed, as a retired place does.
   const locationChanged = after.currentLocationId !== before.currentLocationId
