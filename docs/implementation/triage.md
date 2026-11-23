@@ -210,3 +210,75 @@ slice-planning gate forces its resolution before that slice is planned.
   transform that runs the compiler over `components/` and `hooks/`, or
   a small compiled-hook layer for hooks that read stores outside a
   subscription. Found by Slice 6.2's slice review (2026-11-23).
+
+- **A re-run's empty group with no recorded branch fires the log hook
+  for `''`.** `lib/actions/delta/rerun-journal.ts:513-517` names the
+  reversal set's branch `target[0]?.branchId ?? args.branchId ?? ''`; on
+  a restored write-back the post-commit hook then fires for the set's
+  branch (`lib/actions/delta/reverse-replay.ts:959`), so an empty group
+  with a null `args.branchId` tells the diff cache `''` instead of the
+  journal's branch, and that branch's entries survive the write-back.
+  It needs a `pipeline_runs.branch_id` that is null, which only rows
+  older than that column have (`lib/db/system/system.table.ts:54-55`),
+  met at boot recovery (`lib/pipeline/runtime/recovery.ts:73-78`), when
+  the cache is still empty. Not reachable in practice today. Found in
+  Slice 6.7's reviews (2026-11-23).
+
+- **The test database collapses same-named result columns.**
+  `rowsOf` in `lib/db/__tests__/test-db.ts:35-47` reads row objects and
+  maps them with `Object.values`, so two columns of one name collapse
+  and an integer-like alias moves first. Electron main's `queryOn`
+  (`electron/db/service.ts:52-54`) calls `setReturnArrays(true)` to
+  avoid exactly that: `SELECT 1 AS id, 2 AS id, 3 AS "1"` gives
+  `[3, 2]` on the test database and `[1, 2, 3]` on main (checked on
+  `node:sqlite`, 2026-11-23). A query that only misreads on one of
+  them passes its tests. Pre-existing; the new batch callback inherits
+  it. Found in Slice 6.7's reviews (2026-11-23).
+
+- **The native boot warn calls M1 the present.**
+  `lib/db/runtime/client.native.ts:20` logs "sqlite-vec load failed
+  (non-fatal in M1)", describing a shipped milestone as current, which
+  `.claude/rules/code.md`'s commenting discipline rules out for
+  comments and the same staleness applies to the message. Pre-existing.
+  Found in Slice 6.7's reviews (2026-11-23).
+
+- **`reverseReplayDeltas` reads its group with no branch filter.**
+  `lib/actions/delta/reverse-replay.ts:987-1002` selects every delta of
+  the action id across branches, and `reverseReplayGroup` seeds the set
+  with `group[0]`'s branch (`:1015`). A fork copies action ids, so a
+  group could mix branches; `selectReversalSet` then throws on the
+  stray delta (`lib/actions/delta/row-closure.ts:490-494`) and the
+  reversal fails rather than reversing the wrong rows. Its only
+  production caller is `lib/actions/turns/submit-turn.ts:201`, with a
+  fresh turn action id, so it would take a fork made while that turn
+  runs. Reachability unverified. Found in Slice 6.7's reviews
+  (2026-11-23).
+
+- **Two E2E comments say GO TO World returns to the same World.**
+  `e2e/flows/navigation.ts:7-8` and `e2e/tests/world.spec.ts:65-66`
+  say the Reader → World GO TO round trip "pops to the World instance
+  already on the stack, which keeps its category and selection".
+  `hooks/use-surface-navigate.ts:70-73` dismisses down to the Reader on
+  GO TO Reader, so World is popped and comes back fresh with nothing
+  selected. The callers pick their category either way, so only the
+  comments mislead. Pre-existing. Found in Slice 6.7's reviews
+  (2026-11-23).
+
+- **A third retrieval-bump predicate with its own shape.**
+  `isRetrievalBumpOnly` (`lib/row-signals/link-owners.ts:72-78`) has no
+  table check and calls `{}` a bump, beside `isRetrievalBump`
+  (`lib/history/link-rows.ts:17-22`) and History's `NOT_RETRIEVAL_BUMP`
+  SQL (`lib/history/query.ts:133-137`), which share two constants and a
+  test; nothing keeps the third in step. Found in Slice 6.7's reviews
+  (2026-11-23).
+
+- **The on-device reseed holds a transaction open across `await`s.**
+  `lib/db/devtools/reseed.native.ts:34-40` runs `BEGIN`, then
+  `await db.insert(…)` per table, on the app's native connection. Each
+  insert is synchronous, but the JS thread yields between them. A read
+  in a gap sees rows a `ROLLBACK` may discard, and an app transaction
+  there runs `withTransactionSync`, whose `BEGIN` SQLite refuses inside
+  an open transaction; its catch then runs `ROLLBACK` (expo-sqlite's
+  `SQLiteDatabase.ts:298-307`), ending the reseed's transaction under
+  it. The native read's ESLint guard bans async expo-sqlite calls, not
+  this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's reviews (2026-11-23).
