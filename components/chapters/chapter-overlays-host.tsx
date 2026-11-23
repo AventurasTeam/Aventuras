@@ -25,7 +25,6 @@ import { t } from '@/lib/i18n'
 import {
   chapterOverlaysStore,
   chaptersStore,
-  closeResultChapter,
   currentStoryStore,
   entitiesStore,
   generationStore,
@@ -35,8 +34,9 @@ import {
   loreStore,
   overlayChapter,
   reportChapter,
-  rerunConfirmChapter,
   threadsStore,
+  useCloseResultChapter,
+  useRerunConfirmChapter,
   type RerunConfirmRequest,
   type StoreChapter,
 } from '@/lib/stores'
@@ -138,14 +138,9 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const reviewChapter = chaptersStore.useChapters(openBranchId, (rows) =>
     review == null ? null : reportChapter(rows.get(review.chapterId), review.actionId),
   )
-  const resultHolds = chaptersStore.useChapters(
-    openBranchId,
-    (rows) => closeResultChapter(closeResult, rows, { branchId: openBranchId, openSeq }) != null,
-  )
-  const rerunHolds = chaptersStore.useChapters(
-    openBranchId,
-    (rows) => rerunConfirmChapter(rerunConfirm, rows, openBranchId) != null,
-  )
+  const resultHolds =
+    useCloseResultChapter(closeResult, { branchId: openBranchId, openSeq }) != null
+  const rerunHolds = useRerunConfirmChapter(rerunConfirm, openBranchId) != null
   const presence = useReviewWindowPresence({
     requested: reviewChapter,
     isRequestedNow: reviewRequested,

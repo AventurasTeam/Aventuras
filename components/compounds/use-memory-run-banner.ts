@@ -5,11 +5,11 @@ import { CHAPTER_CLOSE_KIND, CLOSE_PHASE } from '@/lib/pipeline'
 import {
   chapterOverlaysStore,
   chaptersStore,
-  closeResultChapter,
   currentStoryStore,
   generationStore,
   interruptMemoryRuns,
   selectMemoryRun,
+  useCloseResultChapter,
   type CloseResult,
   type RunState,
   type StoreChapter,
@@ -100,9 +100,7 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   )
   const openSeq = currentStoryStore.useOpenSeq()
   const result = chapterOverlaysStore.useOverlays((s) => s.closeResult)
-  const held = chaptersStore.useChapters(branchId, (rows) =>
-    closeResultChapter(result, rows, { branchId, openSeq }),
-  )
+  const held = useCloseResultChapter(result, { branchId, openSeq })
   const latestChapter = chaptersStore.useChapters(branchId, chaptersStore.selectLatest)
 
   const label = run == null ? null : bannerLabel(run)

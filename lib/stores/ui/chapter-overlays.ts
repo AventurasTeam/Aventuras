@@ -40,6 +40,7 @@ export type ChapterOverlaysState = {
 
 type ReportHolder = Pick<StoreChapter, 'hasCloseReport'>
 type HeldReport = ReportHolder & Pick<StoreChapter, 'closeReportActionId'>
+type OpenRef = { branchId: string | null; openSeq: number }
 
 /** C7: an overlay's chapter stands while it holds a report; else null. Pass the open branch's row. */
 export function overlayChapter<C extends ReportHolder>(chapter: C | undefined): C | null {
@@ -59,7 +60,7 @@ export function reportChapter<C extends HeldReport>(
 export function closeResultChapter<C extends HeldReport>(
   result: CloseResult | null,
   branchChapters: ReadonlyMap<string, C>,
-  open: { branchId: string | null; openSeq: number },
+  open: OpenRef,
 ): C | null {
   if (result == null || result.branchId !== open.branchId || result.openSeq !== open.openSeq)
     return null
@@ -78,6 +79,24 @@ export function rerunConfirmChapter<C extends ReportHolder & Pick<StoreChapter, 
   for (const row of branchChapters.values())
     if (row.sequenceNumber > chapter.sequenceNumber) return null
   return chapter
+}
+
+/** C7: `closeResultChapter` on `open.branchId`'s rows, the branch it compares the result to. */
+export function useCloseResultChapter(
+  result: CloseResult | null,
+  open: OpenRef,
+): StoreChapter | null {
+  return chaptersStore.useChapters(open.branchId, (rows) => closeResultChapter(result, rows, open))
+}
+
+/** C7: `rerunConfirmChapter` on `openBranchId`'s rows, the branch it compares the request to. */
+export function useRerunConfirmChapter(
+  request: RerunConfirmRequest | null,
+  openBranchId: string | null,
+): StoreChapter | null {
+  return chaptersStore.useChapters(openBranchId, (rows) =>
+    rerunConfirmChapter(request, rows, openBranchId),
+  )
 }
 
 const INITIAL: ChapterOverlaysState = {
