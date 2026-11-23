@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { assets, emptyEntityState, type CharacterState, type NewEntity } from '@/lib/db'
+import {
+  assets,
+  emptyEntityState,
+  vecTableName,
+  type CharacterState,
+  type NewEntity,
+} from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
+import { writeSystemEntry } from '../story-entries/system-entry'
 import type { PipelineAction } from '../types'
 import {
   appendTurns,
@@ -23,6 +30,7 @@ import {
   rowOn,
   rowsOn,
   seedVectorsWithWindowLore,
+  vectorRows,
   type ForkWorld,
 } from './__tests__/fork-harness'
 
@@ -494,5 +502,165 @@ describe('a fork across a close, its assets and its re-run', () => {
       expect(journalIdsOn(w, childId)).toEqual([])
       expect(rowOn(w, 'chapters', childId, CHAPTER)).toBeDefined()
     })
+  })
+})
+
+describe('a fork at the edges of the log', () => {
+  const MIRA = 'char_fork_mira'
+  // lib/db/bind-limit.ts's SQLITE_MAX_BIND_VARS, module-local there.
+  const SQLITE_BIND_CAP = 32_766
+  const BULK_TURNS = 32_800
+  const BULK_AT = 1_767_500_000_000
+
+  // Entries after the tail and their create deltas, in raw SQL: the action layer would take minutes.
+  function appendBulkTurns(w: ForkWorld, count: number): void {
+    const { top } = w.sqlite
+      .prepare('SELECT max(log_position) AS top FROM deltas WHERE branch_id = ?')
+      .get(w.parentId) as { top: number }
+    const { tail } = w.sqlite
+      .prepare('SELECT max(position) AS tail FROM story_entries WHERE branch_id = ?')
+      .get(w.parentId) as { tail: number }
+    const series = 'WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < ?)'
+    w.sqlite.exec('BEGIN')
+    try {
+      w.sqlite
+        .prepare(
+          `${series} INSERT INTO story_entries (id, branch_id, position, kind, content, created_at)
+           SELECT 'entry_bulk_' || i, ?, ? + 1 + i, 'ai_reply', 'The road runs on.', ? + i FROM n`,
+        )
+        .run(count - 1, w.parentId, tail, BULK_AT)
+      w.sqlite
+        .prepare(
+          `${series} INSERT INTO deltas (id, branch_id, entry_id, action_id, log_position, source, target_table, target_id, op, undo_payload, encoding_version, created_at)
+           SELECT 'delta_bulk_' || i, ?, 'entry_bulk_' || i, 'act_bulk_' || i, ? + 1 + i, 'ai_classifier', 'story_entries', 'entry_bulk_' || i, 'create', NULL, 1, ? + i FROM n`,
+        )
+        .run(count - 1, w.parentId, top, BULK_AT)
+      w.sqlite.exec('COMMIT')
+    } catch (e) {
+      w.sqlite.exec('ROLLBACK')
+      throw e
+    }
+  }
+
+  it("leaves out an error card at the parent's tail", async () => {
+    const w = await openForkWorld(2)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: entryAt(3) }, [
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const card = await writeSystemEntry(
+      { branchId: w.parentId, content: 'The reply stopped short. Retry to continue.' },
+      w.ctx,
+    )
+    const narrative = [1, 2, 3, 4, 5].map(entryAt)
+    expect(entryIdsOn(w, w.parentId)).toEqual([...narrative, card])
+
+    const { childId, facts } = await assertFork(w, entryAt(5))
+
+    expect(facts.hasB).toBe(false)
+    expect(entryIdsOn(w, childId)).toEqual(narrative)
+    expect(entryIdsOn(w, w.parentId)).toEqual([...narrative, card])
+  })
+
+  it('copies every row and every delta when the fork entry is the narrative tail', async () => {
+    const w = await openForkWorld(2)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    await landWrites(w, { actionId: 'act_fork_edit', entryId: null }, [
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: w.parentId, id: MIRA, patch: { description: 'A drover.' } },
+      },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+
+    const { childId, facts } = await assertFork(w, entryAt(5))
+
+    expect(facts).toEqual({ prunedIds: [], droppedJournalIds: [], hasB: false })
+    expect(idsOn(w, 'deltas', childId)).toEqual(idsOn(w, 'deltas', w.parentId))
+    expect(entryIdsOn(w, childId)).toEqual(entryIdsOn(w, w.parentId))
+    expect(idsOn(w, 'entities', childId)).toEqual([MIRA])
+  })
+
+  it('forks at the opening: the opening alone and the world written before the first turn', async () => {
+    const w = await openForkWorld(0)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, MIRA, 'Mira', { description: 'A drover.' }),
+    ])
+    const beforeB = idsOn(w, 'deltas', w.parentId)
+    await appendTurns(w, 2)
+    await landWrites(w, { actionId: 'act_fork_late', entryId: entryAt(3) }, [
+      createEntityAction(w, 'char_fork_late', 'Corin'),
+    ])
+    await landWrites(w, { actionId: 'act_fork_edit', entryId: null }, [
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: w.parentId,
+          id: MIRA,
+          patch: { description: 'A drover who knows the ford.' },
+        },
+      },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(3), { kind: 'entity', id: MIRA })
+
+    const { childId } = await assertFork(w, entryAt(1))
+
+    expect(entryIdsOn(w, childId)).toEqual([entryAt(1)])
+    expect(idsOn(w, 'entities', childId)).toEqual([MIRA])
+    expect(rowOn(w, 'entities', childId, MIRA)).toMatchObject({ description: 'A drover.' })
+    expect(idsOn(w, 'deltas', childId)).toEqual(beforeB)
+    expect(rowOn(w, 'entities', w.parentId, MIRA)).toMatchObject({
+      description: 'A drover who knows the ford.',
+    })
+  })
+
+  it('forks near the start of a window longer than the bind cap', async () => {
+    const w = await openForkWorld(1)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    appendBulkTurns(w, BULK_TURNS)
+    await seedVectorsWithWindowLore(w, 'entry_bulk_0', { kind: 'entity', id: MIRA })
+
+    const { childId, facts } = await assertFork(w, entryAt(3))
+
+    expect(facts.prunedIds.length).toBeGreaterThan(SQLITE_BIND_CAP)
+    expect(entryIdsOn(w, childId)).toEqual([1, 2, 3].map(entryAt))
+  }, 240_000)
+
+  it('copies the vectors of the rows the child holds once rewound, and no others', async () => {
+    const w = await openForkWorld(1)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    await appendTurns(w, 1)
+    const windowLore = await seedVectorsWithWindowLore(w, entryAt(5), {
+      kind: 'entity',
+      id: MIRA,
+    })
+    const parentBefore = vectorRows(w.sqlite, w.parentId)
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    const child = vectorRows(w.sqlite, childId)
+    const parentAfter = vectorRows(w.sqlite, w.parentId)
+    for (const dim of [4, 8]) {
+      const entityTable = vecTableName('entity', dim)
+      const loreTable = vecTableName('lore', dim)
+      expect(
+        parentBefore[entityTable]?.map(({ id }) => id),
+        entityTable,
+      ).toEqual([MIRA])
+      expect(child[entityTable], entityTable).toEqual(parentBefore[entityTable])
+      expect(child[loreTable], loreTable).toEqual([])
+      expect(
+        parentAfter[loreTable]?.map(({ id }) => id),
+        loreTable,
+      ).toEqual([windowLore])
+    }
   })
 })
