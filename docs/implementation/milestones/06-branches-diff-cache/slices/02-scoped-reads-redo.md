@@ -328,10 +328,11 @@ id-only store read as fact goes with it.
   getter returns; for B, or before any hydrate, it returns the empty
   map, the same reference on two calls. The row read returns A's row
   for `(A, id)` and `undefined` for `(B, id)`.
-- The same file: a `useBranchRows(A, identity)` subscriber re-renders
-  and reads the empty map after `hydrate(B, …)` with rows under the
-  same ids, and reads A's rows again after `hydrate(A, …)`. A patch for
-  B while A is loaded notifies nothing, as today.
+- The same file: a subscriber of the branch hook, `useRows(A, identity)`
+  (each store's `useX`, as shipped), re-renders and reads the empty map
+  after `hydrate(B, …)` with rows under the same ids, and reads A's
+  rows again after `hydrate(A, …)`. A patch for B while A is loaded
+  notifies nothing, as today.
 - Each derived getter listed under Scope takes a branch and returns
   nothing for a branch the store doesn't hold:
   `lib/stores/happenings/awareness.test.ts` for `getByHappening` and
@@ -347,11 +348,14 @@ id-only store read as fact goes with it.
 
 - `lib/stores/__tests__/public-api.typecheck.ts` holds a
   `@ts-expect-error` line for each unscoped form, and a call of each
-  scoped one: `entitiesStore.getEntities()`,
-  `entitiesStore.useEntities((m) => m)`, `entitiesStore.getById('x')`,
-  `entriesStore.getEntries()`, `chaptersStore.getLatest()` and
-  `translationsStore.getTranslation` without its branch. Removing the
-  branch parameter from one store's read fails `pnpm typecheck`.
+  scoped one: every working-set store's row getter, the shared hook and
+  `getById` (through `entitiesStore`), and every derived getter,
+  `getRelationships` included. Among them are
+  `entitiesStore.getEntities()`, `entitiesStore.useEntities((m) => m)`,
+  `entitiesStore.getById('x')`, `entriesStore.getEntries()`,
+  `chaptersStore.getLatest()` and `translationsStore.getTranslation`
+  without its branch. Removing the branch parameter from one store's
+  read fails `pnpm typecheck`.
 - `pnpm typecheck` and `pnpm lint` pass at the branch's tip after the
   final rebase.
 - This prints nothing:
@@ -524,5 +528,132 @@ the reasons.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+**The reads that shipped (C5).** The names this doc proposed gave way
+to the stores' own. Each working-set store keeps its members with the
+branch first, `useEntities(branchId, selector)`, `getEntities(branchId)`
+and `getById(branchId, id)`, and gains `useById(branchId, id)`; the
+others follow (`useEntries`/`getEntries`, `useLore`/`getLore`,
+`useThreads`/`getThreads`, `useChapters`/`getChapters`,
+`useHappenings`/`getHappenings`, `useInvolvements`/`getInvolvements`,
+`useAwareness`/`getAwareness`, `useRelationships`/`getRelationshipRows`,
+`useTranslations`/`getTranslations`, `useEraFlips`/`getEraFlips`). The
+factory's are `useRows`, `getRows`, `getById` and `useById`, which the
+stores re-export unwrapped. A branch the store doesn't hold, or `null`,
+reads as one module-level empty map, the same reference on every call,
+or as `undefined`. The derived getters take the branch first:
+`getLatest(branchId)`, `getBySequenceNumber(branchId, n)`,
+`getByKind(branchId, kind)`, both stores' `getByHappening(branchId, id)`,
+`getByCharacter(branchId, id)` and
+`getTranslation(branchId, kind, id, field, language)`;
+`getRelationships(characterId, branchId)` keeps its order.
+`selectLatest(rows)` takes no branch: the only maps a caller can hold
+are a branch's.
+
+**The redo map (C6).** `undoRedoStore` holds a
+`ReadonlyMap<string, readonly RedoGroup[]>`. `pushRedoGroup(group)`
+reads `group.branchId`; `peekRedoGroup`, `popRedoGroup`, `clear`,
+`drop`, `hasRedo` and the hook `useRedoTop` each take a branch. `clear`
+and `drop` delete the branch's entry, and so does a pop that empties
+it, so the map keeps no empty stack. `drop` is the call for a branch
+that goes: `deleteStory` drops each of its branches' stacks after the
+commit, and [Slice 6.6](./06-delete-duplicate.md)'s branch delete calls
+it. `__redoGroupForTest(branchId, …)` takes the branch first.
+
+**Four PRs.** The slice shipped as a stack of four PRs, not the plan's
+three (developer, 2026-11-23): the plan's first came to 113 non-docs
+files, over CodeRabbit's 100-file review cap, so it split after the
+stores' branch reads and their pipeline and action callers. The four
+are those reads, the routes' and components' sweep with the two id
+reads, the unscoped forms' removal with the tests' migration, and the
+redo map.
+
+**Decisions.**
+
+- The guard is the stores' signature, not a lint rule (developer,
+  2026-11-23). No store exposes a row read, `getById` or derived getter
+  without a branch, so `pnpm typecheck` finds an unscoped read anywhere,
+  `lib/stores/` included, and
+  `lib/stores/__tests__/public-api.typecheck.ts` pins each unscoped form
+  as a compile error. The migration ran in steps: the branch reads
+  landed beside `@deprecated` unscoped overloads, callers moved area by
+  area, then the overloads went and the typecheck found every test read.
+- The register two-branch pairs, the chapter delete's branch reads and
+  their mutation table moved to
+  [Slice 6.10](./10-register-branch-pairs.md) (developer, 2026-11-23),
+  which depends on this slice and blocks nothing, so 6.4's landing
+  doesn't wait on them.
+- The mirrors split by table (developer, 2026-11-23). `entryAssetsStore`
+  is gone with its patcher; the first reader of entry assets adds a
+  mirror and its hydrate together. `eraFlipsStore` is live:
+  `loadAndPublish` hydrates it, an eleventh store, for M7.2's era
+  displays. [Slice 6.4](./04-switching-navigator.md)'s switch fills the
+  stores itself, so its fill must include it
+  ([its Open questions](./04-switching-navigator.md#open-questions)).
+- `getLoadedBranch()` keeps 12 reads outside `lib/stores/`, not the 13
+  listed under Scope: `hooks/use-memory-run-outcomes.ts`'s guard went,
+  since `getLatest(branchId)` already answers `undefined` for a branch
+  the store doesn't hold.
+- Lookups whose meaning the branch read changes, each written for its
+  intent, since an `undefined` there now also means another branch is
+  loaded. In `components/reader/use-entry-jump.ts`, the landing watch
+  reads the row on the jump's branch, as its id-and-branch compare did,
+  and releases the jump rather than dropping it when another branch
+  loads; the check after the read from above runs behind a
+  `superseded()` check, so its `undefined` still means the entry left
+  this branch. `freshDeleteTarget` in `use-world-delete.ts` and
+  `use-plot-delete.ts` opens no confirm for a row the route's branch
+  doesn't hold. In `lib/pipeline/definitions/suggestion-refresh.ts`, the
+  target's re-read after the model call finds nothing when another
+  branch loaded meanwhile, so the phase logs
+  `classifier.suggestions_refresh_target_reversed` and ends without
+  writing; before, it could read the other branch's copy of the id.
+- `reviewOf` passes `chaptersStore.getLoadedBranch()` until
+  [Slice 6.4](./04-switching-navigator.md) gives the review request its
+  branch (C5). `overlayChapter(chapter)` and
+  `reportChapter(chapter, actionId)` dropped their `openBranchId`
+  parameter: their callers pass a chapter read on the open branch.
+- Pure helpers whose input came from a store now take branch-named
+  inputs and drop the `branchId` they no longer read:
+  `entityLinkRows`, `entityDeleteImpact`, `relationshipLinksFor`,
+  `involvementsFor`, `happeningLinksFor`, `latestReplyOf`,
+  `chapterTimelineData`, `MergeLinkInput` and `CollisionSources`.
+  `EntityMergeInput` declares its own `branchId`, the branch the merge
+  writes on.
+- `undo-copy.ts`'s `liveUndoRow` became `liveRowsOf(branchId)`: the
+  undo labels name a row only while the stores hold the reader's
+  branch.
+- `redoLastAction` keeps its foreign-group guard as a defense, and its
+  refusal reason now reads `redo group names another branch`: the stack
+  is per branch, so only a broken group can trip it.
+- Two pins beyond the lists: `generation-context.test.ts` pins the
+  builder's entities read to its own branch, since an `await` separates
+  the builder's loaded-branch guard from that read; and the type pin
+  covers `characterRelationshipsStore.getRelationships`, the one derived
+  getter with the branch last.
+- The reader route's raw reads went beyond C11's cell: its chapters
+  read and `notifyUnappliedState`'s entries read moved too, since C5
+  moves every raw read and the signature stops the unscoped form
+  compiling. C11's reader cell now names them (provisional,
+  coordinator, 2026-11-23).
+- `set-lead.ts`'s clear covers every branch of the story: it reads the
+  story's branch ids before its gate check and clears each after the
+  write. [Slice 6.8](./08-per-branch-lead.md) deletes the call.
+
+**Id reads on branch-scoped tables.** `readWideExcerpts` and
+`raiseSystemEntry`'s read-back select by branch and id. The re-check at
+this slice's base and again at its final merge of main found two reads
+that select by id alone, both in `rerun-journal.ts` (6.1's file), and
+both stay. `planWriteBack`'s chapter read and `readJournal`'s journal
+read drop the branch only for a run marker that records none, and
+migration `0022` backfilled every unfinished run's branch from its
+deltas, journal or chapter, so a marker still without one has no
+journal row, and action ids are global: neither read can pick between a
+row and its copy. Every other read is scoped, `deltas`' seven included;
+`state-patch-actions.ts`'s and `close-agent/upkeep.ts`'s by an outer
+`and`.
+
+**Second to land.** Neither [Slice 6.3](./03-fork-core.md) nor
+[Slice 6.8](./08-per-branch-lead.md) had landed at this slice's final
+merge of main (`83e41b4fe`), so both meets are theirs: 6.3 asserts that
+a fork's child starts with no redo stack, and 6.8's rewrite of the
+three lead lines keeps their branch read.

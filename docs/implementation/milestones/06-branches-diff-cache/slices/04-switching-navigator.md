@@ -748,6 +748,14 @@ input keeps its caret through a mid-string edit.
   the plan records why it can't split: the navigator's surfaces, the
   switch, the hold and the reader's fresh instance meet in one E2E, and
   none ships usefully alone.
+- **The era-flips mirror (from Slice 6.2).** 6.2 made `eraFlipsStore`
+  live: `loadAndPublish` hydrates it, an eleventh working-set store
+  ([Slice 6.2 → Implementation notes](./02-scoped-reads-redo.md#implementation-notes)).
+  The switch's read step and its synchronous fill carry it like the
+  other ten, or the store keeps the old branch and reads as empty on the
+  new one. `load-open-story.test.ts` pins `loadAndPublish`'s cancellation
+  checks by count (12, one after each read); a read added there raises
+  it.
 
 ## Implementation notes
 
