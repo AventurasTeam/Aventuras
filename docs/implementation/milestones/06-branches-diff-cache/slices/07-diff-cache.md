@@ -730,3 +730,13 @@ invalidation, and, if the E2E has a survivor, its registration check.
 - **Criterion 13.** Did not apply: 6.8 had not landed when this PR
   opened.
 - **Device smoke** (slot AVD, non-blocking): not run.
+- **The term-list prose** (developer decision). It ships as
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose)
+  reads, with no renderer change and no canon edit in this slice. Two
+  gaps stay open and go to
+  [triage](../../../triage.md): a term list can show two sides that read
+  identically once the 40-character head cut or the whitespace collapse
+  hides the difference, and the exact-match lists (traits, drives,
+  agenda, inventory, equipped) store terms with no whitespace or Unicode
+  normalization, so terms differing only by spacing or NFD versus NFC are
+  distinct values and read `added X, removed X`.

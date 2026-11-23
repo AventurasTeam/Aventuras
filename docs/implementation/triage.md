@@ -282,3 +282,31 @@ slice-planning gate forces its resolution before that slice is planned.
   `SQLiteDatabase.ts:298-307`), ending the reseed's transaction under
   it. The native read's ESLint guard bans async expo-sqlite calls, not
   this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's reviews (2026-11-23).
+
+- **Term-list change prose can show two identical sides, and exact
+  lists let spacing and Unicode form split a term.** Two halves.
+  (1) _Display._ `termList` in `lib/history/diff-prose.ts:247-255`
+  shows each term through `cutTerm` (`:190-196`), which collapses
+  whitespace and keeps a head of 40 characters; free text gets a window
+  cut around its first difference
+  ([Long text](../ui/screens/world/world.md#long-text--change-prose)).
+  A tail edit past the 40th character of a long agenda item renders as
+  `Agenda: added "Seize control of the harbor district…"` followed by
+  `removed "Seize control of the harbor district…"`, the same text
+  twice. A respelling between NFD and NFC forms in a normalized list
+  renders `Tags: respelled "Eldrá" as "Eldrá"`. Needs a design pass on
+  how a term list shows two forms that collide once cut or collapsed.
+  (2) _Write side._ The entity `state` lists (`traits`, `drives`,
+  `agenda`, `inventory`, `equipped_items`) match exactly
+  (`lib/actions/entities/register.ts:401-408`, `termKeyOf` in
+  `lib/actions/delta/term-list.ts:9-11`) and store terms with no
+  whitespace or Unicode normalization, unlike `keywords` and `tags`,
+  which key by `normalizeTerm`. `'brave  heart'` and `'brave heart'`, or
+  NFD and NFC forms of one term, are distinct values, so a change
+  between them reads `Traits: added "brave heart", removed "brave heart"`
+  (the display collapses the spacing). Whether those lists should
+  normalize on write, and what that does to existing rows and the delta
+  history, is a write-side question, not only display. Slice 6.7 shipped
+  the prose as `world.md → Change prose` reads. Found in Slice 6.7's
+  final review (2026-11-23); developer ruled to ship canon-literal and
+  route here.
