@@ -11,8 +11,7 @@ const compositeKey = (kind: string, id: string, field: string, language: string)
 const base = createWorkingSetStore<Translation>()
 let index = new Map<string, string>()
 
-// Rebuild from the base rows — base holds only the loaded branch and branch-guards its own
-// writes, so this auto-inherits the branch guard with no duplicated logic or ordering hazard.
+// Rebuilt from base rows: base holds only the loaded branch and guards writes, so the index does too.
 function rebuildIndex(): void {
   index = new Map()
   for (const r of base.getRows(base.getLoadedBranch()).values()) {

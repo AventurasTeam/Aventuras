@@ -29,7 +29,7 @@ export const chaptersStore = {
       if (c.sequenceNumber === sequenceNumber) return c
     return undefined
   },
-  /** The branch's highest-numbered chapter; `selectLatest` is the same read as a `useChapters` selector. */
+  /** The branch's highest-numbered chapter; `selectLatest` is its selector form. */
   getLatest: (branchId: string | null): StoreChapter | undefined =>
     latestOf(store.getRows(branchId)),
   selectLatest: latestOf,

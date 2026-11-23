@@ -20,9 +20,12 @@ export type ByIdGetter<Row> = {
 }
 
 export type WorkingSetStore<Row extends { id: string }> = {
-  /** A branch the store doesn't hold, or `null`, reads as one shared empty map. Select the map or a primitive, never a fresh array. */
+  /**
+   * An unheld branch or `null` reads as one shared empty map; select it or a primitive, never a
+   * fresh array.
+   */
   useRows: RowsHook<Row>
-  /** The branch's live rows (replaced on the next write; never mutate), else the shared empty map. */
+  /** The branch's live rows (replaced on next write; never mutate), else the shared empty map. */
   getRows: RowsGetter<Row>
   getById: ByIdGetter<Row>
   useById: (branchId: string | null, id: string) => Row | undefined

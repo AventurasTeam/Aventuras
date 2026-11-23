@@ -182,8 +182,7 @@ export async function* periodicClassifierPhase(
       error: { kind: 'orchestrator', detail: 'periodic-classifier: branch not loaded' },
     }
   // Read before the first await: a story opening under the pass publishes its own branch's rows,
-  // which read as empty here. Prompt, reconcile and plan share these; under the gate nothing
-  // else changes them mid-call.
+  // which read empty here. Prompt, reconcile and plan share it; the gate keeps it fixed mid-call.
   const entities = [...entitiesStore.getEntities(ctx.branchId).values()]
   const relationships = [...characterRelationshipsStore.getRelationshipRows(ctx.branchId).values()]
   const threads = [...threadsStore.getThreads(ctx.branchId).values()]

@@ -129,8 +129,7 @@ describe('loadPerTurnWorkingSet', () => {
     expect(load.ok && load.set.entries.map((e) => e.id)).toEqual(['e1', 'e2', 'e3'])
   })
 
-  // The guard checks the entries store only, so the entities read is what keeps another
-  // branch's roster out of the set.
+  // The guard checks entries only; the entities read keeps another branch's roster out.
   it('reads no entities from an entities store loaded for another branch', () => {
     openStory()
     entriesStore.hydrate('b1', [entry('e1', 1)])

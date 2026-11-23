@@ -749,8 +749,8 @@ describe('suggestion-refresh emission phase', () => {
     openStory()
     hydrate()
     wireAppSettings()
-    // A fork copies entries under their ids: the held row under the target's id is now the
-    // other branch's, which can't say whether this branch's row survived.
+    // A fork reuses entry ids: the held row under the target's id is another branch's, so
+    // it can't prove this branch's row survived.
     generateStructuredMock.mockImplementation(async () => {
       entriesStore.hydrate('b2', [{ ...TARGET_ENTRY, branchId: 'b2' }] as never[])
       return okChips([{ categoryRef: 'cat1', text: 'Draw.' }])

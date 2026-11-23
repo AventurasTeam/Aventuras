@@ -232,9 +232,7 @@ describe('loadOpenStory', () => {
       },
     ])
 
-    // Only loadOpenStory's own reads: the join + entries, entities, lore, threads, happenings,
-    // involvements, awareness, chapters, relationships, translations, era flips = 12; more is an
-    // N+1 read.
+    // loadOpenStory's own reads: the join + 11 store reads = 12; more is an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)

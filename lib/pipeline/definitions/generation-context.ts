@@ -372,9 +372,8 @@ export async function buildGenerationContext(
     priceHistory = false,
   } = flags
 
-  // Both guards are defense-in-depth against store desync: a build against the
-  // wrong branch would describe a story this prompt isn't telling, and would
-  // read no entities rather than fail.
+  // Defense-in-depth against store desync: a wrong-branch build would describe another story
+  // and read no entities rather than fail.
   const open = currentStoryStore.getCurrentStory()
   if (!open || open.branchId !== branchId || open.storyId !== storyId)
     return guardFailure(phaseName, 'no open story for branch', ctx)

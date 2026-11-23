@@ -15,11 +15,8 @@ export type WorkingSetLoad =
   | { ok: false; result: PhaseFailure }
 
 /**
- * The working set every per-turn phase reads, behind the two guards none of them
- * may skip. Both are defense-in-depth against store desync: the stores are
- * global and branch-scoped, and a phase that read them for the wrong branch
- * would read no rows and go on to build a silently degenerate prompt rather
- * than fail.
+ * The per-turn working set, behind two guards no phase may skip: the stores are global and
+ * branch-scoped, so a wrong-branch read yields no rows and a silently degenerate prompt.
  */
 export function loadPerTurnWorkingSet(
   ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,
