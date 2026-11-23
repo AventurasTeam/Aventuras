@@ -381,7 +381,7 @@ export const NamesLinkRowsByOtherEnd: Story = {
   },
 }
 
-// ---- Change prose (world.md → Change prose): one update row whose diff resolves ----
+// ---- Change prose (world.md): one update row whose diff resolves, stays pending or fails ----
 
 const oneRow =
   (row: HistoryRow): HistoryLoader =>
@@ -409,7 +409,7 @@ type ProseFixture = {
   entry: DiffCacheEntry
   /** The summary world.md → Change prose gives this row, in en. */
   prose: string
-  /** Working-set rows the prose names, hydrated on br_1. */
+  /** Entities hydrated on br_1: an entity target, and the other end or refs the row names. */
   entities?: Entity[]
 }
 
@@ -720,8 +720,7 @@ export const ProseFailedWalk: Story = {
     await expect(failingPopulate.mock.results[0].value).rejects.toThrow(
       'no row, head delete or held copy',
     )
-    // TanStack tells the row of the error on a zero-delay timer, which a frame outlasts.
-    await new Promise((resolve) => requestAnimationFrame(resolve))
+    // Failed reads as pending does, so no wait here could show the error reached the row.
     expect(within(row).getByText('Modified Voice')).toBeVisible()
   },
 }
