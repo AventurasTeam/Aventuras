@@ -424,6 +424,19 @@ describe('useEntryJump', () => {
     expect(toast.warning).toHaveBeenCalledExactlyOnceWith(t('reader:jumpEntryGone'))
     expect(land).not.toHaveBeenCalled()
   })
+
+  // A copy shares ids: a branch loaded as the rows land may hold the target, and is not this one.
+  it('drops the jump silently when another branch loads as the rows land', async () => {
+    const insertMany = vi.spyOn(entriesStore, 'insertMany').mockImplementationOnce(() => {
+      entriesStore.hydrate('br_other', [{ ...row(1), branchId: 'br_other' }])
+    })
+
+    await jump()(idAt(1))
+
+    expect(insertMany).toHaveBeenCalledTimes(1)
+    expect(land).not.toHaveBeenCalled()
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
 })
 
 describe('useEntryJump: jumping', () => {

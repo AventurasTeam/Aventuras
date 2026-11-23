@@ -154,7 +154,6 @@ const ENTITIES = [
   entity('item_blade', 'item'),
   entity('loc_hollow', 'location'),
   entity('fac_watch', 'faction'),
-  entity('char_other', 'character', { branchId: 'br_2' }),
 ]
 
 beforeEach(() => {
@@ -180,17 +179,34 @@ afterEach(() => {
 })
 
 describe('useRailData', () => {
-  it('keeps only the branch’s rows', () => {
-    loreStore.hydrate('br_1', [lore('lore_1'), lore('lore_x', 'br_2')])
-    threadsStore.hydrate('br_1', [thread('t_1'), thread('t_x', 'br_2')])
-    happeningsStore.hydrate('br_1', [happening('h_1'), happening('h_x', 'br_2')])
+  it('reads its branch’s rows', () => {
+    loreStore.hydrate('br_1', [lore('lore_1')])
+    threadsStore.hydrate('br_1', [thread('t_1')])
+    happeningsStore.hydrate('br_1', [happening('h_1')])
     const { result } = renderHook(() => useRailData('br_1'))
-    expect(result.current.entities.map((e) => e.id)).not.toContain('char_other')
-    expect(result.current.entities).toHaveLength(5)
+    expect(result.current.entities.map((e) => e.id)).toEqual([
+      'char_kael',
+      'char_mira',
+      'item_blade',
+      'loc_hollow',
+      'fac_watch',
+    ])
     expect(result.current.lore.map((r) => r.id)).toEqual(['lore_1'])
     expect(result.current.threads.map((r) => r.id)).toEqual(['t_1'])
     expect(result.current.happenings.map((r) => r.id)).toEqual(['h_1'])
     expect(result.current.branchId).toBe('br_1')
+  })
+
+  it('reads nothing while the stores hold another branch', () => {
+    entitiesStore.hydrate('br_2', [entity('char_other', 'character', { branchId: 'br_2' })])
+    loreStore.hydrate('br_2', [lore('lore_x', 'br_2')])
+    threadsStore.hydrate('br_2', [thread('t_x', 'br_2')])
+    happeningsStore.hydrate('br_2', [happening('h_x', 'br_2')])
+    const { result } = renderHook(() => useRailData('br_1'))
+    expect(result.current.entities).toEqual([])
+    expect(result.current.lore).toEqual([])
+    expect(result.current.threads).toEqual([])
+    expect(result.current.happenings).toEqual([])
   })
 
   it('labels the lead `you` in adventure and `protagonist` in creative', () => {
@@ -266,10 +282,14 @@ describe('useRailData', () => {
   })
 
   it('offers chapter-scoped happenings only once this branch closed a chapter', () => {
-    chaptersStore.hydrate('br_1', [chapter('chap_x', 'br_2')])
-    const before = renderHook(() => useRailData('br_1'))
-    expect(before.result.current.hasClosedChapters).toBe(false)
-    before.unmount()
+    chaptersStore.hydrate('br_1', [])
+    const none = renderHook(() => useRailData('br_1'))
+    expect(none.result.current.hasClosedChapters).toBe(false)
+    none.unmount()
+    chaptersStore.hydrate('br_2', [chapter('chap_x', 'br_2')])
+    const other = renderHook(() => useRailData('br_1'))
+    expect(other.result.current.hasClosedChapters).toBe(false)
+    other.unmount()
     chaptersStore.hydrate('br_1', [chapter('chap_1', 'br_1')])
     const after = renderHook(() => useRailData('br_1'))
     expect(after.result.current.hasClosedChapters).toBe(true)

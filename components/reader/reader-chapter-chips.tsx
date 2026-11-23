@@ -54,13 +54,10 @@ export function ReaderChapterChips({
   onOpenChange,
   ref,
 }: ReaderChapterChipsProps): ReactElement {
-  const chapterRows = chaptersStore.useChapters((m) => m)
+  const chapterRows = chaptersStore.useChapters(branchId, (m) => m)
   const closed = useMemo(
-    () =>
-      [...chapterRows.values()]
-        .filter((chapter) => chapter.branchId === branchId)
-        .sort((a, b) => a.sequenceNumber - b.sequenceNumber),
-    [chapterRows, branchId],
+    () => [...chapterRows.values()].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+    [chapterRows],
   )
 
   const [open, setOpen] = useState(false)

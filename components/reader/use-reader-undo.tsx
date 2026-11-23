@@ -29,7 +29,7 @@ import { UndoConfirm } from './undo-confirm'
 import {
   deletedRowsOf,
   firstRowOf,
-  liveUndoRow,
+  liveRowsOf,
   snapshotRowsOf,
   undoConfirmRows,
   undoConfirmTitle,
@@ -63,12 +63,12 @@ const GATED: Refusal = { code: 'gated', reason: 'generation in flight' }
 
 const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rerun', 'keptClose'])
 
-function redoNames(group: RedoGroup): UndoNames {
-  return undoNames(firstRowOf(liveUndoRow, snapshotRowsOf(group.snapshots)))
+function redoNames(group: RedoGroup, branchId: string): UndoNames {
+  return undoNames(firstRowOf(liveRowsOf(branchId), snapshotRowsOf(group.snapshots)))
 }
 
-function rowLines(target: Target): string[] {
-  const rows = firstRowOf(liveUndoRow, deletedRowsOf(target.deltas))
+function rowLines(target: Target, branchId: string): string[] {
+  const rows = firstRowOf(liveRowsOf(branchId), deletedRowsOf(target.deltas))
   return undoConfirmRows(target.deltas, target.names, rows)
 }
 
@@ -174,7 +174,10 @@ export function useReaderUndo({
       actionId: read.actionId,
       description: describeUndoGroup(read.deltas),
       deltas: read.deltas,
-      names: undoNames(firstRowOf(liveUndoRow, deletedRowsOf(read.deltas)), read.entryPositions),
+      names: undoNames(
+        firstRowOf(liveRowsOf(branchId), deletedRowsOf(read.deltas)),
+        read.entryPositions,
+      ),
     }
   }, [branchId, ctx])
 
@@ -214,7 +217,11 @@ export function useReaderUndo({
         return
       }
       // Read before the redo lands: a redone delete takes the row its name came from.
-      const notice = undoTargetText(describeRedoTarget(group), redoNames(group), 'redoNotice')
+      const notice = undoTargetText(
+        describeRedoTarget(group),
+        redoNames(group, branchId),
+        'redoNotice',
+      )
       const actionId = expectedActionId ?? group.actionId
       const result = await timedReversal('reader.redo_measured', actionId, () =>
         redoLastAction(branchId, ctx, { expectedActionId: actionId }),
@@ -302,9 +309,9 @@ export function useReaderUndo({
             ? []
             : [t('reader:undo.confirmCloseUndone', { number: impact.closeUndone.chapterNumber })]
         if (lines.length > 0) return [...lines, ...closeUndone]
-        return [...rowLines(target), ...closeUndone]
+        return [...rowLines(target, branchId), ...closeUndone]
       }
-      return rowLines(target)
+      return rowLines(target, branchId)
     },
     [branchId, ctx],
   )
@@ -375,8 +382,8 @@ export function useReaderUndo({
     () =>
       redoTop == null
         ? null
-        : undoTargetText(describeRedoTarget(redoTop), redoNames(redoTop), 'redoMenu'),
-    [redoTop],
+        : undoTargetText(describeRedoTarget(redoTop), redoNames(redoTop, branchId), 'redoMenu'),
+    [redoTop, branchId],
   )
   const undoLabel =
     menuTarget == null

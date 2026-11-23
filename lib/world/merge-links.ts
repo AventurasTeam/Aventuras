@@ -18,17 +18,15 @@ import { adoptionHidesStory, type StoryPlace } from './place-rules'
 import { realPlacementOf, type PlacedPlacement } from './placement'
 
 export type MergeLinkInput = {
-  branchId: string
   canonical: Entity
   loser: Entity
-  /** The branch's entities, both rows among them. */
+  /** Both rows among them. */
   branchEntities: readonly Entity[]
-  /** The branch's happenings, read with the link rows: one missing here is gone. */
-  happenings: readonly Pick<Happening, 'id' | 'branchId'>[]
-  /** The branch's link rows. */
-  awareness: readonly HappeningAwareness[]
-  involvements: readonly HappeningInvolvement[]
-  relationships: readonly CharacterRelationship[]
+  /** Read with the link rows: one missing here is gone. */
+  branchHappenings: readonly Pick<Happening, 'id'>[]
+  branchAwareness: readonly HappeningAwareness[]
+  branchInvolvements: readonly HappeningInvolvement[]
+  branchRelationships: readonly CharacterRelationship[]
   /** Where the story is, for a place adoption the story-inside rule would refuse. */
   story: StoryPlace
 }
@@ -163,23 +161,20 @@ function relationshipCopies(
 
 /** world.md → Merge: the loser's links a merge re-creates on the canonical, and those it drops. */
 export function mergeLinks(input: MergeLinkInput): MergeLinks {
-  const { branchId, canonical, loser } = input
+  const { canonical, loser } = input
   const placement = canonicalPlacementOf(input)
   const linksOf = (id: string) =>
     entityLinkRows({
-      branchId,
       id,
-      awareness: input.awareness,
-      involvements: input.involvements,
-      relationships: input.relationships,
+      branchAwareness: input.branchAwareness,
+      branchInvolvements: input.branchInvolvements,
+      branchRelationships: input.branchRelationships,
     })
   const own = linksOf(loser.id)
   const canonicalLinks = linksOf(canonical.id)
   // A create's reversal can orphan a link row; its copy's create would refuse the missing end.
-  const onBranch = <Row extends { id: string; branchId: string }>(rows: readonly Row[]) =>
-    new Set(rows.filter((row) => row.branchId === branchId).map((row) => row.id))
-  const happenings = onBranch(input.happenings)
-  const entities = onBranch(input.branchEntities)
+  const happenings = new Set(input.branchHappenings.map((row) => row.id))
+  const entities = new Set(input.branchEntities.map((row) => row.id))
   const rows: EntityLinkRows = {
     awareness: own.awareness.filter((row) => happenings.has(row.happeningId)),
     involvements: own.involvements.filter((row) => happenings.has(row.happeningId)),

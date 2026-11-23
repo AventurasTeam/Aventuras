@@ -18,14 +18,12 @@ import {
 } from '@/lib/world'
 
 export type CollisionSources = {
-  branchId: string
-  /** The branch's entities. Entities and translations aren't re-filtered; link rows are. */
-  entities: readonly Entity[]
-  happenings: readonly Happening[]
-  awareness: readonly HappeningAwareness[]
-  involvements: readonly HappeningInvolvement[]
-  relationships: readonly CharacterRelationship[]
-  translations: readonly Translation[]
+  branchEntities: readonly Entity[]
+  branchHappenings: readonly Happening[]
+  branchAwareness: readonly HappeningAwareness[]
+  branchInvolvements: readonly HappeningInvolvement[]
+  branchRelationships: readonly CharacterRelationship[]
+  branchTranslations: readonly Translation[]
   /** Where the story is (`storyPlaceOf`), for a merge's placement footnote. */
   story: StoryPlace
 }
@@ -36,11 +34,10 @@ function isOlder(a: Entity, b: Entity): boolean {
 
 function linksOf(id: string, sources: CollisionSources) {
   return entityLinkRows({
-    branchId: sources.branchId,
     id,
-    awareness: sources.awareness,
-    involvements: sources.involvements,
-    relationships: sources.relationships,
+    branchAwareness: sources.branchAwareness,
+    branchInvolvements: sources.branchInvolvements,
+    branchRelationships: sources.branchRelationships,
   })
 }
 
@@ -50,18 +47,17 @@ const joins = (row: CharacterRelationship, id: string) => row.aId === id || row.
 function summarize(entity: Entity, partner: Entity, sources: CollisionSources): EntitySummary {
   const links = linksOf(entity.id, sources)
   const merge = mergeLinks({
-    branchId: sources.branchId,
     canonical: partner,
     loser: entity,
-    branchEntities: sources.entities,
-    happenings: sources.happenings,
-    awareness: sources.awareness,
-    involvements: sources.involvements,
-    relationships: sources.relationships,
+    branchEntities: sources.branchEntities,
+    branchHappenings: sources.branchHappenings,
+    branchAwareness: sources.branchAwareness,
+    branchInvolvements: sources.branchInvolvements,
+    branchRelationships: sources.branchRelationships,
     story: sources.story,
   })
   const relationshipIds = new Set(links.relationships.map((row) => row.id))
-  const inverseRefs = referencingEntities(entity.id, sources.entities).filter(
+  const inverseRefs = referencingEntities(entity.id, sources.branchEntities).filter(
     (other) => other.id !== partner.id,
   ).length
   return {
@@ -84,12 +80,12 @@ function summarize(entity: Entity, partner: Entity, sources: CollisionSources): 
       joiningRelationship: links.relationships.some((row) => joins(row, partner.id)),
       inverseRefs,
       embeddings: entity.embeddingStale === 0 ? 1 : 0,
-      translationRows: sources.translations.filter(
+      translationRows: sources.branchTranslations.filter(
         (row) =>
           (row.targetKind === 'entity' && row.targetId === entity.id) ||
           (row.targetKind === 'character_relationship' && relationshipIds.has(row.targetId)),
       ).length,
-      unheldItems: unheldItemsWithout(entity.id, sources.entities),
+      unheldItems: unheldItemsWithout(entity.id, sources.branchEntities),
       overlap: merge.overlap,
     },
   }
@@ -103,8 +99,8 @@ export function collisionPair(
   ids: readonly [string, string],
   sources: CollisionSources,
 ): readonly [EntitySummary, EntitySummary] | null {
-  const first = sources.entities.find((e) => e.id === ids[0])
-  const second = sources.entities.find((e) => e.id === ids[1])
+  const first = sources.branchEntities.find((e) => e.id === ids[0])
+  const second = sources.branchEntities.find((e) => e.id === ids[1])
   if (first == null || second == null || first.id === second.id) return null
   const [older, newer]: readonly [Entity, Entity] = isOlder(first, second)
     ? [first, second]

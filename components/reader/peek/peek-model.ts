@@ -34,6 +34,7 @@ export type PeekModel =
       aware: number
     }
 
+/** The rail branch's link rows, each a branch read. */
 export type PeekLinks = {
   involvements: ReadonlyMap<string, HappeningInvolvement>
   awareness: ReadonlyMap<string, HappeningAwareness>
@@ -64,7 +65,7 @@ export function peekModelOf(peek: RailPeek, data: RailData, links: PeekLinks): P
     case 'happening': {
       const row = data.happenings.find((r) => r.id === peek.id)
       if (row == null) return null
-      const linked = happeningLinksFor(row.id, data.branchId, links.involvements, links.awareness)
+      const linked = happeningLinksFor(row.id, links.involvements, links.awareness)
       return {
         kind: 'happening',
         row,

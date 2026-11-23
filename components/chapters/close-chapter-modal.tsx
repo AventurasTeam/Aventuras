@@ -59,10 +59,10 @@ export function CloseChapterModal({
   )
   const origin = currentStoryStore.useCurrentStory((open) => open?.definition.worldTimeOrigin)
   const frame = useCalendarFrame(calendarSystemId, origin)
-  const endedChapterNumber = chaptersStore.useChapters((rows) => {
-    const latest = chaptersStore.selectLatest(rows)
-    return latest?.branchId === branchId ? latest.sequenceNumber : null
-  })
+  const endedChapterNumber = chaptersStore.useChapters(
+    branchId,
+    (rows) => chaptersStore.selectLatest(rows)?.sequenceNumber ?? null,
+  )
   const { gateReason } = useStoryGenerationGate(storyId, branchId)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const tailId = useBranchTailId(branchId)

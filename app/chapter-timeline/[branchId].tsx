@@ -57,7 +57,7 @@ export default function ChapterTimelineRoute(): ReactElement {
   const chapterProgress = useChapterProgress(storyId)
   const rerunDisabledReason = useRerunDisabledReason(storyId ?? undefined, branchId)
 
-  const chapterRows = chaptersStore.useChapters((m) => m)
+  const chapterRows = chaptersStore.useChapters(branchId, (m) => m)
   const entryIndex = useEntryIndex(branchId)
   const ranges = useTimelineTimeRanges(branchId, focused)
   const calendarSystemId = open?.definition.calendarSystemId
@@ -66,15 +66,14 @@ export default function ChapterTimelineRoute(): ReactElement {
   const timeline = useMemo(
     () =>
       chapterTimelineData({
-        branchId,
-        rows: chapterRows.values(),
+        branchRows: chapterRows.values(),
         ranges,
         // Empty until the first read lands or if it fails (a re-read keeps the last good index):
         // entry ranges drop meanwhile, nothing waits on it.
         entryIndex: entryIndex.index,
         frame,
       }),
-    [branchId, chapterRows, ranges, entryIndex.index, frame],
+    [chapterRows, ranges, entryIndex.index, frame],
   )
   const expansionRows = useMemo(() => timeline.cards.map((card) => card.row), [timeline.cards])
 

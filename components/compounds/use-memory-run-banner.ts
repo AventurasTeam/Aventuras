@@ -100,10 +100,10 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   )
   const openSeq = currentStoryStore.useOpenSeq()
   const result = chapterOverlaysStore.useOverlays((s) => s.closeResult)
-  const held = chaptersStore.useChapters((rows) =>
+  const held = chaptersStore.useChapters(branchId, (rows) =>
     closeResultChapter(result, rows, { branchId, openSeq }),
   )
-  const latestChapter = chaptersStore.useChapters(chaptersStore.selectLatest)
+  const latestChapter = chaptersStore.useChapters(branchId, chaptersStore.selectLatest)
 
   const label = run == null ? null : bannerLabel(run)
   if (run != null && label != null) {

@@ -48,11 +48,11 @@ export function plotDeleteCopy(target: PlotDeleteTarget, links: LinkCounts): Del
 /** A happening's committed link-row counts, scoped to this branch and this row. Threads have none. */
 export function plotLinkCounts(branchId: string, target: PlotDeleteTarget): LinkCounts {
   if (target.kind === 'thread') return { involvements: 0, awareness: 0 }
-  const own = (row: { branchId: string; happeningId: string }) =>
-    row.branchId === branchId && row.happeningId === target.row.id
+  const ownCount = (rows: ReadonlyMap<string, { happeningId: string }>) =>
+    [...rows.values()].filter((row) => row.happeningId === target.row.id).length
   return {
-    involvements: [...happeningInvolvementsStore.getInvolvements().values()].filter(own).length,
-    awareness: [...happeningAwarenessStore.getAwareness().values()].filter(own).length,
+    involvements: ownCount(happeningInvolvementsStore.getInvolvements(branchId)),
+    awareness: ownCount(happeningAwarenessStore.getAwareness(branchId)),
   }
 }
 
@@ -101,8 +101,8 @@ export function usePlotDelete(branchId: string, ctx: DbCtx, guard: (proceed: () 
       guard(() => {
         const fresh = freshDeleteTarget(
           target,
-          threadsStore.getThreads(),
-          happeningsStore.getHappenings(),
+          threadsStore.getThreads(branchId),
+          happeningsStore.getHappenings(branchId),
         )
         if (fresh == null) return
         setPending({ target: fresh, copy: plotDeleteCopy(fresh, plotLinkCounts(branchId, fresh)) })

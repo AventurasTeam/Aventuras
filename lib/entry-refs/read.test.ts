@@ -226,6 +226,45 @@ describe('readEntryIndex', () => {
   })
 })
 
+describe('readEntryIndex on two branches', () => {
+  // A copy shares entry ids across branches: the wide read must fetch the branch it lists.
+  it("reads each branch's own wide excerpt for an id both branches hold", async () => {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values([
+      { id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 },
+      { id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 },
+    ])
+    // Past the short preview's 200-character cut, so both previews need the wide read.
+    const style = `<style>.seed-resp { ${'padding: 10px; '.repeat(20)}}</style>\n\n`
+    expect(style.length).toBeGreaterThan(200)
+    await db.insert(storyEntries).values([
+      {
+        id: 'e1',
+        branchId: 'br_1',
+        position: 1,
+        kind: 'ai_reply',
+        content: `${style}The lamps on main gutter out.`,
+        createdAt: 1,
+      },
+      {
+        id: 'e1',
+        branchId: 'br_2',
+        position: 1,
+        kind: 'ai_reply',
+        content: `${style}The fork keeps its lamps lit.`,
+        createdAt: 1,
+      },
+    ])
+
+    const [main] = await readEntryIndex('br_1', db)
+    const [fork] = await readEntryIndex('br_2', db)
+
+    expect(main?.excerpt).toBe('The lamps on main gutter out.')
+    expect(fork?.excerpt).toBe('The fork keeps its lamps lit.')
+  })
+})
+
 describe('readOpenRegionTimes', () => {
   it("reads each open-region row's world time, leaving out closed, system, timeless and other branches' rows", async () => {
     const { db } = await createTestDb()

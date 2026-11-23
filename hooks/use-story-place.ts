@@ -10,16 +10,14 @@ import { storyPlaceOf, type StoryPlace } from '@/lib/world'
  * tail's or the scene's place moves, so a consumer's memo doesn't rebuild on every entries patch.
  */
 export function useStoryPlace(branchId: string): StoryPlace {
-  const entryRows = entriesStore.useEntries((m) => m)
+  const entryRows = entriesStore.useEntries(branchId, (m) => m)
   const place = useMemo(() => {
-    const entries = [...entryRows.values()]
-      .filter((e) => e.branchId === branchId)
-      .sort((a, b) => a.position - b.position)
+    const entries = [...entryRows.values()].sort((a, b) => a.position - b.position)
     return storyPlaceOf({
       tail: resolveHeadTurn(entries)?.tail,
       sceneSource: entries.findLast((e) => NARRATIVE_KINDS.has(e.kind)),
     })
-  }, [entryRows, branchId])
+  }, [entryRows])
   const [stable, setStable] = useState(place)
   if (place.tail !== stable.tail || place.scene !== stable.scene) setStable(place)
   return stable

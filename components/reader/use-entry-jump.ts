@@ -16,10 +16,8 @@ export const JUMP_VEIL_TIMEOUT_MS = 30_000
 
 export function oldestLoadedPosition(branchId: string): number | null {
   let oldest: number | null = null
-  for (const row of entriesStore.getEntries().values()) {
-    if (row.branchId === branchId && (oldest === null || row.position < oldest)) {
-      oldest = row.position
-    }
+  for (const row of entriesStore.getEntries(branchId).values()) {
+    if (oldest === null || row.position < oldest) oldest = row.position
   }
   return oldest
 }
@@ -189,7 +187,7 @@ export function useEntryJump(
   const watchLanding = useCallback(
     (entryId: string) => {
       const unsubscribe = entriesStore.subscribe(() => {
-        if (entriesStore.getById(entryId)?.branchId === branchId) return
+        if (entriesStore.getById(branchId, entryId) !== undefined) return
         // Another branch loading means the reader is being left, not that it dropped the landing.
         if (entriesStore.getLoadedBranch() === branchId) drop(entryId, 'left_window')
         else release()
@@ -267,7 +265,12 @@ export function useEntryJump(
         }
         if (read.branchTop) topLoaded()
         entriesStore.insertMany(branchId, read.rows)
-        if (entriesStore.getById(entryId) === undefined) {
+        // Past here, undefined means gone from this branch: another branch loading supersedes it.
+        if (superseded()) {
+          if (current()) release()
+          return
+        }
+        if (entriesStore.getById(branchId, entryId) === undefined) {
           release()
           toast.warning(t('reader:jumpEntryGone'))
           return

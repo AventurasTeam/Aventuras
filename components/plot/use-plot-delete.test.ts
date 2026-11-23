@@ -181,24 +181,34 @@ describe('plotLinkCounts', () => {
     })
   })
 
-  it('counts only this happening’s own-branch link rows, not off-branch or other-happening rows', () => {
+  it('counts only this happening’s link rows, not other-happening rows', () => {
     happeningInvolvementsStore.hydrate(BRANCH, [
       involvement('inv_1', AMBUSH.id),
       involvement('inv_2', AMBUSH.id),
       // Another happening on the same branch.
       involvement('inv_3', 'hap_other'),
-      // Same happening id, but a different branch.
-      involvement('inv_4', AMBUSH.id, { branchId: 'br_2' }),
     ])
     happeningAwarenessStore.hydrate(BRANCH, [
       awareness('aw_1', AMBUSH.id),
       awareness('aw_2', 'hap_other'),
-      awareness('aw_3', AMBUSH.id, { branchId: 'br_2' }),
     ])
 
     expect(plotLinkCounts(BRANCH, { kind: 'happening', row: AMBUSH })).toEqual({
       involvements: 2,
       awareness: 1,
+    })
+  })
+
+  // A fork copies link rows under their ids; the count reads its own branch's.
+  it('counts nothing from link stores loaded for another branch', () => {
+    happeningInvolvementsStore.hydrate('br_2', [
+      involvement('inv_4', AMBUSH.id, { branchId: 'br_2' }),
+    ])
+    happeningAwarenessStore.hydrate('br_2', [awareness('aw_3', AMBUSH.id, { branchId: 'br_2' })])
+
+    expect(plotLinkCounts(BRANCH, { kind: 'happening', row: AMBUSH })).toEqual({
+      involvements: 0,
+      awareness: 0,
     })
   })
 })
@@ -239,11 +249,10 @@ describe('usePlotDelete', () => {
     expect(result.current.copy).toBeNull()
   })
 
-  it('builds the confirm copy for a happening, re-read from the store, with its own-branch link counts', () => {
+  it('builds the confirm copy for a happening, re-read from the store, with its link counts', () => {
     happeningInvolvementsStore.hydrate(BRANCH, [
       involvement('inv_1', AMBUSH.id),
       involvement('inv_2', 'hap_other'),
-      involvement('inv_3', AMBUSH.id, { branchId: 'br_2' }),
     ])
     happeningAwarenessStore.hydrate(BRANCH, [awareness('aw_1', AMBUSH.id)])
     const guard = (fn: () => void) => fn()

@@ -4,15 +4,26 @@ import { entitiesStore, happeningsStore, loreStore, threadsStore } from '@/lib/s
 
 export type HistoryTarget = Entity | Lore | Thread | Happening
 
-/** The tab's row from the working set; a new identity whenever a write patches it. */
-export function useHistoryTarget(table: HistoryTable, id: string): HistoryTarget | undefined {
-  const entity = entitiesStore.useEntities((m) => (table === 'entities' ? m.get(id) : undefined))
-  const lore = loreStore.useLore((m) => (table === 'lore' ? m.get(id) : undefined))
-  const thread = threadsStore.useThreads((m) => (table === 'threads' ? m.get(id) : undefined))
-  const happening = happeningsStore.useHappenings((m) =>
-    table === 'happenings' ? m.get(id) : undefined,
-  )
-  return entity ?? lore ?? thread ?? happening
+/** The tab's row on its branch, from the working set; a new identity whenever a write patches it. */
+export function useHistoryTarget(
+  branchId: string,
+  table: HistoryTable,
+  id: string,
+): HistoryTarget | undefined {
+  const entity = entitiesStore.useById(branchId, id)
+  const lore = loreStore.useById(branchId, id)
+  const thread = threadsStore.useById(branchId, id)
+  const happening = happeningsStore.useById(branchId, id)
+  switch (table) {
+    case 'entities':
+      return entity
+    case 'lore':
+      return lore
+    case 'threads':
+      return thread
+    case 'happenings':
+      return happening
+  }
 }
 
 export function historyTargetName(row: HistoryTarget | undefined): string | null {
