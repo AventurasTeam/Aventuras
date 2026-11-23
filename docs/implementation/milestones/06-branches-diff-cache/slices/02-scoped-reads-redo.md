@@ -348,9 +348,9 @@ id-only store read as fact goes with it.
 
 - `lib/stores/__tests__/public-api.typecheck.ts` holds a
   `@ts-expect-error` line for each unscoped form, and a call of each
-  scoped one: every working-set store's row getter, the shared hook and
-  `getById` (through `entitiesStore`), and every derived getter,
-  `getRelationships` included. Among them are
+  scoped one: every working-set store's row getter, row hook, `getById`
+  and `useById`, and every derived getter, `getRelationships` included.
+  Among them are
   `entitiesStore.getEntities()`, `entitiesStore.useEntities((m) => m)`,
   `entitiesStore.getById('x')`, `entriesStore.getEntries()`,
   `chaptersStore.getLatest()` and `translationsStore.getTranslation`
