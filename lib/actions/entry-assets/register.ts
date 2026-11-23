@@ -133,7 +133,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     targetTable: 'entry_assets',
     targetId: id,
     op: 'delete',
-    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
+    // Full row so reverse-replay can re-insert it.
     undoPayload: { ...current },
     ops: [
       ctx.db
