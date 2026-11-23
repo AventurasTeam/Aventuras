@@ -119,6 +119,7 @@ export {
   declineEmbeddingUpgrade,
   type DeclineEmbeddingUpgradeFn,
 } from './stories/embedding-upgrade'
+export { renameBranch, type RenameBranchResult } from './stories/rename-branch'
 export { resetStorySettings } from './stories/reset-settings'
 export {
   LEAD_REJECTION,
