@@ -30,15 +30,15 @@ type TableCopyArgs = CopyBranches &
 
 /**
  * `where`: per table, SQL with its own binds, ANDed into that table's copy; evaluated in-statement,
- * so it reads the batch as earlier ops left it. A fork passes one for its deltas and its journals;
- * the copier leaves its `system` entries out itself. A subquery over the table it filters aliases
- * it and names inner columns through the alias: drizzle writes `"table"."col"`, which binds to the
- * inner row if unaliased, else to the copied row. `between`: ops run after the rows copy, before
- * the vectors, which copy only for rows `to` then holds (C3).
+ * so it reads the batch as earlier ops left it. A fork must pass one for its deltas and journals;
+ * its `system` entries never copy. A subquery over the table it filters aliases it and names inner
+ * columns through the alias: drizzle writes `"table"."col"`, which binds to the inner row if
+ * unaliased, else to the copied row. `between`: ops run after the rows copy, before the vectors,
+ * which copy only for rows `to` then holds (C3).
  */
 export type BranchCopyArgs = TableCopyArgs & { readonly between?: readonly SqlOp[] }
 
-// copy-non-system's filter, applied by the copier: a fork never copies the parent's error card.
+// copy-non-system's filter: a fork never copies the parent's error card.
 const NON_SYSTEM = ne(storyEntries.kind, 'system')
 
 // All in SQL: a JS round trip would re-serialize the JSON columns canon copies verbatim.
