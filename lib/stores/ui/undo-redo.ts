@@ -35,7 +35,7 @@ export const undoRedoStore = {
     if (stack != null && top != null) setStack(branchId, stack.slice(0, -1))
     return top
   },
-  /** A write on the branch: its redo can no longer replay exactly. */
+  /** A write that can change the branch: its redo can no longer replay exactly. */
   clear: removeStack,
   /** The branch, or its story, is deleted. */
   drop: removeStack,
