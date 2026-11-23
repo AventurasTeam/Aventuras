@@ -62,6 +62,8 @@ const kaelFrom = (fromLogPosition: number, branchId = 'b1'): ChainSnapshotArgs =
 
 beforeEach(async () => {
   t = await createTestDb()
+  // Unordered reads come back reversed, so only the read's ORDER BY yields the chain oldest first.
+  t.sqlite.exec('PRAGMA reverse_unordered_selects = ON')
   await t.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
   await t.db.insert(branches).values([
     { id: 'b1', storyId: 's1', name: 'main', createdAt: 1 },
@@ -78,7 +80,7 @@ beforeEach(async () => {
     createdAt: 1,
     updatedAt: 1,
   })
-  // Out of log order on purpose: the read orders the chain, not the insert.
+  // Out of log order on purpose: the index, not the insert, would order an unordered scan.
   await t.db
     .insert(deltas)
     .values([
