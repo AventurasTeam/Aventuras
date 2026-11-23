@@ -1,5 +1,6 @@
 import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { messageOf } from '@/lib/thrown'
 
 import type { DiffCacheEntry, DiffWalk, UpdateDelta, WalkResult } from './diff-walk'
 
@@ -47,9 +48,6 @@ const keyOf = (branchId: string, deltaId: string): string => JSON.stringify([bra
 
 const targetOf = (delta: Delta): string =>
   JSON.stringify([delta.branchId, delta.targetTable, delta.targetId])
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error)
 
 function waitingFor(delta: UpdateDelta): Waiting {
   let resolve!: (outcome: DiffOutcome) => void
