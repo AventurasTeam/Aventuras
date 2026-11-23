@@ -2,7 +2,6 @@ import { and, eq } from 'drizzle-orm'
 
 import type { EntryAsset, NewEntryAsset } from '@/lib/db'
 import { entryAssetWriteSchema, entryAssets } from '@/lib/db'
-import { entryAssetsStore } from '@/lib/stores'
 
 import {
   register,
@@ -156,6 +155,5 @@ export function registerEntryAssets(): void {
       updateEntryAsset: updateHandler,
       deleteEntryAsset: deleteHandler,
     },
-    patcher: (branchId, p) => entryAssetsStore.patch(branchId, p),
   })
 }
