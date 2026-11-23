@@ -147,13 +147,6 @@ slice-planning gate forces its resolution before that slice is planned.
   changes. It predates Slice 6.2: the former `liveUndoRow` read did
   the same. Found by Slice 6.2's first-PR review (2026-11-23).
 
-- **A comment in `memory-chain.ts` names the wrong slice.**
-  `lib/pipeline/definitions/memory-chain.ts:65` says "(no forks yet,
-  M6.1)", but 6.1 (the copy substrate) has landed and forks are Slice
-  6.3's, so under milestone C12 the comment goes when forks ship. It
-  predates Slice 6.2. Found by Slice 6.2's first-PR review
-  (2026-11-23).
-
 - **No test passes a wrong branch to a scoped store read.** Every
   working-set read now names its branch, so the typecheck blocks a
   return to an unscoped call. It does not block
@@ -173,11 +166,37 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **`raiseSystemEntry` repeats the working-set factory's patch guard.**
   `lib/actions/story-entries/system-entry.ts:85` returns early when the
-  store holds another branch, and the factory's `patch` and
-  `insertMany` (`lib/stores/factory/working-set-store.ts:52` and `:68`)
-  already drop a branch the store doesn't hold. In
-  `system-entry.test.ts`, "leaves the store alone when it holds another
-  branch" fails only with both guards removed; removing either alone
-  passes (mutation-checked 2026-11-23). Either guard is redundant for
-  that test, so keep one and say which. It predates Slice 6.2's third
-  PR. Found by that PR's review (2026-11-23).
+  store holds another branch, and the factory's `patch`
+  (`lib/stores/factory/working-set-store.ts:52`) already drops a branch
+  the store doesn't hold. In `system-entry.test.ts`, "leaves the store
+  alone when it holds another branch" fails only with both guards
+  removed; removing either alone passes (mutation-checked 2026-11-23).
+  The factory guard stays, since every writer relies on it; `:85` also
+  skips a database read. So the choice is dropping `:85` and accepting
+  the wasted read, or pinning it with a case that spies on that read.
+  It predates Slice 6.2's third PR. Found by that PR's review
+  (2026-11-23).
+
+- **A story delete can race an undo in flight.** `deleteStory`
+  (`lib/actions/stories/delete-story.ts`) takes no guard against a
+  reversal in flight. A delete that commits after an undo built its
+  plan and before the undo commits lets the undo report `ok` and push
+  its redo group for a branch that no longer exists: probed with a
+  wrapped `runInTransaction`, `undoRedoStore.__branches()` held the
+  deleted branch (2026-11-23). The reversal itself then commits
+  against the deleted story; for a delete's undo it would re-insert
+  rows into the dead branch (inferred, not probed). Whether the UI can
+  reach the window, the undo's own read-to-commit stretch, is unshown.
+  It predates Slice 6.2. Found by Slice 6.2's slice review
+  (2026-11-23).
+
+- **Can a pipeline reversal leave a redo group that contradicts its
+  branch?** Every delta-logged write clears its branch's redo stack,
+  but the pipeline's reversals clear none: `reverseCloseForRerun`
+  (`lib/pipeline/definitions/chapter-close-reversal.ts`) and a run
+  abort's `reverseRunGroup` / `reverseReplayDeltas`. A review agent
+  reasoned, without a probe, that an aborted re-run whose journal
+  write-back ends `undone` changes the branch while a redo group pushed
+  before the re-run stays, so the redo could restore rows the reversal
+  removed. Verify the sequence before fixing anything. It predates
+  Slice 6.2. Found by Slice 6.2's slice review (2026-11-23).
