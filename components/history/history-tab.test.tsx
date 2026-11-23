@@ -764,14 +764,39 @@ describe('HistoryTab change prose', () => {
     )
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
 
+    const populate = vi.spyOn(diffs, 'populate')
     act(() => diffs.evictBranch('br_other'))
     await settle()
+    expect(populate).not.toHaveBeenCalled()
     expect(walk).toHaveBeenCalledTimes(1)
     expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE)
 
     act(() => diffs.evictBranch(BRANCH))
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(HOARSE_PROSE))
     expect(walk).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to the summary when the re-read after an eviction fails', async () => {
+    const client = createQueryClient()
+    const walk = vi
+      .fn<DiffWalk>()
+      .mockResolvedValueOnce(walked({ [VOICE.id]: VOICE_ENTRY }))
+      .mockRejectedValueOnce(new Error('no row, head delete or held copy'))
+    const diffs = createDiffCache({ walk })
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs, client },
+    )
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
+
+    act(() => diffs.evictBranch(BRANCH))
+    await waitFor(() =>
+      expect(client.getQueryState(['diff', BRANCH, VOICE.id])?.status).toBe('error'),
+    )
+    await settle()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Voice')
   })
 
   it('ends on the walk after an eviction that lands while the first walk is pending', async () => {
@@ -921,7 +946,8 @@ describe('HistoryTab change prose', () => {
     cleanup()
     renderTab(load, 'char_kael', 'entities', { diffs })
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Their view: "rival" → "ally"'))
-    // The second tab reads the cached entry through `peek`, so nothing walks again.
+    // The second tab reads the cached entry through `peek`: prose from its first render, no walk.
     expect(walk).toHaveBeenCalledTimes(1)
+    expect([...view.summaries]).toEqual(['Their view: "rival" → "ally"'])
   })
 })
