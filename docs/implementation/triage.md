@@ -248,17 +248,26 @@ slice-planning gate forces its resolution before that slice is planned.
   comments and the same staleness applies to the message. Pre-existing.
   Found in Slice 6.7's reviews (2026-11-23).
 
-- **`reverseReplayDeltas` reads its group with no branch filter.**
-  `lib/actions/delta/reverse-replay.ts:987-1002` selects every delta of
-  the action id across branches, and `reverseReplayGroup` seeds the set
-  with `group[0]`'s branch (`:1015`). A fork copies action ids, so a
-  group could mix branches; `selectReversalSet` then throws on the
-  stray delta (`lib/actions/delta/row-closure.ts:490-494`) and the
-  reversal fails rather than reversing the wrong rows. Its only
-  production caller is `lib/actions/turns/submit-turn.ts:201`, with a
-  fresh turn action id, so it would take a fork made while that turn
-  runs. Reachability unverified. Found in Slice 6.7's reviews
-  (2026-11-23).
+- **Does the fork's refusal cover a refused admission's reversal?**
+  [Slice 6.1](./milestones/06-branches-diff-cache/slices/01-copy-substrate.md#scope-out)
+  kept `reverseReplayDeltas`'s read by `action_id` alone
+  (`lib/actions/delta/reverse-replay.ts:986-1002`) on purpose: its one
+  caller reverses a live turn's refused admission
+  (`lib/actions/turns/submit-turn.ts:196-201`), and canon lets a live
+  run select by its id. What's new: a fork copies action ids, and a
+  refused admission has no `pipeline_runs` row (its run was never
+  reserved), so the fork's refusal of an unfinished run can't see it. A
+  fork committed between the turn's `user_action` write and its
+  reversal would give the group a second branch, `selectReversalSet`
+  would refuse the set (`lib/actions/delta/row-closure.ts:490-494`), and
+  the `user_action` entry would stand with no marker for boot to retry.
+  The turn's pending mark spans that window
+  (`bracketPendingTurn`, `lib/stores/generation/generation.ts:344-371`),
+  and Slice 6.3's gate refuses while any turn is pending, which may be
+  what covers it; the fork core (Slice 6.3, in flight) answers it.
+  [Slice 6.10's Open questions](./milestones/06-branches-diff-cache/slices/10-register-branch-pairs.md#open-questions)
+  meet the same refusal from the test-fixture side. Found in Slice 6.7's
+  reviews (2026-11-23).
 
 - **Two E2E comments say GO TO World returns to the same World.**
   `e2e/flows/navigation.ts:7-8` and `e2e/tests/world.spec.ts:65-66`
