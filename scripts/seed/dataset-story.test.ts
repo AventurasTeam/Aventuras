@@ -1,5 +1,5 @@
 import { getTableName } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 import {
   DATASET_SEED_LEFT_OUT,
@@ -7,34 +7,35 @@ import {
   parseStorySeed,
   seedAppRefs,
 } from './dataset-story'
+import { insertSeedSteps } from './insert'
+import { seedHeroFork } from '../../lib/actions'
+import { createTestDb } from '../../lib/db/__tests__/test-db'
 import { buildSeedSteps } from '../../lib/db/devtools/seed-dataset'
 import { dbSchema } from '../../lib/db/schema'
+import { exportStorySeed } from '../dataset-chapter/seed-export'
 
 type Row = Record<string, unknown>
 type Seed = Record<string, Row[]>
 
 const HERO = 'story_hero'
-const HERO_BRANCHES = new Set(['br_hero_main', 'br_hero_fork'])
 const REFS = seedAppRefs(buildSeedSteps())
 
-// The default seed's hero story: every table the seed carries has a row, two branches among them.
-function heroSeed(): Seed {
-  const steps = buildSeedSteps()
-  const seed: Seed = {}
-  for (const { name } of DATASET_SEED_TABLES) {
-    const rows = steps.filter((s) => s.name === name).flatMap((s) => s.rows as Row[])
-    seed[name] = structuredClone(
-      rows.filter((r) =>
-        name === 'stories'
-          ? r.id === HERO
-          : name === 'branches'
-            ? r.storyId === HERO
-            : HERO_BRANCHES.has(r.branchId as string),
-      ),
-    )
+let seeded: Seed
+
+// The hero story as `dataset:export-seed` writes it from a seeded database: every table the seed
+// carries has a row, and two branches, the fork a real one.
+beforeAll(async () => {
+  const t = await createTestDb()
+  try {
+    await insertSeedSteps(t.db, buildSeedSteps())
+    await seedHeroFork({ db: t.db, runInTransaction: t.runInTransaction })
+    seeded = JSON.parse(await exportStorySeed(t.sqlite, HERO, REFS)) as Seed
+  } finally {
+    t.sqlite.close()
   }
-  return seed
-}
+}, 60_000)
+
+const heroSeed = (): Seed => structuredClone(seeded)
 
 const parse = (seed: Seed) => parseStorySeed(JSON.stringify(seed), REFS)
 
@@ -178,8 +179,16 @@ describe('parseStorySeed', () => {
     )
     const otherBranch = heroSeed()
     const fork = otherBranch.story_entries!.findIndex((r) => r.branchId === 'br_hero_fork')
-    const mainChapter = otherBranch.chapters!.find((r) => r.branchId === 'br_hero_main')!.id
-    otherBranch.story_entries![fork]!.chapterId = mainChapter
+    const forkChapters = new Set(
+      otherBranch.chapters!.filter((r) => r.branchId === 'br_hero_fork').map((r) => r.id),
+    )
+    // The fork copied chapter 1 under main's id; chapter 2 spans the fork entry, so it rewound.
+    const mainOnly = otherBranch.chapters!.find(
+      (r) => r.branchId === 'br_hero_main' && !forkChapters.has(r.id),
+    )
+    expect(fork).toBeGreaterThanOrEqual(0)
+    expect(mainOnly).toBeDefined()
+    otherBranch.story_entries![fork]!.chapterId = mainOnly!.id
     expect(() => parse(otherBranch)).toThrow(new RegExp(`story_entries\\[${fork}\\]`))
   })
 

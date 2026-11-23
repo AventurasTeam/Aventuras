@@ -262,19 +262,21 @@ function heroChapterId(i: number): string | null {
   return null
 }
 
+function heroMetadata(i: number, kind: NewStoryEntry['kind']): EntryMetadata {
+  return entryMetadataSchema.parse({
+    sceneEntities: [SCENE_POOL[i % SCENE_POOL.length], SCENE_POOL[(i + 1) % SCENE_POOL.length]],
+    currentLocationId: LOC_POOL[i % LOC_POOL.length],
+    worldTime: (i - 1) * 3,
+    ...(kind === 'ai_reply'
+      ? { model: 'seed/narrative', tokens: { prompt: 800 + i, completion: 240 + i } }
+      : {}),
+  })
+}
+
 function heroEntries(): NewStoryEntry[] {
   const rows: NewStoryEntry[] = []
   for (let i = 1; i <= N_HERO; i++) {
     const kind = heroKind(i)
-    const worldTime = (i - 1) * 3
-    const metadata: EntryMetadata = entryMetadataSchema.parse({
-      sceneEntities: [SCENE_POOL[i % SCENE_POOL.length], SCENE_POOL[(i + 1) % SCENE_POOL.length]],
-      currentLocationId: LOC_POOL[i % LOC_POOL.length],
-      worldTime,
-      ...(kind === 'ai_reply'
-        ? { model: 'seed/narrative', tokens: { prompt: 800 + i, completion: 240 + i } }
-        : {}),
-    })
     rows.push({
       id: entryId('hero', i),
       branchId: MAIN,
@@ -282,37 +284,67 @@ function heroEntries(): NewStoryEntry[] {
       kind,
       content: heroContent(i, kind),
       chapterId: heroChapterId(i),
-      metadata,
+      metadata: heroMetadata(i, kind),
       createdAt: BASE + i * MIN,
     })
   }
   return rows
 }
 
-function forkEntries(): NewStoryEntry[] {
-  const rows: NewStoryEntry[] = []
-  for (let i = 1; i <= 12; i++) {
-    const kind: NewStoryEntry['kind'] =
-      i === 1 ? 'opening' : i % 2 === 0 ? 'user_action' : 'ai_reply'
-    rows.push({
-      id: entryId('fork', i),
-      branchId: FORK,
-      position: i,
-      kind,
-      content:
-        i === 1
-          ? 'You let the figure go. The alley swallows them, and the city tilts toward a different ending.'
-          : heroContent(i + 3, kind),
-      chapterId: null,
-      metadata: entryMetadataSchema.parse({
-        sceneEntities: [ID.kael, ID.mira],
-        currentLocationId: ID.market,
-        worldTime: 117 + i,
+// The fork entry is a user_action, so the fork's own turns open on its reply.
+const HERO_FORK_AT = 40
+const HERO_FORK_TURNS = 5
+
+/** C7: the seed forks br_hero_main through the fork's core, under this id, name and time. */
+export const HERO_FORK: {
+  readonly id: 'br_hero_fork'
+  readonly parentId: 'br_hero_main'
+  readonly forkEntryId: string
+  readonly name: 'The road not taken'
+  readonly createdAt: number
+} = {
+  id: FORK,
+  parentId: MAIN,
+  forkEntryId: entryId('hero', HERO_FORK_AT),
+  name: 'The road not taken',
+  createdAt: BASE + DAY,
+}
+
+/**
+ * The turns the seed appends once the fork has run, ending on a reply, under ids only the fork
+ * holds. Each create logs as main's do (`entryCreateDeltas`), from `topLogPosition + 1`.
+ */
+export function heroForkTurns(topLogPosition: number): {
+  entries: NewStoryEntry[]
+  deltas: NewDelta[]
+} {
+  const entries: NewStoryEntry[] = []
+  for (let turn = 1; turn <= HERO_FORK_TURNS; turn++) {
+    const position = HERO_FORK_AT + turn
+    const kind: NewStoryEntry['kind'] = turn % 2 === 1 ? 'ai_reply' : 'user_action'
+    entries.push(
+      withContentTokens({
+        id: entryId('fork', turn),
+        branchId: FORK,
+        position,
+        kind,
+        // Offset from main's line at this position: the fork tells its own turns.
+        content: heroContent(position + 3, kind),
+        chapterId: null,
+        metadata: heroMetadata(position, kind),
+        createdAt: HERO_FORK.createdAt + turn * MIN,
       }),
-      createdAt: BASE + DAY + i * MIN,
-    })
+    )
   }
-  return rows
+  const deltaRows = entryCreateDeltas(entries).map((delta) => ({
+    ...delta,
+    logPosition: topLogPosition + delta.logPosition,
+  }))
+  // The metadata names entities, which the fork holds under their remapped ids.
+  return {
+    entries: entries.map((entry) => remapSeedIds(entry)),
+    deltas: deltaRows.map((delta) => remapSeedIds(delta)),
+  }
 }
 
 // Chapter 2's close as its review window reads it (C4): a landed change, a list refused over its
@@ -2192,13 +2224,9 @@ export function buildSeedSteps(): SeedStep[] {
   const filler = fillerStoryRows()
   const rich = richStoryRows()
   const ledger = ledgerStoryRows()
-  const allEntries = [
-    ...heroEntries(),
-    ...forkEntries(),
-    ...rich.entries,
-    ...ledger.entries,
-    ...filler.entries,
-  ].map(withContentTokens)
+  const allEntries = [...heroEntries(), ...rich.entries, ...ledger.entries, ...filler.entries].map(
+    withContentTokens,
+  )
   const deltaRows = interleaveHeroDeltas(entryCreateDeltas(allEntries))
   // Summed here, after withContentTokens: at import, a count would build the encoder on every launch.
   const chapterRows: NewChapter[] = heroChapters.map((chapter) => ({
@@ -2233,6 +2261,7 @@ export function buildSeedSteps(): SeedStep[] {
     currentBranchId: MAIN,
   }
 
+  // br_hero_fork is no static row: the seed forks it from br_hero_main (HERO_FORK).
   const branchRows: NewBranch[] = [
     {
       id: MAIN,
@@ -2241,14 +2270,6 @@ export function buildSeedSteps(): SeedStep[] {
       forkEntryId: null,
       name: 'Main',
       createdAt: BASE,
-    },
-    {
-      id: FORK,
-      storyId: HERO,
-      parentBranchId: MAIN,
-      forkEntryId: entryId('hero', 40),
-      name: 'The road not taken',
-      createdAt: BASE + DAY,
     },
     ...filler.branches,
   ]

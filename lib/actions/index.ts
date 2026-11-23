@@ -130,6 +130,7 @@ export {
   type ForkResult,
 } from './stories/fork-branch'
 export { resetStorySettings } from './stories/reset-settings'
+export { seedHeroFork } from './stories/seed-hero-fork'
 export {
   LEAD_REJECTION,
   setStoryLead,

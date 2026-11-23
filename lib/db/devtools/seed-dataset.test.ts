@@ -792,13 +792,20 @@ describe('seeded classifier watermarks', () => {
     expect(hero?.classifierStatus).toMatchObject({ processedThrough: 71 })
   })
 
-  it('parks the fork, the rich story and a filler on their own last entries', () => {
+  it('parks the rich story and a filler on their own last entries', () => {
     const statusOf = new Map(
       (rowsOf('branches') as BranchRow[]).map((b) => [b.id, b.classifierStatus]),
     )
-    expect(statusOf.get('br_hero_fork')).toMatchObject({ processedThrough: 12 })
     expect(statusOf.get('br_rich_main')).toMatchObject({ processedThrough: 60 })
     expect(statusOf.get('br_active2_main')).toMatchObject({ processedThrough: 4 })
+  })
+
+  // Its park is asserted on a seeded database (scripts/seed/hero-fork.test.ts).
+  it('leaves br_hero_fork to the fork the seed runs', () => {
+    expect((rowsOf('branches') as BranchRow[]).map((b) => b.id)).not.toContain('br_hero_fork')
+    expect(
+      (rowsOf('story_entries') as EntryRow[]).filter((e) => e.branchId === 'br_hero_fork'),
+    ).toEqual([])
   })
 })
 

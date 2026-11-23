@@ -15,7 +15,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
-import { reseedDevDatabase } from '@/lib/db'
+import { seedHeroFork } from '@/lib/actions'
+import { db, reseedDevDatabase, runInTransaction } from '@/lib/db'
 
 type Status =
   | { phase: 'idle' }
@@ -30,6 +31,8 @@ export default function ReseedDevRoute() {
     setStatus({ phase: 'running' })
     try {
       const summary = await reseedDevDatabase()
+      // lib/db can't run the action layer, so the seed's fork (C7) runs here, as `pnpm db:seed` runs it.
+      await seedHeroFork({ db, runInTransaction })
       setStatus({ phase: 'done', ...summary })
     } catch (err) {
       setStatus({ phase: 'error', message: err instanceof Error ? err.message : String(err) })

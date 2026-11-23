@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { exportStorySeed } from './seed-export'
+import { seedHeroFork } from '../../lib/actions'
 import { createTestDb } from '../../lib/db/__tests__/test-db'
 import { buildSeedSteps, type SeedStep } from '../../lib/db/devtools/seed-dataset'
 import { DATASET_SEED_TABLES, parseStorySeed, seedAppRefs } from '../seed/dataset-story'
@@ -26,6 +27,17 @@ async function loaded(steps: readonly SeedStep[]): Promise<DatabaseSync> {
 }
 
 const seeded = () => loaded(buildSeedSteps())
+
+const HERO_FORK_ID = 'br_hero_fork'
+
+// The static steps, then the fork the seed runs on them: what `pnpm db:seed` writes.
+async function seededWithFork(): Promise<DatabaseSync> {
+  const { db, sqlite, runInTransaction } = await createTestDb()
+  await insertSeedSteps(db, buildSeedSteps())
+  await seedHeroFork({ db, runInTransaction })
+  return sqlite
+}
+
 const exported = (sqlite: DatabaseSync, story = HERO) => exportStorySeed(sqlite, story, REFS)
 
 function setProviderKey(sqlite: DatabaseSync, key: string): void {
@@ -49,37 +61,39 @@ afterEach(() => {
 
 describe('exportStorySeed', () => {
   it('writes only the story, every seeded table in insert order', async () => {
-    const seed = JSON.parse(await exported(await seeded())) as Record<string, Row[]>
+    const sqlite = await seededWithFork()
+    const seed = JSON.parse(await exported(sqlite)) as Record<string, Row[]>
     expect(Object.keys(seed)).toEqual(DATASET_SEED_TABLES.map((spec) => spec.name))
     expect(seed.stories!.map((r) => r.id)).toEqual([HERO])
-    expect(new Set(seed.branches!.map((r) => r.id))).toEqual(new Set([HERO_MAIN, 'br_hero_fork']))
-    const heroRows = (name: string) =>
+    expect(seed.branches!.map((r) => r.id)).toEqual([HERO_MAIN, HERO_FORK_ID])
+    // Main's rows are the static steps'; the fork's exist only once the seed has forked.
+    const mainRows = (name: string) =>
       buildSeedSteps()
         .filter((s) => s.name === name)
         .flatMap((s) => s.rows as Row[])
-        .filter((r) =>
-          name === 'branches' ? r.storyId === HERO : String(r.branchId).startsWith('br_hero_'),
-        )
+        .filter((r) => r.branchId === HERO_MAIN)
+    const forkRows = (name: string) =>
+      sqlite
+        .prepare(`SELECT branch_id AS branchId, id FROM "${name}" WHERE branch_id = ?`)
+        .all(HERO_FORK_ID) as Row[]
     const keys = (rows: Row[]) => rows.map((r) => `${String(r.branchId)}:${String(r.id)}`).sort()
-    for (const { name } of DATASET_SEED_TABLES.slice(1)) {
-      expect(heroRows(name).length, name).toBeGreaterThan(0)
-      expect(keys(seed[name]!), name).toEqual(keys(heroRows(name)))
+    expect(forkRows('story_entries').length).toBeGreaterThan(0)
+    for (const { name } of DATASET_SEED_TABLES.slice(2)) {
+      expect(mainRows(name).length, name).toBeGreaterThan(0)
+      expect(keys(seed[name]!), name).toEqual(keys([...mainRows(name), ...forkRows(name)]))
     }
-    const heroDeltas = buildSeedSteps()
-      .filter((s) => s.name === 'deltas')
-      .flatMap((s) => s.rows as Row[])
-      .filter((r) => r.branchId === HERO_MAIN || r.branchId === 'br_hero_fork')
     const logOrder = (rows: Row[]) =>
       rows.map((r) => `${r.branchId as string}:${r.logPosition as number}`)
-    expect(logOrder(seed.deltas!)).toEqual(
-      logOrder(
-        heroDeltas.toSorted(
-          (a, b) =>
-            String(a.branchId).localeCompare(String(b.branchId)) ||
-            (a.logPosition as number) - (b.logPosition as number),
-        ),
-      ),
+    const forkLog = sqlite
+      .prepare(
+        `SELECT branch_id AS branchId, log_position AS logPosition FROM deltas
+         WHERE branch_id = ? ORDER BY log_position`,
+      )
+      .all(HERO_FORK_ID) as Row[]
+    const mainLog = mainRows('deltas').toSorted(
+      (a, b) => (a.logPosition as number) - (b.logPosition as number),
     )
+    expect(logOrder(seed.deltas!)).toEqual(logOrder([...forkLog, ...mainLog]))
   })
 
   // A reversal re-inserts the rows it restores, so the order rows were written in is no order.
