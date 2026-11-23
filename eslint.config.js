@@ -292,7 +292,6 @@ module.exports = defineConfig([
   },
 
   // A second expo-sqlite handle beside expoDb could interleave with the native chain read.
-  // The typescript-eslint rule, not core's: only it lets type imports through.
   {
     files: ['**/*.{ts,tsx}'],
     ignores: ['lib/db/runtime/client.native.ts'],
