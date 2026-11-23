@@ -36,11 +36,37 @@ const GROUP_KINDS: ReadonlySet<ProseFieldKind> = new Set<ProseFieldKind>(['place
 const LONG_TEXT_MAX = 40
 const LONG_TEXT_LEAD = 16
 
+type FilledKey =
+  | 'history:prose.clause'
+  | 'history:prose.changed'
+  | 'history:prose.quoted'
+  | 'history:prose.added'
+  | 'history:prose.removed'
+  | 'history:prose.respelled'
+  | 'history:prose.respelledPair'
+  | 'history:prose.quantity'
+  | 'history:prose.lastSeen'
+  | 'history:prose.lastSeenNoPlace'
+  | 'history:prose.deletedName'
+
+const SLOT = /\uE000(\d+)\uE001/g
+
+// i18next fills a placeholder at the first match of its text, even inside a value it inserted, so
+// t() sees private-use slot marks and each value replaces its mark in one pass, never re-read.
+function fill(key: FilledKey, values: Readonly<Record<string, string>>, count?: number): string {
+  const names = Object.keys(values)
+  const options: Record<string, string | number> = Object.fromEntries(
+    names.map((name, i) => [name, `\uE000${i}\uE001`]),
+  )
+  if (count !== undefined) options.count = count
+  return t(key, options).replace(SLOT, (_, i: string) => values[names[Number(i)]])
+}
+
 const none = () => t('history:prose.none')
 const ellipsis = () => t('history:prose.ellipsis')
-const quoted = (text: string) => t('history:prose.quoted', { text })
+const quoted = (text: string) => fill('history:prose.quoted', { text })
 const changed = (before: string, after: string) =>
-  t('history:prose.changed', { old: before, new: after })
+  fill('history:prose.changed', { old: before, new: after })
 
 const isEmpty = (value: unknown) => value == null || value === ''
 const sameScalar = (a: unknown, b: unknown) => (isEmpty(a) && isEmpty(b)) || a === b
@@ -223,7 +249,7 @@ function listParts(
     if (change === 'added') added.push(show(term))
     else if (change === 'respelled')
       respelled.push(
-        t('history:prose.respelledPair', { old: show(was.get(key) ?? term), new: show(term) }),
+        fill('history:prose.respelledPair', { old: show(was.get(key) ?? term), new: show(term) }),
       )
   }
   const removed = [...was]
@@ -232,14 +258,12 @@ function listParts(
   const separator = t('history:prose.listSeparator')
   const parts: string[] = []
   if (added.length > 0)
-    parts.push(t('history:prose.added', { terms: added.join(separator), count: added.length }))
+    parts.push(fill('history:prose.added', { terms: added.join(separator) }, added.length))
   if (removed.length > 0)
-    parts.push(
-      t('history:prose.removed', { terms: removed.join(separator), count: removed.length }),
-    )
+    parts.push(fill('history:prose.removed', { terms: removed.join(separator) }, removed.length))
   if (respelled.length > 0)
     parts.push(
-      t('history:prose.respelled', { pairs: respelled.join(separator), count: respelled.length }),
+      fill('history:prose.respelled', { pairs: respelled.join(separator) }, respelled.length),
     )
   return parts.join(separator)
 }
@@ -274,7 +298,10 @@ function recordChange({ old, new: next }: At): Change {
     if (!isCount(was) || !isCount(now)) return null
     if ((was ?? null) === (now ?? null)) continue
     parts.push(
-      t('history:prose.quantity', { name: key, change: changed(countText(was), countText(now)) }),
+      fill('history:prose.quantity', {
+        name: key,
+        change: changed(countText(was), countText(now)),
+      }),
     )
   }
   return parts.length === 0 ? SAME : parts.join(t('history:prose.listSeparator'))
@@ -288,7 +315,7 @@ function refName(id: string, entry: DiffCacheEntry, context: ProseContext): stri
   const live = context.liveName(id)
   if (live !== null) return live
   if (!Object.hasOwn(entry.names, id)) return t('history:unknownTarget')
-  return t('history:prose.deletedName', { name: entry.names[id] })
+  return fill('history:prose.deletedName', { name: entry.names[id] })
 }
 
 function refText(id: string | null | undefined, entry: DiffCacheEntry, context: ProseContext) {
@@ -335,8 +362,8 @@ const sameSeen = (a: Seen | null, b: Seen | null) =>
 function seenText(seen: Seen | null, entry: DiffCacheEntry, context: ProseContext): string {
   if (seen === null) return none()
   const at = entryText(seen.entryId, context)
-  if (seen.locationId === null) return t('history:prose.lastSeenNoPlace', { entry: at })
-  return t('history:prose.lastSeen', {
+  if (seen.locationId === null) return fill('history:prose.lastSeenNoPlace', { entry: at })
+  return fill('history:prose.lastSeen', {
     entry: at,
     place: refName(seen.locationId, entry, context),
   })
@@ -465,7 +492,7 @@ export function diffProse(entry: DiffCacheEntry, context: ProseContext): string 
     const change = changeOf(kind, at, context)
     if (change === null) return null
     if (change !== SAME)
-      clauses.push(t('history:prose.clause', { field: labelOf(path, context), change }))
+      clauses.push(fill('history:prose.clause', { field: labelOf(path, context), change }))
   }
   return clauses.length === 0 ? null : clauses.join(t('history:prose.separator'))
 }

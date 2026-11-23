@@ -977,3 +977,35 @@ describe('diffProse — the collision group', () => {
     ).toBeNull()
   })
 })
+
+describe('diffProse — a value holding placeholder text', () => {
+  it('shows an old free text holding {{new}} as written', () => {
+    expect(
+      diffProse(entryOf({ description: 'use {{new}} here' }, { description: 'plain' }), ENTITIES),
+    ).toBe('Description: "use {{new}} here" → "plain"')
+  })
+
+  it('shows an old name holding {{new}} as written', () => {
+    expect(diffProse(entryOf({ name: 'Kael {{new}}' }, { name: 'Kael' }), ENTITIES)).toBe(
+      'Name: "Kael {{new}}" → "Kael"',
+    )
+  })
+
+  it('shows a quantity named {{change}} as written', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { stackables: { '{{change}}': 1 } } },
+          { state: { ...KAEL_STATE, stackables: { '{{change}}': 2 } } },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Quantities: {{change}} 1 → 2')
+  })
+
+  it('shows a respelled term holding {{new}} as written', () => {
+    expect(
+      diffProse(entryOf({ tags: ['{{new}} pact'] }, { tags: ['{{New}} Pact'] }), contextOf('lore')),
+    ).toBe('Tags: respelled "{{new}} pact" as "{{New}} Pact"')
+  })
+})
