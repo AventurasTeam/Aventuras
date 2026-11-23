@@ -729,7 +729,12 @@ invalidation, and, if the E2E has a survivor, its registration check.
   (`group.branchId`).
 - **Criterion 13.** Did not apply: 6.8 had not landed when this PR
   opened.
-- **Device smoke** (slot AVD, non-blocking): not run.
+- **Device smoke** (slot AVD, non-blocking): ran on `Aventuras_Slot_2`
+  with a debug x86_64 build, whose bundle carried the native read. A World
+  edit of Mira's description read as before-and-after prose in History;
+  after Undo from the reader the update row was gone, and after Redo the
+  same prose came back. Undo and Redo each evicted the branch from the
+  diff cache, checked in the running app.
 - **The term-list prose** (developer decision). It ships as
   [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose)
   reads, with no renderer change and no canon edit in this slice. Two
