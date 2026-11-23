@@ -84,6 +84,9 @@ export type ReversalOptions = {
   keepRedoExact: boolean
 }
 
+/** Where a plan writes; only a fork names a branch other than its set's. */
+export type PlanTarget = { readonly writeBranchId: string }
+
 export type ReversePlan = {
   /**
    * The undos' row writes, one `undo_payload` write per held delete they change, and the vector
@@ -135,6 +138,7 @@ async function journalDropsOf(
   ctx: DbCtx,
   heads: readonly JournalHead[],
   touched: { removed: readonly Delta[]; rewritten: readonly Delta[] },
+  writeBranchId: string,
 ): Promise<Pick<ReversePlan, 'droppedJournals' | 'journalOps'>> {
   if (heads.length === 0) return { droppedJournals: [], journalOps: [] }
   // Only a set that removes a delta of a group can empty it; the read has no action_id index.
@@ -158,49 +162,56 @@ async function journalDropsOf(
   }
   const dropped = journalsToDrop({ heads, groups, ...touched }).map((head) => head.actionId)
   if (dropped.length === 0) return { droppedJournals: [], journalOps: [] }
-  const droppedRows = () =>
-    and(eq(reversalJournals.branchId, set.branchId), inArray(reversalJournals.actionId, dropped))
+  const droppedOn = (branchId: string) =>
+    and(eq(reversalJournals.branchId, branchId), inArray(reversalJournals.actionId, dropped))
   return {
     droppedJournals: (await ctx.db
       .select()
       .from(reversalJournals)
-      .where(droppedRows())) as ReversalJournalRow[],
-    journalOps: [ctx.db.delete(reversalJournals).where(droppedRows()).toSQL()],
+      .where(droppedOn(set.branchId))) as ReversalJournalRow[],
+    journalOps: [ctx.db.delete(reversalJournals).where(droppedOn(writeBranchId)).toSQL()],
   }
 }
 
 /**
  * The reversal of a closed set, unexecuted, for a caller committing it inside its own transaction.
  * Ops and prunes stay separate: their order against the caller's ops is the caller's call. The
- * prunes leave gaps in log_position (data-model.md → Entry mutability & rollback).
+ * prunes leave gaps in log_position (data-model.md → Entry mutability & rollback). It reads the
+ * set's branch and writes `target`'s, the set's own when none is named.
  */
 export async function buildReverseAndPrunePlan(
   set: ReversalSet,
   ctx: DbCtx,
   options: ReversalOptions,
+  target?: PlanTarget,
 ): Promise<ReversePlan> {
+  const writeBranchId = target?.writeBranchId ?? set.branchId
   const heads = await journalHeadsOf(set, ctx)
-  const built = await buildUndoOps(set, ctx, options)
+  const built = await buildUndoOps(set, ctx, options, writeBranchId)
+  const loggedRow = (id: string) => and(eq(deltas.branchId, writeBranchId), eq(deltas.id, id))
   const reownOrPrune = (r: Delta): SqlOp => {
     const keptBy = built.reowned.get(r.id)
     return keptBy === undefined
-      ? ctx.db
-          .delete(deltas)
-          .where(and(eq(deltas.branchId, r.branchId), eq(deltas.id, r.id)))
-          .toSQL()
+      ? ctx.db.delete(deltas).where(loggedRow(r.id)).toSQL()
       : ctx.db
           .update(deltas)
           .set({ source: 'user_edit', entryId: null, actionId: keptBy })
-          .where(and(eq(deltas.branchId, r.branchId), eq(deltas.id, r.id)))
+          .where(loggedRow(r.id))
           .toSQL()
   }
   const logged = [...set.rows, ...built.prunedHolders, ...built.strandedWrites]
   const prunedDeltas = logged.filter((d) => !built.reowned.has(d.id))
   const reownedDeltas = logged.filter((d) => built.reowned.has(d.id))
-  const journals = await journalDropsOf(set, ctx, heads, {
-    removed: [...prunedDeltas, ...reownedDeltas],
-    rewritten: [...built.rewrittenHolders, ...built.survivorRewrites.map(({ delta }) => delta)],
-  })
+  const journals = await journalDropsOf(
+    set,
+    ctx,
+    heads,
+    {
+      removed: [...prunedDeltas, ...reownedDeltas],
+      rewritten: [...built.rewrittenHolders, ...built.survivorRewrites.map(({ delta }) => delta)],
+    },
+    writeBranchId,
+  )
   return {
     ops: built.ops,
     pruneOps: logged.map(reownOrPrune),
@@ -343,6 +354,7 @@ function rebuiltPayload(holder: Delta, copies: readonly HeldCopy[]): Record<stri
 function settleHeldCopies(
   copies: ReadonlyMap<string, HeldCopy>,
   ctx: DbCtx,
+  writeBranchId: string,
 ): {
   payloadOps: SqlOp[]
   pruned: Delta[]
@@ -372,7 +384,7 @@ function settleHeldCopies(
       ctx.db
         .update(deltas)
         .set({ undoPayload: payload })
-        .where(and(eq(deltas.branchId, holder.branchId), eq(deltas.id, holder.id)))
+        .where(and(eq(deltas.branchId, writeBranchId), eq(deltas.id, holder.id)))
         .toSQL(),
     )
   }
@@ -460,6 +472,10 @@ function keepsNothing(entry: TableEntry, row: Record<string, unknown>): boolean 
 type UndoWalk = {
   readonly ctx: DbCtx
   readonly set: ReversalSet
+  /** The set's branch: every row, chain and payload the walk reads. */
+  readonly readBranchId: string
+  /** Every op's branch: the set's own, or a fork's new branch (C1). */
+  readonly writeBranchId: string
   readonly inSet: ReadonlySet<string>
   readonly rowStates: Map<string, RowState>
   // A row a delete outside the set holds takes its undo on that delete's payload copy; a
@@ -477,12 +493,15 @@ type UndoWalk = {
   readonly survivors: Map<string, SurvivorRewrite>
 }
 
-/** A row the plan writes. */
+/** A row the plan writes on the write branch, read as the read branch holds it. */
 type RowTarget = {
   readonly ref: RowRef
+  /** The write branch, which the key, ops and patches name. */
   readonly branchId: string
   readonly entry: TableEntry
   readonly where: ReturnType<typeof whereForDelta>
+  /** The row on the read branch; only `rowStateOf` reads it. */
+  readonly readWhere: ReturnType<typeof whereForDelta>
   /** The key `UndoWalk.rowStates` holds the row under. */
   readonly key: string
 }
@@ -493,20 +512,35 @@ function rowKey(table: string, branchId: string, id: string): string {
   return `${table}:${branchId}:${id}`
 }
 
-function rowTargetOf(table: string, branchId: string, id: string): RowTarget {
+function tableEntryOf(table: string): TableEntry {
   const entry = resolveByTable(table)
   if (!entry) throw new Error(`reverse-replay: unknown target_table ${table}`)
+  return entry
+}
+
+function rowTargetOf(
+  walk: Pick<UndoWalk, 'readBranchId' | 'writeBranchId'>,
+  table: string,
+  id: string,
+): RowTarget {
+  const entry = tableEntryOf(table)
+  const { readBranchId, writeBranchId } = walk
   return {
     ref: { table, id },
-    branchId,
+    branchId: writeBranchId,
     entry,
-    where: whereForDelta(entry.descriptor, { branchId, targetId: id }),
-    key: rowKey(table, branchId, id),
+    where: whereForDelta(entry.descriptor, { branchId: writeBranchId, targetId: id }),
+    readWhere: whereForDelta(entry.descriptor, { branchId: readBranchId, targetId: id }),
+    key: rowKey(table, writeBranchId, id),
   }
 }
 
-function undoTargetOf(delta: Delta): UndoTarget {
-  return { ...rowTargetOf(delta.targetTable, delta.branchId, delta.targetId), delta }
+// From the walk, never the delta's branch: a fork reads the parent and writes the child.
+function undoTargetOf(
+  walk: Pick<UndoWalk, 'readBranchId' | 'writeBranchId'>,
+  delta: Delta,
+): UndoTarget {
+  return { ...rowTargetOf(walk, delta.targetTable, delta.targetId), delta }
 }
 
 async function rowStateOf(walk: UndoWalk, target: RowTarget): Promise<RowState> {
@@ -515,7 +549,7 @@ async function rowStateOf(walk: UndoWalk, target: RowTarget): Promise<RowState> 
   const [current] = (await walk.ctx.db
     .select()
     .from(target.entry.descriptor.table)
-    .where(target.where)) as Record<string, unknown>[]
+    .where(target.readWhere)) as Record<string, unknown>[]
   const state: RowState = {
     ref: target.ref,
     row: { ...(current ?? {}) },
@@ -612,10 +646,10 @@ async function undoCreate(
   walk.rowStates.set(target.key, { ref: target.ref, row: {}, presence: 'deleted' })
   emitDelete(walk, target)
   if (isEmbeddedSourceTable(delta.targetTable)) {
-    const sweepKey = `${delta.targetTable}:${delta.branchId}`
+    const sweepKey = `${delta.targetTable}:${target.branchId}`
     const sweep = walk.swept.get(sweepKey) ?? {
       table: delta.targetTable,
-      branchId: delta.branchId,
+      branchId: target.branchId,
       ids: [],
     }
     sweep.ids.push(delta.targetId)
@@ -776,7 +810,7 @@ export function stateWithRefCleared(state: unknown, ref: RefPath): Record<string
 
 // As World's delete of the named row leaves the row: kept, a place unplaced, a member factionless.
 async function clearRef(walk: UndoWalk, { row, ref }: RefClear): Promise<void> {
-  const target = rowTargetOf(row.table, walk.set.branchId, row.id)
+  const target = rowTargetOf(walk, row.table, row.id)
   const cleared = (column: unknown) => stateWithRefCleared(column, ref)
   const state = await rowStateOf(walk, target)
   if (state.presence === 'live') {
@@ -795,10 +829,13 @@ async function buildUndoOps(
   set: ReversalSet,
   ctx: DbCtx,
   options: ReversalOptions,
+  writeBranchId: string,
 ): Promise<BuiltUndo> {
   const walk: UndoWalk = {
     ctx,
     set,
+    readBranchId: set.branchId,
+    writeBranchId,
     inSet: new Set(set.rows.map((r) => r.id)),
     rowStates: new Map(),
     heldCopies: new Map(),
@@ -813,7 +850,7 @@ async function buildUndoOps(
   const liveLinks = await liveLinkFilter(set.rows, ctx)
 
   for (const delta of set.rows) {
-    const target = undoTargetOf(delta)
+    const target = undoTargetOf(walk, delta)
     if (delta.op === 'create') await undoCreate(walk, target, laterUserEdits(walk, delta))
     else if (delta.op === 'delete') undoDelete(walk, target, liveLinks)
     else await undoUpdate(walk, target)
@@ -822,7 +859,11 @@ async function buildUndoOps(
   for (const clear of set.refClears) await clearRef(walk, clear)
 
   // Stores hold no deleted rows, so a payload edit emits no patch.
-  const { payloadOps, pruned, rewritten, rewrittenHolders } = settleHeldCopies(walk.heldCopies, ctx)
+  const { payloadOps, pruned, rewritten, rewrittenHolders } = settleHeldCopies(
+    walk.heldCopies,
+    ctx,
+    writeBranchId,
+  )
   const strandedWrites = await strandedWritesOf(ctx, set, walk.rowStates, walk.heldCopies)
   const [stranded] = strandedWrites
   if (options.keepRedoExact && stranded)
@@ -840,7 +881,7 @@ async function buildUndoOps(
       ctx.db
         .update(deltas)
         .set({ undoPayload: payload })
-        .where(and(eq(deltas.branchId, delta.branchId), eq(deltas.id, delta.id)))
+        .where(and(eq(deltas.branchId, writeBranchId), eq(deltas.id, delta.id)))
         .toSQL(),
     )
 
@@ -889,7 +930,7 @@ export async function restoringUpdates(
   const restoring = new Set<string>()
   for (const delta of set.rows) {
     if (delta.op !== 'update') continue
-    if (writesRow(await planOwnWrite(chains, undoTargetOf(delta).entry, delta)))
+    if (writesRow(await planOwnWrite(chains, tableEntryOf(delta.targetTable), delta)))
       restoring.add(delta.id)
   }
   return restoring
