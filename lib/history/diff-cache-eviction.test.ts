@@ -50,7 +50,7 @@ async function setup() {
   await db.insert(branches).values({ id: BRANCH, storyId: 's1', name: 'm', createdAt: 1 })
   entitiesStore.hydrate(BRANCH, [])
   entriesStore.hydrate(BRANCH, [])
-  undoRedoStore.clear()
+  undoRedoStore.clear(BRANCH)
   __setDiffCacheDbForTest(db)
   return { db, runInTransaction }
 }
@@ -87,7 +87,7 @@ afterEach(() => {
   diffCache.evictBranch(BRANCH)
   __setDiffCacheDbForTest(null)
   resetAllStores()
-  undoRedoStore.clear()
+  undoRedoStore.clear(BRANCH)
 })
 
 describe('the app diff cache, as the History barrel registers it', () => {

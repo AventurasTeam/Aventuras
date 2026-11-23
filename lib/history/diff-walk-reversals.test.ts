@@ -30,7 +30,7 @@ let ctx: DbCtx
 
 beforeEach(async () => {
   resetAllStores()
-  undoRedoStore.clear()
+  undoRedoStore.clear('b1')
   t = await createTestDb()
   ctx = { db: t.db, runInTransaction: t.runInTransaction }
   await t.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -40,7 +40,7 @@ beforeEach(async () => {
 afterEach(() => {
   __resetBranchWriteLocks()
   resetAllStores()
-  undoRedoStore.clear()
+  undoRedoStore.clear('b1')
 })
 
 async function act(actionId: string, action: PipelineAction): Promise<void> {

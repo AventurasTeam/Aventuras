@@ -50,7 +50,7 @@ afterEach(() => {
   vi.restoreAllMocks()
   entitiesStore.__reset()
   entriesStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.clear('b1')
 })
 
 const STATE: CharacterState = {
@@ -84,7 +84,7 @@ async function setup(): Promise<DbCtx> {
   await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
   entitiesStore.hydrate('b1', [])
   entriesStore.hydrate('b1', [])
-  undoRedoStore.clear()
+  undoRedoStore.clear('b1')
   return { db, runInTransaction }
 }
 
@@ -298,7 +298,7 @@ describe('the commits that rewrite a log', () => {
     } finally {
       offThrowing()
     }
-    expect(entitiesStore.getById('char_kael')?.name).toBe('Kael')
+    expect(entitiesStore.getById('b1', 'char_kael')?.name).toBe('Kael')
     expect(error).toHaveBeenCalledWith('action_layer.log_rewritten_listener_failed', {
       branchId: 'b1',
       error: 'listener boom',
@@ -373,7 +373,7 @@ describe('the commits that rewrite nothing', () => {
       expect(await reverseAndPruneDeltaRows(empty, ctx, { keepRedoExact: false })).toBe(0)
       expect(await reverseReplayDeltas('act_none', ctx)).toBe(0)
       expect(await reverseReplayDeltas('act_none', ctx, settle)).toBe(0)
-      await applyRedo(__redoGroupForTest(), ctx)
+      await applyRedo(__redoGroupForTest('b1'), ctx)
     })
 
     expect(heard).toEqual([])
