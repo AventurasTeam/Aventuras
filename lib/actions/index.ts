@@ -127,6 +127,11 @@ export {
   type SetStoryLeadResult,
 } from './stories/set-lead'
 export {
+  switchBranch,
+  type SwitchBranchInput,
+  type SwitchBranchResult,
+} from './stories/switch-branch'
+export {
   saveStorySettingsSession,
   StorySettingsStaleStoreError,
   StorySettingsUnreadableError,
