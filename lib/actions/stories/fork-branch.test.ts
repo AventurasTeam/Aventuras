@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
+  BRANCH_COPY_MANIFEST,
   branches,
   dbSchema,
   ensureVecTablesSql,
@@ -14,7 +15,7 @@ import {
   type DbCtx,
   type NewEntity,
 } from '@/lib/db'
-import { branchSnapshot } from '@/lib/db/__tests__/two-branch'
+import { branchSnapshot, cloneBranch, type BranchSnapshot } from '@/lib/db/__tests__/two-branch'
 import { logger } from '@/lib/diagnostics'
 import { PER_TURN_KIND } from '@/lib/pipeline'
 import { resetSingletons } from '@/lib/pipeline/__tests__/harness'
@@ -22,7 +23,23 @@ import {
   openCloseFixture,
   type CloseFixture,
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
-import { currentStoryStore, generationStore, isBranchHeld } from '@/lib/stores'
+import {
+  chaptersStore,
+  characterRelationshipsStore,
+  currentStoryStore,
+  entitiesStore,
+  entriesStore,
+  eraFlipsStore,
+  generationStore,
+  happeningAwarenessStore,
+  happeningInvolvementsStore,
+  happeningsStore,
+  isBranchHeld,
+  loreStore,
+  threadsStore,
+  translationsStore,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import {
   FORK_REFUSAL,
@@ -35,7 +52,10 @@ import {
 } from './fork-branch'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
+import { __redoGroupForTest } from '../delta/redo'
+import { resolveByTable } from '../delta/registry'
 import { ReversalIntegrityError, type buildReverseAndPrunePlan } from '../delta/reverse-replay'
+import { getRollbackCounts, sweepToEntry } from '../story-entries/operational'
 import { writeSystemEntry } from '../story-entries/system-entry'
 import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
 import type { PipelineAction } from '../types'
@@ -54,6 +74,25 @@ vi.mock('../delta/reverse-replay', async (importOriginal) => {
   return { ...actual, buildReverseAndPrunePlan: seamed }
 })
 
+// Scripted answers for the fork's swap checks, in call order; none left reads the real state.
+const swap = vi.hoisted(() => ({
+  answers: [] as boolean[],
+  calls: [] as string[],
+  onCall: null as ((count: number) => void) | null,
+}))
+
+vi.mock('@/lib/embedder-swap', async (importOriginal) => {
+  const actual = await importOriginal<{ isStorySwapPending: (storyId: string) => boolean }>()
+  return {
+    ...actual,
+    isStorySwapPending: (storyId: string) => {
+      swap.calls.push(storyId)
+      swap.onCall?.(swap.calls.length)
+      return swap.answers.shift() ?? actual.isStorySwapPending(storyId)
+    },
+  }
+})
+
 const CHILD = 'br_fork_child'
 const AT = 1_790_000_000_000
 
@@ -62,6 +101,9 @@ let f: CloseFixture
 beforeEach(async () => {
   resetSingletons()
   planner.refusal = null
+  swap.answers = []
+  swap.calls = []
+  swap.onCall = null
   f = await openCloseFixture({ turns: 4 })
 })
 
@@ -234,6 +276,78 @@ function holdParent(): void {
   const rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, f.branchId, 'rerun')
   generationStore.abortRun(rerun.runId, 'failed', { unreversed: true })
   expect(isBranchHeld(generationStore.getTxState(), f.branchId)).toBe(true)
+}
+
+// Records each batch's label once it commits, so a test reads the commit order.
+function labelled(label: string, order: string[], waitMs = 0): DbCtx {
+  return {
+    db: f.ctx.db,
+    runInTransaction: async (ops) => {
+      if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs))
+      await f.ctx.runInTransaction(ops)
+      order.push(label)
+    },
+  }
+}
+
+// Anchored on N: landed before the fork's plan, it would survive into the child.
+const lateWrite = (): Parameters<typeof applyDeltaAction>[0] => ({
+  action: {
+    kind: 'createEntity',
+    source: 'user_edit',
+    payload: { entry: character('char_fork_late', 'Mara') },
+  },
+  actionId: 'act_fork_late',
+  branchId: f.branchId,
+  entryId: entryAt(5),
+})
+
+function withoutBranchId(snapshot: BranchSnapshot): BranchSnapshot {
+  return Object.fromEntries(
+    Object.entries(snapshot).map(([table, rows]) => [
+      table,
+      rows.map(({ branch_id: _branch, ...row }) => row),
+    ]),
+  )
+}
+
+// A plain copy of the parent rolled back to B by the shipped rollback: what a fork at N equals.
+async function rolledBackReference(referenceId: string): Promise<BranchSnapshot> {
+  cloneBranch(f.sqlite, f.branchId, referenceId)
+  const counts = await getRollbackCounts(referenceId, entryAt(6), f.ctx)
+  if ('status' in counts) throw new Error(`reference counts refused: ${counts.reason}`)
+  const swept = await sweepToEntry(referenceId, entryAt(6), f.ctx, counts)
+  if (swept.status !== 'ok') throw new Error(`reference rollback refused: ${swept.reason}`)
+  return withoutBranchId(branchSnapshot(f.sqlite, referenceId))
+}
+
+const storeRows = (branchId: string) => ({
+  entries: entriesStore.getEntries(branchId),
+  entities: entitiesStore.getEntities(branchId),
+  lore: loreStore.getLore(branchId),
+  threads: threadsStore.getThreads(branchId),
+  happenings: happeningsStore.getHappenings(branchId),
+  involvements: happeningInvolvementsStore.getInvolvements(branchId),
+  awareness: happeningAwarenessStore.getAwareness(branchId),
+  relationships: characterRelationshipsStore.getRelationshipRows(branchId),
+  chapters: chaptersStore.getChapters(branchId),
+  eraFlips: eraFlipsStore.getEraFlips(branchId),
+  translations: translationsStore.getTranslations(branchId),
+})
+
+// Wraps every registered patcher; the next beforeEach's fixture registers fresh ones.
+function recordPatchers(): string[] {
+  const calls: string[] = []
+  for (const table of Object.keys(BRANCH_COPY_MANIFEST)) {
+    const entry = resolveByTable(table)
+    const patcher = entry?.patcher
+    if (!entry || !patcher) continue
+    entry.patcher = (branchId, patch) => {
+      calls.push(`${table}:${branchId}`)
+      patcher(branchId, patch)
+    }
+  }
+  return calls
 }
 
 describe('forkBranchCore', () => {
@@ -530,5 +644,118 @@ describe('forkBranchCore refusals (AC 4)', () => {
       'action_layer.reversal_refused',
       expect.objectContaining({ branchId: f.branchId, refusal: 'write-back' }),
     )
+  })
+})
+
+describe('forkBranchCore and the branch write lock (AC 8)', () => {
+  it('holds a write dispatched during the fork until its commit; the write lands on the parent only', async () => {
+    const order: string[] = []
+    const fork = forkBranchCore(input(), labelled('fork', order))
+    const write = applyDeltaAction(lateWrite(), labelled('write', order))
+
+    const [forked, written] = await Promise.all([fork, write])
+
+    expect(forked).toEqual(ok(CHILD))
+    expect(written.status).toBe('ok')
+    expect(order).toEqual(['fork', 'write'])
+    expect(entityIdsOf(f.branchId)).toEqual(['char_fork_late'])
+    expect(entityIdsOf(CHILD)).toEqual([])
+    expect(actionIdsOf(CHILD)).not.toContain('act_fork_late')
+  })
+
+  it('runs two forks of one parent one after the other, each child the rolled-back copy', async () => {
+    const reference = await rolledBackReference('br_fork_ref')
+    const order: string[] = []
+    // b's batch waits inside its hold: had a's release freed it, the queued write lands first.
+    const forks = Promise.all([
+      forkBranchCore(input({ newBranchId: 'br_fork_a' }), labelled('a', order)),
+      forkBranchCore(input({ newBranchId: 'br_fork_b' }), labelled('b', order, 30)),
+    ])
+    const write = applyDeltaAction(lateWrite(), labelled('write', order))
+
+    const [results, written] = await Promise.all([forks, write])
+
+    expect(results).toEqual([ok('br_fork_a'), ok('br_fork_b')])
+    expect(written.status).toBe('ok')
+    expect(order).toEqual(['a', 'b', 'write'])
+    expect(withoutBranchId(branchSnapshot(f.sqlite, 'br_fork_a'))).toEqual(reference)
+    expect(withoutBranchId(branchSnapshot(f.sqlite, 'br_fork_b'))).toEqual(reference)
+  })
+})
+
+describe('forkBranchCore and a swap admitted mid-fork', () => {
+  it('refuses when a swap is admitted between its first check and its batch, writing nothing', async () => {
+    swap.answers = [false, true]
+
+    await expectRefused(FORK_REFUSAL.swapPending, () => forkBranchCore(input(), f.ctx))
+
+    expect(swap.calls).toEqual([f.storyId, f.storyId])
+  })
+
+  it('re-checks in the same synchronous step that starts the batch', async () => {
+    let microtaskRan = false
+    const seen: { checks: number; microtaskRan: boolean }[] = []
+    swap.answers = [false, false]
+    swap.onCall = (count) => {
+      if (count === 2)
+        queueMicrotask(() => {
+          microtaskRan = true
+        })
+    }
+    const ctx: DbCtx = {
+      db: f.ctx.db,
+      runInTransaction: (ops) => {
+        seen.push({ checks: swap.calls.length, microtaskRan })
+        return f.ctx.runInTransaction(ops)
+      },
+    }
+
+    expect(await forkBranchCore(input(), ctx)).toEqual(ok(CHILD))
+
+    expect(seen).toEqual([{ checks: 2, microtaskRan: false }])
+  })
+})
+
+describe('forkBranchCore leaves the loaded parent alone (AC 9)', () => {
+  it("changes no store row, runs no patcher and keeps the parent's redo top", async () => {
+    await land('act_fork_pass', entryAt(3), {
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: { entry: character('char_fork_tobin', 'Tobin') },
+    })
+    await land('act_fork_pass_late', entryAt(7), {
+      kind: 'updateEntity',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: f.branchId,
+        id: 'char_fork_tobin',
+        patch: { description: 'The ferryman, drinking since noon.' },
+      },
+    })
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(f.branchId))
+    const redoTop = undoRedoStore.peekRedoGroup(f.branchId)
+    const before = storeRows(f.branchId)
+    expect(before.entries.size).toBe(9)
+    expect(before.entities.get('char_fork_tobin')?.description).toBe(
+      'The ferryman, drinking since noon.',
+    )
+    const patched = recordPatchers()
+
+    expect(await forkBranchCore(input(), f.ctx)).toEqual(ok(CHILD))
+
+    const after = storeRows(f.branchId)
+    for (const key of Object.keys(before) as (keyof typeof before)[])
+      expect(after[key]).toBe(before[key])
+    expect(patched).toEqual([])
+    expect(undoRedoStore.peekRedoGroup(f.branchId)).toBe(redoTop)
+
+    // The recorders are live: a parent write after the fork shows in both.
+    await land('act_fork_user_after', null, {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: { branchId: f.branchId, id: 'char_fork_tobin', patch: { description: 'Tobin.' } },
+    })
+    expect(patched).toContain(`entities:${f.branchId}`)
+    expect(storeRows(f.branchId).entities).not.toBe(before.entities)
   })
 })
