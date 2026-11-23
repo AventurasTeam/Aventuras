@@ -232,9 +232,7 @@ async function undoRerun(
       { keepRedoExact: false },
       [...invalidation.clampOps, ...ops],
       undefined,
-      writeBack.outcome === 'restored'
-        ? { patchesAfter: writeBack.patches, writesBack: writeBack.ops.length > 0 }
-        : undefined,
+      writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
     )
   } catch (e) {
     // Committed: only the store sync failed, so the re-run is undone all the same, and the error

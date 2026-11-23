@@ -912,7 +912,10 @@ export type ReverseCommitHooks = {
   opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
   /** Emitted after the plan's patches, under the same store-sync stage. */
   patchesAfter?: readonly PatchEmission[]
-  /** The extra ops write a re-run's journal back, rewriting the log even when the set is empty. */
+  /**
+   * The commit writes a re-run's journal back, which can restore deltas the re-run's reversal
+   * took, so the log changes even when the set is empty.
+   */
   writesBack?: boolean
 }
 

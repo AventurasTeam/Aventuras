@@ -529,7 +529,7 @@ export async function reverseRunGroup(
       [...ops, ...settle],
       undefined,
       writeBack.outcome === 'restored'
-        ? { patchesAfter: writeBack.patches, writesBack: writeBack.ops.length > 0 }
+        ? { patchesAfter: writeBack.patches, writesBack: true }
         : undefined,
     )
   } catch (e) {
