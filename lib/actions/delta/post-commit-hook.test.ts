@@ -9,6 +9,7 @@ import {
   entities,
   reversalJournals,
   stories,
+  storyEntries,
   type CharacterState,
   type Delta,
   type NewEntity,
@@ -20,7 +21,7 @@ import { entitiesStore, entriesStore, undoRedoStore } from '@/lib/stores'
 import { applyDeltaAction } from './apply-delta-action'
 import { logRewritten, onLogRewritten } from './post-commit-hook'
 import { __redoGroupForTest, applyRedo } from './redo'
-import { reverseCloseForRerun } from './rerun-journal'
+import { reverseCloseForRerun, reverseRunGroup } from './rerun-journal'
 import { DeltaReplayError, reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
 import { selectReversalSet } from './row-closure'
 import {
@@ -31,6 +32,7 @@ import {
   writeCloseWork,
   writeUnderClose,
 } from '../chapters/__tests__/chapter-delete-fixture'
+import { updateStoryEntryContent } from '../story-entries/operational'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 import type { DbCtx, DeltaSource, PipelineAction } from '../types'
 
@@ -377,10 +379,70 @@ describe('the commits that rewrite nothing', () => {
     expect(heard).toEqual([])
     expect(await ctx.db.select().from(stories).where(eq(stories.id, 's-settle'))).toEqual([])
   })
+
+  // A forward write commits through reverseAndPruneDeltaRows too, with nothing to reverse.
+  it('hears nothing on a content edit that sweeps nothing', async () => {
+    const ctx = await setup()
+    const reply = {
+      id: 'e_reply',
+      branchId: 'b1',
+      position: 1,
+      kind: 'ai_reply' as const,
+      content: 'the courier rode north',
+      contentTokens: null,
+      chapterId: null,
+      metadata: null,
+      createdAt: 1,
+    }
+    await ctx.db.insert(storyEntries).values(reply)
+    entriesStore.hydrate('b1', [reply])
+
+    const { heard, settled } = await heardDuring(() =>
+      updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx),
+    )
+
+    expect(settled).toEqual({ status: 'fulfilled', value: { status: 'ok' } })
+    expect(heard).toEqual([])
+    const [row] = await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, 'e_reply'))
+    expect(row?.content).toBe('the courier turned back')
+    expect((await ctx.db.select().from(deltas)).map((d) => d.targetId)).toEqual(['e_reply'])
+  })
 })
 
 describe("a re-run's undo", () => {
   installChapterDeleteHooks(generateStructuredMock)
+
+  it('hears nothing as a re-run that reversed nothing writes its journal', async () => {
+    const c = await openClosed()
+    const { branchId, ctx } = c.fx
+
+    const { heard, settled } = await heardDuring(() =>
+      reverseCloseForRerun({ branchId, chapterId: c.chapter.id, actionId: 'act_rerun' }, ctx),
+    )
+
+    expect(settled.status).toBe('fulfilled')
+    expect(heard).toEqual([])
+    expect(await ctx.db.select({ id: reversalJournals.actionId }).from(reversalJournals)).toEqual([
+      { id: 'act_rerun' },
+    ])
+  })
+
+  it('hears the branch once as an aborted re-run that wrote nothing writes its journal back', async () => {
+    const c = await openClosed()
+    await writeCloseWork(c)
+    const { branchId, ctx } = c.fx
+    await reverseCloseForRerun({ branchId, chapterId: c.chapter.id, actionId: 'act_rerun' }, ctx)
+    expect((await worldRows(c.fx)).lore).toEqual([])
+
+    const { heard, settled } = await heardDuring(() =>
+      reverseRunGroup({ actionId: 'act_rerun', branchId }, ctx),
+    )
+
+    expect(settled).toEqual({ status: 'fulfilled', value: { deltas: 0, journal: 'restored' } })
+    expect(heard).toEqual([branchId])
+    expect((await worldRows(c.fx)).lore.map((row) => row.id)).toEqual([CLOSE_LORE_ID])
+    expect(await ctx.db.select().from(reversalJournals)).toEqual([])
+  })
 
   it('hears the branch once as it writes the journal back', async () => {
     const c = await openClosed()

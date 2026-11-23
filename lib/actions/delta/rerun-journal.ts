@@ -528,7 +528,9 @@ export async function reverseRunGroup(
       { keepRedoExact: false },
       [...ops, ...settle],
       undefined,
-      writeBack.outcome === 'restored' ? { patchesAfter: writeBack.patches } : undefined,
+      writeBack.outcome === 'restored'
+        ? { patchesAfter: writeBack.patches, writesBack: writeBack.ops.length > 0 }
+        : undefined,
     )
   } catch (e) {
     if (!(e instanceof DeltaReplayError && e.committed)) throw e

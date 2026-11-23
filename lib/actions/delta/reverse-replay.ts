@@ -912,6 +912,8 @@ export type ReverseCommitHooks = {
   opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
   /** Emitted after the plan's patches, under the same store-sync stage. */
   patchesAfter?: readonly PatchEmission[]
+  /** The extra ops write a re-run's journal back, rewriting the log even when the set is empty. */
+  writesBack?: boolean
 }
 
 export async function reverseAndPruneDeltaRows(
@@ -923,7 +925,7 @@ export async function reverseAndPruneDeltaRows(
   onPlan: (plan: ReversePlan) => void = () => {},
   hooks: ReverseCommitHooks = {},
 ): Promise<number> {
-  const { opsFromPlan, patchesAfter } = hooks
+  const { opsFromPlan, patchesAfter, writesBack = false } = hooks
   // A hook still commits on an empty set: a re-run that reversed nothing journals all the same.
   if (
     set.rows.length === 0 &&
@@ -943,9 +945,15 @@ export async function reverseAndPruneDeltaRows(
       // Canon writes a journal before the plan's ops; a write-back's extraOps re-insert deltas at
       // positions the prunes free, so they stay last.
       const leading = opsFromPlan ? await opsFromPlan(plan) : []
-      const committed = [...leading, ...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...extraOps]
-      await ctx.runInTransaction(committed)
-      if (committed.length > 0) logRewritten(set.branchId)
+      await ctx.runInTransaction([
+        ...leading,
+        ...plan.ops,
+        ...plan.pruneOps,
+        ...plan.journalOps,
+        ...extraOps,
+      ])
+      // A forward write or a journal alone commits here too, and rewrites no earlier delta.
+      if (set.rows.length > 0 || writesBack) logRewritten(set.branchId)
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
