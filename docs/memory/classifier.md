@@ -1117,8 +1117,10 @@ re-read of an unbounded suffix whose facts survive
 ([`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)).
 At
 fork from entry `N`, the new branch sets
-`processedThrough = min(parent.processedThrough, position(N))` and resets
-the rest of the status to idle.
+`processedThrough = min(parent.processedThrough, position(N))`, null
+when the parent's is null, and resets the rest of the status: `state`
+idle, `lastSuccessAt` and `lastError` null
+([`data-model.md → Branch model`](../data-model.md#branch-model)).
 
 The panel sits in the same Memory tab as the embedder controls
 (see

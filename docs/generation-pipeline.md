@@ -2012,11 +2012,15 @@ domain rows and deltas) verbatim without rewriting JSON-embedded
 reverse-replay (`undoDelete`, captured children) and journal write-back
 always overwrite `branch_id` with the target/executing branch on every
 re-inserted row and delta, and scope every `deltas` `UPDATE` / `DELETE`
-by `(branch_id, id)`. Branch fork reuses the same planner (`planReversal`
-parameterized with `targetBranchId: newBranchId`) to plan on the frozen
-parent and execute on the new branch inside one atomic transaction,
-omitting delta/journal deletes and vector sweeps that the fork's
-pre-filtered copy and post-rewind vector copy handle directly.
+by `(branch_id, id)`. Branch fork reuses the same planner
+(`buildReverseAndPrunePlan`, given a `PlanTarget` whose `writeBranchId`
+is the new branch) to plan on the frozen parent and execute on the new
+branch inside one atomic transaction. Every read stays on the parent
+and every op the plan emits names the new branch, the stamp and key of
+each restored row included; a reversal that names no target reads and
+writes its own branch. The fork omits the delta and journal deletes and
+the vector sweeps, which its pre-filtered copy and post-rewind vector
+copy handle directly.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook

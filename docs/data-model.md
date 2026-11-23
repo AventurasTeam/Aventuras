@@ -469,15 +469,27 @@ non-system entry `N` produces the exact state, delta log, and journal
 set of **snapshotting `parent` (minus `probe_captures`, `pipeline_runs`
 and any `kind='system'` tail entry) and rolling back to `N`**, leaving `parent`
 and its in-memory redo stack untouched; the new branch starts with an
-empty one.
+empty one. Nor does it take `parent`'s other in-memory records,
+`generationStore`'s `deferred` work and `pendingClose` pick
+([`generation-pipeline.md → Multi-run txState`](./generation-pipeline.md#multi-run-txstate)):
+its cadence re-derives from its own `processedThrough`, and a manual
+close picked on `parent` stays `parent`'s.
 
-**Pre-conditions (refused before any write):** generation on `parent` is
-idle
+**Pre-conditions (refused before any write):** the generation gate is
+open
 ([`branch-navigator.md → During generation`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#during-generation--switch--delete--create-blocked)),
-no embedder swap is pending on the story, and `N` exists on
-`parent` with `N.kind !== 'system'` (UI exposes fork on `opening` and
-`ai_reply`). An unfinished run refuses once the plan exists (step 1).
-Fork runs under `parent`'s exclusive branch write lock.
+read with no branch
+([`generation-pipeline.md → Gate derivation as a selector`](./generation-pipeline.md#gate-derivation-as-a-selector)):
+no hard-gate run on any story, no pending turn and no reversal in
+progress. `parent`'s own hold in `heldBranches` doesn't refuse: step 1
+judges a held branch by its run row, so a fork from before the run's
+writes goes ahead. No embedder swap is pending on the story, and `N`
+exists on `parent` with `N.kind !== 'system'`. Any other kind is a
+fork point, a `user_action` included; the UI exposes fork on `opening`
+and `ai_reply`. An unfinished run refuses once the plan exists
+(step 1). Fork runs under `parent`'s exclusive branch write lock, held
+from before its first plan read until its commit, and reads its
+refusals once the lock is granted.
 
 **Single-transaction execution (plan-on-parent, execute-on-child).**
 Let `B` be the earliest non-system entry on `parent` with
@@ -486,7 +498,8 @@ Let `B` be the earliest non-system entry on `parent` with
 
 1. **Plan (read-only on frozen `parent`).** If `B` exists, run
    rollback's shared sweep and reversal planner (`resolveSweep` →
-   `planReversal`, scoped to emit ops for `newBranchId`) over the single
+   `buildReverseAndPrunePlan`, given a `PlanTarget` whose
+   `writeBranchId` is `newBranchId`) over the single
    source-blind
    [survival-anchor predicate](#survival-anchor)
    `log_position >= L AND (entry_id IS NULL OR position(entry_id) >= position(B))`
@@ -495,8 +508,11 @@ Let `B` be the earliest non-system entry on `parent` with
    Any post-`L` delta anchored on a kept entry `≤ N` — `user_edit`
    (prose or metadata), `periodic_classifier`, `chapter_close`, or
    `translation` — survives with its delta unless the closure pulls it
-   in. A `ReversalIntegrityError` aborts before any SQL runs. When `B`
-   does not exist, the plan is empty.
+   in. Every read the plan makes stays on `parent`, and every op it
+   emits names `newBranchId`, the ones step 2 omits included, so no op
+   of a fork's plan can write `parent`; a rollback names no target and
+   reads and writes one branch. A `ReversalIntegrityError` aborts
+   before any SQL runs. When `B` does not exist, the plan is empty.
 
    **An unfinished run refuses the fork.** `pipeline_runs` doesn't
    copy, so a run's writes carried into the child would have no marker
@@ -526,6 +542,9 @@ Let `B` be the earliest non-system entry on `parent` with
    - Insert the `branches` row (`parent_branch_id = parent`,
      `fork_entry_id = N`, idle `classifier_status` with clamped
      `processedThrough` below).
+   - When the caller makes the new branch current, point
+     `stories.current_branch_id` at `newBranchId`, so the branch and
+     the pointer commit together.
    - Copy domain tables per the manifest below (excluding
      `kind='system'` entries, `probe_captures` and `pipeline_runs`).
    - Copy only **surviving** `deltas` (all rows when `B` does not exist;
@@ -543,15 +562,36 @@ Let `B` be the earliest non-system entry on `parent` with
      are never written or scanned, and rows whose embedded fields
      changed already carry `embedding_stale = 1` from the rewind step.
 
+   The lock holds off every delta-logged write and every reversal, but
+   not an embedder swap's staging or relabel, which list the story's
+   branches without it. So the fork reads the pending swap again just
+   before it posts the batch, with no await between that read and the
+   post, and refuses if a swap was admitted since its first read. A
+   swap admitted after the post reads the story's branches once the
+   batch has committed, the new branch among them. No reversal barrier
+   is raised.
+
 **`reversal_journals` across fork.** Sharing rollback's sweep planner
 gives journals four exact cases:
 
-| Fork case (`B` = first non-system entry `> N`, `L = create_lp(B)`)                                                          | Re-run group (`anchor = E`, first `lp = P_first`) | Journal on fork                                                                                  |
-| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 1. `N` is narrative tail (no `B`)                                                                                           | Spared                                            | **Copied**                                                                                       |
-| 2. Chapter ends after `N` (`position(E) > position(N)`)                                                                     | Swept                                             | **Dropped**                                                                                      |
-| 3. Chapter ends `≤ N`, re-run committed before `B` (`P_first < L`)                                                          | Spared; sweep starts above `P_first`              | **Copied** (any foreign spared delta above `P_first` is caught by the standard write-back check) |
-| 4. Chapter ends `≤ N`, re-run committed after `B` (`P_first ≥ L`, e.g. manual close + re-run while open-region turns stood) | Spared; sweep runs from below `P_first`           | **Dropped** (rewinding `B..head` changed state under what the journal snapshotted)               |
+| Fork case (`B` = first non-system entry `> N`, `L = create_lp(B)`)                                                        | Re-run group (`anchor = E`, journal `floor`)  | Journal on fork                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1. `N` is narrative tail (no `B`)                                                                                         | Spared                                        | **Copied**                                                                                       |
+| 2. Chapter ends after `N` (`position(E) > position(N)`)                                                                   | Swept                                         | **Dropped**                                                                                      |
+| 3. Chapter ends `≤ N`, re-run committed before `B` (`floor < L`)                                                          | Spared; sweep starts above the floor          | **Copied** (any foreign spared delta above the floor is caught by the standard write-back check) |
+| 4. Chapter ends `≤ N`, re-run committed after `B` (`L ≤ floor`, e.g. manual close + re-run while open-region turns stood) | Spared; sweep runs from at or below the floor | **Dropped** (rewinding `B..head` changed state under what the journal snapshotted)               |
+
+The floor is the highest `log_position` the re-run's reversal left on
+the branch; under the gate its own writes start at the floor plus one,
+so `floor < L` holds exactly when the re-run committed before `B`. The
+cases are the common shapes of the drop rule every sweep shares
+([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)),
+which decides. A case-3 fork drops the journal too when its plan
+removes one of the re-run's own deltas outside `chapters` and
+`story_entries`, removes or rewrites a delta at or below the floor
+other than the chapter row's and the close's stamps (one the closure
+reaches, a held delete's payload, a survivor's prior value), or
+removes the group's last delta.
 
 **Branch-copy manifest.** Every branch-scoped table behaves the same
 way at fork unless flagged otherwise. The Duplicate column is a
@@ -587,9 +627,11 @@ behavior. New branch-scoped table without a manifest row is a bug.
 column, not a branch-scoped table. The new branch initializes
 `processedThrough = min(parent.processedThrough, position(N))` (it cannot
 have processed turns it does not contain, and surviving deltas already
-carry facts about kept entries up to that point); the rest of the status
-resets to idle, so a fresh branch does not inherit a parent's failed
-pass. See [classifier.md → Persistence](./memory/classifier.md#persistence).
+carry facts about kept entries up to that point), and a `parent` that
+never processed (a null watermark) gives null. The rest of the status
+resets, written whole: `state` idle, `lastSuccessAt` and `lastError`
+null, so a fresh branch inherits neither a parent's failed pass nor its
+last success. See [classifier.md → Persistence](./memory/classifier.md#persistence).
 
 Reads on the new branch are always fast because state is pre-materialized
 — no lineage walk, no copy-on-write. Branch creation cost is linear in
