@@ -14,7 +14,10 @@ export function onLogRewritten(listener: LogRewrittenListener): () => void {
   }
 }
 
-/** Fired by the three commit tails; not on the barrel. Never throws. */
+/**
+ * Fired after each commit that rewrites a branch's log; not on the barrel. A listener's throw is
+ * logged, not rethrown.
+ */
 export function logRewritten(branchId: string): void {
   for (const { listener } of [...registrations]) {
     try {

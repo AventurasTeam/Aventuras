@@ -214,7 +214,7 @@ describe('onLogRewritten', () => {
     expect(listener.mock.calls).toEqual([['b0'], ['b0'], ['b1']])
   })
 
-  it('logs a throwing listener, calls the rest and never throws', () => {
+  it('logs a throwing listener, calls the rest and does not rethrow', () => {
     const error = vi.spyOn(logger, 'error')
     const later = vi.fn()
     const offThrowing = onLogRewritten(() => {
