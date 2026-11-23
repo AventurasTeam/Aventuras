@@ -644,5 +644,86 @@ invalidation, and, if the E2E has a survivor, its registration check.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+- **The read.** `readChainSnapshot`, a function beside `DbCtx` in
+  `lib/db`, reads the chain and the row in one call: a `db:batch` IPC
+  channel whose Electron main handler runs every query in one
+  synchronous call on its one connection, two synchronous drizzle reads
+  on native, and a batch callback on the test database (developer
+  decision). Criterion 3's native half was confirmed by reading the
+  source, not by a probe: drizzle-orm 0.45.2's expo-sqlite session is
+  synchronous, native `runInTransaction` is expo-sqlite 55's
+  `withTransactionSync`, and no app code calls an async expo-sqlite API.
+  ESLint now holds that (developer decision): it bans `*Async` members of
+  `expoDb` and value imports of `expo-sqlite` outside the native client.
+  The Drizzle Studio dev plugin is the one exception: it calls the async
+  API on the app's connection, and is a no-op when `NODE_ENV` is
+  `production`.
+- **The read's tests.** The native read also has a unit test,
+  `lib/db/runtime/chain-snapshot.native.test.ts`, running drizzle's
+  expo-sqlite driver over a small `node:sqlite` sync adapter: it covers
+  mapping and order, not atomicity. The chain query's
+  `EXPLAIN QUERY PLAN` names `deltas_chain_idx`, so the fallback of
+  sorting in JS didn't fire; the chain read test turns on
+  `PRAGMA reverse_unordered_selects`, so a dropped `ORDER BY` fails.
+- **The vocabulary** was designed in canon before planning resumed
+  (developer decision):
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose).
+- **Ref names** (developer decision). The walk reads the names of its
+  entries' refs, stored row then latest delete payload, and records them
+  on the entry; the `(deleted)` mark is computed when the row renders.
+- **The collision group** (developer decision). The walk fills it: when a
+  delta's undo payload holds any of `nameCollisionFlag`,
+  `nameCollisionPartnerId` or `nameCollisionReason`, the entry's `new`
+  holds all three, picked from the walk's state at that step, as `new`
+  already holds the whole column for the placement group. The renderer
+  stays as planned, and `world.md`'s column-group rule holds literally.
+  The developer's words: "(a)" and "Q4: a". Pinned in
+  `lib/history/diff-walk.test.ts` (a merge re-point, a clear by merge
+  and a raise, through the real walk) and in
+  `lib/history/diff-prose-walk.test.ts` (the walk's output rendering
+  `Collision flag: Kael (deleted) → Kael`).
+- **The survivor E2E** (developer decision, built differently). The
+  planned flow, one turn whose pass writes the edited field, leaves no
+  survivor: the pass reads only that turn, so its write is anchored on
+  it, and the turn's CTRL-Z sweeps it. The spec instead parks the
+  classifier watermark so the pass's window opens on the reply before
+  the last turn. After the World edit it rewords that reply from the
+  reader: an edit below the head turn, which records no invalidation
+  scope but moves the reply's prose position past the World edit. It
+  then takes one turn whose pass writes The City Watch's standing with
+  that reply as its source. CTRL-Z of the turn, of the rewording and of
+  the World edit leaves the pass's write standing with its prior
+  rewritten, and Redo puts it back. The spec re-selects World's row
+  after each return from the reader: GO TO Reader dismisses World
+  (`hooks/use-surface-navigate.ts`), so World comes back with nothing
+  selected.
+- **Criterion 12's** two-branch database test lives in
+  `lib/history/diff-walk-reversals.test.ts`, not `diff-walk.test.ts`.
+- **Deviations from the brief.**
+  - `populate` resolves a typed `DiffOutcome`, whose `gone` is no
+    failure, in place of canon's `Promise<DiffCacheEntry>`.
+  - A walk its branch's eviction overtook rejects its callers with
+    `DiffEvictedError`. TanStack joins an invalidation's refetch onto a
+    first fetch that has no data yet instead of cancelling it, so the
+    History host's query function populates again on that error.
+  - History's diff queries set `gcTime: 0`, so the diff cache alone
+    retains entries and a tab remounted after an eviction it didn't hear
+    reads again.
+  - Batching N rows into M walks lives inside `populate`, a batch per
+    tick, so each row's query calls `populate` alone.
+  - The warn's subsystem is a new `history` member of `LogSubsystem`.
+  - Writes with no delta are accepted, and canon's Walk algorithm says
+    so.
+  - The post-commit hook fires only on a commit that rewrites the log
+    (a review ruling): `reverseAndPruneDeltaRows` when its set holds
+    rows or its caller flags a journal write-back, `reverseReplayGroup`
+    when its set holds rows, a redo when its commit is non-empty. A
+    forward write routed through the reversal path with an empty set
+    evicts nothing. This replaces the plan's op-count guard.
+- **C5.** 6.2 had landed; the host's ref names go through
+  `useStoreNames`, which reads its branch accessor. It was merged in,
+  not rebased onto, and the redo hook's branch reads the redo group's
+  (`group.branchId`).
+- **Criterion 13.** Did not apply: 6.8 had not landed when this PR
+  opened.
+- **Device smoke** (slot AVD, non-blocking): not run.

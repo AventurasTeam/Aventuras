@@ -149,6 +149,7 @@ type LogSubsystem =
   | 'calendar'
   | 'app'
   | 'reader'
+  | 'history'
 
 type LogKind = `${LogSubsystem}.${string}`
 ```
@@ -209,6 +210,11 @@ convention, and the expectation that subsystems route through
   `missing`, no journal and no chapter row were left, so the group
   reversed alone, no close was undone, and the user sees no close-undone
   line),
+  `log_rewritten_listener_failed` (error,
+  `lib/actions/delta/post-commit-hook.ts`: a listener of the post-commit
+  hook threw after a reversal, a redo or a journal write-back committed,
+  with `branchId` and `error`; the other listeners, the store sync and
+  the caller's result go on),
   `story_settings_repaired` (the corrupt-blob repair: carries the failing
   key paths, since the blob it describes is overwritten in the same call),
   `thread_save_rejected` / `happening_save_rejected` / `entity_save_rejected` /
@@ -334,6 +340,14 @@ convention, and the expectation that subsystems route through
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or
   renders empty, which silently drops every world-time footer in the
   window), `pad_width_invalid`
+- `history.*` — the diff cache (`lib/history/diff-cache.ts`):
+  `diff_walk_failed` (warn: a walk rejected, on a DB error or a target
+  with no row, no head delete and no held copy, logged once for each
+  delta it was asked for, with `branchId`, `deltaId` and `reason`; the
+  row keeps its field-name summary, and the failure is remembered until
+  its branch's next eviction) and `evict_listener_failed` (error: an
+  eviction listener threw, with `branchId` and `error`; the other
+  listeners still run)
 - `app.*` — cross-cutting runtime events not owned by a single
   subsystem. The global rejection handler's backstop
   (`lib/boot/rejection-handler.ts`) emits four kinds, all always
