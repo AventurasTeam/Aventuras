@@ -45,8 +45,8 @@ function otherEndIds(rows: readonly HistoryRow[]): string[] {
   return [...new Set(rows.flatMap((row) => (row.via.kind === 'own' ? [] : [row.via.otherId])))]
 }
 
-// Working-set names for the rows' other ends. Selectors return a string, so a patch to any
-// other row leaves the tab alone.
+// Working-set names for the given ids (other ends, prose refs). Selectors return a string, so a
+// patch to any other row leaves the tab alone.
 function useStoreNames(branchId: string, ids: readonly string[]): ReadonlyMap<string, string> {
   const entityNames = entitiesStore.useEntities(branchId, (m) =>
     JSON.stringify(ids.map((id) => m.get(id)?.name ?? null)),
