@@ -497,6 +497,23 @@ describe('diffProse — term lists', () => {
     ).toBe('Traits: added "the oath sworn beneath the broken keep…"')
   })
 
+  it('shows whole a term that collapses to 40 characters, though longer as stored', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['brave'] } },
+          {
+            state: {
+              ...KAEL_STATE,
+              traits: ['brave', 'an  unbroken  oath  sworn  beneath  the  keeps'],
+            },
+          },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: added "an unbroken oath sworn beneath the keeps"')
+  })
+
   it('cuts a 50-character term with no space at the 40th character', () => {
     expect(
       diffProse(
