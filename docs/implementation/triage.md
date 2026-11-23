@@ -296,7 +296,8 @@ slice-planning gate forces its resolution before that slice is planned.
   an open transaction; its catch then runs `ROLLBACK` (expo-sqlite's
   `SQLiteDatabase.ts:298-307`), ending the reseed's transaction under
   it. The native read's ESLint guard bans async expo-sqlite calls, not
-  this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's reviews (2026-11-23).
+  this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's
+  reviews (2026-11-23).
 
 - **Term-list change prose can show two identical sides, and exact
   lists let spacing and Unicode form split a term.** Two halves.
