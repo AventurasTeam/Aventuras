@@ -38,8 +38,6 @@ const DUPLICATE_TABLES: readonly BranchCopyTableName[] = [
   'reversal_journals',
 ]
 
-const FORK_FILTERED = ['story_entries', 'deltas', 'reversal_journals'] as const
-
 // Only the spacing and newline catch a JSON re-serialization, which keeps key order and non-ASCII.
 const RAW_JSON = '{ "zeta" :  "ž – 日本",\n  "alpha": [2, 1] }'
 
@@ -78,6 +76,14 @@ function rowsOf(sqlite: DatabaseSync, table: string, branchId: string): Record<s
 
 function idsOf(sqlite: DatabaseSync, query: string, ...params: SQLInputValue[]): string[] {
   return (sqlite.prepare(query).all(...params) as { id: string }[]).map(({ id }) => id)
+}
+
+function entryIds(branchId: string): string[] {
+  return idsOf(
+    t.sqlite,
+    'SELECT id FROM story_entries WHERE branch_id = ? ORDER BY position',
+    branchId,
+  )
 }
 
 function countOn(sqlite: DatabaseSync, table: string, branchId: string): number {
@@ -154,35 +160,44 @@ describe('branchCopyOps', () => {
     })
   })
 
-  it("leaves a fork's trailing system entry out through its story_entries predicate", async () => {
-    const fork: BranchCopyArgs = {
-      from: fx.branchId,
-      to: COPY,
-      mode: 'fork',
-      where: {
-        story_entries: sql`${storyEntries.kind} != 'system'`,
-        deltas: 'all',
-        reversal_journals: 'all',
-      },
-    }
-    expect(tableCopyOps(t.db, fork).map(tableOf)).toEqual(DUPLICATE_TABLES)
+  it.each(['none', 'all', 'sql'] as const)(
+    "leaves a fork's system entry off the copy given %s for story_entries",
+    async (given) => {
+      const source = entryIds(fx.branchId)
+      const [first] = source
+      expect(source.indexOf(fx.systemEntryId)).toBeGreaterThan(0)
+      const survivors = { deltas: 'all', reversal_journals: 'all' } as const
+      // No predicate here excludes the system entry; the SQL one leaves the first entry out.
+      const where = {
+        none: survivors,
+        all: { ...survivors, story_entries: 'all' },
+        sql: { ...survivors, story_entries: ne(storyEntries.id, first) },
+      } as const
+      const fork: BranchCopyArgs = {
+        from: fx.branchId,
+        to: COPY,
+        mode: 'fork',
+        where: where[given],
+      }
 
-    await t.runInTransaction([branchRowOp(COPY), ...(await branchCopyOps(t.db, fork))])
+      await t.runInTransaction([branchRowOp(COPY), ...(await branchCopyOps(t.db, fork))])
 
-    const entryIds = (branchId: string) =>
-      idsOf(
-        t.sqlite,
-        'SELECT id FROM story_entries WHERE branch_id = ? ORDER BY position',
-        branchId,
-      )
-    expect(entryIds(fx.branchId)).toContain(fx.systemEntryId)
-    expect(entryIds(COPY)).toEqual(entryIds(fx.branchId).filter((id) => id !== fx.systemEntryId))
-    // 'all' copies the whole table: a fork at the tail keeps every delta and journal.
-    for (const table of ['deltas', 'reversal_journals']) {
-      const source = rowsOf(t.sqlite, table, fx.branchId)
-      expect(source.length, table).toBeGreaterThan(0)
-      expect(rowsOf(t.sqlite, table, COPY), table).toEqual(source)
-    }
+      const leftOut = given === 'sql' ? [fx.systemEntryId, first] : [fx.systemEntryId]
+      expect(entryIds(COPY)).toEqual(source.filter((id) => !leftOut.includes(id)))
+      // 'all' copies the whole table: a fork at the tail keeps every delta and journal.
+      for (const table of ['deltas', 'reversal_journals']) {
+        const rows = rowsOf(t.sqlite, table, fx.branchId)
+        expect(rows.length, table).toBeGreaterThan(0)
+        expect(rowsOf(t.sqlite, table, COPY), table).toEqual(rows)
+      }
+    },
+  )
+
+  it("copies a duplicate's system entry with the rest", async () => {
+    await t.runInTransaction([branchRowOp(COPY), ...(await duplicateOps())])
+
+    expect(entryIds(COPY)).toContain(fx.systemEntryId)
+    expect(entryIds(COPY)).toEqual(entryIds(fx.branchId))
   })
 
   it('leaves out exactly the deltas a correlated predicate names, reading tables copied before them', async () => {
@@ -251,24 +266,26 @@ describe('branchCopyOps', () => {
     expect(rowsOf(t.sqlite, 'deltas', COPY)).toEqual(rowsOf(t.sqlite, 'deltas', fx.branchId))
   })
 
-  it('refuses a fork missing a predicate for a table it filters', async () => {
-    const partial = { story_entries: 'all', deltas: 'all' } as const
-    // @ts-expect-error a fork names a predicate for every table it filters
-    const typed: BranchCopyArgs = { from: fx.branchId, to: COPY, mode: 'fork', where: partial }
-    await expect(branchCopyOps(t.db, typed)).rejects.toThrow(/reversal_journals/)
-
-    for (const missing of FORK_FILTERED) {
-      const where = Object.fromEntries(
-        FORK_FILTERED.filter((name) => name !== missing).map((name) => [name, 'all']),
-      )
-      const untyped = {
-        from: fx.branchId,
-        to: COPY,
-        mode: 'fork',
-        where,
-      } as unknown as BranchCopyArgs
-      await expect(branchCopyOps(t.db, untyped), missing).rejects.toThrow(missing)
+  it('refuses a fork missing a predicate for its deltas or its journals', async () => {
+    const noDeltas = { reversal_journals: 'all' } as const
+    const noJournals = { deltas: 'all' } as const
+    // @ts-expect-error a fork names a predicate for its deltas
+    const withoutDeltas: BranchCopyArgs = {
+      from: fx.branchId,
+      to: COPY,
+      mode: 'fork',
+      where: noDeltas,
     }
+    // @ts-expect-error a fork names a predicate for its journals
+    const withoutJournals: BranchCopyArgs = {
+      from: fx.branchId,
+      to: COPY,
+      mode: 'fork',
+      where: noJournals,
+    }
+
+    await expect(branchCopyOps(t.db, withoutDeltas)).rejects.toThrow(/ deltas$/)
+    await expect(branchCopyOps(t.db, withoutJournals)).rejects.toThrow(/ reversal_journals$/)
   })
 
   it('takes no predicate for a table its mode skips', () => {

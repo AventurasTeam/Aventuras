@@ -1,14 +1,15 @@
-import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
+import { eq, getTableColumns, ne, sql, type SQL } from 'drizzle-orm'
 
+import { storyEntries } from '../schema'
 import type { DbCtx, SqlOp } from '../types'
 import {
   BRANCH_COPY_MANIFEST,
-  FORK_FILTERS,
+  CALLER_FILTERS,
   type BranchCopyTable,
   type BranchCopyTableName,
   type CopiedIn,
   type CopyMode,
-  type ForkFilteredTable,
+  type ForkPredicateTable,
   type ManifestRow,
 } from './manifest'
 import { vecCopyOps, type CopyBranches } from './vec-copy'
@@ -23,33 +24,38 @@ type TableCopyArgs = CopyBranches &
     | { readonly mode: 'duplicate'; readonly where?: CopyWhere<'duplicate'> }
     | {
         readonly mode: 'fork'
-        readonly where: Record<ForkFilteredTable, CopyPredicate> & CopyWhere<'fork'>
+        readonly where: Record<ForkPredicateTable, CopyPredicate> & CopyWhere<'fork'>
       }
   )
 
 /**
  * `where`: per table, SQL with its own binds, ANDed into that table's copy; evaluated in-statement,
- * so it reads the batch as earlier ops left it. A fork passes one per filtered table. A subquery
- * over the table it filters aliases it and names inner columns through the alias: drizzle writes
- * `"table"."col"`, which binds to the inner row if unaliased, else to the copied row. `between`:
- * ops run after the rows copy, before the vectors, which copy only for rows `to` then holds (C3).
+ * so it reads the batch as earlier ops left it. A fork passes one for its deltas and its journals;
+ * the copier leaves its `system` entries out itself. A subquery over the table it filters aliases
+ * it and names inner columns through the alias: drizzle writes `"table"."col"`, which binds to the
+ * inner row if unaliased, else to the copied row. `between`: ops run after the rows copy, before
+ * the vectors, which copy only for rows `to` then holds (C3).
  */
 export type BranchCopyArgs = TableCopyArgs & { readonly between?: readonly SqlOp[] }
+
+// copy-non-system's filter, applied by the copier: a fork never copies the parent's error card.
+const NON_SYSTEM = ne(storyEntries.kind, 'system')
 
 // All in SQL: a JS round trip would re-serialize the JSON columns canon copies verbatim.
 function tableCopyOp(
   db: DbCtx['db'],
   table: BranchCopyTable,
   { from, to }: CopyBranches,
-  predicate: CopyPredicate | undefined,
+  filters: readonly SQL[],
 ): SqlOp {
   const columns = Object.values(getTableColumns(table)).map((column) =>
     column === table.branchId ? sql`${to}` : sql`${column}`,
   )
-  const ofSource = eq(table.branchId, from)
   // Parenthesized, unlike drizzle's and(): a predicate's top-level OR would reach other branches.
-  const where =
-    predicate === undefined || predicate === 'all' ? ofSource : sql`${ofSource} and (${predicate})`
+  const where = sql.join(
+    [eq(table.branchId, from), ...filters.map((filter) => sql`(${filter})`)],
+    sql` and `,
+  )
   return db
     .insert(table)
     .select(sql`select ${sql.join(columns, sql`, `)} from ${table} where ${where}`)
@@ -65,10 +71,13 @@ export function tableCopyOps(db: DbCtx['db'], args: TableCopyArgs): SqlOp[] {
   ][]) {
     const copy = row[args.mode]
     if (copy === 'skip') continue
-    // The type requires it; an untyped caller would copy the system tail or the pruned deltas.
-    if (FORK_FILTERS[copy] && where[name] === undefined)
+    const predicate = where[name]
+    // The type requires it; an untyped caller would copy the pruned deltas and journals.
+    if (CALLER_FILTERS[copy] && predicate === undefined)
       throw new Error(`branchCopyOps: a fork must pass a predicate for ${name}`)
-    ops.push(tableCopyOp(db, row.table, args, where[name]))
+    const filters: SQL[] = copy === 'copy-non-system' ? [NON_SYSTEM] : []
+    if (predicate !== undefined && predicate !== 'all') filters.push(predicate)
+    ops.push(tableCopyOp(db, row.table, args, filters))
   }
   return ops
 }

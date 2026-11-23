@@ -22,20 +22,24 @@ import {
 export type CopyMode = 'fork' | 'duplicate'
 
 /**
- * `copy-non-system` and `copy-survivors` are fork filters (no `kind = 'system'` entries; only the
- * deltas and journals the rewind keeps), passed by the fork's caller as the table's predicate.
+ * Fork filters: `copy-non-system` leaves `kind = 'system'` entries out, applied by the copier;
+ * `copy-survivors` keeps only the deltas and journals the rewind keeps, passed by the fork's caller
+ * as the table's predicate.
  */
 export type ForkCopy = 'copy' | 'copy-non-system' | 'copy-survivors' | 'skip'
 export type DuplicateCopy = 'copy' | 'skip'
 
-export const FORK_FILTERS = {
+/** The fork values whose filter is the caller's predicate. */
+export const CALLER_FILTERS = {
   copy: false,
-  'copy-non-system': true,
+  'copy-non-system': false,
   'copy-survivors': true,
   skip: false,
 } as const satisfies Record<ForkCopy, boolean>
 
-type ForkFilter = { [C in ForkCopy]: (typeof FORK_FILTERS)[C] extends true ? C : never }[ForkCopy]
+type CallerFilter = {
+  [C in ForkCopy]: (typeof CALLER_FILTERS)[C] extends true ? C : never
+}[ForkCopy]
 
 export type BranchCopyTable = SQLiteTable & { branchId: SQLiteColumn }
 
@@ -95,7 +99,7 @@ export type CopiedIn<M extends CopyMode> = {
   [T in BranchCopyTableName]: Manifest[T][M] extends 'skip' ? never : T
 }[BranchCopyTableName]
 
-/** The tables a fork must filter, so the copier requires a predicate for each. */
-export type ForkFilteredTable = {
-  [T in BranchCopyTableName]: Manifest[T]['fork'] extends ForkFilter ? T : never
+/** The tables a fork filters by the caller's predicate, so the copier requires one for each. */
+export type ForkPredicateTable = {
+  [T in BranchCopyTableName]: Manifest[T]['fork'] extends CallerFilter ? T : never
 }[BranchCopyTableName]

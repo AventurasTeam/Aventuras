@@ -280,7 +280,7 @@ export {
   type CopyPredicate,
   type DuplicateCopy,
   type ForkCopy,
-  type ForkFilteredTable,
+  type ForkPredicateTable,
   type ManifestRow,
   type VecCopyTables,
 } from './branch-copy'

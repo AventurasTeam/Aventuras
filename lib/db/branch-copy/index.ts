@@ -7,7 +7,7 @@ export {
   type CopyMode,
   type DuplicateCopy,
   type ForkCopy,
-  type ForkFilteredTable,
+  type ForkPredicateTable,
   type ManifestRow,
 } from './manifest'
 export { branchCopyOps, type BranchCopyArgs, type CopyPredicate } from './copier'

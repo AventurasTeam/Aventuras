@@ -8,7 +8,7 @@ import {
   type BranchCopyTableName,
   type CopiedIn,
   type CopyMode,
-  type ForkFilteredTable,
+  type ForkPredicateTable,
 } from './manifest'
 
 const names = Object.keys(BRANCH_COPY_MANIFEST) as BranchCopyTableName[]
@@ -73,13 +73,11 @@ describe('BRANCH_COPY_MANIFEST', () => {
     })
   })
 
-  it('derives the tables a predicate may name, and those a fork must filter, from the values', () => {
+  it('derives the tables a predicate may name, and those a fork must pass one for, from the values', () => {
     type Skipped = 'probe_captures' | 'pipeline_runs'
     expectTypeOf<CopiedIn<'duplicate'>>().toEqualTypeOf<Exclude<BranchCopyTableName, Skipped>>()
     expectTypeOf<CopiedIn<'fork'>>().toEqualTypeOf<Exclude<BranchCopyTableName, Skipped>>()
-    expectTypeOf<ForkFilteredTable>().toEqualTypeOf<
-      'story_entries' | 'deltas' | 'reversal_journals'
-    >()
+    expectTypeOf<ForkPredicateTable>().toEqualTypeOf<'deltas' | 'reversal_journals'>()
   })
 
   // A fork's predicate may read a table copied earlier in its batch.
