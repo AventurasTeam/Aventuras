@@ -29,12 +29,15 @@ import {
 } from './prose-fields'
 
 export type DiffCacheEntry = DiffValues & {
-  /** Walk-time names of the entry's ref ids: stored row, else latest delete payload. */
+  /**
+   * Walk-time names of the walk's ref ids, one map every entry of the walk shares: stored row,
+   * else latest delete payload.
+   */
   readonly names: Readonly<Record<string, string>>
 }
 
 export type WalkResult = {
-  /** One entry per listed update on the path, by delta id. */
+  /** Every listed update in the chain from the oldest requested on, requested or not, by id. */
   readonly entries: ReadonlyMap<string, DiffCacheEntry>
   /** Requested ids absent from their chain: pruned after their row loaded. */
   readonly gone: ReadonlySet<string>
@@ -183,7 +186,7 @@ export async function walkTarget(
     if (delta.op !== 'update') continue
     const payload = delta.undoPayload ?? {}
     const keys = Object.keys(payload).filter((key) => !isPayloadMetaKey(key))
-    // Stepped through, never listed: a retrieval bumps each aware row once a turn.
+    // Stepped through, never listed: a bump is the ranker's bookkeeping, not an edit.
     if (!isRetrievalBump(delta))
       stepped.set(delta.id, {
         old: Object.fromEntries(keys.map((key) => [key, payload[key]])),

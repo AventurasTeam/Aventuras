@@ -23,7 +23,10 @@ export type DiffCache = {
   populate(delta: UpdateDelta): Promise<DiffOutcome>
   /** Populates every delta; resolves once all have settled, whatever they settled to. */
   populateBatch(deltas: readonly UpdateDelta[]): Promise<void>
-  /** Drops the branch's entries, walks in flight and remembered failures, then tells listeners. */
+  /**
+   * Drops the branch's entries and remembered failures, and detaches its walks in flight: they run
+   * on, and their callers reject with DiffEvictedError. Then tells listeners.
+   */
   evictBranch(branchId: string): void
   /** Hears each evicted branch. Returns its unregister. */
   onEvict(listener: (branchId: string) => void): () => void
