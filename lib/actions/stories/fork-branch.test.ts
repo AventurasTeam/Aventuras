@@ -2,6 +2,7 @@ import { eq, getTableName } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   BRANCH_COPY_MANIFEST,
   branches,
@@ -10,6 +11,7 @@ import {
   happeningInvolvements,
   isVecFamilyTable,
   packFloat32,
+  pipelineRuns,
   stories,
   type ClassifierStatus,
   type DbCtx,
@@ -54,6 +56,7 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
 import { resolveByTable } from '../delta/registry'
+import { reverseCloseForRerun } from '../delta/rerun-journal'
 import { ReversalIntegrityError, type buildReverseAndPrunePlan } from '../delta/reverse-replay'
 import { getRollbackCounts, sweepToEntry } from '../story-entries/operational'
 import { writeSystemEntry } from '../story-entries/system-entry'
@@ -349,6 +352,121 @@ function recordPatchers(): string[] {
   }
   return calls
 }
+
+const ORPHAN_ACTION = 'act_fork_orphan'
+const RERUN_ACTION = 'act_fork_rerun'
+const CLOSE_CHAPTER = 'chap_fork_crossing'
+
+// An open marker, as a run the process died in leaves it.
+async function seedMarker(runId: string, actionId: string, kind: string): Promise<void> {
+  await f.ctx.db.insert(pipelineRuns).values({
+    runId,
+    kind,
+    actionId,
+    storyId: f.storyId,
+    branchId: f.branchId,
+    startedAt: AT,
+  })
+}
+
+// An orphan pass whose one write is anchored on entry 5.
+async function seedOrphanPass(): Promise<void> {
+  await seedMarker('run_fork_orphan', ORPHAN_ACTION, PERIODIC_CLASSIFIER_KIND)
+  await land(ORPHAN_ACTION, entryAt(5), {
+    kind: 'createEntity',
+    source: 'periodic_classifier',
+    payload: { entry: character('char_fork_orphan', 'Harl') },
+  })
+}
+
+// The orphan's create, in a fork at 5's window, kept by a later user view anchored before B.
+async function seedReownedOrphan(): Promise<void> {
+  for (const [id, name] of [
+    ['char_fork_wren', 'Wren'],
+    ['char_fork_tobin', 'Tobin'],
+  ] as const)
+    await land('act_fork_cast', entryAt(1), {
+      kind: 'createEntity',
+      source: 'user_edit',
+      payload: { entry: character(id, name) },
+    })
+  await seedMarker('run_fork_orphan', ORPHAN_ACTION, PERIODIC_CLASSIFIER_KIND)
+  await land(ORPHAN_ACTION, entryAt(7), {
+    kind: 'upsertCharacterRelationship',
+    source: 'periodic_classifier',
+    payload: {
+      branchId: f.branchId,
+      subjectId: 'char_fork_wren',
+      objectId: 'char_fork_tobin',
+      kind: 'owes a debt',
+      proseEntryId: null,
+    },
+  })
+  await land('act_fork_user_view', entryAt(3), {
+    kind: 'upsertCharacterRelationship',
+    source: 'user_edit',
+    payload: {
+      branchId: f.branchId,
+      subjectId: 'char_fork_wren',
+      objectId: 'char_fork_tobin',
+      kind: 'owes a debt',
+      inverseKind: 'is owed by',
+    },
+  })
+}
+
+// A close ending on entry 5, then its re-run's reversal committed with the run left open.
+async function seedUnfinishedRerun(): Promise<void> {
+  const endEntryId = entryAt(5)
+  await land('act_fork_close', endEntryId, {
+    kind: 'createChapter',
+    source: 'chapter_close',
+    payload: {
+      entry: {
+        id: CLOSE_CHAPTER,
+        branchId: f.branchId,
+        sequenceNumber: 1,
+        title: 'The Crossing',
+        summary: 'Wren talks Tobin into a night crossing.',
+        theme: 'a guarded passage',
+        keywords: ['harrow'],
+        startEntryId: entryAt(1),
+        endEntryId,
+        tokenCount: 64,
+        closedAt: AT,
+        createdAt: AT,
+        updatedAt: AT,
+      },
+    },
+  })
+  await land('act_fork_close', endEntryId, {
+    kind: 'createLore',
+    source: 'chapter_close',
+    payload: {
+      entry: {
+        id: 'lore_fork_toll',
+        branchId: f.branchId,
+        title: 'The Harrow toll',
+        body: 'The Syndicate taxes the ferry.',
+        injectionMode: 'auto',
+        createdAt: AT,
+        updatedAt: AT,
+      },
+    },
+  })
+  await seedMarker('run_fork_rerun', RERUN_ACTION, CHAPTER_CLOSE_KIND)
+  await reverseCloseForRerun(
+    { branchId: f.branchId, chapterId: CLOSE_CHAPTER, actionId: RERUN_ACTION },
+    f.ctx,
+  )
+}
+
+const relationshipCreateOn = (branchId: string): unknown[] =>
+  f.sqlite
+    .prepare(
+      "SELECT source, entry_id AS entryId, action_id AS actionId FROM deltas WHERE branch_id = ? AND target_table = 'character_relationships' AND op = 'create'",
+    )
+    .all(branchId)
 
 describe('forkBranchCore', () => {
   it('copies the parent rolled back to N and leaves the parent as it was', async () => {
@@ -757,5 +875,94 @@ describe('forkBranchCore leaves the loaded parent alone (AC 9)', () => {
     })
     expect(patched).toContain(`entities:${f.branchId}`)
     expect(storeRows(f.branchId).entities).not.toBe(before.entities)
+  })
+})
+
+describe('forkBranchCore refuses a fork that would carry an unfinished run (AC 4, AC 5)', () => {
+  it('refuses when a delta of the run survives the plan, writing nothing', async () => {
+    await seedOrphanPass()
+
+    const refusal = await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
+      forkBranchCore(input({ forkEntryId: entryAt(7) }), f.ctx),
+    )
+
+    expect(refusal.reason).toBe(
+      'run run_fork_orphan (act_fork_orphan) is unfinished; the fork would carry its delta',
+    )
+  })
+
+  it('refuses a tail fork of a parent whose unfinished run has a delta: with no B every delta copies', async () => {
+    await seedOrphanPass()
+
+    const refusal = await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
+      forkBranchCore(input({ forkEntryId: entryAt(9) }), f.ctx),
+    )
+
+    expect(refusal.reason).toBe(
+      'run run_fork_orphan (act_fork_orphan) is unfinished; the fork would carry its delta',
+    )
+  })
+
+  it('forks from before every entry the run wrote on, and the child holds none of its writes', async () => {
+    await seedOrphanPass()
+
+    expect(await forkBranchCore(input({ forkEntryId: entryAt(3) }), f.ctx)).toEqual(ok(CHILD))
+
+    expect(actionIdsOf(CHILD)).not.toContain(ORPHAN_ACTION)
+    expect(entityIdsOf(CHILD)).toEqual([])
+    expect(entityIdsOf(f.branchId)).toEqual(['char_fork_orphan'])
+  })
+
+  it("forks when the run's only surviving delta is a create the plan re-owns", async () => {
+    await seedReownedOrphan()
+
+    expect(await forkBranchCore(input(), f.ctx)).toEqual(ok(CHILD))
+
+    expect(actionIdsOf(CHILD)).not.toContain(ORPHAN_ACTION)
+    expect(relationshipCreateOn(CHILD)).toEqual([
+      { source: 'user_edit', entryId: null, actionId: 'act_fork_user_view' },
+    ])
+    expect(relationshipCreateOn(f.branchId)).toEqual([
+      { source: 'periodic_classifier', entryId: entryAt(7), actionId: ORPHAN_ACTION },
+    ])
+  })
+
+  it("refuses a tail fork while an unfinished re-run's journal would copy", async () => {
+    await seedUnfinishedRerun()
+
+    const refusal = await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
+      forkBranchCore(input({ forkEntryId: entryAt(9) }), f.ctx),
+    )
+
+    expect(refusal.reason).toBe(
+      'run run_fork_rerun (act_fork_rerun) is unfinished; the fork would carry its journal',
+    )
+  })
+
+  it("refuses a fork at the chapter's end: the re-run's journal drops but the chapter it undid stays", async () => {
+    await seedUnfinishedRerun()
+
+    const refusal = await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
+      forkBranchCore(input({ forkEntryId: entryAt(5) }), f.ctx),
+    )
+
+    expect(refusal.reason).toBe(
+      'run run_fork_rerun (act_fork_rerun) is unfinished; the fork would carry its chapter',
+    )
+  })
+
+  it("forks a held parent from before its re-run's chapter end, and refuses at that end", async () => {
+    await seedUnfinishedRerun()
+    holdParent()
+
+    expect(await forkBranchCore(input({ forkEntryId: entryAt(3) }), f.ctx)).toEqual(ok(CHILD))
+
+    const child = branchSnapshot(f.sqlite, CHILD)
+    expect(child.chapters).toEqual([])
+    expect(child.reversal_journals).toEqual([])
+    expect(branchSnapshot(f.sqlite, f.branchId).reversal_journals).toHaveLength(1)
+    await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
+      forkBranchCore(input({ forkEntryId: entryAt(5), newBranchId: 'br_fork_at_end' }), f.ctx),
+    )
   })
 })

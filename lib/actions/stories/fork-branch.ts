@@ -27,6 +27,7 @@ import {
 } from '../story-entries/operational'
 import { STORY_ENTRY_REJECTION } from '../story-entries/register'
 import type { DbCtx } from '../types'
+import { unfinishedRunCarried, type CarriedRun } from './fork-runs'
 import { forkSurvivorPredicates } from './fork-survivors'
 
 export const FORK_REFUSAL = {
@@ -65,6 +66,12 @@ const refused = (code: ForkRefusalCode, reason: string): ForkRefusal => ({
 
 const swapRefusal = (storyId: string): ForkRefusal =>
   refused(FORK_REFUSAL.swapPending, `an embedder swap is pending on ${storyId}`)
+
+const carriedRefusal = ({ runId, actionId, carries }: CarriedRun): ForkRefusal =>
+  refused(
+    FORK_REFUSAL.unfinishedRun,
+    `run ${runId} (${actionId}) is unfinished; the fork would carry its ${carries}`,
+  )
 
 /** data-model.md → Branch model's fork, under a fresh `br_` id and the current time. */
 export function forkBranch(input: ForkBranchInput, ctx: DbCtx): Promise<ForkResult> {
@@ -105,6 +112,9 @@ async function forkHeld(input: ForkBranchCoreInput, ctx: DbCtx): Promise<ForkRes
 
   const planned = await planFork(parentBranchId, forkEntry.position, newBranchId, ctx)
   if (planned.status === 'rejected') return planned
+  // pipeline_runs never copies, so a run's writes carried to the child would have no marker there.
+  const carried = await unfinishedRunCarried(parentBranchId, planned.fork?.plan ?? null, ctx)
+  if (carried) return carriedRefusal(carried)
 
   const copyOps = await branchCopyOps(ctx.db, {
     from: parentBranchId,
