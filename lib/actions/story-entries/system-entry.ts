@@ -16,7 +16,7 @@ function deleteSystemEntries(branchId: string, ctx: DbCtx) {
 // The store copy goes with the row: a card left standing offers a Retry for an entry that's gone.
 export async function clearSystemEntry(branchId: string, ctx: DbCtx): Promise<void> {
   await ctx.runInTransaction([deleteSystemEntries(branchId, ctx)])
-  for (const row of entriesStore.getEntries().values())
+  for (const row of entriesStore.getEntries(branchId).values())
     if (row.kind === 'system') entriesStore.patch(branchId, { op: 'delete', id: row.id })
 }
 
@@ -83,10 +83,13 @@ export async function raiseSystemEntry(
     ctx,
   )
   if (entriesStore.getLoadedBranch() !== args.branchId) return id
-  const [row] = await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id))
+  const [row] = await ctx.db
+    .select()
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, args.branchId), eq(storyEntries.id, id)))
   if (row === undefined) return id
   // A reload during the read may already hold the new row; patch() skips a branch no longer held.
-  for (const held of entriesStore.getEntries().values())
+  for (const held of entriesStore.getEntries(args.branchId).values())
     if (held.kind === 'system' && held.id !== id)
       entriesStore.patch(args.branchId, { op: 'delete', id: held.id })
   entriesStore.patch(args.branchId, { op: 'create', id, row })

@@ -85,6 +85,7 @@ function widePreview(source: SourceHead): string {
 }
 
 async function readWideExcerpts(
+  branchId: string,
   ids: readonly string[],
   database: DbCtx['db'],
 ): Promise<Map<string, string>> {
@@ -94,7 +95,7 @@ async function readWideExcerpts(
     const rows = await database
       .select({ id: storyEntries.id, ...sourceHead(WIDE_SOURCE_CHARS) })
       .from(storyEntries)
-      .where(inArray(storyEntries.id, chunk))
+      .where(and(eq(storyEntries.branchId, branchId), inArray(storyEntries.id, chunk)))
     for (const r of rows) excerpts.set(r.id, widePreview(r))
   }
   return excerpts
@@ -119,6 +120,7 @@ export async function readEntryIndex(branchId: string, database: DbCtx['db']): P
     .orderBy(desc(storyEntries.position))
   const previews = rows.map(preview)
   const wide = await readWideExcerpts(
+    branchId,
     rows.filter((_, i) => previews[i].readFurther).map((r) => r.id),
     database,
   )
