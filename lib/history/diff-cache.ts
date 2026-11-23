@@ -82,7 +82,8 @@ export function createDiffCache({
   const failures = new Map<string, { readonly branchId: string; readonly error: unknown }>()
   // Bumped by each eviction, so a walk that started before one can tell it settled after it.
   const generations = new Map<string, number>()
-  const listeners = new Set<(branchId: string) => void>()
+  // One entry per registration, so a function registered twice unregisters one at a time.
+  const registrations = new Set<{ readonly listener: (branchId: string) => void }>()
   let queued: Waiting[] = []
 
   const generationOf = (branchId: string): number => generations.get(branchId) ?? 0
@@ -194,7 +195,7 @@ export function createDiffCache({
       dropBranch(inFlight, branchId)
       dropBranch(failures, branchId)
       generations.set(branchId, generationOf(branchId) + 1)
-      for (const listener of [...listeners]) {
+      for (const { listener } of [...registrations]) {
         try {
           listener(branchId)
         } catch (error) {
@@ -204,9 +205,10 @@ export function createDiffCache({
     },
 
     onEvict(listener) {
-      listeners.add(listener)
+      const registration = { listener }
+      registrations.add(registration)
       return () => {
-        listeners.delete(listener)
+        registrations.delete(registration)
       }
     },
   }

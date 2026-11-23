@@ -325,6 +325,20 @@ describe('createDiffCache', () => {
       })
     })
 
+    it('calls a listener registered twice once per registration, and unregisters one at a time', () => {
+      const cache = createDiffCache({ walk: answering() })
+      const heard: string[] = []
+      const listener = (branchId: string) => heard.push(branchId)
+      const offFirst = cache.onEvict(listener)
+      cache.onEvict(listener)
+
+      cache.evictBranch('br_b')
+      offFirst()
+      cache.evictBranch('br_c')
+
+      expect(heard).toEqual(['br_b', 'br_b', 'br_c'])
+    })
+
     it('drops the branch before telling listeners, so a listener reads past the eviction', async () => {
       const walk = answering()
       const cache = createDiffCache({ walk })
