@@ -910,13 +910,12 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
 export type ReverseCommitHooks = {
   /** Read inside the key locks after planning; its ops lead the transaction. */
   opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
-  /** Emitted after the plan's patches, under the same store-sync stage. */
-  patchesAfter?: readonly PatchEmission[]
   /**
-   * The commit writes a re-run's journal back, which can restore deltas the re-run's reversal
-   * took, so the log changes even when the set is empty.
+   * Emitted after the plan's patches, under the same store-sync stage. Its presence marks a journal
+   * write-back, which may restore deltas, so the commit fires `logRewritten` even on an empty set;
+   * a journal that restores none costs a listener one spare re-walk.
    */
-  writesBack?: boolean
+  patchesAfter?: readonly PatchEmission[]
 }
 
 export async function reverseAndPruneDeltaRows(
@@ -928,7 +927,7 @@ export async function reverseAndPruneDeltaRows(
   onPlan: (plan: ReversePlan) => void = () => {},
   hooks: ReverseCommitHooks = {},
 ): Promise<number> {
-  const { opsFromPlan, patchesAfter, writesBack = false } = hooks
+  const { opsFromPlan, patchesAfter } = hooks
   // A hook still commits on an empty set: a re-run that reversed nothing journals all the same.
   if (
     set.rows.length === 0 &&
@@ -955,8 +954,8 @@ export async function reverseAndPruneDeltaRows(
         ...plan.journalOps,
         ...extraOps,
       ])
-      // A forward write or a journal alone commits here too, and rewrites no earlier delta.
-      if (set.rows.length > 0 || writesBack) logRewritten(set.branchId)
+      // Only a reversal or a journal write-back changes an earlier delta, never a forward write.
+      if (set.rows.length > 0 || patchesAfter !== undefined) logRewritten(set.branchId)
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
