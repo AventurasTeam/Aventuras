@@ -180,11 +180,10 @@ async function buildLoad(args: BuildArgs) {
     definition: (args.definition ?? definition) as never,
     settings: args.settings ?? settings,
   })
-  // branchId first, so a fixture that states its own (the cross-branch case)
-  // still wins.
+  // A store holds one branch, so every fixture row is b1's.
   entitiesStore.hydrate(
     'b1',
-    (args.entities ?? []).map((e) => ({ branchId: 'b1', ...(e as object) })) as never[],
+    (args.entities ?? []).map((e) => ({ ...(e as object), branchId: 'b1' })) as never[],
   )
   if (args.entries?.length) await seedEntries(args.entries)
 
@@ -310,10 +309,6 @@ describe('buildGenerationContext', () => {
     })
 
     it('is null when the lead dangles on this branch', async () => {
-      const elsewhere = await buildContext({
-        entities: [character(LEAD, 'Mara', { branchId: 'b2' })],
-      })
-      expect(elsewhere.lead).toBeNull()
       const gone = await buildContext({ entities: [character(OTHER, 'Jorin')] })
       expect(gone.lead).toBeNull()
     })
@@ -499,16 +494,11 @@ describe('buildGenerationContext', () => {
     expect(prompt).not.toContain('At the gate')
   })
 
-  it('drops entries and entities belonging to another branch', async () => {
+  it('drops entries belonging to another branch', async () => {
     const ctx = await buildContext({
       entries: [entry('e1', 1, 'ours'), { ...entry('e2', 2, 'theirs'), branchId: 'b2' }] as never[],
-      entities: [
-        { id: 'char_00000000-0000-4000-8000-00000000000a', name: 'Ours', branchId: 'b1' },
-        { id: 'char_00000000-0000-4000-8000-00000000000b', name: 'Theirs', branchId: 'b2' },
-      ] as never[],
     })
     expect((ctx.entries as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
-    expect((ctx.entities as { name: string }[]).map((e) => e.name)).toEqual(['Ours'])
   })
 
   it('always carries suggestionSlots; suggestionsFire gates only the instruction', async () => {
@@ -1128,6 +1118,24 @@ describe('buildGenerationContext — data source', () => {
     const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
+  })
+
+  // The entities guard runs before the buffer reads await, so a story opening that publishes
+  // another branch's roster during them is only kept out by the entities read itself.
+  it('reads no entities from a roster another branch publishes during the buffer reads', async () => {
+    openStory()
+    const entryReads = await import('./entry-reads')
+    const readSceneSource = entryReads.readSceneSource
+    vi.spyOn(entryReads, 'readSceneSource').mockImplementation(async (...args) => {
+      entitiesStore.hydrate('b2', [
+        { id: 'char_00000000-0000-4000-8000-00000000000b', name: 'Theirs', branchId: 'b2' },
+      ] as never[])
+      return readSceneSource(...args)
+    })
+
+    const context = await build()
+
+    expect(context.entities).toEqual([])
   })
 
   it('projects entries to position, kind and content, carrying no metadata', async () => {

@@ -5,7 +5,6 @@ import { characterRelationshipsStore } from './character-relationships/character
 import { currentStoryStore } from './current-story/current-story'
 import { entitiesStore } from './entities/entities'
 import { entriesStore } from './entries/entries'
-import { entryAssetsStore } from './entry-assets/entry-assets'
 import { eraFlipsStore } from './era-flips/era-flips'
 import { generationStore } from './generation/generation'
 import { happeningAwarenessStore } from './happenings/awareness'
@@ -39,7 +38,6 @@ export function resetAllStores(): void {
   currentStoryStore.__reset()
   entitiesStore.__reset()
   entriesStore.__reset()
-  entryAssetsStore.__reset()
   eraFlipsStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -75,7 +73,6 @@ export {
   embeddingStatusStore,
   entitiesStore,
   entriesStore,
-  entryAssetsStore,
   eraFlipsStore,
   generationStore,
   happeningAwarenessStore,

@@ -101,9 +101,9 @@ async function* suggestionEmissionPhase(
     return { status: 'completed' }
   }
 
-  const entries = [...entriesStore.getEntries().values()]
-    .filter((e) => e.branchId === ctx.branchId)
-    .sort((a, b) => a.position - b.position)
+  const entries = [...entriesStore.getEntries(ctx.branchId).values()].sort(
+    (a, b) => a.position - b.position,
+  )
   // Same anchor the strip renders from, so the run writes where the reader is
   // looking. Only AI-authored entries qualify, and everything after the anchor
   // is a user_action or a system row — neither carries chips. Read from the
@@ -181,7 +181,7 @@ async function* suggestionEmissionPhase(
   // layer for this run's duration, but abort paths and any non-UI writer sit
   // outside that, so re-read rather than write from the pre-call snapshot — a
   // reversed row must not be resurrected.
-  const current = entriesStore.getById(target.id)
+  const current = entriesStore.getById(target.branchId, target.id)
   if (!current) {
     ctx.log.warn('classifier.suggestions_refresh_target_reversed', { targetEntryId: target.id })
     return { status: 'completed' }

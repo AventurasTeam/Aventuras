@@ -2,7 +2,6 @@ import { and, eq } from 'drizzle-orm'
 
 import type { EntryAsset, NewEntryAsset } from '@/lib/db'
 import { entryAssetWriteSchema, entryAssets } from '@/lib/db'
-import { entryAssetsStore } from '@/lib/stores'
 
 import {
   register,
@@ -134,7 +133,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     targetTable: 'entry_assets',
     targetId: id,
     op: 'delete',
-    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
+    // Full row so reverse-replay can re-insert it.
     undoPayload: { ...current },
     ops: [
       ctx.db
@@ -156,6 +155,5 @@ export function registerEntryAssets(): void {
       updateEntryAsset: updateHandler,
       deleteEntryAsset: deleteHandler,
     },
-    patcher: (branchId, p) => entryAssetsStore.patch(branchId, p),
   })
 }

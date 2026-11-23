@@ -15,11 +15,11 @@ export const characterRelationshipsStore = {
   useRelationships: store.useRows,
   getRelationshipRows: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
-  getById: (id: string): CharacterRelationship | undefined => store.getRows().get(id),
+  getById: store.getById,
+  useById: store.useById,
   getRelationships: (characterId: string, branchId: string): readonly RelationshipView[] => {
-    if (store.getLoadedBranch() !== branchId) return []
     const out: RelationshipView[] = []
-    for (const r of store.getRows().values()) {
+    for (const r of store.getRows(branchId).values()) {
       if (r.aId !== characterId && r.bId !== characterId) continue
       const isA = r.aId === characterId
       out.push({

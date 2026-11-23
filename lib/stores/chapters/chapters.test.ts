@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import { chaptersStore, type StoreChapter } from './chapters'
 
-function chapterRow(id: string, sequenceNumber: number, title: string): StoreChapter {
+function chapterRow(
+  id: string,
+  sequenceNumber: number,
+  title: string,
+  branchId = 'br_1',
+): StoreChapter {
   return {
     id,
-    branchId: 'br_1',
+    branchId,
     sequenceNumber,
     title,
     summary: 'S',
@@ -28,21 +33,35 @@ describe('chaptersStore', () => {
     chaptersStore.__reset()
     chaptersStore.hydrate('br_1', [chapterRow('chap_1', 1, 'One'), chapterRow('chap_2', 2, 'Two')])
     expect(chaptersStore.getById('chap_1')?.title).toBe('One')
-    expect(chaptersStore.getBySequenceNumber(2)?.id).toBe('chap_2')
-    expect(chaptersStore.getBySequenceNumber(9)).toBeUndefined()
+    expect(chaptersStore.getBySequenceNumber('br_1', 2)?.id).toBe('chap_2')
+    expect(chaptersStore.getBySequenceNumber('br_1', 9)).toBeUndefined()
     expect(chaptersStore.getChapters().size).toBe(2)
   })
 
   it('reads the highest-numbered chapter whatever order the rows were stored in', () => {
     chaptersStore.__reset()
-    expect(chaptersStore.getLatest()).toBeUndefined()
+    expect(chaptersStore.getLatest('br_1')).toBeUndefined()
     chaptersStore.hydrate('br_1', [
       chapterRow('chap_1', 1, 'One'),
       chapterRow('chap_3', 3, 'Three'),
       chapterRow('chap_0', 0, 'Zero'),
     ])
-    expect(chaptersStore.getLatest()?.id).toBe('chap_3')
+    expect(chaptersStore.getLatest('br_1')?.id).toBe('chap_3')
     expect(chaptersStore.selectLatest(chaptersStore.getChapters())?.id).toBe('chap_3')
+  })
+
+  it('reads no chapter by sequence number or as latest for a branch it does not hold', () => {
+    chaptersStore.__reset()
+    chaptersStore.hydrate('br_1', [chapterRow('chap_1', 1, 'One'), chapterRow('chap_2', 2, 'Two')])
+    expect(chaptersStore.getBySequenceNumber('br_2', 1)).toBeUndefined()
+    expect(chaptersStore.getLatest('br_2')).toBeUndefined()
+    expect(chaptersStore.getBySequenceNumber(null, 1)).toBeUndefined()
+    expect(chaptersStore.getLatest(null)).toBeUndefined()
+
+    chaptersStore.hydrate('br_2', [chapterRow('chap_1', 1, 'One on two', 'br_2')])
+    expect(chaptersStore.getBySequenceNumber('br_1', 1)).toBeUndefined()
+    expect(chaptersStore.getLatest('br_1')).toBeUndefined()
+    expect(chaptersStore.getBySequenceNumber('br_2', 1)?.title).toBe('One on two')
   })
 
   it("projects a direct caller's row-shaped create to its report flag, never the report", () => {

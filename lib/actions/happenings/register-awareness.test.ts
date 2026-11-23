@@ -98,7 +98,7 @@ describe('happening_awareness upsert', () => {
     expect(rows.length).toBe(1)
     expect(rows[0].source).toBe('overheard in tavern')
     expect(rows[0].retrievalCount).toBe(0)
-    expect(happeningAwarenessStore.getByCharacter('char_a').length).toBe(1)
+    expect(happeningAwarenessStore.getByCharacter(BRANCH, 'char_a').length).toBe(1)
   })
 
   it('re-emit merges into one row: overwrites source+decay, preserves learned_at + retrieval_count', async () => {

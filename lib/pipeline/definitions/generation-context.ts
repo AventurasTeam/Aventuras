@@ -372,9 +372,8 @@ export async function buildGenerationContext(
     priceHistory = false,
   } = flags
 
-  // Both guards are defense-in-depth against store desync: a build against the
-  // wrong branch would describe a story this prompt isn't telling, and would
-  // filter every entity away rather than fail.
+  // Defense-in-depth against store desync: a wrong-branch build would describe another story
+  // and read no entities rather than fail.
   const open = currentStoryStore.getCurrentStory()
   if (!open || open.branchId !== branchId || open.storyId !== storyId)
     return guardFailure(phaseName, 'no open story for branch', ctx)
@@ -404,9 +403,7 @@ export async function buildGenerationContext(
       : [],
     readsScene ? readSceneSource(ctx.db, branchId) : undefined,
   ])
-  const branchEntities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === branchId,
-  )
+  const branchEntities = [...entitiesStore.getEntities(branchId).values()]
 
   const normalizedDefinition = {
     ...definition,
@@ -493,7 +490,7 @@ export async function buildGenerationContext(
   ])
 
   const retrievedHappenings = promptRows(retrieval?.bundles.happenings.selected)
-  const lead = resolveLead(definition.leadEntityId, entitiesStore.getEntities(), branchId)
+  const lead = resolveLead(definition.leadEntityId, entitiesStore.getEntities(branchId), branchId)
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.

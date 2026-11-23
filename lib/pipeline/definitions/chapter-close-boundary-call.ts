@@ -65,8 +65,8 @@ export function readBoundaryInputs(
   const settings = appSettingsStore.getAppSettings()
   return {
     threshold: open.settings.chapterTokenThreshold,
-    activeThreads: [...threadsStore.getThreads().values()]
-      .filter((thread) => thread.branchId === ctx.branchId && thread.status === 'active')
+    activeThreads: [...threadsStore.getThreads(ctx.branchId).values()]
+      .filter((thread) => thread.status === 'active')
       .map((thread) => ({ title: thread.title })),
     modelConfig: modelConfigOf(settings, open.settings),
   }

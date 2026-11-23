@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  branchEraFlips,
   branches,
   chapters,
   characterRelationships,
@@ -28,6 +29,7 @@ import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  eraFlipsStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
   happeningsStore,
@@ -230,14 +232,13 @@ describe('loadOpenStory', () => {
       },
     ])
 
-    // Only loadOpenStory's own reads: the join + entries, entities, lore, threads, happenings,
-    // involvements, awareness, chapters, relationships, translations = 11; more is an N+1 read.
+    // loadOpenStory's own reads: the join + 11 store reads = 12; more is an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')
 
     const result = await loadOpenStory('br_1', ctx)
 
     expect(result).toEqual({ status: 'ok', storyId: 'story_1', branchId: 'br_1' })
-    expect(selectSpy).toHaveBeenCalledTimes(11)
+    expect(selectSpy).toHaveBeenCalledTimes(12)
 
     const open = currentStoryStore.getCurrentStory()
     expect(open?.storyId).toBe('story_1')
@@ -259,8 +260,12 @@ describe('loadOpenStory', () => {
     expect([...threadsStore.getThreads().values()].map((r) => r.id)).toEqual(['thread_1'])
     expect(happeningsStore.getLoadedBranch()).toBe('br_1')
     expect([...happeningsStore.getHappenings().values()].map((r) => r.id)).toEqual(['hap_1'])
-    expect(happeningInvolvementsStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['hinv_1'])
-    expect(happeningAwarenessStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['haw_1'])
+    expect(happeningInvolvementsStore.getByHappening('br_1', 'hap_1').map((r) => r.id)).toEqual([
+      'hinv_1',
+    ])
+    expect(happeningAwarenessStore.getByHappening('br_1', 'hap_1').map((r) => r.id)).toEqual([
+      'haw_1',
+    ])
     expect(chaptersStore.getLoadedBranch()).toBe('br_1')
     expect([...chaptersStore.getChapters().values()].map((r) => r.id)).toEqual(['chap_1'])
 
@@ -273,6 +278,81 @@ describe('loadOpenStory', () => {
     expect([...translationsStore.getTranslations().values()].map((r) => r.id)).toEqual(['tr_1'])
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
+  })
+
+  it("hydrates the opened branch's era flips and none of another branch's", async () => {
+    const { db, ctx } = await setup()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Aria',
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_1',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS,
+    })
+    await db.insert(branches).values([
+      { id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 },
+      { id: 'br_2', storyId: 'story_1', name: 'branch-2', createdAt: 1 },
+    ])
+    // ef_1 repeats on br_2 under another name, so a row read from the wrong branch shows.
+    await db.insert(branchEraFlips).values([
+      { id: 'ef_1', branchId: 'br_1', atWorldtime: 1000, eraName: 'Age of Ash', createdAt: 1 },
+      { id: 'ef_2', branchId: 'br_1', atWorldtime: 5000, eraName: 'Age of Storms', createdAt: 1 },
+      { id: 'ef_1', branchId: 'br_2', atWorldtime: 1000, eraName: 'Age of Ice', createdAt: 1 },
+      { id: 'ef_3', branchId: 'br_2', atWorldtime: 2000, eraName: 'Age of Mist', createdAt: 1 },
+    ])
+
+    expect(await loadOpenStory('br_1', ctx)).toEqual({
+      status: 'ok',
+      storyId: 'story_1',
+      branchId: 'br_1',
+    })
+
+    expect(eraFlipsStore.getLoadedBranch()).toBe('br_1')
+    const held = [...eraFlipsStore.getEraFlips().values()]
+      .map(({ id, branchId, eraName }) => ({ id, branchId, eraName }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+    expect(held).toEqual([
+      { id: 'ef_1', branchId: 'br_1', eraName: 'Age of Ash' },
+      { id: 'ef_2', branchId: 'br_1', eraName: 'Age of Storms' },
+    ])
+  })
+
+  it('publishes nothing when the open goes stale after the era-flips read', async () => {
+    const { db, ctx } = await setup()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Aria',
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_1',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS,
+    })
+    await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+    await db.insert(branchEraFlips).values({
+      id: 'ef_1',
+      branchId: 'br_1',
+      atWorldtime: 1000,
+      eraName: 'Age of Ash',
+      createdAt: 1,
+    })
+    // One check after the join and one after each of the eleven reads: the twelfth follows the
+    // era-flips read, the last before anything is hydrated.
+    let checks = 0
+
+    const result = await loadOpenStory('br_1', ctx, () => ++checks < 12)
+
+    expect(result).toEqual({ status: 'cancelled' })
+    expect(checks).toBe(12)
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+    expect(eraFlipsStore.getLoadedBranch()).toBeNull()
+    expect(entriesStore.getLoadedBranch()).toBeNull()
   })
 
   // C4: the report stays out of the store; the flag is a boolean, never SQLite's 0 or 1.

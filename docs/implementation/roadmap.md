@@ -167,7 +167,7 @@ vault shell; during M8 — M9.1 and M9.3.
 
 **Promoted** — defined in
 [`milestones/06-branches-diff-cache/`](./milestones/06-branches-diff-cache/milestone.md)
-(milestone + nine slice docs).
+(milestone + ten slice docs).
 
 ---
 

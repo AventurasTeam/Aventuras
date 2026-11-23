@@ -745,6 +745,23 @@ describe('suggestion-refresh emission phase', () => {
     expect(events).toEqual([])
   })
 
+  it("completes without a write when another branch's copy of the target is loaded during the call", async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    // A fork reuses entry ids: the held row under the target's id is another branch's, so
+    // it can't prove this branch's row survived.
+    generateStructuredMock.mockImplementation(async () => {
+      entriesStore.hydrate('b2', [{ ...TARGET_ENTRY, branchId: 'b2' }] as never[])
+      return okChips([{ categoryRef: 'cat1', text: 'Draw.' }])
+    })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+  })
+
   it('cannot clobber a field that changed while the model call was in flight', async () => {
     openStory()
     hydrate()

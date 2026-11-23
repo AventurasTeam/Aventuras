@@ -1,6 +1,7 @@
 import { eq, getTableColumns, sql } from 'drizzle-orm'
 
 import {
+  branchEraFlips,
   branches,
   chapters,
   characterRelationships,
@@ -24,6 +25,7 @@ import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  eraFlipsStore,
   happeningAwarenessStore,
   happeningInvolvementsStore,
   happeningsStore,
@@ -190,6 +192,11 @@ async function loadAndPublish(
     .from(translations)
     .where(eq(translations.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
+  const eraFlipRows = await ctx.db
+    .select()
+    .from(branchEraFlips)
+    .where(eq(branchEraFlips.branchId, branchId))
+  if (!isCurrentRequest()) return { status: 'cancelled' }
 
   storiesStore.clearOpenFailure(row.storyId)
   entriesStore.hydrate(branchId, entryRows)
@@ -202,6 +209,7 @@ async function loadAndPublish(
   chaptersStore.hydrate(branchId, chapterRows)
   characterRelationshipsStore.hydrate(branchId, relationshipRows)
   translationsStore.hydrate(branchId, translationRows)
+  eraFlipsStore.hydrate(branchId, eraFlipRows)
   publish({ storyId: row.storyId, branchId, definition, settings })
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.

@@ -64,7 +64,7 @@ describe('chapters CRUD arms', () => {
     )
     expect((await rowFor(db, 'chap_1')).title).toBe('The Gathering Storm')
     expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war', 'omen'])
-    expect(chaptersStore.getBySequenceNumber(1)?.id).toBe('chap_1')
+    expect(chaptersStore.getBySequenceNumber('br_1', 1)?.id).toBe('chap_1')
   })
 
   it('create writes a close report into the row, and null when the entry has none', async () => {

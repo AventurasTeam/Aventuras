@@ -283,6 +283,18 @@ describe('deleteEntityRow — C3 acceptance', () => {
     expect(await ctx.db.select().from(deltas)).toEqual([])
   })
 
+  it('refuses not-found and writes nothing while the entities store holds another branch', async () => {
+    const [row] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))
+    entitiesStore.hydrate('b2', [{ ...row, branchId: 'b2' }] as never)
+
+    expect(await deleteEntityRow('b1', 'char_x', ctx)).toMatchObject({
+      status: 'rejected',
+      code: ROW_DELETE_REJECTION.notFound,
+    })
+    expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_x'))).toHaveLength(1)
+    expect(await ctx.db.select().from(deltas)).toEqual([])
+  })
+
   it('leaves no orphan when a classifier pass writes after the delete', async () => {
     await deleteEntityRow('b1', 'char_x', ctx)
     const awareness = await applyDeltaAction(

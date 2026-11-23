@@ -19,13 +19,19 @@ export const chaptersStore = {
   useChapters: store.useRows,
   getChapters: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
-  getById: (id: string): StoreChapter | undefined => store.getRows().get(id),
-  getBySequenceNumber: (sequenceNumber: number): StoreChapter | undefined => {
-    for (const c of store.getRows().values()) if (c.sequenceNumber === sequenceNumber) return c
+  getById: store.getById,
+  useById: store.useById,
+  getBySequenceNumber: (
+    branchId: string | null,
+    sequenceNumber: number,
+  ): StoreChapter | undefined => {
+    for (const c of store.getRows(branchId).values())
+      if (c.sequenceNumber === sequenceNumber) return c
     return undefined
   },
-  /** The highest-numbered chapter; `selectLatest` is the same read as a `useChapters` selector. */
-  getLatest: (): StoreChapter | undefined => latestOf(store.getRows()),
+  /** The branch's highest-numbered chapter; `selectLatest` is its selector form. */
+  getLatest: (branchId: string | null): StoreChapter | undefined =>
+    latestOf(store.getRows(branchId)),
   selectLatest: latestOf,
   hydrate: store.hydrate,
   // C4's projection on every write, so no caller can put a report into the store.
