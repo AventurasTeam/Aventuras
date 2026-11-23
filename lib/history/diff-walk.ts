@@ -1,5 +1,4 @@
 import { and, eq, gt, inArray, sql } from 'drizzle-orm'
-import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { isPayloadMetaKey, undoneColumnOf } from '@/lib/actions'
 import {
@@ -13,6 +12,7 @@ import {
   readChainSnapshot,
   threads,
   type ChainSnapshot,
+  type ChainSnapshotArgs,
   type DbCtx,
   type Delta,
 } from '@/lib/db'
@@ -57,10 +57,8 @@ export type UpdateDelta = Delta & { op: 'update' }
 /** Walks one target; every requested delta is on the same branch, table and target. */
 export type DiffWalk = (requested: readonly UpdateDelta[]) => Promise<WalkResult>
 
-type RowKey = { table: SQLiteTable; idCol: SQLiteColumn; branchCol: SQLiteColumn }
-
 /** Each listed table's row and key columns, as the snapshot reads the target row. */
-export const DIFF_TABLE_ROWS: Readonly<Record<DiffTable, RowKey>> = {
+export const DIFF_TABLE_ROWS: Readonly<Record<DiffTable, ChainSnapshotArgs['row']>> = {
   entities: { table: entities, idCol: entities.id, branchCol: entities.branchId },
   lore: { table: lore, idCol: lore.id, branchCol: lore.branchId },
   threads: { table: threads, idCol: threads.id, branchCol: threads.branchId },

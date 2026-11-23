@@ -69,10 +69,11 @@ export function useDiffOutcomes(rows: readonly HistoryRow[]): ReadonlyMap<string
     },
   })
   useEffect(() => {
-    const unsubscribe = loader.onEvict((evicted) => {
-      // C9: invalidate, never remove; a removal notifies no mounted row.
-      void client.invalidateQueries({ queryKey: ['diff', evicted] })
-    })
+    // C9: invalidate, never remove; a removal notifies no mounted row.
+    function rereadBranch(branchId: string): void {
+      void client.invalidateQueries({ queryKey: ['diff', branchId] })
+    }
+    const unsubscribe = loader.onEvict(rereadBranch)
     // A row seeded at render, before this subscription, can miss an eviction; a seed the cache no
     // longer returns as the same entry marks one, so its branch re-reads as the listener would.
     const missed = new Set<string>()
@@ -81,7 +82,7 @@ export function useDiffOutcomes(rows: readonly HistoryRow[]): ReadonlyMap<string
       if (held?.kind === 'entry' && loader.peek(delta.branchId, delta.id) !== held.entry)
         missed.add(delta.branchId)
     }
-    for (const branchId of missed) void client.invalidateQueries({ queryKey: ['diff', branchId] })
+    for (const branchId of missed) rereadBranch(branchId)
     return unsubscribe
   }, [loader, client, updates])
   return useMemo(() => new Map(Object.entries(byId)), [byId])

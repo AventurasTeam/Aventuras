@@ -137,7 +137,7 @@ export function diffPaths(entry: DiffValues): string[] {
 }
 
 // undefined where the path is absent: a stored JSON value is never undefined.
-function valueAt(side: Readonly<Record<string, unknown>>, path: string): unknown {
+export function valueAt(side: Readonly<Record<string, unknown>>, path: string): unknown {
   let value: unknown = side
   for (const key of path.split('.')) {
     if (!isJsonObject(value) || !Object.hasOwn(value, key)) return undefined

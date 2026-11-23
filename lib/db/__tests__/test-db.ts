@@ -60,7 +60,7 @@ export function makeCallback(sqlite: DatabaseSync) {
 export function makeBatchCallback(
   sqlite: DatabaseSync,
 ): (
-  queries: { sql: string; params: unknown[]; method: 'run' | 'all' | 'values' | 'get' }[],
+  queries: { sql: string; params: unknown[]; method: ProxyMethod }[],
 ) => Promise<{ rows: unknown[] }[]> {
   return async (queries) =>
     queries.map(({ sql, params, method }) => rowsOf(sqlite, sql, params, method))

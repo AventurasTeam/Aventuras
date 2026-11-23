@@ -7,7 +7,13 @@ import { ENTITY_STATUSES } from '@/lib/world'
 
 import type { DiffCacheEntry } from './diff-walk'
 import { fieldPathLabel } from './field-labels'
-import { diffPaths, proseFieldOf, type DiffTable, type ProseFieldKind } from './prose-fields'
+import {
+  diffPaths,
+  proseFieldOf,
+  valueAt,
+  type DiffTable,
+  type ProseFieldKind,
+} from './prose-fields'
 
 /** The table whose labels a clause takes, and for a relationship row the tab's side of it. */
 export type ProseTarget =
@@ -73,17 +79,14 @@ const changed = (before: string, after: string) =>
 const isEmpty = (value: unknown) => value == null || value === ''
 const sameScalar = (a: unknown, b: unknown) => (isEmpty(a) && isEmpty(b)) || a === b
 
+const isNullableString = (value: unknown): value is string | null | undefined =>
+  value == null || typeof value === 'string'
+
+const isNullableNumber = (value: unknown): value is number | null | undefined =>
+  value == null || typeof value === 'number'
+
 function isOneOf<T extends string>(values: readonly T[], value: unknown): value is T {
   return (values as readonly unknown[]).includes(value)
-}
-
-function valueAt(values: Readonly<Record<string, unknown>>, path: string): unknown {
-  let current: unknown = values
-  for (const key of path.split('.')) {
-    if (!isJsonObject(current) || !Object.hasOwn(current, key)) return undefined
-    current = current[key]
-  }
-  return current
 }
 
 function labelOf(path: string, target: ProseTarget): string {
@@ -91,9 +94,6 @@ function labelOf(path: string, target: ProseTarget): string {
     ? fieldPathLabel(target.table, path, target.side)
     : fieldPathLabel(target.table, path)
 }
-
-const isText = (value: unknown): value is string | null | undefined =>
-  value == null || typeof value === 'string'
 
 const isWordStart = (chars: readonly string[], at: number) => at === 0 || chars[at - 1] === ' '
 
@@ -132,7 +132,7 @@ function cutLongText(before: string, after: string): [string, string] {
 }
 
 function textChange({ old, new: next }: At): Change {
-  if (!isText(old) || !isText(next)) return null
+  if (!isNullableString(old) || !isNullableString(next)) return null
   const before = oneLine(old ?? '')
   const after = oneLine(next ?? '')
   if (before === after) return SAME
@@ -176,11 +176,8 @@ function enumChange({ path, old, new: next }: At, context: ProseContext): Change
   return before === undefined || after === undefined ? null : changed(before, after)
 }
 
-const isNumber = (value: unknown): value is number | null | undefined =>
-  value == null || typeof value === 'number'
-
 function numberChange({ old, new: next }: At): Change {
-  if (!isNumber(old) || !isNumber(next)) return null
+  if (!isNullableNumber(old) || !isNullableNumber(next)) return null
   if (sameScalar(old, next)) return SAME
   return changed(old == null ? none() : String(old), next == null ? none() : String(next))
 }
@@ -280,9 +277,6 @@ function termListChange({ path, old, new: next }: At, context: ProseContext): Ch
   return listParts(before, after, match, (term) => quoted(cutTerm(term)))
 }
 
-const isCount = (value: unknown): value is number | null | undefined =>
-  value == null || typeof value === 'number'
-
 const countText = (count: number | null | undefined) => (count == null ? none() : String(count))
 
 // A key's null in the old partial is a key absent before; a null partial is a record absent before.
@@ -297,7 +291,7 @@ function recordChange({ old, new: next }: At): Change {
   for (const key of Object.keys(before ?? after)) {
     const was = before !== null && Object.hasOwn(before, key) ? before[key] : null
     const now = Object.hasOwn(after, key) ? after[key] : null
-    if (!isCount(was) || !isCount(now)) return null
+    if (!isNullableNumber(was) || !isNullableNumber(now)) return null
     if ((was ?? null) === (now ?? null)) continue
     parts.push(
       fill('history:prose.quantity', {
@@ -308,9 +302,6 @@ function recordChange({ old, new: next }: At): Change {
   }
   return parts.length === 0 ? SAME : parts.join(t('history:prose.listSeparator'))
 }
-
-const isId = (value: unknown): value is string | null | undefined =>
-  value == null || typeof value === 'string'
 
 // The working set holds the branch's every entity: a ref it lacks is gone, so it reads (deleted).
 function refName(id: string, entry: DiffCacheEntry, context: ProseContext): string {
@@ -330,7 +321,7 @@ function entryText(id: string | null | undefined, context: ProseContext): string
 }
 
 function rowRefChange({ old, new: next, entry }: At, context: ProseContext): Change {
-  if (!isId(old) || !isId(next)) return null
+  if (!isNullableString(old) || !isNullableString(next)) return null
   if (sameScalar(old, next)) return SAME
   return changed(refText(old, entry, context), refText(next, entry, context))
 }
@@ -343,7 +334,7 @@ function refListChange({ old, new: next, entry }: At, context: ProseContext): Ch
 }
 
 function entryRefChange({ old, new: next }: At, context: ProseContext): Change {
-  if (!isId(old) || !isId(next)) return null
+  if (!isNullableString(old) || !isNullableString(next)) return null
   if (sameScalar(old, next)) return SAME
   return changed(entryText(old, context), entryText(next, context))
 }
@@ -354,7 +345,7 @@ function seenOf(value: unknown): Seen | null | undefined {
   if (value == null) return null
   if (!isJsonObject(value)) return undefined
   const { entryId, locationId } = value
-  if (typeof entryId !== 'string' || !isId(locationId)) return undefined
+  if (typeof entryId !== 'string' || !isNullableString(locationId)) return undefined
   return { entryId, locationId: locationId == null || locationId === '' ? null : locationId }
 }
 
@@ -402,7 +393,7 @@ type Placement =
   | { readonly kind: 'top' | 'unplaced' }
 
 function placementOf(parent: unknown, unplaced: unknown): Placement | undefined {
-  if (!isId(parent)) return undefined
+  if (!isNullableString(parent)) return undefined
   if (parent != null && parent !== '') return { kind: 'under', id: parent }
   return { kind: unplaced === true ? 'unplaced' : 'top' }
 }
@@ -434,7 +425,7 @@ function placementChange({ entry }: At, context: ProseContext): Change {
 // The flag reads its partner while raised; the reason never shows.
 function collisionPartner(flag: unknown, partner: unknown): string | null | undefined {
   const raised = flagOf(flag)
-  if (raised === undefined || !isId(partner)) return undefined
+  if (raised === undefined || !isNullableString(partner)) return undefined
   return raised === true && partner != null && partner !== '' ? partner : null
 }
 
