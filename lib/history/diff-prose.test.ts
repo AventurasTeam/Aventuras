@@ -474,6 +474,80 @@ describe('diffProse — term lists', () => {
     )
   })
 
+  it('reads respelled after removed', () => {
+    expect(
+      diffProse(entryOf({ tags: ['eldra', 'old oath'] }, { tags: ['Eldra'] }), contextOf('lore')),
+    ).toBe('Tags: removed "old oath", respelled "eldra" as "Eldra"')
+  })
+
+  it("collapses a term's whitespace before cutting it", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['brave'] } },
+          {
+            state: {
+              ...KAEL_STATE,
+              traits: ['brave', 'the oath  sworn\nbeneath the broken keep at midnight'],
+            },
+          },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: added "the oath sworn beneath the broken keep…"')
+  })
+
+  it('cuts a 50-character term with no space at the 40th character', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['brave'] } },
+          {
+            state: {
+              ...KAEL_STATE,
+              traits: ['brave', 'abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij'],
+            },
+          },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: added "abcdefghijabcdefghijabcdefghijabcdefghij…"')
+  })
+
+  it('keeps the word that ends exactly at the 40th character', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { traits: ['brave'] } },
+          {
+            state: {
+              ...KAEL_STATE,
+              traits: ['brave', 'an unbroken oath sworn beneath the keeps forever'],
+            },
+          },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Traits: added "an unbroken oath sworn beneath the keeps…"')
+  })
+
+  it('cuts a term by code point, never inside a surrogate pair', () => {
+    const shown = diffProse(
+      entryOf(
+        { state: { traits: ['brave'] } },
+        {
+          state: {
+            ...KAEL_STATE,
+            traits: ['brave', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀bbbbbbbbbb'],
+          },
+        },
+      ),
+      ENTITIES,
+    )
+    expect(shown).toBe('Traits: added "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀…"')
+    expect(shown).not.toMatch(LONE_SURROGATE)
+  })
+
   it('reads an agenda absent before as an empty list', () => {
     expect(
       diffProse(
