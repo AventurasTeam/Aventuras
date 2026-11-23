@@ -405,6 +405,8 @@ export const generationStore = {
     isUserEditBlocked(getTxState(), currentStoryStore.getCurrentStory()?.branchId),
   isHeadReversalBlocked: (branchId: string) => isHeadReversalBlocked(getTxState(), branchId),
   hasActiveRun: () => getTxState().runs.size > 0,
+  /** From a turn's pending mark until its body settles, past an early end of the mark. */
+  isTurnBodyActive: turnBodyActive,
   startRun: api.startRun,
   setCurrentPhase: api.setCurrentPhase,
   recordPhaseResult: api.recordPhaseResult,

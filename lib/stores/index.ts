@@ -27,6 +27,7 @@ import {
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { listCollapseStore } from './ui/list-collapse'
+import { readerHoldStore } from './ui/reader-hold'
 import { readerRailStore } from './ui/reader-rail'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
@@ -56,6 +57,7 @@ export function resetAllStores(): void {
   blockingOverlaysStore.__reset()
   chapterOverlaysStore.__reset()
   listCollapseStore.__reset()
+  readerHoldStore.__reset()
   readerRailStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.__reset()
@@ -110,6 +112,7 @@ export {
 } from './branches/branches'
 
 export { openEmbedderSwapDialog } from './ui/embedder-swap'
+export { readerHoldStore, type ReaderHoldToken } from './ui/reader-hold'
 
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
 export type { StoreChapter } from './chapters/chapters'
