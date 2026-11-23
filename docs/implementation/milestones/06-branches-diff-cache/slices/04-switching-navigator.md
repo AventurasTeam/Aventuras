@@ -748,6 +748,31 @@ input keeps its caret through a mid-string edit.
   the plan records why it can't split: the navigator's surfaces, the
   switch, the hold and the reader's fresh instance meet in one E2E, and
   none ships usefully alone.
+- **The era-flips mirror (from Slice 6.2).** 6.2 made `eraFlipsStore`
+  live: `loadAndPublish` hydrates it, an eleventh working-set store
+  ([Slice 6.2 → Implementation notes](./02-scoped-reads-redo.md#implementation-notes)).
+  The switch's read step and its synchronous fill carry it like the
+  other ten, or the store keeps the old branch and reads as empty on the
+  new one. `load-open-story.test.ts` pins at least 12
+  cancellation checks before any hydrate (one after each read); a read
+  added there needs the count raised by hand.
+- **Undo and redo across a load, a leave or a switch (from Slice 6.2's
+  review).** Three gaps older than 6.2 that the switch and the reader's
+  fresh instance reach, all in `components/reader/use-reader-undo.tsx`:
+  - Redo pressed from the Actions menu while the route still hydrates
+    is refused `branch-not-loaded`, which `report` only debug-logs, so
+    nothing shows.
+  - `runUndo` checks nothing live after its await, so an undo that
+    settles after the branch changed or the screen left still posts its
+    "Undid …" notice with Redo.
+  - The notice, a toast, outlives the reader that posted it. Its Redo,
+    pressed from another reader, runs `redoLastAction` for the old
+    branch and is refused silently; under the per-branch map the old
+    branch's group survives, so the press is always silent.
+
+  The default: the notice goes when its reader unmounts or its branch
+  changes, an undo that settles after either posts none, and Redo waits
+  or says why while the branch loads.
 
 ## Implementation notes
 

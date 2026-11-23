@@ -291,14 +291,8 @@ export default function ReaderComposerRoute() {
   // Select the raw map (stable reference between patches); derive the sorted
   // view with useMemo. Returning a fresh array from the selector would break
   // useSyncExternalStore's snapshot-stability contract and loop.
-  const rows = entriesStore.useEntries((m) => m)
-  const entries = useMemo(
-    () =>
-      [...rows.values()]
-        .filter((e) => e.branchId === branchId)
-        .sort((a, b) => a.position - b.position),
-    [rows, branchId],
-  )
+  const rows = entriesStore.useEntries(branchId, (m) => m)
+  const entries = useMemo(() => [...rows.values()].sort((a, b) => a.position - b.position), [rows])
   // The document renders a slice of the window (reader-composer.md → Loaded-set model).
   const slice = useReaderSlice(branchId, entries, db)
 
@@ -354,6 +348,7 @@ export default function ReaderComposerRoute() {
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
   const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities(
+    branchId,
     (m) => resolveLead(leadEntityId, m, branchId)?.name ?? null,
   )
   const modesEnabled =
@@ -377,7 +372,7 @@ export default function ReaderComposerRoute() {
     openForBranch?.definition.worldTimeOrigin,
     ctx,
   )
-  const chapterRows = chaptersStore.useChapters((m) => m)
+  const chapterRows = chaptersStore.useChapters(branchId, (m) => m)
   const chapterBreaks = useMemo(
     () => chapterBreaksOf([...chapterRows.values()], slice.rows, worldTimeDecorations),
     [chapterRows, slice.rows, worldTimeDecorations],
@@ -399,11 +394,8 @@ export default function ReaderComposerRoute() {
   // Same snapshot-stability contract as `rows` above: select the raw map, derive
   // the array with useMemo. The whole branch, unwindowed — the panel resolves ids
   // that may sit outside the current scene, and the editor offers every candidate.
-  const entityRows = entitiesStore.useEntities((m) => m)
-  const branchEntities = useMemo(
-    () => [...entityRows.values()].filter((e) => e.branchId === branchId),
-    [entityRows, branchId],
-  )
+  const entityRows = entitiesStore.useEntities(branchId, (m) => m)
+  const branchEntities = useMemo(() => [...entityRows.values()], [entityRows])
   // The window always reaches the tail. A slice short of it gets no tail actions: none of its rows
   // is tailEntryId, which the surface's tail checks compare against.
   const holdsLiveEdge = true
@@ -704,9 +696,7 @@ export default function ReaderComposerRoute() {
   // Read before the drop (composer-draft.ts → SubmissionHandback), so a caller whose drop or
   // resync throws still holds its text. The drop keeps it out of the pipeline's prompt/position.
   const systemTail = useCallback((): DroppedSystemEntry | null => {
-    const tail = [...entriesStore.getEntries().values()].find(
-      (e) => e.branchId === branchId && e.kind === 'system',
-    )
+    const tail = [...entriesStore.getEntries(branchId).values()].find((e) => e.kind === 'system')
     return tail ? { content: tail.content, failure: tail.metadata?.systemFailure } : null
   }, [branchId])
 
@@ -714,7 +704,7 @@ export default function ReaderComposerRoute() {
   const notifyUnappliedState = useCallback(
     (started: string) => {
       if (!branchUnchanged(started)) return
-      const reply = latestReplyOf(entriesStore.getEntries().values(), started)
+      const reply = latestReplyOf(entriesStore.getEntries(started).values())
       const role = unappliedStateRole(reply?.metadata?.stateReport)
       if (role != null)
         toast.warning(
@@ -1363,7 +1353,7 @@ export default function ReaderComposerRoute() {
         toast.error(t('reader:rollbackFailed'))
         return
       }
-      const target = entriesStore.getById(targetId)
+      const target = entriesStore.getById(branchId, targetId)
       setRollback({
         mode: 'rollback',
         targetId,
@@ -1455,7 +1445,7 @@ export default function ReaderComposerRoute() {
         toast.error(t('reader:regenerateFailed'))
         return
       }
-      const targetNumber = entriesStore.getById(entryId)?.position ?? 0
+      const targetNumber = entriesStore.getById(startedBranchId, entryId)?.position ?? 0
       if (classifyRegenerateGate(counts) === 'immediate') {
         // The confirm path runs this through runAction; the ↻ tap fires it unhandled.
         try {
@@ -1513,9 +1503,9 @@ export default function ReaderComposerRoute() {
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
-  // error belongs to the strip that fired it. The entry ref alone would cover
-  // it (ids are globally unique, and a switch nulls the tail); the branch ref
-  // stays so the guard is legible without trusting that cross-module invariant.
+  // error belongs to the strip that fired it. The guard needs both refs: a
+  // fork's copy keeps the tail's entry id, so the entry ref alone can match
+  // another branch's tail.
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   // Published from the commit, like branchIdRef: the guard below reads both, and
   // an anchor from a render that never landed would fail it against live state.

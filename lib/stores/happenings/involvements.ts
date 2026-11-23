@@ -8,9 +8,10 @@ export const happeningInvolvementsStore = {
   useInvolvements: store.useRows,
   getInvolvements: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
-  getById: (id: string): HappeningInvolvement | undefined => store.getRows().get(id),
-  getByHappening: (happeningId: string): readonly HappeningInvolvement[] =>
-    Array.from(store.getRows().values()).filter((r) => r.happeningId === happeningId),
+  getById: store.getById,
+  useById: store.useById,
+  getByHappening: (branchId: string | null, happeningId: string): readonly HappeningInvolvement[] =>
+    Array.from(store.getRows(branchId).values()).filter((r) => r.happeningId === happeningId),
   hydrate: store.hydrate,
   patch: store.patch,
   __reset: store.__reset,

@@ -21,10 +21,10 @@ const DEFINITION = storyDefinitionSchema.parse({
   worldTimeOrigin: { year: 0 },
 })
 
-function entry(id: string, position: number, branchId = 'b1'): StoryEntry {
+function entry(id: string, position: number): StoryEntry {
   return {
     id,
-    branchId,
+    branchId: 'b1',
     position,
     kind: 'ai_reply',
     content: id,
@@ -129,17 +129,14 @@ describe('loadPerTurnWorkingSet', () => {
     expect(load.ok && load.set.entries.map((e) => e.id)).toEqual(['e1', 'e2', 'e3'])
   })
 
-  // The branch guard above already refuses a store hydrated elsewhere, so these
-  // filters only catch a row tagged for another branch inside the held one.
-  // They stay because metadata inheritance and the retrieval query read the
-  // tail of this set, and a foreign row would be the wrong story's.
-  it('drops rows tagged for another branch inside the held one', () => {
+  // The guard checks entries only; the entities read keeps another branch's roster out.
+  it('reads no entities from an entities store loaded for another branch', () => {
     openStory()
-    entriesStore.hydrate('b1', [entry('e1', 1), entry('foreign', 2, 'b2')])
-    entitiesStore.hydrate('b1', [entity('char_1'), entity('char_foreign', 'b2')])
+    entriesStore.hydrate('b1', [entry('e1', 1)])
+    entitiesStore.hydrate('b2', [entity('char_foreign', 'b2')])
 
     const load = loadPerTurnWorkingSet(RUN, 'phase')
-    expect(load.ok && load.set.entries.map((e) => e.id)).toEqual(['e1'])
-    expect(load.ok && load.set.entities.map((e) => e.id)).toEqual(['char_1'])
+    expect(load.ok).toBe(true)
+    expect(load.ok && load.set.entities).toEqual([])
   })
 })

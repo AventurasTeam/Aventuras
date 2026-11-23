@@ -30,7 +30,7 @@ afterEach(() => {
   entriesStore.__reset()
   entitiesStore.__reset()
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 const LOC_A = 'loc_a'
@@ -617,6 +617,22 @@ describe('updateEntrySceneFields', () => {
     expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
   })
 
+  it('refuses a place the entities store holds only for another branch, writing nothing', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    entitiesStore.hydrate('b2', [{ ...location(LOC_B), branchId: 'b2' }] as never)
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a'], currentLocationId: LOC_B },
+      ctx,
+    )
+    expect(result).toMatchObject({ status: 'rejected', code: 'not-a-location' })
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toHaveLength(0)
+  })
+
   // As a scene already in a retired place keeps it: refusing would block every member-only edit.
   it('saves a member-only edit on a tail whose location names no place', async () => {
     const { db, runInTransaction } = await createTestDb()
@@ -763,7 +779,7 @@ describe('updateEntrySceneFields', () => {
     await seed(db)
     const sunk = { ...location('loc_sunk'), status: 'retired' as const }
     await db.insert(entities).values(sunk)
-    entitiesStore.hydrate('b1', [...entitiesStore.getEntities().values(), sunk] as never)
+    entitiesStore.hydrate('b1', [...entitiesStore.getEntities('b1').values(), sunk] as never)
 
     const result = await updateEntrySceneFields(
       'b1',

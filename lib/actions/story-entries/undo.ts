@@ -240,13 +240,13 @@ async function undoRerun(
     // Committed: only the store sync failed, so the re-run is undone all the same, and the error
     // says how its journal ended.
     if (e instanceof DeltaReplayError && e.committed) {
-      undoRedoStore.clear()
+      undoRedoStore.clear(branchId)
       logCloseUndone(actionId, writeBack)
       throw withJournalOutcome(e, actionId, writeBack)
     }
     throw e
   }
-  undoRedoStore.clear()
+  undoRedoStore.clear(branchId)
   logCloseUndone(actionId, writeBack)
   return writeBack.outcome === 'undone'
     ? { status: 'ok', closeUndone: { chapterNumber: writeBack.chapterNumber } }
@@ -262,17 +262,16 @@ export async function redoLastAction(
   if (entriesStore.getLoadedBranch() !== branchId)
     return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
 
-  const group = undoRedoStore.peekRedoGroup()
+  const group = undoRedoStore.peekRedoGroup(branchId)
   if (!group) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
   const moved = movedFrom(expectedActionId, group.actionId)
   if (moved != null) return moved
-  // The redo stack is a single global stack, not partitioned per branch. Guard
-  // against applying another branch's snapshot to this context.
+  // A group whose snapshots name another branch is broken: redone here, it would write there.
   if (group.snapshots.some((s) => s.delta.branchId !== branchId))
     return {
       status: 'rejected',
       code: 'integrity',
-      reason: 'redo stack does not belong to this branch',
+      reason: 'redo group names another branch',
     }
 
   // Bracketed like every reversal, so no pass starts mid-sweep.
@@ -282,7 +281,7 @@ export async function redoLastAction(
     () =>
       refusingIntegrity(branchId, async () => {
         // A write committing during the settle clears the stack; its snapshot would restore over it.
-        if (undoRedoStore.peekRedoGroup() !== group)
+        if (undoRedoStore.peekRedoGroup(branchId) !== group)
           return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
         const invalidation = await resolveRedoInvalidation(branchId, group.snapshots, ctx)
         if (invalidation.status === 'unreadable')
@@ -292,10 +291,10 @@ export async function redoLastAction(
         } catch (e) {
           // Committed: the redo's DB write landed, only the store sync failed. Pop regardless —
           // a retry would re-insert an already-inserted delta row and collide on its primary key.
-          if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup()
+          if (e instanceof DeltaReplayError && e.committed) undoRedoStore.popRedoGroup(branchId)
           throw e
         }
-        undoRedoStore.popRedoGroup()
+        undoRedoStore.popRedoGroup(branchId)
         return { status: 'ok' }
       }),
     () => GATED,

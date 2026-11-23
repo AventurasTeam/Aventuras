@@ -25,14 +25,14 @@ describe('happeningsStore', () => {
   it('hydrates and reads by id', () => {
     happeningsStore.__reset()
     happeningsStore.hydrate('br_1', [row('hap_1', 'Duel'), row('hap_2', 'Coronation')])
-    expect(happeningsStore.getById('hap_1')?.title).toBe('Duel')
-    expect(happeningsStore.getHappenings().size).toBe(2)
+    expect(happeningsStore.getById('br_1', 'hap_1')?.title).toBe('Duel')
+    expect(happeningsStore.getHappenings('br_1').size).toBe(2)
   })
 
   it('no-ops a patch for a non-held branch', () => {
     happeningsStore.__reset()
     happeningsStore.hydrate('br_1', [])
     happeningsStore.patch('br_2', { op: 'create', id: 'hap_9', row: row('hap_9', 'Ghost') })
-    expect(happeningsStore.getById('hap_9')).toBeUndefined()
+    expect(happeningsStore.getById('br_1', 'hap_9')).toBeUndefined()
   })
 })

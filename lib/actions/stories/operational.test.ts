@@ -338,11 +338,11 @@ describe('stories column writes', () => {
     expect(currentStoryStore.getCurrentStory()).toBeNull()
     expect(currentStoryStore.getOpenSeq()).toBe(0)
     expect(entriesStore.getLoadedBranch()).toBeNull()
-    expect(entriesStore.getEntries().size).toBe(0)
+    expect(entriesStore.getEntries('br_1').size).toBe(0)
     expect(entitiesStore.getLoadedBranch()).toBeNull()
-    expect(entitiesStore.getEntities().size).toBe(0)
+    expect(entitiesStore.getEntities('br_1').size).toBe(0)
     expect(loreStore.getLoadedBranch()).toBeNull()
-    expect(loreStore.getLore().size).toBe(0)
+    expect(loreStore.getLore('br_1').size).toBe(0)
     expect(navigationStore.getNavigation()).toEqual({
       currentStoryId: null,
       currentBranchId: null,

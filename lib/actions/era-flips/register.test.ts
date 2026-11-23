@@ -46,7 +46,7 @@ describe('branch_era_flips CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'ef_1')).eraName).toBe('Age of Ash')
-    expect(eraFlipsStore.getById('ef_1')?.atWorldtime).toBe(1000)
+    expect(eraFlipsStore.getById('br_1', 'ef_1')?.atWorldtime).toBe(1000)
   })
 
   it('a write to a non-held branch no-ops against the store', async () => {
@@ -61,7 +61,7 @@ describe('branch_era_flips CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'ef_1')).eraName).toBe('Age of Ash')
-    expect(eraFlipsStore.getById('ef_1')).toBeUndefined()
+    expect(eraFlipsStore.getById('br_2', 'ef_1')).toBeUndefined()
   })
 
   it('rejects a negative at_worldtime on create (no row, no delta)', async () => {
@@ -163,13 +163,13 @@ describe('branch_era_flips CRUD arms', () => {
     )
 
     expect((await rowFor(db, 'ef_1')).atWorldtime).toBe(2000)
-    expect(eraFlipsStore.getById('ef_1')?.eraName).toBe('Age of Storms')
+    expect(eraFlipsStore.getById('br_1', 'ef_1')?.eraName).toBe('Age of Storms')
 
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     const back = await rowFor(db, 'ef_1')
     expect(back.atWorldtime).toBe(1000)
     expect(back.eraName).toBe('Age of Ash')
-    expect(eraFlipsStore.getById('ef_1')?.atWorldtime).toBe(1000)
+    expect(eraFlipsStore.getById('br_1', 'ef_1')?.atWorldtime).toBe(1000)
   })
 
   it('delete captures the full row; reverse-replay re-inserts + store create-patch', async () => {
@@ -195,10 +195,10 @@ describe('branch_era_flips CRUD arms', () => {
       ctx,
     )
     expect(await rowFor(db, 'ef_1')).toBeUndefined()
-    expect(eraFlipsStore.getById('ef_1')).toBeUndefined()
+    expect(eraFlipsStore.getById('br_1', 'ef_1')).toBeUndefined()
 
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'ef_1')).eraName).toBe('Age of Ash')
-    expect(eraFlipsStore.getById('ef_1')?.eraName).toBe('Age of Ash')
+    expect(eraFlipsStore.getById('br_1', 'ef_1')?.eraName).toBe('Age of Ash')
   })
 })

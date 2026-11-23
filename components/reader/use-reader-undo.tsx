@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 
 import { chapterImpactLines } from '@/components/chapters/chapter-impact-lines'
 import {
@@ -29,7 +29,7 @@ import { UndoConfirm } from './undo-confirm'
 import {
   deletedRowsOf,
   firstRowOf,
-  liveUndoRow,
+  liveRowsOf,
   snapshotRowsOf,
   undoConfirmRows,
   undoConfirmTitle,
@@ -58,17 +58,29 @@ type Confirm = {
   lines: string[]
 }
 
+type OpenedRedo = { group: RedoGroup; label: string }
+
 const NOTHING: Refusal = { code: 'nothing-to-apply', reason: 'nothing to apply' }
 const GATED: Refusal = { code: 'gated', reason: 'generation in flight' }
 
 const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rerun', 'keptClose'])
 
 function redoNames(group: RedoGroup): UndoNames {
-  return undoNames(firstRowOf(liveUndoRow, snapshotRowsOf(group.snapshots)))
+  return undoNames(firstRowOf(liveRowsOf(group.branchId), snapshotRowsOf(group.snapshots)))
 }
 
-function rowLines(target: Target): string[] {
-  const rows = firstRowOf(liveUndoRow, deletedRowsOf(target.deltas))
+function redoMenuLabel(group: RedoGroup): string {
+  return undoTargetText(describeRedoTarget(group), redoNames(group), 'redoMenu')
+}
+
+function redoLabelOf(top: RedoGroup | undefined, opened: OpenedRedo | null): string | null {
+  if (top == null) return null
+  if (top === opened?.group) return opened.label
+  return redoMenuLabel(top)
+}
+
+function rowLines(target: Target, branchId: string): string[] {
+  const rows = firstRowOf(liveRowsOf(branchId), deletedRowsOf(target.deltas))
   return undoConfirmRows(target.deltas, target.names, rows)
 }
 
@@ -137,6 +149,8 @@ export function useReaderUndo({
   confirm: JSX.Element | null
 } {
   const [menuTarget, setMenuTarget] = useState<Target | null>(null)
+  // Redo's names read live rows no hook here subscribes to, so each menu open labels it afresh.
+  const [openedRedo, setOpenedRedo] = useState<OpenedRedo | null>(null)
   const menuTargetRef = useRef<Target | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const busyRef = useRef(false)
@@ -174,7 +188,10 @@ export function useReaderUndo({
       actionId: read.actionId,
       description: describeUndoGroup(read.deltas),
       deltas: read.deltas,
-      names: undoNames(firstRowOf(liveUndoRow, deletedRowsOf(read.deltas)), read.entryPositions),
+      names: undoNames(
+        firstRowOf(liveRowsOf(branchId), deletedRowsOf(read.deltas)),
+        read.entryPositions,
+      ),
     }
   }, [branchId, ctx])
 
@@ -208,7 +225,7 @@ export function useReaderUndo({
 
   const runRedo = useCallback(
     async (origin: Origin, expectedActionId?: string) => {
-      const group = undoRedoStore.peekRedoGroup()
+      const group = undoRedoStore.peekRedoGroup(branchId)
       if (group == null) {
         report('redo', NOTHING, origin)
         return
@@ -268,7 +285,7 @@ export function useReaderUndo({
         return
       }
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
-      const redoable = undoRedoStore.peekRedoGroup()?.actionId === target.actionId
+      const redoable = undoRedoStore.peekRedoGroup(branchId)?.actionId === target.actionId
       announce(
         notice,
         redoable
@@ -302,9 +319,9 @@ export function useReaderUndo({
             ? []
             : [t('reader:undo.confirmCloseUndone', { number: impact.closeUndone.chapterNumber })]
         if (lines.length > 0) return [...lines, ...closeUndone]
-        return [...rowLines(target), ...closeUndone]
+        return [...rowLines(target, branchId), ...closeUndone]
       }
-      return rowLines(target)
+      return rowLines(target, branchId)
     },
     [branchId, ctx],
   )
@@ -356,6 +373,8 @@ export function useReaderUndo({
       const seq = ++resolveSeqRef.current
       showMenuTarget(null)
       if (!open) return
+      const top = undoRedoStore.peekRedoGroup(branchId)
+      setOpenedRedo(top == null ? null : { group: top, label: redoMenuLabel(top) })
       resolve().then(
         (target) => {
           if (resolveSeqRef.current === seq) showMenuTarget(target)
@@ -370,14 +389,8 @@ export function useReaderUndo({
     [branchId, resolve, showMenuTarget],
   )
 
-  const redoTop = undoRedoStore.useUndoRedo((s) => s.redoStack.at(-1))
-  const redoLabel = useMemo(
-    () =>
-      redoTop == null
-        ? null
-        : undoTargetText(describeRedoTarget(redoTop), redoNames(redoTop), 'redoMenu'),
-    [redoTop],
-  )
+  const redoTop = undoRedoStore.useRedoTop(branchId)
+  const redoLabel = redoLabelOf(redoTop, openedRedo)
   const undoLabel =
     menuTarget == null
       ? t('reader:actions.undo')

@@ -25,9 +25,7 @@ function commitEntity(
   story: StoryPlace,
   ctx: DbCtx,
 ): Promise<EntitySaveResult> {
-  const branchEntities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === args.branchId,
-  )
+  const branchEntities = [...entitiesStore.getEntities(args.branchId).values()]
   return commitRowSave(
     'entity',
     {

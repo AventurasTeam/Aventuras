@@ -63,8 +63,8 @@ describe('chapters CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'chap_1')).title).toBe('The Gathering Storm')
-    expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war', 'omen'])
-    expect(chaptersStore.getBySequenceNumber(1)?.id).toBe('chap_1')
+    expect(chaptersStore.getById('br_1', 'chap_1')?.keywords).toEqual(['war', 'omen'])
+    expect(chaptersStore.getBySequenceNumber('br_1', 1)?.id).toBe('chap_1')
   })
 
   it('create writes a close report into the row, and null when the entry has none', async () => {
@@ -125,7 +125,7 @@ describe('chapters CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'chap_1')).title).toBe('The Gathering Storm') // DB written
-    expect(chaptersStore.getById('chap_1')).toBeUndefined() // store no-op
+    expect(chaptersStore.getById('br_2', 'chap_1')).toBeUndefined() // store no-op
   })
 
   it('rejects a non-string keyword on create (no row, no delta)', async () => {
@@ -245,7 +245,7 @@ describe('chapters CRUD arms', () => {
     )
 
     expect((await rowFor(db, 'chap_1')).title).toBe('War Breaks')
-    expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war'])
+    expect(chaptersStore.getById('br_1', 'chap_1')?.keywords).toEqual(['war'])
 
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     const back = await rowFor(db, 'chap_1')
@@ -253,7 +253,7 @@ describe('chapters CRUD arms', () => {
     expect(back.summary).toBe('Heroes assemble as war looms.')
     expect(back.theme).toBe('rising tension')
     expect(back.keywords).toEqual(['war', 'omen'])
-    expect(chaptersStore.getById('chap_1')?.keywords).toEqual(['war', 'omen'])
+    expect(chaptersStore.getById('br_1', 'chap_1')?.keywords).toEqual(['war', 'omen'])
   })
 
   it('defaults embedding_stale to 1 on create', async () => {
@@ -338,7 +338,7 @@ describe('chapters store projection', () => {
     db: Awaited<ReturnType<typeof setup>>['db'],
     hasCloseReport: boolean,
   ) {
-    const stored = chaptersStore.getById('chap_1')
+    const stored = chaptersStore.getById('br_1', 'chap_1')
     expect(stored).toBeDefined()
     const { hasCloseReport: flag, closeReportActionId, ...storeRest } = stored!
     const { closeReport, ...dbRest } = await rowFor(db, 'chap_1')

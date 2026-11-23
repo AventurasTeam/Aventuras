@@ -10,7 +10,7 @@ import { readUndoTarget } from './undo-target'
 afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 const ENTRY = { contentTokens: null, chapterId: null, metadata: null }

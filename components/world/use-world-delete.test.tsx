@@ -116,22 +116,19 @@ describe('useWorldDelete', () => {
     loreStore.hydrate(BRANCH, [VEIL])
   })
 
-  it('builds the confirm copy for an entity, re-read from the store, with its own-branch link counts', () => {
+  it('builds the confirm copy for an entity, re-read from the store, with its link counts', () => {
     happeningAwarenessStore.hydrate(BRANCH, [
       awareness('haw_1', MIRA.id),
       awareness('haw_2', MIRA.id, { happeningId: 'hap_2' }),
       awareness('haw_x', 'char_other'),
-      awareness('haw_y', MIRA.id, { branchId: 'br_2' }),
     ])
     happeningInvolvementsStore.hydrate(BRANCH, [
       involvement('hinv_1', MIRA.id),
       involvement('hinv_x', 'char_other'),
-      involvement('hinv_y', MIRA.id, { branchId: 'br_2' }),
     ])
     characterRelationshipsStore.hydrate(BRANCH, [
       relationship('rel_1', 'char_kael', MIRA.id),
       relationship('rel_x', 'char_kael', 'char_other'),
-      relationship('rel_y', 'char_kael', MIRA.id, { branchId: 'br_2' }),
     ])
     const guard = (fn: () => void) => fn()
     const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
@@ -144,6 +141,23 @@ describe('useWorldDelete', () => {
       '1 happening involvement',
       '1 relationship',
     ])
+  })
+
+  // A fork's copies name the same entity; the confirm counts only its own branch's.
+  it('counts no link rows from stores loaded for another branch', () => {
+    const OTHER = 'br_2'
+    happeningAwarenessStore.hydrate(OTHER, [awareness('haw_y', MIRA.id, { branchId: OTHER })])
+    happeningInvolvementsStore.hydrate(OTHER, [involvement('hinv_y', MIRA.id, { branchId: OTHER })])
+    characterRelationshipsStore.hydrate(OTHER, [
+      relationship('rel_y', 'char_kael', MIRA.id, { branchId: OTHER }),
+    ])
+    const guard = (fn: () => void) => fn()
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+
+    act(() => result.current.request({ kind: 'entity', row: MIRA }))
+
+    expect(result.current.copy?.title).toBe('Delete Mira?')
+    expect(result.current.copy?.impacts).toEqual([])
   })
 
   it("names the row's current title when a dirty-pane Save renamed it before the guard released", () => {

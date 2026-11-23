@@ -66,13 +66,13 @@ export function armSettledText(args: {
     : null
 }
 
-export function latestReplyOf<E extends { branchId: string; kind: string; position: number }>(
-  entries: Iterable<E>,
-  branchId: string,
+/** The latest `ai_reply` among one branch's entries (a branch read). */
+export function latestReplyOf<E extends { kind: string; position: number }>(
+  branchEntries: Iterable<E>,
 ): E | undefined {
   let latest: E | undefined
-  for (const entry of entries) {
-    if (entry.branchId !== branchId || entry.kind !== 'ai_reply') continue
+  for (const entry of branchEntries) {
+    if (entry.kind !== 'ai_reply') continue
     if (latest == null || entry.position > latest.position) latest = entry
   }
   return latest

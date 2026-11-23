@@ -64,22 +64,16 @@ async function readSignalWindow(
 
 export function useRowSignals(branchId: string): RowSignalsSnapshot {
   // Raw maps are stable; a fresh derived array here would break useSyncExternalStore's contract.
-  const entryRows = entriesStore.useEntries((m) => m)
+  const entryRows = entriesStore.useEntries(branchId, (m) => m)
   const entries = useMemo(
-    () =>
-      [...entryRows.values()]
-        .filter((e) => e.branchId === branchId)
-        .sort((a, b) => a.position - b.position),
-    [entryRows, branchId],
+    () => [...entryRows.values()].sort((a, b) => a.position - b.position),
+    [entryRows],
   )
-  const entityRows = entitiesStore.useEntities((m) => m)
-  const entities = useMemo(
-    () => [...entityRows.values()].filter((e) => e.branchId === branchId),
-    [entityRows, branchId],
-  )
-  const loreRows = loreStore.useLore((m) => m)
-  const threadRows = threadsStore.useThreads((m) => m)
-  const happeningRows = happeningsStore.useHappenings((m) => m)
+  const entityRows = entitiesStore.useEntities(branchId, (m) => m)
+  const entities = useMemo(() => [...entityRows.values()], [entityRows])
+  const loreRows = loreStore.useLore(branchId, (m) => m)
+  const threadRows = threadsStore.useThreads(branchId, (m) => m)
+  const happeningRows = happeningsStore.useHappenings(branchId, (m) => m)
   const [latestReplyId = null, fadingReplyId = null] = latestReplyIds(entries)
   // settleCount marks the moment a run's writes are final; shared across every mounted instance.
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
@@ -110,14 +104,13 @@ export function useRowSignals(branchId: string): RowSignalsSnapshot {
   }, [entities])
 
   const isLive = useMemo(() => {
-    const rowsOf: Record<LiveRowCategory, ReadonlyMap<string, { branchId: string }>> = {
+    const rowsOf: Record<LiveRowCategory, ReadonlyMap<string, unknown>> = {
       lore: loreRows,
       thread: threadRows,
       happening: happeningRows,
     }
-    return (category: LiveRowCategory, id: string): boolean =>
-      rowsOf[category].get(id)?.branchId === branchId
-  }, [loreRows, threadRows, happeningRows, branchId])
+    return (category: LiveRowCategory, id: string): boolean => rowsOf[category].has(id)
+  }, [loreRows, threadRows, happeningRows])
 
   const recentlyClassified = useMemo(
     () =>

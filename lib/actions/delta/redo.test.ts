@@ -109,7 +109,7 @@ describe('prepareUndo / applyRedo', () => {
       createdAt: Date.now(),
     }
 
-    await applyRedo(__redoGroupForTest([{ delta: deltaRow, rowBeforeUndo: null }]), ctx)
+    await applyRedo(__redoGroupForTest('b1', [{ delta: deltaRow, rowBeforeUndo: null }]), ctx)
 
     const rows = await db.select().from(deltas).where(eq(deltas.id, 'd_missing'))
     expect(rows).toHaveLength(0)
@@ -218,7 +218,7 @@ describe('prepareUndo / applyRedo', () => {
     // A null rowBeforeUndo means the snapshot found no matching row: applyRedo
     // must write nothing to the DB for create/update, and must NOT patch the store.
     await applyRedo(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         { delta: createDelta, rowBeforeUndo: null },
         { delta: deleteDelta, rowBeforeUndo: null },
       ]),
@@ -469,13 +469,13 @@ describe('RedoGroup', () => {
   // The held-row refusal and the snapshot's before-the-reversal timing live in prepareUndo, so
   // applyRedo and the redo stack take only a group it minted.
   it('is not satisfied by a hand-built snapshot list', () => {
-    const snapshots = __redoGroupForTest().snapshots
+    const snapshots = __redoGroupForTest('b1').snapshots
     // @ts-expect-error a snapshot list is not a minted group
     const redo = () => applyRedo(snapshots, {} as never)
     // @ts-expect-error nor is a literal with the same shape
     undoRedoStore.pushRedoGroup({ snapshots })
     expect(redo).toBeTypeOf('function')
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
   })
 })
 
@@ -506,7 +506,7 @@ describe('applyRedo and embedding_stale', () => {
     entitiesStore.hydrate('b1', [])
     const row = await redoUpdate(ENTITY_CASE)
     expect(row.embedding_stale).toBe(1)
-    expect(entitiesStore.getById('char_1')?.embeddingStale).toBe(1)
+    expect(entitiesStore.getById('b1', 'char_1')?.embeddingStale).toBe(1)
   })
 
   it('redoes a story_entries update, which has no embedding_stale column', async () => {
@@ -543,7 +543,7 @@ describe('applyRedo and embedding_stale', () => {
     expect(row.metadata).toEqual(forward)
     // Drizzle drops a key the table has no column for, so an ungated force shows
     // up only here — as a phantom column merged into the held-branch store row.
-    expect(entriesStore.getById('e1')).not.toHaveProperty('embeddingStale')
+    expect(entriesStore.getById('b1', 'e1')).not.toHaveProperty('embeddingStale')
   })
 
   it('redoes a content edit back to the count it wrote', async () => {
@@ -575,7 +575,7 @@ describe('applyRedo and embedding_stale', () => {
 
     const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e1'))
     expect(row.contentTokens).toBe(countTokens(edited))
-    expect(entriesStore.getById('e1')?.contentTokens).toBe(countTokens(edited))
+    expect(entriesStore.getById('b1', 'e1')?.contentTokens).toBe(countTokens(edited))
   })
 
   it('writes nothing for a null-rowBeforeUndo create on an embeddable table', async () => {
@@ -585,7 +585,7 @@ describe('applyRedo and embedding_stale', () => {
     entitiesStore.hydrate('b1', [])
 
     await applyRedo(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         {
           delta: {
             id: 'd_null',
@@ -608,7 +608,7 @@ describe('applyRedo and embedding_stale', () => {
     )
 
     expect(() => readRow(sqlite, 'entities', 'char_1')).toThrow()
-    expect(entitiesStore.getById('char_1')).toBeUndefined()
+    expect(entitiesStore.getById('b1', 'char_1')).toBeUndefined()
   })
 
   it('leaves a redone delete deleted', async () => {

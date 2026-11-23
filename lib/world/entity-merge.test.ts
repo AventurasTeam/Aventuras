@@ -134,10 +134,10 @@ function merge({ canonical = A, loser = B, ...overrides }: MergeOverrides = {}) 
     deselectedTags: [],
     deselectedKeywords: [],
     branchEntities: [canonical, loser, M, N],
-    happenings: ['hap_1', 'hap_2', 'hap_3'].map((id) => ({ id, branchId: 'b1' })),
-    awareness: [],
-    involvements: [],
-    relationships: [],
+    branchHappenings: ['hap_1', 'hap_2', 'hap_3'].map((id) => ({ id })),
+    branchAwareness: [],
+    branchInvolvements: [],
+    branchRelationships: [],
     tail: null,
     story: storyPlaceOf({ tail: null, sceneSource: null }),
     newId: sequentialIds(),
@@ -184,10 +184,10 @@ describe('entityMergeActions — refusals', () => {
         deselectedTags: [],
         deselectedKeywords: [],
         branchEntities: [A, B],
-        happenings: [],
-        awareness: [],
-        involvements: [],
-        relationships: [],
+        branchHappenings: [],
+        branchAwareness: [],
+        branchInvolvements: [],
+        branchRelationships: [],
         story: storyPlaceOf({ tail: null, sceneSource: null }),
         tail: null,
         newId: sequentialIds(),
@@ -204,10 +204,10 @@ describe('entityMergeActions — refusals', () => {
       deselectedTags: [],
       deselectedKeywords: [],
       branchEntities: [A, B],
-      happenings: [],
-      awareness: [],
-      involvements: [],
-      relationships: [],
+      branchHappenings: [],
+      branchAwareness: [],
+      branchInvolvements: [],
+      branchRelationships: [],
       story: storyPlaceOf({ tail: null, sceneSource: null }),
       tail: null,
       newId: sequentialIds(),
@@ -1078,7 +1078,7 @@ describe('entityMergeActions — inverse refs', () => {
 describe('entityMergeActions — link rows', () => {
   it('moves the loser’s awareness with its fields, count and source row, dropping one the canonical has', () => {
     const plan = merge({
-      awareness: [
+      branchAwareness: [
         aware('haw_1', 'char_a', 'hap_1'),
         aware('haw_2', 'char_b', 'hap_1', { source: 'told' }),
         aware('haw_3', 'char_b', 'hap_2', {
@@ -1120,7 +1120,7 @@ describe('entityMergeActions — link rows', () => {
 
   it('re-creates an involvement under an injected id, dropping one in a happening the canonical is in', () => {
     const plan = merge({
-      involvements: [
+      branchInvolvements: [
         involved('hinv_1', 'char_a', 'hap_1', 'witness'),
         involved('hinv_2', 'char_b', 'hap_1', 'culprit'),
         involved('hinv_3', 'char_b', 'hap_2', 'victim'),
@@ -1146,7 +1146,7 @@ describe('entityMergeActions — link rows', () => {
 
   it('moves one of the loser’s involvements per happening, the first with its role', () => {
     const plan = merge({
-      involvements: [
+      branchInvolvements: [
         involved('hinv_1', 'char_b', 'hap_2', 'victim'),
         involved('hinv_2', 'char_b', 'hap_3', null),
         involved('hinv_3', 'char_b', 'hap_2', 'witness'),
@@ -1166,18 +1166,15 @@ describe('entityMergeActions — link rows', () => {
 
   it('copies a link row whose other end the branch has, and leaves one whose end is gone', () => {
     const plan = merge({
-      branchEntities: [A, B, M, entity('char_g', 'character', { branchId: 'b2' })],
-      // hap_g survives on another branch only.
-      happenings: [
-        { id: 'hap_1', branchId: 'b1' },
-        { id: 'hap_g', branchId: 'b2' },
-      ],
-      awareness: [aware('haw_1', 'char_b', 'hap_1'), aware('haw_2', 'char_b', 'hap_g')],
-      involvements: [
+      // char_g and hap_g are gone from the branch: its lists hold neither.
+      branchEntities: [A, B, M],
+      branchHappenings: [{ id: 'hap_1' }],
+      branchAwareness: [aware('haw_1', 'char_b', 'hap_1'), aware('haw_2', 'char_b', 'hap_g')],
+      branchInvolvements: [
         involved('hinv_1', 'char_b', 'hap_g', null),
         involved('hinv_2', 'char_b', 'hap_1', 'witness'),
       ],
-      relationships: [
+      branchRelationships: [
         rel('rel_1', 'char_b', 'char_g', 'friend', null),
         rel('rel_2', 'char_b', 'char_m', 'mentor', null),
       ],
@@ -1210,7 +1207,7 @@ describe('entityMergeActions — link rows', () => {
   })
 
   it('drops the relationship between the pair', () => {
-    const plan = merge({ relationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
+    const plan = merge({ branchRelationships: [rel('rel_1', 'char_a', 'char_b', 'twin', 'twin')] })
     expect(ofKind(plan.actions, 'upsertCharacterRelationship')).toStrictEqual([])
     expect(plan.overlap.relationships).toBe(0)
   })
@@ -1220,7 +1217,7 @@ describe('entityMergeActions — link rows', () => {
     const plan = merge({
       canonical,
       branchEntities: [canonical, B, A, M],
-      relationships: [
+      branchRelationships: [
         rel('rel_1', 'char_b', 'char_m', 'mentor', 'pupil'),
         rel('rel_2', 'char_a', 'char_b', 'ally', 'rival'),
       ],
@@ -1247,7 +1244,7 @@ describe('entityMergeActions — link rows', () => {
 
   it('merges a pair both rows have, the canonical’s non-null views winning', () => {
     const plan = merge({
-      relationships: [
+      branchRelationships: [
         rel('rel_1', 'char_a', 'char_m', 'friend', null),
         rel('rel_2', 'char_b', 'char_m', 'enemy', 'debtor'),
       ],
@@ -1268,7 +1265,7 @@ describe('entityMergeActions — link rows', () => {
 
   it('writes no relationship when the canonical’s views already cover the pair', () => {
     const plan = merge({
-      relationships: [
+      branchRelationships: [
         rel('rel_1', 'char_a', 'char_m', 'friend', 'ally'),
         rel('rel_2', 'char_b', 'char_m', 'enemy', 'rival'),
       ],
@@ -1279,7 +1276,7 @@ describe('entityMergeActions — link rows', () => {
 
   it('counts only the loser’s relationships whose other end the canonical already has', () => {
     const plan = merge({
-      relationships: [
+      branchRelationships: [
         rel('rel_1', 'char_a', 'char_m', 'friend', null),
         rel('rel_2', 'char_b', 'char_m', 'enemy', null),
         rel('rel_3', 'char_b', 'char_n', 'mentor', null),
@@ -1418,7 +1415,7 @@ describe('entityMergeActions — the group', () => {
       canonical: factionA,
       loser: factionB,
       branchEntities: [factionA, factionB, member, walker],
-      involvements: [involved('hinv_1', 'fac_b', 'hap_1', null)],
+      branchInvolvements: [involved('hinv_1', 'fac_b', 'hap_1', null)],
       tail: { id: 'entry_9', sceneEntities: ['fac_b'], currentLocationId: null },
     })
     const label = (a: PipelineAction) =>
@@ -1433,13 +1430,13 @@ describe('entityMergeActions — the group', () => {
 
     const characters = merge({
       canonical: entity('char_a', 'character', flaggedWith('char_b')),
-      awareness: [
+      branchAwareness: [
         aware('haw_1', 'char_b', 'hap_1'),
         aware('haw_2', 'char_a', 'hap_2'),
         aware('haw_3', 'char_b', 'hap_2'),
       ],
-      involvements: [involved('hinv_1', 'char_b', 'hap_1', null)],
-      relationships: [rel('rel_1', 'char_b', 'char_m', 'friend', null)],
+      branchInvolvements: [involved('hinv_1', 'char_b', 'hap_1', null)],
+      branchRelationships: [rel('rel_1', 'char_b', 'char_m', 'friend', null)],
       tail: { id: 'entry_9', sceneEntities: ['char_b'], currentLocationId: null },
     })
     expect(characters.actions.map(label)).toStrictEqual([

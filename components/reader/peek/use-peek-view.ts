@@ -40,8 +40,8 @@ export type PeekView = {
 export function usePeekView(peek: RailPeek | null, data: RailData): PeekView {
   const { branchId } = data
   // Raw maps are stable between patches; derived values via useMemo.
-  const involvements = happeningInvolvementsStore.useInvolvements((m) => m)
-  const awareness = happeningAwarenessStore.useAwareness((m) => m)
+  const involvements = happeningInvolvementsStore.useInvolvements(branchId, (m) => m)
+  const awareness = happeningAwarenessStore.useAwareness(branchId, (m) => m)
   const worldTime = useBranchWorldTime(branchId)
   // Another branch's open story says nothing about this branch's calendar.
   const calendarId = currentStoryStore.useCurrentStory((s) =>

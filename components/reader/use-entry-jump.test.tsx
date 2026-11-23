@@ -57,10 +57,10 @@ const span = (from: number, through: number): StoryEntry[] =>
 const byWindow =
   (branchId: string) =>
   (entryId: string): JumpClass =>
-    entriesStore.getById(entryId)?.branchId === branchId ? 'slice' : 'read'
+    entriesStore.getById(branchId, entryId) !== undefined ? 'slice' : 'read'
 
 const loadedPositions = () =>
-  [...entriesStore.getEntries().values()].map((r) => r.position).sort((a, b) => a - b)
+  [...entriesStore.getEntries(BRANCH).values()].map((r) => r.position).sort((a, b) => a - b)
 
 function expectContiguous(from: number, through: number) {
   expect(loadedPositions()).toEqual(span(from, through).map((r) => r.position))
@@ -185,12 +185,12 @@ describe('useEntryJump', () => {
     })
     let sameTick: boolean | null = null
     topLoaded.mockImplementation(() => {
-      if (entriesStore.getById(idAt(1)) !== undefined) {
+      if (entriesStore.getById(BRANCH, idAt(1)) !== undefined) {
         sameTick = writeTickOpen
         return
       }
       queueMicrotask(() => {
-        sameTick = entriesStore.getById(idAt(1)) !== undefined
+        sameTick = entriesStore.getById(BRANCH, idAt(1)) !== undefined
       })
     })
 
@@ -245,7 +245,7 @@ describe('useEntryJump', () => {
   it('lands only after the rows are in the store', async () => {
     let inStoreAtLanding = false
     land.mockImplementation((id) => {
-      inStoreAtLanding = entriesStore.getById(id) !== undefined
+      inStoreAtLanding = entriesStore.getById(BRANCH, id) !== undefined
     })
 
     await jump()(idAt(1))
@@ -423,6 +423,19 @@ describe('useEntryJump', () => {
 
     expect(toast.warning).toHaveBeenCalledExactlyOnceWith(t('reader:jumpEntryGone'))
     expect(land).not.toHaveBeenCalled()
+  })
+
+  // A copy shares ids: a branch loaded as the rows land may hold the target, and is not this one.
+  it('drops the jump silently when another branch loads as the rows land', async () => {
+    const insertMany = vi.spyOn(entriesStore, 'insertMany').mockImplementationOnce(() => {
+      entriesStore.hydrate('br_other', [{ ...row(1), branchId: 'br_other' }])
+    })
+
+    await jump()(idAt(1))
+
+    expect(insertMany).toHaveBeenCalledTimes(1)
+    expect(land).not.toHaveBeenCalled()
+    expect(toast.warning).not.toHaveBeenCalled()
   })
 })
 
@@ -966,7 +979,7 @@ describe('useEntryJump: jumping', () => {
     const classify = (): JumpClass => 'read'
     const { result } = renderHook(() => useEntryJump(BRANCH, ctx, classify, land, () => {}))
     await act(() => result.current.jump('entry_71'))
-    expect(entriesStore.getById('entry_70')).toBeDefined()
+    expect(entriesStore.getById(BRANCH, 'entry_70')).toBeDefined()
     expect(land).toHaveBeenCalledExactlyOnceWith('entry_71')
   })
 

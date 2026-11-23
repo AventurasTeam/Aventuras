@@ -331,8 +331,8 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()?.processedThrough).toBe(30)
   })
 
-  // Fails if the phase stops passing the store's rows or stops filtering them by branch.
-  it('shows the classifier only the stored relationship rows for its own branch', async () => {
+  // Fails if the phase stops passing the store's relationship rows to the prompt.
+  it("shows the classifier its branch's stored relationship rows", async () => {
     const kael = {
       id: CHAR_KAEL,
       branchId: 'b1',
@@ -366,16 +366,6 @@ describe('periodicClassifierPhase', () => {
           createdAt: 1,
           updatedAt: 1,
         },
-        {
-          id: 'rel_2',
-          branchId: 'other',
-          aId: CHAR_KAEL,
-          bId: CHAR_ARIA,
-          kind: 'rival',
-          inverseKind: null,
-          createdAt: 1,
-          updatedAt: 1,
-        },
       ] as CharacterRelationship[],
     })
     vi.mocked(generateStructured).mockResolvedValue({
@@ -389,7 +379,6 @@ describe('periodicClassifierPhase', () => {
     const { system, user } = vi.mocked(generateStructured).mock.calls[0][1]
     expect(user).toContain('Kael sees')
     expect(user).toContain('as: ally')
-    expect(user).not.toContain('rival')
     // classifier.md → What the classifier reads: role line and rules lead; branch lists stay out.
     expect(system).toMatch(
       /^You are extracting structured world state from recent story prose\. Report only what the prose supports; never invent\.\n\nRules for every list:\n\n- Provenance\. /,
@@ -418,7 +407,6 @@ describe('periodicClassifierPhase', () => {
     })
     threadsStore.hydrate('b1', [
       thread('thr_11111111-1111-1111-1111-111111111111', 'b1', 'Recover the relic'),
-      thread('thr_22222222-2222-2222-2222-222222222222', 'other', 'Raise the dead'),
     ])
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
@@ -430,8 +418,93 @@ describe('periodicClassifierPhase', () => {
 
     const { system, user } = vi.mocked(generateStructured).mock.calls[0][1]
     expect(user).toContain('- [th1] Recover the relic (active)')
-    expect(user).not.toContain('Raise the dead')
     expect(system).not.toContain('Recover the relic')
+  })
+
+  // Fails if the phase reads the relationship, thread or happening rows without naming its branch.
+  it('shows the classifier no relationship, thread or happening from a store loaded for another branch', async () => {
+    const HAP_FLOOD = 'hap_77777777-7777-7777-7777-777777777777'
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+      keywords: [],
+    } as unknown as Entity
+    const aria = { ...kael, id: CHAR_ARIA, name: 'Aria', description: 'His sister.' }
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      entities: [kael, aria],
+      // Turn 1 names the flood, so the pass would list it from the store if it read it.
+      entryMetadata: {
+        1: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          injectedHappenings: [HAP_FLOOD],
+        },
+      },
+    })
+    happeningsStore.hydrate('other', [
+      {
+        id: HAP_FLOOD,
+        branchId: 'other',
+        title: 'The river flood',
+        description: null,
+        category: null,
+        icon: null,
+        temporal: null,
+        occurredAtEntryId: null,
+        commonKnowledge: 0,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    characterRelationshipsStore.hydrate('other', [
+      {
+        id: 'rel_2',
+        branchId: 'other',
+        aId: CHAR_KAEL,
+        bId: CHAR_ARIA,
+        kind: 'rival',
+        inverseKind: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    threadsStore.hydrate('other', [
+      {
+        id: 'thr_22222222-2222-2222-2222-222222222222',
+        branchId: 'other',
+        title: 'Raise the dead',
+        description: null,
+        category: null,
+        icon: null,
+        status: 'active',
+        injectionMode: 'auto',
+        triggeredAtEntryId: null,
+        resolvedAtEntryId: null,
+        embeddingStale: 0,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ])
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+
+    await drain(h.ctx)
+
+    const { user } = vi.mocked(generateStructured).mock.calls[0][1]
+    expect(user).not.toContain('rival')
+    expect(user).not.toContain('Raise the dead')
+    expect(user).not.toContain('The river flood')
   })
 
   it("keeps its own branch's roster and story when a story opening publishes under its first read", async () => {
@@ -3354,7 +3427,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
         })
         .from(threads)
     const storeThreads = () =>
-      [...threadsStore.getThreads().values()].map(
+      [...threadsStore.getThreads('b1').values()].map(
         ({ status, triggeredAtEntryId, resolvedAtEntryId }) => ({
           status,
           triggeredAtEntryId,

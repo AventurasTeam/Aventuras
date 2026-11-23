@@ -177,7 +177,9 @@ describe('refreshSuggestions', () => {
       // spares the chips too (data-model.md -> Survival anchor).
       entryId: 'entry-1',
     })
-    expect(entriesStore.getById('entry-1')?.metadata?.nextTurnSuggestions?.source).toBe('refresh')
+    expect(entriesStore.getById('b1', 'entry-1')?.metadata?.nextTurnSuggestions?.source).toBe(
+      'refresh',
+    )
   })
 
   it('survives a CTRL-Z round trip on an entry that had no metadata at all', async () => {

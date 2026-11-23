@@ -77,7 +77,7 @@ async function updateEntrySceneFieldsLocked(
     currentLocationId:
       edit.currentLocationId === undefined ? before.currentLocationId : edit.currentLocationId,
   }
-  // A no-op delta would clear the global redo stack for nothing. Membership, not
+  // A no-op delta would clear the branch's redo stack for nothing. Membership, not
   // order: the scene is a set, and the editor's control emits in its own order.
   if (
     sameMembers(after.sceneEntities, before.sceneEntities) &&
@@ -103,9 +103,7 @@ async function updateEntrySceneFieldsLocked(
   const previousMetadata = previousEntry?.metadata
   const actionId = generateId('act')
 
-  const branchEntities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === branchId,
-  )
+  const branchEntities = [...entitiesStore.getEntities(branchId).values()]
   // The editor offers places only; the action layer holds the line for any other caller. A scene
   // already at an id that names no place keeps it until it is changed, as a retired place does.
   const locationChanged = after.currentLocationId !== before.currentLocationId

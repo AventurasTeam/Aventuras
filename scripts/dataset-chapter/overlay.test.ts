@@ -338,8 +338,8 @@ describe('the dataset overlay', () => {
     await applyDatasetOverlay(ctx)
 
     for (const entry of DATASET_OVERLAY.entities)
-      expect(entitiesStore.getById(entry.id)?.state, entry.name).toMatchObject(entry.state)
-    expect(threadsStore.getById(DATASET_OVERLAY.plantedThread.row.id)).toMatchObject({
+      expect(entitiesStore.getById(B, entry.id)?.state, entry.name).toMatchObject(entry.state)
+    expect(threadsStore.getById(B, DATASET_OVERLAY.plantedThread.row.id)).toMatchObject({
       title: DATASET_OVERLAY.plantedThread.row.title,
     })
   })

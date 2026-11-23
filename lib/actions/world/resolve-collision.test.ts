@@ -42,7 +42,11 @@ import {
 } from '@/lib/stores'
 import { entityLinkRows } from '@/lib/world'
 
-import { resolveCollision, type CollisionResolution } from './resolve-collision'
+import {
+  COLLISION_REJECTION,
+  resolveCollision,
+  type CollisionResolution,
+} from './resolve-collision'
 import { reserveRunAfterGateCheck } from '../delta/__tests__/gate-race'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
@@ -579,11 +583,19 @@ describe('resolveCollision — merge', () => {
     ]
     const before = await linkIds()
     const links = entityLinkRows({
-      branchId: 'b1',
       id: 'char_b',
-      awareness: await ctx.db.select().from(happeningAwareness),
-      involvements: await ctx.db.select().from(happeningInvolvements),
-      relationships: await ctx.db.select().from(characterRelationships),
+      branchAwareness: await ctx.db
+        .select()
+        .from(happeningAwareness)
+        .where(eq(happeningAwareness.branchId, 'b1')),
+      branchInvolvements: await ctx.db
+        .select()
+        .from(happeningInvolvements)
+        .where(eq(happeningInvolvements.branchId, 'b1')),
+      branchRelationships: await ctx.db
+        .select()
+        .from(characterRelationships)
+        .where(eq(characterRelationships.branchId, 'b1')),
     })
 
     await resolveCollision('b1', MERGE_B_INTO_A, ctx)
@@ -1439,6 +1451,21 @@ describe('resolveCollision — refusals', () => {
     expect(await resolveCollision('b1', KEEP_A_B, ctx)).toMatchObject({
       status: 'rejected',
       code: 'in-flight',
+    })
+    expect(await deltaRows()).toEqual([])
+  })
+
+  // A fork copies the pair under its ids; resolving on b1 must not plan from b2's copies.
+  it('refuses not-found, writing nothing, while the entities store holds another branch', async () => {
+    const rows = (await ctx.db.select().from(entities)) as Entity[]
+    entitiesStore.hydrate(
+      'b2',
+      rows.map((row) => ({ ...row, branchId: 'b2' })),
+    )
+
+    expect(await resolveCollision('b1', KEEP_A_B, ctx)).toMatchObject({
+      status: 'rejected',
+      code: COLLISION_REJECTION.notFound,
     })
     expect(await deltaRows()).toEqual([])
   })

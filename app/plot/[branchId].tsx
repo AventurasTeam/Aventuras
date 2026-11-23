@@ -105,32 +105,19 @@ export default function PlotRoute() {
   const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 
-  // Raw maps from the selectors (stable between patches); arrays via useMemo.
-  const threadRows = threadsStore.useThreads((m) => m)
-  const threads = useMemo(
-    () => [...threadRows.values()].filter((r) => r.branchId === branchId),
-    [threadRows, branchId],
-  )
-  const happeningRows = happeningsStore.useHappenings((m) => m)
-  const happenings = useMemo(
-    () => [...happeningRows.values()].filter((r) => r.branchId === branchId),
-    [happeningRows, branchId],
-  )
+  // The branch's maps from the selectors (stable between patches); arrays via useMemo.
+  const threadRows = threadsStore.useThreads(branchId, (m) => m)
+  const threads = useMemo(() => [...threadRows.values()], [threadRows])
+  const happeningRows = happeningsStore.useHappenings(branchId, (m) => m)
+  const happenings = useMemo(() => [...happeningRows.values()], [happeningRows])
   const threadCategories = useMemo(() => distinctCategories(threads), [threads])
   const happeningCategories = useMemo(() => distinctCategories(happenings), [happenings])
-  const involvementRows = happeningInvolvementsStore.useInvolvements((m) => m)
-  const awarenessRows = happeningAwarenessStore.useAwareness((m) => m)
-  const entityRows = entitiesStore.useEntities((m) => m)
-  const entities = useMemo(
-    () => [...entityRows.values()].filter((e) => e.branchId === branchId),
-    [entityRows, branchId],
-  )
-  const chapterRows = chaptersStore.useChapters((m) => m)
+  const involvementRows = happeningInvolvementsStore.useInvolvements(branchId, (m) => m)
+  const awarenessRows = happeningAwarenessStore.useAwareness(branchId, (m) => m)
+  const entityRows = entitiesStore.useEntities(branchId, (m) => m)
+  const entities = useMemo(() => [...entityRows.values()], [entityRows])
   // The chapters store holds closed chapters only; the open region has no row.
-  const hasClosedChapters = useMemo(
-    () => [...chapterRows.values()].some((c) => c.branchId === branchId),
-    [chapterRows, branchId],
-  )
+  const hasClosedChapters = chaptersStore.useChapters(branchId, (m) => m.size > 0)
   const entryIndex = useEntryIndex(branchId)
   const listSignals = useMemo<PlotListSignals>(
     () => ({ entries: entryIndex.index, hasClosedChapters }),
@@ -151,8 +138,8 @@ export default function PlotRoute() {
 
   const selectedHappeningId = selection?.type === 'happening' ? selection.row.id : null
   const links = useMemo(
-    () => happeningLinksFor(selectedHappeningId, branchId, involvementRows, awarenessRows),
-    [selectedHappeningId, branchId, involvementRows, awarenessRows],
+    () => happeningLinksFor(selectedHappeningId, involvementRows, awarenessRows),
+    [selectedHappeningId, involvementRows, awarenessRows],
   )
 
   const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =

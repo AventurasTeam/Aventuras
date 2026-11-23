@@ -21,34 +21,36 @@ export type EntityDeleteImpact = {
 type ImpactInput = {
   branchId: string
   row: Entity
-  /** The branch's entities. */
-  entities: readonly Entity[]
-  entries: Iterable<StoryEntry>
-  awareness: Iterable<HappeningAwareness>
-  involvements: Iterable<HappeningInvolvement>
-  relationships: Iterable<CharacterRelationship>
+  branchEntities: readonly Entity[]
+  branchEntries: Iterable<StoryEntry>
+  branchAwareness: Iterable<HappeningAwareness>
+  branchInvolvements: Iterable<HappeningInvolvement>
+  branchRelationships: Iterable<CharacterRelationship>
 }
 
 /** Mirrors `entityDeleteActions` for refs, items and the tail; `entityLinkRows` for link counts. */
 export function entityDeleteImpact({
   branchId,
   row,
-  entities,
-  entries,
-  awareness,
-  involvements,
-  relationships,
+  branchEntities,
+  branchEntries,
+  branchAwareness,
+  branchInvolvements,
+  branchRelationships,
 }: ImpactInput): EntityDeleteImpact {
-  const head = resolveHeadTurn(
-    [...entries].filter((e) => e.branchId === branchId).sort((a, b) => a.position - b.position),
-  )
+  const head = resolveHeadTurn([...branchEntries].sort((a, b) => a.position - b.position))
   const plan = entityDeleteActions({
     branchId,
     target: row,
-    branchEntities: entities,
+    branchEntities,
     tail: deleteTailOf(head),
   })
-  const links = entityLinkRows({ branchId, id: row.id, awareness, involvements, relationships })
+  const links = entityLinkRows({
+    id: row.id,
+    branchAwareness,
+    branchInvolvements,
+    branchRelationships,
+  })
   return {
     awareness: links.awareness.length,
     involvements: links.involvements.length,

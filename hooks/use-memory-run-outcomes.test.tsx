@@ -20,12 +20,12 @@ import { openCloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fix
 import {
   chapterOverlaysStore,
   chaptersStore,
-  closeResultChapter,
   currentStoryStore,
   resetAllStores,
   type DeferredWorkKind,
   type StoreChapter,
 } from '@/lib/stores'
+import { closeResultChapter } from '@/lib/stores/ui/chapter-overlays'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { useMemoryRunOutcomes } from './use-memory-run-outcomes'
@@ -422,7 +422,7 @@ describe('useMemoryRunOutcomes', () => {
           stoppedTasks: 0,
         }),
       )
-      const rows = chaptersStore.getChapters()
+      const rows = chaptersStore.getChapters('br_1')
       expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 1 })?.id).toBe('chap_2')
     })
 
@@ -467,7 +467,7 @@ describe('useMemoryRunOutcomes', () => {
       resolveRead({ chapterId: 'chap_2', report: report('act_close') })
       await vi.waitFor(() => expect(held()?.openSeq).toBe(1))
 
-      const rows = chaptersStore.getChapters()
+      const rows = chaptersStore.getChapters('br_1')
       expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 2 })).toBeNull()
       expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 1 })?.id).toBe('chap_2')
     })
@@ -696,7 +696,7 @@ describe('useMemoryRunOutcomes', () => {
       const storeHadReport: (boolean | undefined)[] = []
       const show = chapterOverlaysStore.showCloseResult
       vi.spyOn(chapterOverlaysStore, 'showCloseResult').mockImplementation((result) => {
-        storeHadReport.push(chaptersStore.getById(result.chapterId)?.hasCloseReport)
+        storeHadReport.push(chaptersStore.getById(fx.branchId, result.chapterId)?.hasCloseReport)
         show(result)
       })
       render(<Probe />)
@@ -718,7 +718,7 @@ describe('useMemoryRunOutcomes', () => {
         }),
       )
       expect(storeHadReport).toEqual([true])
-      expect(chaptersStore.getById(chapterId)?.hasCloseReport).toBe(true)
+      expect(chaptersStore.getById(fx.branchId, chapterId)?.hasCloseReport).toBe(true)
     })
   })
 

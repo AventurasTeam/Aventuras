@@ -58,7 +58,7 @@ describe('applyDeltaAction', () => {
     expect(delta.source).toBe('ai_classifier')
   })
 
-  it('clears the redo stack on a committed write, not on a rejection', async () => {
+  it("clears its branch's redo stack on a committed write, not on a rejection", async () => {
     const { db, runInTransaction } = await createTestDb()
     await seed(db)
     const args = (id: string, branchId: string): Parameters<typeof applyDeltaAction>[0] => ({
@@ -81,13 +81,15 @@ describe('applyDeltaAction', () => {
       entryId: null,
     })
 
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b-other'))
     // Branch mismatch rejects before any write — a rejection is not a new action.
     await applyDeltaAction(args('entry_r1', 'b-other'), { db, runInTransaction })
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b-other')).toBe(true)
 
     await applyDeltaAction(args('entry_r1', 'b1'), { db, runInTransaction })
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b-other')).toBe(true)
   })
 
   it('op=update: undo_payload captures pre-change metadata partial; log_position increments', async () => {
@@ -265,6 +267,23 @@ describe('applyDeltaActionGroup', () => {
     // MAX+1 is a subquery per statement, so batching must not collapse the positions.
     expect(rows.map((r) => r.logPosition).sort()).toEqual([1, 2])
     expect((await db.select().from(storyEntries)).length).toBe(2)
+  })
+
+  it("clears its branch's redo stack on commit, and leaves another branch's", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res).toEqual({ status: 'ok' })
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 
   it('commits nothing when a later action rejects', async () => {

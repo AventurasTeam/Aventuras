@@ -147,7 +147,7 @@ describe('ReaderChapterChips', () => {
   })
 
   it('lists this branch closed chapters oldest first, with their ranges', () => {
-    chaptersStore.hydrate('br_1', [chapter(2), chapter(1), chapter(9, 'br_other')])
+    chaptersStore.hydrate('br_1', [chapter(2), chapter(1)])
     stubs.ranges = new Map([['br_1_chap_1', { first: 3_600, last: 7_200 }]])
     render(chips())
     expect(stubs.popover?.closed).toEqual([
@@ -166,6 +166,12 @@ describe('ReaderChapterChips', () => {
         startEntryId: 'br_1_start_2',
       },
     ])
+  })
+
+  it("hands no closed rows while another branch's chapters are loaded", () => {
+    chaptersStore.hydrate('br_other', [chapter(9, 'br_other')])
+    render(chips())
+    expect(stubs.popover?.closed).toEqual([])
   })
 
   it('takes since from the open region first time, alone', () => {

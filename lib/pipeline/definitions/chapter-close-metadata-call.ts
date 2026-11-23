@@ -73,15 +73,6 @@ export type MetadataCallInputs = {
   modelConfig: ResolveModelConfig
 }
 
-function latestChapterSummary(branchId: string): string | null {
-  let latest: { sequenceNumber: number; summary: string } | undefined
-  for (const chapter of chaptersStore.getChapters().values()) {
-    if (chapter.branchId !== branchId) continue
-    if (latest === undefined || chapter.sequenceNumber > latest.sequenceNumber) latest = chapter
-  }
-  return latest?.summary ?? null
-}
-
 /**
  * Synchronous: every store read the metadata call needs, while the check holds. An open publishing
  * during a later await replaces the stores with another branch's rows.
@@ -95,8 +86,8 @@ export function readMetadataInputs(ctx: PhaseContext): MetadataCallInputs | Phas
     }
   const settings = appSettingsStore.getAppSettings()
   return {
-    previousChapterSummary: latestChapterSummary(ctx.branchId),
-    threads: [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId),
+    previousChapterSummary: chaptersStore.getLatest(ctx.branchId)?.summary ?? null,
+    threads: [...threadsStore.getThreads(ctx.branchId).values()],
     mode: open.definition.mode,
     modelConfig: modelConfigOf(settings, open.settings),
   }

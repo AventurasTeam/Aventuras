@@ -157,13 +157,12 @@ function dbCount(sql: string, id: string, partnerId: string): number {
 
 function sources(): CollisionSources {
   return {
-    branchId: 'b1',
-    entities: [...entitiesStore.getEntities().values()],
-    happenings: [...happeningsStore.getHappenings().values()],
-    awareness: [...happeningAwarenessStore.getAwareness().values()],
-    involvements: [...happeningInvolvementsStore.getInvolvements().values()],
-    relationships: [...characterRelationshipsStore.getRelationshipRows().values()],
-    translations: [...translationsStore.getTranslations().values()],
+    branchEntities: [...entitiesStore.getEntities('b1').values()],
+    branchHappenings: [...happeningsStore.getHappenings('b1').values()],
+    branchAwareness: [...happeningAwarenessStore.getAwareness('b1').values()],
+    branchInvolvements: [...happeningInvolvementsStore.getInvolvements('b1').values()],
+    branchRelationships: [...characterRelationshipsStore.getRelationshipRows('b1').values()],
+    branchTranslations: [...translationsStore.getTranslations('b1').values()],
     story: storyPlaceOf({ tail: null, sceneSource: null }),
   }
 }
@@ -306,11 +305,11 @@ describe('collisionPair', () => {
     'a duplicate under a disabled place, with the story %s, gives the canonical %s',
     (_where, at, placement) => {
       const base = sources()
-      const harbor = base.entities.find((e) => e.id === 'loc_a')!
-      const twin = base.entities.find((e) => e.id === 'loc_b')!
+      const harbor = base.branchEntities.find((e) => e.id === 'loc_a')!
+      const twin = base.branchEntities.find((e) => e.id === 'loc_b')!
       const dark = { ...harbor, id: 'loc_d', name: 'Dark Wing', injectionMode: 'disabled' as const }
       const entities = [
-        ...base.entities.filter((e) => e.id !== 'loc_a' && e.id !== 'loc_b'),
+        ...base.branchEntities.filter((e) => e.id !== 'loc_a' && e.id !== 'loc_b'),
         { ...harbor, state: { parent_location_id: null, unplaced: true as const } },
         { ...twin, state: { parent_location_id: 'loc_d' } },
         { ...dark, state: { parent_location_id: null } },
@@ -319,7 +318,7 @@ describe('collisionPair', () => {
         tail: { metadata: { currentLocationId: at } },
         sceneSource: { metadata: { currentLocationId: at } },
       })
-      const sides = collisionPair(['loc_a', 'loc_b'], { ...base, entities, story })!
+      const sides = collisionPair(['loc_a', 'loc_b'], { ...base, branchEntities: entities, story })!
       expect(sides[1].relationCounts.overlap.canonicalPlacement).toBe(placement)
     },
   )
@@ -403,7 +402,7 @@ describe('collisionPair', () => {
       const src = sources()
       const pair = collisionPair([canonicalId, loserId], src)!
       const { relationCounts: counts } = pair.find((side) => side.id === loserId)!
-      const lookup = collisionPairOf(src.entities, [canonicalId, loserId])
+      const lookup = collisionPairOf(src.branchEntities, [canonicalId, loserId])
       if ('miss' in lookup) throw new Error(`not a collision pair: ${lookup.miss}`)
       const actions = entityMergeActions({
         branchId: 'b1',
@@ -412,11 +411,11 @@ describe('collisionPair', () => {
         fromLoser: [],
         deselectedTags: [],
         deselectedKeywords: [],
-        branchEntities: src.entities,
-        happenings: src.happenings,
-        awareness: src.awareness,
-        involvements: src.involvements,
-        relationships: src.relationships,
+        branchEntities: src.branchEntities,
+        branchHappenings: src.branchHappenings,
+        branchAwareness: src.branchAwareness,
+        branchInvolvements: src.branchInvolvements,
+        branchRelationships: src.branchRelationships,
         story: src.story,
         tail: null,
         newId: (prefix) => `${prefix}_new`,

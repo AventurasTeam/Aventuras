@@ -116,11 +116,12 @@ function contentEditSet(counted: CountedContent, clear: CutOffClear) {
 }
 
 function contentEditPatchColumns(
+  branchId: string,
   id: string,
   counted: CountedContent,
   clear: CutOffClear,
 ): CountedContent & { metadata?: EntryMetadata } {
-  const stored = clear.clearsCutOff ? entriesStore.getById(id)?.metadata : null
+  const stored = clear.clearsCutOff ? entriesStore.getById(branchId, id)?.metadata : null
   return stored ? { ...counted, metadata: withoutCutOff(stored) } : counted
 }
 
@@ -204,7 +205,7 @@ async function updateStoryEntryContentBracketed(
   entriesStore.patch(branchId, {
     op: 'update',
     id,
-    columns: contentEditPatchColumns(id, counted, clear),
+    columns: contentEditPatchColumns(branchId, id, counted, clear),
   })
   return { status: 'ok' }
 }

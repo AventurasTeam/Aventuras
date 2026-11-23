@@ -11,8 +11,8 @@ export function logReversalRefused(branchId: string, e: ReversalIntegrityError):
   logger.error('action_layer.reversal_refused', { branchId, refusal: e.refusal, reason: e.message })
 }
 
-// A second unrelated action clears the redo stack (data-model.md). That holds when only the store
-// sync after the commit throws too: the action landed all the same. A refusal is not committed.
+// A new action clears its branch's redo stack (data-model.md), even when only the post-commit
+// store sync throws: the action landed. A refusal is not committed, so it keeps the stack.
 export async function commitNewAction(
   set: ReversalSet,
   ctx: DbCtx,
@@ -21,8 +21,8 @@ export async function commitNewAction(
   try {
     await reverseAndPruneDeltaRows(set, ctx, { keepRedoExact: false }, extraOps)
   } catch (e) {
-    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear()
+    if (e instanceof DeltaReplayError && e.committed) undoRedoStore.clear(set.branchId)
     throw e
   }
-  undoRedoStore.clear()
+  undoRedoStore.clear(set.branchId)
 }

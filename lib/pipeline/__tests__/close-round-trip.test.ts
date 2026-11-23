@@ -1758,9 +1758,9 @@ const ARMS: readonly RoundTripArm[] = [
       // A rename undone after the re-run leaves a redo group a re-run's undo must not keep.
       await renameChapter(h, 'The Night Ferry')
       expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
-      expect(undoRedoStore.hasRedo(), 'the rename waits in redo').toBe(true)
+      expect(undoRedoStore.hasRedo(h.fx.branchId), 'the rename waits in redo').toBe(true)
       expect(await undoLastAction(h.fx.branchId, h.fx.ctx)).toEqual({ status: 'ok' })
-      expect(undoRedoStore.hasRedo(), 'CTRL-Z of a re-run clears redo').toBe(false)
+      expect(undoRedoStore.hasRedo(h.fx.branchId), 'CTRL-Z of a re-run clears redo').toBe(false)
     },
   },
   {

@@ -86,4 +86,12 @@ describe('useStoryPlace', () => {
     expect(result.current).not.toBe(sceneMoved)
     expect(result.current).toEqual({ tail: 'loc_moved', scene: 'loc_moved' })
   })
+
+  it('reads no place while another branch is loaded', () => {
+    entriesStore.hydrate('br_2', [
+      { ...entry('f_reply', 2, 'ai_reply', 'loc_other'), branchId: 'br_2' },
+    ])
+    render(<Probe />)
+    expect(latest).toEqual({ tail: null, scene: null })
+  })
 })

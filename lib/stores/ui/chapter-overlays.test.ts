@@ -391,21 +391,18 @@ describe('the overlays hold rule', () => {
   }
   const open = { branchId: 'br_1', openSeq: 3 }
 
-  it('gives back a chapter with a report on the open branch, and null for any other', () => {
-    expect(overlayChapter(held, 'br_1')).toBe(held)
-    expect(overlayChapter(undefined, 'br_1')).toBeNull()
-    expect(overlayChapter({ ...held, hasCloseReport: false }, 'br_1')).toBeNull()
-    expect(overlayChapter(held, 'br_2')).toBeNull()
-    expect(overlayChapter(held, null)).toBeNull()
+  it('gives back a chapter with a report, and null for none', () => {
+    expect(overlayChapter(held)).toBe(held)
+    expect(overlayChapter(undefined)).toBeNull()
+    expect(overlayChapter({ ...held, hasCloseReport: false })).toBeNull()
   })
 
   // C7: a re-run's commit, or its undo, replaces the row's report.
   it('holds a chapter only while it holds the report the overlay opened on', () => {
-    expect(reportChapter(held, 'br_1', 'act_1')).toBe(held)
-    expect(reportChapter(held, 'br_1', 'act_rerun')).toBeNull()
-    expect(reportChapter(held, 'br_1', null)).toBeNull()
-    expect(reportChapter({ ...held, hasCloseReport: false }, 'br_1', 'act_1')).toBeNull()
-    expect(reportChapter(held, 'br_2', 'act_1')).toBeNull()
+    expect(reportChapter(held, 'act_1')).toBe(held)
+    expect(reportChapter(held, 'act_rerun')).toBeNull()
+    expect(reportChapter(held, null)).toBeNull()
+    expect(reportChapter({ ...held, hasCloseReport: false }, 'act_1')).toBeNull()
   })
 
   it("gives back a close result's own chapter while the result is the open's and it stands", () => {

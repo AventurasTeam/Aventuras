@@ -24,27 +24,23 @@ function entryRangeOf(row: StoreChapter, entryIndex: EntryIndex): ChapterCardDat
   return first == null || last == null ? null : { first, last }
 }
 
-/** One branch's closed chapters as card props, oldest first. */
+/** One branch's closed chapters, from its branch read, as card props, oldest first. */
 export function chapterTimelineData({
-  branchId,
-  rows,
+  branchRows,
   ranges,
   entryIndex,
   frame,
 }: {
-  branchId: string
-  rows: Iterable<StoreChapter>
+  branchRows: Iterable<StoreChapter>
   ranges: ChapterTimeRanges
   entryIndex: EntryIndex
   frame: CalendarFrame | null
 }): ChapterTimelineData {
-  const kept = Array.from(rows)
-    .filter((row) => row.branchId === branchId)
-    .sort((a, b) => a.sequenceNumber - b.sequenceNumber)
-  const cards = kept.map(
+  const ordered = Array.from(branchRows).sort((a, b) => a.sequenceNumber - b.sequenceNumber)
+  const cards = ordered.map(
     (row, index): ChapterCardData => ({
       row,
-      latest: index === kept.length - 1,
+      latest: index === ordered.length - 1,
       timeLabel: chapterTimeRangeLabel(ranges.get(row.id), frame),
       entryRange: entryRangeOf(row, entryIndex),
     }),

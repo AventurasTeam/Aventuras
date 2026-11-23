@@ -60,13 +60,6 @@ const CLOSED_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
   [COLLISION_REJECTION.failed]: () => collisionRejectionText(COLLISION_REJECTION.failed),
 }
 
-function inBranch<Row extends { branchId: string }>(
-  rows: ReadonlyMap<string, Row>,
-  branchId: string,
-): Row[] {
-  return [...rows.values()].filter((row) => row.branchId === branchId)
-}
-
 /** The flagged row's parent, which the pair rule makes the other's too (`same-parent` only). */
 function sharedParentName(flagged: FlaggedEntity, entities: readonly Entity[]): string | undefined {
   if (flagged.nameCollisionReason !== 'same-parent') return undefined
@@ -144,14 +137,20 @@ export function useCollisionResolve(
   }, [])
   const open = requested != null
   // Subscribed only while open, so a closed dialog doesn't re-render the route on every link patch.
-  const entityRows = entitiesStore.useEntities((rows) => (open ? rows : null))
-  const happeningRows = happeningsStore.useHappenings((rows) => (open ? rows : null))
-  const awarenessRows = happeningAwarenessStore.useAwareness((rows) => (open ? rows : null))
-  const involvementRows = happeningInvolvementsStore.useInvolvements((rows) => (open ? rows : null))
-  const relationshipRows = characterRelationshipsStore.useRelationships((rows) =>
+  const entityRows = entitiesStore.useEntities(branchId, (rows) => (open ? rows : null))
+  const happeningRows = happeningsStore.useHappenings(branchId, (rows) => (open ? rows : null))
+  const awarenessRows = happeningAwarenessStore.useAwareness(branchId, (rows) =>
     open ? rows : null,
   )
-  const translationRows = translationsStore.useTranslations((rows) => (open ? rows : null))
+  const involvementRows = happeningInvolvementsStore.useInvolvements(branchId, (rows) =>
+    open ? rows : null,
+  )
+  const relationshipRows = characterRelationshipsStore.useRelationships(branchId, (rows) =>
+    open ? rows : null,
+  )
+  const translationRows = translationsStore.useTranslations(branchId, (rows) =>
+    open ? rows : null,
+  )
 
   const pair = useMemo((): CollisionDialogPair | null => {
     if (
@@ -164,24 +163,23 @@ export function useCollisionResolve(
       translationRows == null
     )
       return null
-    const entities = inBranch(entityRows, branchId)
-    const lookup = collisionPairOf(entities, requested)
+    const branchEntities = [...entityRows.values()]
+    const lookup = collisionPairOf(branchEntities, requested)
     if ('miss' in lookup) return null
     const [requestedRow, otherRow] = lookup.pair
     const flagged = flaggedSideOf(requestedRow, otherRow)
     if (flagged == null) return null
     const sides = collisionPair(requested, {
-      branchId,
-      entities,
-      happenings: inBranch(happeningRows, branchId),
-      awareness: inBranch(awarenessRows, branchId),
-      involvements: inBranch(involvementRows, branchId),
-      relationships: inBranch(relationshipRows, branchId),
-      translations: inBranch(translationRows, branchId),
+      branchEntities,
+      branchHappenings: [...happeningRows.values()],
+      branchAwareness: [...awarenessRows.values()],
+      branchInvolvements: [...involvementRows.values()],
+      branchRelationships: [...relationshipRows.values()],
+      branchTranslations: [...translationRows.values()],
       story,
     })
     if (sides == null) return null
-    const parentName = sharedParentName(flagged, entities)
+    const parentName = sharedParentName(flagged, branchEntities)
     return {
       sides,
       flaggedId: flagged.id,
@@ -190,7 +188,6 @@ export function useCollisionResolve(
     }
   }, [
     requested,
-    branchId,
     entityRows,
     happeningRows,
     awarenessRows,

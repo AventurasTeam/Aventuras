@@ -48,11 +48,11 @@ function otherEndIds(rows: readonly HistoryRow[]): string[] {
 // Working-set names for the rows' other ends. Selectors return a string, so a patch to any
 // other row leaves the tab alone.
 function useStoreNames(branchId: string, ids: readonly string[]): ReadonlyMap<string, string> {
-  const entityNames = entitiesStore.useEntities((m) =>
-    JSON.stringify(ids.map((id) => (m.get(id)?.branchId === branchId ? m.get(id)?.name : null))),
+  const entityNames = entitiesStore.useEntities(branchId, (m) =>
+    JSON.stringify(ids.map((id) => m.get(id)?.name ?? null)),
   )
-  const happeningTitles = happeningsStore.useHappenings((m) =>
-    JSON.stringify(ids.map((id) => (m.get(id)?.branchId === branchId ? m.get(id)?.title : null))),
+  const happeningTitles = happeningsStore.useHappenings(branchId, (m) =>
+    JSON.stringify(ids.map((id) => m.get(id)?.title ?? null)),
   )
   return useMemo(() => {
     const entity = JSON.parse(entityNames) as (string | null)[]
@@ -140,7 +140,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)
   const [op, setOp] = useState<HistoryOp | null>(null)
   const [sort, setSort] = useState<HistorySort>('newest')
-  const row = useHistoryTarget(targetTable, targetId)
+  const row = useHistoryTarget(branchId, targetTable, targetId)
   const settleCount = generationStore.useGeneration((s) => s.settleCount)
   const links = useLinkVersion(targetTable, targetId, branchId)
   const [otherEnds, otherEndChanged] = useReducer((n: number) => n + 1, 0)

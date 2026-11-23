@@ -42,11 +42,11 @@ function confirmCopy(branchId: string, target: WorldDeleteTarget): DeleteConfirm
   const impact = entityDeleteImpact({
     branchId,
     row: target.row,
-    entities: [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId),
-    entries: entriesStore.getEntries().values(),
-    awareness: happeningAwarenessStore.getAwareness().values(),
-    involvements: happeningInvolvementsStore.getInvolvements().values(),
-    relationships: characterRelationshipsStore.getRelationshipRows().values(),
+    branchEntities: [...entitiesStore.getEntities(branchId).values()],
+    branchEntries: entriesStore.getEntries(branchId).values(),
+    branchAwareness: happeningAwarenessStore.getAwareness(branchId).values(),
+    branchInvolvements: happeningInvolvementsStore.getInvolvements(branchId).values(),
+    branchRelationships: characterRelationshipsStore.getRelationshipRows(branchId).values(),
   })
   return entityDeleteCopy(target.row, impact)
 }
@@ -64,7 +64,11 @@ export function useWorldDelete(branchId: string, ctx: DbCtx, guard: (proceed: ()
   const request = useCallback(
     (target: WorldDeleteTarget) =>
       guard(() => {
-        const fresh = freshDeleteTarget(target, entitiesStore.getEntities(), loreStore.getLore())
+        const fresh = freshDeleteTarget(
+          target,
+          entitiesStore.getEntities(branchId),
+          loreStore.getLore(branchId),
+        )
         if (fresh == null) return
         setPending({ target: fresh, copy: confirmCopy(branchId, fresh) })
       }),

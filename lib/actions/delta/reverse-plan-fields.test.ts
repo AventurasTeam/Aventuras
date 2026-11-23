@@ -84,7 +84,7 @@ afterEach(() => {
   entitiesStore.__reset()
   entriesStore.__reset()
   loreStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   vi.restoreAllMocks()
 })
 
@@ -293,7 +293,7 @@ describe('the commit hooks', () => {
     expect(heard!.patches).toEqual([
       { table: 'lore', branchId: 'b1', patch: { op: 'delete', id: 'lore_vael' } },
     ])
-    expect(loreStore.getById('lore_vael')).toEqual(row)
+    expect(loreStore.getById('b1', 'lore_vael')).toEqual(row)
   })
 
   it('commits nothing when a hook op fails', async () => {

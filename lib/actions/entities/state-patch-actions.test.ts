@@ -167,7 +167,7 @@ describe('updateEntityVisualState', () => {
       inventory: ['item_sword'],
       stackables: { gold: 5 },
     })
-    expect(entitiesStore.getById('char_1')?.state).toMatchObject({
+    expect(entitiesStore.getById('br_1', 'char_1')?.state).toMatchObject({
       visual: { attire: 'cloak now muddied to the waist' },
     })
   })
@@ -482,7 +482,7 @@ describe('promoteStagedEntity', () => {
     )
     expect(result.status).toBe('ok')
     expect((await rowFor(db, 'char_1')).status).toBe('active')
-    expect(entitiesStore.getById('char_1')?.status).toBe('active')
+    expect(entitiesStore.getById('br_1', 'char_1')?.status).toBe('active')
   })
 
   it('a second emission on an already-active entity no-ops (soft reject, no delta)', async () => {
@@ -573,7 +573,7 @@ describe('promoteStagedEntity', () => {
 
     const row = await rowFor(db, 'char_1')
     expect(row.status).toBe('active')
-    expect(entitiesStore.getById('char_1')?.status).toBe('active')
+    expect(entitiesStore.getById('br_1', 'char_1')?.status).toBe('active')
   })
 
   it('no-ops when the target row is gone', async () => {
@@ -619,7 +619,7 @@ describe('appendEntityKeywords', () => {
       'ser kael',
       'the wanderer',
     ])
-    expect(entitiesStore.getById('char_1')?.keywords).toEqual([
+    expect(entitiesStore.getById('br_1', 'char_1')?.keywords).toEqual([
       'the knight',
       'ser kael',
       'the wanderer',
@@ -689,8 +689,8 @@ describe('retireEntity', () => {
     const row = await rowFor(db, 'char_1')
     expect(row.status).toBe('retired')
     expect(row.retiredReason).toBe('fell at the ford')
-    expect(entitiesStore.getById('char_1')?.status).toBe('retired')
-    expect(entitiesStore.getById('char_1')?.retiredReason).toBe('fell at the ford')
+    expect(entitiesStore.getById('br_1', 'char_1')?.status).toBe('retired')
+    expect(entitiesStore.getById('br_1', 'char_1')?.retiredReason).toBe('fell at the ford')
   })
 
   it('clears a leftover retiredReason when retiring with no reason given', async () => {
@@ -935,9 +935,9 @@ describe('setCharacterFaction', () => {
     expect((await apply(ctx, join('fact_circle'), 'act_j')).status).toBe('ok')
 
     expect((await rowFor(db, 'char_1')).state).toEqual({ ...CHAR.state, faction_id: 'fact_circle' })
-    expect((entitiesStore.getById('char_1')?.state as CharacterState | undefined)?.faction_id).toBe(
-      'fact_circle',
-    )
+    expect(
+      (entitiesStore.getById('br_1', 'char_1')?.state as CharacterState | undefined)?.faction_id,
+    ).toBe('fact_circle')
     const [delta] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_j'))
     expect(delta.undoPayload).toEqual({ state: { faction_id: null } })
   })
@@ -1123,10 +1123,10 @@ describe('setCharacterFaction', () => {
       deselectedTags: [],
       deselectedKeywords: [],
       branchEntities,
-      happenings: [],
-      awareness: [],
-      involvements: [],
-      relationships: [],
+      branchHappenings: [],
+      branchAwareness: [],
+      branchInvolvements: [],
+      branchRelationships: [],
       story: storyPlaceOf({ tail: null, sceneSource: null }),
       tail: null,
       newId: (prefix) => `${prefix}_merge`,
@@ -1214,7 +1214,7 @@ describe('placeLocation', () => {
     const stored = await stateIn(db)
     expect(stored).toEqual(placed)
     expect(Object.keys(stored ?? {})).not.toContain('unplaced')
-    const inStore = entitiesStore.getById('loc_varn')?.state
+    const inStore = entitiesStore.getById('br_1', 'loc_varn')?.state
     expect(inStore).toEqual(placed)
     expect(Object.keys(inStore ?? {})).not.toContain('unplaced')
     expect(await undoPayloadsOf(db, 'act_p')).toEqual([
@@ -1231,7 +1231,7 @@ describe('placeLocation', () => {
     const stored = await stateIn(db)
     expect(stored).toEqual(topLevel)
     expect(Object.keys(stored ?? {})).not.toContain('unplaced')
-    const inStore = entitiesStore.getById('loc_varn')?.state
+    const inStore = entitiesStore.getById('br_1', 'loc_varn')?.state
     expect(inStore).toEqual(topLevel)
     expect(Object.keys(inStore ?? {})).not.toContain('unplaced')
     expect(await undoPayloadsOf(db, 'act_p')).toEqual([{ state: { unplaced: true } }])
@@ -1255,7 +1255,7 @@ describe('placeLocation', () => {
     await apply(ctx, place(UNDER_REACH), 'act_p')
     expect(await reverseReplayDeltas('act_p', ctx)).toBe(1)
     expect(await stateIn(db)).toEqual(UNPLACED)
-    expect(entitiesStore.getById('loc_varn')?.state).toEqual(UNPLACED)
+    expect(entitiesStore.getById('br_1', 'loc_varn')?.state).toEqual(UNPLACED)
   })
 
   // location-map.ts reads a parent the branch has no place for as unplaced; so does the handler.
@@ -1569,7 +1569,7 @@ describe('updateEntityCondition', () => {
       parent_location_id: null,
       condition: 'burned to the ground',
     })
-    expect(entitiesStore.getById('loc_hall')?.state).toEqual({
+    expect(entitiesStore.getById('br_1', 'loc_hall')?.state).toEqual({
       parent_location_id: null,
       condition: 'burned to the ground',
     })
@@ -1658,7 +1658,7 @@ describe('renameEntity', () => {
       keywords: ['the stranger', 'the hooded stranger'],
       embeddingStale: 1,
     })
-    expect(entitiesStore.getById('char_1')).toMatchObject({
+    expect(entitiesStore.getById('br_1', 'char_1')).toMatchObject({
       name: 'Mira',
       keywords: ['the stranger', 'the hooded stranger'],
     })
@@ -1979,7 +1979,7 @@ describe('renameEntity onto a name another row holds', () => {
 
     const landed = { keywords: ['the host', 'Mara'], ...flagged('char_2') }
     expect(await rowFor(db, 'char_1')).toMatchObject({ name: 'the innkeeper', ...landed })
-    expect(entitiesStore.getById('char_1')).toMatchObject(landed)
+    expect(entitiesStore.getById('br_1', 'char_1')).toMatchObject(landed)
     expect(await undoPayloadsOf(db, 'act_n')).toEqual([{ keywords: ['the host'], ...UNFLAGGED }])
   })
 
@@ -2172,7 +2172,7 @@ describe('raiseCollisionFlag', () => {
     expect((await apply(ctx, raise(), 'act_f')).status).toBe('ok')
 
     expect(await flagOf(db)).toEqual([1, 'char_2', 'name-taken'])
-    expect(entitiesStore.getById('char_1')).toMatchObject({
+    expect(entitiesStore.getById('br_1', 'char_1')).toMatchObject({
       nameCollisionFlag: 1,
       nameCollisionPartnerId: 'char_2',
       nameCollisionReason: 'name-taken',
@@ -2725,7 +2725,7 @@ describe('setFactionStanding', () => {
       standing: 'at war with the crown',
       agenda: ['corner the iron trade'],
     })
-    expect(entitiesStore.getById('fact_1')?.state).toMatchObject({
+    expect(entitiesStore.getById('br_1', 'fact_1')?.state).toMatchObject({
       standing: 'at war with the crown',
     })
     expect(await undoPayloadOf(db, 'act_s')).toEqual({ state: { standing: 'a quiet guild' } })
@@ -2833,7 +2833,10 @@ describe('returnFromRetirement', () => {
     expect((await apply(ctx, comeBack(), 'act_r')).status).toBe('ok')
 
     expect(await rowFor(db, 'char_1')).toMatchObject({ status: 'active', retiredReason: null })
-    expect(entitiesStore.getById('char_1')).toMatchObject({ status: 'active', retiredReason: null })
+    expect(entitiesStore.getById('br_1', 'char_1')).toMatchObject({
+      status: 'active',
+      retiredReason: null,
+    })
     expect(await undoPayloadOf(db, 'act_r')).toEqual({
       status: 'retired',
       retiredReason: 'fell at the ford',
@@ -3022,7 +3025,10 @@ describe('setEntityKeywords', () => {
     await writeProse(ctx)
     expect(await outcomeOf(ctx, setKeywords(['the wanderer'], ['The Drunk']))).toStrictEqual(LANDED)
     expect(await keywordsOf(db)).toEqual(['the knight', 'the wanderer'])
-    expect(entitiesStore.getById('char_1')?.keywords).toEqual(['the knight', 'the wanderer'])
+    expect(entitiesStore.getById('br_1', 'char_1')?.keywords).toEqual([
+      'the knight',
+      'the wanderer',
+    ])
     expect(await undoPayloadsOf(db, 'act_k')).toEqual([{ keywords: ['the knight', 'the drunk'] }])
   })
 

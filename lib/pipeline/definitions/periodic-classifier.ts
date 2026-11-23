@@ -31,7 +31,6 @@ import {
   storyEntries,
   type ClassifierStatus,
   type DbCtx,
-  type Entity,
   type Happening,
   type StoryEntry,
 } from '@/lib/db'
@@ -168,10 +167,6 @@ function advanceWatermark(ctx: StatusCtx, coversThrough: number): Promise<void> 
   return patchStatus(ctx, watermarkKey(coversThrough))
 }
 
-function branchEntities(branchId: string): Entity[] {
-  return [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId)
-}
-
 async function recordFailure(ctx: StatusCtx, detail: string): Promise<void> {
   const status = nextStatusOnFailure(await readStatus(ctx), { error: detail, at: Date.now() })
   await writeStatus(ctx, status)
@@ -186,23 +181,17 @@ export async function* periodicClassifierPhase(
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'periodic-classifier: branch not loaded' },
     }
-  // Read before the first await: a story opening under the pass publishes its own branch's rows,
-  // which filter to nothing here. Prompt, reconcile and plan share these; under the gate nothing
-  // else changes them mid-call.
-  const entities = branchEntities(ctx.branchId)
-  const relationships = [...characterRelationshipsStore.getRelationshipRows().values()].filter(
-    (r) => r.branchId === ctx.branchId,
-  )
-  const threads = [...threadsStore.getThreads().values()].filter((t) => t.branchId === ctx.branchId)
-  const storedHappenings = [...happeningsStore.getHappenings().values()].filter(
-    (h) => h.branchId === ctx.branchId,
-  )
+  // Read before the first await: a story opening mid-pass reads empty here. Prompt, reconcile and
+  // plan share these reads; the gate keeps them fixed mid-call.
+  const entities = [...entitiesStore.getEntities(ctx.branchId).values()]
+  const relationships = [...characterRelationshipsStore.getRelationshipRows(ctx.branchId).values()]
+  const threads = [...threadsStore.getThreads(ctx.branchId).values()]
+  const storedHappenings = [...happeningsStore.getHappenings(ctx.branchId).values()]
   // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
-  const awareness = [...happeningAwarenessStore.getAwareness().values()].filter(
-    (a) => a.branchId === ctx.branchId,
-  )
+  const awareness = [...happeningAwarenessStore.getAwareness(ctx.branchId).values()]
   const leadId =
-    resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(), ctx.branchId)?.id ?? null
+    resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(ctx.branchId), ctx.branchId)
+      ?.id ?? null
   const cfg = appSettingsStore.getAppSettings()
   const status = await readStatus(ctx)
   ctx.intermediates[PRE_RUN_STATUS] = status

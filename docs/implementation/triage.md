@@ -139,3 +139,74 @@ slice-planning gate forces its resolution before that slice is planned.
   slice. Separately, `lib/actions/story-entries/scene-fields.test.ts:248`
   and `:315` spell out the call its `removeCast` helper makes (`:216`).
   No defect either way. Found by M6.1's slice review (2026-11-22).
+
+- **No test passes a wrong branch to a scoped store read.** Every
+  working-set read now names its branch, so the typecheck blocks a
+  return to an unscoped call. It does not block
+  `x(store.getLoadedBranch())`, which compiles and reads like the old
+  unscoped call, and only a case with rows on two branches would catch
+  it. The sites no such case covers yet, each taking its branch from a
+  caller or the open story: `lib/actions/world/resolve-collision.ts:158-162`,
+  `lib/actions/world/save-entity.ts:28`,
+  `components/reader/peek/use-peek-view.ts:43-44`,
+  `components/reader/use-reader-slice.ts:65`,
+  `components/reader/use-entry-jump.ts:190`,
+  `components/reader/use-reader-undo.tsx:75` and `:184`,
+  `components/chapters/chapter-overlays-host.tsx:90`,
+  `hooks/use-row-signals.ts:67-76`, and `freshDeleteTarget`'s reads in
+  `components/world/use-world-delete.ts:69-70` and
+  `components/plot/use-plot-delete.ts:104-105`, which each survived a
+  swap to `getLoadedBranch()` in the slice review. Cheapest first pin:
+  an awareness row on `br_2` in the peek-view case. Found by Slice
+  6.2's third-PR review (2026-11-23); the list re-checked by its slice
+  review (2026-11-23).
+
+- **`raiseSystemEntry` repeats the working-set factory's patch guard.**
+  `lib/actions/story-entries/system-entry.ts:85` returns early when the
+  store holds another branch, and the factory's `patch`
+  (`lib/stores/factory/working-set-store.ts:52`) already drops a branch
+  the store doesn't hold. In `system-entry.test.ts`, "leaves the store
+  alone when it holds another branch" fails only with both guards
+  removed; removing either alone passes (mutation-checked 2026-11-23).
+  The factory guard stays, since every writer relies on it; `:85` also
+  skips a database read. So the choice is dropping `:85` and accepting
+  the wasted read, or pinning it with a case that spies on that read.
+  It predates Slice 6.2's third PR. Found by that PR's review
+  (2026-11-23).
+
+- **A story delete can race an undo in flight.** `deleteStory`
+  (`lib/actions/stories/delete-story.ts`) takes no guard against a
+  reversal in flight. A delete that commits after an undo built its
+  plan and before the undo commits lets the undo report `ok` and push
+  its redo group for a branch that no longer exists: probed with a
+  wrapped `runInTransaction`, `undoRedoStore.__branches()` held the
+  deleted branch (2026-11-23). The reversal itself then commits
+  against the deleted story; for a delete's undo it would re-insert
+  rows into the dead branch (inferred, not probed). Whether the UI can
+  reach the window, the undo's own read-to-commit stretch, is unshown.
+  It predates Slice 6.2. Found by Slice 6.2's slice review
+  (2026-11-23).
+
+- **Can a pipeline reversal leave a redo group that contradicts its
+  branch?** Every delta-logged write clears its branch's redo stack,
+  but the pipeline's reversals clear none: `reverseCloseForRerun`
+  (`lib/pipeline/definitions/chapter-close-reversal.ts`) and a run
+  abort's `reverseRunGroup` / `reverseReplayDeltas`. A review agent
+  reasoned, without a probe, that an aborted re-run whose journal
+  write-back ends `undone` changes the branch while a redo group pushed
+  before the re-run stays, so the redo could restore rows the reversal
+  removed. Verify the sequence before fixing anything. It predates
+  Slice 6.2. Found by Slice 6.2's slice review (2026-11-23).
+
+- **Unit tests run hooks without React Compiler.** The app builds with
+  the compiler (`app.json` → `expo.experiments.reactCompiler`), but
+  `vitest.config.ts` doesn't apply it, so a hook whose correctness rests
+  on what the compiler memoizes passes vitest either way, and
+  `pnpm compiler:check` reports bail-outs, not behaviour. Slice 6.2's
+  slice review hit it in `components/reader/use-reader-undo.tsx`: a
+  Redo label that ignored the state the menu's open sets stayed green
+  uncompiled and went stale compiled (a scratch harness compiled the
+  hook with the build's compiler, 2026-11-23). Options: a vitest
+  transform that runs the compiler over `components/` and `hooks/`, or
+  a small compiled-hook layer for hooks that read stores outside a
+  subscription. Found by Slice 6.2's slice review (2026-11-23).

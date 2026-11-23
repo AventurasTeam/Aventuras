@@ -33,7 +33,7 @@ afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
   happeningsStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>['db']
@@ -180,7 +180,7 @@ describe('the recorded invalidation scope', () => {
 
     // Payload metadata is not a column. The working-set store spreads a patch's
     // `columns` onto the row unfiltered, so a leaked key would stick to it.
-    const patched = Object.keys(entriesStore.getById('e_reply') ?? {})
+    const patched = Object.keys(entriesStore.getById('b1', 'e_reply') ?? {})
     expect(patched.filter((k) => k.startsWith('$'))).toEqual([])
   })
 
@@ -263,7 +263,7 @@ describe('undo of a content edit', () => {
     // The edit is its own group: were it not, the head would be the turn beneath it.
     expect(rows.map((r) => r.id).sort()).toEqual(['e_open', 'e_reply'])
     expect(rows.find((r) => r.id === 'e_reply')?.content).toBe('the courier rode north')
-    expect(entriesStore.getById('e_reply')?.content).toBe('the courier rode north')
+    expect(entriesStore.getById('b1', 'e_reply')?.content).toBe('the courier rode north')
 
     const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(remaining.map((d) => d.id)).toEqual(['d_turn'])
@@ -311,7 +311,7 @@ describe('undo of a content edit', () => {
 
     // Replaying the fact would re-insert a row the next pass re-derives anyway, and
     // fight the redo arm's own invalidation.
-    const snapshots = undoRedoStore.peekRedoGroup()?.snapshots
+    const snapshots = undoRedoStore.peekRedoGroup('b1')?.snapshots
     expect(snapshots).toHaveLength(1)
     expect(isContentEditDelta(snapshots![0].delta)).toBe(true)
   })
@@ -327,7 +327,7 @@ describe('undo of a content edit', () => {
 
     const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_reply'))
     expect(row.content).toBe('the courier turned back')
-    expect(entriesStore.getById('e_reply')?.content).toBe('the courier turned back')
+    expect(entriesStore.getById('b1', 'e_reply')?.content).toBe('the courier turned back')
     const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(remaining.filter(isContentEditDelta)).toHaveLength(1)
   })
@@ -407,7 +407,7 @@ describe('undo of a content edit', () => {
     // applyRedo writes nothing for a snapshot carrying no row, so clamping for it would
     // spend a pass re-reading prose that never changed.
     undoRedoStore.pushRedoGroup(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         {
           delta: {
             id: 'd_phantom',
@@ -574,7 +574,7 @@ describe('a content edit round trip', () => {
 
     const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_reply'))
     expect(row.content).toBe('the courier rode north')
-    expect(entriesStore.getById('e_reply')?.content).toBe('the courier rode north')
+    expect(entriesStore.getById('b1', 'e_reply')?.content).toBe('the courier rode north')
     const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(remaining.map((d) => d.id)).toEqual(['d_turn'])
   })
@@ -637,7 +637,7 @@ describe('a content edit of a cut-off reply', () => {
     expect(row.content).toBe('the courier turned back')
     expect(row.metadata).toEqual(REPLY_META)
     // Strict: the store holds the patch as given, so a key left at undefined would stay on it.
-    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata).toStrictEqual(REPLY_META)
     const edits = await db.select().from(deltas).where(eq(deltas.source, 'user_edit'))
     expect(edits).toHaveLength(1)
     expect(edits[0].undoPayload).toEqual({
@@ -661,7 +661,7 @@ describe('a content edit of a cut-off reply', () => {
     const row = await replyRow(db)
     expect(row.content).toBe('the courier rode north')
     expect(row.metadata).toEqual({ ...REPLY_META, cutOff: MARK })
-    expect(entriesStore.getById('e_reply')?.metadata?.cutOff).toEqual(MARK)
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata?.cutOff).toEqual(MARK)
   })
 
   it('redo clears the mark again', async () => {
@@ -677,7 +677,7 @@ describe('a content edit of a cut-off reply', () => {
     const row = await replyRow(db)
     expect(row.content).toBe('the courier turned back')
     expect(row.metadata).toEqual(REPLY_META)
-    expect(entriesStore.getById('e_reply')?.metadata).toEqual(REPLY_META)
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata).toEqual(REPLY_META)
     const remaining = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(remaining.filter(isContentEditDelta)).toHaveLength(1)
   })
@@ -706,7 +706,7 @@ describe('a content edit of a cut-off reply', () => {
     await updateStoryEntryContent('b1', 'e_reply', 'the courier turned back', ctx)
 
     expect((await replyRow(db)).metadata).toEqual(REPLY_META)
-    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata).toStrictEqual(REPLY_META)
   })
 
   it.each([
@@ -761,7 +761,7 @@ describe('a content edit of a cut-off reply', () => {
     const row = await replyRow(db)
     expect(row.content).toBe('the courier rode north')
     expect(row.metadata).toEqual({ ...REPLY_META, cutOff: MARK })
-    expect(entriesStore.getById('e_reply')?.metadata?.cutOff).toEqual(MARK)
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata?.cutOff).toEqual(MARK)
   })
 
   it('undoes an unknown cause, which carries no numbers', async () => {
@@ -776,7 +776,7 @@ describe('a content edit of a cut-off reply', () => {
 
     const row = await replyRow(db)
     expect(row.metadata).toStrictEqual({ ...REPLY_META, cutOff: unknown })
-    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual({
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata).toStrictEqual({
       ...REPLY_META,
       cutOff: unknown,
     })
@@ -825,7 +825,7 @@ describe('the count of an edited entry', () => {
 
   async function expectCount(db: TestDb, count: number | null) {
     expect((await replyRow(db)).contentTokens).toBe(count)
-    expect(entriesStore.getById('e_reply')?.contentTokens).toBe(count)
+    expect(entriesStore.getById('b1', 'e_reply')?.contentTokens).toBe(count)
   }
 
   it('tells the two texts apart, or nothing below could fail', () => {
@@ -896,7 +896,7 @@ describe('the count of an edited entry', () => {
 
     await updateStoryEntryContent('b1', 'e_reply', EDITED, ctx)
     await expectCount(db, countTokens(EDITED))
-    expect(entriesStore.getById('e_reply')?.metadata).toStrictEqual(REPLY_META)
+    expect(entriesStore.getById('b1', 'e_reply')?.metadata).toStrictEqual(REPLY_META)
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
     await expectCount(db, countTokens(ORIGINAL))

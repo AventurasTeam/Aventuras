@@ -42,13 +42,10 @@ function mount(ctx: DbCtx, initialBranch = BRANCH) {
   const commits: Commit[] = []
   const hook = renderHook(
     ({ branchId }) => {
-      const rows = entriesStore.useEntries((m) => m)
+      const rows = entriesStore.useEntries(branchId, (m) => m)
       const entries = useMemo(
-        () =>
-          [...rows.values()]
-            .filter((entry) => entry.branchId === branchId)
-            .sort((a, b) => a.position - b.position),
-        [rows, branchId],
+        () => [...rows.values()].sort((a, b) => a.position - b.position),
+        [rows],
       )
       const slice = useReaderSlice(branchId, entries, ctx.db)
       useLayoutEffect(() => {
@@ -103,7 +100,7 @@ describe('useReaderSlice', () => {
       env.IS_REACT_ACT_ENVIRONMENT = true
     }
     // The page read 21..70; the slice took 25 of them and trimmed its bottom to 50.
-    expect(entriesStore.getById(idOf(21))).toBeDefined()
+    expect(entriesStore.getById(BRANCH, idOf(21))).toBeDefined()
     expect(commits.at(-1)).toMatchObject({ first: 46, last: 95, hasNewer: true })
     // No commit showed the window grown under a slice that hadn't moved yet.
     expect(commits.filter((commit) => commit.first === 71 && commit.key > sliceKey)).toEqual([])
@@ -129,7 +126,7 @@ describe('useReaderSlice', () => {
     const { result } = mount(ctx)
     const stale = result.current.sliceKey - 1
     await act(() => result.current.requestNearTop({ sliceKey: stale, keepId: idOf(90) }))
-    expect(entriesStore.getById(idOf(70))).toBeUndefined()
+    expect(entriesStore.getById(BRANCH, idOf(70))).toBeUndefined()
     expect(result.current.rows[0].position).toBe(71)
   })
 

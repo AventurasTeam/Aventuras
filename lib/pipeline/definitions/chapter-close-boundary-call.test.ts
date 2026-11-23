@@ -250,14 +250,10 @@ describe('readBoundaryInputs', () => {
     })
   })
 
-  it("leaves out another branch's active thread", () => {
-    threadsStore.hydrate('b1', [
-      thread('thr_1', 'Find the heir', 'active'),
-      thread('thr_x', 'Elsewhere entirely', 'active', 'b2'),
-    ])
-    expect(readBoundaryInputs(phaseCtx())).toMatchObject({
-      activeThreads: [{ title: 'Find the heir' }],
-    })
+  // The check holds on the entities store; the threads read is what keeps another branch's out.
+  it('reads no active thread from a threads store loaded for another branch', () => {
+    threadsStore.hydrate('b2', [thread('thr_x', 'Elsewhere entirely', 'active', 'b2')])
+    expect(readBoundaryInputs(phaseCtx())).toHaveProperty('activeThreads', [])
   })
 
   it("carries the story's model overrides into the config", () => {

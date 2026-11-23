@@ -25,14 +25,14 @@ describe('loreStore', () => {
   it('hydrates and reads by id', () => {
     loreStore.__reset()
     loreStore.hydrate('br_1', [loreRow('lore_1', 'Magic'), loreRow('lore_2', 'Religion')])
-    expect(loreStore.getById('lore_1')?.title).toBe('Magic')
-    expect(loreStore.getLore().size).toBe(2)
+    expect(loreStore.getById('br_1', 'lore_1')?.title).toBe('Magic')
+    expect(loreStore.getLore('br_1').size).toBe(2)
   })
 
   it('no-ops a patch for a non-held branch', () => {
     loreStore.__reset()
     loreStore.hydrate('br_1', [])
     loreStore.patch('br_2', { op: 'create', id: 'lore_9', row: loreRow('lore_9', 'Ghost') })
-    expect(loreStore.getById('lore_9')).toBeUndefined()
+    expect(loreStore.getById('br_1', 'lore_9')).toBeUndefined()
   })
 })

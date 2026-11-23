@@ -55,6 +55,8 @@ class RedoGroup {
   readonly #minted = true
   /** The action the CTRL-Z undid: what redo names, and the id a caller pins it to. */
   readonly actionId: string
+  /** The branch the undo reversed: the group restores there and sits on that branch's stack. */
+  readonly branchId: string
   readonly snapshots: readonly RedoSnapshot[]
   /** The clears of refs to a row the snapshot re-creates; redo writes each back, logging nothing. */
   readonly refRestores: readonly RefRestore[]
@@ -66,11 +68,13 @@ class RedoGroup {
 
   constructor(
     actionId: string,
+    branchId: string,
     snapshots: readonly RedoSnapshot[],
     refRestores: readonly RefRestore[],
     survivorPayloads: readonly SurvivorPayload[] = [],
   ) {
     this.actionId = actionId
+    this.branchId = branchId
     this.snapshots = snapshots
     this.refRestores = refRestores
     this.survivorPayloads = survivorPayloads
@@ -79,12 +83,13 @@ class RedoGroup {
 
 export type { RedoGroup }
 
-// Test-only: a group no undo took, for a test that needs one on the redo stack.
+// Test-only: a group no undo took, for a test that needs one on a branch's redo stack.
 export function __redoGroupForTest(
+  branchId: string,
   snapshots: readonly RedoSnapshot[] = [],
   actionId = snapshots[0]?.delta.actionId ?? 'act_test',
 ): RedoGroup {
-  return new RedoGroup(actionId, snapshots, [])
+  return new RedoGroup(actionId, branchId, snapshots, [])
 }
 
 /** A redoable CTRL-Z of a set: the redo group, taken before `reverse` runs the reversal. */
@@ -193,7 +198,7 @@ async function snapshotForRedo(
       refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id, placementBeforeUndo })
     }
   }
-  return new RedoGroup(actionId, snapshots, refRestores, survivors)
+  return new RedoGroup(actionId, set.branchId, snapshots, refRestores, survivors)
 }
 
 // A whole-row snapshot carries no diff, so redo errs dirty on membership alone; the
@@ -226,7 +231,7 @@ export function applyRedo(
     })),
   ])
   return withKeyLocks(keys, () =>
-    applyRedoLocked(snapshots, refRestores, survivorPayloads, ctx, extraOps),
+    applyRedoLocked(group.branchId, snapshots, refRestores, survivorPayloads, ctx, extraOps),
   )
 }
 
@@ -289,6 +294,7 @@ function withoutDeadRefs(
 }
 
 async function applyRedoLocked(
+  groupBranch: string,
   snapshots: readonly RedoSnapshot[],
   refRestores: readonly RefRestore[],
   survivorPayloads: readonly SurvivorPayload[],
@@ -339,9 +345,8 @@ async function applyRedoLocked(
     // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
     if (restored) restoredDeltas.push(delta)
   }
-  // At its own position: every delta-logged write clears the redo stack, so nothing has
-  // logged into the slot the undo freed, and log order stays write order
-  // (data-model.md -> Entry mutability & rollback).
+  // At its own position: every delta-logged write clears its branch's redo stack, so nothing
+  // logged into the freed slot and log order stays write order (data-model.md → Entry mutability).
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
   // The survivors sit on snapshot rows, so the row locks above cover them.
   for (const { id, branchId, undoPayload } of survivorPayloads)
@@ -372,8 +377,7 @@ async function applyRedoLocked(
   }
   const committed = [...ops, ...deltaOps, ...extraOps]
   await ctx.runInTransaction(committed)
-  const branchId = snapshots[0]?.delta.branchId ?? refRestores[0]?.branchId
-  if (committed.length > 0 && branchId !== undefined) logRewritten(branchId)
+  if (committed.length > 0) logRewritten(groupBranch)
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {

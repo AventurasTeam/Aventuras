@@ -5,7 +5,6 @@ import { characterRelationshipsStore } from './character-relationships/character
 import { currentStoryStore } from './current-story/current-story'
 import { entitiesStore } from './entities/entities'
 import { entriesStore } from './entries/entries'
-import { entryAssetsStore } from './entry-assets/entry-assets'
 import { eraFlipsStore } from './era-flips/era-flips'
 import { generationStore } from './generation/generation'
 import { happeningAwarenessStore } from './happenings/awareness'
@@ -19,10 +18,10 @@ import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
 import {
   chapterOverlaysStore,
-  closeResultChapter,
   overlayChapter,
   reportChapter,
-  rerunConfirmChapter,
+  useCloseResultChapter,
+  useRerunConfirmChapter,
 } from './ui/chapter-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
@@ -39,7 +38,6 @@ export function resetAllStores(): void {
   currentStoryStore.__reset()
   entitiesStore.__reset()
   entriesStore.__reset()
-  entryAssetsStore.__reset()
   eraFlipsStore.__reset()
   generationStore.__reset()
   happeningAwarenessStore.__reset()
@@ -58,7 +56,7 @@ export function resetAllStores(): void {
   listCollapseStore.__reset()
   readerRailStore.__reset()
   recoveryReportStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   wizardStore.reset()
 }
 
@@ -69,13 +67,11 @@ export {
   chapterOverlaysStore,
   chaptersStore,
   characterRelationshipsStore,
-  closeResultChapter,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
   entitiesStore,
   entriesStore,
-  entryAssetsStore,
   eraFlipsStore,
   generationStore,
   happeningAwarenessStore,
@@ -92,12 +88,13 @@ export {
   rehydrateAppSettings,
   rehydrateStories,
   reportChapter,
-  rerunConfirmChapter,
   storiesStore,
   threadsStore,
   translationsStore,
   undoRedoStore,
+  useCloseResultChapter,
   useRegisteredOverlay,
+  useRerunConfirmChapter,
   wizardStore,
 }
 

@@ -191,7 +191,7 @@ export function undoConfirmTitle(description: UnseenUndoDescription, names: Undo
 /** Where a row's fields are read: the working set, a delete's payload, or a redo snapshot. */
 export type UndoRowSource = (row: UndoRowRef) => Row | undefined
 
-const LIVE: Record<string, (id: string) => object | undefined> = {
+const LIVE: Record<string, (branchId: string | null, id: string) => object | undefined> = {
   entities: entitiesStore.getById,
   lore: loreStore.getById,
   threads: threadsStore.getById,
@@ -200,10 +200,13 @@ const LIVE: Record<string, (id: string) => object | undefined> = {
   character_relationships: characterRelationshipsStore.getById,
   happening_involvements: happeningInvolvementsStore.getById,
   happening_awareness: happeningAwarenessStore.getById,
+  story_entries: entriesStore.getById,
 }
 
-/** A row in the open story's working set. */
-export const liveUndoRow: UndoRowSource = ({ table, id }) => LIVE[table]?.(id) as Row | undefined
+/** Rows in the open story's working set on `branchId`; none while the stores hold another branch. */
+export function liveRowsOf(branchId: string | null): UndoRowSource {
+  return ({ table, id }) => LIVE[table]?.(branchId, id) as Row | undefined
+}
 
 /** A gone row as the group's delete captured it (delete-cascade.ts: the payload is the row). */
 export function deletedRowsOf(deltas: readonly Delta[]): UndoRowSource {
@@ -282,9 +285,7 @@ export function undoNames(
     rowName,
     entryRef: (entryId) => {
       const position =
-        entryPositions[entryId] ??
-        entriesStore.getById(entryId)?.position ??
-        rows({ table: 'story_entries', id: entryId })?.position
+        entryPositions[entryId] ?? rows({ table: 'story_entries', id: entryId })?.position
       return typeof position === 'number' ? formatEntryRef(position) : null
     },
     chapterNumber: (chapterId) => {

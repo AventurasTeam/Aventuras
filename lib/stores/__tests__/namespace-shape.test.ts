@@ -57,6 +57,7 @@ describe('lib/stores public surface', () => {
     expect(typeof entitiesStore.useEntities).toBe('function')
     expect(typeof entitiesStore.getEntities).toBe('function')
     expect(typeof entitiesStore.getById).toBe('function')
+    expect(typeof entitiesStore.useById).toBe('function')
     expect(typeof entitiesStore.getByKind).toBe('function')
   })
 
@@ -146,7 +147,8 @@ describe('lib/stores public surface', () => {
     expect(generationStore.getTxState().runs.size).toBe(0)
     expect(generationStore.getTxState().deferred.size).toBe(0)
     expect(navigationStore.getNavigation().currentStoryId).toBeNull()
-    expect(entitiesStore.getEntities().size).toBe(0)
+    expect(entitiesStore.getLoadedBranch()).toBeNull()
+    expect(entitiesStore.getEntities('br_1').size).toBe(0)
     expect(recoveryReportStore.getSnapshot()).toEqual({
       pendingRecoveryReport: null,
       activeRecoveryReport: null,

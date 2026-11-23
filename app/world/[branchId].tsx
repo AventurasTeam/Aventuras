@@ -141,20 +141,14 @@ export default function WorldRoute() {
   const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
 
-  // Raw maps from the selectors (stable between patches); arrays via useMemo.
-  const entityRows = entitiesStore.useEntities((m) => m)
-  const entities = useMemo(
-    () => [...entityRows.values()].filter((e) => e.branchId === branchId),
-    [entityRows, branchId],
-  )
-  const loreRows = loreStore.useLore((m) => m)
-  const lore = useMemo(
-    () => [...loreRows.values()].filter((l) => l.branchId === branchId),
-    [loreRows, branchId],
-  )
-  const relationshipRows = characterRelationshipsStore.useRelationships((m) => m)
-  const involvementRows = happeningInvolvementsStore.useInvolvements((m) => m)
-  const happeningRows = happeningsStore.useHappenings((m) => m)
+  // The branch's maps from the selectors (stable between patches); arrays via useMemo.
+  const entityRows = entitiesStore.useEntities(branchId, (m) => m)
+  const entities = useMemo(() => [...entityRows.values()], [entityRows])
+  const loreRows = loreStore.useLore(branchId, (m) => m)
+  const lore = useMemo(() => [...loreRows.values()], [loreRows])
+  const relationshipRows = characterRelationshipsStore.useRelationships(branchId, (m) => m)
+  const involvementRows = happeningInvolvementsStore.useInvolvements(branchId, (m) => m)
+  const happeningRows = happeningsStore.useHappenings(branchId, (m) => m)
   const worldTime = useBranchWorldTime(branchId)
   const story = useStoryPlace(branchId)
   const entryIndex = useEntryIndex(branchId)
@@ -184,15 +178,14 @@ export default function WorldRoute() {
     () =>
       relationshipLinksFor(
         selectedEntity?.kind === 'character' ? selectedEntity.id : null,
-        branchId,
         relationshipRows,
         entities,
       ),
-    [selectedEntity, branchId, relationshipRows, entities],
+    [selectedEntity, relationshipRows, entities],
   )
   const involvements = useMemo(
-    () => involvementsFor(selectedEntity?.id ?? null, branchId, involvementRows, happeningRows),
-    [selectedEntity, branchId, involvementRows, happeningRows],
+    () => involvementsFor(selectedEntity?.id ?? null, involvementRows, happeningRows),
+    [selectedEntity, involvementRows, happeningRows],
   )
   const paneData = useMemo<EntityPaneData>(
     () => ({

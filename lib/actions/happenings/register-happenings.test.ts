@@ -96,7 +96,7 @@ describe('happenings CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'hap_1')).title).toBe('The duel')
-    expect(happeningsStore.getById('hap_1')?.temporal).toBe('at dawn')
+    expect(happeningsStore.getById('br_1', 'hap_1')?.temporal).toBe('at dawn')
   })
 
   it('rejects a create with both time fields (no row, no delta)', async () => {
@@ -172,7 +172,7 @@ describe('happenings CRUD arms', () => {
       status: 'rejected',
     })
     expect((await rowFor(db, 'hap_1')).description).toEqual('Kael vs Aria')
-    expect(happeningsStore.getById('hap_1')?.title).toBe('The duel')
+    expect(happeningsStore.getById('br_1', 'hap_1')?.title).toBe('The duel')
     expect((await db.select().from(deltas)).length).toBe(1)
     expect(await update('hap_9', { description: 'rewritten' })).toMatchObject({
       status: 'rejected',
@@ -208,10 +208,10 @@ describe('happenings CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'hap_1')).title).toBe('The reckoning')
-    expect(happeningsStore.getById('hap_1')?.commonKnowledge).toBe(1)
+    expect(happeningsStore.getById('br_1', 'hap_1')?.commonKnowledge).toBe(1)
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     expect((await rowFor(db, 'hap_1')).title).toBe('The duel')
-    expect(happeningsStore.getById('hap_1')?.commonKnowledge).toBe(0)
+    expect(happeningsStore.getById('br_1', 'hap_1')?.commonKnowledge).toBe(0)
   })
 
   it('rejects an update with an out-of-range commonKnowledge (no row change, no delta)', async () => {
@@ -268,10 +268,10 @@ describe('happenings CRUD arms', () => {
       ctx,
     )
     expect(await rowFor(db, 'hap_1')).toBeUndefined()
-    expect(happeningsStore.getById('hap_1')).toBeUndefined()
+    expect(happeningsStore.getById('br_1', 'hap_1')).toBeUndefined()
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'hap_1')).title).toBe('The duel')
-    expect(happeningsStore.getById('hap_1')?.title).toBe('The duel')
+    expect(happeningsStore.getById('br_1', 'hap_1')?.title).toBe('The duel')
   })
 
   it('deleting a happening also removes its involvements and awareness rows', async () => {
@@ -425,7 +425,7 @@ describe('happenings CRUD arms', () => {
     const restoredHap = await rowFor(db, 'hap_1')
     expect(restoredHap).toBeDefined()
     expect(restoredHap?.title).toBe('The duel')
-    expect(happeningsStore.getById('hap_1')?.title).toBe('The duel')
+    expect(happeningsStore.getById('br_1', 'hap_1')?.title).toBe('The duel')
 
     expect(await countRows('happening_involvements', 'br_1', db)).toBe(1)
     expect(await countRows('happening_awareness', 'br_1', db)).toBe(1)
@@ -455,13 +455,13 @@ describe('happenings CRUD arms', () => {
     })
 
     // Verify the child rows are synced to stores
-    expect(happeningInvolvementsStore.getById('inv_1')).toMatchObject({
+    expect(happeningInvolvementsStore.getById('br_1', 'inv_1')).toMatchObject({
       id: 'inv_1',
       happeningId: 'hap_1',
       entityId: 'char_1',
       role: 'protagonist',
     })
-    expect(happeningAwarenessStore.getById('haw_1')).toMatchObject({
+    expect(happeningAwarenessStore.getById('br_1', 'haw_1')).toMatchObject({
       id: 'haw_1',
       happeningId: 'hap_1',
       characterId: 'char_1',
@@ -500,7 +500,7 @@ describe('happenings CRUD arms', () => {
     await reverseReplayDeltas('act_d', ctx)
 
     expect(await rowFor(db, 'hap_1')).toBeDefined()
-    const restored = happeningsStore.getById('hap_1')
+    const restored = happeningsStore.getById('br_1', 'hap_1')
     expect(restored).toBeDefined()
     expect(restored).not.toHaveProperty('involvements')
     expect(restored).not.toHaveProperty('awareness')
@@ -562,9 +562,9 @@ describe('happenings CRUD arms', () => {
     expect(await rowFor(db, 'hap_1')).toBeDefined()
     expect(await countRows('happening_involvements', 'br_1', db)).toBe(1)
     expect(await countRows('happening_awareness', 'br_1', db)).toBe(1)
-    expect(happeningsStore.getById('hap_1')).toBeDefined()
-    expect(happeningInvolvementsStore.getById('inv_1')).toBeDefined()
-    expect(happeningAwarenessStore.getById('haw_1')).toBeDefined()
+    expect(happeningsStore.getById('br_1', 'hap_1')).toBeDefined()
+    expect(happeningInvolvementsStore.getById('br_1', 'inv_1')).toBeDefined()
+    expect(happeningAwarenessStore.getById('br_1', 'haw_1')).toBeDefined()
 
     // Redo the delete: cascade should delete children too, not just parent
     await applyRedo(group, ctx)
@@ -574,9 +574,9 @@ describe('happenings CRUD arms', () => {
     expect(await countRows('happening_involvements', 'br_1', db)).toBe(0)
     expect(await countRows('happening_awareness', 'br_1', db)).toBe(0)
 
-    expect(happeningsStore.getById('hap_1')).toBeUndefined()
-    expect(happeningInvolvementsStore.getById('inv_1')).toBeUndefined()
-    expect(happeningAwarenessStore.getById('haw_1')).toBeUndefined()
+    expect(happeningsStore.getById('br_1', 'hap_1')).toBeUndefined()
+    expect(happeningInvolvementsStore.getById('br_1', 'inv_1')).toBeUndefined()
+    expect(happeningAwarenessStore.getById('br_1', 'haw_1')).toBeUndefined()
   })
 
   it('defaults embedding_stale to 1 on create', async () => {

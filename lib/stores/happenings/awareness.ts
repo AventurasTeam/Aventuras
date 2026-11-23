@@ -8,11 +8,12 @@ export const happeningAwarenessStore = {
   useAwareness: store.useRows,
   getAwareness: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
-  getById: (id: string): HappeningAwareness | undefined => store.getRows().get(id),
-  getByHappening: (happeningId: string): readonly HappeningAwareness[] =>
-    Array.from(store.getRows().values()).filter((r) => r.happeningId === happeningId),
-  getByCharacter: (characterId: string): readonly HappeningAwareness[] =>
-    Array.from(store.getRows().values()).filter((r) => r.characterId === characterId),
+  getById: store.getById,
+  useById: store.useById,
+  getByHappening: (branchId: string | null, happeningId: string): readonly HappeningAwareness[] =>
+    Array.from(store.getRows(branchId).values()).filter((r) => r.happeningId === happeningId),
+  getByCharacter: (branchId: string | null, characterId: string): readonly HappeningAwareness[] =>
+    Array.from(store.getRows(branchId).values()).filter((r) => r.characterId === characterId),
   hydrate: store.hydrate,
   patch: store.patch,
   __reset: store.__reset,

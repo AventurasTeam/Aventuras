@@ -42,5 +42,5 @@ directory (`NN-name/`) with a `milestone.md` definition and a
   Branches work: a copy substrate under story duplicate and fork, the
   fork proven equal to a copy rolled back, the navigator with switching,
   rename and delete, one redo stack and one lead per branch, and
-  History's before-and-after prose from the diff cache; nine slices,
+  History's before-and-after prose from the diff cache; ten slices,
   four day-one startable.

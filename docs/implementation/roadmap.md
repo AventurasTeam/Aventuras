@@ -167,7 +167,7 @@ vault shell; during M8 — M9.1 and M9.3.
 
 **Promoted** — defined in
 [`milestones/06-branches-diff-cache/`](./milestones/06-branches-diff-cache/milestone.md)
-(milestone + nine slice docs).
+(milestone + ten slice docs).
 
 ---
 
@@ -1204,6 +1204,19 @@ each names.
   source text, as suggestion chips are) and fixes the canon to match.
   No translation phase runs before this slice, so nothing is stale yet.
   Raised by the AI writer map's planning (2026-10-22).
+- **M8.2 — A translation subscriber can read the old index after a
+  hydrate or patch.** `translationsStore.hydrate` and `patch`
+  (`lib/stores/translations/translations.ts`) call the factory's, whose
+  `setState` notifies subscribers before `rebuildIndex()` runs, and the
+  rebuild notifies nothing. A selector that calls `getTranslation` sees
+  the new loaded branch with the old index: after a hydrate for another
+  branch it can return the old branch's text, and a key only the new
+  branch holds reads as a miss until the next change (probed with a
+  jsdom hook test, 2026-11-23). Nothing calls `getTranslation` from a
+  render today; this slice's reactive `useTranslation` is its first
+  subscriber, so it builds the index before the notify, or derives it
+  from the rows' identity. It predates Slice 6.2. Found by Slice 6.2's
+  slice review (2026-11-23).
 - **M8.3 — The wizard's era picker and its Finish-time flip are
   unbuilt.** [`wizard.md → Calendar swap inside wizard`](../ui/screens/wizard/wizard.md#calendar-swap-inside-wizard)
   promises an era selector when the picked calendar has eras, and Finish
