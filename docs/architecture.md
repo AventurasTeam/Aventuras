@@ -1517,12 +1517,11 @@ the scopes declared in each per-screen doc.
 A walk serves the requested deltas, the `op=update` deltas asked for on
 one target. It reads the chain of deltas on the same
 `(branch_id, target_id)` from the oldest requested delta's `log_position`
-on, every op, `target_table` as a post-filter, ordered by `log_position`,
-and the target row by branch and id, **with no write committing between
-the two reads**, so a fresh delta can't make an off-by-one between them.
-Neither platform has a read transaction to give that, so the read is one
-call that runs both, `readChainSnapshot` in `lib/db`, a function beside
-`DbCtx`:
+on, every op, ordered by `log_position`, and the target row by branch and
+id, **with no write committing between the two reads**, so a fresh delta
+can't make an off-by-one between them. Neither platform has a read
+transaction to give that, so the read is one call that runs both,
+`readChainSnapshot` in `lib/db`, a function beside `DbCtx`:
 
 - **Desktop:** one `db:batch` IPC message. Electron main runs every query
   of the batch in one synchronous call on its one connection, so no
@@ -1540,9 +1539,17 @@ call that runs both, `readChainSnapshot` in `lib/db`, a function beside
   on-device reseed (`lib/db/devtools/reseed.native.ts`), which throws
   outside `__DEV__`, holds a `BEGIN` open across `await`s between its
   synchronous inserts, so a walk run in one of those gaps reads rows the
-  reseed hasn't committed.
+  reseed hasn't committed. A third ban keeps other code off the batch
+  the desktop read runs on: in code bound for native, `db.batch` and
+  `ctx.db.batch` are errors outside `lib/db/runtime/**`, since drizzle's
+  expo-sqlite driver has no batch while the app db's sqlite-proxy type
+  declares one.
 - **The test database:** its batch callback runs every query in one
   synchronous call, so the walk's tests run the desktop path.
+
+The chain's `target_table` filter is the SQL name of the table the row
+read takes (`getTableName(row.table)`), so the two reads can't name
+different tables.
 
 A requested delta absent from its chain is **gone**: a reversal pruned it
 after its History row loaded. It resolves without an entry; when every
@@ -1559,7 +1566,7 @@ seeds its state from the first of these that exists:
    under its cascade key (`relationships`, `involvements` or
    `awareness`). It is a second read, made only when the first two are
    absent: no forward write can re-create a deleted row, and only a
-   reversal can restore one, which evicts the branch
+   reversal or a redo can restore one, either of which evicts the branch
    ([Concurrency, rollback, error path](#concurrency-rollback-error-path)).
 
 With none of the three the target is corrupt, and the walk rejects.
@@ -1651,6 +1658,7 @@ can exist before its listener does. Both come from the `lib/history`
 barrel.
 
 ```ts
+type UpdateDelta = Delta & { op: 'update' }
 type DiffCacheEntry = {
   old: Record<string, unknown>
   new: Record<string, unknown>
@@ -1660,16 +1668,18 @@ type DiffCacheEntry = {
 type DiffOutcome = { kind: 'entry'; entry: DiffCacheEntry } | { kind: 'gone' }
 
 peek(branchId: string, deltaId: string): DiffCacheEntry | undefined  // sync, render-safe
-populate(delta: Delta): Promise<DiffOutcome>     // async; runs the walk; keys on delta.branchId
-populateBatch(deltas: Delta[]): Promise<void>    // groups by branch and target
+populate(delta: UpdateDelta): Promise<DiffOutcome>            // async; runs the walk; keys on delta.branchId
+populateBatch(deltas: readonly UpdateDelta[]): Promise<void>  // groups by branch and target
 evictBranch(branchId: string): void              // the post-commit hook's listener
-onEvict(listener: (branchId: string) => void): () => void  // a host hears its branch's eviction
+onEvict(listener: (branchId: string) => void): () => void  // a host hears each evicted branch
 ```
 
-`populate` resolves `gone` for a delta its walk found pruned
-([Walk algorithm](#walk-algorithm)): nothing cached, nothing remembered,
-nothing logged. The walk records no retrieval bump, so one long
-awareness chain can't fill the cap below.
+`populate` resolves `gone` for any requested delta its walk gave no
+entry: one pruned from its chain ([Walk algorithm](#walk-algorithm)), or
+a retrieval bump, which the walk steps through but never lists (History
+never requests one). Nothing is cached, remembered or logged for it. The
+walk records no retrieval bump, so one long awareness chain can't fill
+the cap below.
 
 LRU eviction, hard cap **2000 entries**; a `peek` hit and a `populate`
 both refresh recency. Conservative estimate
@@ -1762,8 +1772,9 @@ and a listener that throws is logged
 (`action_layer.log_rewritten_listener_failed`) without stopping the
 others, the store sync or the caller's result. It fires only on a commit
 that rewrites the log: a reversal fires when its set holds rows or its
-caller flags a journal write-back, a redo when its commit is non-empty,
-on the redo group's branch. A forward write routed through the reversal
+commit writes a journal back (the caller passes the write-back's patches
+as `patchesAfter`), a redo when its commit is non-empty, on the redo
+group's branch. A forward write routed through the reversal
 path with nothing reversed (a head-turn content edit, a regenerate's
 clamp ops, a re-run start that reversed nothing) evicts nothing.
 A fork, a story duplicate and a branch delete evict nothing
@@ -1771,7 +1782,8 @@ A fork, a story duplicate and a branch delete evict nothing
 for a deleted delta needs nothing more: nothing reads it, since the
 delta renders on no surface anymore.
 
-A walk that started before its branch's eviction writes nothing when it
+An eviction detaches its branch's walks in flight without cancelling
+them. A walk that started before it runs on and writes nothing when it
 settles, since its read can see a half-reversed row: no entry, no
 remembered failure, no `warn`. Its waiting `populate` calls reject with
 `DiffEvictedError`, and a `populate` after the eviction starts a new
