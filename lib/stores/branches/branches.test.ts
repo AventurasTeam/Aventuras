@@ -200,6 +200,17 @@ describe('refreshBranches', () => {
     expect(ids(branchesStore.getBranches('s1'))).toEqual(['br_new'])
   })
 
+  it('drops a refresh still reading at a reset when no refresh starts after it', async () => {
+    const read = deferred<BranchRow[]>()
+    const pending = refreshBranches(stubDb(read.promise), 's1')
+    resetAllStores()
+
+    read.resolve([row('br_old')])
+    await pending
+
+    expect(branchesStore.getBranches('s1')).toEqual([])
+  })
+
   it('resolves, logs and keeps the last rows when its read throws', async () => {
     const error = vi.spyOn(logger, 'error')
     branchesStore.hydrate('s1', [row('br_b')])
