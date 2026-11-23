@@ -207,9 +207,8 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
 
   await ctx.runInTransaction(ops)
 
-  // Any new delta-logged action invalidates its branch's redo (data-model.md → Entry mutability &
-  // rollback); cleared at this choke point so forward writers can't forget. Redo's re-insert
-  // bypasses it.
+  // A delta-logged write invalidates its branch's redo (data-model.md → Entry mutability &
+  // rollback), cleared here so forward writers can't forget. Redo's re-insert bypasses it.
   undoRedoStore.clear(branchId)
 
   // Action layer owns the store mirror; the patcher branch-guards internally.
