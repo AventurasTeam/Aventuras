@@ -174,6 +174,12 @@ async function seedRelationship(): Promise<{ update: Delta; relationshipId: stri
   return { update: await only('act_rival'), relationshipId: (await only('act_rel')).targetId }
 }
 
+const KAEL_FLAGGED: Partial<NewEntity> = {
+  nameCollisionFlag: 1,
+  nameCollisionPartnerId: 'char_kaelan',
+  nameCollisionReason: 'duplicate',
+}
+
 const RIVAL = { old: { kind: 'friend' }, new: { kind: 'rival' }, names: {} }
 
 const loreDelta = (over: Partial<Delta> = {}): Delta => ({
@@ -255,6 +261,66 @@ describe('walkTarget', () => {
     expect(spied.reads).toEqual({ batch: 1, single: 1 })
   })
 
+  it('seeds from the held row with the target id when the delete holds several', async () => {
+    await t.db
+      .insert(entities)
+      .values([
+        entity('char_aaron', 'Aaron'),
+        entity('char_kael', 'Kael'),
+        entity('char_mira', 'Mira'),
+      ])
+    await act('act_aaron', {
+      kind: 'upsertCharacterRelationship',
+      source: 'user_edit',
+      payload: {
+        branchId: 'b1',
+        subjectId: 'char_aaron',
+        objectId: 'char_mira',
+        kind: 'sibling',
+        inverseKind: null,
+      },
+    })
+    await act('act_rel', relate('friend'))
+    await act('act_rival', relate('rival'))
+    const aaronLink = (await only('act_aaron')).targetId
+    const relationshipId = (await only('act_rel')).targetId
+    const update = await only('act_rival')
+    await act('act_del_mira', deleteEntity('char_mira'))
+    const [holder] = await deltasOf('act_del_mira')
+    // The target held second: a walk taking the first held row would seed from Aaron's link.
+    expect((holder.undoPayload?.relationships as { id: string }[]).map((row) => row.id)).toEqual([
+      aaronLink,
+      relationshipId,
+    ])
+
+    const result = await walkTarget(t.db, [update])
+
+    expect(result.entries.get(update.id)).toEqual(RIVAL)
+  })
+
+  it("ignores a held copy in another branch's delete", async () => {
+    const { update, relationshipId } = await seedRelationship()
+    await act('act_del_mira', deleteEntity('char_mira'))
+    await t.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 2 })
+    await t.db.insert(deltas).values({
+      id: 'dl_b2_holder',
+      branchId: 'b2',
+      entryId: null,
+      actionId: 'act_b2',
+      logPosition: 9999,
+      source: 'user_edit',
+      targetTable: 'entities',
+      targetId: 'char_mira',
+      op: 'delete',
+      undoPayload: { id: 'char_mira', relationships: [{ id: relationshipId, kind: 'lover' }] },
+      createdAt: 9999,
+    })
+
+    const result = await walkTarget(t.db, [update])
+
+    expect(result.entries.get(update.id)).toEqual(RIVAL)
+  })
+
   it('rejects a target with no row, no head delete and no held copy', async () => {
     const ghost: NewDelta = {
       id: 'dl_ghost',
@@ -287,6 +353,22 @@ describe('walkTarget', () => {
     })
   })
 
+  it('gives the chained deltas their entries when others in the request are gone', async () => {
+    await act('act_0', createFord)
+    await act('act_1', editFord({ body: 'A drowning in spring.' }))
+    const update = await only('act_1')
+    const pruned = loreDelta({ id: 'dl_pruned', logPosition: update.logPosition - 1 })
+
+    const result = await walkTarget(t.db, [pruned, update])
+
+    expect(result.gone).toEqual(new Set(['dl_pruned']))
+    expect(result.entries.get(update.id)).toEqual({
+      old: { body: 'Shallow in summer.' },
+      new: { body: 'A drowning in spring.' },
+      names: {},
+    })
+  })
+
   it('puts no $ key in old or new', async () => {
     await t.db.insert(entities).values([
       entity('char_kaelan', 'Kaelan'),
@@ -309,7 +391,8 @@ describe('walkTarget', () => {
 
     const result = await walkTarget(t.db, [update])
 
-    expect(result.entries.get(update.id)).toEqual({
+    // Strict: toEqual would pass a `$` key carried with an undefined value.
+    expect(result.entries.get(update.id)).toStrictEqual({
       old: {
         nameCollisionFlag: 1,
         nameCollisionPartnerId: 'char_kaelan',
@@ -317,6 +400,133 @@ describe('walkTarget', () => {
       },
       new: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
       names: { char_kaelan: 'Kaelan' },
+    })
+  })
+
+  it('fills new with the whole collision group as each re-point left it', async () => {
+    await t.db
+      .insert(entities)
+      .values([
+        entity('char_kaelan', 'Kaelan'),
+        entity('char_kaelen', 'Kaelen'),
+        entity('char_kaelyn', 'Kaelyn'),
+        entity('char_kael', 'Kael', KAEL_FLAGGED),
+      ])
+    await act('act_1', updateEntity('char_kael', { nameCollisionPartnerId: 'char_kaelen' }))
+    await act(
+      'act_2',
+      updateEntity('char_kael', {
+        nameCollisionPartnerId: 'char_kaelyn',
+        nameCollisionReason: 'name-taken',
+      }),
+    )
+    const [first, second] = [await only('act_1'), await only('act_2')]
+    expect(first.undoPayload).toStrictEqual({ nameCollisionPartnerId: 'char_kaelan' })
+    expect(second.undoPayload).toStrictEqual({
+      nameCollisionPartnerId: 'char_kaelen',
+      nameCollisionReason: 'duplicate',
+    })
+
+    const result = await walkTarget(t.db, [first, second])
+
+    const names = { char_kaelan: 'Kaelan', char_kaelen: 'Kaelen', char_kaelyn: 'Kaelyn' }
+    expect(result.entries.get(first.id)).toStrictEqual({
+      old: { nameCollisionPartnerId: 'char_kaelan' },
+      new: {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_kaelen',
+        nameCollisionReason: 'duplicate',
+      },
+      names,
+    })
+    expect(result.entries.get(second.id)).toStrictEqual({
+      old: { nameCollisionPartnerId: 'char_kaelen', nameCollisionReason: 'duplicate' },
+      new: {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_kaelyn',
+        nameCollisionReason: 'name-taken',
+      },
+      names,
+    })
+  })
+
+  it('gives a clear alongside another column the cleared group and that column', async () => {
+    await t.db
+      .insert(entities)
+      .values([entity('char_kaelan', 'Kaelan'), entity('char_kael', 'Kael', KAEL_FLAGGED)])
+    await act(
+      'act_1',
+      updateEntity('char_kael', {
+        description: 'a wandering knight',
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      }),
+    )
+    const update = await only('act_1')
+
+    const result = await walkTarget(t.db, [update])
+
+    expect(result.entries.get(update.id)).toStrictEqual({
+      old: {
+        description: null,
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_kaelan',
+        nameCollisionReason: 'duplicate',
+      },
+      new: {
+        description: 'a wandering knight',
+        nameCollisionFlag: 0,
+        nameCollisionPartnerId: null,
+        nameCollisionReason: null,
+      },
+      names: { char_kaelan: 'Kaelan' },
+    })
+  })
+
+  it("gives a classifier's raise the group it set", async () => {
+    await t.db
+      .insert(entities)
+      .values([entity('char_kaelan', 'Kaelan'), entity('char_kael', 'Kael')])
+    await act('act_1', {
+      kind: 'raiseCollisionFlag',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'b1',
+        id: 'char_kael',
+        partnerId: 'char_kaelan',
+        reason: 'duplicate',
+        proseEntryId: null,
+      },
+    })
+    const raise = await only('act_1')
+
+    const result = await walkTarget(t.db, [raise])
+
+    expect(result.entries.get(raise.id)).toStrictEqual({
+      old: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+      new: {
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: 'char_kaelan',
+        nameCollisionReason: 'duplicate',
+      },
+      names: { char_kaelan: 'Kaelan' },
+    })
+  })
+
+  it("leaves a flagged row's other edits without the collision group", async () => {
+    await t.db
+      .insert(entities)
+      .values([entity('char_kaelan', 'Kaelan'), entity('char_kael', 'Kael', KAEL_FLAGGED)])
+    await act('act_1', updateEntity('char_kael', { description: 'a wandering knight' }))
+    const update = await only('act_1')
+
+    const result = await walkTarget(t.db, [update])
+
+    expect(result.entries.get(update.id)).toStrictEqual({
+      old: { description: null },
+      new: { description: 'a wandering knight' },
+      names: {},
     })
   })
 

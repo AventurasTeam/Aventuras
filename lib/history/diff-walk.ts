@@ -20,7 +20,13 @@ import { isJsonObject } from '@/lib/json-object'
 
 import { HELD_KEY, HOLDING_TABLES, namesOf } from './link-ends'
 import { HISTORY_LINK_TABLES, isRetrievalBump, type HistoryLinkTable } from './link-rows'
-import { DIFF_TABLES, refIdsOf, type DiffTable, type DiffValues } from './prose-fields'
+import {
+  COLLISION_COLUMNS,
+  DIFF_TABLES,
+  refIdsOf,
+  type DiffTable,
+  type DiffValues,
+} from './prose-fields'
 
 export type DiffCacheEntry = DiffValues & {
   /** Walk-time names of the entry's ref ids: stored row, else latest delete payload. */
@@ -75,6 +81,13 @@ const isDiffTable = (table: string): table is DiffTable =>
 
 const isLinkTable = (table: DiffTable): table is HistoryLinkTable =>
   (HISTORY_LINK_TABLES as readonly string[]).includes(table)
+
+// The collision group is worded as one field, so a write to any of it shows all three after it.
+function pickedKeys(table: DiffTable, keys: readonly string[]): readonly string[] {
+  const collision: readonly string[] = COLLISION_COLUMNS
+  if (table !== 'entities' || !keys.some((key) => collision.includes(key))) return keys
+  return [...new Set([...keys, ...collision])]
+}
 
 const sameTarget = (delta: Delta, first: Delta): boolean =>
   delta.op === 'update' &&
@@ -169,7 +182,7 @@ export async function walkTarget(
     if (!isRetrievalBump(delta))
       stepped.set(delta.id, {
         old: Object.fromEntries(keys.map((key) => [key, payload[key]])),
-        new: Object.fromEntries(keys.map((key) => [key, state[key]])),
+        new: Object.fromEntries(pickedKeys(targetTable, keys).map((key) => [key, state[key]])),
       })
     for (const key of keys) state[key] = undoneColumnOf(targetTable, key, payload[key], state[key])
   }
