@@ -658,9 +658,10 @@ invalidation, and, if the E2E has a survivor, its registration check.
   Two dev-only paths are the exceptions: the Drizzle Studio dev plugin
   calls the async API on the app's connection, and is a no-op when
   `NODE_ENV` is `production`; the on-device reseed
-  (`lib/db/devtools/reseed.native.ts`) holds a `BEGIN` open across
-  `await`s between its synchronous inserts, and throws outside
-  `__DEV__`.
+  (`lib/db/devtools/reseed.native.ts`), which throws outside `__DEV__`,
+  holds a `BEGIN` open across `await`s between its synchronous inserts,
+  so a walk run in one of those gaps reads rows the reseed hasn't
+  committed.
 - **The read's tests.** The native read also has a unit test,
   `lib/db/runtime/chain-snapshot.native.test.ts`, running drizzle's
   expo-sqlite driver over a small `node:sqlite` sync adapter: it covers
@@ -680,7 +681,7 @@ invalidation, and, if the E2E has a survivor, its registration check.
   holds all three, picked from the walk's state at that step, as `new`
   already holds the whole column for the placement group. The renderer
   stays as planned, and `world.md`'s column-group rule holds literally.
-  The developer's words: "(a)". Pinned in
+  Pinned in
   `lib/history/diff-walk.test.ts` (a merge re-point, a clear by merge
   and a raise, through the real walk) and in
   `lib/history/diff-prose-walk.test.ts` (the walk's output rendering
@@ -701,7 +702,9 @@ invalidation, and, if the E2E has a survivor, its registration check.
   (`hooks/use-surface-navigate.ts`), so World comes back with nothing
   selected.
 - **Criterion 12's** two-branch database test lives in
-  `lib/history/diff-walk-reversals.test.ts`, not `diff-walk.test.ts`.
+  `lib/history/diff-walk-reversals.test.ts`, not `diff-walk.test.ts`,
+  and criterion 2's `EXPLAIN QUERY PLAN` case lives in
+  `lib/db/runtime/chain-snapshot.test.ts`, beside the read it plans.
 - **Deviations from the brief.**
   - `populate` resolves a typed `DiffOutcome`, whose `gone` is no
     failure, in place of canon's `Promise<DiffCacheEntry>`.
@@ -719,7 +722,8 @@ invalidation, and, if the E2E has a survivor, its registration check.
     so.
   - The post-commit hook fires only on a commit that rewrites the log
     (a review ruling): `reverseAndPruneDeltaRows` when its set holds
-    rows or its caller flags a journal write-back, `reverseReplayGroup`
+    rows or its commit writes a journal back (the caller passes the
+    write-back's patches as `patchesAfter`), `reverseReplayGroup`
     when its set holds rows, a redo when its commit is non-empty. A
     forward write routed through the reversal path with an empty set
     evicts nothing. This replaces the plan's op-count guard.
