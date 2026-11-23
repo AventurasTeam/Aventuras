@@ -21,7 +21,7 @@ export type ChainSnapshot = {
   row: Record<string, unknown> | null
 }
 
-/** The chain and row selects on `db`, unexecuted; each platform file runs them its own atomic way. */
+/** The chain and row selects on `db`, unexecuted; each platform runs them atomically. */
 export function chainSnapshotQueries<TMode extends 'sync' | 'async', TRunResult>(
   db: BaseSQLiteDatabase<TMode, TRunResult, typeof dbSchema>,
   { branchId, targetTable, targetId, fromLogPosition, row }: ChainSnapshotArgs,

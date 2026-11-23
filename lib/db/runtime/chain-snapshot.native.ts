@@ -8,7 +8,10 @@ import {
 import type { dbSchema } from '../schema'
 import type { DbCtx, Delta } from '../types'
 
-/** The chain and the row with no write committed between them: one batch on desktop and the test DB, two sync reads on native. */
+/**
+ * The chain and the row with no write committed between them: one batch on desktop and the test
+ * DB, two sync reads on native.
+ */
 export async function readChainSnapshot(
   db: DbCtx['db'],
   args: ChainSnapshotArgs,

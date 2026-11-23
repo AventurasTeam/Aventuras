@@ -24,9 +24,8 @@ import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 import { world } from '../locators/world'
 
-// world.md → Change prose: History words an update's before and after. Unit and story tests own
-// the wording; this spec drives real edits, undos and redos through the UI and the desktop read
-// batch, asserting each write in the DB before the row's prose (testing.md → Selector strategy).
+// world.md → Change prose. Unit and story tests own the wording; this spec drives real edits,
+// undos and redos through the UI, asserting each write in the DB before the row's prose.
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 
@@ -183,9 +182,8 @@ test.describe.serial('History diff prose — edits, undo and redo', () => {
   })
 })
 
-// A survivor: a later write the edit's undo spares, with its prior rewritten. Only a pass writes
-// above a World save that CTRL-Z still reaches, and only one anchored below the turn it rides
-// survives that turn's undo, so the pass reads a reply reworded after the edit.
+// A survivor: a later write the edit's undo spares, its prior rewritten. Only a pass anchored
+// below the turn it rides survives that turn's undo, so it reads a reply reworded after the edit.
 test.describe('History diff prose — a pass write that survives the undo of the edit under it', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -202,9 +200,8 @@ test.describe('History diff prose — a pass write that survives the undo of the
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
-    // The window opens on the reply before the last turn: three rows now and five after one
-    // turn, so a cadence of 5 brings the pass due after that turn and not before. A count of 0
-    // appends no filler; the call only re-parks the watermark.
+    // Window opens on the reply before the last turn: three rows now, five after one turn, so
+    // cadence 5 makes the pass due after that turn only. Count 0 appends no filler, just re-parks.
     const lastReply = parkClassifierWatermarkAtLastReply(seeded.dbPath, HERO_BRANCH)
     seedClassifierBacklog(seeded.dbPath, HERO_BRANCH, 0, lastReply - 3)
     setClassifierCadence(seeded.dbPath, HERO_STORY, 5)

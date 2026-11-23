@@ -13,7 +13,7 @@ export const RETRIEVAL_COUNT = 'retrievalCount'
 /** The table whose updates of the retrieval count alone History leaves out. */
 export const RETRIEVAL_BUMP_TABLE = 'happening_awareness'
 
-/** An awareness update whose payload holds the retrieval count alone, as the History query skips it. */
+/** An awareness update whose payload is the retrieval count alone, as the History query skips. */
 export function isRetrievalBump(delta: Pick<Delta, 'targetTable' | 'op' | 'undoPayload'>): boolean {
   if (delta.targetTable !== RETRIEVAL_BUMP_TABLE || delta.op !== 'update') return false
   // Every key counts, `$` ones included, as the query's json_each count does.

@@ -143,7 +143,7 @@ describe('undoneColumnOf', () => {
     })
   })
 
-  // No handler logs a null state partial (a null column reads as the empty state), so it is set here.
+  // No handler logs a null state partial (null reads as the empty state), so it is set here.
   it('restores a null partial on state as a null column', async () => {
     await act('act_create', create(KAEL))
     await act(

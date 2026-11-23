@@ -23,7 +23,7 @@ import { DiffLoaderProvider, type DiffLoader } from './diff-loader'
 import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { HistoryTab } from './history-tab'
 
-// The storybook setup registers no domains, and the term-list prose reads each list's registered match.
+// Storybook registers no domains; term-list prose reads each list's registered match.
 registerAllDomains()
 
 const delta = (
