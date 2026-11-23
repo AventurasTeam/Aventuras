@@ -1514,7 +1514,8 @@ the scopes declared in each per-screen doc.
 
 ### Walk algorithm
 
-For a target `op=update` delta D, read the chain of deltas on the same
+A walk serves the requested deltas, the `op=update` deltas asked for on
+one target. It reads the chain of deltas on the same
 `(branch_id, target_id)` from the oldest requested delta's `log_position`
 on, every op, `target_table` as a post-filter, ordered by `log_position`,
 and the target row by branch and id, **with no write committing between
@@ -1532,10 +1533,14 @@ call that runs both, `readChainSnapshot` in `lib/db`, a function beside
   between the two. That holds only while nothing calls expo-sqlite's
   async API on the app's connection, which `eslint.config.js` enforces:
   it bans any `*Async` member of `expoDb`, and any value import of
-  `expo-sqlite` outside `lib/db/runtime/client.native.ts`. The Drizzle
-  Studio dev plugin is the one exception: it calls the async API on the
-  connection, and is a no-op when `NODE_ENV` is `production`, so only a
-  dev build can see a Studio query interleave with a walk.
+  `expo-sqlite` outside `lib/db/runtime/client.native.ts`. Two dev-only
+  paths are the exceptions. The Drizzle Studio dev plugin calls the async
+  API on the connection, and is a no-op when `NODE_ENV` is `production`,
+  so only a dev build can see a Studio query interleave with a walk. The
+  on-device reseed (`lib/db/devtools/reseed.native.ts`), which throws
+  outside `__DEV__`, holds a `BEGIN` open across `await`s between its
+  synchronous inserts, so a walk run in one of those gaps reads rows the
+  reseed hasn't committed.
 - **The test database:** its batch callback runs every query in one
   synchronous call, so the walk's tests run the desktop path.
 
@@ -1590,8 +1595,10 @@ recorded nowhere. History leaves that shape out
 ([`world.md → History tab`](./ui/screens/world/world.md#history-tab)),
 and a retrieval can bump each aware in-scene row once a turn, so one
 long awareness chain would otherwise fill the cache. The walk and
-History's query test the shape with one definition beside
-`RETRIEVAL_COUNT` (`lib/history/link-rows.ts`), so they can't drift.
+History's query build the shape from the same two constants,
+`RETRIEVAL_COUNT` and `RETRIEVAL_BUMP_TABLE` (`lib/history/link-rows.ts`),
+and a test in `lib/history/diff-walk.test.ts` pins that the two leave
+out the same deltas.
 
 Last, the walk reads the names of the rows its entries reference (a row
 ref, a ref list's items, a place's parent, the collision partner,
@@ -1783,7 +1790,8 @@ with the delta id and the reason, per
 A later `populate` of that delta rejects at once, with no walk and no
 second `warn`. The memory goes with its branch's next eviction: under a
 snapshot read, only a rewrite of the log can change a chain the walk
-found corrupt. The host keeps the `undo_payload`-keys summary for that
+found corrupt. A plain DB error is remembered as long, so a one-off
+failure keeps its rows on the summary until that eviction. The host keeps the `undo_payload`-keys summary for that
 row. The row stays usable. The warn level keeps the entry visible in
 Diagnostics Hub Logs without requiring the debug-level master
 toggle, so users investigating "why is this delta log row less

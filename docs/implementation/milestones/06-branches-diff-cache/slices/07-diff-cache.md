@@ -186,13 +186,13 @@ follow the default.
 - Each update on the path that History lists gets an entry, so one walk
   serves every requested delta on its target. An awareness update whose
   payload holds only `retrievalCount`, the shape History leaves out
-  (a retrieval bump, or a close's reset; `lib/history/query.ts:130-134`),
+  (a retrieval bump, or a close's reset; `lib/history/query.ts:131-137`),
   is stepped back through but gets no entry: a retrieval can bump each
   aware in-scene row once a turn, so one long awareness chain would
-  otherwise fill the 2000-entry cache. The walk tests that shape with
-  the same rule as the list's query, one definition beside
-  `RETRIEVAL_COUNT` (`lib/history/link-rows.ts`), so the two can't
-  drift.
+  otherwise fill the 2000-entry cache. The walk and the list's query
+  build that shape from the same two constants, `RETRIEVAL_COUNT` and
+  `RETRIEVAL_BUMP_TABLE` (`lib/history/link-rows.ts`), and a test pins
+  that the two leave out the same deltas.
 - Every read is scoped by `branch_id`.
 
 **The cache** (`lib/history/diff-cache.ts`).
@@ -224,7 +224,9 @@ follow the default.
   A later `populate` for it rejects at once, with no walk and no second
   `warn`, whether or not TanStack has dropped its query. The memory goes
   with its branch's next eviction: under a consistent read, only a
-  rewrite of the log can change a chain the walk found corrupt.
+  rewrite of the log can change a chain the walk found corrupt. A plain
+  DB error is remembered as long, so a one-off failure keeps its rows
+  on the summary until that eviction.
 - The cache registers its eviction with the hook when its module loads,
   so no entry can exist before its listener does.
 
@@ -534,8 +536,6 @@ each side, the pending miss (summary showing), and the failed walk
 
 | Level                  | Tool                                                                          | What                                                                                                                                                                                                                              |
 | ---------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Level                  | Tool                                                                          | What                                                                                                                                                                                                                              |
-| ---                    | ---                                                                           | ---                                                                                                                                                                                                                               |
 | Unit, `lib/actions`    | Vitest, `--project unit`, test database                                       | The wrapper against the reversal's own restore; the hook at its three call sites, after a store-sync failure, and with a throwing listener.                                                                                       |
 | Unit, `lib/history`    | Vitest, `--project unit`, test database                                       | The read's consistency and its index; the walk's seeds, meta keys, column group, bumps with no entry, a gone delta, and survivor rewrites across an undo and a redo; the renderer per field kind; the fallback's tests unchanged. |
 | Unit, cache            | Vitest, `--project unit`, injected walk                                       | Keying, LRU, coalescing, batching, eviction, the in-flight guard on entries and rejections, gone outcomes, remembered failures.                                                                                                   |
@@ -655,9 +655,12 @@ invalidation, and, if the E2E has a survivor, its registration check.
   `withTransactionSync`, and no app code calls an async expo-sqlite API.
   ESLint now holds that (developer decision): it bans `*Async` members of
   `expoDb` and value imports of `expo-sqlite` outside the native client.
-  The Drizzle Studio dev plugin is the one exception: it calls the async
-  API on the app's connection, and is a no-op when `NODE_ENV` is
-  `production`.
+  Two dev-only paths are the exceptions: the Drizzle Studio dev plugin
+  calls the async API on the app's connection, and is a no-op when
+  `NODE_ENV` is `production`; the on-device reseed
+  (`lib/db/devtools/reseed.native.ts`) holds a `BEGIN` open across
+  `await`s between its synchronous inserts, and throws outside
+  `__DEV__`.
 - **The read's tests.** The native read also has a unit test,
   `lib/db/runtime/chain-snapshot.native.test.ts`, running drizzle's
   expo-sqlite driver over a small `node:sqlite` sync adapter: it covers
@@ -677,7 +680,7 @@ invalidation, and, if the E2E has a survivor, its registration check.
   holds all three, picked from the walk's state at that step, as `new`
   already holds the whole column for the placement group. The renderer
   stays as planned, and `world.md`'s column-group rule holds literally.
-  The developer's words: "(a)" and "Q4: a". Pinned in
+  The developer's words: "(a)". Pinned in
   `lib/history/diff-walk.test.ts` (a merge re-point, a clear by merge
   and a raise, through the real walk) and in
   `lib/history/diff-prose-walk.test.ts` (the walk's output rendering
