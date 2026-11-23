@@ -24,14 +24,14 @@ export function applyMigration(sqlite: DatabaseSync, tag: string): void {
   }
 }
 
+type ProxyMethod = 'run' | 'all' | 'get' | 'values'
+
 // drizzle-orm 0.45.2 ships no node-sqlite driver; sqlite-proxy wraps any
 // SQLite backend via a callback, making node:sqlite usable without a native dep.
 // The proxy's mapResultRow indexes rows by column position, so all methods
 // must return rows as arrays-of-values, not as objects. Mirrors the desktop
 // (Electron main) adapter: 'get' returns the single row directly so drizzle
 // decodes it as a row rather than an array-of-rows.
-type ProxyMethod = 'run' | 'all' | 'get' | 'values'
-
 function rowsOf(
   sqlite: DatabaseSync,
   sql: string,
