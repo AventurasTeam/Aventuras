@@ -1,15 +1,31 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   assets,
+  branches,
   emptyEntityState,
+  stories,
+  storyEntries,
   vecTableName,
   type CharacterState,
+  type DbCtx,
   type NewEntity,
+  type NewStoryEntry,
 } from '@/lib/db'
-import { resetAllStores } from '@/lib/stores'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { branchSnapshot } from '@/lib/db/__tests__/two-branch'
+import {
+  entitiesStore,
+  entriesStore,
+  generationStore,
+  resetAllStores,
+  undoRedoStore,
+} from '@/lib/stores'
 
+import { applyDeltaAction } from '../delta/apply-delta-action'
+import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { writeSystemEntry } from '../story-entries/system-entry'
+import { undoLastAction } from '../story-entries/undo'
 import type { PipelineAction } from '../types'
 import {
   appendTurns,
@@ -29,6 +45,7 @@ import {
   rerunByHand,
   rowOn,
   rowsOn,
+  seedForkVectors,
   seedVectorsWithWindowLore,
   vectorRows,
   type ForkWorld,
@@ -662,5 +679,308 @@ describe('a fork at the edges of the log', () => {
         loreTable,
       ).toEqual([windowLore])
     }
+  })
+})
+
+// data-model.md → Entry mutability & rollback: one redo stack per branch, and a fork leaves the
+// parent's. data-model.md → Branch model: a copy's JSON names the branch that wrote it, fork after
+// fork, and a restore stamps the branch it writes.
+describe('around a fork: CTRL-Z, redo and a fork of a fork', () => {
+  const STORY = 's_fka'
+  const PARENT = 'br_fka_parent'
+  const GRAND = 'br_fork_grand'
+  const GRAND_REF = 'br_fork_grand_ref'
+  const AT = 1_767_225_600_000
+  const OPENING = 'ent_fka_open'
+  const U1 = 'ent_fka_u1'
+  const R1 = 'ent_fka_r1'
+  const U2 = 'ent_fka_u2'
+  const R2 = 'ent_fka_r2'
+  const U3 = 'ent_fka_u3'
+  const R3 = 'ent_fka_r3'
+  const ROOK = 'char_fka_rook'
+  const MIRA = 'char_fka_mira'
+  const HAPPENING = 'hap_fka_ford'
+  const LORE = 'lore_fka_toll'
+  const DELETE_ACTION = 'act_fka_delete'
+  const LATE_ACTION = 'act_fka_late'
+
+  type DeletePayload = {
+    branchId: string
+    relationships: { id: string; branchId: string }[]
+    awareness: { id: string; branchId: string }[]
+  }
+
+  let t: Awaited<ReturnType<typeof createTestDb>>
+  let ctx: DbCtx
+
+  beforeEach(async () => {
+    generationStore.__reset()
+    undoRedoStore.__reset()
+    t = await createTestDb()
+    ctx = { db: t.db, runInTransaction: t.runInTransaction }
+  })
+
+  afterEach(() => {
+    __resetBranchWriteLocks()
+    entitiesStore.__reset()
+    entriesStore.__reset()
+    generationStore.__reset()
+    undoRedoStore.__reset()
+  })
+
+  const world = (): ForkWorld => ({ ctx, sqlite: t.sqlite, storyId: STORY, parentId: PARENT })
+
+  async function land(
+    actionId: string,
+    entryId: string | null,
+    actions: readonly PipelineAction[],
+  ): Promise<void> {
+    for (const action of actions) {
+      const result = await applyDeltaAction({ action, actionId, branchId: PARENT, entryId }, ctx)
+      if (result.status !== 'ok')
+        throw new Error(`${actionId} refused ${action.kind}: ${JSON.stringify(result)}`)
+    }
+  }
+
+  const entryRow = (
+    id: string,
+    position: number,
+    kind: 'opening' | 'user_action' | 'ai_reply',
+  ): NewStoryEntry => ({
+    id,
+    branchId: PARENT,
+    position,
+    kind,
+    content: `${kind} at ${position}`,
+    metadata: { sceneEntities: [], currentLocationId: null, worldTime: position },
+    createdAt: AT + position,
+  })
+
+  async function turn(actionId: string, user: string, reply: string, at: number): Promise<void> {
+    await land(actionId, user, [
+      {
+        kind: 'createStoryEntry',
+        source: 'user_edit',
+        payload: { entry: entryRow(user, at, 'user_action') },
+      },
+    ])
+    await land(actionId, reply, [
+      {
+        kind: 'createStoryEntry',
+        source: 'ai_classifier',
+        payload: { entry: entryRow(reply, at + 1, 'ai_reply') },
+      },
+    ])
+  }
+
+  const character = (id: string, name: string, description: string): NewEntity => ({
+    id,
+    branchId: PARENT,
+    kind: 'character',
+    name,
+    description,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: AT,
+    updatedAt: AT,
+  })
+
+  async function seedParent(): Promise<void> {
+    await ctx.db
+      .insert(stories)
+      .values({ id: STORY, title: 'The Ford', createdAt: AT, updatedAt: AT })
+    await ctx.db
+      .insert(branches)
+      .values({ id: PARENT, storyId: STORY, name: 'main', createdAt: AT })
+    // Story creation writes the opening and logs no delta for it.
+    await ctx.db.insert(storyEntries).values(entryRow(OPENING, 1, 'opening'))
+    await turn('act_fka_t1', U1, R1, 2)
+    await land('act_fka_pass1', R1, [
+      {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry: character(ROOK, 'Rook', 'A drover who owes a debt.') },
+      },
+      {
+        kind: 'createEntity',
+        source: 'periodic_classifier',
+        payload: { entry: character(MIRA, 'Mira', 'A drover who knows the ford.') },
+      },
+      {
+        kind: 'createHappening',
+        source: 'periodic_classifier',
+        payload: {
+          entry: {
+            id: HAPPENING,
+            branchId: PARENT,
+            title: 'The ford gives way',
+            description: 'Rook goes under at the ford.',
+            createdAt: AT,
+            updatedAt: AT,
+          },
+        },
+      },
+      {
+        kind: 'upsertHappeningAwareness',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: PARENT,
+          happeningId: HAPPENING,
+          characterId: ROOK,
+          proseEntryId: null,
+        },
+      },
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: PARENT,
+          subjectId: ROOK,
+          objectId: MIRA,
+          kind: 'owes a debt',
+          proseEntryId: null,
+        },
+      },
+    ])
+    await turn('act_fka_t2', U2, R2, 4)
+    await land(DELETE_ACTION, null, [
+      { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: PARENT, id: ROOK } },
+    ])
+    await turn('act_fka_t3', U3, R3, 6)
+    await land('act_fka_pass3', R3, [
+      {
+        kind: 'createLore',
+        source: 'periodic_classifier',
+        payload: {
+          entry: {
+            id: LORE,
+            branchId: PARENT,
+            title: 'The ford toll',
+            body: 'Drovers pay the ferryman in salt.',
+            injectionMode: 'auto',
+            createdAt: AT,
+            updatedAt: AT,
+          },
+        },
+      },
+    ])
+  }
+
+  const branchesHolding = (table: string, id: string): string[] =>
+    (
+      t.sqlite
+        .prepare(`SELECT branch_id FROM ${table} WHERE id = ? ORDER BY branch_id`)
+        .all(id) as {
+        branch_id: string
+      }[]
+    ).map((row) => row.branch_id)
+
+  function deleteOn(branchId: string): { id: string; payload: DeletePayload } {
+    const row = t.sqlite
+      .prepare(
+        `SELECT id, undo_payload FROM deltas
+         WHERE branch_id = ? AND action_id = ? AND op = 'delete' AND target_id = ?`,
+      )
+      .get(branchId, DELETE_ACTION, ROOK) as { id: string; undo_payload: string } | undefined
+    if (row === undefined) throw new Error(`${branchId} holds no delete of ${ROOK}`)
+    return { id: row.id, payload: JSON.parse(row.undo_payload) as DeletePayload }
+  }
+
+  const deltasOf = (branchId: string, actionId: string): number =>
+    (
+      t.sqlite
+        .prepare('SELECT count(*) AS n FROM deltas WHERE branch_id = ? AND action_id = ?')
+        .get(branchId, actionId) as { n: number }
+    ).n
+
+  it('CTRL-Z on the child restores a copied delete and its captured children there alone (AC 15)', async () => {
+    await seedParent()
+    const { childId } = await assertFork(world(), R2)
+    const copied = deleteOn(childId)
+    // Not vacuous: the copy's payload still names the parent, as a copy's JSON does.
+    expect(copied.payload).toMatchObject({
+      branchId: PARENT,
+      relationships: [{ branchId: PARENT }],
+      awareness: [{ branchId: PARENT }],
+    })
+    const relationship = copied.payload.relationships[0]!.id
+    const awareness = copied.payload.awareness[0]!.id
+    expect(branchesHolding('entities', ROOK)).toEqual([])
+    const parentBefore = branchSnapshot(t.sqlite, PARENT)
+    entriesStore.hydrate(childId, [])
+
+    expect(await undoLastAction(childId, ctx)).toEqual({ status: 'ok' })
+
+    expect(branchesHolding('entities', ROOK)).toEqual([childId])
+    expect(branchesHolding('character_relationships', relationship)).toEqual([childId])
+    expect(branchesHolding('happening_awareness', awareness)).toEqual([childId])
+    expect(deltasOf(childId, DELETE_ACTION)).toBe(0)
+    expect(deltasOf(PARENT, DELETE_ACTION)).toBeGreaterThan(0)
+    expect(branchSnapshot(t.sqlite, PARENT)).toEqual(parentBefore)
+  })
+
+  it("leaves the parent's redo group its top and the child an empty stack (AC 16, AC 17)", async () => {
+    await seedParent()
+    await land(LATE_ACTION, null, [
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: {
+          branchId: PARENT,
+          id: MIRA,
+          patch: { description: 'A drover who swam the ford.' },
+        },
+      },
+    ])
+    entriesStore.hydrate(PARENT, [])
+    expect(await undoLastAction(PARENT, ctx)).toEqual({ status: 'ok' })
+    const group = undoRedoStore.peekRedoGroup(PARENT)
+    expect(group?.actionId).toBe(LATE_ACTION)
+
+    const { childId } = await assertFork(world(), R2)
+
+    expect(undoRedoStore.peekRedoGroup(PARENT)).toBe(group)
+    // Both sides: an id naming no branch would read an empty stack as well.
+    expect(
+      (t.sqlite.prepare('SELECT id FROM branches WHERE id = ?').get(childId) as { id: string }).id,
+    ).toBe(childId)
+    expect(undoRedoStore.hasRedo(PARENT)).toBe(true)
+    expect(undoRedoStore.hasRedo(childId)).toBe(false)
+  })
+
+  it('a fork of a fork restores a delete whose payload names the grandparent onto the grandchild alone', async () => {
+    await seedParent()
+    seedForkVectors(world(), {
+      created: { kind: 'lore', id: LORE },
+      kept: { kind: 'entity', id: MIRA },
+    })
+    const { childId } = await assertFork(world(), R2)
+    const copied = deleteOn(childId)
+    expect(copied.payload).toMatchObject({
+      branchId: PARENT,
+      relationships: [{ branchId: PARENT }],
+      awareness: [{ branchId: PARENT }],
+    })
+    const relationship = copied.payload.relationships[0]!.id
+    const awareness = copied.payload.awareness[0]!.id
+    // Not vacuous: the kept row's vectors reached the child, so the grandchild's copy has some.
+    expect(Object.values(vectorRows(t.sqlite, childId)).flat().length).toBeGreaterThan(0)
+    expect(branchesHolding('entities', ROOK)).toEqual([])
+    const parentRows = branchSnapshot(t.sqlite, PARENT)
+    const parentVectors = vectorRows(t.sqlite, PARENT)
+
+    const { facts } = await assertFork({ ...world(), parentId: childId }, R1, {
+      childId: GRAND,
+      referenceId: GRAND_REF,
+    })
+
+    // The delete sits in the grandchild's window, so its plan restores Rook from the copy's payload.
+    expect(facts.prunedIds).toContain(copied.id)
+    expect(branchesHolding('entities', ROOK)).toEqual([GRAND, GRAND_REF])
+    expect(branchesHolding('character_relationships', relationship)).toEqual([GRAND, GRAND_REF])
+    expect(branchesHolding('happening_awareness', awareness)).toEqual([GRAND, GRAND_REF])
+    expect(branchSnapshot(t.sqlite, PARENT)).toEqual(parentRows)
+    expect(vectorRows(t.sqlite, PARENT)).toEqual(parentVectors)
   })
 })

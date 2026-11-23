@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { branchCopyOps } from '@/lib/db'
+import { forkBranchCore } from '@/lib/actions'
+import { branchCopyOps, storyEntries } from '@/lib/db'
 
 import { captureInput, seededDb } from './__tests__/fixtures'
 import { writeProbeCapture } from './writer'
@@ -37,5 +38,47 @@ describe('captures do not cross branches', () => {
       sqlite.prepare('SELECT count(*) AS n FROM probe_captures WHERE branch_id = ?').get(branchId)
     expect(count('br_c')).toMatchObject({ n: 0 })
     expect(count('br_a')).toMatchObject({ n: 2 })
+  })
+
+  // data-model.md → Branch model: a fork copies no capture (probe.md → Branch fork and capture
+  // portability). br_a's opening is the narrative tail, so the plan is empty and the copy is whole.
+  it('leaves every capture on the parent when forkBranchCore forks it (AC 19)', async () => {
+    const { db, sqlite, runInTransaction } = await seededDb()
+    await db.insert(storyEntries).values({
+      id: 'ent_open',
+      branchId: 'br_a',
+      position: 1,
+      kind: 'opening',
+      content: 'The tide came in early.',
+      createdAt: 1000,
+    })
+    for (const id of ['pc_1', 'pc_2'])
+      await writeProbeCapture(
+        { runInTransaction },
+        captureInput({ id, branchId: 'br_a', targetEntryId: 'ent_open' }),
+      )
+
+    const forked = await forkBranchCore(
+      {
+        parentBranchId: 'br_a',
+        forkEntryId: 'ent_open',
+        name: 'Low tide',
+        makeCurrent: false,
+        newBranchId: 'br_fork',
+        createdAt: 2000,
+      },
+      { db, runInTransaction },
+    )
+
+    expect(forked).toEqual({ status: 'ok', branchId: 'br_fork' })
+    const count = (branchId: string) =>
+      sqlite.prepare('SELECT count(*) AS n FROM probe_captures WHERE branch_id = ?').get(branchId)
+    expect(count('br_fork')).toMatchObject({ n: 0 })
+    expect(count('br_a')).toMatchObject({ n: 2 })
+    // Not vacuous: the copy ran, so the child holds the parent's entry.
+    const copied = sqlite
+      .prepare('SELECT id FROM story_entries WHERE branch_id = ?')
+      .all('br_fork') as { id: string }[]
+    expect(copied.map((row) => row.id)).toEqual(['ent_open'])
   })
 })
