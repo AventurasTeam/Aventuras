@@ -916,7 +916,7 @@ the earliest reply's window is the whole set, so the survivor id-list
 path wasn't exercised at real scale.
 
 **Device reseed (Acceptance criteria 24).** On the slot AVD
-(emulator-5558, 2026-11-24), the dev reseed route left `br_hero_fork`
+(emulator-5558, 2026-11-23), the dev reseed route left `br_hero_fork`
 a real fork, read from the device's database through run-as as
 Acceptance criteria 20 reads a seeded file. The device database held
 no vectors, so the reseed's vector wipe wasn't exercised there.
