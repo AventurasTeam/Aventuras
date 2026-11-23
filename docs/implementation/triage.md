@@ -139,3 +139,17 @@ slice-planning gate forces its resolution before that slice is planned.
   slice. Separately, `lib/actions/story-entries/scene-fields.test.ts:248`
   and `:315` spell out the call its `removeCast` helper makes (`:216`).
   No defect either way. Found by M6.1's slice review (2026-11-22).
+
+- **`redoLabel` goes stale after a rename while a redo is pending.**
+  `components/reader/use-reader-undo.tsx:379-386` memoizes `redoLabel`
+  on `[redoTop, branchId]` and reads row names from the stores with no
+  subscription, so the Redo label keeps the old name until `redoTop`
+  changes. It predates Slice 6.2: the former `liveUndoRow` read did
+  the same. Found by Slice 6.2's first-PR review (2026-11-23).
+
+- **A comment in `memory-chain.ts` names the wrong slice.**
+  `lib/pipeline/definitions/memory-chain.ts:65` says "(no forks yet,
+  M6.1)", but 6.1 (the copy substrate) has landed and forks are Slice
+  6.3's, so under milestone C12 the comment goes when forks ship. It
+  predates Slice 6.2. Found by Slice 6.2's first-PR review
+  (2026-11-23).
