@@ -90,7 +90,7 @@ describe('entry_assets CRUD arms', () => {
     expect(result.status).toBe('rejected')
   })
 
-  it('update role + position; reverse-replay restores row + store', async () => {
+  it('update role + position; reverse-replay restores the row', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(
       {
