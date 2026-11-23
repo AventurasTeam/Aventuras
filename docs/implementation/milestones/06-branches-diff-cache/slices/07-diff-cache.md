@@ -701,9 +701,10 @@ invalidation, and, if the E2E has a survivor, its registration check.
   after each return from the reader: GO TO Reader dismisses World
   (`hooks/use-surface-navigate.ts`), so World comes back with nothing
   selected.
-- **Criterion 12's** two-branch database test lives in
-  `lib/history/diff-walk-reversals.test.ts`, not `diff-walk.test.ts`,
-  and criterion 2's `EXPLAIN QUERY PLAN` case lives in
+- **Criterion 12's** two-branch database test, and criterion 4's last
+  two cases (the abort's gone and the survivor across CTRL-Z and redo),
+  live in `lib/history/diff-walk-reversals.test.ts`, not
+  `diff-walk.test.ts`, and criterion 2's `EXPLAIN QUERY PLAN` case lives in
   `lib/db/runtime/chain-snapshot.test.ts`, beside the read it plans.
 - **Deviations from the brief.**
   - `populate` resolves a typed `DiffOutcome`, whose `gone` is no
@@ -745,7 +746,7 @@ invalidation, and, if the E2E has a survivor, its registration check.
   gaps stay open and go to
   [triage](../../../triage.md): a term list can show two sides that read
   identically once the 40-character head cut or the whitespace collapse
-  hides the difference, and the exact-match lists (traits, drives,
-  agenda, inventory, equipped) store terms with no whitespace or Unicode
-  normalization, so terms differing only by spacing or NFD versus NFC are
-  distinct values and read `added X, removed X`.
+  hides the difference, and the exact-match text lists (traits, drives,
+  agenda) store terms with no whitespace or Unicode normalization, so
+  terms differing only by spacing or NFD versus NFC are distinct values
+  and read `added X, removed X`.
