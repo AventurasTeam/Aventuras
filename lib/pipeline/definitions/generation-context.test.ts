@@ -501,25 +501,6 @@ describe('buildGenerationContext', () => {
     expect((ctx.entries as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
   })
 
-  // The entities guard runs before the buffer reads await, so a story opening that publishes
-  // another branch's roster during them is only kept out by the entities read itself.
-  it('reads no entities from a roster another branch publishes during the buffer reads', async () => {
-    const entryReads = await import('./entry-reads')
-    const readSceneSource = entryReads.readSceneSource
-    vi.spyOn(entryReads, 'readSceneSource').mockImplementation(async (...args) => {
-      entitiesStore.hydrate('b2', [
-        { id: 'char_00000000-0000-4000-8000-00000000000b', name: 'Theirs', branchId: 'b2' },
-      ] as never[])
-      return readSceneSource(...args)
-    })
-
-    const ctx = await buildContext({
-      entities: [{ id: 'char_00000000-0000-4000-8000-00000000000a', name: 'Ours' }],
-    })
-
-    expect(ctx.entities).toEqual([])
-  })
-
   it('always carries suggestionSlots; suggestionsFire gates only the instruction', async () => {
     const paletteSettings = storySettings({
       suggestionCategories: [
@@ -1137,6 +1118,24 @@ describe('buildGenerationContext — data source', () => {
     const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
+  })
+
+  // The entities guard runs before the buffer reads await, so a story opening that publishes
+  // another branch's roster during them is only kept out by the entities read itself.
+  it('reads no entities from a roster another branch publishes during the buffer reads', async () => {
+    openStory()
+    const entryReads = await import('./entry-reads')
+    const readSceneSource = entryReads.readSceneSource
+    vi.spyOn(entryReads, 'readSceneSource').mockImplementation(async (...args) => {
+      entitiesStore.hydrate('b2', [
+        { id: 'char_00000000-0000-4000-8000-00000000000b', name: 'Theirs', branchId: 'b2' },
+      ] as never[])
+      return readSceneSource(...args)
+    })
+
+    const context = await build()
+
+    expect(context.entities).toEqual([])
   })
 
   it('projects entries to position, kind and content, carrying no metadata', async () => {
