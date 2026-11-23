@@ -48,9 +48,11 @@ async function driftOneLoreRow(app: LaunchedApp): Promise<{ id: string; hash: st
     `SELECT id FROM lore WHERE branch_id = ? ORDER BY id LIMIT 1`,
     [HERO_BRANCH],
   )
-  const [[hash]] = await queryApp(app.window, `SELECT source_hash FROM lore_vec_384 WHERE id = ?`, [
-    id,
-  ])
+  const [[hash]] = await queryApp(
+    app.window,
+    `SELECT source_hash FROM lore_vec_384 WHERE branch_id = ? AND id = ?`,
+    [HERO_BRANCH, id],
+  )
   await queryApp(app.window, `UPDATE lore SET body = ? WHERE branch_id = ? AND id = ?`, [
     'Rewritten behind the staleness flag, which stays clean on purpose.',
     HERO_BRANCH,
