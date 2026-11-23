@@ -5,6 +5,7 @@ import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import {
   createSeededUserDataDir,
+  markBranchEmbeddingClean,
   markEntitiesEmbeddingStale,
   markSwapPending,
   removeUserDataDir,
@@ -17,6 +18,7 @@ import { storySettings } from '../locators/story-settings'
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
+const HERO_FORK_BRANCH = 'br_hero_fork'
 const HERO_STORY = 'story_hero'
 
 const staleTotal = (app: LaunchedApp): Promise<number> => branchStaleTotal(app.window, HERO_BRANCH)
@@ -39,6 +41,7 @@ test.describe('embedder — drain on story open', () => {
     // Redundant now that the seed leaves every entity stale — kept so this spec
     // doesn't silently stop populating entities_vec_* if the seed goes clean again.
     markEntitiesEmbeddingStale(seeded.dbPath, HERO_BRANCH)
+    markBranchEmbeddingClean(seeded.dbPath, HERO_FORK_BRANCH)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
@@ -83,8 +86,8 @@ test.describe('embedder — drain on story open', () => {
     // refresh, which counts the whole story, and the drain sink, which reports
     // only the open branch's remaining — and by the time this runs the sink
     // wrote last. They agree with the branch-scoped poll above only because
-    // every embeddable seeded row lives on br_hero_main; one on the fork branch
-    // would leave a story-wide count the drain never clears.
+    // beforeAll marks the fork's copied rows clean: a stale row on a branch the
+    // reader never opens leaves a story-wide count the drain never clears.
     await expect(statusPill.memoryIncomplete(app.window)).toBeHidden()
   })
 })

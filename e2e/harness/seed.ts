@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
+import { SOURCE_TABLES } from '@/lib/db'
+
 const REPO_ROOT = join(__dirname, '..', '..')
 
 // Remove a seeded temp dir; safe to call more than once (launchApp also removes
@@ -175,13 +177,29 @@ export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): vo
 
 // Every embeddable table at once. A no-op today for the same reason as
 // markEntitiesEmbeddingStale above. Runs before launch.
-const EMBEDDABLE_TABLES = ['entities', 'lore', 'chapters', 'threads', 'happenings'] as const
+const EMBEDDABLE_TABLES = Object.values(SOURCE_TABLES)
 
 export function markBranchEmbeddingStale(dbPath: string, branchId: string): void {
   const db = new DatabaseSync(dbPath)
   try {
     for (const table of EMBEDDABLE_TABLES) {
       db.prepare(`UPDATE "${table}" SET embedding_stale = 1 WHERE branch_id = ?`).run(branchId)
+    }
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * Marks a branch's embeddable rows clean, so a non-open branch adds nothing to the story count.
+ * The pill counts the whole story and only the open branch drains (parked.md → Staleness pill on
+ * non-open branches). Runs before launch.
+ */
+export function markBranchEmbeddingClean(dbPath: string, branchId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    for (const table of EMBEDDABLE_TABLES) {
+      db.prepare(`UPDATE "${table}" SET embedding_stale = 0 WHERE branch_id = ?`).run(branchId)
     }
   } finally {
     db.close()
@@ -377,8 +395,8 @@ export function seedClassifierBacklog(
 /**
  * Park the classifier watermark at the last `ai_reply` and return it, so a pass covers only turns
  * committed after launch. Equals the seed's park (last non-system row) when that row is a reply,
- * as on br_hero_main; a row lower on br_hero_fork (ends on a user_action). Not MAX(position):
- * the first Send's user_action takes a trailing `system` row's position. Runs before launch.
+ * as on br_hero_main and br_hero_fork. Not MAX(position): the first Send's user_action takes a
+ * trailing `system` row's position. Runs before launch.
  */
 export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
   const db = new DatabaseSync(dbPath)

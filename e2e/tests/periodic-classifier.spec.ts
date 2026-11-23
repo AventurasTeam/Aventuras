@@ -745,8 +745,8 @@ test.describe('periodic classifier — the writer map', () => {
       app.window,
       `SELECT name, keywords, status, retired_reason, state, name_collision_flag,
               name_collision_partner_id, name_collision_reason
-       FROM entities WHERE id = ?`,
-      [id],
+       FROM entities WHERE branch_id = ? AND id = ?`,
+      [HERO_BRANCH, id],
     )
     return {
       name,
@@ -934,9 +934,11 @@ test.describe('periodic classifier — the writer map', () => {
       ),
     ).toEqual([['active', 'mystery', 'key', 'auto', turn2Reply, null]])
     expect(
-      await queryApp(page, `SELECT status, resolved_at_entry_id FROM threads WHERE id = ?`, [
-        amulet,
-      ]),
+      await queryApp(
+        page,
+        `SELECT status, resolved_at_entry_id FROM threads WHERE branch_id = ? AND id = ?`,
+        [HERO_BRANCH, amulet],
+      ),
     ).toEqual([['resolved', turn2Reply]])
     expect(
       await queryApp(
