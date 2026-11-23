@@ -91,6 +91,15 @@ const HERMES_BUILTIN_BANS = [
   "MemberExpression[object.name='Array'][property.name='fromAsync']",
 ].map((selector) => ({ selector, message: HERMES_BUILTIN_MESSAGE }))
 
+// Native-only like the Hermes bans: drizzle's expo-sqlite driver has no batch, though the app
+// db's sqlite-proxy type declares one on every platform.
+const DB_BATCH_BAN = {
+  selector:
+    "MemberExpression[property.name='batch']:matches([object.name='db'], [object.property.name='db'])",
+  message:
+    "Native has no db.batch: drizzle's expo-sqlite driver lacks it, so the call passes unit tests and desktop and throws on Android. Read atomically through readChainSnapshot. See docs/architecture.md#walk-algorithm.",
+}
+
 module.exports = defineConfig([
   expoConfig,
   ...storybook.configs['flat/recommended'],
@@ -126,7 +135,7 @@ module.exports = defineConfig([
     },
     rules: {
       // The wildcard-import ban and the other selectors: see SYNTAX_BANS at the top of this file.
-      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS],
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS, DB_BATCH_BAN],
 
       // generationStore's mutators, by owner: see the constants at the top of this file.
       'no-restricted-properties': [
@@ -399,6 +408,15 @@ module.exports = defineConfig([
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**', '**/*.stories.tsx'],
     rules: {
       'no-restricted-properties': 'off',
+    },
+  },
+
+  // readChainSnapshot splits by platform here, so the runtime may batch. Sits before the Hermes
+  // block, which still governs the runtime's tests.
+  {
+    files: ['lib/db/runtime/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS],
     },
   },
 

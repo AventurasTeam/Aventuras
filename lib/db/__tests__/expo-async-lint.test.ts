@@ -21,6 +21,15 @@ const onExpoDb = (call: string) =>
 const VALUE_IMPORT =
   "import { openDatabaseSync } from 'expo-sqlite'\nexport const handle = openDatabaseSync('second.db')\n"
 
+const onDb = (call: string) =>
+  `import { db } from '@/lib/db'\nconst ctx = { db }\nexport const read = () => ${call}\n`
+
+async function batchBans(code: string, filePath: string) {
+  return (await messages(code, filePath)).filter(
+    (m) => m.ruleId === 'no-restricted-syntax' && /\bbatch\b/.test(m.message),
+  )
+}
+
 describe("the native chain read's async-API ban", () => {
   it.each([
     "getAllAsync('SELECT 1')",
@@ -64,5 +73,32 @@ describe('the expo-sqlite import ban', () => {
     "import { type SQLiteDatabase } from 'expo-sqlite'\nexport type Handle = SQLiteDatabase\n",
   ])('permits a type import: %s', async (code) => {
     expect(await ruleIds(code, NATIVE_FIXTURE)).not.toContain(IMPORT_BAN)
+  })
+})
+
+describe("the native driver's missing-batch ban", () => {
+  it.each([
+    ['components/__batch-fixture.tsx', 'db.batch([])'],
+    ['components/__batch-fixture.tsx', 'ctx.db.batch([])'],
+    ['lib/history/__batch-fixture.ts', 'db.batch([])'],
+    ['lib/history/__batch-fixture.ts', 'ctx.db.batch([])'],
+  ])('flags %s calling %s', async (filePath, call) => {
+    expect(await batchBans(onDb(call), filePath)).toHaveLength(1)
+  })
+
+  it('points at readChainSnapshot and the canon section', async () => {
+    const [ban] = await batchBans(onDb('db.batch([])'), 'components/__batch-fixture.tsx')
+    expect(ban?.message).toContain('readChainSnapshot')
+    expect(ban?.message).toContain('docs/architecture.md#walk-algorithm')
+  })
+
+  it('leaves lib/db/runtime alone and keeps its other bans', async () => {
+    const code = `${onDb('db.batch([])')}export const sorted = [2, 1].toSorted()\n`
+    const filePath = 'lib/db/runtime/__batch-fixture.ts'
+    const hermes = (await messages(code, filePath)).filter(
+      (m) => m.ruleId === 'no-restricted-syntax' && m.message.includes('Hermes'),
+    )
+    expect(hermes).toHaveLength(1)
+    expect(await batchBans(code, filePath)).toHaveLength(0)
   })
 })
