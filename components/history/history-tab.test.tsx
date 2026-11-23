@@ -940,6 +940,52 @@ describe('HistoryTab change prose', () => {
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Occurred at: none → entry #12'))
   })
 
+  it("holds a link row's entry ref on its summary until the entry index has read", async () => {
+    entryIndex.index.set('entry_12', {
+      id: 'entry_12',
+      position: 12,
+      kind: 'ai_reply',
+      chapterId: null,
+      excerpt: '',
+    })
+    entryIndex.ready = false
+    const learned = update('delta_learned', 'happening_awareness', 'haw_1', {
+      learnedAtEntryId: null,
+    })
+    const learnedEntry = entry({ learnedAtEntryId: null }, { learnedAtEntryId: 'entry_12' })
+    const client = createQueryClient()
+    const walk = vi.fn<DiffWalk>().mockResolvedValue(walked({ [learned.id]: learnedEntry }))
+    const tab = renderTab(
+      loader((): HistoryRow[] => [
+        {
+          delta: learned,
+          via: {
+            kind: 'link',
+            table: 'happening_awareness',
+            linkId: 'haw_1',
+            otherId: 'hap_fire',
+            side: null,
+          },
+        },
+      ]),
+      'char_aria',
+      'entities',
+      { diffs: createDiffCache({ walk }), client },
+    )
+    await waitFor(() =>
+      expect(client.getQueryData(['diff', BRANCH, learned.id])).toEqual({
+        kind: 'entry',
+        entry: learnedEntry,
+      }),
+    )
+    await settle()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Learned at')
+
+    entryIndex.ready = true
+    tab.rerenderTab()
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Learned at: none → entry #12'))
+  })
+
   it("reads a relationship row's prose by the tab's side", async () => {
     const kind = update('delta_kind', 'character_relationships', 'rel_1', { kind: 'rival' })
     const walk = vi
