@@ -7,7 +7,7 @@ import { buildSeedSteps } from './seed-dataset'
 
 export type ReseedSummary = { tables: number; rows: number }
 
-// On-device twin of scripts/seed/index.ts: wipe with FKs off
+// On-device twin of scripts/seed's static rows (the caller then forks br_hero_fork): wipe with FKs off
 // (order-independent), insert with FKs on so a broken reference in the
 // dataset fails loudly. Migrations are not run here — the boot hook already
 // migrated the live connection.
