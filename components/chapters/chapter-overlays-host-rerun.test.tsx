@@ -407,6 +407,29 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(actions.start).not.toHaveBeenCalled()
   })
 
+  // A fork keeps chapter ids: the new branch's copy, with a later chapter, is no close under it.
+  it("a switch to a branch with a later chapter after the request's copy drops it silently", async () => {
+    const show = vi.spyOn(toastStore, 'show')
+    renderHost()
+    openRerun()
+    await confirmShown()
+    act(() => {
+      chaptersStore.hydrate('br_2', [
+        chapter({ branchId: 'br_2' }),
+        chapter({
+          id: 'chap_3',
+          branchId: 'br_2',
+          sequenceNumber: 3,
+          closeReportActionId: 'act_close_3',
+        }),
+      ])
+      openStory('br_2')
+    })
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+    expect(confirmView.mounted).toBe(false)
+    expect(show).not.toHaveBeenCalled()
+  })
+
   it('a story close drops the request silently', async () => {
     const show = vi.spyOn(toastStore, 'show')
     renderHost()

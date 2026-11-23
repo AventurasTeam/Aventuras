@@ -76,7 +76,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   entriesStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 async function act(actionId: string, action: PipelineAction): Promise<void> {

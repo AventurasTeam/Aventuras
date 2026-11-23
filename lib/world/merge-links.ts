@@ -20,7 +20,7 @@ import { realPlacementOf, type PlacedPlacement } from './placement'
 export type MergeLinkInput = {
   canonical: Entity
   loser: Entity
-  /** Both rows among them. */
+  /** Holds both `canonical` and `loser`. */
   branchEntities: readonly Entity[]
   /** Read with the link rows: one missing here is gone. */
   branchHappenings: readonly Pick<Happening, 'id'>[]

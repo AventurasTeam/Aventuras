@@ -3,22 +3,17 @@ import { createStore } from 'zustand/vanilla'
 
 import type { StorePatch } from '@/lib/actions'
 
-export type RowsHook<Row> = <T>(
-  branchId: string | null,
-  selector: (rows: ReadonlyMap<string, Row>) => T,
-) => T
-export type RowsGetter<Row> = (branchId: string | null) => ReadonlyMap<string, Row>
-export type ByIdGetter<Row> = (branchId: string | null, id: string) => Row | undefined
+type Selector<Row, T> = (rows: ReadonlyMap<string, Row>) => T
 
 export type WorkingSetStore<Row extends { id: string }> = {
   /**
    * An unheld branch or `null` reads as one shared empty map; select it or a primitive, never a
    * fresh array.
    */
-  useRows: RowsHook<Row>
+  useRows: <T>(branchId: string | null, selector: Selector<Row, T>) => T
   /** The branch's live rows (replaced on next write; never mutate), else the shared empty map. */
-  getRows: RowsGetter<Row>
-  getById: ByIdGetter<Row>
+  getRows: (branchId: string | null) => ReadonlyMap<string, Row>
+  getById: (branchId: string | null, id: string) => Row | undefined
   useById: (branchId: string | null, id: string) => Row | undefined
   getLoadedBranch: () => string | null
   patch: (branchId: string, patch: StorePatch) => void
@@ -31,7 +26,6 @@ export type WorkingSetStore<Row extends { id: string }> = {
 }
 
 type State<Row extends { id: string }> = { rows: Map<string, Row>; loadedBranch: string | null }
-type Selector<Row, T> = (rows: ReadonlyMap<string, Row>) => T
 
 // One reference for every store and call, so a selector that returns it stays stable.
 const EMPTY_ROWS: ReadonlyMap<string, never> = new Map<string, never>()

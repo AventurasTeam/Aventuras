@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 
 import { chapterImpactLines } from '@/components/chapters/chapter-impact-lines'
 import {
@@ -58,13 +58,25 @@ type Confirm = {
   lines: string[]
 }
 
+type OpenedRedo = { group: RedoGroup; label: string }
+
 const NOTHING: Refusal = { code: 'nothing-to-apply', reason: 'nothing to apply' }
 const GATED: Refusal = { code: 'gated', reason: 'generation in flight' }
 
 const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rerun', 'keptClose'])
 
-function redoNames(group: RedoGroup, branchId: string): UndoNames {
-  return undoNames(firstRowOf(liveRowsOf(branchId), snapshotRowsOf(group.snapshots)))
+function redoNames(group: RedoGroup): UndoNames {
+  return undoNames(firstRowOf(liveRowsOf(group.branchId), snapshotRowsOf(group.snapshots)))
+}
+
+function redoMenuLabel(group: RedoGroup): string {
+  return undoTargetText(describeRedoTarget(group), redoNames(group), 'redoMenu')
+}
+
+function redoLabelOf(top: RedoGroup | undefined, opened: OpenedRedo | null): string | null {
+  if (top == null) return null
+  if (top === opened?.group) return opened.label
+  return redoMenuLabel(top)
 }
 
 function rowLines(target: Target, branchId: string): string[] {
@@ -137,6 +149,8 @@ export function useReaderUndo({
   confirm: JSX.Element | null
 } {
   const [menuTarget, setMenuTarget] = useState<Target | null>(null)
+  // Redo's names read live rows no hook here subscribes to, so each menu open labels it afresh.
+  const [openedRedo, setOpenedRedo] = useState<OpenedRedo | null>(null)
   const menuTargetRef = useRef<Target | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const busyRef = useRef(false)
@@ -211,17 +225,13 @@ export function useReaderUndo({
 
   const runRedo = useCallback(
     async (origin: Origin, expectedActionId?: string) => {
-      const group = undoRedoStore.peekRedoGroup()
+      const group = undoRedoStore.peekRedoGroup(branchId)
       if (group == null) {
         report('redo', NOTHING, origin)
         return
       }
       // Read before the redo lands: a redone delete takes the row its name came from.
-      const notice = undoTargetText(
-        describeRedoTarget(group),
-        redoNames(group, branchId),
-        'redoNotice',
-      )
+      const notice = undoTargetText(describeRedoTarget(group), redoNames(group), 'redoNotice')
       const actionId = expectedActionId ?? group.actionId
       const result = await timedReversal('reader.redo_measured', actionId, () =>
         redoLastAction(branchId, ctx, { expectedActionId: actionId }),
@@ -275,7 +285,7 @@ export function useReaderUndo({
         return
       }
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
-      const redoable = undoRedoStore.peekRedoGroup()?.actionId === target.actionId
+      const redoable = undoRedoStore.peekRedoGroup(branchId)?.actionId === target.actionId
       announce(
         notice,
         redoable
@@ -363,6 +373,8 @@ export function useReaderUndo({
       const seq = ++resolveSeqRef.current
       showMenuTarget(null)
       if (!open) return
+      const top = undoRedoStore.peekRedoGroup(branchId)
+      setOpenedRedo(top == null ? null : { group: top, label: redoMenuLabel(top) })
       resolve().then(
         (target) => {
           if (resolveSeqRef.current === seq) showMenuTarget(target)
@@ -377,14 +389,8 @@ export function useReaderUndo({
     [branchId, resolve, showMenuTarget],
   )
 
-  const redoTop = undoRedoStore.useUndoRedo((s) => s.redoStack.at(-1))
-  const redoLabel = useMemo(
-    () =>
-      redoTop == null
-        ? null
-        : undoTargetText(describeRedoTarget(redoTop), redoNames(redoTop, branchId), 'redoMenu'),
-    [redoTop, branchId],
-  )
+  const redoTop = undoRedoStore.useRedoTop(branchId)
+  const redoLabel = redoLabelOf(redoTop, openedRedo)
   const undoLabel =
     menuTarget == null
       ? t('reader:actions.undo')

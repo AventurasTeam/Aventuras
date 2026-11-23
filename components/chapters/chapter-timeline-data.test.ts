@@ -19,17 +19,17 @@ const FRAME: CalendarFrame = {
 const NO_RANGES: ChapterTimeRanges = new Map()
 const NO_INDEX: EntryIndex = new Map()
 
-function chapter(sequenceNumber: number, branchId = 'br_1'): StoreChapter {
+function chapter(sequenceNumber: number): StoreChapter {
   return {
-    id: `${branchId}_chap_${sequenceNumber}`,
-    branchId,
+    id: `br_1_chap_${sequenceNumber}`,
+    branchId: 'br_1',
     sequenceNumber,
     title: `Title ${sequenceNumber}`,
     summary: '',
     theme: '',
     keywords: [],
-    startEntryId: `${branchId}_start_${sequenceNumber}`,
-    endEntryId: `${branchId}_end_${sequenceNumber}`,
+    startEntryId: `br_1_start_${sequenceNumber}`,
+    endEntryId: `br_1_end_${sequenceNumber}`,
     tokenCount: 0,
     closedAt: 1,
     embeddingStale: 0,

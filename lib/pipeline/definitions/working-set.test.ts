@@ -21,10 +21,10 @@ const DEFINITION = storyDefinitionSchema.parse({
   worldTimeOrigin: { year: 0 },
 })
 
-function entry(id: string, position: number, branchId = 'b1'): StoryEntry {
+function entry(id: string, position: number): StoryEntry {
   return {
     id,
-    branchId,
+    branchId: 'b1',
     position,
     kind: 'ai_reply',
     content: id,

@@ -825,8 +825,9 @@ whichever of the pair lands second meets it.
     case, setting and clearing, through this slice's label.
 43. If 6.10 has landed: `lib/actions/entities/register.test.ts` holds
     6.10's `createEntity` and `deleteEntity` pairs, run again over the
-    bodies this slice changed, each still red when its handler's branch
-    condition is removed (a mutation restored by `cp`), with this
+    bodies this slice changed, each still red when any one branch
+    condition 6.10's table lists for its handler is removed alone (a
+    mutation restored by `cp`), with this
     slice's `isLead` pair beside them in the same `branch scope` block,
     red the same way.
 

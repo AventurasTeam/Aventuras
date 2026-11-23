@@ -461,9 +461,9 @@ describe('a classifier write racing a user Save on one row', () => {
     },
   )
 
-  // Production keeps the two apart: every delta-logged write clears the redo stack, and the
-  // redo's bracket holds writers off. Raced anyway, a write that took the slot the undo freed
-  // fails the redo on the position backstop, atomically, rather than restoring over it.
+  // Production keeps them apart: a delta-logged write clears its branch's redo stack, and the
+  // redo's bracket holds writers off. Raced anyway, a write that took the freed slot fails the
+  // redo atomically on the position backstop.
   it('fails a redo whole when a classifier append took its slot, else keeps their log order', async () => {
     const ctx = await setup()
     const redoFailed = new Set<number>()
@@ -637,7 +637,7 @@ describe('a user Save racing CTRL-Z of the Save before it', () => {
         await ctx.db.insert(entities).values(character(id, 'active', ['v0']))
         expect((await keywordSave(id, 'v1', `s1_${delay}`)).status).toBe('ok')
         entriesStore.hydrate(BRANCH, [])
-        undoRedoStore.clear()
+        undoRedoStore.__reset()
 
         let saveSettled = false
         const second = keywordSave(id, 'v2', `s2_${delay}`).then((result) => {
@@ -688,7 +688,7 @@ describe('a user Save racing CTRL-Y', () => {
       const id = `char_${delay}`
       await ctx.db.insert(entities).values(character(id, 'active', ['v0']))
       entriesStore.hydrate(BRANCH, [])
-      undoRedoStore.clear()
+      undoRedoStore.__reset()
       expect((await keywordSave(id, 'v1', `s1_${delay}`)).status).toBe('ok')
       expect(await undoLastAction(BRANCH, ctx)).toEqual({ status: 'ok' })
 

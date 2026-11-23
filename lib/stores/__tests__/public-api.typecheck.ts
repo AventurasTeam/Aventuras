@@ -45,37 +45,129 @@ export function useBranchReadPins(): void {
   // @ts-expect-error a read by id names its branch
   entitiesStore.getById('x')
   entitiesStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  entitiesStore.useById('x')
   entitiesStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   entriesStore.getEntries()
   entriesStore.getEntries('br')
+  // @ts-expect-error a row hook names its branch
+  entriesStore.useEntries((m) => m)
+  entriesStore.useEntries('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  entriesStore.getById('x')
+  entriesStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  entriesStore.useById('x')
+  entriesStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   loreStore.getLore()
   loreStore.getLore('br')
+  // @ts-expect-error a row hook names its branch
+  loreStore.useLore((m) => m)
+  loreStore.useLore('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  loreStore.getById('x')
+  loreStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  loreStore.useById('x')
+  loreStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   threadsStore.getThreads()
   threadsStore.getThreads('br')
+  // @ts-expect-error a row hook names its branch
+  threadsStore.useThreads((m) => m)
+  threadsStore.useThreads('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  threadsStore.getById('x')
+  threadsStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  threadsStore.useById('x')
+  threadsStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   chaptersStore.getChapters()
   chaptersStore.getChapters('br')
+  // @ts-expect-error a row hook names its branch
+  chaptersStore.useChapters((m) => m)
+  chaptersStore.useChapters('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  chaptersStore.getById('x')
+  chaptersStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  chaptersStore.useById('x')
+  chaptersStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   happeningsStore.getHappenings()
   happeningsStore.getHappenings('br')
+  // @ts-expect-error a row hook names its branch
+  happeningsStore.useHappenings((m) => m)
+  happeningsStore.useHappenings('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  happeningsStore.getById('x')
+  happeningsStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  happeningsStore.useById('x')
+  happeningsStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   happeningInvolvementsStore.getInvolvements()
   happeningInvolvementsStore.getInvolvements('br')
+  // @ts-expect-error a row hook names its branch
+  happeningInvolvementsStore.useInvolvements((m) => m)
+  happeningInvolvementsStore.useInvolvements('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  happeningInvolvementsStore.getById('x')
+  happeningInvolvementsStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  happeningInvolvementsStore.useById('x')
+  happeningInvolvementsStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   happeningAwarenessStore.getAwareness()
   happeningAwarenessStore.getAwareness('br')
+  // @ts-expect-error a row hook names its branch
+  happeningAwarenessStore.useAwareness((m) => m)
+  happeningAwarenessStore.useAwareness('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  happeningAwarenessStore.getById('x')
+  happeningAwarenessStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  happeningAwarenessStore.useById('x')
+  happeningAwarenessStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   characterRelationshipsStore.getRelationshipRows()
   characterRelationshipsStore.getRelationshipRows('br')
+  // @ts-expect-error a row hook names its branch
+  characterRelationshipsStore.useRelationships((m) => m)
+  characterRelationshipsStore.useRelationships('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  characterRelationshipsStore.getById('x')
+  characterRelationshipsStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  characterRelationshipsStore.useById('x')
+  characterRelationshipsStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   translationsStore.getTranslations()
   translationsStore.getTranslations('br')
+  // @ts-expect-error a row hook names its branch
+  translationsStore.useTranslations((m) => m)
+  translationsStore.useTranslations('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  translationsStore.getById('x')
+  translationsStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  translationsStore.useById('x')
+  translationsStore.useById('br', 'x')
   // @ts-expect-error a row read names its branch
   eraFlipsStore.getEraFlips()
   eraFlipsStore.getEraFlips('br')
+  // @ts-expect-error a row hook names its branch
+  eraFlipsStore.useEraFlips((m) => m)
+  eraFlipsStore.useEraFlips('br', (m) => m)
+  // @ts-expect-error a read by id names its branch
+  eraFlipsStore.getById('x')
+  eraFlipsStore.getById('br', 'x')
+  // @ts-expect-error a hook by id names its branch
+  eraFlipsStore.useById('x')
+  eraFlipsStore.useById('br', 'x')
   // @ts-expect-error a derived getter names its branch
   chaptersStore.getLatest()
   chaptersStore.getLatest('br')

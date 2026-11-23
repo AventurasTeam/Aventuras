@@ -1202,7 +1202,7 @@ async function relationshipDeltas(db: Db): Promise<Delta[]> {
 
 function undoAfterReversal(ctx: Ctx) {
   entriesStore.hydrate('b1', [])
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   return undoLastAction('b1', ctx)
 }
 
@@ -1237,7 +1237,7 @@ describe('a kept create goes to the user write that kept its row', () => {
     // Overwrites the pass's view too, so the edit's undo alone would put the pass's fact back.
     await sweptUnderUserView(ctx, db, userViews('rival', 'wary'))
     entriesStore.hydrate('b1', [])
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
 
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
@@ -1335,7 +1335,7 @@ describe('a kept create goes to the user write that kept its row', () => {
 describe('reversing a machine write after an undo and redo of the user write before it', () => {
   async function undoThenRedo(ctx: Ctx) {
     entriesStore.hydrate('b1', [])
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
     expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
   }

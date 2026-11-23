@@ -57,7 +57,7 @@ describe('createWorkingSetStore', () => {
     expect(store.getRows('br_1').size).toBe(1)
   })
 
-  it('__reset clears rows and loadedBranch', () => {
+  it('__reset unloads the branch: every read is empty', () => {
     const store = createWorkingSetStore<Row>()
     store.hydrate('br_1', [{ id: 'x_1', name: 'a' }])
     store.__reset()

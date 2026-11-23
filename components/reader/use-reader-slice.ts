@@ -55,13 +55,13 @@ function createSliceStore(): SliceStore {
 
 // The store replaces its map on every write and reads one shared empty map for a branch it doesn't
 // hold, so the map's identity alone keys the sorted window.
-let sortedWindow: { rows: ReadonlyMap<string, StoryEntry>; window: StoryEntry[] } = {
+let sortedWindow: { rows: ReadonlyMap<string, StoryEntry>; window: readonly StoryEntry[] } = {
   rows: new Map(),
   window: [],
 }
 
 /** The store's window for the branch now, sorted: handlers run between renders. */
-function readWindow(branchId: string): StoryEntry[] {
+function readWindow(branchId: string): readonly StoryEntry[] {
   const rows = entriesStore.getEntries(branchId)
   if (sortedWindow.rows !== rows) {
     sortedWindow = { rows, window: [...rows.values()].sort((a, b) => a.position - b.position) }
@@ -111,7 +111,7 @@ export function useReaderSlice(
   }, [store, state, view.next])
 
   // The document's view of the state, with any open or fallback the layout effect hasn't stored.
-  const current = useCallback((): { from: SliceState; window: StoryEntry[] } | null => {
+  const current = useCallback((): { from: SliceState; window: readonly StoryEntry[] } | null => {
     const stored = store.get()
     const window = readWindow(branchId)
     const derived = deriveSlice(stored, branchId, window, ENTRIES_WINDOW_SIZE)

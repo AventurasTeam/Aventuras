@@ -1503,9 +1503,9 @@ export default function ReaderComposerRoute() {
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
-  // error belongs to the strip that fired it. The entry ref alone would cover
-  // it (ids are globally unique, and a switch nulls the tail); the branch ref
-  // stays so the guard is legible without trusting that cross-module invariant.
+  // error belongs to the strip that fired it. The guard needs both refs: a
+  // fork's copy keeps the tail's entry id, so the entry ref alone can match
+  // another branch's tail.
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   // Published from the commit, like branchIdRef: the guard below reads both, and
   // an anchor from a render that never landed would fail it against live state.

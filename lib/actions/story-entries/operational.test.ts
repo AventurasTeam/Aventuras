@@ -77,7 +77,7 @@ afterEach(() => {
   happeningAwarenessStore.__reset()
   happeningInvolvementsStore.__reset()
   happeningsStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
@@ -178,7 +178,7 @@ describe('updateStoryEntryContent', () => {
     expect(contentDeltas(rows)[0].logPosition).toBe(2)
   })
 
-  it('clears the redo stack on success (an edit is a new unrelated action)', async () => {
+  it("clears its branch's redo stack on success, leaving another branch's (an edit is a new unrelated action)", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
@@ -195,11 +195,13 @@ describe('updateStoryEntryContent', () => {
         createdAt: 1,
       },
     ])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     await updateStoryEntryContent('b1', 'e1', 'new text', ctx)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 
   it('clears the redo stack even when the store patch after the commit throws', async () => {
@@ -219,7 +221,7 @@ describe('updateStoryEntryContent', () => {
         createdAt: 1,
       },
     ])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -229,7 +231,7 @@ describe('updateStoryEntryContent', () => {
     )
     patch.mockRestore()
 
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
   it('rejects while a hard-gate run is in flight', async () => {
@@ -612,26 +614,29 @@ describe('rollbackToEntry', () => {
     expect(row.classifierStatus?.processedThrough).toBe(1)
   })
 
-  it('clears the redo stack on success (a rollback is a new unrelated action)', async () => {
+  it("clears its branch's redo stack on success, leaving another branch's (a rollback is a new unrelated action)", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     const shown = await shownCounts('b1', 't2', ctx)
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
     expect(result.status).toBe('ok')
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 
-  it('clears the redo stack when the rollback commits but its store sync throws', async () => {
+  it("clears its branch's redo stack when the rollback commits but its store sync throws, leaving another branch's", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedBranchWithTurns(db, ctx)
     entriesStore.hydrate('b1', [])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
     const shown = await shownCounts('b1', 't2', ctx)
     const patch = vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
@@ -644,7 +649,8 @@ describe('rollbackToEntry', () => {
 
     expect(error).toBeInstanceOf(DeltaReplayError)
     expect((error as DeltaReplayError).committed).toBe(true)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 })
 
@@ -837,11 +843,12 @@ async function seedHeadTurnUnderFailure(db: Awaited<ReturnType<typeof createTest
 }
 
 describe('updateStoryEntryContent classifier invalidation', () => {
-  it('clears the redo stack when the edit commits but its reversal store sync throws', async () => {
+  it("clears its branch's redo stack when the edit commits but its reversal store sync throws, leaving another branch's", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedClassifiedTail(db)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
     const patch = vi.spyOn(happeningsStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -853,7 +860,8 @@ describe('updateStoryEntryContent classifier invalidation', () => {
 
     expect(error).toBeInstanceOf(DeltaReplayError)
     expect((error as DeltaReplayError).committed).toBe(true)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 
   it('takes link rows anchored to a different entry down with their happening', async () => {
@@ -1091,7 +1099,7 @@ describe('updateStoryEntryContent invalidation scope', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seedClassifiedTail(db)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
 
     // e2 is the tail, so without the guard this would take the full in-scope path.
     expect((await updateStoryEntryContent('b1', 'e2', 'old', ctx)).status).toBe('ok')
@@ -1105,7 +1113,7 @@ describe('updateStoryEntryContent invalidation scope', () => {
       .from(branches)
       .where(eq(branches.id, 'b1'))
     expect(branch.status?.processedThrough).toBe(2)
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 
   it('covers the tail reply too when the head turn origin is edited', async () => {
@@ -1303,7 +1311,7 @@ describe('rollback over the closed set', () => {
     const ctx = { db, runInTransaction }
     await seedLateLink(db, ctx, false)
     entriesStore.hydrate('b1', [])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await db.select().from(deltas)
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: NEVER_SHOWN })
@@ -1315,7 +1323,7 @@ describe('rollback over the closed set', () => {
     })
     expect(await db.select().from(deltas)).toEqual(before)
     expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
   })
 
@@ -1350,7 +1358,7 @@ describe('rollback over the closed set', () => {
         undoPayload: { state: { faction_id: 'ent_a' } },
       },
     ])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await db.select().from(deltas)
     const shown = await shownCounts('b1', 't2', ctx)
 
@@ -1363,7 +1371,7 @@ describe('rollback over the closed set', () => {
     })
     expect(await db.select().from(deltas)).toEqual(before)
     expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 })
 
@@ -1423,7 +1431,7 @@ describe('content edit refusals', () => {
         undoPayload: { state: { current_location_id: 'hap_2' } },
       },
     ])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await db.select().from(deltas)
 
     const result = await updateStoryEntryContent('b1', 'e2', 'new', ctx)
@@ -1436,7 +1444,7 @@ describe('content edit refusals', () => {
     const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e2'))
     expect(row.content).toBe('old')
     expect(await db.select().from(deltas)).toEqual(before)
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 })
 
@@ -1545,7 +1553,7 @@ describe('rollback confirm counts', () => {
       },
       ctx,
     )
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await db.select().from(deltas)
 
     const result = await rollbackToEntry('b1', 't2', ctx, { expectedCounts: shown })
@@ -1561,7 +1569,7 @@ describe('rollback confirm counts', () => {
       expect(result.counts.worldStateChanges).toBe(3)
     expect(await db.select().from(deltas)).toEqual(before)
     expect(await entryIds(db)).toEqual(['op', 't1', 't2', 't3'])
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
   })
 

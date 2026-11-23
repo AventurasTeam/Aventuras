@@ -59,7 +59,7 @@ let ctx: DbCtx
 
 beforeEach(async () => {
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   t = await createTestDb()
   ctx = { db: t.db, runInTransaction: t.runInTransaction }
 })
@@ -69,7 +69,7 @@ afterEach(() => {
   entitiesStore.__reset()
   entriesStore.__reset()
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 async function openOnA(): Promise<void> {

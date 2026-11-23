@@ -705,19 +705,21 @@ describe('regenerateTurn', () => {
     expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
   })
 
-  it('clears the redo stack (a regenerate is a new unrelated action)', async () => {
+  it("clears its branch's redo stack, leaving another branch's (a regenerate is a new unrelated action)", async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
       expectedCounts: undefined,
     })
 
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 
   it.each([
@@ -736,7 +738,8 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
 
     const regen = withSweepHook(
       () => {
@@ -753,7 +756,8 @@ describe('regenerateTurn', () => {
     )
 
     await expect(regen).rejects.toBeInstanceOf(DeltaReplayError)
-    expect(undoRedoStore.hasRedo()).toBe(expectedHasRedo)
+    expect(undoRedoStore.hasRedo('b1')).toBe(expectedHasRedo)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
     // A thrown regenerate leaves no mark to hold the gate up and stall every pass.
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     expect(generationStore.isUserEditBlocked()).toBe(false)
@@ -773,7 +777,7 @@ describe('regenerateTurn', () => {
         throw new TypeError('Failed to fetch')
       }),
     )
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
       expectedCounts: undefined,
@@ -782,7 +786,7 @@ describe('regenerateTurn', () => {
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('failed')
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
   it('CTRL-Z after a completed regenerate undoes the new take, keeping the user action', async () => {
@@ -925,7 +929,7 @@ describe('regenerateTurn', () => {
       .values({ id: 'hinv_raw', branchId: 'b1', happeningId: 'h_b', entityId: 'char_k' })
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await ctx.db.select().from(deltas)
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
@@ -939,7 +943,7 @@ describe('regenerateTurn', () => {
     })
     expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(await ctx.db.select().from(deltas)).toEqual(before)
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 
   it('reports sweep-refused when the reversal refuses at commit', async () => {
@@ -947,7 +951,7 @@ describe('regenerateTurn', () => {
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await ctx.db.select().from(deltas)
     const error = vi.spyOn(logger, 'error')
 
@@ -972,7 +976,7 @@ describe('regenerateTurn', () => {
     })
     expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(await ctx.db.select().from(deltas)).toEqual(before)
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
     expect(error).toHaveBeenCalledWith(
       'action_layer.reversal_refused',
       expect.objectContaining({ branchId: 'b1', refusal: 'write-back' }),
@@ -1140,7 +1144,7 @@ describe('regenerateTurn', () => {
         )
       ).status,
     ).toBe('ok')
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
     const before = await ctx.db.select().from(deltas)
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
@@ -1162,7 +1166,7 @@ describe('regenerateTurn', () => {
     })
     expect(await ctx.db.select().from(deltas)).toEqual(before)
     expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
     expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     expect(generationStore.isUserEditBlocked()).toBe(false)

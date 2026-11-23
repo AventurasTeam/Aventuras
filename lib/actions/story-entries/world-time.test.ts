@@ -19,7 +19,7 @@ import { __redoGroupForTest } from '../delta/redo'
 afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 // Fresh objects per call: hydrate holds the rows it is given, so a shared
@@ -98,7 +98,7 @@ describe('updateEntryWorldTime', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
 
     const result = await updateEntryWorldTime('b1', 'e2', 45, ctx)
     expect(result.status).toBe('ok')
@@ -120,9 +120,8 @@ describe('updateEntryWorldTime', () => {
     expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
     expect(entriesStore.getEntries('b1').get('e2')?.metadata?.worldTime).toBe(45)
     expect(entriesStore.getEntries('b1').get('e1')?.metadata?.worldTime).toBe(60)
-    // Contrast with the suppression test below: a real write does clear the
-    // global redo stack, which is why suppressing a no-op write matters.
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    // A real write clears the branch's redo stack; contrast the suppression test below.
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
   it('rejects an entry read through the wrong branch', async () => {
@@ -204,7 +203,7 @@ describe('updateEntryWorldTime', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
 
     const result = await updateEntryWorldTime('b1', 'e2', 120, ctx)
     expect(result.status).toBe('ok')
@@ -216,9 +215,8 @@ describe('updateEntryWorldTime', () => {
       worldTime: 120,
       summary: 's',
     })
-    // The harm a no-op delta would do: applyDeltaAction clears the redo stack,
-    // which is global rather than per-branch.
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    // The harm a no-op delta would do: applyDeltaAction clears the branch's redo stack.
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 
   // Two Saves landing during one in-flight write: unserialized, both reads

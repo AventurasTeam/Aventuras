@@ -176,7 +176,7 @@ afterEach(() => {
   generationStore.__reset()
   happeningsStore.__reset()
   happeningInvolvementsStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 describe('rolling back past a place parent anchored on a later turn than its child', () => {

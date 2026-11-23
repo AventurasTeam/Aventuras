@@ -18,10 +18,10 @@ import { translationsStore } from './translations/translations'
 import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
 import {
   chapterOverlaysStore,
-  closeResultChapter,
   overlayChapter,
   reportChapter,
-  rerunConfirmChapter,
+  useCloseResultChapter,
+  useRerunConfirmChapter,
 } from './ui/chapter-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
@@ -56,7 +56,7 @@ export function resetAllStores(): void {
   listCollapseStore.__reset()
   readerRailStore.__reset()
   recoveryReportStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   wizardStore.reset()
 }
 
@@ -67,7 +67,6 @@ export {
   chapterOverlaysStore,
   chaptersStore,
   characterRelationshipsStore,
-  closeResultChapter,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
@@ -89,12 +88,13 @@ export {
   rehydrateAppSettings,
   rehydrateStories,
   reportChapter,
-  rerunConfirmChapter,
   storiesStore,
   threadsStore,
   translationsStore,
   undoRedoStore,
+  useCloseResultChapter,
   useRegisteredOverlay,
+  useRerunConfirmChapter,
   wizardStore,
 }
 

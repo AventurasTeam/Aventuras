@@ -542,7 +542,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     const rowBeforeUndo = { ...before, state: { parent_location_id: 'loc_gone' } }
 
     await hydrateEntities()
-    await applyRedo(__redoGroupForTest([{ delta, rowBeforeUndo }]), ctx)
+    await applyRedo(__redoGroupForTest('b1', [{ delta, rowBeforeUndo }]), ctx)
 
     expect(await stateOf('loc_quarter')).toEqual(UNPLACED)
     expect(entitiesStore.getById('b1', 'loc_quarter')?.state).toEqual(UNPLACED)

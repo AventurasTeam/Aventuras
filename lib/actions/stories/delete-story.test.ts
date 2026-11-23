@@ -38,10 +38,12 @@ import {
   generationStore,
   rehydrateStories,
   storiesStore,
+  undoRedoStore,
   type DeferredWorkKind,
 } from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
+import { __redoGroupForTest } from '../delta/redo'
 
 const emptyJournal = (chapterId: string): RerunJournal => ({
   version: 1,
@@ -106,6 +108,7 @@ async function setup() {
   storiesStore.__reset() // deleteStory re-hydrates at the end; this clears cross-test state
   embedderSwapStore.__reset()
   generationStore.__reset()
+  undoRedoStore.__reset()
   const listTables = async (): Promise<string[]> =>
     (
       sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
@@ -233,6 +236,33 @@ describe('deleteStory', () => {
     expect(generationStore.getTxState().pendingClose.get('br_victim')).toEqual({
       endEntryId: 'e_victim',
     })
+  })
+
+  it("drops the redo stack of every deleted branch and keeps another story's", async () => {
+    const { db, listTables, ctx } = await setup()
+    await db
+      .insert(branches)
+      .values({ id: 'br_victim_alt', storyId: 'victim', name: 'alt', createdAt: 1 })
+    for (const branchId of ['br_victim', 'br_victim_alt', 'br_survivor'])
+      undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId))
+
+    await deleteStory('victim', ctx, listTables)
+
+    expect(undoRedoStore.__branches()).toEqual(['br_survivor'])
+  })
+
+  it('keeps every redo stack when the delete does not commit', async () => {
+    const { db, listTables, ctx } = await setup()
+    await db
+      .insert(branches)
+      .values({ id: 'br_victim_alt', storyId: 'victim', name: 'alt', createdAt: 1 })
+    for (const branchId of ['br_victim', 'br_victim_alt', 'br_survivor'])
+      undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId))
+    const failingCtx = { ...ctx, runInTransaction: () => Promise.reject(new Error('write failed')) }
+
+    await expect(deleteStory('victim', failingCtx, listTables)).rejects.toThrow('write failed')
+
+    expect(undoRedoStore.__branches()).toEqual(['br_victim', 'br_victim_alt', 'br_survivor'])
   })
 
   it('is a no-op-safe full sweep across every owned table (empty tables included)', async () => {

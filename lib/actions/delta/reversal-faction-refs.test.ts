@@ -312,7 +312,7 @@ describe('a reversal or redo never restores a dead id', () => {
 
     await hydrateEntities()
     await applyRedo(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         { delta: delta('delta_named', 'update', 'char_x', 98), rowBeforeUndo: named },
         { delta: delta('delta_gone', 'delete', 'fact_f', 99), rowBeforeUndo: factionRow },
       ]),
@@ -346,7 +346,7 @@ describe('a reversal or redo never restores a dead id', () => {
     }
 
     await hydrateEntities()
-    await applyRedo(__redoGroupForTest([{ delta, rowBeforeUndo }]), ctx)
+    await applyRedo(__redoGroupForTest('b1', [{ delta, rowBeforeUndo }]), ctx)
 
     expect(await factionOf('char_x')).toBeNull()
     expect(entitiesStore.getById('b1', 'char_x')).toEqual(await entityRow('char_x'))

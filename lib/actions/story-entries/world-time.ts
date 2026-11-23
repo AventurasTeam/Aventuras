@@ -65,7 +65,7 @@ async function updateEntryWorldTimeLocked(
   // Nothing to merge onto: synthesizing the sibling fields would invent data.
   if (current.metadata == null)
     return rejected(STORY_ENTRY_REJECTION.noMetadata, `entry ${id} has no metadata to edit`)
-  // A no-op delta would clear the global (cross-branch) redo stack for nothing.
+  // A no-op delta would clear the branch's redo stack for nothing.
   if (current.metadata.worldTime === worldTime) return { status: 'ok' }
   // Re-checked after the awaited read: the gate above is a TOCTOU window, and a
   // hard-gate run starting inside it would race this write.

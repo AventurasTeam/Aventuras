@@ -587,7 +587,7 @@ describe('single-perspective upsert against a user edit newer than the prose', (
   it('reads a blank view at create through an undo and redo of the create', async () => {
     const { db, ctx } = await setup()
     entriesStore.hydrate('br_1', [])
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
     await writeProse(ctx, 'e_p0', 1)
     await applyDeltaAction(views(null, 'wary', 'act_u'), ctx)
     expect((await applyDeltaAction(classify('friend', 'act_k0', 'e_p0'), ctx)).status).toBe('ok')

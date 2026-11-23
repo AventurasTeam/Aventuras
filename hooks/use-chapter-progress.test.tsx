@@ -42,10 +42,10 @@ function reply(id: string, tokens: number): OpenRegionRow {
   return { id, kind: 'ai_reply', position: Number(id.slice(1)), tokens }
 }
 
-function entry(id: string, position: number, branchId = 'b1'): StoryEntry {
+function entry(id: string, position: number): StoryEntry {
   return {
     id,
-    branchId,
+    branchId: 'b1',
     position,
     kind: 'user_action',
     content: '',

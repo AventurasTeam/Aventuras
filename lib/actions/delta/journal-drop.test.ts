@@ -263,7 +263,7 @@ describe('the planner drops a journal its reversal would make inexact', () => {
 
   afterEach(() => {
     entriesStore.__reset()
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
   })
 
   async function act(actionId: string, action: PipelineAction): Promise<void> {

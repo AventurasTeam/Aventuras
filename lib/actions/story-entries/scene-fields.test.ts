@@ -30,7 +30,7 @@ afterEach(() => {
   entriesStore.__reset()
   entitiesStore.__reset()
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 const LOC_A = 'loc_a'

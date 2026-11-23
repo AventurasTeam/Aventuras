@@ -32,6 +32,7 @@ import { isContentEditDelta } from './classifier-facts'
 import { updateStoryEntryContent } from './operational'
 import { redoLastAction, undoLastAction } from './undo'
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { __redoGroupForTest } from '../delta/redo'
 import {
   DeltaReplayError,
   reverseAndPruneDeltaRows,
@@ -53,7 +54,7 @@ afterEach(() => {
   resetPipelineRegistry()
   entriesStore.__reset()
   generationStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
@@ -328,7 +329,7 @@ describe('undoLastAction / redoLastAction', () => {
     hydrateOpeningAndTurn()
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     // Re-insert the row undo deleted so applyRedo's forward INSERT hits a PK
     // conflict inside its transaction and throws — a genuine, recoverable
@@ -344,42 +345,137 @@ describe('undoLastAction / redoLastAction', () => {
     await expect(redoLastAction('b1', ctx)).rejects.toThrow()
 
     // Snapshot survives the failure: nothing was popped, redo is still pending.
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     // Clear the conflict; the still-present snapshot now redoes successfully.
     await db.delete(storyEntries).where(eq(storyEntries.id, 'e_turn'))
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
     expect(entriesStore.getById('b1', 'e_turn')).toBeDefined()
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
-  it('rejects redo whose snapshot belongs to a different branch, leaving the stack', async () => {
+  it("keeps each branch's redo through the other's refusal, committed write and redo", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
+    hydrateOpeningAndTurn()
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+
+    // b2 must be the loaded branch to reach its stack at all: branch-not-loaded answers first.
+    entriesStore.hydrate('b2', [])
+    expect(await redoLastAction('b2', ctx)).toEqual({
+      status: 'rejected',
+      code: 'nothing-to-apply',
+      reason: 'nothing to redo',
+    })
+    const write = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createStoryEntry',
+          source: 'user_edit',
+          payload: {
+            entry: {
+              id: 'e_b2',
+              branchId: 'b2',
+              position: 1,
+              kind: 'user_action',
+              content: 'elsewhere',
+              createdAt: 3,
+            },
+          },
+        },
+        actionId: 'act_b2',
+        branchId: 'b2',
+        entryId: null,
+      },
+      ctx,
+    )
+    expect(write.status).toBe('ok')
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+    // Pushed after b2's write, whose clear would take it.
+    const b2Group = __redoGroupForTest('b2')
+    undoRedoStore.pushRedoGroup(b2Group)
+
+    entriesStore.hydrate('b1', [OPENING_ROW])
+    expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+    expect(entriesStore.getById('b1', 'e_turn')).toBeDefined()
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.peekRedoGroup('b2')).toBe(b2Group)
+  })
+
+  it('refuses integrity for a group on its stack whose snapshots name another branch', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
     hydrateOpeningAndTurn()
-
-    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
-    expect(undoRedoStore.hasRedo()).toBe(true)
-
-    // b_other must be the LOADED branch to reach the snapshot guard at all:
-    // branch-not-loaded answers first, and the mismatch goes unexercised.
-    entriesStore.hydrate('b_other', [])
-    const wrong = await redoLastAction('b_other', ctx)
-    expect(wrong.status).toBe('rejected')
-    if (wrong.status === 'rejected') {
-      expect(wrong.reason).toMatch(/redo stack/i)
-      // A snapshot belonging to another branch is a broken redo stack, not an
-      // empty one — the reader must surface it rather than say "Nothing to redo."
-      expect(wrong.code).toBe('integrity')
+    const foreign: Delta = {
+      id: 'd_foreign',
+      branchId: 'b2',
+      actionId: 'act_foreign',
+      op: 'create',
+      targetTable: 'story_entries',
+      targetId: 'e_foreign',
+      entryId: null,
+      source: 'user_edit',
+      undoPayload: null,
+      logPosition: 9,
+      encodingVersion: 1,
+      createdAt: 9,
     }
+    const group = __redoGroupForTest('b1', [{ delta: foreign, rowBeforeUndo: null }])
+    undoRedoStore.pushRedoGroup(group)
+    const before = await db.select().from(deltas)
 
-    // The mismatch must not consume branch b1's own redo.
-    expect(undoRedoStore.hasRedo()).toBe(true)
-    entriesStore.hydrate('b1', [OPENING_ROW])
-    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
-    expect(entriesStore.getById('b1', 'e_turn')).toBeDefined()
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(await redoLastAction('b1', ctx)).toEqual({
+      status: 'rejected',
+      code: 'integrity',
+      reason: 'redo group names another branch',
+    })
+
+    expect(undoRedoStore.peekRedoGroup('b1')).toBe(group)
+    expect(await db.select().from(deltas)).toEqual(before)
+  })
+
+  it("pops its own branch's group when the redo commits and only its store sync throws", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    const elsewhere = __redoGroupForTest('b2')
+    undoRedoStore.pushRedoGroup(elsewhere)
+    vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    await expect(redoLastAction('b1', ctx)).rejects.toBeInstanceOf(DeltaReplayError)
+
+    // Committed: the redo put the turn's delta back before the store sync threw.
+    expect(await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).toHaveLength(1)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.peekRedoGroup('b2')).toBe(elsewhere)
+  })
+
+  it('keeps the deeper group when a redo commits and only its store sync throws', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    const deeper = __redoGroupForTest('b1', [], 'act_deeper')
+    undoRedoStore.pushRedoGroup(deeper)
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+    vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    await expect(redoLastAction('b1', ctx)).rejects.toBeInstanceOf(DeltaReplayError)
+
+    expect(await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).toHaveLength(1)
+    expect(undoRedoStore.peekRedoGroup('b1')).toBe(deeper)
   })
 
   it('preserves the redo snapshot when reversal commits but post-commit store sync fails', async () => {
@@ -397,7 +493,7 @@ describe('undoLastAction / redoLastAction', () => {
     // The DB change is real and committed: the delta row was pruned.
     expect((await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).length).toBe(0)
     // ...and redo capability was preserved despite the thrown store-sync error.
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 
   it('rejects undo/redo while generation blocks user edits', async () => {
@@ -568,7 +664,7 @@ describe('undoLastAction over a refused closure', () => {
     expect(error.mock.calls.filter(([m]) => m === 'action_layer.reversal_refused')).toHaveLength(1)
     expect(await db.select().from(deltas)).toEqual(before)
     expect(entriesStore.getById('b1', 'e_turn')).toBeDefined()
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 })
 
@@ -841,7 +937,7 @@ describe('undo and redo carry the reversal closure', () => {
       reason: expect.stringContaining('held-in-redo'),
     })
     expect(await db.select().from(deltas)).toEqual(before)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
     expect(error).toHaveBeenCalledWith(
       'action_layer.reversal_refused',
       expect.objectContaining({ branchId: 'b1', refusal: 'held-in-redo' }),
@@ -935,7 +1031,7 @@ describe('a CTRL-Z whose reversal would prune writes outside its redo', () => {
       ],
     ])
     await expectNothingWritten(db, before)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
   it("prunes the pair's writes when the same set reverses outside CTRL-Z", async () => {
@@ -985,7 +1081,7 @@ describe('a CTRL-Z whose reversal would prune writes outside its redo', () => {
     })
     await expectNothingWritten(db, before)
     expect(entriesStore.getById('b1', 'e_turn')).toBeDefined()
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 })
 
@@ -1107,7 +1203,7 @@ describe('undo and redo during a pass', () => {
     expect(await db.select().from(deltas)).toEqual([])
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
     expect(deferrals).toHaveLength(1)
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 
   it('refuses a CTRL-Z whose target is not the turn, leaving the pass running', async () => {
@@ -1320,7 +1416,7 @@ describe('undo and redo pinned to the action they named', () => {
     })
 
     expect(entriesStore.getById('b1', 'e_turn')).toBeUndefined()
-    expect(undoRedoStore.peekRedoGroup()?.actionId).toBe('act_turn')
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
   })
 
   it('refuses target-moved when a newer action heads the log, writing nothing', async () => {
@@ -1333,7 +1429,7 @@ describe('undo and redo pinned to the action they named', () => {
     expect(result).toMatchObject({ status: 'rejected', code: 'target-moved' })
     expect(entriesStore.getById('b1', 'e_turn')?.content).toBe('edited')
     expect(await db.select().from(deltas)).toEqual(before)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
   it('refuses a redo whose named action is no longer the stack top, leaving the stack', async () => {
@@ -1344,7 +1440,7 @@ describe('undo and redo pinned to the action they named', () => {
 
     expect(result).toMatchObject({ status: 'rejected', code: 'target-moved' })
     expect(entriesStore.getById('b1', 'e_turn')).toBeUndefined()
-    expect(undoRedoStore.peekRedoGroup()?.actionId).toBe('act_turn')
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
     expect(await redoLastAction('b1', ctx, { expectedActionId: 'act_turn' })).toEqual({
       status: 'ok',
     })

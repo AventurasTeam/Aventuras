@@ -20,12 +20,12 @@ import { openCloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fix
 import {
   chapterOverlaysStore,
   chaptersStore,
-  closeResultChapter,
   currentStoryStore,
   resetAllStores,
   type DeferredWorkKind,
   type StoreChapter,
 } from '@/lib/stores'
+import { closeResultChapter } from '@/lib/stores/ui/chapter-overlays'
 import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { useMemoryRunOutcomes } from './use-memory-run-outcomes'

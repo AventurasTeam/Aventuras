@@ -52,8 +52,8 @@ shape every suite follows: a `branch scope` block over a second branch.
   [`C10`](../milestone.md#c10--the-leads-surface) for the `isLead`
   pair; [`C11`](../milestone.md#c11--shared-files); and the
   [dependency graph](../milestone.md#dependency-graph)
-- [Slice 6.2](./02-scoped-reads-redo.md)'s Implementation notes: the
-  store reads these suites now use
+- [Slice 6.2 → Implementation notes](./02-scoped-reads-redo.md#implementation-notes):
+  the store reads these suites now use
 - `lib/actions/story-entries/register.test.ts:224-300`, the shape;
   `lib/db/__tests__/two-branch.ts` (6.1), the copy fixture
 

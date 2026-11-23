@@ -125,12 +125,11 @@ const CLOSE_UNDONE: UndoResult = { status: 'ok', closeUndone: { chapterNumber: 3
 
 let toasts: ToastItem[] = []
 
-// An undo that lands pushes the redo group it took, as undoLastAction does: the target's rows as
-// they stood before it.
+// An undo that lands pushes its redo group onto its branch's stack, as undoLastAction does.
 function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> | null = null) {
-  actions.undoLastAction.mockImplementation(async () => {
+  actions.undoLastAction.mockImplementation(async (branchId) => {
     const snapshots = read.deltas.map((d) => ({ delta: d, rowBeforeUndo }))
-    undoRedoStore.pushRedoGroup(__redoGroupForTest(snapshots, read.actionId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId, snapshots, read.actionId))
     return OK
   })
 }
@@ -157,7 +156,7 @@ beforeEach(() => {
   toastStore.subscribe((next) => {
     toasts = next
   })
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   entitiesStore.__reset()
   loreStore.__reset()
   for (const fn of Object.values(actions)) fn.mockReset()
@@ -200,6 +199,7 @@ describe('useReaderUndo — the label', () => {
     act(() =>
       undoRedoStore.pushRedoGroup(
         __redoGroupForTest(
+          'b1',
           [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
           'act_turn',
         ),
@@ -382,6 +382,7 @@ describe('useReaderUndo — refusals', () => {
   it('redoes the stack top, pinned to it', async () => {
     undoRedoStore.pushRedoGroup(
       __redoGroupForTest(
+        'b1',
         [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
         'act_turn',
       ),
@@ -392,6 +393,123 @@ describe('useReaderUndo — refusals', () => {
     await settle()
     expect(actions.redoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
     expect(toasts[0].message).toBe('Redid the turn at entry #2')
+  })
+})
+
+describe('useReaderUndo — one redo stack per branch', () => {
+  const turnGroup = (branchId: string) =>
+    __redoGroupForTest(
+      branchId,
+      [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+      'act_turn',
+    )
+
+  it("shows no Redo on a branch whose stack is empty, though another branch's holds a group", async () => {
+    undoRedoStore.pushRedoGroup(turnGroup('b1'))
+    const r = render({ branchId: 'b2' })
+    expect(r.result.current.redoLabel).toBeNull()
+
+    act(() => r.result.current.redo('menu'))
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Nothing to redo.'])
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+  })
+
+  it("names its own branch's group once it is on that branch", () => {
+    undoRedoStore.pushRedoGroup(turnGroup('b1'))
+    const r = render({ branchId: 'b2' })
+
+    r.rerender(LIVE)
+
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+  })
+
+  it("offers Redo after an undo on its branch, though another branch's group is newer", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockImplementation(async (branchId) => {
+      undoRedoStore.pushRedoGroup(turnGroup(branchId))
+      // Newest across the map, so a read that ignored the branch would find this group instead.
+      undoRedoStore.pushRedoGroup(__redoGroupForTest('b2', [], 'act_elsewhere'))
+      return OK
+    })
+    const r = render()
+
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].message).toBe('Undid the turn at entry #2')
+    expect(toasts[0].action?.label).toBe('Redo')
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+  })
+})
+
+describe('useReaderUndo — the Redo label reads the rows as the menu opens', () => {
+  // A delete's undo re-creates its row, so the snapshot holds none: only the live row names it.
+  const deleteGroup = () =>
+    __redoGroupForTest(
+      'b1',
+      LORE_SAVE.deltas.map((d) => ({ delta: d, rowBeforeUndo: null })),
+      LORE_SAVE.actionId,
+    )
+
+  async function openMenu(r: ReturnType<typeof render>) {
+    act(() => r.result.current.onMenuOpenChange(true))
+    await settle()
+  }
+
+  beforeEach(() => actions.readUndoTarget.mockResolvedValue(null))
+
+  it('names the row once the stores load the branch after the reader mounted', async () => {
+    undoRedoStore.pushRedoGroup(deleteGroup())
+    // Another story's branch is still held when the reader mounts on b1.
+    loreStore.hydrate('b_other', [makeLore({ id: 'lore_x', title: 'Elsewhere' })])
+    const r = render()
+    expect(r.result.current.redoLabel).toBe('Redo the latest change')
+
+    act(() => loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })]))
+    await openMenu(r)
+
+    expect(r.result.current.redoLabel).toBe('Redo deleting The toll')
+  })
+
+  it('names the row as it reads at each open, renamed since the last', async () => {
+    loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
+    undoRedoStore.pushRedoGroup(deleteGroup())
+    const r = render()
+    await openMenu(r)
+    expect(r.result.current.redoLabel).toBe('Redo deleting The toll')
+    act(() => r.result.current.onMenuOpenChange(false))
+
+    act(() =>
+      loreStore.patch('b1', { op: 'update', id: 'lore_1', columns: { title: 'The bridge' } }),
+    )
+    await openMenu(r)
+
+    expect(r.result.current.redoLabel).toBe('Redo deleting The bridge')
+  })
+
+  it('follows the stack top after an open, and has none once the stack empties', async () => {
+    loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
+    undoRedoStore.pushRedoGroup(deleteGroup())
+    const r = render()
+    await openMenu(r)
+
+    act(() =>
+      undoRedoStore.pushRedoGroup(
+        __redoGroupForTest(
+          'b1',
+          [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+          'act_turn',
+        ),
+      ),
+    )
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+
+    act(() => undoRedoStore.clear('b1'))
+    expect(r.result.current.redoLabel).toBeNull()
   })
 })
 
@@ -522,7 +640,7 @@ describe('useReaderUndo — review fixes', () => {
   it('names a redone delete in its notice although the redo removed the row', async () => {
     loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
     const snapshots = LORE_SAVE.deltas.map((d) => ({ delta: d, rowBeforeUndo: null }))
-    undoRedoStore.pushRedoGroup(__redoGroupForTest(snapshots, LORE_SAVE.actionId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1', snapshots, LORE_SAVE.actionId))
     actions.redoLastAction.mockImplementation(async () => {
       loreStore.hydrate('b1', [])
       return OK

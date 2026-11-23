@@ -730,7 +730,7 @@ describe('redo after a survivor rewrite', () => {
   it('leaves the database as it was, delta payloads included', async () => {
     const { db, ctx } = await setup()
     entriesStore.hydrate('b1', [])
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
     await createKael(ctx)
     await apply(ctx, patchKael('user_edit', { keywords: ['the knight', 'ser kael'] }), 'act_u')
     await apply(ctx, append(['the wanderer']), 'act_pass')
