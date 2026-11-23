@@ -3427,7 +3427,7 @@ describe('periodicClassifierPhase via runPipeline', () => {
         })
         .from(threads)
     const storeThreads = () =>
-      [...threadsStore.getThreads().values()].map(
+      [...threadsStore.getThreads('b1').values()].map(
         ({ status, triggeredAtEntryId, resolvedAtEntryId }) => ({
           status,
           triggeredAtEntryId,

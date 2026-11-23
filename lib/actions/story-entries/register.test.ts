@@ -46,7 +46,7 @@ describe('story_entries patcher', () => {
       },
       ctx,
     )
-    expect(entriesStore.getById('e1')?.content).toBe('hi')
+    expect(entriesStore.getById('b1', 'e1')?.content).toBe('hi')
   })
 
   it('mirrors a metadata update into the held entries store', async () => {
@@ -95,7 +95,7 @@ describe('story_entries patcher', () => {
       },
       ctx,
     )
-    expect(entriesStore.getById('e1')?.metadata?.worldTime).toBe(42)
+    expect(entriesStore.getById('b1', 'e1')?.metadata?.worldTime).toBe(42)
   })
 })
 
@@ -141,14 +141,14 @@ describe('content_tokens at create', () => {
     async (kind) => {
       const row = await createEntry(kind)
       expect(row.contentTokens).toBe(countTokens(PROSE))
-      expect(entriesStore.getById('e1')?.contentTokens).toBe(countTokens(PROSE))
+      expect(entriesStore.getById('b1', 'e1')?.contentTokens).toBe(countTokens(PROSE))
     },
   )
 
   it('counts the content whatever count the payload holds', async () => {
     const row = await createEntry('ai_reply', { contentTokens: 999999 })
     expect(row.contentTokens).toBe(countTokens(PROSE))
-    expect(entriesStore.getById('e1')?.contentTokens).toBe(countTokens(PROSE))
+    expect(entriesStore.getById('b1', 'e1')?.contentTokens).toBe(countTokens(PROSE))
   })
 
   it('counts stored content, not the prose a prompt reads from it', async () => {
@@ -345,7 +345,7 @@ describe('deleteStoryEntry arm', () => {
           .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
       ).length,
     ).toBe(0)
-    expect(entriesStore.getById('e1')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e1')).toBeUndefined()
 
     await reverseReplayDeltas('act_d', ctx)
     const [restored] = await db
@@ -353,7 +353,7 @@ describe('deleteStoryEntry arm', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
     expect(restored).toEqual(entry)
-    expect(entriesStore.getById('e1')).toEqual(entry)
+    expect(entriesStore.getById('b1', 'e1')).toEqual(entry)
   })
 
   it('rejects deleting an opening entry', async () => {
@@ -440,7 +440,7 @@ describe('deleteStoryEntry arm', () => {
         .from(storyEntries)
         .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
       expect(restored).toEqual(entry)
-      expect(entriesStore.getById('e1')).toEqual(entry)
+      expect(entriesStore.getById('b1', 'e1')).toEqual(entry)
     },
   )
 })
@@ -504,7 +504,7 @@ describe('stampEntryChapter', () => {
     })
     expect(delta!.undoPayload).toEqual({ chapterId: null })
     expect(isContentEditDelta(delta!)).toBe(false)
-    expect(entriesStore.getById('e1')?.chapterId).toBe('chap_new')
+    expect(entriesStore.getById('b1', 'e1')?.chapterId).toBe('chap_new')
   })
 
   it('restores the chapter the entry held before, on undo', async () => {
@@ -516,7 +516,7 @@ describe('stampEntryChapter', () => {
     await reverseReplayDeltas('act_close', ctx)
 
     expect((await entryRow(ctx))!.chapterId).toBe('chap_old')
-    expect(entriesStore.getById('e1')?.chapterId).toBe('chap_old')
+    expect(entriesStore.getById('b1', 'e1')?.chapterId).toBe('chap_old')
   })
 
   it('clears the stamp on undo when the entry held none', async () => {
@@ -526,7 +526,7 @@ describe('stampEntryChapter', () => {
     await reverseReplayDeltas('act_close', ctx)
 
     expect((await entryRow(ctx))!.chapterId).toBeNull()
-    expect(entriesStore.getById('e1')?.chapterId).toBeNull()
+    expect(entriesStore.getById('b1', 'e1')?.chapterId).toBeNull()
   })
 
   it('refuses an entry that is not there and logs nothing', async () => {

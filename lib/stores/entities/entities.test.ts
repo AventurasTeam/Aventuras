@@ -34,7 +34,7 @@ describe('entitiesStore', () => {
       ent('char_1', 'character', 'Kael'),
       ent('loc_1', 'location', 'Tavern'),
     ])
-    expect(entitiesStore.getById('char_1')?.name).toBe('Kael')
+    expect(entitiesStore.getById('br_1', 'char_1')?.name).toBe('Kael')
     expect(entitiesStore.getByKind('br_1', 'character').map((e) => e.id)).toEqual(['char_1'])
     expect(entitiesStore.getByKind('br_1', 'location').map((e) => e.id)).toEqual(['loc_1'])
   })
@@ -59,6 +59,6 @@ describe('entitiesStore', () => {
       id: 'char_9',
       row: ent('char_9', 'character', 'Ghost'),
     })
-    expect(entitiesStore.getById('char_9')).toBeUndefined()
+    expect(entitiesStore.getById('br_1', 'char_9')).toBeUndefined()
   })
 })

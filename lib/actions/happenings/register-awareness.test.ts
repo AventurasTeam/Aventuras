@@ -273,7 +273,7 @@ describe('happening_awareness upsert', () => {
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     const back = await awarenessRows(db, 'char_a', 'hap_1')
     expect(back[0].id).toBe(created.id)
-    expect(happeningAwarenessStore.getById(created.id)?.source).toBe('s')
+    expect(happeningAwarenessStore.getById(BRANCH, created.id)?.source).toBe('s')
   })
 
   it('reverse-replay of the create deletes the row + prunes the store', async () => {
@@ -297,10 +297,10 @@ describe('happening_awareness upsert', () => {
       ctx,
     )
     const [created] = await awarenessRows(db, 'char_a', 'hap_1')
-    expect(happeningAwarenessStore.getById(created.id)?.source).toBe('s')
+    expect(happeningAwarenessStore.getById(BRANCH, created.id)?.source).toBe('s')
     expect(await reverseReplayDeltas('act_1', ctx)).toBe(1)
     expect((await awarenessRows(db, 'char_a', 'hap_1')).length).toBe(0)
-    expect(happeningAwarenessStore.getById(created.id)).toBeUndefined()
+    expect(happeningAwarenessStore.getById(BRANCH, created.id)).toBeUndefined()
   })
 
   it('collapses an empty learned-at ref to NULL on create', async () => {
@@ -387,7 +387,7 @@ describe('happening_awareness upsert', () => {
     expect(result.status).toBe('ok')
     const [row] = await awarenessRows(db, 'char_a', 'hap_1')
     expect(row.learnedAtEntryId).toBe('entry_9')
-    expect(happeningAwarenessStore.getById('haw_1')?.learnedAtEntryId).toBe('entry_9')
+    expect(happeningAwarenessStore.getById(BRANCH, 'haw_1')?.learnedAtEntryId).toBe('entry_9')
 
     const [delta] = (await db
       .select()
@@ -457,7 +457,7 @@ describe('bumpAwarenessRetrieval', () => {
 
     expect(result.status).toBe('ok')
     expect(await countOf(ctx, 'haw_1')).toBe(5)
-    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(5)
+    expect(happeningAwarenessStore.getById(BRANCH, 'haw_1')?.retrievalCount).toBe(5)
   })
 
   // Under the turn's gate the target can't vanish; if it did, the row-blind handler
@@ -552,7 +552,7 @@ describe('bumpAwarenessRetrieval', () => {
     expect(await reverseReplayDeltas('act_1', ctx)).toBe(1)
 
     expect(await countOf(ctx, 'haw_1')).toBe(4)
-    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(4)
+    expect(happeningAwarenessStore.getById(BRANCH, 'haw_1')?.retrievalCount).toBe(4)
   })
 
   // Distinct from the single-bump reverse above: two deltas land under one
@@ -663,7 +663,7 @@ describe('resetAwarenessRetrieval', () => {
     expect(await applyDeltaAction(reset('haw_1', 6), ctx)).toMatchObject({ status: 'ok' })
 
     expect(await countOf(ctx, 'haw_1')).toBe(0)
-    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(0)
+    expect(happeningAwarenessStore.getById(BRANCH, 'haw_1')?.retrievalCount).toBe(0)
   })
 
   it('logs one update whose undo payload is the prior count alone, which reads as a bump', async () => {
@@ -691,7 +691,7 @@ describe('resetAwarenessRetrieval', () => {
     expect(await reverseReplayDeltas('act_reset', ctx)).toBe(1)
 
     expect(await countOf(ctx, 'haw_1')).toBe(6)
-    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(6)
+    expect(happeningAwarenessStore.getById(BRANCH, 'haw_1')?.retrievalCount).toBe(6)
   })
 
   it('no-ops a count already at zero, logging nothing', async () => {
@@ -877,7 +877,7 @@ describe('upsertHappeningAwareness retrievalCount', () => {
 
     const [row] = await awarenessRows(db, 'char_a', 'hap_1')
     expect(row.retrievalCount).toBe(7)
-    expect(happeningAwarenessStore.getById(row.id)?.retrievalCount).toBe(7)
+    expect(happeningAwarenessStore.getById(BRANCH, row.id)?.retrievalCount).toBe(7)
   })
 
   it('starts a classifier create at zero whatever it carries', async () => {
@@ -925,7 +925,7 @@ describe('upsertHappeningAwareness retrievalCount', () => {
     const [row] = await awarenessRows(db, 'char_a', 'hap_1')
     expect(row.source).toBe('told by Jorin')
     expect(row.retrievalCount).toBe(4)
-    expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(4)
+    expect(happeningAwarenessStore.getById(BRANCH, 'haw_1')?.retrievalCount).toBe(4)
     const [delta] = (await db.select().from(deltas)) as Delta[]
     expect(delta.undoPayload).toEqual({ source: 'told' })
   })
@@ -1006,7 +1006,7 @@ describe("upsertHappeningAwareness from a close's merge", () => {
   // lessons-learned → Drizzle drops unknown keys: the store patch is where a leaked key shows.
   async function storeMatchesDb(db: Db, id: string): Promise<HappeningAwareness> {
     const [row] = await db.select().from(happeningAwareness).where(eq(happeningAwareness.id, id))
-    expect(happeningAwarenessStore.getById(id)).toEqual(row)
+    expect(happeningAwarenessStore.getById(BRANCH, id)).toEqual(row)
     return row
   }
 
@@ -1058,7 +1058,7 @@ describe("upsertHappeningAwareness from a close's merge", () => {
       decayResistance: 0.4,
       source: 'told; overheard',
     })
-    expect(happeningAwarenessStore.getById(row.id)).toEqual(row)
+    expect(happeningAwarenessStore.getById(BRANCH, row.id)).toEqual(row)
   })
 
   it('leaves learned_at and the count as they stand when a close write names neither', async () => {

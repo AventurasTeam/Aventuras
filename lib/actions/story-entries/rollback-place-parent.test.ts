@@ -129,17 +129,19 @@ async function parentOf(id: string): Promise<string | null> {
 async function expectDocksUnplaced(): Promise<void> {
   expect(await entityIds()).toEqual(['loc_docks', 'loc_old', 'loc_pier'])
   expect(await parentOf('loc_docks')).toBeNull()
-  expect(entitiesStore.getById('loc_docks')?.state).toEqual({
+  expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual({
     parent_location_id: null,
     unplaced: true,
   })
-  expect(entitiesStore.getById('loc_varn')).toBeUndefined()
+  expect(entitiesStore.getById('b1', 'loc_varn')).toBeUndefined()
   expect(await parentOf('loc_pier')).toBe('loc_docks')
-  expect(entitiesStore.getById('loc_pier')?.state).toEqual({ parent_location_id: 'loc_docks' })
+  expect(entitiesStore.getById('b1', 'loc_pier')?.state).toEqual({
+    parent_location_id: 'loc_docks',
+  })
   expect(await ctx.db.select({ id: happeningInvolvements.id }).from(happeningInvolvements)).toEqual(
     [{ id: 'hinv_docks' }],
   )
-  expect(happeningInvolvementsStore.getById('hinv_docks')).toBeDefined()
+  expect(happeningInvolvementsStore.getById('b1', 'hinv_docks')).toBeDefined()
   expect(await ctx.db.select({ id: happenings.id }).from(happenings)).toEqual([{ id: 'hap_fire' }])
   const left = await ctx.db
     .select({ targetId: deltas.targetId })

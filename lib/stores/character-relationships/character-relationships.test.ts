@@ -49,6 +49,6 @@ describe('characterRelationshipsStore', () => {
       id: 'rel_9',
       row: row('rel_9', 'char_a', 'char_b', 'ally', null),
     })
-    expect(characterRelationshipsStore.getById('rel_9')).toBeUndefined()
+    expect(characterRelationshipsStore.getById('br_1', 'rel_9')).toBeUndefined()
   })
 })

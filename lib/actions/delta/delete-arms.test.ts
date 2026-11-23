@@ -226,8 +226,8 @@ describe('delete happening — link rows', () => {
       },
       ctx,
     )
-    expect(happeningInvolvementsStore.getInvolvements().has('hinv_1')).toBe(false)
-    expect(happeningAwarenessStore.getAwareness().has('haw_1')).toBe(false)
+    expect(happeningInvolvementsStore.getInvolvements('b1').has('hinv_1')).toBe(false)
+    expect(happeningAwarenessStore.getAwareness('b1').has('haw_1')).toBe(false)
     expect(
       await ctx.db
         .select()
@@ -262,7 +262,7 @@ describe('delete happening — link rows', () => {
     expect(
       await ctx.db.select().from(happeningAwareness).where(eq(happeningAwareness.branchId, 'b2')),
     ).toEqual([awarenessB2])
-    expect(happeningInvolvementsStore.getInvolvements().has('hinv_1')).toBe(true)
-    expect(happeningAwarenessStore.getAwareness().has('haw_1')).toBe(true)
+    expect(happeningInvolvementsStore.getInvolvements('b1').has('hinv_1')).toBe(true)
+    expect(happeningAwarenessStore.getAwareness('b1').has('haw_1')).toBe(true)
   })
 })

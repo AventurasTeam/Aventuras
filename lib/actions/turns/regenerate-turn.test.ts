@@ -395,7 +395,7 @@ describe('regenerateTurn', () => {
       code: 'generation-in-flight',
       reason: 'generation in flight',
     })
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(runningPass('b1')?.actionId).toBe(held.actionId)
     expect(generationStore.getTxState().deferred.size).toBe(0)
     held.finish('completed')
@@ -431,7 +431,7 @@ describe('regenerateTurn', () => {
       code: 'generation-in-flight',
       reason: 'generation in flight',
     })
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
   })
@@ -458,7 +458,7 @@ describe('regenerateTurn', () => {
       reason: 'classifier held',
     })
     expect(swept).not.toHaveBeenCalled()
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
     expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
@@ -488,7 +488,7 @@ describe('regenerateTurn', () => {
       reason: 'classifier held',
     })
     expect(swept).not.toHaveBeenCalled()
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     const replies = await ctx.db
       .select({ id: storyEntries.id })
       .from(storyEntries)
@@ -576,7 +576,7 @@ describe('regenerateTurn', () => {
       reason: 'generation in flight',
     })
     // The reply and its classifier fact both survive an in-flight refusal.
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
   })
 
@@ -655,7 +655,7 @@ describe('regenerateTurn', () => {
       code: 'no-origin',
       reason: 'no originating user action',
     })
-    expect(entriesStore.getById('e_orphan')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_orphan')).toBeDefined()
   })
 
   // Without the per-branch queue the two dispatches interleave their
@@ -702,7 +702,7 @@ describe('regenerateTurn', () => {
     })
 
     expect(regen).toEqual({ status: 'rejected', code: 'embedder-swap', reason: 'embedder-swap' })
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
   })
 
   it('clears the redo stack (a regenerate is a new unrelated action)', async () => {
@@ -850,7 +850,7 @@ describe('regenerateTurn', () => {
     // The two halves the host needs for Retry / draft-restore survive an unwind
     // that could not land — and the un-unwound user_action is still standing.
     expect(settled.userActionContent).toBe('I cross the bridge.')
-    expect(entriesStore.getById('e_u2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_u2')).toBeDefined()
     // The flag the host reads to refuse Retry: offering this text while the
     // action still stands would insert a second identical user_action.
     expect(settled.converged).toBe(false)
@@ -937,7 +937,7 @@ describe('regenerateTurn', () => {
       code: 'sweep-refused',
       reason: expect.stringContaining('no-create'),
     })
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(await ctx.db.select().from(deltas)).toEqual(before)
     expect(undoRedoStore.hasRedo()).toBe(true)
   })
@@ -970,7 +970,7 @@ describe('regenerateTurn', () => {
       code: 'sweep-refused',
       reason: expect.stringContaining('write-back'),
     })
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(await ctx.db.select().from(deltas)).toEqual(before)
     expect(undoRedoStore.hasRedo()).toBe(true)
     expect(error).toHaveBeenCalledWith(
@@ -1097,8 +1097,8 @@ describe('regenerateTurn', () => {
     const places = await db.select({ id: entities.id, state: entities.state }).from(entities)
     const unplaced = { parent_location_id: null, unplaced: true }
     expect(places).toEqual([{ id: 'loc_docks', state: unplaced }])
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual(unplaced)
-    expect(entitiesStore.getById('loc_varn')).toBeUndefined()
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(unplaced)
+    expect(entitiesStore.getById('b1', 'loc_varn')).toBeUndefined()
   })
 
   async function shownCounts(
@@ -1161,7 +1161,7 @@ describe('regenerateTurn', () => {
       },
     })
     expect(await ctx.db.select().from(deltas)).toEqual(before)
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(undoRedoStore.hasRedo()).toBe(true)
     expect(await ctx.db.select().from(pipelineRuns)).toEqual([])
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
@@ -1232,7 +1232,7 @@ describe('regenerateTurn', () => {
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('failed')
     expect(regen.converged).toBe(true)
-    expect(entriesStore.getById('e_u2')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e_u2')).toBeUndefined()
   })
 
   // The counts a ↻ tap reads beside a running close leave its rows out (rollback-confirm.md →
@@ -1316,7 +1316,7 @@ describe('regenerateTurn', () => {
     })
     expect(await closing.origin).toMatchObject({ outcome: 'completed' })
     expect(await db.select().from(chapters)).toHaveLength(1)
-    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     expect(generationStore.isUserEditBlocked()).toBe(false)
   })

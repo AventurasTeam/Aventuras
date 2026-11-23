@@ -47,7 +47,7 @@ const KEY = 7
 // A slice that is the window: a row in it lands at once, one outside it is read.
 const WINDOW_SLICE: JumpSlice = {
   classifyJump: (entryId): JumpClass =>
-    entriesStore.getById(entryId)?.branchId === BRANCH ? 'slice' : 'read',
+    entriesStore.getById(BRANCH, entryId) !== undefined ? 'slice' : 'read',
   placeLanding: () => KEY,
   topLoaded: () => {},
 }
@@ -281,12 +281,9 @@ describe('useReaderEntryJump', () => {
     const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
     const commits: { top: boolean; hasOlder: boolean; sliceKey: number }[] = []
     const { result } = renderHook(() => {
-      const rows = entriesStore.useEntries((m) => m)
+      const rows = entriesStore.useEntries(BRANCH, (m) => m)
       const entries = useMemo(
-        () =>
-          [...rows.values()]
-            .filter((row) => row.branchId === BRANCH)
-            .sort((a, b) => a.position - b.position),
+        () => [...rows.values()].sort((a, b) => a.position - b.position),
         [rows],
       )
       const slice = useReaderSlice(BRANCH, entries, ctx.db)

@@ -96,7 +96,7 @@ describe('translationsStore', () => {
     expect(
       translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es'),
     ).toBeUndefined()
-    expect(translationsStore.getById('tr_1')).toBeUndefined()
+    expect(translationsStore.getById('br_1', 'tr_1')).toBeUndefined()
   })
 
   it('no-ops a patch for a non-held branch (index stays consistent)', () => {
@@ -110,6 +110,6 @@ describe('translationsStore', () => {
     expect(
       translationsStore.getTranslation('br_1', 'entity', 'char_9', 'description', 'es'),
     ).toBeUndefined()
-    expect(translationsStore.getById('tr_9')).toBeUndefined()
+    expect(translationsStore.getById('br_1', 'tr_9')).toBeUndefined()
   })
 })

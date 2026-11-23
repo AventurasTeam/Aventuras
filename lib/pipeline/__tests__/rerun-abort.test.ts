@@ -329,7 +329,7 @@ describe("a re-run whose Cancel couldn't take itself back", () => {
     const { branchId, storyId, ctx } = c.h.fx
     let shown = false
     const off = entriesStore.subscribe(() => {
-      if (entriesStore.getEntries().size !== c.left.entries.length) shown = true
+      if (entriesStore.getEntries(branchId).size !== c.left.entries.length) shown = true
     })
     try {
       expect(

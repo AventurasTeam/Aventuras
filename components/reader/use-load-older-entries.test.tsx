@@ -37,8 +37,8 @@ function row(position: number, branchId = BRANCH): StoryEntry {
 const span = (from: number, through: number, branchId = BRANCH): StoryEntry[] =>
   Array.from({ length: through - from + 1 }, (_, i) => row(from + i, branchId))
 
-const loadedPositions = () =>
-  [...entriesStore.getEntries().values()].map((r) => r.position).sort((a, b) => a - b)
+const loadedPositions = (branchId: string) =>
+  [...entriesStore.getEntries(branchId).values()].map((r) => r.position).sort((a, b) => a - b)
 
 function holdNextRead(failWith?: Error) {
   let open!: () => void
@@ -84,7 +84,7 @@ describe('useLoadOlderEntries', () => {
   it('loads the page above the window and reports a full page as more above', async () => {
     await loadOlder()()
 
-    expect(loadedPositions()).toEqual(span(101, TOTAL).map((r) => r.position))
+    expect(loadedPositions(BRANCH)).toEqual(span(101, TOTAL).map((r) => r.position))
     expect(onBoundary).toHaveBeenCalledExactlyOnceWith(true)
   })
 
@@ -93,7 +93,7 @@ describe('useLoadOlderEntries', () => {
 
     await loadOlder()()
 
-    expect(loadedPositions()).toEqual(span(1, TOTAL).map((r) => r.position))
+    expect(loadedPositions(BRANCH)).toEqual(span(1, TOTAL).map((r) => r.position))
     expect(onBoundary).toHaveBeenCalledExactlyOnceWith(false)
   })
 
@@ -106,7 +106,7 @@ describe('useLoadOlderEntries', () => {
     release()
     await done
 
-    expect(loadedPositions()).toEqual(span(101, TOTAL).map((r) => r.position))
+    expect(loadedPositions(BRANCH)).toEqual(span(101, TOTAL).map((r) => r.position))
     expect(onBoundary).toHaveBeenCalledExactlyOnceWith(true)
   })
 
@@ -118,7 +118,7 @@ describe('useLoadOlderEntries', () => {
     release()
     await done
 
-    expect(loadedPositions()).toEqual(span(1, TOTAL).map((r) => r.position))
+    expect(loadedPositions(BRANCH)).toEqual(span(1, TOTAL).map((r) => r.position))
     expect(onBoundary).toHaveBeenCalledExactlyOnceWith(false)
   })
 
@@ -130,7 +130,7 @@ describe('useLoadOlderEntries', () => {
     release()
     await done
 
-    expect(loadedPositions()).toEqual(span(11, 60).map((r) => r.position))
+    expect(loadedPositions(OTHER)).toEqual(span(11, 60).map((r) => r.position))
     expect(onBoundary).not.toHaveBeenCalled()
   })
 
@@ -159,7 +159,7 @@ describe('useLoadOlderEntries', () => {
     hook.rerender({ branchId: OTHER })
     await hook.result.current()
 
-    expect(loadedPositions()).toEqual(span(1, 60).map((r) => r.position))
+    expect(loadedPositions(OTHER)).toEqual(span(1, 60).map((r) => r.position))
     expect(onBoundary).toHaveBeenCalledExactlyOnceWith(false)
     release()
     await leaving
@@ -181,6 +181,6 @@ describe('useLoadOlderEntries', () => {
     expect(onBoundary).not.toHaveBeenCalled()
 
     await load()
-    expect(loadedPositions()).toEqual(span(101, TOTAL).map((r) => r.position))
+    expect(loadedPositions(BRANCH)).toEqual(span(101, TOTAL).map((r) => r.position))
   })
 })

@@ -2022,7 +2022,7 @@ describe('narrative fold — creates', () => {
     expect(created.map((e) => e.kind)).toEqual(['item'])
     const rows = await branchRows()
     expect(rows.find((r) => r.id === UNPLACED_DOCKS)?.state).toEqual({ parent_location_id: TOWN })
-    expect(entitiesStore.getById(UNPLACED_DOCKS)?.state).toEqual({ parent_location_id: TOWN })
+    expect(entitiesStore.getById('b1', UNPLACED_DOCKS)?.state).toEqual({ parent_location_id: TOWN })
     expect(rows.find((r) => r.id === HERO)?.state).toMatchObject({
       current_location_id: UNPLACED_DOCKS,
     })

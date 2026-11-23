@@ -190,7 +190,7 @@ describe('reversing a machine write under a later user write', () => {
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await kael(db)).toMatchObject({ status: 'retired', retiredReason: 'exiled' })
-    expect(entitiesStore.getById('char_kael')).toMatchObject({ status: 'retired' })
+    expect(entitiesStore.getById('b1', 'char_kael')).toMatchObject({ status: 'retired' })
     expect(await actionIds(db)).toEqual(['act_0', 'act_u'])
   })
 
@@ -219,7 +219,7 @@ describe('reversing a machine write under a later user write', () => {
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'rival', inverseKind: 'friend' })
-    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+    expect(characterRelationshipsStore.getById('b1', row.id)).toEqual(row)
   })
 
   it('still reverses the columns of its own the user did not write since', async () => {
@@ -699,7 +699,7 @@ describe("reversing a close's stackable normalization under a later user write",
   async function stateAfterClose(db: Db, ctx: Ctx): Promise<CharacterState> {
     expect(await reverseReplayDeltas('act_close', ctx)).toBe(1)
     const state = (await kael(db)).state as CharacterState
-    expect(entitiesStore.getById('char_kael')?.state).toEqual(state)
+    expect(entitiesStore.getById('b1', 'char_kael')?.state).toEqual(state)
     return state
   }
 
@@ -795,7 +795,7 @@ describe('reversing a machine view update', () => {
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
-    expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
+    expect(characterRelationshipsStore.getById('b1', created.id)).toBeUndefined()
     // The user's writes to the pair go with it, so no CTRL-Z lands on a group naming it.
     expect(await actionIds(db)).toEqual([])
     expect(await undoAfterReversal(ctx)).toMatchObject({ code: 'nothing-to-apply' })
@@ -839,7 +839,7 @@ describe('reversing a machine view update', () => {
     const [row] = await pair(db)
     expect(row).toEqual({ ...created, kind: null, inverseKind: 'friend' })
     expect(await actionIds(db)).toEqual(['act_0'])
-    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+    expect(characterRelationshipsStore.getById('b1', row.id)).toEqual(row)
   })
 
   it('leaves a pair the user deleted since deleted', async () => {
@@ -996,7 +996,7 @@ describe('reversing a machine view update', () => {
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: 'ally', inverseKind: null })
-    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+    expect(characterRelationshipsStore.getById('b1', row.id)).toEqual(row)
   })
 })
 
@@ -1011,7 +1011,7 @@ describe('reversing a machine create of a relationship', () => {
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: null, inverseKind: 'wary' })
-    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+    expect(characterRelationshipsStore.getById('b1', row.id)).toEqual(row)
     // The kept create goes to the user write that kept the row, not out of the log.
     expect(await actionIds(db)).toEqual(['act_u', 'act_u'])
   })
@@ -1057,7 +1057,7 @@ describe('reversing a machine create of a relationship', () => {
     await reverseRows(await deltasOf(db, 'act_c'), ctx)
 
     expect(await pair(db)).toHaveLength(0)
-    expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
+    expect(characterRelationshipsStore.getById('b1', created.id)).toBeUndefined()
   })
 })
 
@@ -1075,7 +1075,7 @@ describe('a kept pair takes the machine updates of the views it nulls', () => {
 
     const [row] = await pair(db)
     expect(row).toMatchObject({ kind: null, inverseKind: 'mentor' })
-    expect(characterRelationshipsStore.getById(row.id)).toEqual(row)
+    expect(characterRelationshipsStore.getById('b1', row.id)).toEqual(row)
     expect(await deltasOf(db, 'act_c2')).toEqual([])
     expect(await actionIds(db)).toEqual(['act_u', 'act_u'])
   })

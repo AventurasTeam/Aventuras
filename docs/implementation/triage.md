@@ -153,3 +153,31 @@ slice-planning gate forces its resolution before that slice is planned.
   6.3's, so under milestone C12 the comment goes when forks ship. It
   predates Slice 6.2. Found by Slice 6.2's first-PR review
   (2026-11-23).
+
+- **No test passes a wrong branch to a scoped store read.** Every
+  working-set read now names its branch, so the typecheck blocks a
+  return to an unscoped call. It does not block
+  `x(store.getLoadedBranch())`, which compiles and reads like the old
+  unscoped call, and only a case with rows on two branches would catch
+  it. The sites that take their branch from a caller or the open story:
+  `lib/actions/world/resolve-collision.ts:158-162`,
+  `lib/actions/world/save-entity.ts:28`,
+  `components/reader/peek/use-peek-view.ts:43-44`,
+  `components/reader/use-reader-slice.ts:65`,
+  `components/reader/use-entry-jump.ts:190`,
+  `components/reader/use-reader-undo.tsx:71`,
+  `components/chapters/chapter-overlays-host.tsx:90` and `:142-149`,
+  `hooks/use-row-signals.ts:68-76`. Cheapest first pin: an awareness row
+  on `br_2` in the peek-view case. Found by Slice 6.2's third-PR review
+  (2026-11-23).
+
+- **`raiseSystemEntry` repeats the working-set factory's patch guard.**
+  `lib/actions/story-entries/system-entry.ts:85` returns early when the
+  store holds another branch, and the factory's `patch` and
+  `insertMany` (`lib/stores/factory/working-set-store.ts:52` and `:68`)
+  already drop a branch the store doesn't hold. In
+  `system-entry.test.ts`, "leaves the store alone when it holds another
+  branch" fails only with both guards removed; removing either alone
+  passes (mutation-checked 2026-11-23). Either guard is redundant for
+  that test, so keep one and say which. It predates Slice 6.2's third
+  PR. Found by that PR's review (2026-11-23).

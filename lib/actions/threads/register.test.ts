@@ -73,7 +73,7 @@ describe('threads CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'thr_1')).title).toBe('Recover the relic')
-    expect(threadsStore.getById('thr_1')?.status).toBe('pending')
+    expect(threadsStore.getById('br_1', 'thr_1')?.status).toBe('pending')
   })
 
   it('a write to a non-held branch no-ops against the store', async () => {
@@ -88,7 +88,7 @@ describe('threads CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'thr_1')).title).toBe('Recover the relic')
-    expect(threadsStore.getById('thr_1')).toBeUndefined()
+    expect(threadsStore.getById('br_2', 'thr_1')).toBeUndefined()
   })
 
   it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
@@ -148,7 +148,7 @@ describe('threads CRUD arms', () => {
       status: 'rejected',
     })
     expect((await rowFor(db, 'thr_1')).status).toEqual('pending')
-    expect(threadsStore.getById('thr_1')?.title).toBe('Recover the relic')
+    expect(threadsStore.getById('br_1', 'thr_1')?.title).toBe('Recover the relic')
     expect((await db.select().from(deltas)).length).toBe(1)
     expect(await update('thr_9', { status: 'active' })).toMatchObject({
       status: 'rejected',
@@ -202,13 +202,13 @@ describe('threads CRUD arms', () => {
     )
 
     expect((await rowFor(db, 'thr_1')).status).toBe('active')
-    expect(threadsStore.getById('thr_1')?.triggeredAtEntryId).toBe('se_5')
+    expect(threadsStore.getById('br_1', 'thr_1')?.triggeredAtEntryId).toBe('se_5')
 
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     const back = await rowFor(db, 'thr_1')
     expect(back.status).toBe('pending')
     expect(back.triggeredAtEntryId).toBeNull()
-    expect(threadsStore.getById('thr_1')?.status).toBe('pending')
+    expect(threadsStore.getById('br_1', 'thr_1')?.status).toBe('pending')
   })
 
   it('normalizes an empty-string entry ref to null on update', async () => {
@@ -285,11 +285,11 @@ describe('threads CRUD arms', () => {
       ctx,
     )
     expect(await rowFor(db, 'thr_1')).toBeUndefined()
-    expect(threadsStore.getById('thr_1')).toBeUndefined()
+    expect(threadsStore.getById('br_1', 'thr_1')).toBeUndefined()
 
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'thr_1')).title).toBe('Recover the relic')
-    expect(threadsStore.getById('thr_1')?.title).toBe('Recover the relic')
+    expect(threadsStore.getById('br_1', 'thr_1')?.title).toBe('Recover the relic')
   })
 
   it('defaults embedding_stale to 1 on create', async () => {
@@ -395,13 +395,16 @@ describe('updateThread — the entry a status ended on', () => {
       await create(ctx, { ...PASS_THREAD, status: from }, 'periodic_classifier')
       expect((await apply(ctx, userPatch({ status: to }), 'act_u')).status).toBe('ok')
       expect(await rowFor(db, 'thr_1')).toMatchObject({ status: to, resolvedAtEntryId: null })
-      expect(threadsStore.getById('thr_1')).toMatchObject({ status: to, resolvedAtEntryId: null })
+      expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject({
+        status: to,
+        resolvedAtEntryId: null,
+      })
       expect(await undoOf(db, 'act_u')).toEqual({ status: from, resolvedAtEntryId: 'e_old' })
 
       await reverseReplayDeltas('act_u', ctx)
       const restored = { status: from, resolvedAtEntryId: 'e_old' }
       expect(await rowFor(db, 'thr_1')).toMatchObject(restored)
-      expect(threadsStore.getById('thr_1')).toMatchObject(restored)
+      expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject(restored)
     },
   )
 
@@ -561,7 +564,10 @@ describe('setThreadStatus', () => {
       await seed(ctx)
       expect((await apply(ctx, setStatus(status), 'act_s')).status).toBe('ok')
       expect(await rowFor(db, 'thr_1')).toMatchObject({ status, resolvedAtEntryId: PROSE })
-      expect(threadsStore.getById('thr_1')).toMatchObject({ status, resolvedAtEntryId: PROSE })
+      expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject({
+        status,
+        resolvedAtEntryId: PROSE,
+      })
       expect(await undoOf(db, 'act_s')).toEqual({ status: 'active', resolvedAtEntryId: null })
     },
   )
@@ -631,7 +637,7 @@ describe('setThreadStatus', () => {
     await apply(ctx, setStatus('resolved'), 'act_s')
     expect(await reverseReplayDeltas('act_s', ctx)).toBe(1)
     expect(await rowFor(db, 'thr_1')).toMatchObject({ status: 'active', resolvedAtEntryId: null })
-    expect(threadsStore.getById('thr_1')).toMatchObject({ status: 'active' })
+    expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject({ status: 'active' })
   })
 
   // generation-pipeline.md → Reverse-replay: a status and its entry ref are restored as one field.
@@ -643,7 +649,7 @@ describe('setThreadStatus', () => {
     await reverseReplayDeltas('act_s', ctx)
     const restored = { status: 'resolved', resolvedAtEntryId: 'e_old' }
     expect(await rowFor(db, 'thr_1')).toMatchObject(restored)
-    expect(threadsStore.getById('thr_1')).toMatchObject(restored)
+    expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject(restored)
   })
 
   it('keeps both when the user changed the status after the pass took the thread up', async () => {
@@ -654,7 +660,7 @@ describe('setThreadStatus', () => {
     await reverseReplayDeltas('act_s', ctx)
     const kept = { status: 'failed', resolvedAtEntryId: null }
     expect(await rowFor(db, 'thr_1')).toMatchObject(kept)
-    expect(threadsStore.getById('thr_1')).toMatchObject(kept)
+    expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject(kept)
   })
 
   it('keeps no entry once the user fails a thread the pass resolved and the pass is reversed', async () => {
@@ -665,7 +671,7 @@ describe('setThreadStatus', () => {
     await reverseReplayDeltas('act_s', ctx)
     const kept = { status: 'failed', resolvedAtEntryId: null }
     expect(await rowFor(db, 'thr_1')).toMatchObject(kept)
-    expect(threadsStore.getById('thr_1')).toMatchObject(kept)
+    expect(threadsStore.getById('br_1', 'thr_1')).toMatchObject(kept)
   })
 
   it('no-ops when the status already matches', async () => {
@@ -877,7 +883,7 @@ describe('updateThread — columns that already stand, and the user edits a mach
 
     expect(result.status).toBe('ok')
     expect(await undoOf(db, 'act_u')).toEqual({ description: 'A quest line.' })
-    expect(threadsStore.getById('thr_1')?.description).toBe('The relic is found.')
+    expect(threadsStore.getById('br_1', 'thr_1')?.description).toBe('The relic is found.')
   })
 
   it('reads an empty entry ref over a null one as restated', async () => {

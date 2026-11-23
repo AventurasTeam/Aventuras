@@ -505,9 +505,11 @@ describe('a cancelled close', () => {
     ])
     expect(singles).toEqual([])
     expect(await branchState()).toEqual(before)
-    expect(entriesStore.getEntries().size).toBe(f.entries.length)
-    expect([...entriesStore.getEntries().values()].every((e) => e.chapterId === null)).toBe(true)
-    expect(chaptersStore.getChapters().size).toBe(0)
+    expect(entriesStore.getEntries(f.branchId).size).toBe(f.entries.length)
+    expect(
+      [...entriesStore.getEntries(f.branchId).values()].every((e) => e.chapterId === null),
+    ).toBe(true)
+    expect(chaptersStore.getChapters(f.branchId).size).toBe(0)
     expect(generationStore.getTxState().deferred.get(f.branchId)).toEqual({ close: true })
   })
 
@@ -593,8 +595,10 @@ describe('a close whose group does not land whole', () => {
       detail: 'chapter-close: stampEntryChapter not applied: forced noop',
     })
     expect(await branchState()).toEqual(before)
-    expect([...entriesStore.getEntries().values()].every((e) => e.chapterId === null)).toBe(true)
-    expect(chaptersStore.getChapters().size).toBe(0)
+    expect(
+      [...entriesStore.getEntries(f.branchId).values()].every((e) => e.chapterId === null),
+    ).toBe(true)
+    expect(chaptersStore.getChapters(f.branchId).size).toBe(0)
   })
 })
 

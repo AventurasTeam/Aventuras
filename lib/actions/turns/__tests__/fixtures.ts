@@ -143,5 +143,5 @@ export async function openStory(
 }
 
 export function branchEntries(branchId: string) {
-  return [...entriesStore.getEntries().values()].filter((e) => e.branchId === branchId)
+  return [...entriesStore.getEntries(branchId).values()]
 }

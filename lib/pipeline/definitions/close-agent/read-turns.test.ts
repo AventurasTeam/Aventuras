@@ -60,8 +60,8 @@ describe('read_turns', () => {
   it('reads an entry older than the reader window, from the database', async () => {
     const fx = await openCloseFixture({ turns: 30 })
     // The store holds the last 50 of 61 entries: the newest, not the opening.
-    expect(entriesStore.getById(fx.entries.at(-1)!.id)).toBeDefined()
-    expect(entriesStore.getById(fx.entries[0]!.id)).toBeUndefined()
+    expect(entriesStore.getById(fx.branchId, fx.entries.at(-1)!.id)).toBeDefined()
+    expect(entriesStore.getById(fx.branchId, fx.entries[0]!.id)).toBeUndefined()
 
     expect(await readTurns(chapterContext(fx, fx.entries.length - 1), ['t1'])).toEqual({
       turns: [{ id: 't1', kind: 'opening', prose: expect.stringMatching(OPENING) }],

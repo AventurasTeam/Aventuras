@@ -779,7 +779,7 @@ describe('updateEntrySceneFields', () => {
     await seed(db)
     const sunk = { ...location('loc_sunk'), status: 'retired' as const }
     await db.insert(entities).values(sunk)
-    entitiesStore.hydrate('b1', [...entitiesStore.getEntities().values(), sunk] as never)
+    entitiesStore.hydrate('b1', [...entitiesStore.getEntities('b1').values(), sunk] as never)
 
     const result = await updateEntrySceneFields(
       'b1',

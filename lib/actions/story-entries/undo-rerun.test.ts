@@ -155,10 +155,12 @@ describe('CTRL-Z of a re-run', () => {
     expect(await journalRows(c)).toEqual([])
     expect(undoRedoStore.hasRedo()).toBe(false)
     // The stores end as the DB does: the write-back's patches emit after the group's own.
-    expect(loreStore.getById(CLOSE_LORE_ID)).toBeDefined()
-    expect(loreStore.getById(RERUN_LORE_ID)).toBeUndefined()
-    expect(threadsStore.getById(THREAD_ABSORBED.id)).toBeUndefined()
-    expect(entitiesStore.getById(TOBIN.id)?.description).toBe(TOBIN_CLOSE_DESCRIPTION)
+    expect(loreStore.getById(c.fx.branchId, CLOSE_LORE_ID)).toBeDefined()
+    expect(loreStore.getById(c.fx.branchId, RERUN_LORE_ID)).toBeUndefined()
+    expect(threadsStore.getById(c.fx.branchId, THREAD_ABSORBED.id)).toBeUndefined()
+    expect(entitiesStore.getById(c.fx.branchId, TOBIN.id)?.description).toBe(
+      TOBIN_CLOSE_DESCRIPTION,
+    )
   })
 
   it('restores a close that changed nothing in the world, and leaves no journal', async () => {
@@ -401,7 +403,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(await worldRows(c.fx)).toEqual(before.world)
     expect(await chapterRows(c.fx)).toEqual(before.chapters)
     expect(await journalRows(c)).toEqual([])
-    expect(loreStore.getById(CLOSE_LORE_ID)).toBeDefined()
+    expect(loreStore.getById(c.fx.branchId, CLOSE_LORE_ID)).toBeDefined()
   })
 })
 

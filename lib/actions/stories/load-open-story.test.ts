@@ -247,19 +247,19 @@ describe('loadOpenStory', () => {
     expect(open?.settings).toEqual(STORY_SETTINGS)
 
     expect(entriesStore.getLoadedBranch()).toBe('br_1')
-    expect([...entriesStore.getEntries().values()].map((e) => e.id)).toEqual(['e_1'])
+    expect([...entriesStore.getEntries('br_1').values()].map((e) => e.id)).toEqual(['e_1'])
 
     expect(entitiesStore.getLoadedBranch()).toBe('br_1')
-    expect([...entitiesStore.getEntities().values()].map((e) => e.id)).toEqual(['char_1'])
+    expect([...entitiesStore.getEntities('br_1').values()].map((e) => e.id)).toEqual(['char_1'])
 
     expect(loreStore.getLoadedBranch()).toBe('br_1')
-    expect([...loreStore.getLore().values()].map((l) => l.id)).toEqual(['lore_1'])
-    expect(loreStore.getById('lore_2')).toBeUndefined()
+    expect([...loreStore.getLore('br_1').values()].map((l) => l.id)).toEqual(['lore_1'])
+    expect(loreStore.getById('br_1', 'lore_2')).toBeUndefined()
 
     expect(threadsStore.getLoadedBranch()).toBe('br_1')
-    expect([...threadsStore.getThreads().values()].map((r) => r.id)).toEqual(['thread_1'])
+    expect([...threadsStore.getThreads('br_1').values()].map((r) => r.id)).toEqual(['thread_1'])
     expect(happeningsStore.getLoadedBranch()).toBe('br_1')
-    expect([...happeningsStore.getHappenings().values()].map((r) => r.id)).toEqual(['hap_1'])
+    expect([...happeningsStore.getHappenings('br_1').values()].map((r) => r.id)).toEqual(['hap_1'])
     expect(happeningInvolvementsStore.getByHappening('br_1', 'hap_1').map((r) => r.id)).toEqual([
       'hinv_1',
     ])
@@ -267,7 +267,7 @@ describe('loadOpenStory', () => {
       'haw_1',
     ])
     expect(chaptersStore.getLoadedBranch()).toBe('br_1')
-    expect([...chaptersStore.getChapters().values()].map((r) => r.id)).toEqual(['chap_1'])
+    expect([...chaptersStore.getChapters('br_1').values()].map((r) => r.id)).toEqual(['chap_1'])
 
     expect(characterRelationshipsStore.getLoadedBranch()).toBe('br_1')
     expect(characterRelationshipsStore.getRelationships('char_1', 'br_1')).toEqual([
@@ -275,7 +275,9 @@ describe('loadOpenStory', () => {
     ])
 
     expect(translationsStore.getLoadedBranch()).toBe('br_1')
-    expect([...translationsStore.getTranslations().values()].map((r) => r.id)).toEqual(['tr_1'])
+    expect([...translationsStore.getTranslations('br_1').values()].map((r) => r.id)).toEqual([
+      'tr_1',
+    ])
 
     expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })
@@ -312,7 +314,7 @@ describe('loadOpenStory', () => {
     })
 
     expect(eraFlipsStore.getLoadedBranch()).toBe('br_1')
-    const held = [...eraFlipsStore.getEraFlips().values()]
+    const held = [...eraFlipsStore.getEraFlips('br_1').values()]
       .map(({ id, branchId, eraName }) => ({ id, branchId, eraName }))
       .sort((a, b) => a.id.localeCompare(b.id))
     expect(held).toEqual([
@@ -410,7 +412,7 @@ describe('loadOpenStory', () => {
       ['chap_4', false, null],
       ['chap_5', false, null],
     ] as const) {
-      const stored = chaptersStore.getById(id)
+      const stored = chaptersStore.getById('br_1', id)
       expect(stored).toBeDefined()
       const { hasCloseReport: flag, closeReportActionId, ...storeRest } = stored!
       const [row] = await db.select().from(chapters).where(eq(chapters.id, id))

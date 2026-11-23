@@ -494,10 +494,10 @@ describe('deleteEntityRow — races closed by the in-lock re-read', () => {
 function afterStoreRead(then: () => void): { restore: () => void } {
   const real = entitiesStore.getEntities
   let reads = 0
-  const spy = vi.spyOn(entitiesStore, 'getEntities').mockImplementation(() => {
+  const spy = vi.spyOn(entitiesStore, 'getEntities').mockImplementation((branchId) => {
     reads += 1
     if (reads === 1) queueMicrotask(then)
-    return real()
+    return real(branchId)
   })
   return { restore: () => spy.mockRestore() }
 }

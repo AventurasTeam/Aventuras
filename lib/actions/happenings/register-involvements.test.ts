@@ -81,7 +81,7 @@ describe('happening_involvements CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'hinv_1')).role).toBe('duelist')
-    expect(happeningInvolvementsStore.getById('hinv_1')?.entityId).toBe('char_1')
+    expect(happeningInvolvementsStore.getById('br_1', 'hinv_1')?.entityId).toBe('char_1')
   })
 
   it('update role; reverse-replay restores', async () => {
@@ -113,7 +113,7 @@ describe('happening_involvements CRUD arms', () => {
     expect((await rowFor(db, 'hinv_1')).role).toBe('witness')
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     expect((await rowFor(db, 'hinv_1')).role).toBe('duelist')
-    expect(happeningInvolvementsStore.getById('hinv_1')?.role).toBe('duelist')
+    expect(happeningInvolvementsStore.getById('br_1', 'hinv_1')?.role).toBe('duelist')
   })
 
   it('no-ops a role update that changes nothing, writing no delta', async () => {
@@ -205,7 +205,7 @@ describe('happening_involvements CRUD arms', () => {
     expect(await rowFor(db, 'hinv_1')).toBeUndefined()
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'hinv_1')).entityId).toBe('char_1')
-    expect(happeningInvolvementsStore.getById('hinv_1')?.role).toBe('duelist')
+    expect(happeningInvolvementsStore.getById('br_1', 'hinv_1')?.role).toBe('duelist')
   })
 })
 
@@ -299,7 +299,7 @@ describe('createHappeningInvolvement under user precedence', () => {
 
     expect(await involvementsOf(db, 'hap_1', 'char_1')).toEqual([])
     expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_close'))).toEqual([])
-    expect(happeningInvolvementsStore.getById('hinv_carried')).toBeUndefined()
+    expect(happeningInvolvementsStore.getById('br_1', 'hinv_carried')).toBeUndefined()
   })
 
   it('re-creates an involvement the user removed before the prose', async () => {

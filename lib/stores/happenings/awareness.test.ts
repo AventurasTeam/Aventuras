@@ -58,6 +58,6 @@ describe('happeningAwarenessStore', () => {
       id: 'haw_9',
       row: row('haw_9', 'hap_9', 'char_z'),
     })
-    expect(happeningAwarenessStore.getById('haw_9')).toBeUndefined()
+    expect(happeningAwarenessStore.getById('br_1', 'haw_9')).toBeUndefined()
   })
 })

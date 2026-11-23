@@ -120,8 +120,8 @@ describe('the Treasure Island seed', () => {
     const ctx = await seededWithDataset()
     expect(await openStory(STORY, ctx, () => {})).toEqual({ status: 'ok', branchId: BRANCH })
     expect(entitiesStore.getLoadedBranch()).toBe(BRANCH)
-    expect(entitiesStore.getEntities().size).toBe(56)
-    expect([...chaptersStore.getChapters().values()].map((c) => c.title)).toEqual([
+    expect(entitiesStore.getEntities(BRANCH).size).toBe(56)
+    expect([...chaptersStore.getChapters(BRANCH).values()].map((c) => c.title)).toEqual([
       'The Treasure Map and the Hispaniola',
     ])
   })
