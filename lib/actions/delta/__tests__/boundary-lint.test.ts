@@ -15,10 +15,20 @@ const VALUE_IMPORT =
 describe('lib/actions takes nothing from lib/history', () => {
   it.each([
     ['the delta layer', 'lib/actions/delta/__history-fixture.ts'],
-    ['the barrel', 'lib/actions/__history-fixture.ts'],
+    ['the module root', 'lib/actions/__history-fixture.ts'],
     ['a domain', 'lib/actions/world/__history-fixture.ts'],
   ])('flags a value import from %s', async (_name, filePath) => {
     expect(await boundaryMessages(VALUE_IMPORT, filePath)).toEqual([expect.stringContaining(CYCLE)])
+  })
+
+  it.each([
+    ['a value import', VALUE_IMPORT],
+    ['a named re-export', "export { humanizeDelta } from '@/lib/history'\n"],
+    ['a star re-export', "export * from '@/lib/history'\n"],
+  ])('flags %s in the barrel itself', async (_name, source) => {
+    expect(await boundaryMessages(source, 'lib/actions/index.ts')).toEqual([
+      expect.stringContaining(CYCLE),
+    ])
   })
 
   it('flags a type import too', async () => {
