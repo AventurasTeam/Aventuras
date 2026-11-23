@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { emptyEntityState, type CharacterState, type NewEntity } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
 import type { PipelineAction } from '../types'
@@ -8,12 +9,16 @@ import {
   assertFork,
   createEntityAction,
   createHappeningAction,
+  deltaRowsOf,
   entryAt,
+  FORK_CHILD_ID,
+  forkPlan,
   landWrites,
   openForkWorld,
   rowOn,
   rowsOn,
   seedVectorsWithWindowLore,
+  type ForkWorld,
 } from './__tests__/fork-harness'
 
 afterEach(() => {
@@ -148,5 +153,198 @@ describe('a fork reaches every restore path', () => {
       inverse_kind: null,
     })
     expect(rowOn(w, 'character_relationships', w.parentId, pairId)).toEqual(parentPair)
+  })
+})
+
+describe('a fork rewrites the log it keeps on the child alone', () => {
+  const KAEL = 'char_fork_kael'
+  const MIRA = 'char_fork_mira'
+  const STATE: CharacterState = {
+    visual: { attire: 'travel cloak' },
+    traits: ['brave'],
+    drives: [],
+    voice: 'low and dry',
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: null,
+    lastSeenAt: null,
+  }
+
+  // Kael and Mira before B, then entries 4-7 after them.
+  async function kaelAndMira(kael: Partial<NewEntity> = {}): Promise<ForkWorld> {
+    const w = await openForkWorld(1)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, KAEL, 'Kael', kael),
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    await appendTurns(w, 2)
+    return w
+  }
+
+  const passPair = (w: ForkWorld, kind: string): PipelineAction => ({
+    kind: 'upsertCharacterRelationship',
+    source: 'periodic_classifier',
+    payload: { branchId: w.parentId, subjectId: KAEL, objectId: MIRA, kind, proseEntryId: null },
+  })
+
+  it("rewrites a held delete's payload on the child, the parent's holder as logged", async () => {
+    const w = await kaelAndMira()
+    await landWrites(w, { actionId: 'act_fork_pass_pair', entryId: entryAt(5) }, [
+      passPair(w, 'wary'),
+    ])
+    const pairs = rowsOn(w, 'character_relationships', w.parentId)
+    expect(pairs).toHaveLength(1)
+    const pairId = String(pairs[0].id)
+    await landWrites(w, { actionId: 'act_fork_delete_kael', entryId: entryAt(3) }, [
+      { kind: 'deleteEntity', source: 'user_edit', payload: { branchId: w.parentId, id: KAEL } },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const holders = deltaRowsOf(w, w.parentId, 'act_fork_delete_kael')
+    expect(holders).toHaveLength(1)
+    const holderId = String(holders[0].id)
+    const planned = await forkPlan(w, entryAt(3), FORK_CHILD_ID)
+    expect(planned?.plan.rewrittenHolders.map((d) => d.id)).toEqual([holderId])
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    const payloadOn = (branchId: string) =>
+      String(rowOn(w, 'deltas', branchId, holderId)?.undo_payload)
+    expect(payloadOn(childId)).toContain(KAEL)
+    expect(payloadOn(childId)).not.toContain(pairId)
+    expect(payloadOn(w.parentId)).toContain(pairId)
+  })
+
+  it("rewrites a surviving later write's prior value on the child alone", async () => {
+    const w = await kaelAndMira({ state: STATE })
+    const withVoice = (voice: string) => ({ state: { ...STATE, voice } })
+    await landWrites(w, { actionId: 'act_fork_close_voice', entryId: entryAt(5) }, [
+      {
+        kind: 'updateEntity',
+        source: 'chapter_close',
+        payload: { branchId: w.parentId, id: KAEL, patch: withVoice('hoarse') },
+      },
+    ])
+    await landWrites(w, { actionId: 'act_fork_pass_voice', entryId: entryAt(3) }, [
+      {
+        kind: 'updateEntity',
+        source: 'periodic_classifier',
+        payload: { branchId: w.parentId, id: KAEL, patch: withVoice('steady') },
+      },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const survivors = deltaRowsOf(w, w.parentId, 'act_fork_pass_voice')
+    expect(survivors).toHaveLength(1)
+    const survivorId = String(survivors[0].id)
+    const planned = await forkPlan(w, entryAt(3), FORK_CHILD_ID)
+    expect(planned?.plan.survivorRewrites.map(({ delta }) => delta.id)).toEqual([survivorId])
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    const priorVoice = (branchId: string) =>
+      (
+        JSON.parse(String(rowOn(w, 'deltas', branchId, survivorId)?.undo_payload)) as {
+          state?: { voice?: string }
+        }
+      ).state?.voice
+    expect(priorVoice(childId)).toBe('low and dry')
+    expect(priorVoice(w.parentId)).toBe('hoarse')
+    const kaelOn = (branchId: string) =>
+      JSON.parse(String(rowOn(w, 'entities', branchId, KAEL)?.state)) as CharacterState
+    expect(kaelOn(childId).voice).toBe('steady')
+  })
+
+  it('re-owns on the child a machine create a later user write kept', async () => {
+    const w = await kaelAndMira()
+    await landWrites(w, { actionId: 'act_fork_pass_pair', entryId: entryAt(5) }, [
+      passPair(w, 'rival'),
+    ])
+    const creates = deltaRowsOf(w, w.parentId, 'act_fork_pass_pair')
+    expect(creates).toHaveLength(1)
+    const created = creates[0]
+    await landWrites(w, { actionId: 'act_fork_keep', entryId: entryAt(3) }, [
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'user_edit',
+        payload: {
+          branchId: w.parentId,
+          subjectId: KAEL,
+          objectId: MIRA,
+          kind: 'rival',
+          inverseKind: 'mentor',
+        },
+      },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const planned = await forkPlan(w, entryAt(3), FORK_CHILD_ID)
+    expect(planned?.plan.reownedDeltas.map((d) => d.id)).toEqual([created.id])
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    expect(rowOn(w, 'deltas', childId, String(created.id))).toMatchObject({
+      source: 'user_edit',
+      entry_id: null,
+      action_id: 'act_fork_keep',
+    })
+    expect(rowOn(w, 'deltas', w.parentId, String(created.id))).toEqual(created)
+    // The user wrote Mira's view only, so the swept pass's view goes and the row stays.
+    expect(rowOn(w, 'character_relationships', childId, String(created.target_id))).toMatchObject({
+      kind: null,
+      inverse_kind: 'mentor',
+    })
+  })
+
+  it("clears on the child a place's parent and a member's faction the window removes", async () => {
+    const PIER = 'loc_fork_pier'
+    const QUAY = 'loc_fork_quay'
+    const TAMSIN = 'char_fork_tamsin'
+    const WARDENS = 'fact_fork_wardens'
+    const w = await openForkWorld(1)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, PIER, "Tobin's Pier", {
+        kind: 'location',
+        state: { parent_location_id: null },
+      }),
+      createEntityAction(w, TAMSIN, 'Tamsin', {
+        state: { ...emptyEntityState('character'), faction_id: null },
+      }),
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    await appendTurns(w, 2)
+    await landWrites(w, { actionId: 'act_fork_pass_world', entryId: entryAt(5) }, [
+      createEntityAction(w, QUAY, 'Harrow Quay', {
+        kind: 'location',
+        state: { parent_location_id: null },
+      }),
+      createEntityAction(w, WARDENS, 'The Wardens', { kind: 'faction' }),
+    ])
+    await landWrites(w, { actionId: 'act_fork_move', entryId: entryAt(3) }, [
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: w.parentId, id: PIER, patch: { state: { parent_location_id: QUAY } } },
+      },
+    ])
+    await landWrites(w, { actionId: 'act_fork_join', entryId: entryAt(3) }, [
+      {
+        kind: 'setCharacterFaction',
+        source: 'periodic_classifier',
+        payload: { branchId: w.parentId, id: TAMSIN, factionId: WARDENS, proseEntryId: null },
+      },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const planned = await forkPlan(w, entryAt(3), FORK_CHILD_ID)
+    expect(
+      planned?.swept.set.refClears.map(({ row, ref }) => `${row.id}.${ref.path}`).sort(),
+    ).toEqual([`${PIER}.parent_location_id`, `${TAMSIN}.faction_id`].sort())
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    const stateOn = (branchId: string, id: string) =>
+      JSON.parse(String(rowOn(w, 'entities', branchId, id)?.state)) as Record<string, unknown>
+    expect(stateOn(childId, PIER)).toMatchObject({ parent_location_id: null, unplaced: true })
+    expect(stateOn(childId, TAMSIN)).toMatchObject({ faction_id: null })
+    expect(stateOn(w.parentId, PIER)).toMatchObject({ parent_location_id: QUAY })
+    expect(stateOn(w.parentId, TAMSIN)).toMatchObject({ faction_id: WARDENS })
   })
 })

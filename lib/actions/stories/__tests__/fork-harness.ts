@@ -228,6 +228,16 @@ export function entryIdsOn(w: ForkWorld, branchId: string): string[] {
   return rows.map(({ id }) => id)
 }
 
+export function deltaRowsOf(
+  w: ForkWorld,
+  branchId: string,
+  actionId: string,
+): Record<string, unknown>[] {
+  return w.sqlite
+    .prepare('SELECT * FROM deltas WHERE branch_id = ? AND action_id = ? ORDER BY log_position')
+    .all(branchId, actionId) as Record<string, unknown>[]
+}
+
 /** Each family table's rows on the branch, every table listed, embeddings as hex. */
 export function vectorRows(sqlite: DatabaseSync, branchId: string): Record<string, VectorRow[]> {
   const names = sqlite
@@ -334,7 +344,8 @@ function entryAfter(w: ForkWorld, forkEntryId: string): string | null {
   return next?.id ?? null
 }
 
-async function forkPlan(
+/** The fork's own sweep and plan, read-only on the parent; null with no B. */
+export async function forkPlan(
   w: ForkWorld,
   forkEntryId: string,
   childId: string,
