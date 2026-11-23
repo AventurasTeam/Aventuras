@@ -55,10 +55,7 @@ export function reportChapter<C extends HeldReport>(
   return held != null && held.closeReportActionId === actionId ? held : null
 }
 
-/**
- * C7: a committed close's chapter while its result is this open's and it stands; else null.
- * `branchChapters` is the open branch's read.
- */
+/** C7: a close result's chapter while it is this open's and stands; else null. */
 export function closeResultChapter<C extends HeldReport>(
   result: CloseResult | null,
   branchChapters: ReadonlyMap<string, C>,
@@ -69,10 +66,7 @@ export function closeResultChapter<C extends HeldReport>(
   return reportChapter(branchChapters.get(result.chapterId), result.actionId)
 }
 
-/**
- * C7: the re-run confirm's chapter while it stands with a report as the open branch's latest.
- * `branchChapters` is the open branch's read.
- */
+/** C7: the re-run confirm's chapter while it holds a report as the open branch's latest. */
 export function rerunConfirmChapter<C extends ReportHolder & Pick<StoreChapter, 'sequenceNumber'>>(
   request: RerunConfirmRequest | null,
   branchChapters: ReadonlyMap<string, C>,

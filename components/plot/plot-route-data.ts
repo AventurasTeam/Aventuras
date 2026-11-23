@@ -14,9 +14,8 @@ export function distinctCategories(rows: readonly { category: string | null }[])
 const NO_LINKS: HappeningLinks = { involvements: [], awareness: [] }
 
 /**
- * A happening's committed link rows, from one branch's link reads. No happening (a thread, create
- * mode, nothing selected) returns one shared empty value, so the pane's draft baseline keeps its
- * identity.
+ * A happening's committed link rows; no happening returns one shared empty value, so the pane's
+ * draft baseline keeps its identity.
  */
 export function happeningLinksFor(
   happeningId: string | null,
