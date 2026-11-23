@@ -259,10 +259,46 @@ describe('deleteStory', () => {
     }
   })
 
+  // A run row that names a branch but no story is reached only through BRANCH_SCOPED, and the
+  // branches delete would fail its foreign key; a row with no branch only by story id.
+  it('removes its run rows with a branch or without one, and keeps another story’s', async () => {
+    const { db, listTables, ctx } = await setup()
+    await db.insert(pipelineRuns).values([
+      {
+        runId: 'run_victim_branch_only',
+        kind: 'per-turn',
+        actionId: 'act_vb',
+        storyId: null,
+        branchId: 'br_victim',
+        startedAt: 2,
+      },
+      {
+        runId: 'run_victim_stamped',
+        kind: 'per-turn',
+        actionId: 'act_vs',
+        storyId: 'victim',
+        branchId: 'br_victim',
+        startedAt: 2,
+      },
+      {
+        runId: 'run_survivor_stamped',
+        kind: 'per-turn',
+        actionId: 'act_ss',
+        storyId: 'survivor',
+        branchId: 'br_survivor',
+        startedAt: 2,
+      },
+    ])
+
+    await deleteStory('victim', ctx, listTables)
+
+    const left = await db.select({ runId: pipelineRuns.runId }).from(pipelineRuns)
+    expect(left.map((r) => r.runId).sort()).toEqual(['run_survivor', 'run_survivor_stamped'])
+  })
+
   it('cascade covers exactly the schema branch-scoped tables (no future orphans)', () => {
-    // Every table carrying a branch_id is owned-by-story content in this schema, so it
-    // MUST be in the cascade. This guards against a table being dropped from BRANCH_SCOPED
-    // or a new branch-scoped table being added to the schema without wiring the cascade.
+    // Every branch_id table, run bookkeeping included, dies with its story: MUST be cascaded.
+    // Catches one dropped from BRANCH_SCOPED, or a new one added without wiring the cascade.
     const schemaBranchTables = (Object.values(dbSchema) as SQLiteTable[])
       .filter((t) => 'branchId' in getTableColumns(t))
       .map(getTableName)

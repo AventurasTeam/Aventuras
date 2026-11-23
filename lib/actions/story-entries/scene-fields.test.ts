@@ -156,8 +156,8 @@ const MIRA = 'char_m'
 const TURN = 'act_turn'
 
 /**
- * e1 is the user_action, e2 the reply taking char_a and the cast it brings in to LOC_B, logged as
- * submit-turn and the per-turn pipeline log them: only the reply's create carries an entry anchor.
+ * e1 the user_action, e2 the reply taking char_a and its incoming cast to LOC_B, as submit-turn and
+ * the per-turn pipeline log them: each create anchors on its own entry, the fold's writes on none.
  */
 async function seedTurn(db: TestDb, ctx: DbCtx, cast: NewEntity[] = [character(MIRA, LOC_C)]) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -186,7 +186,7 @@ async function seedTurn(db: TestDb, ctx: DbCtx, cast: NewEntity[] = [character(M
       source: 'user_edit',
       payload: { entry: { ...userAction, kind: 'user_action' } },
     },
-    null,
+    'e1',
   )
   await log(
     {
@@ -483,6 +483,68 @@ describe('updateEntrySceneFields', () => {
       status: 'ok',
     })
     expect((await entityState(db, 'char_n')).current_location_id).toBe(LOC_A)
+  })
+
+  // The anchor ties a user_action's create to its entry, but only a run's create ties the entry
+  // to the writes logged under its action; a user_action tail reads its own anchored edits only.
+  it("leaves a character where their turn's unanchored write put them on a user_action tail", async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    const [reply] = entryRows()
+    await db.insert(storyEntries).values(reply)
+    const rows = [
+      character('char_a', LOC_A),
+      character(MIRA, LOC_C),
+      location(LOC_A),
+      location(LOC_B),
+      location(LOC_C),
+    ]
+    for (const row of rows) await db.insert(entities).values(row)
+    await hydrateEntities(db)
+    entriesStore.hydrate('b1', [])
+
+    const log = async (action: PipelineAction, entryId: string | null) => {
+      const result = await applyDeltaAction(
+        { action, actionId: TURN, branchId: 'b1', entryId },
+        ctx,
+      )
+      if (result.status !== 'ok') throw new Error(`${action.kind}: ${JSON.stringify(result)}`)
+    }
+    // As submitTurn logs it: anchored on the entry it creates.
+    await log(
+      {
+        kind: 'createStoryEntry',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'e2',
+            branchId: 'b1',
+            position: 2,
+            kind: 'user_action',
+            content: 'Mira walks in',
+            chapterId: null,
+            metadata: { sceneEntities: ['char_a', MIRA], currentLocationId: LOC_B, worldTime: 120 },
+            createdAt: 2,
+          },
+        },
+      },
+      'e2',
+    )
+    // A write of the turn's run that outlived it (its reversal failed), unanchored like the fold's.
+    await log(
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'piggyback_tagged_block',
+        payload: { branchId: 'b1', id: MIRA, currentLocationId: LOC_B },
+      },
+      null,
+    )
+    await hydrateEntities(db)
+
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
+    expect((await entityState(db, MIRA)).current_location_id).toBe(LOC_B)
   })
 
   // entry-card.md → Scene editor: promoted exactly as the generation fold promotes it, the place

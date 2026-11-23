@@ -71,7 +71,11 @@ export async function recoverInFlightRuns(ctx: DbCtx): Promise<RecoveryReport> {
       // Marker rides the reversal's transaction: never claims an uncommitted reversal. An orphan
       // with nothing reversed or written back is deleted.
       const result = await reverseRunGroup(
-        { actionId: orphan.actionId, branchId: null, rerunChapterId: orphan.rerunChapterId },
+        {
+          actionId: orphan.actionId,
+          branchId: orphan.branchId,
+          rerunChapterId: orphan.rerunChapterId,
+        },
         ctx,
         (anything) => {
           settled.reversed = anything

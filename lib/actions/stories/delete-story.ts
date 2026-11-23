@@ -47,6 +47,7 @@ export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   deltas,
   reversalJournals,
   entryAssets,
+  pipelineRuns,
 ]
 
 /** Transactional cascade of a story's entire owned graph, child -> parent. No DB-level FK cascade exists. */
@@ -73,6 +74,7 @@ export async function deleteStory(
     // above cannot reach them; without this their rows outlive the story.
     ops.push(...deleteBranchVecOps(await listTables(), branchIds))
   }
+  // Run rows older than pipeline_runs.branch_id may name no branch; they go by their story.
   ops.push(ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.storyId, storyId)).toSQL())
   // A draft carries a wizard_sessions row keyed by its story id; this slice owns that table.
   ops.push(ctx.db.delete(wizardSessions).where(eq(wizardSessions.id, storyId)).toSQL())

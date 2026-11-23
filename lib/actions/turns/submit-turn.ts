@@ -176,7 +176,8 @@ export async function submitTurn(
             },
             actionId: turnActionId,
             branchId: ids.branchId,
-            entryId: null,
+            // data-model.md → Survival anchor: the turn's create anchors on the entry it creates.
+            entryId,
           },
           ctx,
         )

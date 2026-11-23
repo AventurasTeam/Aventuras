@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, getTableColumns, gt } from 'drizzle-orm'
+import { and, asc, desc, eq, gt } from 'drizzle-orm'
 
 import {
   chapters,
@@ -17,7 +17,7 @@ import { DIVIDER_TABLES, readChapterCloseGroups } from '../chapters/close-groups
 import type { DbCtx } from '../types'
 import { vecSweepIdsOps, vecTableLister } from './delete-cascade'
 import { readCurrentRow } from './redo'
-import { resolveByTable, whereForDelta, type TableDescriptor } from './registry'
+import { branchKeyOf, resolveByTable, whereForDelta, type TableDescriptor } from './registry'
 import { DeltaReplayError, type JournalOutcome } from './replay-errors'
 import {
   replayFailure,
@@ -220,14 +220,6 @@ async function groupIsWhole(
   )
 }
 
-function branchKeyOf(descriptor: TableDescriptor): string | undefined {
-  const { branchCol } = descriptor
-  if (branchCol === undefined) return undefined
-  return Object.entries(getTableColumns(descriptor.table)).find(
-    ([, column]) => column === branchCol,
-  )?.[0]
-}
-
 function upsertRowOp(ctx: DbCtx, descriptor: TableDescriptor, row: Record<string, unknown>): SqlOp {
   const target = descriptor.branchCol ? [descriptor.branchCol, descriptor.idCol] : descriptor.idCol
   return ctx.db
@@ -237,8 +229,8 @@ function upsertRowOp(ctx: DbCtx, descriptor: TableDescriptor, row: Record<string
     .toSQL()
 }
 
-// Each restored row and delta takes the executing branch, for a fork's verbatim copy of the
-// journal (no forks yet, M6.1).
+// Each restored row and delta takes the executing branch: a copied journal's JSON names the
+// branch that wrote it.
 async function writeBackOps(
   found: FoundJournal,
   actionId: string,
@@ -285,7 +277,7 @@ async function writeBackOps(
     return ctx.db
       .insert(deltas)
       .values(delta)
-      .onConflictDoUpdate({ target: deltas.id, set: delta })
+      .onConflictDoUpdate({ target: [deltas.branchId, deltas.id], set: delta })
       .toSQL()
   })
   const heldOps = journal.journals.map((held) =>
@@ -377,7 +369,7 @@ export function withJournalOutcome(
 
 type WriteBackArgs = {
   actionId: string
-  /** Null when the caller knows no branch (recovery of a group with no delta). */
+  /** Null for a run marker that records no branch (M6 C2): the reads then go by id alone. */
   branchId: string | null
   /** The group's deltas, newest first, as the caller read them. */
   group: readonly Delta[]
@@ -497,7 +489,11 @@ export async function reverseRunGroup(
     group = (await ctx.db
       .select()
       .from(deltas)
-      .where(eq(deltas.actionId, actionId))
+      .where(
+        args.branchId === null
+          ? eq(deltas.actionId, actionId)
+          : and(eq(deltas.branchId, args.branchId), eq(deltas.actionId, actionId)),
+      )
       .orderBy(desc(deltas.logPosition))) as Delta[]
     writeBack = await rerunWriteBack(
       { actionId, branchId: args.branchId, group, rerunChapterId: args.rerunChapterId },

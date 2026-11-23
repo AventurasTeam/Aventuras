@@ -1,0 +1,105 @@
+import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
+
+import {
+  branchEraFlips,
+  chapters,
+  characterRelationships,
+  deltas,
+  entities,
+  entryAssets,
+  happeningAwareness,
+  happeningInvolvements,
+  happenings,
+  lore,
+  pipelineRuns,
+  probeCaptures,
+  reversalJournals,
+  storyEntries,
+  threads,
+  translations,
+} from '../schema'
+
+export type CopyMode = 'fork' | 'duplicate'
+
+/**
+ * Fork filters: `copy-non-system` leaves `kind = 'system'` entries out, applied by the copier;
+ * `copy-survivors` keeps only the deltas and journals the rewind keeps, passed by the fork's caller
+ * as the table's predicate.
+ */
+export type ForkCopy = 'copy' | 'copy-non-system' | 'copy-survivors' | 'skip'
+export type DuplicateCopy = 'copy' | 'skip'
+
+/** The fork values whose filter is the caller's predicate. */
+export const CALLER_FILTERS = {
+  copy: false,
+  'copy-non-system': false,
+  'copy-survivors': true,
+  skip: false,
+} as const satisfies Record<ForkCopy, boolean>
+
+type CallerFilter = {
+  [C in ForkCopy]: (typeof CALLER_FILTERS)[C] extends true ? C : never
+}[ForkCopy]
+
+export type BranchCopyTable = SQLiteTable & { branchId: SQLiteColumn }
+
+export type BranchCopyTableName =
+  | 'story_entries'
+  | 'entities'
+  | 'character_relationships'
+  | 'lore'
+  | 'threads'
+  | 'happenings'
+  | 'happening_involvements'
+  | 'happening_awareness'
+  | 'chapters'
+  | 'branch_era_flips'
+  | 'translations'
+  | 'entry_assets'
+  | 'probe_captures'
+  | 'pipeline_runs'
+  | 'deltas'
+  | 'reversal_journals'
+
+export type ManifestRow = {
+  readonly table: BranchCopyTable
+  readonly fork: ForkCopy
+  readonly duplicate: DuplicateCopy
+}
+
+/**
+ * data-model.md → Branch model's manifest, in copy order: a fork's predicate may read a table
+ * copied earlier in the batch, so deltas and journals copy after every domain table.
+ */
+export const BRANCH_COPY_MANIFEST = {
+  story_entries: { table: storyEntries, fork: 'copy-non-system', duplicate: 'copy' },
+  entities: { table: entities, fork: 'copy', duplicate: 'copy' },
+  character_relationships: { table: characterRelationships, fork: 'copy', duplicate: 'copy' },
+  lore: { table: lore, fork: 'copy', duplicate: 'copy' },
+  threads: { table: threads, fork: 'copy', duplicate: 'copy' },
+  happenings: { table: happenings, fork: 'copy', duplicate: 'copy' },
+  happening_involvements: { table: happeningInvolvements, fork: 'copy', duplicate: 'copy' },
+  happening_awareness: { table: happeningAwareness, fork: 'copy', duplicate: 'copy' },
+  chapters: { table: chapters, fork: 'copy', duplicate: 'copy' },
+  branch_era_flips: { table: branchEraFlips, fork: 'copy', duplicate: 'copy' },
+  translations: { table: translations, fork: 'copy', duplicate: 'copy' },
+  entry_assets: { table: entryAssets, fork: 'copy', duplicate: 'copy' },
+  // probe.md → Branch fork and capture portability: a capture is meaningful only on its branch.
+  probe_captures: { table: probeCaptures, fork: 'skip', duplicate: 'skip' },
+  // A run's marker belongs to the branch it ran on, and run_id is a global key.
+  pipeline_runs: { table: pipelineRuns, fork: 'skip', duplicate: 'skip' },
+  deltas: { table: deltas, fork: 'copy-survivors', duplicate: 'copy' },
+  reversal_journals: { table: reversalJournals, fork: 'copy-survivors', duplicate: 'copy' },
+} as const satisfies Readonly<Record<BranchCopyTableName, ManifestRow>>
+
+type Manifest = typeof BRANCH_COPY_MANIFEST
+
+/** The tables a mode copies, so the only ones a predicate may name. */
+export type CopiedIn<M extends CopyMode> = {
+  [T in BranchCopyTableName]: Manifest[T][M] extends 'skip' ? never : T
+}[BranchCopyTableName]
+
+/** The tables a fork filters by the caller's predicate, so the copier requires one for each. */
+export type ForkPredicateTable = {
+  [T in BranchCopyTableName]: Manifest[T]['fork'] extends CallerFilter ? T : never
+}[BranchCopyTableName]

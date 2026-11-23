@@ -160,10 +160,10 @@ async function seedTwoTurnsWithCatchUp(ctx: Awaited<ReturnType<typeof makeHarnes
   await ctx.db
     .insert(deltas)
     .values([
-      DELTA('d_u1', 'act_t1', 'story_entries', 'e_u1', null, 'user_edit', 1),
-      DELTA('d_r1', 'act_t1', 'story_entries', 'e_r1', null, 'ai_classifier', 2),
-      DELTA('d_u2', 'act_t2', 'story_entries', 'e_u2', null, 'user_edit', 3),
-      DELTA('d_r2', 'act_t2', 'story_entries', 'e_r2', null, 'ai_classifier', 4),
+      DELTA('d_u1', 'act_t1', 'story_entries', 'e_u1', 'e_u1', 'user_edit', 1),
+      DELTA('d_r1', 'act_t1', 'story_entries', 'e_r1', 'e_r1', 'ai_classifier', 2),
+      DELTA('d_u2', 'act_t2', 'story_entries', 'e_u2', 'e_u2', 'user_edit', 3),
+      DELTA('d_r2', 'act_t2', 'story_entries', 'e_r2', 'e_r2', 'ai_classifier', 4),
       DELTA('d_fa', 'act_cls', 'happenings', 'h_a', 'e_r1', 'periodic_classifier', 5),
       DELTA('d_fb', 'act_cls', 'happenings', 'h_b', 'e_r2', 'periodic_classifier', 6),
     ])

@@ -173,6 +173,7 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
       kind: run.kind,
       actionId: run.actionId,
       storyId: ctx.storyId,
+      branchId: run.branchId,
       startedAt: Date.now(),
     })
   } catch (e) {

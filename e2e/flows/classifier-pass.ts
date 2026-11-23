@@ -18,7 +18,7 @@ export function gatedPassReply(title: string) {
   }
 }
 
-// A story's runs of one kind, oldest first, by outcome; pipeline_runs has no branch column.
+// A story's runs of one kind, oldest first, by outcome.
 export async function runOutcomes(
   page: Page,
   kind: string,

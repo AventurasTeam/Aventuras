@@ -171,8 +171,9 @@ At 6.1's lines, per C1's last bullet:
 
 - On 6.1's copier, whose signatures are what 6.1 ships (C3): every
   table the manifest has a fork copy, `story_entries` with
-  `kind = 'system'` left out. `probe_captures` and `pipeline_runs` are
-  not copied.
+  `kind = 'system'` left out by the copier itself, so 6.3 passes
+  predicates only for `deltas` and `reversal_journals`. `probe_captures`
+  and `pipeline_runs` are not copied.
 - `deltas`: every row but the plan's prune set, `plan.prunedDeltas`,
   which is canon's `(set.rows \ reowned) ∪ prunedHolders ∪ strandedWrites`
   (`reverse-replay.ts:188-189`); a re-owned create copies and takes its
@@ -611,8 +612,7 @@ files named are suggestions the plan may rename, with this doc amended.
 14. The same file, each shown red by a mutation restored by `cp`: a
     stamp or key read from `delta.branchId` on `undoDelete`'s children
     fails the delete-inside-the-window fixture; the same on the
-    tombstone re-insert fails the tombstone fixture; dropping the copy's
-    system-entry predicate fails the error-card fixture; keeping the
+    tombstone re-insert fails the tombstone fixture; keeping the
     vector sweeps in the fork's ops fails a parent-untouched vector
     assertion; running the vector copy before the plan's ops fails the
     restored row's vector; copying `deltas` without the prune exclusion
@@ -709,6 +709,26 @@ files named are suggestions the plan may rename, with this doc amended.
   `ReversePlan` gains: separate re-own ops, separate vector-sweep ops,
   or a fork view over the plan. `ReversePlan` keeps its fields either
   way.
+- **One read still on the read branch.** [Slice 6.1](./01-copy-substrate.md)
+  moved every stamp, key and patch C1 gave it off `delta.branchId`, and
+  left one branch read the split must decide: `prepareUndo`'s
+  `takeSurvivors` fills `SurvivorPayload.branchId` from `set.branchId`
+  (`lib/actions/delta/redo.ts:110`). That is the branch the undo wrote
+  while the two are one; if the split reaches the survivor rewrites
+  this callback takes, it must follow the write branch, and agree with
+  the group's own branch once C6 lands.
+- **The seed's create deltas.** `entryCreateDeltas`
+  (`lib/db/devtools/seed-dataset.ts:1364-1386`) logs every entry create
+  with a null anchor and an action of its own, and
+  [The seed's fork](#the-seeds-fork) plans the fork's appended turns in
+  that shape. Since [Slice 6.1](./01-copy-substrate.md), `submitTurn`
+  anchors the `user_action` create on its entry
+  (`lib/actions/turns/submit-turn.ts:180`), as the `ai_reply` create
+  already was
+  (`lib/pipeline/definitions/per-turn.ts:547`), and one turn shares one
+  action. Nothing on screen differs today; whether the seed's creates,
+  main's and the fork's, follow the production shape is this slice's
+  call when it rebuilds the seed (C11 gives 6.3 the fork's rows).
 - **How short the survivor copy's two lists stay.** The predicate is
   the default (C7). Whether the deltas the plan prunes outside the
   window, or the creates it re-owns, can pass the bind cap on a real

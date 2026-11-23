@@ -21,6 +21,7 @@ import {
   type RerunJournal,
   type SqlOp,
 } from '@/lib/db'
+import { branchSnapshot, cloneBranch } from '@/lib/db/__tests__/two-branch'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { queryAllOn, type CloseFixture } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { entriesStore, happeningsStore, loreStore } from '@/lib/stores'
@@ -1073,6 +1074,38 @@ describe('rerunWriteBack', () => {
 
     expect(await fullState(c.fx)).toEqual(before)
   })
+
+  it('writes the deltas it edited in place back over a copied branch’s own, leaving the source’s', async () => {
+    const fx = await openSeeded()
+    await seedHappeningPair(fx)
+    const c = await closeOn(fx, fx.replyIds[END_REPLY])
+    await writeCloseWork(c)
+    await writeUnderAction(c, c.actionId, [closePairView(fx.branchId)])
+    await writeLater(fx, userPairView(fx.branchId), { actionId: USER_PAIR, entryId: null })
+    await writeLater(fx, deleteKeptThread(fx.branchId), { actionId: USER_DELETE, entryId: null })
+    const logBefore = await logRows(fx)
+    await reverseForRerun(c)
+    await rerunWrites(c)
+    cloneBranch(fx.sqlite, fx.branchId, 'br_copy')
+    const copy: CloseFixture = { ...fx, branchId: 'br_copy' }
+    const source = branchSnapshot(fx.sqlite, fx.branchId)
+    const { deltas: logged } = await journalOf(copy, RERUN)
+    const held = new Map((await logRows(copy)).map((d) => [d.id, d]))
+    const edited = logged.filter((d) => held.has(d.id))
+    expect(edited.map(shapeOf).sort()).toEqual([
+      expect.stringMatching(/^create character_relationships:/),
+      `delete threads:${THREAD_KEPT.id}`,
+    ])
+    for (const d of edited) {
+      expect(d.branchId).toBe(fx.branchId)
+      expect(held.get(d.id)).not.toEqual({ ...d, branchId: copy.branchId })
+    }
+
+    expect(await reverseWithWriteBack(copy, RERUN)).toMatchObject({ outcome: 'restored' })
+
+    expect(await logRows(copy)).toEqual(logBefore.map((d) => ({ ...d, branchId: copy.branchId })))
+    expect(branchSnapshot(fx.sqlite, fx.branchId)).toEqual(source)
+  })
 })
 
 // The marker's settle, as abortRun's rides the reversal's transaction.
@@ -1370,5 +1403,29 @@ describe('reverseRunGroup', () => {
     expect(await fullState(c.fx)).toEqual(held)
     expect(await journalRows(c.fx)).toHaveLength(1)
     expect(undoneLogs()).toEqual([])
+  })
+})
+
+describe('reverseRunGroup on two branches holding one group', () => {
+  it('reverses only the given branch’s copy of a group the other branch also holds', async () => {
+    const c = await openClosed()
+    const prior = (await entityOf(c.fx, TOBIN.id))?.description
+    await writeLater(
+      c.fx,
+      describeTobin(c.fx.branchId, 'The ferryman, as the pass read him.', 'periodic_classifier'),
+      { actionId: 'act_pass', entryId: c.fx.replyIds[1] },
+    )
+    cloneBranch(c.fx.sqlite, c.fx.branchId, 'br_copy')
+    const copy: CloseFixture = { ...c.fx, branchId: 'br_copy' }
+    const parent = branchSnapshot(c.fx.sqlite, c.fx.branchId)
+
+    expect(await reverseRunGroup({ actionId: 'act_pass', branchId: 'br_copy' }, c.fx.ctx)).toEqual({
+      deltas: 1,
+      journal: null,
+    })
+
+    expect((await entityOf(copy, TOBIN.id))?.description).toBe(prior)
+    expect(await deltasOf(copy, 'act_pass')).toEqual([])
+    expect(branchSnapshot(c.fx.sqlite, c.fx.branchId)).toEqual(parent)
   })
 })

@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, storyEntries, type StoryEntry } from '@/lib/db'
+import { branches, deltas, storyEntries, type StoryEntry } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { startStorySwap } from '@/lib/embedder-swap'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
@@ -170,6 +170,39 @@ describe('submitTurn', () => {
     expect(reply?.metadata?.sceneEntities).toEqual([])
     expect(reply?.metadata?.currentLocationId).toBeNull()
     expect(typeof reply?.metadata?.model).toBe('string')
+  })
+
+  // data-model.md → Survival anchor: a foreground turn anchors its entry's create to the turn.
+  it('anchors the user_action create on the entry it creates', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    expectRan(
+      await submitTurn(
+        { storyId: 's1', branchId: 'b1' },
+        { content: 'Hello there', composerMode: 'say' },
+        ctx,
+      ),
+    )
+
+    const [userAction] = await db
+      .select({ id: storyEntries.id })
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'user_action')))
+    const creates = await db
+      .select({ entryId: deltas.entryId, source: deltas.source })
+      .from(deltas)
+      .where(
+        and(
+          eq(deltas.branchId, 'b1'),
+          eq(deltas.targetTable, 'story_entries'),
+          eq(deltas.targetId, userAction.id),
+          eq(deltas.op, 'create'),
+        ),
+      )
+    expect(creates).toEqual([{ entryId: userAction.id, source: 'user_edit' }])
   })
 
   it('inherits scene state from the tail entry onto the user_action, and the ai_reply inherits it too', async () => {

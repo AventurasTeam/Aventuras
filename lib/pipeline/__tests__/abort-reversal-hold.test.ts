@@ -4,7 +4,7 @@ import { withBranchWriteShared } from '@/lib/actions/delta/branch-write-lock'
 import { DeltaReplayError } from '@/lib/actions/delta/replay-errors'
 import { reverseRunGroup } from '@/lib/actions/delta/rerun-journal'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { happenings } from '@/lib/db'
+import { branches, happenings } from '@/lib/db'
 import {
   configureDeltaActionPort,
   definePipeline,
@@ -411,6 +411,7 @@ describe("an abort whose reversal didn't commit", () => {
   it('refuses every start on the held branch, reserving nothing, and starts one on another', async () => {
     await abortWith(UNCOMMITTED, 'rerun')
     const { ctx } = await makeHarness()
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'other', createdAt: 1 })
     defineRun('later-run')
 
     const refused = await within(startPipeline('later-run', ctx).origin, 'a start on b1')

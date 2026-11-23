@@ -52,6 +52,43 @@ describe('deltas table', () => {
     await expect(db.insert(deltas).values({ id: 'delta_b', ...base })).rejects.toThrow()
   })
 
+  it('holds one delta id on two branches, and each (branch_id, id) once', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seedBranch(db)
+    await db
+      .insert(branches)
+      .values({ id: 'b2', storyId: 's1', name: 'fork', parentBranchId: 'b1', createdAt: 2 })
+    const insert = (branchId: string, logPosition: number) =>
+      db
+        .insert(deltas)
+        .values({
+          id: 'delta_1',
+          branchId,
+          entryId: null,
+          actionId: 'act_1',
+          logPosition,
+          source: 'ai_classifier',
+          targetTable: 'story_entries',
+          targetId: 'entry_1',
+          op: 'update',
+          undoPayload: { worldTime: 0 },
+          encodingVersion: 1,
+          createdAt: 1,
+        })
+        .toSQL()
+
+    await runInTransaction([insert('b1', 1), insert('b2', 1)])
+
+    const rows = await db
+      .select({ branchId: deltas.branchId })
+      .from(deltas)
+      .where(eq(deltas.id, 'delta_1'))
+    expect(rows.map((r) => r.branchId).sort()).toEqual(['b1', 'b2'])
+    await expect(runInTransaction([insert('b1', 2)])).rejects.toThrow(
+      /UNIQUE constraint failed: deltas\.branch_id, deltas\.id/,
+    )
+  })
+
   it('rejects a delta whose branch does not exist (FK on)', async () => {
     const { db } = await createTestDb()
     await expect(

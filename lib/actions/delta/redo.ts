@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 import type { Delta, Entity, LocationState, SqlOp } from '@/lib/db'
 import { deltas, isEmbeddedSourceTable } from '@/lib/db'
@@ -40,6 +40,8 @@ export type RefRestore = {
 /** A surviving delta's payload from before the undo rewrote it, for redo to write back. */
 export type SurvivorPayload = {
   readonly id: string
+  /** The branch the undo wrote; redo writes the payload back there. */
+  readonly branchId: string
   readonly undoPayload: Record<string, unknown> | null
 }
 
@@ -105,7 +107,7 @@ export async function prepareUndo(
     survivors.length = 0
     for (const { delta } of survivorRewrites)
       if (restored.has(heldKey(delta.targetTable, delta.targetId)))
-        survivors.push({ id: delta.id, undoPayload: delta.undoPayload })
+        survivors.push({ id: delta.id, branchId: set.branchId, undoPayload: delta.undoPayload })
   }
   return {
     group,
@@ -341,8 +343,14 @@ async function applyRedoLocked(
   // (data-model.md -> Entry mutability & rollback).
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
   // The survivors sit on snapshot rows, so the row locks above cover them.
-  for (const { id, undoPayload } of survivorPayloads)
-    deltaOps.push(ctx.db.update(deltas).set({ undoPayload }).where(eq(deltas.id, id)).toSQL())
+  for (const { id, branchId, undoPayload } of survivorPayloads)
+    deltaOps.push(
+      ctx.db
+        .update(deltas)
+        .set({ undoPayload })
+        .where(and(eq(deltas.branchId, branchId), eq(deltas.id, id)))
+        .toSQL(),
+    )
   // Read under the key locks: only the ref goes back, over the column as the undo left it.
   const refPatches: { row: RowRef; branchId: string; columns: Record<string, unknown> }[] = []
   for (const restore of refRestores) {

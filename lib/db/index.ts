@@ -268,6 +268,23 @@ export {
   vectorsByIdQuery,
 } from './embeddings'
 export {
+  BRANCH_COPY_MANIFEST,
+  branchCopyOps,
+  vecCopyStatement,
+  type BranchCopyArgs,
+  type BranchCopyTable,
+  type BranchCopyTableName,
+  type CopiedIn,
+  type CopyBranches,
+  type CopyMode,
+  type CopyPredicate,
+  type DuplicateCopy,
+  type ForkCopy,
+  type ForkPredicateTable,
+  type ManifestRow,
+  type VecCopyTables,
+} from './branch-copy'
+export {
   emptyCastDraft,
   emptyWorkingState,
   wizardCastDraftSchema,
