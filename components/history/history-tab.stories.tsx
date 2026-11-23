@@ -5,12 +5,26 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { EntryIndexReadProvider, type EntryIndexRead } from '@/hooks/use-entry-index'
+import { registerAllDomains } from '@/lib/actions'
 import type { Delta, Entity, Happening, Thread } from '@/lib/db'
-import type { HistoryChunk, HistoryQuery, HistoryRow, HistoryTable } from '@/lib/history'
+import type { EntryRef } from '@/lib/entry-refs'
+import type {
+  DiffCacheEntry,
+  DiffOutcome,
+  HistoryChunk,
+  HistoryQuery,
+  HistoryRow,
+  HistoryTable,
+} from '@/lib/history'
 import { entitiesStore, generationStore, happeningsStore, threadsStore } from '@/lib/stores'
 
-import { HistoryLoaderProvider } from './history-loader'
+import { DiffLoaderProvider, type DiffLoader } from './diff-loader'
+import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { HistoryTab } from './history-tab'
+
+// The storybook setup registers no domains, and the term-list prose reads each list's registered match.
+registerAllDomains()
 
 const delta = (
   targetTable: string,
@@ -96,6 +110,27 @@ function hydrateTargets(): () => void {
   }
 }
 
+// Newest first, as readEntryIndex returns them: the entries the prose stories name.
+const ENTRIES: readonly EntryRef[] = [47, 40, 31, 12, 3].map(
+  (position): EntryRef => ({
+    id: `entry_${position}`,
+    position,
+    kind: 'ai_reply',
+    chapterId: null,
+    excerpt: '',
+  }),
+)
+const readEntries: EntryIndexRead = async () => ENTRIES
+
+const NO_EVICTIONS = () => () => {}
+
+// The default for every story: a walk that never settles, so update rows keep their summary.
+const PENDING_DIFFS: DiffLoader = {
+  peek: () => undefined,
+  populate: () => new Promise<DiffOutcome>(() => {}),
+  onEvict: NO_EVICTIONS,
+}
+
 const meta: Meta<typeof HistoryTab> = {
   title: 'Compounds/History/HistoryTab',
   component: HistoryTab,
@@ -107,9 +142,13 @@ const meta: Meta<typeof HistoryTab> = {
   },
   decorators: [
     (Story) => (
-      <HistoryLoaderProvider value={load}>
-        <Story />
-      </HistoryLoaderProvider>
+      <EntryIndexReadProvider value={readEntries}>
+        <HistoryLoaderProvider value={load}>
+          <DiffLoaderProvider value={PENDING_DIFFS}>
+            <Story />
+          </DiffLoaderProvider>
+        </HistoryLoaderProvider>
+      </EntryIndexReadProvider>
     ),
   ],
 }
@@ -339,5 +378,347 @@ export const NamesLinkRowsByOtherEnd: Story = {
     expect(rows).toHaveLength(2)
     expect(within(rows[0]).getByText('Awareness · Kael')).toBeVisible()
     expect(within(rows[1]).getByText('Awareness · Mira')).toBeVisible()
+  },
+}
+
+// ---- Change prose (world.md → Change prose): one update row whose diff resolves ----
+
+const oneRow =
+  (row: HistoryRow): HistoryLoader =>
+  async () => ({ rows: [row], nextCursor: null, names: {} })
+
+function resolvingDiffs(entry: DiffCacheEntry): DiffLoader {
+  return {
+    peek: () => undefined,
+    populate: async () => ({ kind: 'entry', entry }),
+    onEvict: NO_EVICTIONS,
+  }
+}
+
+const entity = (id: string, kind: Entity['kind'], name: string): Entity => ({
+  ...KAEL,
+  id,
+  kind,
+  name,
+})
+
+type ProseFixture = {
+  targetTable: HistoryTable
+  targetId: string
+  row: HistoryRow
+  entry: DiffCacheEntry
+  /** The summary world.md → Change prose gives this row, in en. */
+  prose: string
+  /** Working-set rows the prose names, hydrated on br_1. */
+  entities?: Entity[]
+}
+
+function proseStory({
+  targetTable,
+  targetId,
+  row,
+  entry,
+  prose,
+  entities = [],
+}: ProseFixture): Story {
+  const rows = oneRow(row)
+  const diffs = resolvingDiffs(entry)
+  return {
+    args: { branchId: 'br_1', targetTable, targetId },
+    beforeEach: () => {
+      entitiesStore.hydrate('br_1', entities)
+      return () => entitiesStore.__reset()
+    },
+    decorators: [
+      (Story) => (
+        <HistoryLoaderProvider value={rows}>
+          <DiffLoaderProvider value={diffs}>
+            <Story />
+          </DiffLoaderProvider>
+        </HistoryLoaderProvider>
+      ),
+    ],
+    play: async () => {
+      const [historyRow] = await screen.findAllByTestId('delta-log-row', {}, WAIT)
+      expect(await within(historyRow).findByText(prose, {}, WAIT)).toBeVisible()
+    },
+  }
+}
+
+const kaelUpdate = (undoPayload: Record<string, unknown>) =>
+  own(delta('entities', 'char_kael', undoPayload))
+
+/** Free text: quoted, and a long side cut by world.md → Long text — change prose. */
+export const ProseFreeText: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({ description: 'A wary ranger.' }),
+  entry: {
+    old: { description: 'A wary ranger.' },
+    new: { description: 'A wary ranger. He once served the crown before the war.' },
+    names: {},
+  },
+  prose: 'Description: "A wary ranger." → "A wary ranger. He once served the crown…"',
+  entities: [KAEL],
+})
+
+/** Enum: the select's word. */
+export const ProseEnum: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({ status: 'active' }),
+  entry: { old: { status: 'active' }, new: { status: 'retired' }, names: {} },
+  prose: 'Status: Active → Retired',
+  entities: [KAEL],
+})
+
+/** Number: as stored. */
+export const ProseNumber: Story = proseStory({
+  targetTable: 'lore',
+  targetId: 'lore_pact',
+  row: own(delta('lore', 'lore_pact', { priority: 0 })),
+  entry: { old: { priority: 0 }, new: { priority: 5 }, names: {} },
+  prose: 'Priority: 0 → 5',
+})
+
+/** Flag: yes and no. */
+export const ProseFlag: Story = proseStory({
+  targetTable: 'happenings',
+  targetId: 'hap_fire',
+  row: own(delta('happenings', 'hap_fire', { commonKnowledge: 0 })),
+  entry: { old: { commonKnowledge: 0 }, new: { commonKnowledge: 1 }, names: {} },
+  prose: 'Common knowledge: no → yes',
+})
+
+/** Row ref: a merge's deleted loser reads (deleted), its live namesake doesn't. */
+export const ProseRowRef: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({ state: { faction_id: 'fac_old' } }),
+  entry: {
+    old: { state: { faction_id: 'fac_old' } },
+    new: { state: { faction_id: 'fac_iron', traits: ['wary'] } },
+    names: { fac_old: 'Iron Pact', fac_iron: 'Iron Pact' },
+  },
+  prose: 'Faction: Iron Pact (deleted) → Iron Pact',
+  entities: [KAEL, entity('fac_iron', 'faction', 'Iron Pact')],
+})
+
+/** Entry ref: `entry #n` once the branch's entry index has read. */
+export const ProseEntryRef: Story = proseStory({
+  targetTable: 'threads',
+  targetId: 'thread_amulet',
+  row: own(delta('threads', 'thread_amulet', { resolvedAtEntryId: null })),
+  entry: { old: { resolvedAtEntryId: null }, new: { resolvedAtEntryId: 'entry_31' }, names: {} },
+  prose: 'Resolved at: none → entry #31',
+})
+
+/** Term list: added in the new list's order, removed in the old's; drives and voice say nothing. */
+export const ProseTermList: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({ state: { traits: ['loyal'] } }),
+  entry: {
+    old: { state: { traits: ['loyal'] } },
+    new: {
+      state: { traits: ['former soldier', 'scarred'], drives: ['find the amulet'], voice: 'low' },
+    },
+    names: {},
+  },
+  prose: 'Traits: added "former soldier", "scarred", removed "loyal"',
+  entities: [KAEL],
+})
+
+/** Ref list: names in place of quoted terms. */
+export const ProseRefList: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({ state: { inventory: ['item_rope'] } }),
+  entry: {
+    old: { state: { inventory: ['item_rope'] } },
+    new: { state: { inventory: ['item_silver'] } },
+    names: { item_rope: 'Rope', item_silver: 'Silver coin' },
+  },
+  prose: 'Carried: added Silver coin, removed Rope (deleted)',
+  entities: [KAEL, entity('item_silver', 'item', 'Silver coin')],
+})
+
+/** Record: keys from the old partial; a key added since reads none. */
+export const ProseRecord: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({ state: { stackables: { gold: 250, arrows: null } } }),
+  entry: {
+    old: { state: { stackables: { gold: 250, arrows: null } } },
+    new: { state: { stackables: { gold: 200, arrows: 12 } } },
+    names: {},
+  },
+  prose: 'Quantities: gold 250 → 200, arrows none → 12',
+  entities: [KAEL],
+})
+
+/** Compound: entry and place; world time doesn't show. */
+export const ProseLastSeen: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: kaelUpdate({
+    state: { lastSeenAt: { entryId: 'entry_40', locationId: 'loc_tavern', worldTime: 100 } },
+  }),
+  entry: {
+    old: {
+      state: { lastSeenAt: { entryId: 'entry_40', locationId: 'loc_tavern', worldTime: 100 } },
+    },
+    new: {
+      state: { lastSeenAt: { entryId: 'entry_47', locationId: 'loc_market', worldTime: 141 } },
+    },
+    names: { loc_tavern: 'The Tavern', loc_market: 'Market Square' },
+  },
+  prose: 'Last seen: entry #40 at The Tavern → entry #47 at Market Square',
+  entities: [
+    KAEL,
+    entity('loc_tavern', 'location', 'The Tavern'),
+    entity('loc_market', 'location', 'Market Square'),
+  ],
+})
+
+/** Placement group: an unplaced place reads Unknown, the parent picker's word. */
+export const ProsePlacement: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'loc_alley',
+  row: own(delta('entities', 'loc_alley', { state: { parent_location_id: null, unplaced: true } })),
+  entry: {
+    old: { state: { parent_location_id: null, unplaced: true } },
+    new: { state: { parent_location_id: 'loc_quarter' } },
+    names: { loc_quarter: 'The Old Quarter' },
+  },
+  prose: 'Parent location: Unknown → The Old Quarter',
+  entities: [
+    entity('loc_alley', 'location', 'The Alley'),
+    entity('loc_quarter', 'location', 'The Old Quarter'),
+  ],
+})
+
+/** Collision group: the partner's name when raised. */
+export const ProseCollision: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael_twin',
+  row: own(
+    delta('entities', 'char_kael_twin', {
+      nameCollisionFlag: 0,
+      nameCollisionPartnerId: null,
+      nameCollisionReason: null,
+    }),
+  ),
+  entry: {
+    old: { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+    new: {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_kael',
+      nameCollisionReason: 'name-taken',
+    },
+    names: { char_kael: 'Kael' },
+  },
+  prose: 'Collision flag: none → Kael',
+  entities: [KAEL, entity('char_kael_twin', 'character', 'Kael')],
+})
+
+const relationshipRow = (side: 'a' | 'b', otherId: string): HistoryRow => ({
+  delta: delta('character_relationships', 'rel_aria_kael', { kind: 'rival' }),
+  via: {
+    kind: 'link',
+    table: 'character_relationships',
+    linkId: 'rel_aria_kael',
+    otherId,
+    side,
+  },
+})
+
+const VIEW_CHANGE: DiffCacheEntry = {
+  old: { kind: 'rival' },
+  new: { kind: 'ally', inverseKind: null },
+  names: {},
+}
+
+/** A relationship's `kind` is the tab's own view on side a… */
+export const ProseRelationshipSideA: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_aria',
+  row: relationshipRow('a', 'char_kael'),
+  entry: VIEW_CHANGE,
+  prose: 'Your view: "rival" → "ally"',
+  entities: [KAEL, entity('char_aria', 'character', 'Aria')],
+})
+
+/** …and the other's view on side b. */
+export const ProseRelationshipSideB: Story = proseStory({
+  targetTable: 'entities',
+  targetId: 'char_kael',
+  row: relationshipRow('b', 'char_aria'),
+  entry: VIEW_CHANGE,
+  prose: 'Their view: "rival" → "ally"',
+  entities: [KAEL, entity('char_aria', 'character', 'Aria')],
+})
+
+const VOICE_ROWS = oneRow(kaelUpdate({ state: { voice: 'low' } }))
+
+const pendingPopulate = fn((_delta: Delta) => new Promise<DiffOutcome>(() => {}))
+const PENDING_SPY: DiffLoader = {
+  peek: () => undefined,
+  populate: pendingPopulate,
+  onEvict: NO_EVICTIONS,
+}
+
+/** A miss whose walk is still running shows the field-name summary. */
+export const ProsePendingMiss: Story = {
+  args: { branchId: 'br_1', targetTable: 'entities', targetId: 'char_kael' },
+  beforeEach: () => {
+    pendingPopulate.mockClear()
+  },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={VOICE_ROWS}>
+        <DiffLoaderProvider value={PENDING_SPY}>
+          <Story />
+        </DiffLoaderProvider>
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    const [row] = await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    await waitFor(() => expect(pendingPopulate).toHaveBeenCalled(), WAIT)
+    expect(within(row).getByText('Modified Voice')).toBeVisible()
+  },
+}
+
+const failingPopulate = fn(async (_delta: Delta): Promise<DiffOutcome> => {
+  throw new Error('no row, head delete or held copy')
+})
+const FAILING_SPY: DiffLoader = {
+  peek: () => undefined,
+  populate: failingPopulate,
+  onEvict: NO_EVICTIONS,
+}
+
+/** A failed walk keeps the field-name summary. */
+export const ProseFailedWalk: Story = {
+  args: { branchId: 'br_1', targetTable: 'entities', targetId: 'char_kael' },
+  beforeEach: () => {
+    failingPopulate.mockClear()
+  },
+  decorators: [
+    (Story) => (
+      <HistoryLoaderProvider value={VOICE_ROWS}>
+        <DiffLoaderProvider value={FAILING_SPY}>
+          <Story />
+        </DiffLoaderProvider>
+      </HistoryLoaderProvider>
+    ),
+  ],
+  play: async () => {
+    const [row] = await screen.findAllByTestId('delta-log-row', {}, WAIT)
+    await waitFor(() => expect(failingPopulate).toHaveBeenCalled(), WAIT)
+    // The rejection settles a beat later; the summary has to outlast it.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(within(row).getByText('Modified Voice')).toBeVisible()
   },
 }
