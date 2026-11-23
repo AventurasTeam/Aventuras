@@ -72,6 +72,12 @@ const SYNTAX_BANS = [
     message:
       'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
   },
+  // The native chain read is atomic only while every call on the app's connection is synchronous.
+  {
+    selector: "MemberExpression[object.name='expoDb'][property.name=/Async$/]",
+    message:
+      "expo-sqlite's async API runs off the JS thread and can land between the native chain read's two sync reads, or show them uncommitted rows. Use the *Sync form. See docs/architecture.md#walk-algorithm.",
+  },
 ]
 
 // Builtins Android's Hermes lacks, matched by a name nothing else uses (Set's `union` collides with
@@ -273,6 +279,28 @@ module.exports = defineConfig([
 
       'react-native/no-inline-styles': 'error',
       'react-native/no-color-literals': 'error',
+    },
+  },
+
+  // A second expo-sqlite handle beside expoDb could interleave with the native chain read.
+  // The typescript-eslint rule, not core's: only it lets type imports through.
+  {
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['lib/db/runtime/client.native.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'expo-sqlite',
+              allowTypeImports: true,
+              message:
+                'Only lib/db/runtime/client.native.ts opens expo-sqlite: a second handle beside expoDb breaks the native chain read. Type imports are fine. See docs/architecture.md#walk-algorithm.',
+            },
+          ],
+        },
+      ],
     },
   },
 

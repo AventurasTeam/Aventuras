@@ -137,6 +137,8 @@ export {
   type GlobalAgentId,
 } from './app-settings/agents'
 export { db } from './runtime/client'
+export { readChainSnapshot } from './runtime/chain-snapshot'
+export type { ChainSnapshot, ChainSnapshotArgs } from './runtime/chain-snapshot-queries'
 export { DrizzleStudioDevTools } from './devtools/drizzle-studio-devtools'
 export { reseedDevDatabase, type ReseedSummary } from './devtools/reseed'
 export { entryMetadataSchema } from './story-entries/entry-metadata'
