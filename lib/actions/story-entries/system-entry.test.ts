@@ -97,17 +97,17 @@ describe('clearSystemEntry', () => {
   describe('the reader store', () => {
     const hydrateAll = async () =>
       entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
-    const heldIds = () => [...entriesStore.getEntries('b1').keys()].sort()
+    const heldIds = (branchId: string) => [...entriesStore.getEntries(branchId).keys()].sort()
 
     // A card the store kept would offer a Retry for a row that's gone, and Dismiss reloads nothing.
     it('takes the card out with the row, and nothing else', async () => {
       await writeSystemEntry({ branchId: 'b1', content: 'x' }, ctx)
       await hydrateAll()
-      expect(heldIds()).toHaveLength(3)
+      expect(heldIds('b1')).toHaveLength(3)
 
       await clearSystemEntry('b1', ctx)
 
-      expect(heldIds()).toEqual(['e1', 'e2'])
+      expect(heldIds('b1')).toEqual(['e1', 'e2'])
     })
 
     it('leaves the card standing when the delete rejects', async () => {
@@ -117,7 +117,7 @@ describe('clearSystemEntry', () => {
 
       await expect(clearSystemEntry('b1', refusing)).rejects.toThrow('db gone')
 
-      expect(heldIds()).toContain(id)
+      expect(heldIds('b1')).toContain(id)
     })
 
     it("leaves a held branch's card alone when clearing another branch", async () => {
@@ -127,7 +127,7 @@ describe('clearSystemEntry', () => {
 
       await clearSystemEntry('b2', ctx)
 
-      expect(heldIds()).toContain(id)
+      expect(heldIds('b1')).toContain(id)
     })
   })
 })
@@ -145,7 +145,7 @@ describe('raiseSystemEntry', () => {
 
   const hydrateAll = async () =>
     entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
-  const heldIds = () => [...entriesStore.getEntries('b1').keys()].sort()
+  const heldIds = (branchId: string) => [...entriesStore.getEntries(branchId).keys()].sort()
   const failureOf = async (id: string) =>
     (await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id)))[0]?.metadata
       ?.systemFailure
@@ -229,8 +229,8 @@ describe('raiseSystemEntry', () => {
       ctx,
     )
 
-    expect(heldIds()).toEqual(['e1', 'e2', id].sort())
-    expect(heldIds()).not.toContain(standing)
+    expect(heldIds('b1')).toEqual(['e1', 'e2', id].sort())
+    expect(heldIds('b1')).not.toContain(standing)
     const [row] = await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id))
     expect(entriesStore.getById('b1', id)).toEqual(row)
   })
@@ -242,7 +242,7 @@ describe('raiseSystemEntry', () => {
     await raiseSystemEntry({ branchId: 'b1', content: 'close failed', failure: CLOSE_FAILURE }, ctx)
 
     expect(entriesStore.getLoadedBranch()).toBe('b2')
-    expect([...entriesStore.getEntries('b2').keys()]).toEqual([])
+    expect(heldIds('b2')).toEqual([])
     expect(await systemRows()).toHaveLength(1)
   })
 })

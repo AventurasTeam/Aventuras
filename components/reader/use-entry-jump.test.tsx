@@ -57,7 +57,7 @@ const span = (from: number, through: number): StoryEntry[] =>
 const byWindow =
   (branchId: string) =>
   (entryId: string): JumpClass =>
-    entriesStore.getById(branchId, entryId)?.branchId === branchId ? 'slice' : 'read'
+    entriesStore.getById(branchId, entryId) !== undefined ? 'slice' : 'read'
 
 const loadedPositions = () =>
   [...entriesStore.getEntries(BRANCH).values()].map((r) => r.position).sort((a, b) => a - b)
