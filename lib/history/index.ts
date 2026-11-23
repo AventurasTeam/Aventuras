@@ -24,6 +24,7 @@ export {
   type DiffCache,
   type DiffOutcome,
 } from './diff-cache'
+export { diffProse, type ProseContext } from './diff-prose'
 export { DiffWalkError, type DiffCacheEntry, type DiffWalk } from './diff-walk'
 export { HISTORY_OPS } from './field-labels'
 export type { HistoryTable } from './field-labels'
