@@ -63,12 +63,12 @@ const GATED: Refusal = { code: 'gated', reason: 'generation in flight' }
 
 const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rerun', 'keptClose'])
 
-function redoNames(group: RedoGroup, branchId: string): UndoNames {
-  return undoNames(firstRowOf(liveRowsOf(branchId), snapshotRowsOf(group.snapshots)))
+function redoNames(group: RedoGroup): UndoNames {
+  return undoNames(firstRowOf(liveRowsOf(group.branchId), snapshotRowsOf(group.snapshots)))
 }
 
 function redoMenuLabel(group: RedoGroup): string {
-  return undoTargetText(describeRedoTarget(group), redoNames(group, group.branchId), 'redoMenu')
+  return undoTargetText(describeRedoTarget(group), redoNames(group), 'redoMenu')
 }
 
 function rowLines(target: Target, branchId: string): string[] {
@@ -223,11 +223,7 @@ export function useReaderUndo({
         return
       }
       // Read before the redo lands: a redone delete takes the row its name came from.
-      const notice = undoTargetText(
-        describeRedoTarget(group),
-        redoNames(group, branchId),
-        'redoNotice',
-      )
+      const notice = undoTargetText(describeRedoTarget(group), redoNames(group), 'redoNotice')
       const actionId = expectedActionId ?? group.actionId
       const result = await timedReversal('reader.redo_measured', actionId, () =>
         redoLastAction(branchId, ctx, { expectedActionId: actionId }),
