@@ -319,10 +319,11 @@ Provider: [Slice 6.1](./slices/01-copy-substrate.md). Consumers: 6.3,
   `INSERT … SELECT` that flips `branch_id` and keeps every other
   column, taking its column list from the schema at call time, so a
   column a parallel slice adds (6.8's `is_lead`) copies with no edit.
-  Each table takes an optional predicate: a fork leaves out
-  `kind = 'system'` entries and the deltas and journals its plan
-  removes. The exclusion can't be a bound id list, since a fork near
-  the start of a long story removes more ids than SQLite binds.
+  Each table takes an optional predicate: a fork's predicates leave
+  out the deltas and journals its plan removes, and the copier itself
+  leaves out a fork's `kind = 'system'` entries. The exclusion can't
+  be a bound id list, since a fork near the start of a long story
+  removes more ids than SQLite binds.
 - **Vectors copy last, as their own ops.** One statement per family
   table from `listVecFamilyTables`
   (`lib/db/embeddings/vec-tables.ts:33-39`), building `pk` from the

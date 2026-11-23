@@ -310,12 +310,12 @@ duplicate; `deltas` and `reversal_journals` copied as survivors at a
 fork and whole at a duplicate; every other table copied. The values'
 names are the plan's. `*_vec` and `assets` have no row: vec0 tables are
 not in `dbSchema`, and `assets` has no branch. The copier copies each
-table its mode doesn't mark not copied; the filters a fork's values
-name (no `system` entries, surviving deltas and journals) are met by
-the predicates 6.3 passes, not by the copier. The copier reads the
-manifest, never `BRANCH_SCOPED`, which holds `probe_captures`: a
-copier built on that list would copy captures without ever naming the
-table.
+table its mode doesn't mark not copied. Of the filters a fork's values
+name, the copier applies one itself, leaving out `system` entries; the
+predicates 6.3 passes meet the other, the surviving deltas and
+journals. The copier reads the manifest, never `BRANCH_SCOPED`, which
+holds `probe_captures`: a copier built on that list would copy captures
+without ever naming the table.
 
 **The copier (C3).** It returns ops for a caller's batch and runs
 nothing. Signatures are this slice's: 6.3 and 6.6 start their copy tasks
@@ -333,11 +333,12 @@ after it merges. One proposed shape is a synchronous
 - **Predicates.** Each table takes a predicate, a SQL fragment with its
   own binds, ANDed into its `WHERE` and evaluated inside the statement,
   so it reads the batch's state at that point. A fork must pass one for
-  `story_entries`, `deltas` and `reversal_journals` (`'all'` for none),
-  by type and at runtime; elsewhere it's optional. A fork leaves
-  out `kind = 'system'` entries and the deltas and journals its plan
-  removes; the exclusion can't be a bound id list, since a fork near the
-  start of a long story removes more ids than SQLite binds
+  `deltas` and `reversal_journals` (`'all'` for none), by type and at
+  runtime; elsewhere it's optional. In fork mode the copier leaves out
+  `kind = 'system'` entries itself, under any `story_entries` predicate
+  a caller passes. A fork's predicates leave out the deltas and journals
+  its plan removes; the exclusion can't be a bound id list, since a fork
+  near the start of a long story removes more ids than SQLite binds
   (`lib/db/bind-limit.ts:3`). Building that exclusion is 6.3's.
 - **Vector ops, last and apart.** One statement per family table
   `listVecFamilyTables` finds (`vec-tables.ts:32-39`), returned
@@ -633,9 +634,11 @@ removed, and again when the children's is. In `undoDelete`,
   `branchSnapshot` is unchanged.
 - The same file: each table op names exactly the columns
   `getTableColumns` gives that table.
-- The same file: a `story_entries` predicate `kind != 'system'` leaves
-  out the trailing system entry, and a `deltas` predicate written as a
-  subquery with no id list leaves out the rows it names.
+- The same file: a fork leaves out the trailing system entry with no
+  `story_entries` predicate, with `'all'` and with a SQL one, and a
+  duplicate copies it; a fork without a `deltas` or `reversal_journals`
+  predicate fails to type-check and throws; a `deltas` predicate written
+  as a subquery with no id list leaves out the rows it names.
 - The same file, with A's vectors seeded in two dim families, under two
   models, one row with a pre-widen `branchId:id` key: C's vectors carry
   literal keys `<C>:<id>:<model>` with A's `model_id`, `id`,
@@ -740,10 +743,13 @@ filters must alias the inner table and name the inner columns through
 that alias: unaliased, the predicate's references to the row being
 copied bind to the subquery's row, and an inner column written through
 drizzle after aliasing binds to the row being copied. Both fail
-silently in a fork's survivor predicate. In `fork` mode the copier requires a predicate for
-`story_entries`, `deltas` and `reversal_journals`, by type and at
-runtime (`'all'` copies one unfiltered): the manifest names a fork's
-filters, but nothing else makes a caller pass them.
+silently in a fork's survivor predicate. In `fork` mode the copier
+requires a predicate for `deltas` and `reversal_journals`, by type and
+at runtime (`'all'` copies one unfiltered): the manifest names a fork's
+survivor filters, but nothing else makes a caller pass them. It leaves
+a fork's `kind = 'system'` entries out itself, from the manifest's
+`copy-non-system`, and ANDs a caller's `story_entries` predicate, if
+any, on top.
 
 **Copy order.** The manifest's key order is the copy order, not
 `BRANCH_SCOPED`'s (which puts `entry_assets` after `reversal_journals`):
@@ -759,6 +765,11 @@ suffixes, not their numbers, so a regeneration must keep both names.
 
 **Decisions.**
 
+- The copier applies a fork's `system`-entry filter, as `skip` already
+  drives what isn't copied; planning had left it to 6.3's predicate.
+  The developer chose this at the slice review (R1: C, 2026-11-23), so
+  no fork caller can copy the parent's error card; the copier's test
+  holds the mutation 6.3 had planned for it.
 - Every `model_id`'s vectors copy, as canon's manifest reads; both
   callers refuse during a pending swap, so only a settled swap's
   leftovers copy.

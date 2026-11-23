@@ -171,8 +171,9 @@ At 6.1's lines, per C1's last bullet:
 
 - On 6.1's copier, whose signatures are what 6.1 ships (C3): every
   table the manifest has a fork copy, `story_entries` with
-  `kind = 'system'` left out. `probe_captures` and `pipeline_runs` are
-  not copied.
+  `kind = 'system'` left out by the copier itself, so 6.3 passes
+  predicates only for `deltas` and `reversal_journals`. `probe_captures`
+  and `pipeline_runs` are not copied.
 - `deltas`: every row but the plan's prune set, `plan.prunedDeltas`,
   which is canon's `(set.rows \ reowned) ∪ prunedHolders ∪ strandedWrites`
   (`reverse-replay.ts:188-189`); a re-owned create copies and takes its
@@ -611,8 +612,7 @@ files named are suggestions the plan may rename, with this doc amended.
 14. The same file, each shown red by a mutation restored by `cp`: a
     stamp or key read from `delta.branchId` on `undoDelete`'s children
     fails the delete-inside-the-window fixture; the same on the
-    tombstone re-insert fails the tombstone fixture; dropping the copy's
-    system-entry predicate fails the error-card fixture; keeping the
+    tombstone re-insert fails the tombstone fixture; keeping the
     vector sweeps in the fork's ops fails a parent-untouched vector
     assertion; running the vector copy before the plan's ops fails the
     restored row's vector; copying `deltas` without the prune exclusion
