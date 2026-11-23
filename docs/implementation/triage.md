@@ -353,3 +353,21 @@ slice-planning gate forces its resolution before that slice is planned.
   prose's `fill` helper (`lib/history/diff-prose.ts:54-65`) is the
   pattern that fixes it. Pre-existing. Found in Slice 6.7's slice review
   (2026-11-23).
+
+- **The diff cache repeats rules the action layer owns.** Two copies
+  sit across the `lib/actions` → `lib/history` boundary, which only
+  `lib/history` may cross:
+  - `firstSpellings` (`lib/history/diff-prose.ts:224`) restates the
+    private first-occurrence rule of `spellings`
+    (`lib/actions/delta/term-list.ts:15`), so a change to how a list's
+    spelling is picked would leave the prose naming another spelling
+    than the reversal restores.
+  - `COLLISION_COLUMNS` (`lib/history/prose-fields.ts:119`) is the
+    fourth copy of the collision trio, beside `FLAG_COLUMNS`
+    (`lib/actions/entities/register.ts:120`), `COLLISION_FLAG_COLUMNS`
+    (`lib/actions/delta/user-precedence.ts:218`) and `FLAG_FIELDS`
+    (`lib/pipeline/definitions/close-agent/lifecycle-tools.ts:68`).
+
+  Folding either needs a new export on the `lib/actions` barrel.
+  Found by Slice 6.7's slice review (2026-11-23); the simplifier left
+  them.
