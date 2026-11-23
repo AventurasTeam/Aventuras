@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, getTableName } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
@@ -25,7 +25,7 @@ import {
 import { createTestDb, makeBatchCallback, makeCallback } from '@/lib/db/__tests__/test-db'
 import { resetAllStores } from '@/lib/stores'
 
-import { DiffWalkError, walkTarget, type UpdateDelta } from './diff-walk'
+import { DIFF_TABLE_ROWS, DiffWalkError, walkTarget, type UpdateDelta } from './diff-walk'
 import { isRetrievalBump } from './link-rows'
 import { loadHistoryChunk } from './query'
 
@@ -782,6 +782,30 @@ describe('walkTarget', () => {
     await expect(walkTarget(t.db, [loreDelta({ targetTable: 'chapters' })])).rejects.toThrow(
       DiffWalkError,
     )
+  })
+})
+
+describe('DIFF_TABLE_ROWS', () => {
+  it("keys each listed table to that table's row, id and branch columns", () => {
+    const names = [
+      'entities',
+      'lore',
+      'threads',
+      'happenings',
+      'character_relationships',
+      'happening_involvements',
+      'happening_awareness',
+    ] as const
+    expect(Object.keys(DIFF_TABLE_ROWS).sort()).toEqual([...names].sort())
+    for (const name of names) {
+      const { table, idCol, branchCol } = DIFF_TABLE_ROWS[name]
+      expect([
+        getTableName(table),
+        getTableName(idCol.table),
+        getTableName(branchCol.table),
+      ]).toEqual([name, name, name])
+      expect([idCol.name, branchCol.name]).toEqual(['id', 'branch_id'])
+    }
   })
 })
 
