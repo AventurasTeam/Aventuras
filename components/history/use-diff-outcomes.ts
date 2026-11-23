@@ -29,16 +29,15 @@ async function populateAfterEvictions(
   }
 }
 
+const diffKey = (delta: Delta): DiffQueryKey => ['diff', delta.branchId, delta.id]
+
 function peeked(loader: DiffLoader, delta: Delta): DiffOutcome | undefined {
   const entry = loader.peek(delta.branchId, delta.id)
   return entry === undefined ? undefined : { kind: 'entry', entry }
 }
 
 /** Each update row's diff outcome, by delta id; absent while pending, re-reading or failed. */
-export function useDiffOutcomes(
-  branchId: string,
-  rows: readonly HistoryRow[],
-): ReadonlyMap<string, DiffOutcome> {
+export function useDiffOutcomes(rows: readonly HistoryRow[]): ReadonlyMap<string, DiffOutcome> {
   const loader = useDiffLoader()
   const client = useQueryClient()
   const updates = useMemo(
@@ -48,7 +47,7 @@ export function useDiffOutcomes(
   )
   const queries = updates.map(
     (delta): DiffQuery => ({
-      queryKey: ['diff', branchId, delta.id],
+      queryKey: diffKey(delta),
       queryFn: () => populateAfterEvictions(loader, delta),
       initialData: () => peeked(loader, delta),
       // The diff cache owns retention: a query that outlived its tab would miss the eviction.
@@ -72,16 +71,18 @@ export function useDiffOutcomes(
   useEffect(() => {
     const unsubscribe = loader.onEvict((evicted) => {
       // C9: invalidate, never remove; a removal notifies no mounted row.
-      if (evicted === branchId) void client.invalidateQueries({ queryKey: ['diff', evicted] })
+      void client.invalidateQueries({ queryKey: ['diff', evicted] })
     })
     // A row seeded at render, before this subscription, can miss an eviction; a seed the cache no
     // longer returns as the same entry marks one, so its branch re-reads as the listener would.
-    const missed = updates.some((delta) => {
-      const held = client.getQueryData<DiffOutcome>(['diff', branchId, delta.id])
-      return held?.kind === 'entry' && loader.peek(delta.branchId, delta.id) !== held.entry
-    })
-    if (missed) void client.invalidateQueries({ queryKey: ['diff', branchId] })
+    const missed = new Set<string>()
+    for (const delta of updates) {
+      const held = client.getQueryData<DiffOutcome>(diffKey(delta))
+      if (held?.kind === 'entry' && loader.peek(delta.branchId, delta.id) !== held.entry)
+        missed.add(delta.branchId)
+    }
+    for (const branchId of missed) void client.invalidateQueries({ queryKey: ['diff', branchId] })
     return unsubscribe
-  }, [loader, client, branchId, updates])
+  }, [loader, client, updates])
   return useMemo(() => new Map(Object.entries(byId)), [byId])
 }

@@ -164,7 +164,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
   )
   const storeNames = useStoreNames(branchId, otherIds)
   useOtherEndChanges(storeNames, otherIds, search !== '', otherEndChanged)
-  const outcomes = useDiffOutcomes(branchId, chunks.rows)
+  const outcomes = useDiffOutcomes(chunks.rows)
   const refIds = useMemo(
     () => refIdsOfRows(chunks.rows, outcomes, targetTable),
     [chunks.rows, outcomes, targetTable],

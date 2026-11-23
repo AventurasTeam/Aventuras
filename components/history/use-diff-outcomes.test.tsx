@@ -19,6 +19,7 @@ import { DiffLoaderProvider, type DiffLoader } from './diff-loader'
 import { useDiffOutcomes } from './use-diff-outcomes'
 
 const B1 = 'br_1'
+const B2 = 'br_2'
 
 const voiceUpdate = (branchId: string, id: string): UpdateDelta => ({
   id,
@@ -64,7 +65,7 @@ function renderOutcomes(
 ) {
   const seen: { current: Outcomes | null } = { current: null }
   function Probe() {
-    seen.current = useDiffOutcomes(B1, rows)
+    seen.current = useDiffOutcomes(rows)
     return null
   }
   function BeforeEffects() {
@@ -117,6 +118,30 @@ describe('useDiffOutcomes', () => {
     expect(seen.current?.get('d1')).toEqual({ kind: 'entry', entry: GRAVELLY })
     await settle()
     expect(populate).not.toHaveBeenCalled()
+    expect(seen.current?.get('d1')).toEqual({ kind: 'entry', entry: GRAVELLY })
+  })
+
+  it("keys each row on its own delta's branch, so an eviction re-reads that branch's rows", async () => {
+    const walk = vi
+      .fn<DiffWalk>()
+      .mockImplementation(async ([delta]) =>
+        walked({ [delta.id]: walk.mock.calls.length > 2 ? HOARSE : GRAVELLY }),
+      )
+    const cache = createDiffCache({ walk })
+    const d1 = voiceUpdate(B1, 'd1')
+    const d2 = voiceUpdate(B2, 'd2')
+    await cache.populate(d1)
+    await cache.populate(d2)
+    const seen = renderOutcomes(cache, [own(d1), own(d2)])
+    await settle()
+    expect(seen.current?.get('d2')).toEqual({ kind: 'entry', entry: GRAVELLY })
+
+    const populate = vi.spyOn(cache, 'populate')
+    act(() => cache.evictBranch(B2))
+    await waitFor(() => expect(seen.current?.get('d2')).toEqual({ kind: 'entry', entry: HOARSE }))
+    await settle()
+    expect(walk).toHaveBeenCalledTimes(3)
+    expect(populate.mock.calls.map(([delta]) => delta.id)).toEqual(['d2'])
     expect(seen.current?.get('d1')).toEqual({ kind: 'entry', entry: GRAVELLY })
   })
 })
