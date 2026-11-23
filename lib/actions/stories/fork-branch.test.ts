@@ -416,7 +416,7 @@ async function seedReownedOrphan(): Promise<void> {
 }
 
 // A close ending on entry 5, then its re-run's reversal committed with the run left open.
-async function seedUnfinishedRerun(): Promise<void> {
+async function seedUnfinishedRerun(beforeRerun?: () => Promise<void>): Promise<void> {
   const endEntryId = entryAt(5)
   await land('act_fork_close', endEntryId, {
     kind: 'createChapter',
@@ -454,6 +454,7 @@ async function seedUnfinishedRerun(): Promise<void> {
       },
     },
   })
+  await beforeRerun?.()
   await seedMarker('run_fork_rerun', RERUN_ACTION, CHAPTER_CLOSE_KIND)
   await reverseCloseForRerun(
     { branchId: f.branchId, chapterId: CLOSE_CHAPTER, actionId: RERUN_ACTION },
@@ -941,6 +942,28 @@ describe('forkBranchCore refuses a fork that would carry an unfinished run (AC 4
 
   it("refuses a fork at the chapter's end: the re-run's journal drops but the chapter it undid stays", async () => {
     await seedUnfinishedRerun()
+
+    const refusal = await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
+      forkBranchCore(input({ forkEntryId: entryAt(5) }), f.ctx),
+    )
+
+    expect(refusal.reason).toBe(
+      'run run_fork_rerun (act_fork_rerun) is unfinished; the fork would carry its chapter',
+    )
+  })
+
+  it("refuses at the chapter's end when the plan prunes only a later edit of the re-run's chapter", async () => {
+    await seedUnfinishedRerun(() =>
+      land('act_fork_rename', entryAt(7), {
+        kind: 'updateChapter',
+        source: 'user_edit',
+        payload: {
+          branchId: f.branchId,
+          id: CLOSE_CHAPTER,
+          patch: { title: 'The Night Crossing' },
+        },
+      }),
+    )
 
     const refusal = await expectRefused(FORK_REFUSAL.unfinishedRun, () =>
       forkBranchCore(input({ forkEntryId: entryAt(5) }), f.ctx),

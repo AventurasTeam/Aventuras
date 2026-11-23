@@ -71,7 +71,7 @@ const FORK_AT = 1_767_400_000_000
 const REFERENCE_AT = 1_767_400_000_001
 const WORLD_AT = 1_767_300_000_000
 const WINDOW_LORE_ID = 'lore_fork_window'
-// Two dimension families, so a copy or a sweep that reaches one family alone shows.
+// Two dimension families, so a sweep that skips one family's table leaves a vector the child lacks.
 const VECTOR_DIMS = [4, 8] as const
 
 const KIND_TABLES = {

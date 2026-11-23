@@ -324,6 +324,37 @@ describe('a fork rewrites the log it keeps on the child alone', () => {
     })
   })
 
+  it('prunes on the child a user edit before B of a row the window creates', async () => {
+    const WREN = 'char_fork_wren'
+    const w = await kaelAndMira()
+    await landWrites(w, { actionId: 'act_fork_pass_wren', entryId: entryAt(5) }, [
+      createEntityAction(w, WREN, 'Wren'),
+    ])
+    await landWrites(w, { actionId: 'act_fork_rename_wren', entryId: entryAt(3) }, [
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: w.parentId, id: WREN, patch: { name: 'Wrenna' } },
+      },
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const edits = deltaRowsOf(w, w.parentId, 'act_fork_rename_wren')
+    expect(edits).toHaveLength(1)
+    const editId = String(edits[0].id)
+    const planned = await forkPlan(w, entryAt(3), FORK_CHILD_ID)
+    const windowIds = new Set(planned?.swept.window.map((d) => d.id))
+    expect(planned?.plan.prunedDeltas.filter((d) => !windowIds.has(d.id)).map((d) => d.id)).toEqual(
+      [editId],
+    )
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    expect(rowOn(w, 'deltas', childId, editId)).toBeUndefined()
+    expect(rowOn(w, 'entities', childId, WREN)).toBeUndefined()
+    expect(rowOn(w, 'deltas', w.parentId, editId)).toEqual(edits[0])
+    expect(rowOn(w, 'entities', w.parentId, WREN)).toMatchObject({ name: 'Wrenna' })
+  })
+
   it("clears on the child a place's parent and a member's faction the window removes", async () => {
     const PIER = 'loc_fork_pier'
     const QUAY = 'loc_fork_quay'
