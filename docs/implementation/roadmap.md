@@ -331,7 +331,10 @@ code before it moved; resolve with the slice it names.
   ([`architecture.md → Delta history diff resolution`](../architecture.md#delta-history-diff-resolution)).
   The Diagnostics delta log adopts the cache and needs wording for the
   rest: story entries, whole-prose content edits included, chapters,
-  translations, era flips and entry assets.
+  translations, era flips and entry assets. It also needs a sideless
+  wording for a relationship's two views, which World and Plot read by
+  the tab's side
+  ([`world.md → Change prose`](../ui/screens/world/world.md#change-prose)).
 - **M7.3 — Electron main has no unhandled-rejection handler.**
   Slice 3.12a installed one in the renderer (`lib/boot/rejection-handler.ts`),
   but `electron/main.ts` registers no `process.on('unhandledRejection')` —

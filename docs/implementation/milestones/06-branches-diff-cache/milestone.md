@@ -755,8 +755,7 @@ resolves the rest.
 - **Each slice's PR makes the canon edits its doc lists.** Among them:
   6.3 renames canon's `planReversal` and `targetBranchId` to what
   ships; 6.6 records the asset-trash deferral on canon's branch-delete
-  paragraph; 6.7 amends the walk for held copies and the search
-  wording.
+  paragraph; 6.7 amends the walk for held copies.
 - **Flips.** 6.5 enables `Re-run on new branch`, which M5 shipped
   disabled, and flips the story and E2E assertions that pin it so. 6.5
   passes `onBranch`, and 6.6 passes `StoryCard`'s `onDuplicate`
@@ -943,11 +942,6 @@ resolves the rest.
   desktop, the JS thread on Android. 6.3 measures a fork and 6.6 a full
   duplicate on the dataset story. A bad number reopens that slice's
   approach, not the layout.
-- **The diff prose's vocabulary.** Canon gives one example sentence and
-  the iteration rule. Wording for scalars, enums, refs, term lists,
-  record keys, counters and column groups is undesigned. It sits in one
-  slice, 6.7, and has real options, so 6.7's planning offers the design
-  route.
 - **Prompt changes on the dev model.** 6.9 adds instructions to
   classifier prompts tuned to the dev model, the capability floor. Its
   probe run says whether they hold; a miss reopens the wording, not the

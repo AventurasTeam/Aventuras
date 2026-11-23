@@ -95,7 +95,7 @@ focus holds.
 ```
 ┌──────────────────────────────────────────────────┐
 │ (update)  Kael · state.traits                     │
-│           Added "former soldier"; was ["brave",…] │
+│           Traits: added "former soldier"          │
 │           classifier · entry #47 · 2h ago         │
 └──────────────────────────────────────────────────┘
 ```
@@ -139,13 +139,15 @@ summary drops the line and its part of the row's description; a Not
 applied refusal that proposed no value has none.
 Host owns rendering — for an entity update, this humanizes the
 `undo_payload` JSON; for create / delete, this can be a one-liner
-(`Created`, `Deleted`).
+(`Created`, `Deleted`). World's and Plot's History tabs word an
+update per
+[World → Change prose](../screens/world/world.md#change-prose).
 
 For `op=update` rows, the `(old, new)` pair needed to form the
 diff prose comes from the in-memory
 [delta diff cache](../../architecture.md#delta-history-diff-resolution).
 On cache miss, the host falls back to a summary derived from
-`undo_payload` keys alone (e.g., `Modified traits, drives`) and
+`undo_payload` keys alone (e.g., `Modified Traits, Drives`) and
 upgrades to the rich prose on populate. The pattern's
 `summary: string` contract stays unchanged in either state.
 `op=create` and `op=delete` never go through the cache.
