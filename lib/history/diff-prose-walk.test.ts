@@ -1,8 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import type { PipelineAction } from '@/lib/actions'
-import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
+import { applyDeltaAction, type PipelineAction } from '@/lib/actions'
 import {
   branches,
   deltas,
