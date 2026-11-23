@@ -57,6 +57,7 @@ describe('lib/stores public surface', () => {
     expect(typeof entitiesStore.useEntities).toBe('function')
     expect(typeof entitiesStore.getEntities).toBe('function')
     expect(typeof entitiesStore.getById).toBe('function')
+    expect(typeof entitiesStore.useById).toBe('function')
     expect(typeof entitiesStore.getByKind).toBe('function')
   })
 

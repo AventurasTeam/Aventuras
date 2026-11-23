@@ -78,6 +78,11 @@ Three tiers, narrowest first:
   selectors plus hydrate and **no value-setter** — writes go through
   the action layer, which re-hydrates it (see
   [Syncing a store after a write](#syncing-a-store-after-a-write)).
+  A working-set store holds one branch, and a read of it names that
+  branch: the stores expose no row read, `getById` or derived getter
+  without one, and a branch the store doesn't hold reads as empty.
+  `getLoadedBranch()` tells a branch that isn't loaded from one that is
+  loaded and empty.
 
 SQLite remains canonical for persistent data; the Zustand tier is
 the in-memory working copy.
