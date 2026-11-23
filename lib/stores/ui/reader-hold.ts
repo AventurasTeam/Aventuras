@@ -17,7 +17,7 @@ function setTokens(branchId: string, tokens: ReadonlySet<ReaderHoldToken>): void
   store.setState({ held })
 }
 
-// Held while any token is live, so a refused second take releasing its own never ends the first.
+// Each take is its own token, so an older release cannot drop a newer hold on the same branch.
 export const readerHoldStore = {
   take: (branchId: string): ReaderHoldToken => {
     const token: ReaderHoldToken = { branchId }
