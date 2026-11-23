@@ -199,7 +199,7 @@ describe('plotLinkCounts', () => {
     })
   })
 
-  // A fork copies link rows under their ids; the count reads its own branch's.
+  // A fork's copies name the same happening; the count reads its own branch's.
   it('counts nothing from link stores loaded for another branch', () => {
     happeningInvolvementsStore.hydrate('br_2', [
       involvement('inv_4', AMBUSH.id, { branchId: 'br_2' }),

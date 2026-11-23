@@ -49,8 +49,11 @@ function happening(branchId: string, title: string): Happening {
   }
 }
 
-/** Hydrates the table's store for `branchId` with one row under X, named `label`, and returns it. */
-type TableCase = { table: HistoryTable; seed: (branchId: string, label: string) => HistoryTarget }
+type TableCase = {
+  table: HistoryTable
+  /** Hydrates the table's store for `branchId` with one row under X, named `label`, and returns it. */
+  seed: (branchId: string, label: string) => HistoryTarget
+}
 
 const TABLES: readonly TableCase[] = [
   {

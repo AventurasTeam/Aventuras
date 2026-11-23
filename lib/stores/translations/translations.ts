@@ -26,7 +26,7 @@ export const translationsStore = {
   getTranslations: base.getRows,
   getById: base.getById,
   useById: base.useById,
-  // The index holds the loaded branch's rows alone, so any other branch reads as a miss.
+  // The index is the loaded branch's alone: a read for another branch must miss, not return it.
   getTranslation: (
     branchId: string | null,
     kind: Translation['targetKind'],

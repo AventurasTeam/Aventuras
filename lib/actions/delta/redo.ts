@@ -82,7 +82,7 @@ class RedoGroup {
 
 export type { RedoGroup }
 
-// Test-only: a group no undo took, for a test that needs one on the redo stack.
+// Test-only: a group no undo took, for a test that needs one on a branch's redo stack.
 export function __redoGroupForTest(
   branchId: string,
   snapshots: readonly RedoSnapshot[] = [],

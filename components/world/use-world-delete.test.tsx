@@ -143,7 +143,7 @@ describe('useWorldDelete', () => {
     ])
   })
 
-  // A fork copies link rows under their ids; the confirm counts only its own branch's.
+  // A fork's copies name the same entity; the confirm counts only its own branch's.
   it('counts no link rows from stores loaded for another branch', () => {
     const OTHER = 'br_2'
     happeningAwarenessStore.hydrate(OTHER, [awareness('haw_y', MIRA.id, { branchId: OTHER })])
