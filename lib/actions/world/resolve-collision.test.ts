@@ -584,9 +584,18 @@ describe('resolveCollision — merge', () => {
     const before = await linkIds()
     const links = entityLinkRows({
       id: 'char_b',
-      branchAwareness: await ctx.db.select().from(happeningAwareness),
-      branchInvolvements: await ctx.db.select().from(happeningInvolvements),
-      branchRelationships: await ctx.db.select().from(characterRelationships),
+      branchAwareness: await ctx.db
+        .select()
+        .from(happeningAwareness)
+        .where(eq(happeningAwareness.branchId, 'b1')),
+      branchInvolvements: await ctx.db
+        .select()
+        .from(happeningInvolvements)
+        .where(eq(happeningInvolvements.branchId, 'b1')),
+      branchRelationships: await ctx.db
+        .select()
+        .from(characterRelationships)
+        .where(eq(characterRelationships.branchId, 'b1')),
     })
 
     await resolveCollision('b1', MERGE_B_INTO_A, ctx)
