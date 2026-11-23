@@ -179,8 +179,8 @@ test.describe.serial('Plot panel', () => {
     )
     const [[originalDescription]] = await queryApp(
       page,
-      `SELECT description FROM happenings WHERE id = ?`,
-      [hapId],
+      `SELECT description FROM happenings WHERE branch_id = ? AND id = ?`,
+      [branchId, hapId],
     )
     const entityId = async (name: string) => {
       const [[id]] = await queryApp(
@@ -193,8 +193,8 @@ test.describe.serial('Plot panel', () => {
     const awarenessId = async (characterId: string) => {
       const [[id]] = await queryApp(
         page,
-        `SELECT id FROM happening_awareness WHERE happening_id = ? AND character_id = ?`,
-        [hapId, characterId],
+        `SELECT id FROM happening_awareness WHERE branch_id = ? AND happening_id = ? AND character_id = ?`,
+        [branchId, hapId, characterId],
       )
       return id as string
     }
@@ -285,18 +285,18 @@ test.describe.serial('Plot panel', () => {
     const revertedState = async () => {
       const [[description]] = await queryApp(
         page,
-        `SELECT description FROM happenings WHERE id = ?`,
-        [hapId],
+        `SELECT description FROM happenings WHERE branch_id = ? AND id = ?`,
+        [branchId, hapId],
       )
       const mira = await queryApp(
         page,
-        `SELECT id FROM happening_awareness WHERE happening_id = ? AND character_id = ?`,
-        [hapId, miraId],
+        `SELECT id FROM happening_awareness WHERE branch_id = ? AND happening_id = ? AND character_id = ?`,
+        [branchId, hapId, miraId],
       )
       const [[goneCount]] = await queryApp(
         page,
-        `SELECT COUNT(*) FROM happening_awareness WHERE happening_id = ? AND character_id IN (?, ?)`,
-        [hapId, sageId, vorneId],
+        `SELECT COUNT(*) FROM happening_awareness WHERE branch_id = ? AND happening_id = ? AND character_id IN (?, ?)`,
+        [branchId, hapId, sageId, vorneId],
       )
       return [description, mira[0]?.[0] ?? null, goneCount]
     }
