@@ -1,7 +1,7 @@
 import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import type { DiffCacheEntry, DiffWalk, WalkResult } from './diff-walk'
+import type { DiffCacheEntry, DiffWalk, UpdateDelta, WalkResult } from './diff-walk'
 
 /** The cache's hard cap, in entries (architecture.md → Cache shape and lifecycle). */
 export const DIFF_CACHE_CAPACITY = 2000
@@ -20,9 +20,9 @@ export type DiffCache = {
   /** The cached entry, refreshing its recency. Synchronous. */
   peek(branchId: string, deltaId: string): DiffCacheEntry | undefined
   /** The delta's outcome; a tick's calls on one target share one walk. */
-  populate(delta: Delta): Promise<DiffOutcome>
+  populate(delta: UpdateDelta): Promise<DiffOutcome>
   /** Populates every delta; resolves once all have settled, whatever they settled to. */
-  populateBatch(deltas: readonly Delta[]): Promise<void>
+  populateBatch(deltas: readonly UpdateDelta[]): Promise<void>
   /** Drops the branch's entries, walks in flight and remembered failures, then tells listeners. */
   evictBranch(branchId: string): void
   /** Hears each evicted branch. Returns its unregister. */
@@ -31,7 +31,7 @@ export type DiffCache = {
 
 type Waiting = {
   readonly branchId: string
-  readonly delta: Delta
+  readonly delta: UpdateDelta
   readonly key: string
   readonly promise: Promise<DiffOutcome>
   readonly resolve: (outcome: DiffOutcome) => void
@@ -48,7 +48,7 @@ const targetOf = (delta: Delta): string =>
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
-function waitingFor(delta: Delta): Waiting {
+function waitingFor(delta: UpdateDelta): Waiting {
   let resolve!: (outcome: DiffOutcome) => void
   let reject!: (error: unknown) => void
   const promise = new Promise<DiffOutcome>((res, rej) => {
@@ -119,7 +119,7 @@ export function createDiffCache({
     const { branchId } = items[0]
     const generation = generationOf(branchId)
     const requested = [
-      ...new Map(items.map((item): [string, Delta] => [item.delta.id, item.delta])).values(),
+      ...new Map(items.map((item): [string, UpdateDelta] => [item.delta.id, item.delta])).values(),
     ]
     let result: WalkResult
     try {

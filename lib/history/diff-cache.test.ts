@@ -1,16 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import { createDiffCache, DIFF_CACHE_CAPACITY, DiffEvictedError } from './diff-cache'
-import { DiffWalkError, type DiffCacheEntry, type DiffWalk, type WalkResult } from './diff-walk'
+import {
+  DiffWalkError,
+  type DiffCacheEntry,
+  type DiffWalk,
+  type UpdateDelta,
+  type WalkResult,
+} from './diff-walk'
 
 afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const delta = (id: string, over: Partial<Delta> = {}): Delta => ({
+const delta = (id: string, over: Partial<UpdateDelta> = {}): UpdateDelta => ({
   id,
   branchId: 'br_b',
   entryId: null,
@@ -27,7 +32,7 @@ const delta = (id: string, over: Partial<Delta> = {}): Delta => ({
 })
 
 // Names its delta and branch, so an entry served under the wrong key shows.
-const entryFor = (d: Delta): DiffCacheEntry => ({
+const entryFor = (d: UpdateDelta): DiffCacheEntry => ({
   old: { title: 'The ford' },
   new: { title: `${d.id} on ${d.branchId}` },
   names: {},

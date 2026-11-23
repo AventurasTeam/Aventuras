@@ -87,7 +87,8 @@ describe('diffProse — fed by the walk', () => {
     })
     expect(repoint.undoPayload).toStrictEqual({ nameCollisionPartnerId: 'char_kael_old' })
 
-    const entry = (await walkTarget(t.db, [repoint])).entries.get(repoint.id)
+    if (repoint.op !== 'update') throw new Error(`the re-point logged a ${repoint.op}`)
+    const entry = (await walkTarget(t.db, [{ ...repoint, op: repoint.op }])).entries.get(repoint.id)
     if (entry === undefined) throw new Error('the walk resolved no entry for the re-point')
 
     expect(

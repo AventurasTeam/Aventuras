@@ -20,7 +20,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { cloneBranch, type TestDb } from '@/lib/db/__tests__/two-branch'
 import { entitiesStore, entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
-import { walkTarget } from './diff-walk'
+import { walkTarget, type UpdateDelta } from './diff-walk'
 
 // generation-pipeline.md → Reverse-replay: a reversal rewrites a survivor's prior value and a redo
 // puts it back; data-model.md → Branch model: a copy repeats every delta id on the new branch.
@@ -56,10 +56,12 @@ async function deltasOn(branchId: string, actionId: string): Promise<Delta[]> {
     .orderBy(asc(deltas.logPosition))) as Delta[]
 }
 
-async function onlyOn(branchId: string, actionId: string): Promise<Delta> {
+async function onlyOn(branchId: string, actionId: string): Promise<UpdateDelta> {
   const rows = await deltasOn(branchId, actionId)
   if (rows.length !== 1) throw new Error(`${actionId} on ${branchId}: ${rows.length} deltas`)
-  return rows[0]
+  const [delta] = rows
+  if (delta.op !== 'update') throw new Error(`${actionId} on ${branchId}: a ${delta.op}`)
+  return { ...delta, op: delta.op }
 }
 
 const FORD: NewLore = {

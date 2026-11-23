@@ -2,7 +2,12 @@ import { useQueries, useQueryClient, type UseQueryOptions } from '@tanstack/reac
 import { useEffect, useMemo } from 'react'
 
 import type { Delta } from '@/lib/db'
-import { DiffEvictedError, type DiffOutcome, type HistoryRow } from '@/lib/history'
+import {
+  DiffEvictedError,
+  type DiffOutcome,
+  type HistoryRow,
+  type UpdateDelta,
+} from '@/lib/history'
 
 import { useDiffLoader, type DiffLoader } from './diff-loader'
 
@@ -11,7 +16,10 @@ type DiffQuery = UseQueryOptions<DiffOutcome, Error, DiffOutcome, DiffQueryKey>
 
 // An eviction that overtakes a row's first read rejects it with DiffEvictedError, and TanStack
 // joins the invalidation's refetch onto that same fetch, so the read starts again here.
-async function populateAfterEvictions(loader: DiffLoader, delta: Delta): Promise<DiffOutcome> {
+async function populateAfterEvictions(
+  loader: DiffLoader,
+  delta: UpdateDelta,
+): Promise<DiffOutcome> {
   for (;;) {
     try {
       return await loader.populate(delta)
@@ -34,7 +42,8 @@ export function useDiffOutcomes(
   const loader = useDiffLoader()
   const client = useQueryClient()
   const updates = useMemo(
-    () => rows.map((row) => row.delta).filter((delta) => delta.op === 'update'),
+    () =>
+      rows.map((row) => row.delta).filter((delta): delta is UpdateDelta => delta.op === 'update'),
     [rows],
   )
   const queries = updates.map(

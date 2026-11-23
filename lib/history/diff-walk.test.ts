@@ -25,7 +25,7 @@ import {
 import { createTestDb, makeBatchCallback, makeCallback } from '@/lib/db/__tests__/test-db'
 import { resetAllStores } from '@/lib/stores'
 
-import { DiffWalkError, walkTarget } from './diff-walk'
+import { DiffWalkError, walkTarget, type UpdateDelta } from './diff-walk'
 import { isRetrievalBump } from './link-rows'
 import { loadHistoryChunk } from './query'
 
@@ -65,6 +65,12 @@ async function only(actionId: string): Promise<Delta> {
   const rows = await deltasOf(actionId)
   if (rows.length !== 1) throw new Error(`${actionId} logged ${rows.length} deltas, not one`)
   return rows[0]
+}
+
+async function onlyUpdate(actionId: string): Promise<UpdateDelta> {
+  const delta = await only(actionId)
+  if (delta.op !== 'update') throw new Error(`${actionId} logged a ${delta.op}, not an update`)
+  return { ...delta, op: delta.op }
 }
 
 // The test database behind callbacks that count the walk's reads, and can fail a single query or
@@ -167,11 +173,11 @@ const relate = (kind: string): PipelineAction => ({
 })
 
 /** Kael and Mira, a relationship between them, and one update of its `kind`: friend → rival. */
-async function seedRelationship(): Promise<{ update: Delta; relationshipId: string }> {
+async function seedRelationship(): Promise<{ update: UpdateDelta; relationshipId: string }> {
   await t.db.insert(entities).values([entity('char_kael', 'Kael'), entity('char_mira', 'Mira')])
   await act('act_rel', relate('friend'))
   await act('act_rival', relate('rival'))
-  return { update: await only('act_rival'), relationshipId: (await only('act_rel')).targetId }
+  return { update: await onlyUpdate('act_rival'), relationshipId: (await only('act_rel')).targetId }
 }
 
 const KAEL_FLAGGED: Partial<NewEntity> = {
@@ -182,7 +188,7 @@ const KAEL_FLAGGED: Partial<NewEntity> = {
 
 const RIVAL = { old: { kind: 'friend' }, new: { kind: 'rival' }, names: {} }
 
-const loreDelta = (over: Partial<Delta> = {}): Delta => ({
+const loreDelta = (over: Partial<UpdateDelta> = {}): UpdateDelta => ({
   id: 'dl_1',
   branchId: 'b1',
   entryId: null,
@@ -207,7 +213,11 @@ describe('walkTarget', () => {
     await act('act_1', updateEntity('char_kael', { state: scarred }))
     await act('act_2', updateEntity('char_kael', { state: driven }))
     await act('act_3', updateEntity('char_kael', { state: hardened }))
-    const [first, second, third] = [await only('act_1'), await only('act_2'), await only('act_3')]
+    const [first, second, third] = [
+      await onlyUpdate('act_1'),
+      await onlyUpdate('act_2'),
+      await onlyUpdate('act_3'),
+    ]
 
     const result = await walkTarget(t.db, [first, second, third])
 
@@ -238,7 +248,7 @@ describe('walkTarget', () => {
       source: 'user_edit',
       payload: { branchId: 'b1', id: 'lore_ford' },
     })
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
 
     const result = await walkTarget(t.db, [update])
 
@@ -284,7 +294,7 @@ describe('walkTarget', () => {
     await act('act_rival', relate('rival'))
     const aaronLink = (await only('act_aaron')).targetId
     const relationshipId = (await only('act_rel')).targetId
-    const update = await only('act_rival')
+    const update = await onlyUpdate('act_rival')
     await act('act_del_mira', deleteEntity('char_mira'))
     const [holder] = await deltasOf('act_del_mira')
     // The target held second: a walk taking the first held row would seed from Aaron's link.
@@ -336,7 +346,7 @@ describe('walkTarget', () => {
       createdAt: 1000,
     }
     await t.db.insert(deltas).values(ghost)
-    const update = await only('act_ghost')
+    const update = await onlyUpdate('act_ghost')
 
     await expect(walkTarget(t.db, [update])).rejects.toThrow(DiffWalkError)
     await expect(walkTarget(t.db, [update])).rejects.toThrow(
@@ -356,7 +366,7 @@ describe('walkTarget', () => {
   it('gives the chained deltas their entries when others in the request are gone', async () => {
     await act('act_0', createFord)
     await act('act_1', editFord({ body: 'A drowning in spring.' }))
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
     const pruned = loreDelta({ id: 'dl_pruned', logPosition: update.logPosition - 1 })
 
     const result = await walkTarget(t.db, [pruned, update])
@@ -386,7 +396,7 @@ describe('walkTarget', () => {
         nameCollisionReason: null,
       }),
     )
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
     expect(Object.keys(update.undoPayload ?? {})).toContain('$resolvedPair')
 
     const result = await walkTarget(t.db, [update])
@@ -420,7 +430,7 @@ describe('walkTarget', () => {
         nameCollisionReason: 'name-taken',
       }),
     )
-    const [first, second] = [await only('act_1'), await only('act_2')]
+    const [first, second] = [await onlyUpdate('act_1'), await onlyUpdate('act_2')]
     expect(first.undoPayload).toStrictEqual({ nameCollisionPartnerId: 'char_kaelan' })
     expect(second.undoPayload).toStrictEqual({
       nameCollisionPartnerId: 'char_kaelen',
@@ -463,7 +473,7 @@ describe('walkTarget', () => {
         nameCollisionReason: null,
       }),
     )
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
 
     const result = await walkTarget(t.db, [update])
 
@@ -499,7 +509,7 @@ describe('walkTarget', () => {
         proseEntryId: null,
       },
     })
-    const raise = await only('act_1')
+    const raise = await onlyUpdate('act_1')
 
     const result = await walkTarget(t.db, [raise])
 
@@ -519,7 +529,7 @@ describe('walkTarget', () => {
       .insert(entities)
       .values([entity('char_kaelan', 'Kaelan'), entity('char_kael', 'Kael', KAEL_FLAGGED)])
     await act('act_1', updateEntity('char_kael', { description: 'a wandering knight' }))
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
 
     const result = await walkTarget(t.db, [update])
 
@@ -554,8 +564,8 @@ describe('walkTarget', () => {
       'act_move',
       updateEntity('loc_old', { state: { parent_location_id: 'loc_varn', condition: 'flooded' } }),
     )
-    const flood = await only('act_flood')
-    const move = await only('act_move')
+    const flood = await onlyUpdate('act_flood')
+    const move = await onlyUpdate('act_move')
     expect(move.undoPayload).toEqual({ state: { parent_location_id: 'loc_quarter' } })
     // Reversing the parent's create clears the ref and logs nothing (generation-pipeline.md →
     // Reverse-replay), so the move's payload stays parent-only against an unplaced row.
@@ -619,8 +629,8 @@ describe('walkTarget', () => {
     await act('act_b1', bump(3))
     await act('act_b2', bump(4))
     await act('act_2', aware('chapter_close', { decayResistance: 0.8, retrievalCount: 9 }))
-    const first = await only('act_1')
-    const second = await only('act_2')
+    const first = await onlyUpdate('act_1')
+    const second = await onlyUpdate('act_2')
     const bumps = [await only('act_b1'), await only('act_b2')]
     expect(first.undoPayload).toEqual({ source: null, retrievalCount: 0 })
     expect(second.undoPayload).toEqual({ decayResistance: null, retrievalCount: 5 })
@@ -644,7 +654,7 @@ describe('walkTarget', () => {
   it('reads the chain and the row in one batch, and nothing more for a target with no refs', async () => {
     await act('act_0', createFord)
     await act('act_1', editFord({ body: 'A drowning in spring.' }))
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
     const spied = spiedDb()
 
     await walkTarget(spied.db, [update])
@@ -655,7 +665,7 @@ describe('walkTarget', () => {
   it('gives a forward update landing just after the read the entry of a walk wholly before it', async () => {
     await act('act_0', createFord)
     await act('act_1', editFord({ body: 'A drowning in spring.' }))
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
     const spied = spiedDb()
     spied.hooks.afterBatch = () => act('act_2', editFord({ body: 'Ice in winter.' }))
 
@@ -718,7 +728,7 @@ describe('walkTarget', () => {
       updateEntity('char_kael', { state: { ...CHARACTER_STATE, faction_id: 'fac_iron' } }),
     )
     await act('act_2', deleteEntity('fac_old'))
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
 
     const result = await walkTarget(t.db, [update])
 
@@ -740,7 +750,7 @@ describe('walkTarget', () => {
       'act_1',
       updateEntity('char_kael', { state: { ...CHARACTER_STATE, faction_id: 'fac_iron' } }),
     )
-    const update = await only('act_1')
+    const update = await onlyUpdate('act_1')
     const failure = new Error('disk I/O error')
     const spied = spiedDb()
     spied.hooks.failSingle = failure
@@ -766,7 +776,9 @@ describe('walkTarget', () => {
     await expect(
       walkTarget(t.db, [loreDelta(), loreDelta({ id: 'dl_2', branchId: 'b2' })]),
     ).rejects.toThrow('mixed targets')
-    await expect(walkTarget(t.db, [loreDelta({ op: 'delete' })])).rejects.toThrow('mixed targets')
+    const removal: Delta = { ...loreDelta(), op: 'delete' }
+    // @ts-expect-error a non-update is refused by the type, and the walk still checks
+    await expect(walkTarget(t.db, [removal])).rejects.toThrow('mixed targets')
     await expect(walkTarget(t.db, [loreDelta({ targetTable: 'chapters' })])).rejects.toThrow(
       DiffWalkError,
     )

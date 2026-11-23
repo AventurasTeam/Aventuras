@@ -48,8 +48,11 @@ export class DiffWalkError extends Error {
   }
 }
 
-/** Walks one target; every requested delta is an update on the same branch, table and target. */
-export type DiffWalk = (requested: readonly Delta[]) => Promise<WalkResult>
+/** The only op the walk and the cache take: a create or a delete has no diff. */
+export type UpdateDelta = Delta & { op: 'update' }
+
+/** Walks one target; every requested delta is on the same branch, table and target. */
+export type DiffWalk = (requested: readonly UpdateDelta[]) => Promise<WalkResult>
 
 type RowKey = { table: SQLiteTable; idCol: SQLiteColumn; branchCol: SQLiteColumn }
 
@@ -147,7 +150,7 @@ async function seedOf(
 /** Walks one target's chain newest to oldest, giving each listed update its old and new values. */
 export async function walkTarget(
   db: DbCtx['db'],
-  requested: readonly Delta[],
+  requested: readonly UpdateDelta[],
 ): Promise<WalkResult> {
   const first = requested[0]
   if (first === undefined || !requested.every((delta) => sameTarget(delta, first)))

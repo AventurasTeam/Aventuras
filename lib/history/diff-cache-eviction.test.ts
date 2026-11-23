@@ -11,7 +11,7 @@ import {
   type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { __setDiffCacheDbForTest, diffCache } from '@/lib/history'
+import { __setDiffCacheDbForTest, diffCache, type UpdateDelta } from '@/lib/history'
 import { entitiesStore, entriesStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
 // The cache as History's host imports it: nothing here registers with the action layer's hook.
@@ -62,7 +62,7 @@ async function apply(ctx: Ctx, action: PipelineAction, actionId: string) {
   if (result.status !== 'ok') throw new Error(`${actionId} did not land: ${JSON.stringify(result)}`)
 }
 
-async function kaelUpdateOf(ctx: Ctx, actionId: string): Promise<Delta> {
+async function kaelUpdateOf(ctx: Ctx, actionId: string): Promise<UpdateDelta> {
   const rows = (await ctx.db
     .select()
     .from(deltas)
@@ -74,10 +74,10 @@ async function kaelUpdateOf(ctx: Ctx, actionId: string): Promise<Delta> {
       ),
     )) as Delta[]
   expect(rows.map((row) => row.op)).toEqual(['update'])
-  return rows[0]
+  return { ...rows[0], op: 'update' }
 }
 
-async function walkedValues(delta: Delta) {
+async function walkedValues(delta: UpdateDelta) {
   const outcome = await diffCache.populate(delta)
   if (outcome.kind !== 'entry') throw new Error(`expected an entry, got ${outcome.kind}`)
   return { old: outcome.entry.old, new: outcome.entry.new }
