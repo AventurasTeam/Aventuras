@@ -33,7 +33,7 @@ afterEach(() => {
   entriesStore.__reset()
   generationStore.__reset()
   happeningsStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>['db']
@@ -311,7 +311,7 @@ describe('undo of a content edit', () => {
 
     // Replaying the fact would re-insert a row the next pass re-derives anyway, and
     // fight the redo arm's own invalidation.
-    const snapshots = undoRedoStore.peekRedoGroup()?.snapshots
+    const snapshots = undoRedoStore.peekRedoGroup('b1')?.snapshots
     expect(snapshots).toHaveLength(1)
     expect(isContentEditDelta(snapshots![0].delta)).toBe(true)
   })
@@ -407,7 +407,7 @@ describe('undo of a content edit', () => {
     // applyRedo writes nothing for a snapshot carrying no row, so clamping for it would
     // spend a pass re-reading prose that never changed.
     undoRedoStore.pushRedoGroup(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         {
           delta: {
             id: 'd_phantom',

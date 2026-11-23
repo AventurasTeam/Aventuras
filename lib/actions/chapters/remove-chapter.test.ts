@@ -465,7 +465,7 @@ describe('removeChapter and the bracket', () => {
     // The fixture's last entry: a close never moves the watermark, and neither may its delete.
     expect(await processedThrough(c.fx)).toBe(13)
     const settled = generationStore.getSettleCount()
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
 
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toEqual({
       status: 'ok',
@@ -473,13 +473,13 @@ describe('removeChapter and the bracket', () => {
 
     expect(generationStore.getSettleCount()).toBe(settled + 1)
     expect(await processedThrough(c.fx)).toBe(13)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
   })
 
   it('clears redo when the delete commits and only its store sync throws', async () => {
     const c = await openClosed()
     const settled = generationStore.getSettleCount()
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
     vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -493,7 +493,7 @@ describe('removeChapter and the bracket', () => {
 
     expect(error).toBeInstanceOf(DeltaReplayError)
     expect((error as DeltaReplayError).committed).toBe(true)
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
     expect(await chapterRows(c.fx)).toEqual([])
     expect(generationStore.getSettleCount()).toBe(settled + 1)
   })

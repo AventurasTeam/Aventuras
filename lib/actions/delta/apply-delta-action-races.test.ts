@@ -637,7 +637,7 @@ describe('a user Save racing CTRL-Z of the Save before it', () => {
         await ctx.db.insert(entities).values(character(id, 'active', ['v0']))
         expect((await keywordSave(id, 'v1', `s1_${delay}`)).status).toBe('ok')
         entriesStore.hydrate(BRANCH, [])
-        undoRedoStore.clear()
+        undoRedoStore.__reset()
 
         let saveSettled = false
         const second = keywordSave(id, 'v2', `s2_${delay}`).then((result) => {
@@ -688,7 +688,7 @@ describe('a user Save racing CTRL-Y', () => {
       const id = `char_${delay}`
       await ctx.db.insert(entities).values(character(id, 'active', ['v0']))
       entriesStore.hydrate(BRANCH, [])
-      undoRedoStore.clear()
+      undoRedoStore.__reset()
       expect((await keywordSave(id, 'v1', `s1_${delay}`)).status).toBe('ok')
       expect(await undoLastAction(BRANCH, ctx)).toEqual({ status: 'ok' })
 

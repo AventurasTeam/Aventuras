@@ -220,21 +220,39 @@ describe('setStoryLead', () => {
     await expect(setStoryLead('story_missing', 'char_mira', ctx)).rejects.toThrow('Story not found')
   })
 
-  it('clears redo on a successful lead change', async () => {
-    const { ctx } = await setup()
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
-    expect(undoRedoStore.hasRedo()).toBe(true)
+  it("clears redo on every branch of the story, and keeps another story's", async () => {
+    const { db, ctx } = await setup()
+    await db.insert(stories).values({
+      id: 'story_2',
+      title: 'T2',
+      status: 'active',
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_3',
+      definition: DEFINITION,
+      settings: SETTINGS,
+    })
+    await db
+      .insert(branches)
+      .values([{ id: 'br_3', storyId: 'story_2', name: 'main', createdAt: 1 }])
+    for (const branchId of ['br_1', 'br_2', 'br_3'])
+      undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId))
+
     expect(await setStoryLead('story_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
-    expect(undoRedoStore.hasRedo()).toBe(false)
+
+    expect(undoRedoStore.__branches()).toEqual(['br_3'])
   })
 
-  it('leaves redo intact when the lead change is refused', async () => {
+  it('leaves redo intact on every branch when the lead change is refused', async () => {
     const { ctx } = await setup()
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_2'))
+
     expect(await setStoryLead('story_1', 'loc_hollow', ctx)).toEqual({
       status: 'rejected',
       code: 'not-character',
     })
-    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    expect(undoRedoStore.__branches()).toEqual(['br_1', 'br_2'])
   })
 })

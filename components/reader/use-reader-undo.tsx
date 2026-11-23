@@ -211,7 +211,7 @@ export function useReaderUndo({
 
   const runRedo = useCallback(
     async (origin: Origin, expectedActionId?: string) => {
-      const group = undoRedoStore.peekRedoGroup()
+      const group = undoRedoStore.peekRedoGroup(branchId)
       if (group == null) {
         report('redo', NOTHING, origin)
         return
@@ -275,7 +275,7 @@ export function useReaderUndo({
         return
       }
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
-      const redoable = undoRedoStore.peekRedoGroup()?.actionId === target.actionId
+      const redoable = undoRedoStore.peekRedoGroup(branchId)?.actionId === target.actionId
       announce(
         notice,
         redoable
@@ -377,7 +377,7 @@ export function useReaderUndo({
     [branchId, resolve, showMenuTarget],
   )
 
-  const redoTop = undoRedoStore.useUndoRedo((s) => s.redoStack.at(-1))
+  const redoTop = undoRedoStore.useRedoTop(branchId)
   const redoLabel = useMemo(
     () =>
       redoTop == null

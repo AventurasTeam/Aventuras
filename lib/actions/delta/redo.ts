@@ -54,6 +54,8 @@ class RedoGroup {
   readonly #minted = true
   /** The action the CTRL-Z undid: what redo names, and the id a caller pins it to. */
   readonly actionId: string
+  /** The branch the undo reversed: the group restores there and sits on that branch's stack. */
+  readonly branchId: string
   readonly snapshots: readonly RedoSnapshot[]
   /** The clears of refs to a row the snapshot re-creates; redo writes each back, logging nothing. */
   readonly refRestores: readonly RefRestore[]
@@ -65,11 +67,13 @@ class RedoGroup {
 
   constructor(
     actionId: string,
+    branchId: string,
     snapshots: readonly RedoSnapshot[],
     refRestores: readonly RefRestore[],
     survivorPayloads: readonly SurvivorPayload[] = [],
   ) {
     this.actionId = actionId
+    this.branchId = branchId
     this.snapshots = snapshots
     this.refRestores = refRestores
     this.survivorPayloads = survivorPayloads
@@ -80,10 +84,11 @@ export type { RedoGroup }
 
 // Test-only: a group no undo took, for a test that needs one on the redo stack.
 export function __redoGroupForTest(
+  branchId: string,
   snapshots: readonly RedoSnapshot[] = [],
   actionId = snapshots[0]?.delta.actionId ?? 'act_test',
 ): RedoGroup {
-  return new RedoGroup(actionId, snapshots, [])
+  return new RedoGroup(actionId, branchId, snapshots, [])
 }
 
 /** A redoable CTRL-Z of a set: the redo group, taken before `reverse` runs the reversal. */
@@ -192,7 +197,7 @@ async function snapshotForRedo(
       refRestores.push({ branchId: set.branchId, row, ref, idBeforeUndo: id, placementBeforeUndo })
     }
   }
-  return new RedoGroup(actionId, snapshots, refRestores, survivors)
+  return new RedoGroup(actionId, set.branchId, snapshots, refRestores, survivors)
 }
 
 // A whole-row snapshot carries no diff, so redo errs dirty on membership alone; the
@@ -338,7 +343,7 @@ async function applyRedoLocked(
     // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
     if (restored) restoredDeltas.push(delta)
   }
-  // At its own position: every delta-logged write clears the redo stack, so nothing has
+  // At its own position: every delta-logged write clears its branch's redo stack, so nothing has
   // logged into the slot the undo freed, and log order stays write order
   // (data-model.md -> Entry mutability & rollback).
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())

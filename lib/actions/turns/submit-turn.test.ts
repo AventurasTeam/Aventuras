@@ -589,12 +589,12 @@ describe('submitTurn', () => {
     await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     await submitTurn({ storyId: 's1', branchId: 'b1' }, { content: 'x', composerMode: 'do' }, ctx)
 
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
   it('fails the turn and writes no ai_reply when the provider stream errors', async () => {

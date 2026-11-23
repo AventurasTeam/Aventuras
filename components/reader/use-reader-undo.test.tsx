@@ -125,12 +125,12 @@ const CLOSE_UNDONE: UndoResult = { status: 'ok', closeUndone: { chapterNumber: 3
 
 let toasts: ToastItem[] = []
 
-// An undo that lands pushes the redo group it took, as undoLastAction does: the target's rows as
-// they stood before it.
+// An undo that lands pushes the redo group it took onto its branch's stack, as undoLastAction
+// does: the target's rows as they stood before it.
 function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> | null = null) {
-  actions.undoLastAction.mockImplementation(async () => {
+  actions.undoLastAction.mockImplementation(async (branchId) => {
     const snapshots = read.deltas.map((d) => ({ delta: d, rowBeforeUndo }))
-    undoRedoStore.pushRedoGroup(__redoGroupForTest(snapshots, read.actionId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId, snapshots, read.actionId))
     return OK
   })
 }
@@ -157,7 +157,7 @@ beforeEach(() => {
   toastStore.subscribe((next) => {
     toasts = next
   })
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   entitiesStore.__reset()
   loreStore.__reset()
   for (const fn of Object.values(actions)) fn.mockReset()
@@ -200,6 +200,7 @@ describe('useReaderUndo — the label', () => {
     act(() =>
       undoRedoStore.pushRedoGroup(
         __redoGroupForTest(
+          'b1',
           [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
           'act_turn',
         ),
@@ -382,6 +383,7 @@ describe('useReaderUndo — refusals', () => {
   it('redoes the stack top, pinned to it', async () => {
     undoRedoStore.pushRedoGroup(
       __redoGroupForTest(
+        'b1',
         [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
         'act_turn',
       ),
@@ -522,7 +524,7 @@ describe('useReaderUndo — review fixes', () => {
   it('names a redone delete in its notice although the redo removed the row', async () => {
     loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
     const snapshots = LORE_SAVE.deltas.map((d) => ({ delta: d, rowBeforeUndo: null }))
-    undoRedoStore.pushRedoGroup(__redoGroupForTest(snapshots, LORE_SAVE.actionId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1', snapshots, LORE_SAVE.actionId))
     actions.redoLastAction.mockImplementation(async () => {
       loreStore.hydrate('b1', [])
       return OK

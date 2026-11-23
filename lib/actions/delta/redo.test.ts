@@ -109,7 +109,7 @@ describe('prepareUndo / applyRedo', () => {
       createdAt: Date.now(),
     }
 
-    await applyRedo(__redoGroupForTest([{ delta: deltaRow, rowBeforeUndo: null }]), ctx)
+    await applyRedo(__redoGroupForTest('b1', [{ delta: deltaRow, rowBeforeUndo: null }]), ctx)
 
     const rows = await db.select().from(deltas).where(eq(deltas.id, 'd_missing'))
     expect(rows).toHaveLength(0)
@@ -218,7 +218,7 @@ describe('prepareUndo / applyRedo', () => {
     // A null rowBeforeUndo means the snapshot found no matching row: applyRedo
     // must write nothing to the DB for create/update, and must NOT patch the store.
     await applyRedo(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         { delta: createDelta, rowBeforeUndo: null },
         { delta: deleteDelta, rowBeforeUndo: null },
       ]),
@@ -469,13 +469,13 @@ describe('RedoGroup', () => {
   // The held-row refusal and the snapshot's before-the-reversal timing live in prepareUndo, so
   // applyRedo and the redo stack take only a group it minted.
   it('is not satisfied by a hand-built snapshot list', () => {
-    const snapshots = __redoGroupForTest().snapshots
+    const snapshots = __redoGroupForTest('b1').snapshots
     // @ts-expect-error a snapshot list is not a minted group
     const redo = () => applyRedo(snapshots, {} as never)
     // @ts-expect-error nor is a literal with the same shape
     undoRedoStore.pushRedoGroup({ snapshots })
     expect(redo).toBeTypeOf('function')
-    undoRedoStore.clear()
+    undoRedoStore.__reset()
   })
 })
 
@@ -585,7 +585,7 @@ describe('applyRedo and embedding_stale', () => {
     entitiesStore.hydrate('b1', [])
 
     await applyRedo(
-      __redoGroupForTest([
+      __redoGroupForTest('b1', [
         {
           delta: {
             id: 'd_null',

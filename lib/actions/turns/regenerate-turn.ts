@@ -196,7 +196,8 @@ export async function regenerateTurn(
               () => IN_FLIGHT_REJECTION,
             )
           } catch (error) {
-            if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
+            if (error instanceof DeltaReplayError && error.committed)
+              undoRedoStore.clear(ids.branchId)
             throw error
           }
           if (swept === HELD_REJECTION || swept === IN_FLIGHT_REJECTION) return swept
@@ -206,7 +207,7 @@ export async function regenerateTurn(
               : { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
           // A regenerate is a new unrelated action (data-model.md); the discarded
           // take is not redo-restorable.
-          undoRedoStore.clear()
+          undoRedoStore.clear(ids.branchId)
 
           // No input threading: narrativePhase (per-turn.ts) reads its prompt from
           // the branch tail and its insert position from MAX(position). Post-sweep the

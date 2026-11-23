@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
-import { entities, stories, storyDefinitionSchema, type DbCtx } from '@/lib/db'
+import { branches, entities, stories, storyDefinitionSchema, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { currentStoryStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
 
@@ -55,6 +55,10 @@ export async function setStoryLead(
   if (target.status !== 'active') return refuse(storyId, entityId, LEAD_REJECTION.notActive)
   const next = storyDefinitionSchema.safeParse({ ...story.definition, leadEntityId: entityId })
   if (!next.success) return refuse(storyId, entityId, LEAD_REJECTION.invalidDefinition)
+  const storyBranches = await ctx.db
+    .select({ id: branches.id })
+    .from(branches)
+    .where(eq(branches.storyId, storyId))
   // No await between this gate and the write, so a run starting mid-read cannot slip past.
   if (generationStore.isUserEditBlocked()) return refuse(storyId, entityId, LEAD_REJECTION.inFlight)
   await ctx.runInTransaction([
@@ -64,9 +68,9 @@ export async function setStoryLead(
       .where(eq(stories.id, storyId))
       .toSQL(),
   ])
-  // Redo replays deletes without the arm's lead refusal; this direct write must invalidate
-  // redo like every delta-logged one.
-  undoRedoStore.clear()
+  // Redo replays deletes without the arm's lead refusal, and the lead is the story's: this direct
+  // write invalidates redo on every branch of the story.
+  for (const { id } of storyBranches) undoRedoStore.clear(id)
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, definition: next.data })
   await rehydrateStories(ctx.db)

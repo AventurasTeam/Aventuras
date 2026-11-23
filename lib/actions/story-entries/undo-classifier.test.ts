@@ -37,7 +37,7 @@ afterEach(() => {
   generationStore.__reset()
   happeningsStore.__reset()
   happeningAwarenessStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 const status = (processedThrough: number): ClassifierStatus => ({

@@ -56,7 +56,7 @@ export function resetAllStores(): void {
   listCollapseStore.__reset()
   readerRailStore.__reset()
   recoveryReportStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   wizardStore.reset()
 }
 

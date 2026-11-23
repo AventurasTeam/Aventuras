@@ -56,7 +56,7 @@ vi.mock('@/lib/ai', async (importOriginal) => ({
 installChapterDeleteHooks(generateStructuredMock)
 
 afterEach(() => {
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
 })
 
 const RERUN = 'act_rerun'
@@ -144,7 +144,7 @@ describe('CTRL-Z of a re-run', () => {
     const before = await rerun(c)
     expect((await worldRows(c.fx)).lore.map((row) => row.id)).toEqual([RERUN_LORE_ID])
     expect(await journalRows(c)).toHaveLength(1)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
 
@@ -153,7 +153,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(await chapterRows(c.fx)).toEqual(before.chapters)
     expect(await entryRows(c.fx)).toEqual(before.entries)
     expect(await journalRows(c)).toEqual([])
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
     // The stores end as the DB does: the write-back's patches emit after the group's own.
     expect(loreStore.getById(c.fx.branchId, CLOSE_LORE_ID)).toBeDefined()
     expect(loreStore.getById(c.fx.branchId, RERUN_LORE_ID)).toBeUndefined()
@@ -193,7 +193,7 @@ describe('CTRL-Z of a re-run', () => {
         },
       },
     ])
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
 
     expect(await undoLastAction(branchId, ctx)).toStrictEqual({ status: 'ok' })
 
@@ -201,21 +201,21 @@ describe('CTRL-Z of a re-run', () => {
     expect(await worldRows(c.fx)).toEqual(before.world)
     expect(await chapterRows(c.fx)).toEqual(before.chapters)
     expect(await journalRows(c)).toEqual([])
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
   })
 
   it('empties the redo stack when only the store sync after the commit throws', async () => {
     const c = await openClosed()
     await writeCloseWork(c)
     const before = await rerun(c)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
     vi.spyOn(loreStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
 
     await expect(undoLastAction(c.fx.branchId, c.fx.ctx)).rejects.toBeInstanceOf(DeltaReplayError)
 
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
     expect(await logRows(c.fx)).toEqual(before.log)
     expect(await journalRows(c)).toEqual([])
   })
@@ -237,7 +237,7 @@ describe('CTRL-Z of a re-run', () => {
     )
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
-    expect(undoRedoStore.hasRedo()).toBe(true)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(true)
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
 
     expect(await redoLastAction(c.fx.branchId, c.fx.ctx)).toEqual({
@@ -276,7 +276,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(c.chapter.sequenceNumber).toBe(1)
     await rerun(c)
     await spoil(c)
-    undoRedoStore.pushRedoGroup(__redoGroupForTest())
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({
       status: 'ok',
@@ -291,7 +291,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(
       (await logRows(c.fx)).filter((d) => d.actionId === c.actionId || d.actionId === RERUN),
     ).toEqual([])
-    expect(undoRedoStore.hasRedo()).toBe(false)
+    expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
     expect(undoneLogLevels()).toEqual(['warn'])
   })
 

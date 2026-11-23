@@ -84,7 +84,7 @@ afterEach(() => {
   entitiesStore.__reset()
   entriesStore.__reset()
   loreStore.__reset()
-  undoRedoStore.clear()
+  undoRedoStore.__reset()
   vi.restoreAllMocks()
 })
 
