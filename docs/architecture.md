@@ -1496,7 +1496,9 @@ and the
 render rows via the
 [`DeltaLogRow`](./ui/patterns/delta-log-row.md) pattern, whose
 `summary: string` slot takes pre-formatted diff prose
-(`Added "former soldier"; was ["brave", "loyal"]`). Forming that
+(`Traits: added "former soldier"`, worded per
+[`world.md → Change prose`](./ui/screens/world/world.md#change-prose)).
+Forming that
 prose for `op=update` deltas requires both the OLD value and the
 NEW value: OLD lives in
 [`deltas.undo_payload`](./data-model.md#diagram) directly, but
@@ -1552,11 +1554,17 @@ pre-state. For a delta whose `undo_payload` is
 `{state: {traits: ["brave"]}}` against a current row where
 `state = {traits: ["brave", "former soldier"], drives: [...], voice: "low"}`,
 the renderer reads `keys(old.state)` → `["traits"]` and emits
-`Added "former soldier"` without touching `drives` or `voice`.
-A key whose old and new values match renders nothing: a reversal can
-rewrite a surviving delta into restating a field, and the delta keeps
-the key so it still says who wrote the field
+`Traits: added "former soldier"` without touching `drives` or `voice`.
+The keys are the paths the field-name summary reads, so `$`-prefixed
+meta keys make no clause. A record whose old partial is `null`, the
+column absent before the delta, has no keys to iterate: every key of
+its new value is an addition. A key whose old and new values match
+renders nothing: a reversal can rewrite a surviving delta into
+restating a field, and the delta keeps the key so it still says who
+wrote the field
 ([`generation-pipeline.md → Reverse-replay`](./generation-pipeline.md#reverse-replay)).
+What counts as matching, and what a row shows when nothing renders,
+is in [`world.md → Change prose`](./ui/screens/world/world.md#change-prose).
 
 `op=create` and `op=delete` never go through the cache —
 [`DeltaLogRow`](./ui/patterns/delta-log-row.md#summary) renders
@@ -1618,9 +1626,11 @@ Each row's host (per-screen page) renders via:
 2. `delta.op === 'update'`:
    - `peek(delta.branchId, delta.id)` first.
    - **Hit:** format rich `(old, new)` prose, pass as `summary`.
+     An entry whose every clause renders nothing keeps the
+     keys-only summary below.
    - **Miss:** kick off `populate(delta)`, fall back to a
      summary derived from `undo_payload` keys alone (e.g.,
-     `Modified traits, drives`). On populate resolution, the
+     `Modified Traits, Drives`). On populate resolution, the
      host's normal re-render path picks up the new entry and
      the row upgrades to the rich form.
 
