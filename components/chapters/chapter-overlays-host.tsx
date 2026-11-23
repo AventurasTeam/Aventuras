@@ -120,9 +120,8 @@ async function readRerunPreview(
 
 // Only a later chapter on the same branch is a close landing; a switch or story close is silent.
 function closeLandedUnder(request: RerunConfirmRequest): boolean {
-  const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
-  const chapter = overlayChapter(chaptersStore.getById(openBranchId, request.chapterId))
-  return chapter != null && chaptersStore.getLatest(openBranchId)?.id !== chapter.id
+  const chapter = overlayChapter(chaptersStore.getById(request.branchId, request.chapterId))
+  return chapter != null && chaptersStore.getLatest(request.branchId)?.id !== chapter.id
 }
 
 /**
