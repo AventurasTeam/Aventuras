@@ -79,7 +79,7 @@ describe('translations CRUD arms', () => {
     )
     expect((await rowFor(db, 'tr_1')).translatedText).toBe('Hola mundo')
     expect((await db.select().from(deltas)).length).toBe(1)
-    expect(translationsStore.getTranslation('entity', 'char_1', 'description', 'es')).toBe(
+    expect(translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es')).toBe(
       'Hola mundo',
     )
   })
@@ -156,13 +156,13 @@ describe('translations CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'tr_1')).translatedText).toBe('Hola de nuevo')
-    expect(translationsStore.getTranslation('entity', 'char_1', 'description', 'es')).toBe(
+    expect(translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es')).toBe(
       'Hola de nuevo',
     )
 
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     expect((await rowFor(db, 'tr_1')).translatedText).toBe('Hola mundo')
-    expect(translationsStore.getTranslation('entity', 'char_1', 'description', 'es')).toBe(
+    expect(translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es')).toBe(
       'Hola mundo',
     )
   })
@@ -195,12 +195,12 @@ describe('translations CRUD arms', () => {
     )
     expect(await rowFor(db, 'tr_1')).toBeUndefined()
     expect(
-      translationsStore.getTranslation('entity', 'char_1', 'description', 'es'),
+      translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es'),
     ).toBeUndefined()
 
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'tr_1')).translatedText).toBe('Hola mundo')
-    expect(translationsStore.getTranslation('entity', 'char_1', 'description', 'es')).toBe(
+    expect(translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es')).toBe(
       'Hola mundo',
     )
   })
@@ -219,12 +219,12 @@ describe('translations CRUD arms', () => {
       },
       ctx,
     )
-    expect(translationsStore.getTranslation('entity', 'char_1', 'description', 'es')).toBe(
+    expect(translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es')).toBe(
       'Hola mundo',
     )
     expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
     expect(
-      translationsStore.getTranslation('entity', 'char_1', 'description', 'es'),
+      translationsStore.getTranslation('br_1', 'entity', 'char_1', 'description', 'es'),
     ).toBeUndefined()
   })
 

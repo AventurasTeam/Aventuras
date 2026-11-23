@@ -262,8 +262,12 @@ describe('loadOpenStory', () => {
     expect([...threadsStore.getThreads().values()].map((r) => r.id)).toEqual(['thread_1'])
     expect(happeningsStore.getLoadedBranch()).toBe('br_1')
     expect([...happeningsStore.getHappenings().values()].map((r) => r.id)).toEqual(['hap_1'])
-    expect(happeningInvolvementsStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['hinv_1'])
-    expect(happeningAwarenessStore.getByHappening('hap_1').map((r) => r.id)).toEqual(['haw_1'])
+    expect(happeningInvolvementsStore.getByHappening('br_1', 'hap_1').map((r) => r.id)).toEqual([
+      'hinv_1',
+    ])
+    expect(happeningAwarenessStore.getByHappening('br_1', 'hap_1').map((r) => r.id)).toEqual([
+      'haw_1',
+    ])
     expect(chaptersStore.getLoadedBranch()).toBe('br_1')
     expect([...chaptersStore.getChapters().values()].map((r) => r.id)).toEqual(['chap_1'])
 

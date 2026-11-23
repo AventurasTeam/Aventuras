@@ -122,7 +122,7 @@ async function readRerunPreview(
 function closeLandedUnder(request: RerunConfirmRequest): boolean {
   const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
   const chapter = overlayChapter(chaptersStore.getById(request.chapterId), openBranchId)
-  return chapter != null && chaptersStore.getLatest()?.id !== chapter.id
+  return chapter != null && chaptersStore.getLatest(openBranchId)?.id !== chapter.id
 }
 
 /**

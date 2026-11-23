@@ -15,7 +15,7 @@ let index = new Map<string, string>()
 // writes, so this auto-inherits the branch guard with no duplicated logic or ordering hazard.
 function rebuildIndex(): void {
   index = new Map()
-  for (const r of base.getRows().values()) {
+  for (const r of base.getRows(base.getLoadedBranch()).values()) {
     if (r.translatedText != null)
       index.set(compositeKey(r.targetKind, r.targetId, r.field, r.language), r.translatedText)
   }
@@ -24,14 +24,20 @@ function rebuildIndex(): void {
 export const translationsStore = {
   getLoadedBranch: base.getLoadedBranch,
   useTranslations: base.useRows,
-  getTranslations: (): ReadonlyMap<string, Translation> => base.getRows(),
-  getById: (id: string): Translation | undefined => base.getRows().get(id),
+  getTranslations: base.getRows,
+  getById: base.getById,
+  useById: base.useById,
+  // The index holds the loaded branch's rows alone, so any other branch reads as a miss.
   getTranslation: (
+    branchId: string | null,
     kind: Translation['targetKind'],
     id: string,
     field: string,
     language: string,
-  ): string | undefined => index.get(compositeKey(kind, id, field, language)),
+  ): string | undefined =>
+    branchId != null && base.getLoadedBranch() === branchId
+      ? index.get(compositeKey(kind, id, field, language))
+      : undefined,
   hydrate: (branchId: string, rows: Translation[]): void => {
     base.hydrate(branchId, rows)
     rebuildIndex()

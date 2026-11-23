@@ -8,9 +8,10 @@ export const entitiesStore = {
   useEntities: store.useRows,
   getEntities: store.getRows,
   getLoadedBranch: store.getLoadedBranch,
-  getById: (id: string): Entity | undefined => store.getRows().get(id),
-  getByKind: (kind: Entity['kind']): readonly Entity[] =>
-    [...store.getRows().values()].filter((e) => e.kind === kind),
+  getById: store.getById,
+  useById: store.useById,
+  getByKind: (branchId: string | null, kind: Entity['kind']): readonly Entity[] =>
+    [...store.getRows(branchId).values()].filter((e) => e.kind === kind),
   hydrate: store.hydrate,
   patch: store.patch,
   __reset: store.__reset,
