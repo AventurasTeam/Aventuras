@@ -127,10 +127,11 @@ the
   `resolved_at_entry_id` (read-only entry ref, only when status is
   resolved/failed).
 - **History** — delta log filtered to this thread; structured search
-  over field-path / op / change-summary text per
+  over field-path / op / field-name summary text per
   [patterns → Search bar scope](../../patterns/lists.md#search-bar-scope).
-  Same shape as World's History tab, down to a row opening its entry in
-  the reader; uses the
+  Same shape as World's History tab, down to its
+  [change prose](../world/world.md#change-prose) and a row opening its
+  entry in the reader; uses the
   [load-older pattern](../../patterns/lists.md#load-older--log-shaped-unbounded-lists),
   not virtualization.
 
