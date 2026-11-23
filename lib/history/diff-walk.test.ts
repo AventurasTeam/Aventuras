@@ -815,13 +815,14 @@ describe('isRetrievalBump', () => {
       undoPayload,
       createdAt: logPosition,
     })
-    await t.db
-      .insert(deltas)
-      .values([
-        update('dl_bare', 1, { retrievalCount: 0 }),
-        update('dl_meta', 2, { retrievalCount: 1, $machinePin: true }),
-        update('dl_mixed', 3, { retrievalCount: 2, source: null }),
-      ])
+    await t.db.insert(deltas).values([
+      update('dl_bare', 1, { retrievalCount: 0 }),
+      update('dl_meta', 2, { retrievalCount: 1, $machinePin: true }),
+      update('dl_mixed', 3, { retrievalCount: 2, source: null }),
+      // One key that isn't the count, as a single-field awareness edit writes.
+      update('dl_source', 4, { source: null }),
+      update('dl_decay', 5, { decayResistance: 0.5 }),
+    ])
     const written = (await t.db
       .select()
       .from(deltas)
@@ -832,6 +833,8 @@ describe('isRetrievalBump', () => {
       ['dl_bare', true],
       ['dl_meta', false],
       ['dl_mixed', false],
+      ['dl_source', false],
+      ['dl_decay', false],
     ])
     const chunk = await loadHistoryChunk(t.db, {
       branchId: 'b1',
@@ -841,8 +844,15 @@ describe('isRetrievalBump', () => {
       cursor: null,
     })
     const listed = chunk.rows.map((row) => row.delta.id)
-    expect(listed).toEqual(['dl_meta', 'dl_mixed'])
+    expect(listed).toEqual(['dl_meta', 'dl_mixed', 'dl_source', 'dl_decay'])
     expect(listed).toEqual(written.filter((d) => !isRetrievalBump(d)).map((d) => d.id))
+    const walked = await walkTarget(
+      t.db,
+      await Promise.all(written.map((d) => onlyUpdate(d.actionId))),
+    )
+    expect(new Set(walked.entries.keys())).toEqual(
+      new Set(['dl_meta', 'dl_mixed', 'dl_source', 'dl_decay']),
+    )
   })
 
   it('is false off the awareness table, for a create, and for an empty payload', () => {
