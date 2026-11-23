@@ -57,8 +57,7 @@ type Overrides = {
 
 function data(rows: Iterable<StoreChapter>, overrides: Overrides = {}) {
   return chapterTimelineData({
-    branchId: 'br_1',
-    rows,
+    branchRows: rows,
     ranges: overrides.ranges ?? NO_RANGES,
     entryIndex: overrides.entryIndex ?? NO_INDEX,
     frame: overrides.frame === undefined ? FRAME : overrides.frame,
@@ -71,18 +70,13 @@ describe('chapterTimelineData', () => {
     expect(cards.map((card) => card.row.id)).toEqual(['br_1_chap_2', 'br_1_chap_9', 'br_1_chap_10'])
   })
 
-  it("keeps only the branch's rows", () => {
-    const { cards } = data([chapter(1), chapter(4, 'br_2'), chapter(2)])
-    expect(cards.map((card) => card.row.id)).toEqual(['br_1_chap_1', 'br_1_chap_2'])
-  })
-
-  it('flags only the highest sequence on the branch as latest', () => {
-    const { cards } = data([chapter(10), chapter(2), chapter(9), chapter(11, 'br_2')])
+  it('flags only the highest sequence as latest', () => {
+    const { cards } = data([chapter(10), chapter(2), chapter(9)])
     expect(cards.filter((card) => card.latest).map((card) => card.row.id)).toEqual(['br_1_chap_10'])
   })
 
   it('gives no cards for a branch with no closed chapter', () => {
-    expect(data([chapter(1, 'br_2')])).toEqual({ cards: [], sinceLabel: null })
+    expect(data([])).toEqual({ cards: [], sinceLabel: null })
   })
 
   it('carries the store row itself', () => {

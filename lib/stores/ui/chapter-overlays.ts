@@ -38,51 +38,51 @@ export type ChapterOverlaysState = {
   rerunConfirm: RerunConfirmRequest | null
 }
 
-type ReportHolder = Pick<StoreChapter, 'branchId' | 'hasCloseReport'>
+type ReportHolder = Pick<StoreChapter, 'hasCloseReport'>
 type HeldReport = ReportHolder & Pick<StoreChapter, 'closeReportActionId'>
 
-/** C7: an overlay's chapter stands while it holds a report on the open branch; else null. */
-export function overlayChapter<C extends ReportHolder>(
-  chapter: C | undefined,
-  openBranchId: string | null,
-): C | null {
-  return chapter != null && chapter.hasCloseReport && chapter.branchId === openBranchId
-    ? chapter
-    : null
+/** C7: an overlay's chapter stands while it holds a report; else null. Pass the open branch's row. */
+export function overlayChapter<C extends ReportHolder>(chapter: C | undefined): C | null {
+  return chapter != null && chapter.hasCloseReport ? chapter : null
 }
 
 /** C7: the chapter while it holds the report an overlay opened on; a re-run or its undo ends it. */
 export function reportChapter<C extends HeldReport>(
   chapter: C | undefined,
-  openBranchId: string | null,
   actionId: string | null,
 ): C | null {
-  const held = overlayChapter(chapter, openBranchId)
+  const held = overlayChapter(chapter)
   return held != null && held.closeReportActionId === actionId ? held : null
 }
 
-/** C7: a committed close's chapter while its result is this open's and it stands; else null. */
+/**
+ * C7: a committed close's chapter while its result is this open's and it stands; else null.
+ * `branchChapters` is the open branch's read.
+ */
 export function closeResultChapter<C extends HeldReport>(
   result: CloseResult | null,
-  chapters: ReadonlyMap<string, C>,
+  branchChapters: ReadonlyMap<string, C>,
   open: { branchId: string | null; openSeq: number },
 ): C | null {
   if (result == null || result.branchId !== open.branchId || result.openSeq !== open.openSeq)
     return null
-  return reportChapter(chapters.get(result.chapterId), open.branchId, result.actionId)
+  return reportChapter(branchChapters.get(result.chapterId), result.actionId)
 }
 
-/** C7: the re-run confirm's chapter while it stands with a report as the open branch's latest. */
+/**
+ * C7: the re-run confirm's chapter while it stands with a report as the open branch's latest.
+ * `branchChapters` is the open branch's read.
+ */
 export function rerunConfirmChapter<C extends ReportHolder & Pick<StoreChapter, 'sequenceNumber'>>(
   request: RerunConfirmRequest | null,
-  chapters: ReadonlyMap<string, C>,
+  branchChapters: ReadonlyMap<string, C>,
   openBranchId: string | null,
 ): C | null {
   if (request == null || request.branchId !== openBranchId) return null
-  const chapter = overlayChapter(chapters.get(request.chapterId), openBranchId)
+  const chapter = overlayChapter(branchChapters.get(request.chapterId))
   if (chapter == null) return null
-  for (const row of chapters.values())
-    if (row.branchId === openBranchId && row.sequenceNumber > chapter.sequenceNumber) return null
+  for (const row of branchChapters.values())
+    if (row.sequenceNumber > chapter.sequenceNumber) return null
   return chapter
 }
 
@@ -98,8 +98,10 @@ const store = createStore<ChapterOverlaysState>()(() => INITIAL)
 // Functions, never rendered, so kept outside the zustand state: a registration re-renders nothing.
 let surfaceSlot: { token: object; surface: OverlaySurface } | null = null
 
+// A review request carries no branch yet (M6): its chapter is the loaded branch's.
 function reviewOf(chapterId: string): ReviewRequest {
-  return { chapterId, actionId: chaptersStore.getById(chapterId)?.closeReportActionId ?? null }
+  const chapter = chaptersStore.getById(chaptersStore.getLoadedBranch(), chapterId)
+  return { chapterId, actionId: chapter?.closeReportActionId ?? null }
 }
 
 function guarded(proceed: () => void): void {

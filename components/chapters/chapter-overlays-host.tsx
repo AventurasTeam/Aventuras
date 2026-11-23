@@ -60,7 +60,7 @@ const reviewRequested = () => {
   if (review == null) return false
   const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
   return (
-    reportChapter(chaptersStore.getById(review.chapterId), openBranchId, review.actionId) != null
+    reportChapter(chaptersStore.getById(openBranchId, review.chapterId), review.actionId) != null
   )
 }
 
@@ -87,7 +87,7 @@ async function readReviewSources(branchId: string, chapterId: string): Promise<R
     const kinds = new Map<string, EntityKind>()
     const absent: string[] = []
     for (const id of reportEntityIds(report)) {
-      const kind = entitiesStore.getById(id)?.kind
+      const kind = entitiesStore.getById(branchId, id)?.kind
       if (kind == null) absent.push(id)
       else kinds.set(id, kind)
     }
@@ -121,7 +121,7 @@ async function readRerunPreview(
 // Only a later chapter on the same branch is a close landing; a switch or story close is silent.
 function closeLandedUnder(request: RerunConfirmRequest): boolean {
   const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
-  const chapter = overlayChapter(chaptersStore.getById(request.chapterId), openBranchId)
+  const chapter = overlayChapter(chaptersStore.getById(openBranchId, request.chapterId))
   return chapter != null && chaptersStore.getLatest(openBranchId)?.id !== chapter.id
 }
 
@@ -136,15 +136,15 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const rerunConfirm = chapterOverlaysStore.useOverlays((s) => s.rerunConfirm)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
   const openSeq = currentStoryStore.useOpenSeq()
-  const reviewChapter = chaptersStore.useChapters((rows) =>
-    review == null
-      ? null
-      : reportChapter(rows.get(review.chapterId), openBranchId, review.actionId),
+  const reviewChapter = chaptersStore.useChapters(openBranchId, (rows) =>
+    review == null ? null : reportChapter(rows.get(review.chapterId), review.actionId),
   )
   const resultHolds = chaptersStore.useChapters(
+    openBranchId,
     (rows) => closeResultChapter(closeResult, rows, { branchId: openBranchId, openSeq }) != null,
   )
   const rerunHolds = chaptersStore.useChapters(
+    openBranchId,
     (rows) => rerunConfirmChapter(rerunConfirm, rows, openBranchId) != null,
   )
   const presence = useReviewWindowPresence({
@@ -239,14 +239,15 @@ function ReviewHost({
   const entryIndex = entryIndexRead.index
   // Built before the index reads, a review cites raw entry ids and links no entry.
   const indexReady = entryIndexRead.ready
-  const entities = entitiesStore.useEntities((rows) => rows)
-  const lore = loreStore.useLore((rows) => rows)
-  const threads = threadsStore.useThreads((rows) => rows)
-  const happenings = happeningsStore.useHappenings((rows) => rows)
-  const awareness = happeningAwarenessStore.useAwareness((rows) => rows)
+  const entities = entitiesStore.useEntities(branchId, (rows) => rows)
+  const lore = loreStore.useLore(branchId, (rows) => rows)
+  const threads = threadsStore.useThreads(branchId, (rows) => rows)
+  const happenings = happeningsStore.useHappenings(branchId, (rows) => rows)
+  const awareness = happeningAwarenessStore.useAwareness(branchId, (rows) => rows)
   const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
   const rerunReason = useRerunDisabledReason(storyId, branchId)
   const latest = chaptersStore.useChapters(
+    branchId,
     (rows) => chaptersStore.selectLatest(rows)?.id === chapterId,
   )
   const rerun = () =>

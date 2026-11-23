@@ -212,17 +212,6 @@ describe('useChapterProgress', () => {
     expect(reads.series).toHaveBeenCalledTimes(2)
   })
 
-  it('does not read again for a row on another branch', async () => {
-    entriesStore.hydrate('b1', [entry('e1', 1)])
-    await renderAtHundredTokens()
-
-    act(() => {
-      entriesStore.patch('b1', { op: 'create', id: 'x9', row: entry('x9', 9, 'b2') })
-    })
-    await act(async () => {})
-    expect(reads.series).toHaveBeenCalledTimes(1)
-  })
-
   it('holds the last number while the next read is pending', async () => {
     await renderAtHundredTokens()
 

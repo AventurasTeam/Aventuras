@@ -168,16 +168,21 @@ describe('usePeekView', () => {
   })
 
   it('takes world time from this branch’s tail by position, not by store order', () => {
-    // Neither store order nor its reverse ends on e4; another branch's entry sits past it.
+    // Neither store order nor its reverse ends on e4.
     entriesStore.hydrate('br_1', [
       entry('e2', 'user_action', 2, 200),
       entry('e4', 'user_action', 4, 400),
-      entry('f9', 'ai_reply', 9, 900, 'br_2'),
       entry('e1', 'opening', 1, 100),
       entry('e3', 'ai_reply', 3, 300),
     ])
     const { result } = renderPeek(null)
     expect(result.current.entityContext.worldTime).toBe(400)
+  })
+
+  it('takes no world time while another branch is loaded', () => {
+    entriesStore.hydrate('br_2', [entry('f9', 'ai_reply', 9, 900, 'br_2')])
+    const { result } = renderPeek(null)
+    expect(result.current.entityContext.worldTime).toBe(0)
   })
 
   it('takes the default calendar from a story open on another branch', () => {

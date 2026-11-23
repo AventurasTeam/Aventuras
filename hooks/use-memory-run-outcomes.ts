@@ -12,7 +12,6 @@ import {
   currentStoryStore,
   type CloseResult,
   type DeferredWorkKind,
-  type StoreChapter,
 } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -27,12 +26,6 @@ function failedCopy(
   if (kind === PERIODIC_CLASSIFIER_KIND) return 'chrome.memoryUpdateFailed'
   if (kind === CHAPTER_CLOSE_KIND) return 'chrome.chapterCloseFailed'
   return null
-}
-
-function latestStoreChapter(branchId: string): StoreChapter | undefined {
-  return chaptersStore.getLoadedBranch() === branchId
-    ? chaptersStore.getLatest(branchId)
-    : undefined
 }
 
 // `run_complete` names no chapter or branch: the open branch's latest report must carry its
@@ -60,7 +53,7 @@ async function committedClose(actionId: string, rerun: boolean): Promise<CloseRe
       actionId,
       error: error instanceof Error ? error.message : String(error),
     })
-    const chapter = latestStoreChapter(branchId)
+    const chapter = chaptersStore.getLatest(branchId)
     return chapter == null
       ? null
       : { branchId, openSeq, chapterId: chapter.id, actionId, rerun, stoppedTasks: 0 }
