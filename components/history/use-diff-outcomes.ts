@@ -26,7 +26,7 @@ function peeked(loader: DiffLoader, delta: Delta): DiffOutcome | undefined {
   return entry === undefined ? undefined : { kind: 'entry', entry }
 }
 
-/** Each update row's resolved diff outcome, by delta id; absent while pending or after a rejection. */
+/** Each update row's diff outcome, by delta id; absent while pending, re-reading or failed. */
 export function useDiffOutcomes(
   branchId: string,
   rows: readonly HistoryRow[],
@@ -44,6 +44,8 @@ export function useDiffOutcomes(
       initialData: () => peeked(loader, delta),
       // The diff cache owns retention: a query that outlived its tab would miss the eviction.
       gcTime: 0,
+      // Only an invalidation makes a diff stale, so `isStale` marks a re-read after an eviction.
+      staleTime: Infinity,
     }),
   )
   // A plain record, so TanStack's structural sharing keeps it stable while no outcome changes.
@@ -52,7 +54,8 @@ export function useDiffOutcomes(
     combine: (results) => {
       const outcomes: Record<string, DiffOutcome> = {}
       results.forEach((result, i) => {
-        if (result.status === 'success') outcomes[updates[i].id] = result.data
+        // An evicted row's old outcome is stale prose; canon wants the summary until the re-read.
+        if (result.status === 'success' && !result.isStale) outcomes[updates[i].id] = result.data
       })
       return outcomes
     },

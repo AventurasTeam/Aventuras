@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -654,6 +654,17 @@ describe('HistoryTab change prose', () => {
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
   })
 
+  it("shows the prose under a client whose queries go stale at once, as TanStack's default does", async () => {
+    const diffs = createDiffCache({ walk: async () => walked({ [VOICE.id]: VOICE_ENTRY }) })
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs, client: new QueryClient() },
+    )
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
+  })
+
   it('keeps the summary when the walk rejects, and when it finds the delta gone', async () => {
     const failedClient = createQueryClient()
     const failing = vi
@@ -751,10 +762,11 @@ describe('HistoryTab change prose', () => {
   })
 
   it("re-reads a mounted row when the cache evicts the tab's branch, and only then", async () => {
+    const rewalk = deferred<WalkResult>()
     const walk = vi
       .fn<DiffWalk>()
       .mockResolvedValueOnce(walked({ [VOICE.id]: VOICE_ENTRY }))
-      .mockResolvedValueOnce(walked({ [VOICE.id]: HOARSE_ENTRY }))
+      .mockReturnValueOnce(rewalk.promise)
     const diffs = createDiffCache({ walk })
     renderTab(
       loader(() => [own(VOICE)]),
@@ -772,6 +784,11 @@ describe('HistoryTab change prose', () => {
     expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE)
 
     act(() => diffs.evictBranch(BRANCH))
+    await waitFor(() => expect(walk).toHaveBeenCalledTimes(2))
+    await settle()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Voice')
+
+    await act(async () => rewalk.resolve(walked({ [VOICE.id]: HOARSE_ENTRY })))
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(HOARSE_PROSE))
     expect(walk).toHaveBeenCalledTimes(2)
   })
