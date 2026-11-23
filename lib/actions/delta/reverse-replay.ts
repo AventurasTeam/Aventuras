@@ -309,7 +309,12 @@ function undoneValue(schema: ZodType | undefined, partial: unknown, current: unk
 
 // A place's parent and unplaced mark restore as one field: the clear logs nothing, so a
 // parent-only partial can land on a place it unplaced.
-function undoneColumn(entry: TableEntry, col: string, partial: unknown, current: unknown): unknown {
+export function undoneColumn(
+  entry: TableEntry,
+  col: string,
+  partial: unknown,
+  current: unknown,
+): unknown {
   const undone = undoneValue(entry.columnSchemas[col], partial, current)
   if (entry.table !== 'entities' || col !== 'state') return undone
   if (!isJsonObject(partial) || !isJsonObject(undone)) return undone

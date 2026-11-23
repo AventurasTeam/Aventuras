@@ -52,6 +52,7 @@ export {
 } from './delta/apply-delta-action'
 export { deltaActionPort } from './delta/action-port'
 export { holdBranchWriteExclusive, releaseBranchWriteExclusive } from './delta/branch-write-lock'
+export { termMatchOf, undoneColumnOf } from './delta/column-undo'
 export {
   applyUndoPayload,
   computeUndoPayload,
@@ -67,6 +68,7 @@ export {
   reverseReplayDeltas,
 } from './delta/reverse-replay'
 export { readRowGuard } from './delta/row-guard'
+export { termChanges, termKeyOf, type TermChange, type TermMatch } from './delta/term-list'
 export { readUnfinishedRuns, type UnfinishedRun } from './delta/unfinished-runs'
 export { userDeletedHappeningLink } from './delta/user-precedence'
 export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'
