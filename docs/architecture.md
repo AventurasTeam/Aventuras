@@ -1791,8 +1791,9 @@ A later `populate` of that delta rejects at once, with no walk and no
 second `warn`. The memory goes with its branch's next eviction: under a
 snapshot read, only a rewrite of the log can change a chain the walk
 found corrupt. A plain DB error is remembered as long, so a one-off
-failure keeps its rows on the summary until that eviction. The host keeps the `undo_payload`-keys summary for that
-row. The row stays usable. The warn level keeps the entry visible in
+failure keeps its rows on the summary until that eviction. The host
+keeps the `undo_payload`-keys summary for that row. The row stays
+usable. The warn level keeps the entry visible in
 Diagnostics Hub Logs without requiring the debug-level master
 toggle, so users investigating "why is this delta log row less
 detailed than the others" can find the cause. No UI signal on the
