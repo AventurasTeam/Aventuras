@@ -98,13 +98,13 @@ export const HISTORY_LINK_WATCH: Readonly<
 }
 
 // Where a delete's payload holds its cascade-removed link rows (delete-cascade.ts → PAYLOAD_KEY).
-export const HELD_KEY: Record<HistoryLinkTable, string> = {
+export const HELD_KEY: Readonly<Record<HistoryLinkTable, string>> = {
   character_relationships: 'relationships',
   happening_involvements: 'involvements',
   happening_awareness: 'awareness',
 }
 
-export const HOLDING_TABLES = ['entities', 'happenings']
+export const HOLDING_TABLES = ['entities', 'happenings'] as const
 
 /**
  * `column IN (ids)`, bound as one JSON array: the union binds every unbounded id list in one
