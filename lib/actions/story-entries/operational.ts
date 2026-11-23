@@ -240,7 +240,7 @@ async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ where: SQL | undefined; earliestRemovedPosition: number } | StoryEntryRejection> {
+): Promise<{ where: SQL; earliestRemovedPosition: number } | StoryEntryRejection> {
   const [target] = await ctx.db
     .select()
     .from(storyEntries)
@@ -282,7 +282,7 @@ async function resolveRollbackWindow(
       eq(deltas.branchId, branchId),
       sql`${deltas.logPosition} >= ${createDelta.lp}`,
       sql`(${deltas.entryId} IS NULL OR (SELECT ${storyEntries.position} FROM ${storyEntries} WHERE ${storyEntries.branchId} = ${deltas.branchId} AND ${storyEntries.id} = ${deltas.entryId}) >= ${target.position})`,
-    ),
+    ) as SQL,
     // B: the target is itself the first entry the sweep removes, for both the
     // rollback and the CTRL-Z turn arm.
     earliestRemovedPosition: target.position,
@@ -294,6 +294,8 @@ export type ResolvedSweep = {
   clampOps: readonly SqlOp[]
   /** The rollback window before the closure, newest first. */
   window: readonly Delta[]
+  /** The survival-anchor predicate the window was read with, for a copy evaluating it in SQL. */
+  windowWhere: SQL
   /** The pass or close holding the branch as the sweep resolved; its rows count nowhere. */
   runningActionId: string | null
   targetPosition: number
@@ -329,6 +331,7 @@ export async function resolveSweep(
     set,
     clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition),
     window: rows,
+    windowWhere: win.where,
     runningActionId,
     targetPosition: win.earliestRemovedPosition,
   }
