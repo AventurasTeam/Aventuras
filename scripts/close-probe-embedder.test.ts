@@ -217,6 +217,19 @@ describe('installProbeBridges', () => {
     expect(await bridge.query('SELECT 1 AS a WHERE 0', [], 'get')).toEqual({ rows: undefined })
   })
 
+  it("answers a batch with each query's rows in query order, as main's bridge does", async () => {
+    installProbeBridges(probeEmbedderBridge(ROOT), await createTestDb())
+    const bridge = globalThis.window.aventurasDb!
+
+    expect(
+      await bridge.batch([
+        { sql: 'SELECT 1 AS a, 2 AS b', params: [], method: 'all' },
+        { sql: 'SELECT 1 AS a WHERE 0', params: [], method: 'get' },
+        { sql: 'SELECT ? AS c', params: [3], method: 'get' },
+      ]),
+    ).toEqual([{ rows: [[1, 2]] }, { rows: undefined }, { rows: [3] }])
+  })
+
   it('refuses to install over a window something else set', async () => {
     const db = await createTestDb()
     vi.stubGlobal('window', {})

@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { app } from 'electron'
 import { getLoadablePath } from 'sqlite-vec'
 
-import type { DbProxyMethod, DbProxyResult } from './types'
+import type { DbProxyMethod, DbProxyQuery, DbProxyResult } from './types'
 
 let sqlite: DatabaseSync | null = null
 
@@ -56,6 +56,16 @@ export function queryOn(
 
 export function query(sqlText: string, params: unknown[], method: DbProxyMethod): DbProxyResult {
   return queryOn(getDb(), sqlText, params, method)
+}
+
+// Not a transaction: writes go through `transaction`. One synchronous loop on the one
+// connection, so no other IPC handler, and so no write, runs between the queries.
+export function batchOn(db: DatabaseSync, queries: readonly DbProxyQuery[]): DbProxyResult[] {
+  return queries.map(({ sql, params, method }) => queryOn(db, sql, params, method))
+}
+
+export function batch(queries: readonly DbProxyQuery[]): DbProxyResult[] {
+  return batchOn(getDb(), queries)
 }
 
 export function exec(sqlText: string): void {
