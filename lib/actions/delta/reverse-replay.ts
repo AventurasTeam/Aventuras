@@ -911,9 +911,8 @@ export type ReverseCommitHooks = {
   /** Read inside the key locks after planning; its ops lead the transaction. */
   opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
   /**
-   * Emitted after the plan's patches, under the same store-sync stage. Its presence marks a journal
-   * write-back, which may restore deltas, so the commit fires `logRewritten` even on an empty set;
-   * a journal that restores none costs a listener one spare re-walk.
+   * Emitted after the plan's patches, same store-sync stage. Marks a journal write-back, which may
+   * restore deltas, so `logRewritten` fires even on an empty set (at worst one spare re-walk).
    */
   patchesAfter?: readonly PatchEmission[]
 }

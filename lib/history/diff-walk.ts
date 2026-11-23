@@ -29,10 +29,7 @@ import {
 } from './prose-fields'
 
 export type DiffCacheEntry = DiffValues & {
-  /**
-   * Walk-time names of the walk's ref ids, one map every entry of the walk shares: stored row,
-   * else latest delete payload.
-   */
+  /** Ref names at walk time (stored row, else latest delete payload); one map all entries share. */
   readonly names: Readonly<Record<string, string>>
 }
 
