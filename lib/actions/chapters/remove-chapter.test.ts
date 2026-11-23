@@ -466,6 +466,7 @@ describe('removeChapter and the bracket', () => {
     expect(await processedThrough(c.fx)).toBe(13)
     const settled = generationStore.getSettleCount()
     undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_other'))
 
     expect(await removeChapter(c.fx.branchId, c.chapter.id, 'whole', c.fx.ctx)).toEqual({
       status: 'ok',
@@ -474,12 +475,14 @@ describe('removeChapter and the bracket', () => {
     expect(generationStore.getSettleCount()).toBe(settled + 1)
     expect(await processedThrough(c.fx)).toBe(13)
     expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
+    expect(undoRedoStore.hasRedo('br_other')).toBe(true)
   })
 
   it('clears redo when the delete commits and only its store sync throws', async () => {
     const c = await openClosed()
     const settled = generationStore.getSettleCount()
     undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_other'))
     vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -494,6 +497,7 @@ describe('removeChapter and the bracket', () => {
     expect(error).toBeInstanceOf(DeltaReplayError)
     expect((error as DeltaReplayError).committed).toBe(true)
     expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
+    expect(undoRedoStore.hasRedo('br_other')).toBe(true)
     expect(await chapterRows(c.fx)).toEqual([])
     expect(generationStore.getSettleCount()).toBe(settled + 1)
   })

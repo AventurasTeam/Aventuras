@@ -705,12 +705,13 @@ describe('regenerateTurn', () => {
     expect(entriesStore.getById('b1', 'e_r2')).toBeDefined()
   })
 
-  it('clears the redo stack (a regenerate is a new unrelated action)', async () => {
+  it("clears its branch's redo stack, leaving another branch's (a regenerate is a new unrelated action)", async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
     undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
     expect(undoRedoStore.hasRedo('b1')).toBe(true)
 
     await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
@@ -718,6 +719,7 @@ describe('regenerateTurn', () => {
     })
 
     expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
   })
 
   it.each([
@@ -737,6 +739,7 @@ describe('regenerateTurn', () => {
     await openStory(db, 's1', 'b1')
     await hydrateAppSettings(async () => WORKING_CONFIG)
     undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b2'))
 
     const regen = withSweepHook(
       () => {
@@ -754,6 +757,7 @@ describe('regenerateTurn', () => {
 
     await expect(regen).rejects.toBeInstanceOf(DeltaReplayError)
     expect(undoRedoStore.hasRedo('b1')).toBe(expectedHasRedo)
+    expect(undoRedoStore.hasRedo('b2')).toBe(true)
     // A thrown regenerate leaves no mark to hold the gate up and stall every pass.
     expect(generationStore.getTxState().pendingTurns.size).toBe(0)
     expect(generationStore.isUserEditBlocked()).toBe(false)

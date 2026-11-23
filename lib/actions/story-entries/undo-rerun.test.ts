@@ -145,6 +145,7 @@ describe('CTRL-Z of a re-run', () => {
     expect((await worldRows(c.fx)).lore.map((row) => row.id)).toEqual([RERUN_LORE_ID])
     expect(await journalRows(c)).toHaveLength(1)
     undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_other'))
 
     expect(await undoLastAction(c.fx.branchId, c.fx.ctx)).toStrictEqual({ status: 'ok' })
 
@@ -154,6 +155,7 @@ describe('CTRL-Z of a re-run', () => {
     expect(await entryRows(c.fx)).toEqual(before.entries)
     expect(await journalRows(c)).toEqual([])
     expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
+    expect(undoRedoStore.hasRedo('br_other')).toBe(true)
     // The stores end as the DB does: the write-back's patches emit after the group's own.
     expect(loreStore.getById(c.fx.branchId, CLOSE_LORE_ID)).toBeDefined()
     expect(loreStore.getById(c.fx.branchId, RERUN_LORE_ID)).toBeUndefined()
@@ -209,6 +211,7 @@ describe('CTRL-Z of a re-run', () => {
     await writeCloseWork(c)
     const before = await rerun(c)
     undoRedoStore.pushRedoGroup(__redoGroupForTest(c.fx.branchId))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_other'))
     vi.spyOn(loreStore, 'patch').mockImplementation(() => {
       throw new Error('store sync boom')
     })
@@ -216,6 +219,7 @@ describe('CTRL-Z of a re-run', () => {
     await expect(undoLastAction(c.fx.branchId, c.fx.ctx)).rejects.toBeInstanceOf(DeltaReplayError)
 
     expect(undoRedoStore.hasRedo(c.fx.branchId)).toBe(false)
+    expect(undoRedoStore.hasRedo('br_other')).toBe(true)
     expect(await logRows(c.fx)).toEqual(before.log)
     expect(await journalRows(c)).toEqual([])
   })
