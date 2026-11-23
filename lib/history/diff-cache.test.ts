@@ -246,6 +246,32 @@ describe('createDiffCache', () => {
       expect(cache.peek('br_b', 'dl_1')).toEqual(FRESH)
     })
 
+    it('keeps the fresh walk joinable when the stale walk settles after it started', async () => {
+      const staleGate = deferred<WalkResult>()
+      const freshGate = deferred<WalkResult>()
+      const unwanted: DiffCacheEntry = { ...FRESH, new: { title: 'a third walk' } }
+      const walk = vi
+        .fn<DiffWalk>(async () => resultOf(unwanted))
+        .mockReturnValueOnce(staleGate.promise)
+        .mockReturnValueOnce(freshGate.promise)
+      const cache = createDiffCache({ walk })
+      const stale = cache.populate(delta('dl_1'))
+      await settle()
+      cache.evictBranch('br_b')
+      const fresh = cache.populate(delta('dl_1'))
+      await settle()
+
+      staleGate.resolve(resultOf(STALE))
+      await expect(stale).rejects.toBeInstanceOf(DiffEvictedError)
+      const joined = cache.populate(delta('dl_1'))
+      await settle()
+
+      expect(walk).toHaveBeenCalledTimes(2)
+      freshGate.resolve(resultOf(FRESH))
+      await expect(fresh).resolves.toEqual({ kind: 'entry', entry: FRESH })
+      await expect(joined).resolves.toEqual({ kind: 'entry', entry: FRESH })
+    })
+
     it('leaves a stale walk out of the cache when nothing walked after the eviction', async () => {
       const gate = deferred<WalkResult>()
       const walk = vi.fn<DiffWalk>(async () => resultOf(FRESH)).mockReturnValueOnce(gate.promise)
