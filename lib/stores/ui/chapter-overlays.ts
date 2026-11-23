@@ -11,8 +11,11 @@ export type OverlaySurface = {
 
 export type CloseModalRequest = { branchId: string; endEntryId?: string }
 
-/** The open review window: its chapter and the report (`closeReportActionId`) it opened on. */
-export type ReviewRequest = { chapterId: string; actionId: string | null }
+/**
+ * The open review window: its branch, its chapter and the report (`closeReportActionId`) it opened
+ * on. A fork copies the chapter's id and its report's action, so only the branch tells them apart.
+ */
+export type ReviewRequest = { branchId: string; chapterId: string; actionId: string | null }
 
 /** The re-run confirm's request; `reopenReview` when `Re-run…` closed the review window for it. */
 export type RerunConfirmRequest = { branchId: string; chapterId: string; reopenReview: boolean }
@@ -111,10 +114,9 @@ const store = createStore<ChapterOverlaysState>()(() => INITIAL)
 // Functions, never rendered, so kept outside the zustand state: a registration re-renders nothing.
 let surfaceSlot: { token: object; surface: OverlaySurface } | null = null
 
-// A review request carries no branch yet (M6): its chapter is the loaded branch's.
-function reviewOf(chapterId: string): ReviewRequest {
-  const chapter = chaptersStore.getById(chaptersStore.getLoadedBranch(), chapterId)
-  return { chapterId, actionId: chapter?.closeReportActionId ?? null }
+function reviewOf(branchId: string, chapterId: string): ReviewRequest {
+  const chapter = chaptersStore.getById(branchId, chapterId)
+  return { branchId, chapterId, actionId: chapter?.closeReportActionId ?? null }
 }
 
 function guarded(proceed: () => void): void {
@@ -130,9 +132,9 @@ export const chapterOverlaysStore = {
    * Refused while a re-run request is held (its confirm mounts once its read lands). Returns
    * whether the window opened.
    */
-  openReviewWindow: (input: { chapterId: string }): boolean => {
+  openReviewWindow: (input: { branchId: string; chapterId: string }): boolean => {
     if (store.getState().rerunConfirm != null) return false
-    store.setState({ review: reviewOf(input.chapterId) })
+    store.setState({ review: reviewOf(input.branchId, input.chapterId) })
     return true
   },
   closeReviewWindow: (): void => store.setState({ review: null }),
@@ -169,7 +171,7 @@ export const chapterOverlaysStore = {
     if (request == null) return
     store.setState(
       reopen && request.reopenReview
-        ? { rerunConfirm: null, review: reviewOf(request.chapterId) }
+        ? { rerunConfirm: null, review: reviewOf(request.branchId, request.chapterId) }
         : { rerunConfirm: null },
     )
   },

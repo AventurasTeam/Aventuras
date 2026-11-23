@@ -59,6 +59,7 @@ const reviewRequested = () => {
   const { review } = chapterOverlaysStore.getState()
   if (review == null) return false
   const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
+  if (review.branchId !== openBranchId) return false
   return (
     reportChapter(chaptersStore.getById(openBranchId, review.chapterId), review.actionId) != null
   )
@@ -135,8 +136,11 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const rerunConfirm = chapterOverlaysStore.useOverlays((s) => s.rerunConfirm)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
   const openSeq = currentStoryStore.useOpenSeq()
+  // A fork copies the chapter's id and its report's action: only the branch tells them apart.
   const reviewChapter = chaptersStore.useChapters(openBranchId, (rows) =>
-    review == null ? null : reportChapter(rows.get(review.chapterId), review.actionId),
+    review == null || review.branchId !== openBranchId
+      ? null
+      : reportChapter(rows.get(review.chapterId), review.actionId),
   )
   const resultHolds =
     useCloseResultChapter(closeResult, { branchId: openBranchId, openSeq }) != null

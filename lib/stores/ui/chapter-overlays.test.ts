@@ -53,8 +53,9 @@ describe('chapterOverlaysStore', () => {
 
   it('opens the review window on the report its chapter holds, and closes it', () => {
     chaptersStore.hydrate('br_hero', [row({ id: 'chap_hero_2' })])
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
       chapterId: 'chap_hero_2',
       actionId: 'act_close_2',
     })
@@ -63,9 +64,25 @@ describe('chapterOverlaysStore', () => {
   })
 
   it('opens on no report for a chapter the store does not hold', () => {
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_missing' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_missing' })
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
       chapterId: 'chap_missing',
+      actionId: null,
+    })
+  })
+
+  // A fork copies chapter ids and report actions: a request reads its report on its own branch.
+  it("records the branch its caller passes and reads no report from another branch's copy", () => {
+    chaptersStore.hydrate('br_fork', [row({ id: 'chap_hero_2', branchId: 'br_fork' })])
+
+    expect(
+      chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' }),
+    ).toBe(true)
+
+    expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
+      chapterId: 'chap_hero_2',
       actionId: null,
     })
   })
@@ -160,7 +177,7 @@ describe('chapterOverlaysStore', () => {
   })
 
   it("holds a copy of a caller's input, never the caller's object", () => {
-    const review = { chapterId: 'chap_hero_2' }
+    const review = { branchId: 'br_hero', chapterId: 'chap_hero_2' }
     chapterOverlaysStore.openReviewWindow(review)
     expect(chapterOverlaysStore.getState().review).not.toBe(review)
 
@@ -181,7 +198,7 @@ describe('chapterOverlaysStore', () => {
   })
 
   it('__reset clears the state and the surface slot', () => {
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     chapterOverlaysStore.openCloseModal({ branchId: 'br_hero' })
     chapterOverlaysStore.openRerunConfirm({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     chapterOverlaysStore.showCloseResult({
@@ -204,7 +221,7 @@ describe('chapterOverlaysStore', () => {
   })
 
   it('is cleared by resetAllStores', () => {
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     chapterOverlaysStore.registerSurface(surface())
     resetAllStores()
     expect(chapterOverlaysStore.getState().review).toBeNull()
@@ -242,7 +259,7 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
       seen.push(chapterOverlaysStore.getState().review)
     })
     chapterOverlaysStore.registerSurface(surface(guard))
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     chapterOverlaysStore.openRerunConfirm({
       branchId: 'br_hero',
       chapterId: 'chap_hero_2',
@@ -265,7 +282,7 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
   it('drops a second request from the window once the first has closed it', () => {
     const guard = vi.fn<Guard>((proceed) => proceed())
     chapterOverlaysStore.registerSurface(surface(guard))
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     const fromReview = { branchId: 'br_hero', chapterId: 'chap_hero_2', fromReview: true }
     chapterOverlaysStore.openRerunConfirm(fromReview)
     chapterOverlaysStore.openRerunConfirm(fromReview)
@@ -278,6 +295,7 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
 
     chapterOverlaysStore.closeRerunConfirm({ reopen: true })
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
       chapterId: 'chap_hero_2',
       actionId: 'act_close_2',
     })
@@ -306,7 +324,7 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
   })
 
   it("closing with reopen brings the remembered window back on the chapter's current report", () => {
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     chapterOverlaysStore.openRerunConfirm({
       branchId: 'br_hero',
       chapterId: 'chap_hero_2',
@@ -318,13 +336,34 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
     chapterOverlaysStore.closeRerunConfirm({ reopen: true })
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
       chapterId: 'chap_hero_2',
       actionId: 'act_close_2b',
     })
   })
 
+  it("closing with reopen brings the window back on the re-run request's branch", () => {
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openRerunConfirm({
+      branchId: 'br_hero',
+      chapterId: 'chap_hero_2',
+      fromReview: true,
+    })
+    chaptersStore.hydrate('br_fork', [
+      row({ id: 'chap_hero_2', branchId: 'br_fork', closeReportActionId: 'act_fork_2' }),
+    ])
+
+    chapterOverlaysStore.closeRerunConfirm({ reopen: true })
+
+    expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
+      chapterId: 'chap_hero_2',
+      actionId: null,
+    })
+  })
+
   it('closing without reopen leaves a remembered window closed', () => {
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     chapterOverlaysStore.openRerunConfirm({
       branchId: 'br_hero',
       chapterId: 'chap_hero_2',
@@ -345,19 +384,24 @@ describe('chapterOverlaysStore — the re-run confirm', () => {
   it('refuses to open the review window while a request is held, and opens it once none is', () => {
     chapterOverlaysStore.openRerunConfirm({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     const before = chapterOverlaysStore.getState()
-    expect(chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })).toBe(false)
+    expect(
+      chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' }),
+    ).toBe(false)
     expect(chapterOverlaysStore.getState()).toBe(before)
 
     chapterOverlaysStore.closeRerunConfirm({ reopen: false })
-    expect(chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })).toBe(true)
+    expect(
+      chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' }),
+    ).toBe(true)
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_hero',
       chapterId: 'chap_hero_2',
       actionId: 'act_close_2',
     })
   })
 
   it('closing with no request held changes nothing', () => {
-    chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_hero_2' })
+    chapterOverlaysStore.openReviewWindow({ branchId: 'br_hero', chapterId: 'chap_hero_2' })
     const before = chapterOverlaysStore.getState()
     chapterOverlaysStore.closeRerunConfirm({ reopen: true })
     expect(chapterOverlaysStore.getState()).toBe(before)

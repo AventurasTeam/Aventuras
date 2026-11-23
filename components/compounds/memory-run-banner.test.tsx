@@ -372,6 +372,7 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
     act(() => closedBanner(result.current).onReview())
 
     expect(chapterOverlaysStore.getState().review).toEqual({
+      branchId: 'branch-1',
       chapterId: 'chap_2',
       actionId: 'act_close_2',
     })

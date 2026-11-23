@@ -26,6 +26,7 @@ import {
   happeningAwarenessStore,
   happeningsStore,
   loreStore,
+  reportChapter,
   resetAllStores,
   threadsStore,
 } from '@/lib/stores'
@@ -613,7 +614,7 @@ describe('ChapterOverlaysHost — the review', () => {
     const { onExited } = shown()
 
     act(() => {
-      chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' })
+      chapterOverlaysStore.openReviewWindow({ branchId: 'br_1', chapterId: 'chap_2' })
       onExited?.()
     })
 
@@ -874,6 +875,21 @@ describe('ChapterOverlaysHost — the derived rule', () => {
   it('closes the window when another branch opens', async () => {
     await openReady()
     act(() => openStory('br_2'))
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(view.mounted).toBe(false)
+  })
+
+  // A fork copies the chapter's id and its report's action: only the request's branch differs.
+  it("closes the window when a branch holding the chapter's copy opens", async () => {
+    await openReady()
+
+    act(() => {
+      chaptersStore.hydrate('br_fork', [chapter({ branchId: 'br_fork' })])
+      openStory('br_fork')
+    })
+
+    // Positive control: the copy alone would hold the window open.
+    expect(reportChapter(chaptersStore.getById('br_fork', 'chap_2'), 'act_close_2')).not.toBeNull()
     expect(chapterOverlaysStore.getState().review).toBeNull()
     expect(view.mounted).toBe(false)
   })

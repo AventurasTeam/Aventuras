@@ -184,7 +184,9 @@ export default function ChapterTimelineRoute(): ReactElement {
                   blockedReason={gateReason}
                   hotkeysEnabled={focused}
                   onJump={() => jump(card.row.startEntryId)}
-                  onReview={() => chapterOverlaysStore.openReviewWindow({ chapterId: card.row.id })}
+                  onReview={() =>
+                    chapterOverlaysStore.openReviewWindow({ branchId, chapterId: card.row.id })
+                  }
                   onDelete={() => guard(() => void deleteConfirm.open(card.row.id))}
                   onRerun={() =>
                     chapterOverlaysStore.openRerunConfirm({ branchId, chapterId: card.row.id })

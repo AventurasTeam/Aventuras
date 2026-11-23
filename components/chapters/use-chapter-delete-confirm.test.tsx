@@ -255,7 +255,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
       pendingOpen = result.current.open('chap_2')
     })
 
-    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    act(() => chapterOverlaysStore.openReviewWindow({ branchId: 'br_1', chapterId: 'chap_2' }))
     await act(async () => {
       opening.resolve(PREVIEW)
       await pendingOpen
@@ -263,14 +263,18 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
     expect(result.current.target).toBeNull()
     // No chapter row in this test, so the window holds no report.
-    expect(chapterOverlaysStore.getState().review).toEqual({ chapterId: 'chap_2', actionId: null })
+    expect(chapterOverlaysStore.getState().review).toEqual({
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      actionId: null,
+    })
   })
 
   it('closes when the review window opens over it, and stays closed after the window goes', async () => {
     const { result } = setup()
     await openOn(result)
 
-    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    act(() => chapterOverlaysStore.openReviewWindow({ branchId: 'br_1', chapterId: 'chap_2' }))
     expect(result.current.target).toBeNull()
     act(() => chapterOverlaysStore.closeReviewWindow())
 
@@ -582,7 +586,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
       confirming = result.current.confirm('whole')
     })
 
-    act(() => chapterOverlaysStore.openReviewWindow({ chapterId: 'chap_2' }))
+    act(() => chapterOverlaysStore.openReviewWindow({ branchId: 'br_1', chapterId: 'chap_2' }))
     await act(async () => {
       removal.resolve(refusal('in-flight'))
       await confirming
