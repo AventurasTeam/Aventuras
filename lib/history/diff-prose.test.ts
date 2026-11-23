@@ -610,3 +610,353 @@ describe('diffProse — quantities', () => {
     ).toBeNull()
   })
 })
+
+const lookup =
+  (map: Readonly<Record<string, string>>) =>
+  (id: string): string | null =>
+    Object.hasOwn(map, id) ? map[id] : null
+
+const WORLD = contextOf('entities', {
+  liveName: lookup({
+    fac_iron: 'Iron Pact',
+    item_coin: 'Silver coin',
+    loc_tavern: 'The Tavern',
+    loc_market: 'Market Square',
+    loc_quarter: 'The Old Quarter',
+    char_kael: 'Kael',
+  }),
+  entryLabel: lookup({ ent_3: 'entry #3', ent_40: 'entry #40', ent_47: 'entry #47' }),
+})
+
+const ENTRY_LABELS = lookup({ ent_12: 'entry #12', ent_31: 'entry #31' })
+
+describe('diffProse — refs', () => {
+  it("names a row ref's row, none for a null side", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { faction_id: null } },
+          { state: { ...KAEL_STATE, faction_id: 'fac_iron' } },
+        ),
+        WORLD,
+      ),
+    ).toBe('Faction: none → Iron Pact')
+  })
+
+  it('marks a ref the working set lacks (deleted), under its walk-time name', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { faction_id: 'fac_iron_old' } },
+          { state: { ...KAEL_STATE, faction_id: 'fac_iron' } },
+          { fac_iron_old: 'Iron Pact' },
+        ),
+        WORLD,
+      ),
+    ).toBe('Faction: Iron Pact (deleted) → Iron Pact')
+  })
+
+  it('takes the live name over the walk-time one', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { faction_id: null } },
+          { state: { ...KAEL_STATE, faction_id: 'fac_iron' } },
+          { fac_iron: 'The Old Pact' },
+        ),
+        WORLD,
+      ),
+    ).toBe('Faction: none → Iron Pact')
+  })
+
+  it('reads Unknown row for a ref with no live name and no walk-time name', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { faction_id: null } },
+          { state: { ...KAEL_STATE, faction_id: 'fac_lost' } },
+        ),
+        WORLD,
+      ),
+    ).toBe('Faction: none → Unknown row')
+  })
+
+  it('reads a ref list as a term list, with names in place of quoted terms', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { inventory: ['item_rope'] } },
+          { state: { ...KAEL_STATE, inventory: ['item_coin'] } },
+          { item_rope: 'Rope' },
+        ),
+        WORLD,
+      ),
+    ).toBe('Carried: added Silver coin, removed Rope (deleted)')
+  })
+
+  it('matches ref ids exactly, not by normalized term', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { inventory: ['item_Rope'] } },
+          { state: { ...KAEL_STATE, inventory: ['item_rope'] } },
+          { item_Rope: 'Rope', item_rope: 'Rope' },
+        ),
+        WORLD,
+      ),
+    ).toBe('Carried: added Rope (deleted), removed Rope (deleted)')
+  })
+})
+
+describe('diffProse — entry refs', () => {
+  it('reads an entry ref as the meta line does, none for a null side', () => {
+    expect(
+      diffProse(
+        entryOf({ resolvedAtEntryId: null }, { resolvedAtEntryId: 'ent_31' }),
+        contextOf('threads', { entryLabel: ENTRY_LABELS }),
+      ),
+    ).toBe('Resolved at: none → entry #31')
+  })
+
+  it("reads Unknown entry for an entry the branch's index doesn't hold", () => {
+    expect(
+      diffProse(
+        entryOf({ occurredAtEntryId: 'ent_gone' }, { occurredAtEntryId: 'ent_12' }),
+        contextOf('happenings', { entryLabel: ENTRY_LABELS }),
+      ),
+    ).toBe('Occurred at: Unknown entry → entry #12')
+  })
+})
+
+describe('diffProse — last seen', () => {
+  it('reads its entry and its place', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { lastSeenAt: { entryId: 'ent_40', locationId: 'loc_tavern', worldTime: 10 } } },
+          {
+            state: {
+              ...KAEL_STATE,
+              lastSeenAt: { entryId: 'ent_47', locationId: 'loc_market', worldTime: 20 },
+            },
+          },
+        ),
+        WORLD,
+      ),
+    ).toBe('Last seen: entry #40 at The Tavern → entry #47 at Market Square')
+  })
+
+  it('reads none for a null side and the entry alone with no place', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { lastSeenAt: null } },
+          {
+            state: {
+              ...KAEL_STATE,
+              lastSeenAt: { entryId: 'ent_3', locationId: null, worldTime: 1 },
+            },
+          },
+        ),
+        WORLD,
+      ),
+    ).toBe('Last seen: none → entry #3')
+  })
+
+  it('reads a change of place alone', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { lastSeenAt: { entryId: 'ent_40', locationId: 'loc_tavern', worldTime: 10 } } },
+          {
+            state: {
+              ...KAEL_STATE,
+              lastSeenAt: { entryId: 'ent_40', locationId: 'loc_market', worldTime: 10 },
+            },
+          },
+        ),
+        WORLD,
+      ),
+    ).toBe('Last seen: entry #40 at The Tavern → entry #40 at Market Square')
+  })
+
+  it('takes the keys a partial old lacks from new', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { lastSeenAt: { entryId: 'ent_40' } } },
+          {
+            state: {
+              ...KAEL_STATE,
+              lastSeenAt: { entryId: 'ent_47', locationId: 'loc_tavern', worldTime: 9 },
+            },
+          },
+        ),
+        WORLD,
+      ),
+    ).toBe('Last seen: entry #40 at The Tavern → entry #47 at The Tavern')
+  })
+
+  it('renders nothing for a change to world time alone', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { lastSeenAt: { worldTime: 5 } } },
+          {
+            state: {
+              ...KAEL_STATE,
+              lastSeenAt: { entryId: 'ent_40', locationId: 'loc_tavern', worldTime: 9 },
+            },
+          },
+        ),
+        WORLD,
+      ),
+    ).toBeNull()
+  })
+})
+
+describe('diffProse — the placement group', () => {
+  it('reads an unplaced place as Unknown, in one clause for both paths', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { parent_location_id: null, unplaced: true } },
+          { state: { parent_location_id: 'loc_quarter' } },
+        ),
+        WORLD,
+      ),
+    ).toBe('Parent location: Unknown → The Old Quarter')
+  })
+
+  it('reads a null parent that is not unplaced as Top level', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { parent_location_id: 'loc_quarter' } },
+          { state: { parent_location_id: null } },
+        ),
+        WORLD,
+      ),
+    ).toBe('Parent location: The Old Quarter → Top level')
+  })
+
+  it('reads a false mark as placed, not Unknown', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { parent_location_id: 'loc_quarter' } },
+          { state: { parent_location_id: null, unplaced: false } },
+        ),
+        WORLD,
+      ),
+    ).toBe('Parent location: The Old Quarter → Top level')
+  })
+
+  it('takes the mark from new when the payload holds only the parent', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { parent_location_id: null } },
+          { state: { parent_location_id: null, unplaced: true } },
+        ),
+        WORLD,
+      ),
+    ).toBeNull()
+  })
+
+  it('takes the parent from new when the payload holds only the mark', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { state: { unplaced: null } },
+          { state: { parent_location_id: null, unplaced: true } },
+        ),
+        WORLD,
+      ),
+    ).toBe('Parent location: Top level → Unknown')
+  })
+})
+
+describe('diffProse — the collision group', () => {
+  it("reads a raised flag as its partner's name, in one clause for three columns", () => {
+    expect(
+      diffProse(
+        entryOf(
+          { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+          {
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_kael',
+            nameCollisionReason: 'alike',
+          },
+        ),
+        WORLD,
+      ),
+    ).toBe('Collision flag: none → Kael')
+  })
+
+  it('reads a flag a merge cleared', () => {
+    expect(
+      diffProse(
+        entryOf(
+          {
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_kael_old',
+            nameCollisionReason: 'duplicate',
+          },
+          { nameCollisionFlag: 0, nameCollisionPartnerId: null, nameCollisionReason: null },
+          { char_kael_old: 'Kael' },
+        ),
+        WORLD,
+      ),
+    ).toBe('Collision flag: Kael (deleted) → none')
+  })
+
+  it('reads a flag a merge re-pointed, taking the flag from new', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { nameCollisionPartnerId: 'char_kael_old' },
+          {
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_kael',
+            nameCollisionReason: 'duplicate',
+          },
+          { char_kael_old: 'Kael' },
+        ),
+        WORLD,
+      ),
+    ).toBe('Collision flag: Kael (deleted) → Kael')
+  })
+
+  it('reads a flag that was lowered as none, whatever partner it still names', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { nameCollisionFlag: 0, nameCollisionPartnerId: 'char_kael' },
+          {
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_kael',
+            nameCollisionReason: 'alike',
+          },
+        ),
+        WORLD,
+      ),
+    ).toBe('Collision flag: none → Kael')
+  })
+
+  it('renders nothing for a change to the reason alone', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { nameCollisionReason: 'alike' },
+          {
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_kael',
+            nameCollisionReason: 'distinct',
+          },
+        ),
+        WORLD,
+      ),
+    ).toBeNull()
+  })
+})

@@ -280,6 +280,147 @@ function recordChange({ old, new: next }: At): Change {
   return parts.length === 0 ? SAME : parts.join(t('history:prose.listSeparator'))
 }
 
+const isId = (value: unknown): value is string | null | undefined =>
+  value == null || typeof value === 'string'
+
+// The working set holds the branch's every entity: a ref it lacks is gone, so it reads (deleted).
+function refName(id: string, entry: DiffCacheEntry, context: ProseContext): string {
+  const live = context.liveName(id)
+  if (live !== null) return live
+  if (!Object.hasOwn(entry.names, id)) return t('history:unknownTarget')
+  return t('history:prose.deletedName', { name: entry.names[id] })
+}
+
+function refText(id: string | null | undefined, entry: DiffCacheEntry, context: ProseContext) {
+  return id == null || id === '' ? none() : refName(id, entry, context)
+}
+
+function entryText(id: string | null | undefined, context: ProseContext): string {
+  if (id == null || id === '') return none()
+  return context.entryLabel(id) ?? t('history:unknownEntry')
+}
+
+function rowRefChange({ old, new: next, entry }: At, context: ProseContext): Change {
+  if (!isId(old) || !isId(next)) return null
+  if (sameScalar(old, next)) return SAME
+  return changed(refText(old, entry, context), refText(next, entry, context))
+}
+
+function refListChange({ old, new: next, entry }: At, context: ProseContext): Change {
+  const before = listOf(old)
+  const after = listOf(next)
+  if (before === undefined || after === undefined) return null
+  return listParts(before, after, 'exact', (id) => refName(id, entry, context))
+}
+
+function entryRefChange({ old, new: next }: At, context: ProseContext): Change {
+  if (!isId(old) || !isId(next)) return null
+  if (sameScalar(old, next)) return SAME
+  return changed(entryText(old, context), entryText(next, context))
+}
+
+type Seen = { readonly entryId: string; readonly locationId: string | null }
+
+function seenOf(value: unknown): Seen | null | undefined {
+  if (value == null) return null
+  if (!isJsonObject(value)) return undefined
+  const { entryId, locationId } = value
+  if (typeof entryId !== 'string' || !isId(locationId)) return undefined
+  return { entryId, locationId: locationId == null || locationId === '' ? null : locationId }
+}
+
+const sameSeen = (a: Seen | null, b: Seen | null) =>
+  a === null || b === null ? a === b : a.entryId === b.entryId && a.locationId === b.locationId
+
+function seenText(seen: Seen | null, entry: DiffCacheEntry, context: ProseContext): string {
+  if (seen === null) return none()
+  const at = entryText(seen.entryId, context)
+  if (seen.locationId === null) return t('history:prose.lastSeenNoPlace', { entry: at })
+  return t('history:prose.lastSeen', {
+    entry: at,
+    place: refName(seen.locationId, entry, context),
+  })
+}
+
+// World time neither shows nor compares; a partial old takes the keys it lacks from new.
+function lastSeenChange({ old, new: next, entry }: At, context: ProseContext): Change {
+  const before = seenOf(isJsonObject(old) && isJsonObject(next) ? { ...next, ...old } : old)
+  const after = seenOf(next)
+  if (before === undefined || after === undefined) return null
+  if (sameSeen(before, after)) return SAME
+  return changed(seenText(before, entry, context), seenText(after, entry, context))
+}
+
+const PARENT = 'parent_location_id'
+const UNPLACED = 'unplaced'
+const COLLISION_FLAG = 'nameCollisionFlag'
+const COLLISION_PARTNER = 'nameCollisionPartnerId'
+
+function stateOf(values: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+  const state = values.state
+  return isJsonObject(state) ? state : {}
+}
+
+// A column group's old side takes the members its payload lacks from the new side.
+const memberOf = (
+  old: Readonly<Record<string, unknown>>,
+  next: Readonly<Record<string, unknown>>,
+  key: string,
+): unknown => (Object.hasOwn(old, key) ? old[key] : next[key])
+
+type Placement =
+  | { readonly kind: 'under'; readonly id: string }
+  | { readonly kind: 'top' | 'unplaced' }
+
+function placementOf(parent: unknown, unplaced: unknown): Placement | undefined {
+  if (!isId(parent)) return undefined
+  if (parent != null && parent !== '') return { kind: 'under', id: parent }
+  return { kind: unplaced === true ? 'unplaced' : 'top' }
+}
+
+const placementKey = (placement: Placement) =>
+  placement.kind === 'under' ? `under:${placement.id}` : placement.kind
+
+// The parent picker's words for a place with no parent.
+function placementText(placement: Placement, entry: DiffCacheEntry, context: ProseContext) {
+  if (placement.kind === 'under') return refName(placement.id, entry, context)
+  return placement.kind === 'top'
+    ? t('world:connections.placementTopLevel')
+    : t('world:connections.placementUnknown')
+}
+
+function placementChange({ entry }: At, context: ProseContext): Change {
+  const oldState = stateOf(entry.old)
+  const newState = stateOf(entry.new)
+  const before = placementOf(
+    memberOf(oldState, newState, PARENT),
+    memberOf(oldState, newState, UNPLACED),
+  )
+  const after = placementOf(newState[PARENT], newState[UNPLACED])
+  if (before === undefined || after === undefined) return null
+  if (placementKey(before) === placementKey(after)) return SAME
+  return changed(placementText(before, entry, context), placementText(after, entry, context))
+}
+
+// The flag reads its partner while raised; the reason never shows.
+function collisionPartner(flag: unknown, partner: unknown): string | null | undefined {
+  const raised = flagOf(flag)
+  if (raised === undefined || !isId(partner)) return undefined
+  return raised === true && partner != null && partner !== '' ? partner : null
+}
+
+function collisionChange({ entry }: At, context: ProseContext): Change {
+  const { old, new: next } = entry
+  const before = collisionPartner(
+    memberOf(old, next, COLLISION_FLAG),
+    memberOf(old, next, COLLISION_PARTNER),
+  )
+  const after = collisionPartner(next[COLLISION_FLAG], next[COLLISION_PARTNER])
+  if (before === undefined || after === undefined) return null
+  if (before === after) return SAME
+  return changed(refText(before, entry, context), refText(after, entry, context))
+}
+
 function changeOf(kind: ProseFieldKind, at: At, context: ProseContext): Change {
   switch (kind) {
     case 'text':
@@ -295,12 +436,17 @@ function changeOf(kind: ProseFieldKind, at: At, context: ProseContext): Change {
     case 'record':
       return recordChange(at)
     case 'rowRef':
+      return rowRefChange(at, context)
     case 'refList':
+      return refListChange(at, context)
     case 'entryRef':
+      return entryRefChange(at, context)
     case 'lastSeen':
+      return lastSeenChange(at, context)
     case 'placement':
+      return placementChange(at, context)
     case 'collision':
-      return null
+      return collisionChange(at, context)
   }
 }
 
