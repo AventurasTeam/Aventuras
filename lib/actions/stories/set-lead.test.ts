@@ -198,12 +198,30 @@ describe('setStoryLead', () => {
 
   it('refuses while generation is in flight', async () => {
     const { db, ctx } = await setup()
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_2'))
     vi.spyOn(generationStore, 'isUserEditBlocked').mockReturnValue(true)
     expect(await setStoryLead('story_1', 'char_mira', ctx)).toEqual({
       status: 'rejected',
       code: 'in-flight',
     })
     expect(await storedLead(db)).toBe('char_kael')
+    expect(undoRedoStore.__branches()).toEqual(['br_1', 'br_2'])
+  })
+
+  it('leaves redo intact on every branch when the write fails', async () => {
+    const { db, ctx } = await setup()
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_1'))
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('br_2'))
+    const failing = {
+      ...ctx,
+      runInTransaction: vi.fn().mockRejectedValue(new Error('write failed')),
+    }
+
+    await expect(setStoryLead('story_1', 'char_mira', failing)).rejects.toThrow('write failed')
+
+    expect(await storedLead(db)).toBe('char_kael')
+    expect(undoRedoStore.__branches()).toEqual(['br_1', 'br_2'])
   })
 
   it('refuses a draft story', async () => {
