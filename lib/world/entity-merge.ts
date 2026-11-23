@@ -28,6 +28,8 @@ export type MergeScalar = (typeof MERGE_SCALARS)[number]
 
 export type EntityMergeInput = MergeDeselections &
   Omit<MergeLinkInput, 'canonical' | 'loser'> & {
+    /** The branch the merge writes on; both rows of `pair` must be on it. */
+    branchId: string
     pair: CollisionPair
     /** The row of `pair` that survives; the other one is the loser. */
     canonicalId: string

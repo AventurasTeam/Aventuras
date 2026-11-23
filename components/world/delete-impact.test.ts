@@ -22,24 +22,21 @@ const tail = {
 } as StoryEntry
 
 describe('entityDeleteImpact', () => {
-  it('names two awareness rows, one involvement, one relationship (bId side) and the tail-scene drop, ignoring off-branch rows', () => {
+  it('names two awareness rows, one involvement, one relationship (bId side) and the tail-scene drop', () => {
     const impact = entityDeleteImpact({
       branchId: 'b1',
       row: mira,
-      entities: [mira],
-      entries: [tail],
-      awareness: [
+      branchEntities: [mira],
+      branchEntries: [tail],
+      branchAwareness: [
         { id: 'haw_1', branchId: 'b1', characterId: 'char_mira', happeningId: 'hap_1' },
         { id: 'haw_2', branchId: 'b1', characterId: 'char_mira', happeningId: 'hap_2' },
-        { id: 'haw_x', branchId: 'b2', characterId: 'char_mira', happeningId: 'hap_x' },
       ] as never,
-      involvements: [
+      branchInvolvements: [
         { id: 'hinv_1', branchId: 'b1', entityId: 'char_mira', happeningId: 'hap_1' },
-        { id: 'hinv_x', branchId: 'b2', entityId: 'char_mira', happeningId: 'hap_x' },
       ] as never,
-      relationships: [
+      branchRelationships: [
         { id: 'rel_1', branchId: 'b1', aId: 'char_kael', bId: 'char_mira' },
-        { id: 'rel_x', branchId: 'b2', aId: 'char_kael', bId: 'char_mira' },
       ] as never,
     })
     expect(impact).toEqual({
@@ -68,11 +65,13 @@ describe('entityDeleteImpact', () => {
     const impact = entityDeleteImpact({
       branchId: 'b1',
       row: mira,
-      entities: [mira],
-      entries: [],
-      awareness: [],
-      involvements: [],
-      relationships: [{ id: 'rel_2', branchId: 'b1', aId: 'char_mira', bId: 'char_kael' }] as never,
+      branchEntities: [mira],
+      branchEntries: [],
+      branchAwareness: [],
+      branchInvolvements: [],
+      branchRelationships: [
+        { id: 'rel_2', branchId: 'b1', aId: 'char_mira', bId: 'char_kael' },
+      ] as never,
     })
     expect(impact.relationships).toBe(1)
   })
@@ -109,11 +108,11 @@ describe('entityDeleteImpact', () => {
     const impact = entityDeleteImpact({
       branchId: 'b1',
       row: hollow,
-      entities: [hollow, kael, vorne, key],
-      entries: [],
-      awareness: [],
-      involvements: [],
-      relationships: [],
+      branchEntities: [hollow, kael, vorne, key],
+      branchEntries: [],
+      branchAwareness: [],
+      branchInvolvements: [],
+      branchRelationships: [],
     })
     // Distinct non-zero counts catch a references/unplacedItems mix-up: the item counts twice —
     // it loses its link (a reference, like the two characters) and ends up unplaced too.
@@ -143,11 +142,11 @@ describe('entityDeleteImpact', () => {
     const impact = entityDeleteImpact({
       branchId: 'b1',
       row: hollow,
-      entities: [hollow, market],
-      entries: [],
-      awareness: [],
-      involvements: [],
-      relationships: [],
+      branchEntities: [hollow, market],
+      branchEntries: [],
+      branchAwareness: [],
+      branchInvolvements: [],
+      branchRelationships: [],
     })
     expect(impact.unplacedPlaces).toBe(1)
     expect(entityDeleteCopy(hollow, impact).impacts).toEqual([

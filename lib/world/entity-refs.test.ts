@@ -201,28 +201,25 @@ describe('referencingEntities', () => {
 })
 
 describe('entityLinkRows', () => {
-  it('collects the cascade link set on the branch, a relationship from either end', () => {
+  it("collects the id's cascade link set from one branch's rows, a relationship from either end", () => {
     const awareness = [
       { id: 'haw_1', branchId: 'b1', characterId: 'char_x', happeningId: 'hap_1' },
-      { id: 'haw_2', branchId: 'b2', characterId: 'char_x', happeningId: 'hap_1' },
       { id: 'haw_3', branchId: 'b1', characterId: 'char_y', happeningId: 'hap_1' },
     ] as HappeningAwareness[]
     const involvements = [
       { id: 'hinv_1', branchId: 'b1', entityId: 'char_x', happeningId: 'hap_1' },
-      { id: 'hinv_2', branchId: 'b2', entityId: 'char_x', happeningId: 'hap_1' },
+      { id: 'hinv_3', branchId: 'b1', entityId: 'char_y', happeningId: 'hap_1' },
     ] as HappeningInvolvement[]
     const relationships = [
       { id: 'rel_1', branchId: 'b1', aId: 'char_a', bId: 'char_x' },
       { id: 'rel_2', branchId: 'b1', aId: 'char_x', bId: 'char_z' },
-      { id: 'rel_3', branchId: 'b2', aId: 'char_a', bId: 'char_x' },
       { id: 'rel_4', branchId: 'b1', aId: 'char_a', bId: 'char_z' },
     ] as CharacterRelationship[]
     const links = entityLinkRows({
-      branchId: 'b1',
       id: 'char_x',
-      awareness,
-      involvements,
-      relationships,
+      branchAwareness: awareness,
+      branchInvolvements: involvements,
+      branchRelationships: relationships,
     })
     expect(links.awareness.map((r) => r.id)).toEqual(['haw_1'])
     expect(links.involvements.map((r) => r.id)).toEqual(['hinv_1'])

@@ -202,6 +202,15 @@ describe('useCollisionResolve → opening', () => {
     expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
   })
 
+  // A fork copies the pair under its ids; the dialog reads the route's branch only.
+  it('opens no pair while the entities store holds another branch', () => {
+    entitiesStore.hydrate('br_2', [
+      { ...OLDER, branchId: 'br_2' },
+      { ...NEWER, branchId: 'br_2' },
+    ])
+    expect(openPair().current.pair).toBeNull()
+  })
+
   it('does not re-render on store patches while no pair is open', () => {
     let renders = 0
     renderHook(() => {

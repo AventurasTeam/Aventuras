@@ -583,11 +583,10 @@ describe('resolveCollision — merge', () => {
     ]
     const before = await linkIds()
     const links = entityLinkRows({
-      branchId: 'b1',
       id: 'char_b',
-      awareness: await ctx.db.select().from(happeningAwareness),
-      involvements: await ctx.db.select().from(happeningInvolvements),
-      relationships: await ctx.db.select().from(characterRelationships),
+      branchAwareness: await ctx.db.select().from(happeningAwareness),
+      branchInvolvements: await ctx.db.select().from(happeningInvolvements),
+      branchRelationships: await ctx.db.select().from(characterRelationships),
     })
 
     await resolveCollision('b1', MERGE_B_INTO_A, ctx)

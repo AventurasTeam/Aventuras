@@ -115,21 +115,16 @@ void CASCADE_LISTS
 
 /** The link rows the entity arm's cascade removes with `id`, by `entityCascade`'s predicates. */
 export function entityLinkRows(input: {
-  branchId: string
   id: string
-  awareness: Iterable<HappeningAwareness>
-  involvements: Iterable<HappeningInvolvement>
-  relationships: Iterable<CharacterRelationship>
+  branchAwareness: Iterable<HappeningAwareness>
+  branchInvolvements: Iterable<HappeningInvolvement>
+  branchRelationships: Iterable<CharacterRelationship>
 }): EntityLinkRows {
-  const { branchId, id } = input
+  const { id } = input
   return {
-    awareness: [...input.awareness].filter((a) => a.branchId === branchId && a.characterId === id),
-    involvements: [...input.involvements].filter(
-      (i) => i.branchId === branchId && i.entityId === id,
-    ),
-    relationships: [...input.relationships].filter(
-      (r) => r.branchId === branchId && (r.aId === id || r.bId === id),
-    ),
+    awareness: [...input.branchAwareness].filter((a) => a.characterId === id),
+    involvements: [...input.branchInvolvements].filter((i) => i.entityId === id),
+    relationships: [...input.branchRelationships].filter((r) => r.aId === id || r.bId === id),
   }
 }
 
