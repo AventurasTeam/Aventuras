@@ -276,6 +276,10 @@ export default function ReaderComposerRoute() {
   useLayoutEffect(() => {
     branchIdRef.current = branchId
   }, [branchId])
+  // One line per reader instance: a switch that mounts the reader twice shows in the log.
+  useEffect(() => {
+    logger.debug('reader.mounted', { branchId: branchIdRef.current })
+  }, [])
   // One composer and one lastSubmission serve every branch, so settle-time
   // recovery must prove the branch didn't change under its awaits before handing
   // the user's text back. Persisted recovery (the failure entry) is branch-bound
