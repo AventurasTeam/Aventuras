@@ -70,7 +70,6 @@ const delta = (id: string, logPosition: number, over: Partial<Delta> = {}): Delt
 
 const kael = (targetId = 'char_kael', branchId = 'b1') => ({
   branchId,
-  targetTable: 'entities',
   targetId,
   fromLogPosition: 2,
   row: { table: entities, idCol: entities.id, branchCol: entities.branchId },
@@ -131,7 +130,6 @@ describe('readChainSnapshot (native)', () => {
   it('maps a row by field name', async () => {
     const { row } = await readChainSnapshot(expoDb, {
       ...kael('rel_1'),
-      targetTable: 'character_relationships',
       row: {
         table: characterRelationships,
         idCol: characterRelationships.id,

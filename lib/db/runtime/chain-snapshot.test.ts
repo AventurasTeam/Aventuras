@@ -54,7 +54,6 @@ const ENTITY_ROW = { table: entities, idCol: entities.id, branchCol: entities.br
 
 const kaelFrom = (fromLogPosition: number, branchId = 'b1'): ChainSnapshotArgs => ({
   branchId,
-  targetTable: 'entities',
   targetId: 'char_kael',
   fromLogPosition,
   row: ENTITY_ROW,
@@ -81,16 +80,19 @@ beforeEach(async () => {
     updatedAt: 1,
   })
   // Out of log order on purpose: the index, not the insert, would order an unordered scan.
-  await t.db
-    .insert(deltas)
-    .values([
-      delta('d_voice', 4, { undoPayload: { state: { voice: 'hoarse' } } }),
-      delta('d_lore', 3, { targetTable: 'lore', undoPayload: { title: 'Kael' } }),
-      delta('d_traits', 2, { undoPayload: { state: { traits: ['brave'] } } }),
-      delta('d_create', 1, { op: 'create' }),
-      delta('d_create', 1, { branchId: 'b2', op: 'create' }),
-      delta('d_fork', 2, { branchId: 'b2', undoPayload: { name: 'Kael' } }),
-    ])
+  await t.db.insert(deltas).values([
+    delta('d_voice', 4, { undoPayload: { state: { voice: 'hoarse' } } }),
+    delta('d_lore', 3, { targetTable: 'lore', undoPayload: { title: 'Kael' } }),
+    delta('d_traits', 2, { undoPayload: { state: { traits: ['brave'] } } }),
+    delta('d_create', 1, { op: 'create' }),
+    delta('d_create', 1, { branchId: 'b2', op: 'create' }),
+    delta('d_fork', 2, { branchId: 'b2', undoPayload: { name: 'Kael' } }),
+    delta('d_rel', 5, {
+      targetTable: 'character_relationships',
+      targetId: 'rel_1',
+      undoPayload: { kind: 'friend' },
+    }),
+  ])
 })
 
 describe('readChainSnapshot', () => {
@@ -129,13 +131,12 @@ describe('readChainSnapshot', () => {
     expect(fork.row?.name).toBe('Kael of the fork')
   })
 
-  it('maps the row: field names, and a JSON column parsed', async () => {
+  it("maps the row: field names, a JSON column parsed; reads the row's own table's chain", async () => {
     const { row } = await readChainSnapshot(t.db, kaelFrom(1))
     expect(row?.state).toEqual(STATE)
 
     const pair = await readChainSnapshot(t.db, {
       branchId: 'b1',
-      targetTable: 'character_relationships',
       targetId: 'rel_1',
       fromLogPosition: 1,
       row: {
@@ -146,7 +147,7 @@ describe('readChainSnapshot', () => {
     })
     expect(pair.row).toMatchObject({ id: 'rel_1', kind: 'rival', inverseKind: 'wary' })
     expect(pair.row).not.toHaveProperty('inverse_kind')
-    expect(pair.chain).toEqual([])
+    expect(pair.chain.map((d) => d.id)).toEqual(['d_rel'])
   })
 
   it('reads a missing row as null', async () => {

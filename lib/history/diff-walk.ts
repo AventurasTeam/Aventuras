@@ -160,7 +160,6 @@ export async function walkTarget(
 
   const snapshot = await readChainSnapshot(db, {
     branchId,
-    targetTable,
     targetId,
     fromLogPosition: requested.reduce(
       (oldest, delta) => Math.min(oldest, delta.logPosition),
