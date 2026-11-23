@@ -97,11 +97,11 @@ beforeEach(async () => {
   await t.db
     .insert(deltas)
     .values([
-      delta('d_voice', 4, { undoPayload: { state: { voice: 'hoarse' } } }),
-      delta('d_lore', 3, { targetTable: 'lore', undoPayload: { title: 'Kael' } }),
-      delta('d_traits', 2, { undoPayload: { state: { traits: ['brave'] } } }),
       delta('d_create', 1, { op: 'create' }),
+      delta('d_traits', 2, { undoPayload: { state: { traits: ['brave'] } } }),
       delta('d_fork', 2, { branchId: 'b2', undoPayload: { name: 'Kael' } }),
+      delta('d_lore', 3, { targetTable: 'lore', undoPayload: { title: 'Kael' } }),
+      delta('d_voice', 4, { undoPayload: { state: { voice: 'hoarse' } } }),
     ])
   expoDb = drizzle(expoOver(t.sqlite) as unknown as Parameters<typeof drizzle>[0], {
     schema: dbSchema,

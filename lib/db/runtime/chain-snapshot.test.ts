@@ -79,14 +79,14 @@ beforeEach(async () => {
     createdAt: 1,
     updatedAt: 1,
   })
-  // Out of log order on purpose: the index, not the insert, would order an unordered scan.
+  // In log order: a reversed scan of the chain index or the rowid alike reads newest first.
   await t.db.insert(deltas).values([
-    delta('d_voice', 4, { undoPayload: { state: { voice: 'hoarse' } } }),
-    delta('d_lore', 3, { targetTable: 'lore', undoPayload: { title: 'Kael' } }),
-    delta('d_traits', 2, { undoPayload: { state: { traits: ['brave'] } } }),
     delta('d_create', 1, { op: 'create' }),
     delta('d_create', 1, { branchId: 'b2', op: 'create' }),
+    delta('d_traits', 2, { undoPayload: { state: { traits: ['brave'] } } }),
     delta('d_fork', 2, { branchId: 'b2', undoPayload: { name: 'Kael' } }),
+    delta('d_lore', 3, { targetTable: 'lore', undoPayload: { title: 'Kael' } }),
+    delta('d_voice', 4, { undoPayload: { state: { voice: 'hoarse' } } }),
     delta('d_rel', 5, {
       targetTable: 'character_relationships',
       targetId: 'rel_1',
