@@ -606,19 +606,23 @@ to this row (`op=create / update / delete`), and the deltas of the
 link rows that name it (see **Link rows** below). Never editable —
 rollback happens in the reader. Row rendering follows the
 [DeltaLogRow pattern](../../patterns/delta-log-row.md); host
-resolves target display names and renders the diff summary
-prose, then hands pre-formatted strings to the compound.
+resolves target display names and renders the
+[change prose](#change-prose), then hands pre-formatted strings to
+the compound.
 
 - **Search** — structured: `field-path strings`, `op`, and the
-  rendered change-summary text. `op` matches its rendered label
+  field-name summary text. `op` matches its rendered label
   (word-start) or the raw enum; the field-path and free-text arms
   apply to `update` deltas only, since a delete's undo payload is the
   full row and would match every path. The free-text arm is a `LIKE`
   over each `undo_payload` member's JSON text, skipping `$`-prefixed
   meta members, with the term JSON-escaped the same way, so it
-  matches the value from before the change, not the new one. A whole
-  update summary typed as shown (`Modified Traits, Drives`) matches an
-  update when every field it names resolves, through the label
+  matches the value from before the change, not the new one. The
+  change prose itself isn't searched: a value typed in the quotes the
+  prose shows it in misses, since the quotes are escaped with the
+  term. A whole field-name summary typed (`Modified Traits, Drives`),
+  the summary an update row shows until its change prose resolves,
+  matches an update when every field it names resolves, through the label
   vocabulary or as a literal path, to a path in its undo payload —
   field values never match a summary. A field path is tested via
   `json_type(undo_payload, '$.<path>') IS NOT NULL`, not
@@ -684,8 +688,9 @@ prose, then hands pre-formatted strings to the compound.
   `Awareness`). The other end's name is read live, the working set
   first, then its stored row, else from the other end's own latest
   delete payload, always within the tab's branch, else "Unknown row";
-  a rename shows without a reload. Summaries read `Created`,
-  `Modified <fields>` and `Deleted`. An other end's delete reads
+  a rename shows without a reload. Summaries read `Created` and
+  `Deleted`, and an update reads its [change prose](#change-prose).
+  An other end's delete reads
   "Removed when Kael was deleted" under the link label alone, `Links`
   when it removed more than one kind; with no name to read, "Removed
   when its other end was deleted". A relationship's `kind` and
@@ -717,6 +722,164 @@ prose, then hands pre-formatted strings to the compound.
 Involvements table gets the same load-older pattern eventually; list
 pane is fine unpaginated for normal stories (filter chips + search
 handle it).
+
+### Change prose
+
+An update row's summary says what its delta changed, before and
+after, from the
+[diff cache's](../../../architecture.md#delta-history-diff-resolution)
+`{ old, new }` entry. Until the entry resolves, and when the walk
+fails or finds its delta gone, the row shows the field-name summary
+(`Modified Traits, Drives`). Create, delete and removal rows read as
+**Link-row wording** above says. Plot's History reads the same way.
+
+**Shape.** One clause per changed field, `<Label>: <change>`, under
+the label the field-name summary uses, a relationship's by the tab's
+side. The fields are the payload's paths as the field-name summary
+reads them (`state` and `state.visual` descended, `$`-prefixed meta
+keys skipped), in the payload's order, which is the order the target
+line lists the raw paths in. Two column groups render as one clause,
+at their first path: a place's parent with its `unplaced` mark, and
+the collision flag's three columns. A status and its reason or entry,
+and a happening's `occurredAtEntryId` and `temporal`, are separate
+clauses. Clauses join with `; `, and a clause's parts and a list's
+items with `, `. The summary keeps the row's two-line clamp; a clause
+the clamp cuts still shows on the target line.
+
+```
+(update)  Kael · description, state.traits, state.voice
+          Description: "A wary ranger." → "A wary ranger. He once served the
+          crown…"; Traits: added "former soldier"; Voice: "low" → "gravelly"
+          user · entry #47 · 2h ago
+```
+
+**Equality.** A clause whose old and new values are equal renders
+nothing. Values compare, not their rendered text: null, absent and
+`''` are one empty value, an absent list is `[]`, free text compares
+with its whitespace collapsed, and a list compares as a set. A
+reversal can leave a surviving delta restating its field
+([Reverse-replay](../../../generation-pipeline.md#reverse-replay)).
+When no clause renders, or a path has no wording, the whole row shows
+the field-name summary.
+
+**Values.** A changed value reads `old → new`; an empty side reads
+`none`, unquoted, so free text reading "none" stays distinct.
+
+| Kind               | Fields                                                                                                                                                                                        | Reads                                                                                                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Free text          | `name`, `title`, `description`, `body`, `voice`, `condition`, `standing`, `category`, `icon`, `temporal`, `retiredReason`, the six visual sub-fields, `kind`, `inverseKind`, `role`, `source` | quoted, cut when long: `Voice: "low" → "gravelly"`, `Voice: none → "gravelly"`, `Category: "omen" → none`                                                             |
+| Enum               | entity `status`, thread `status`, `injectionMode`                                                                                                                                             | the form's word: `Status: Active → Retired`, `Injection: Auto → Always`                                                                                               |
+| Number             | `priority`, `decayResistance`, `retrievalCount`                                                                                                                                               | as stored: `Priority: 0 → 5`, `Decay resistance: 0.5 → 0.8`                                                                                                           |
+| Flag               | `commonKnowledge`, any 0/1 flag                                                                                                                                                               | `Common knowledge: no → yes`                                                                                                                                          |
+| Row ref            | `current_location_id`, `faction_id`, `at_location_id`                                                                                                                                         | the row's name: `Faction: none → Iron Pact`, `Faction: Iron Pact (deleted) → Iron Pact`                                                                               |
+| Entry ref          | `triggeredAtEntryId`, `resolvedAtEntryId`, `occurredAtEntryId`, `learnedAtEntryId`                                                                                                            | `Resolved at: none → entry #31`, `Occurred at: Unknown entry → entry #12`                                                                                             |
+| Term list          | `tags`, `keywords`, `traits`, `drives`, `agenda`                                                                                                                                              | `Traits: added "former soldier", "scarred", removed "loyal"`, `Tags: respelled "iron pact" as "Iron Pact", "eldra" as "Eldra"`                                        |
+| Ref list           | `inventory` (Carried), `equipped_items` (Equipped)                                                                                                                                            | `Carried: added Silver coin, removed Rope (deleted)`                                                                                                                  |
+| Record             | `stackables` (Quantities)                                                                                                                                                                     | `Quantities: gold 250 → 200, arrows none → 12`                                                                                                                        |
+| Compound           | `lastSeenAt`                                                                                                                                                                                  | `Last seen: entry #40 at The Tavern → entry #47 at Market Square`, `Last seen: none → entry #3`                                                                       |
+| Placement group    | a place's `parent_location_id` and `unplaced`                                                                                                                                                 | `Parent location: Unknown → The Old Quarter`, `Parent location: The Old Quarter → Top level`                                                                          |
+| Collision group    | `nameCollisionFlag`, `nameCollisionPartnerId`, `nameCollisionReason`                                                                                                                          | `Collision flag: none → Kael` (raised), `Collision flag: Kael (deleted) → none` (cleared by a merge), `Collision flag: Kael (deleted) → Kael` (re-pointed by a merge) |
+| Relationship views | `kind`, `inverseKind`                                                                                                                                                                         | `Your view: "rival" → "ally"` on side a's tab is `Their view: "rival" → "ally"` on side b's                                                                           |
+
+- **Free text** is quoted, with its whitespace collapsed; long text is
+  cut as [Long text](#long-text--change-prose) below says. `icon` is
+  free text, the icon's stored name.
+- **Enum words** are the ones the forms' selects show, casing
+  included: `world:tiers.*` and `plot:tiers.*` for a status, and
+  `world:fields.injection.*` or `plot:fields.injection.*`.
+- **A term list** compares as reverse-replay compares it: `tags` and
+  `keywords` by normalized term, the other lists exactly. Its parts
+  read added, removed, then respelled, each named once; added and
+  respelled terms follow the new list's order, removed ones the old
+  list's. A reorder alone renders nothing. A term over 40 characters is
+  cut at a word end with `…`.
+- **A ref list** reads as a term list, matched exactly, with names in
+  place of quoted terms.
+- **`stackables`** takes its keys from the old partial, except when
+  the whole column was absent before, its old `null`: then every key
+  of the new record is an addition. A key reads `none` on a side that
+  doesn't hold it; one whose two counts match renders nothing. The
+  quantity's name isn't quoted.
+- **`lastSeenAt`** reads `none` on a null side. Its entry and its place
+  compare and show, `entry #40` alone when the place is null; its world
+  time does neither, so a change to world time alone renders nothing.
+  A partial old value takes its missing keys from the new one.
+- **A column group** takes the members its payload lacks from the new
+  value. A place's parent reads its name, `Top level` when null and not
+  unplaced, `Unknown` when unplaced, the parent picker's words. The
+  collision flag reads its partner's name when set, else `none`; its
+  reason doesn't show, so a change to the reason alone renders nothing.
+- **A ref** names its row as a link row's other end is named, else
+  "Unknown row". A ref the working set doesn't hold reads `(deleted)`
+  after its name: the working set holds every entity of the branch,
+  whatever its status, so such a row is gone, and a merge re-points
+  every ref to its deleted loser onto a namesake ([Merge](#merge)).
+  The mark is read when the row renders, not when its name was found.
+  A character's or item's null location reads
+  `none`: an item's null means held or unplaced
+  ([ItemState shape](../../../data-model.md#itemstate-shape)).
+- **An entry ref** reads `entry #n`, as the meta line does, and
+  "Unknown entry" when the branch's entry index doesn't hold it. A row
+  whose prose names an entry shows the field-name summary until the
+  index has read, and after a failed read.
+
+#### Long text — change prose
+
+In code points, both sides with whitespace collapsed:
+
+1. When both sides are 40 characters or fewer, both show whole.
+2. Otherwise both start at one index: the earliest word start from 16
+   characters before the first difference to the difference itself,
+   or 16 before it when that range holds no word start, and never
+   before the text's start. A word start is the text's start or an
+   index after a space. The first difference is the first index where
+   the sides differ, or the shorter side's length when one begins the
+   other.
+3. A side whose rest is 40 characters or fewer shows to its end.
+   Otherwise it ends at the last space after the difference and no
+   later than 40 characters from the start, a space exactly there
+   included, or at the 40th character with none. A side never ends at
+   or before the difference.
+4. `…` marks a cut at either end.
+
+```
+old: A wary ranger from the northern marches who served the crown for a decade before the war.
+new: A wary ranger from the northern marches who deserted the crown after a decade before the war.
+Description: "…marches who served the crown for a…" → "…marches who deserted the crown after a…"
+
+old: A wary ranger.
+new: A wary ranger. He once served the crown before the war.
+Description: "A wary ranger." → "A wary ranger. He once served the crown…"
+```
+
+#### Keys — change prose
+
+In the `history` namespace, beside the `field.*` labels and
+`unknownTarget` it reuses:
+
+| Key                                       | en                                     |
+| ----------------------------------------- | -------------------------------------- |
+| `prose.clause`                            | `{{field}}: {{change}}`                |
+| `prose.separator`                         | `; `                                   |
+| `prose.listSeparator`                     | `, `                                   |
+| `prose.changed`                           | `{{old}} → {{new}}`                    |
+| `prose.quoted`                            | `"{{text}}"`                           |
+| `prose.ellipsis`                          | `…`                                    |
+| `prose.none`                              | `none`                                 |
+| `prose.yes`, `prose.no`                   | `yes`, `no`                            |
+| `prose.added`, `prose.removed`            | `added {{terms}}`, `removed {{terms}}` |
+| `prose.respelled`                         | `respelled {{pairs}}`                  |
+| `prose.respelledPair`                     | `{{old}} as {{new}}`                   |
+| `prose.quantity`                          | `{{name}} {{change}}`                  |
+| `prose.lastSeen`, `prose.lastSeenNoPlace` | `{{entry}} at {{place}}`, `{{entry}}`  |
+| `prose.deletedName`                       | `{{name}} (deleted)`                   |
+| `unknownEntry`                            | `Unknown entry`                        |
+
+`prose.added`, `prose.removed` and `prose.respelled` take `count`, the
+terms or pairs they name, for a locale whose verb agrees with it. A
+locale reorders inside a key, or flips the arrow; code only joins
+finished fragments with the separator keys. The parts of a list keep
+the order added, removed, respelled.
 
 ## Lore — separate kind
 

@@ -88,9 +88,8 @@ tasks start.
   consumes; [C11](../milestone.md#c11--shared-files) and
   [C12](../milestone.md#c12--canon-and-flips), which it follows; the
   [Definition of done](../milestone.md#definition-of-done)'s Diff prose
-  line; and the milestone's
-  [Open questions](../milestone.md#open-questions) on the prose
-  vocabulary.
+  line; and the prose's wording,
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose).
 - Lessons:
   [known-answer vectors share blind spots](../../../lessons-learned/known-answer-vectors-share-blind-spots.md#how-to-apply)
   (walk tests take expectations from what the test wrote, never from the
@@ -262,15 +261,16 @@ follow the default.
   side, to a summary string. It iterates the keys of `old` per column,
   descending a nested column as `changedPaths` does (`state`, and
   `state.visual` within it), and looks each path up in `new`. A path
-  whose old and new are deep-equal renders nothing.
+  whose old and new are equal, as
+  [Change prose](../../../../ui/screens/world/world.md#change-prose)
+  defines it, renders nothing.
 - Wording per field kind through `t()` in the `history` namespace, as
-  the design route at planning settles it (see
-  [Open questions](#open-questions)). The kinds across the seven tables:
-  free text, enums, term lists, row refs, entry refs, the `stackables`
-  record, `state.visual`'s sub-fields, numbers and counters, flags, the
-  column groups (a place's parent and `unplaced`, the collision triple,
-  a status with its reason or entry), and a relationship's two views by
-  side.
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose)
+  sets it out. The kinds across the seven tables: free text, enums,
+  term lists, row refs, entry refs, the `stackables` record,
+  `state.visual`'s sub-fields, numbers and counters, flags, the two
+  column groups (a place's parent and `unplaced`, the collision
+  triple), and a relationship's two views by side.
 - `humanizeDelta` and `changedPaths` keep their signatures and output:
   the fallback, search, the reader's undo confirm
   (`components/reader/undo-copy.ts:300,333`) and the close review
@@ -337,12 +337,6 @@ each side, the pending miss (summary showing), and the failed walk
 - `architecture.md → Cache shape and lifecycle`: the module path chosen,
   `populate`'s gone outcome, and the walk's skip of the retrieval-count
   shape.
-- `world.md → History tab` (Search) and the History row of
-  `lists.md → Search bar scope`: search matches the field-name summary
-  and the payload's pre-change values, not the prose a row shows. The
-  `history:tab.scopeSummary` chip follows if the wording changes.
-  `plot.md`'s History bullet defers to `lists.md`.
-- The prose vocabulary, wherever the design route lands it.
 - `observability.md → Subsystem emission inventory`: the walk-failure
   `warn`.
 - `tech-stack.md → TanStack Query`: "and later the diff cache" becomes
@@ -363,8 +357,8 @@ each side, the pending miss (summary showing), and the failed walk
   stands, and M4's note that it would lift "until M6.4" is stale.
 - **The reader's undo confirm** keeps the field-name summary.
 - **The close review's formatter** (`close-review-changes.ts`) keeps its
-  `old → new` wording; the renderer may reuse its value helpers if the
-  vocabulary agrees, without changing its output.
+  `old → new` wording. The renderer agrees with it on format, not
+  code: it keeps its own value functions.
 - **The composite `deltas` key and the branch-scoped delta writes**
   (6.1, C1). This slice reads by branch from its first commit and
   relies on C1 for the rest.
@@ -488,8 +482,8 @@ each side, the pending miss (summary showing), and the failed walk
      instead turns it red;
    - a path whose old and new are equal renders nothing;
    - a relationship's `kind` reads by the tab's side;
-   - one case per field kind, in the wording canon holds once the design
-     route lands it.
+   - one case per field kind, in the wording of
+     [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose).
 
    `lib/history/humanize.test.ts`, `lib/history/close-review-changes.test.ts`
    and the reader's undo-copy tests pass with no expectation changed.
@@ -588,19 +582,32 @@ invalidation, and, if the E2E has a survivor, its registration check.
   them makes a live target read as missing with no delete in its chain,
   which rejects and is then remembered as a failure.
 
-- **The prose vocabulary.** Canon gives one example sentence and the
-  iteration rule. Wording for the field kinds under Scope is undesigned,
-  and 6.7's planning offers the design route (milestone
-  [Open questions](../milestone.md#open-questions)). Questions it meets:
-  where the vocabulary lands in canon (`world.md → History tab` holds
-  the link-row wording today; `delta-log-row.md → Summary` is the other
-  candidate); what an update renders when every path restates its value
-  (empty, which drops the summary line, or the field-name summary); refs
-  as names, read as link-row names are (working set first, then the
-  stored row, then the latest delete payload, within the tab's branch),
-  with an id that reads nowhere; long text (`description`, `body`) on
-  both sides under the two-line clamp; and whether to reuse the close
-  review's value helpers despite its arrow format.
+- **Ref names outside the working set.**
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose)
+  names a ref as a link row's other end is named, and marks one the
+  working set doesn't hold `(deleted)`, checked at render; a merge
+  deletes its loser, so those names are routine, not rare. Ids the
+  working set lacks cost a read 6.7 hasn't sized. Options: (a) the walk
+  records them: after its read, `populate` reads
+  the names of the ref ids in its entries (stored row, then latest
+  delete payload, through `link-ends.ts`'s `namesOf` and
+  `latestDeletedValues`, made public) into a `names` map on the entry,
+  and the renderer takes the working set first; one-phase loading and
+  the host unchanged, but the entry shape grows, and a row renamed after
+  the walk and then deleted shows its walk-time name. (b) A names query
+  in the host keyed on the ids the working set lacks: the entry shape
+  holds, loading goes two-phase. The design leans (a).
+- **Entry-ref rows wait for the entry index.** Until its first read the
+  index reads `ready: false`, and prose would flash "Unknown entry"; a
+  row whose prose names an entry keeps the field-name summary until the
+  index has read, and after a failed read. Rows with no entry ref don't
+  wait.
+- **The renderer's seams.** `termChanges`
+  (`lib/actions/delta/term-list.ts`) isn't on the `lib/actions` barrel,
+  and each list's match lives in its table's registration; the renderer
+  needs both. A status reads the select's word (`world:tiers.*`,
+  `plot:tiers.*`), not the close review's status maps, which use the
+  tags' `status.*` words.
 - **Writes with no delta.** A reversal's ref clear (a place's parent, a
   character's faction: `reverse-replay.ts:756-768`), the views a
   reversal nulls on a kept relationship (`:580-590`), and redo's ref

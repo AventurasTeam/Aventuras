@@ -997,10 +997,14 @@ variant.
 
 Diff cache pending fallback is built into the pattern's
 `summary: string` contract: cache miss → host produces a
-keys-only summary (e.g., `Modified traits, drives`); cache
+keys-only summary (e.g., `Modified Traits, Drives`); cache
 populate → host upgrades to rich prose (e.g.,
-`Added "former soldier"; was ["brave", "loyal"]`). Tab 5 inherits
-this without local additions.
+`Traits: added "former soldier"`). Tab 5 words its rows with
+[World → Change prose](../world/world.md#change-prose). A
+relationship row there has no tab side, which the prose's "Your
+view" and "Their view" read by, so its two views need a sideless
+wording of their own
+([M7.3](../../../implementation/roadmap.md#m7--app-settings--diagnostics--onboarding)).
 
 #### Row tap behavior
 
