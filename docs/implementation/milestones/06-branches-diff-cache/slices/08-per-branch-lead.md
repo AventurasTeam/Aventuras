@@ -516,7 +516,8 @@ Seeds.
   Order-free meets, written as "if the other has landed": with 6.1, the
   regenerated migrations; with 6.2, the three lead lines; with 6.3, the
   harness's lead switch and the fork's stamps; with 6.7, the flag's
-  prose.
+  prose; with 6.10, the register pairs for `createEntity` and
+  `deleteEntity`.
 - **6.7 (C9).** The second of 6.7 and 6.8 to land gives `isLead` its
   prose.
 - **6.9 (C10).** 6.9's projections carry the computed mark, never the
@@ -822,31 +823,37 @@ whichever of the pair lands second meets it.
     appends included, carries Kael's id.
 42. If 6.7 has landed: `lib/history/diff-prose.test.ts` has an `isLead`
     case, setting and clearing, through this slice's label.
+43. If 6.10 has landed: `lib/actions/entities/register.test.ts` holds
+    6.10's `createEntity` and `deleteEntity` pairs, run again over the
+    bodies this slice changed, each still red when its handler's branch
+    condition is removed (a mutation restored by `cp`), with this
+    slice's `isLead` pair beside them in the same `branch scope` block,
+    red the same way.
 
 **End to end** (`e2e/tests/per-branch-lead.spec.ts`, new, on the seeded
 hero story's main branch with the mock LLM; DB assertions first, then
 role and name through the app's i18n keys):
 
-43. World's `Set as lead` on Mira: in the DB, Mira's `is_lead` is 1,
+44. World's `Set as lead` on Mira: in the DB, Mira's `is_lead` is 1,
     Kael's 0, and both deltas share one `action_id`. The reader's Undo
     opens the confirm titled by the lead row's string; after Undo, Kael
     is flagged and Mira not.
-44. Deleting Kael from World: the confirm shows the needs-a-lead line;
+45. Deleting Kael from World: the confirm shows the needs-a-lead line;
     after it, the branch has no flagged row.
-45. In the reader, a typed draft and Send: no `user_action` row is
+46. In the reader, a typed draft and Send: no `user_action` row is
     added, the seeded `system` tail row is still there, the composer
     still holds the draft, and the reason line shows. The last reply's
     regenerate, pressed or disabled per open question 2, leaves that
     reply's row and the `system` row in place.
-46. `Set as lead` on Mira again, then Send: the new `user_action` and its
+47. `Set as lead` on Mira again, then Send: the new `user_action` and its
     `ai_reply` both carry `metadata.leadId` equal to Mira's id.
-47. In a launch of its own, after R4's design pass: with the newer (by
+48. In a launch of its own, after R4's design pass: with the newer (by
     `created_at`) Brannoc row of the seeded collision pair flagged as the
     lead before launch, and Kael unflagged, resolving the pair by Merge
     without touching the picker leaves the newer row, still flagged, and
     removes the older. The stamped and both-held cases are proven in
     unit tests and stories above.
-48. `e2e/tests/world.spec.ts`, `e2e/tests/peek-drawer.spec.ts`,
+49. `e2e/tests/world.spec.ts`, `e2e/tests/peek-drawer.spec.ts`,
     `e2e/tests/wizard-cast.spec.ts` (the committed lead's cast row has
     `is_lead = 1`, the staged character 0) and
     `e2e/tests/world-delete-undo.spec.ts` (the lead's `Delete entity` is
@@ -854,7 +861,7 @@ role and name through the app's i18n keys):
 
 **Hygiene.**
 
-49. `pnpm lint`, `pnpm format:check`, `pnpm compiler:check`,
+50. `pnpm lint`, `pnpm format:check`, `pnpm compiler:check`,
     `pnpm typecheck`, `pnpm lint:docs` and `pnpm test:run` (the unit and
     storybook projects) pass. Every new chrome string routes through
     `t()`. The forward pointers listed above are gone.
