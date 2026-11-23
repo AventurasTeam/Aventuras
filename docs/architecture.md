@@ -1735,10 +1735,27 @@ The fallback keeps `DeltaLogRow`'s `summary: string` contract
 unchanged. Pre-walk and post-walk are both real strings; the
 post-walk version is richer.
 
-Re-render trigger mechanism is host-determined and not
-load-bearing for the cache contract (TanStack Query keyed on
-`['diff', branchId, delta.id]` is the natural fit given the existing
-stack).
+A host re-renders through TanStack Query, and the cache leaves it
+duties that History's host (`useDiffOutcomes(rows)`,
+`components/history/use-diff-outcomes.ts`) meets and a second host,
+such as the Diagnostics Hub's Delta log, owes too:
+
+- One query per update row, keyed `['diff', branchId, delta.id]` on the
+  delta's own branch, its initial data seeded from `peek`.
+- `staleTime: Infinity` and `gcTime: 0`. Only an invalidation makes a
+  diff stale, and the cache alone retains entries, so a host remounted
+  after an eviction it didn't hear reads again instead of showing what
+  TanStack kept.
+- On `onEvict(b)`, invalidate the `['diff', b]` queries, never remove
+  them: a removal notifies no mounted row. An invalidated outcome shows
+  the field-name summary until its re-read lands.
+- A query function that meets `DiffEvictedError` populates again:
+  TanStack joins an invalidation's refetch onto a first fetch that has
+  no data yet instead of starting a new one, so the rejected fetch is
+  the read the row waits on.
+- Once subscribed to `onEvict`, re-check the seeds against `peek`: an
+  eviction between the first `peek` and the subscription would
+  otherwise leave a row on an entry the cache dropped.
 
 `populate` coalesces concurrent calls for the same branch and
 `delta.id` via an internal in-flight promise map; `populateBatch`
