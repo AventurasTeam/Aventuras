@@ -227,6 +227,47 @@ describe('diffProse — long text', () => {
     )
   })
 
+  // Indices: a 0-19, space 20, b 21-36, the difference at 37; 21 is the only word start in 21-37.
+  it('starts at a word start exactly 16 characters before the difference', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: `${'a'.repeat(20)} ${'b'.repeat(16)}cddd` },
+          { description: `${'a'.repeat(20)} ${'b'.repeat(16)}eddd` },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Description: "…bbbbbbbbbbbbbbbbcddd" → "…bbbbbbbbbbbbbbbbeddd"')
+  })
+
+  // Indices: a 0-18, space 19, b 20-25, space 26, c 27-36, the difference at 37.
+  it('passes over a word start 17 characters before the difference', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: `${'a'.repeat(19)} ${'b'.repeat(6)} ${'c'.repeat(10)}xddd` },
+          { description: `${'a'.repeat(19)} ${'b'.repeat(6)} ${'c'.repeat(10)}yddd` },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Description: "…ccccccccccxddd" → "…ccccccccccyddd"')
+  })
+
+  // The difference at 30 with no word start in 14-30: both start at 14 and end at the 40th, 53.
+  it('starts 16 characters before the difference when that range holds no word start', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: `${'w'.repeat(30)}x${'w'.repeat(29)}` },
+          { description: `${'w'.repeat(30)}y${'w'.repeat(29)}` },
+        ),
+        ENTITIES,
+      ),
+    ).toBe(
+      `Description: "…${'w'.repeat(16)}x${'w'.repeat(23)}…" → "…${'w'.repeat(16)}y${'w'.repeat(23)}…"`,
+    )
+  })
+
   it('ends at a space exactly 40 characters from the start', () => {
     expect(
       diffProse(
