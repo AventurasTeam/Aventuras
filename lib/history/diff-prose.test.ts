@@ -201,6 +201,57 @@ describe('diffProse — long text', () => {
       ),
     ).toBe(`Description: "${'w'.repeat(40)}…" → "${'v'.repeat(40)}…"`)
   })
+
+  it('shows two sides of exactly 40 characters whole', () => {
+    expect(
+      diffProse(
+        entryOf({ description: `${'a'.repeat(39)}b` }, { description: `${'a'.repeat(39)}c` }),
+        ENTITIES,
+      ),
+    ).toBe(
+      'Description: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab" → "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac"',
+    )
+  })
+
+  it('starts at a word start at the difference itself', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: `${'a'.repeat(30)} served the crown for a decade before the war` },
+          { description: `${'a'.repeat(30)} deserted the crown after a decade before the war` },
+        ),
+        ENTITIES,
+      ),
+    ).toBe(
+      'Description: "…served the crown for a decade before the…" → "…deserted the crown after a decade before…"',
+    )
+  })
+
+  it('ends at a space exactly 40 characters from the start', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: `${'a'.repeat(20)} ${'b'.repeat(19)} ${'c'.repeat(20)}` },
+          { description: 'z' },
+        ),
+        ENTITIES,
+      ),
+    ).toBe('Description: "aaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbb…" → "z"')
+  })
+
+  it('never ends at a space at the difference itself', () => {
+    expect(
+      diffProse(
+        entryOf(
+          { description: `${'x'.repeat(10)} ${'y'.repeat(50)}` },
+          { description: `${'x'.repeat(10)}z${'y'.repeat(50)}` },
+        ),
+        ENTITIES,
+      ),
+    ).toBe(
+      'Description: "xxxxxxxxxx yyyyyyyyyyyyyyyyyyyyyyyyyyyyy…" → "xxxxxxxxxxzyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…"',
+    )
+  })
 })
 
 describe('diffProse — enums, numbers, flags', () => {
@@ -263,6 +314,17 @@ describe('diffProse — enums, numbers, flags', () => {
         contextOf('happenings'),
       ),
     ).toBe('Common knowledge: no → yes')
+  })
+
+  it('renders nothing for an enum, number or flag whose value is unchanged', () => {
+    expect(diffProse(entryOf({ status: 'active' }, { status: 'active' }), ENTITIES)).toBeNull()
+    expect(diffProse(entryOf({ priority: 3 }, { priority: 3 }), contextOf('lore'))).toBeNull()
+    expect(
+      diffProse(
+        entryOf({ commonKnowledge: 0 }, { commonKnowledge: false }),
+        contextOf('happenings'),
+      ),
+    ).toBeNull()
   })
 })
 
