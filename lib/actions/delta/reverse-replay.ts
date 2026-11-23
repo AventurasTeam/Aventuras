@@ -35,6 +35,7 @@ import {
   type ReversalChains,
   type SurvivorEdit,
 } from './own-write'
+import { logRewritten } from './post-commit-hook'
 import {
   branchKeyOf,
   resolveByTable,
@@ -942,13 +943,9 @@ export async function reverseAndPruneDeltaRows(
       // Canon writes a journal before the plan's ops; a write-back's extraOps re-insert deltas at
       // positions the prunes free, so they stay last.
       const leading = opsFromPlan ? await opsFromPlan(plan) : []
-      await ctx.runInTransaction([
-        ...leading,
-        ...plan.ops,
-        ...plan.pruneOps,
-        ...plan.journalOps,
-        ...extraOps,
-      ])
+      const committed = [...leading, ...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...extraOps]
+      await ctx.runInTransaction(committed)
+      if (committed.length > 0) logRewritten(set.branchId)
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
@@ -1016,6 +1013,8 @@ export async function reverseReplayGroup(
 
       plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
+      // A settle-only commit rewrites no log, and an empty group has no branch.
+      if (set.rows.length > 0) logRewritten(set.branchId)
     } catch (e) {
       throw replayFailure(e, actionId)
     }

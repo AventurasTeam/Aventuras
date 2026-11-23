@@ -189,6 +189,13 @@ module.exports = defineConfig([
               message:
                 'lib/pipeline takes no value import of the lib/actions barrel: it imports @/lib/pipeline back, a cycle. Read from lib/db, or import types from @/lib/actions/types.',
             },
+            // The diff cache in lib/history hears a rewritten log through the action layer's hook.
+            {
+              from: [{ type: 'lib-module', captured: { name: 'actions' } }],
+              disallow: [{ to: [{ type: 'lib-module', captured: { name: 'history' } }] }],
+              message:
+                'lib/actions imports nothing from lib/history: lib/history imports the lib/actions barrel, a cycle. Hear a rewritten log through onLogRewritten instead. See docs/architecture.md#concurrency-rollback-error-path.',
+            },
             // lib/diagnostics is zero-dependency infrastructure; importing
             // lib/stores would invert the layering and close an import cycle
             // (the gate is injected, not imported). See

@@ -59,6 +59,7 @@ export {
   isPayloadMetaKey,
   PAYLOAD_META_PREFIX,
 } from './delta/delta-encoding'
+export { onLogRewritten, type LogRewrittenListener } from './delta/post-commit-hook'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
 export { __resetRegistry, type StorePatch } from './delta/registry'
 export { __redoGroupForTest, type RedoGroup, type RedoSnapshot } from './delta/redo'

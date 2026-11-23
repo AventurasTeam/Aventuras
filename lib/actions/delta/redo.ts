@@ -9,6 +9,7 @@ import { cascadePatches } from './delete-cascade'
 import { heldKey, type HeldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { absentRefs, pathRefIds, type LiveRef, type RefPath } from './live-refs'
+import { logRewritten } from './post-commit-hook'
 import { resolveByTable, whereForDelta } from './registry'
 import {
   DeltaReplayError,
@@ -369,7 +370,10 @@ async function applyRedoLocked(
     )
     refPatches.push({ row, branchId, columns })
   }
-  await ctx.runInTransaction([...ops, ...deltaOps, ...extraOps])
+  const committed = [...ops, ...deltaOps, ...extraOps]
+  await ctx.runInTransaction(committed)
+  const branchId = snapshots[0]?.delta.branchId ?? refRestores[0]?.branchId
+  if (committed.length > 0 && branchId !== undefined) logRewritten(branchId)
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {
