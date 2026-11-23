@@ -156,7 +156,8 @@ day one:  6.1   6.2   6.7   6.8        6.3*   6.4*
 6.2 ┄ 6.3    (no edge: the second to land adds the check that a fork's
               child starts with an empty redo stack)
 6.8 ┄ 6.10   (no edge: if 6.8 lands first, 6.10 keeps its isLead pair
-              in the entities branch scope block)
+              in the entities branch scope block; if 6.10 lands first,
+              6.8 re-runs its createEntity and deleteEntity pairs)
 ```
 
 Each "second to land" job is an acceptance criterion in both slices of
@@ -655,7 +656,7 @@ Provider: [Slice 6.7](./slices/07-diff-cache.md). Shares files with
 ### C10 — The lead's surface
 
 Provider: [Slice 6.8](./slices/08-per-branch-lead.md). Consumers: 6.9;
-meets 6.1, 6.2 and 6.3.
+meets 6.1, 6.2, 6.3 and 6.10.
 
 - **The flag.** `entities.is_lead`, with its `CHECK`, on
   `lib/db/entities/entities.table.ts:16-55`; `isLead` joins the

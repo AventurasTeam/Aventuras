@@ -651,9 +651,10 @@ the branch only for a run marker that records none, and migration
 `0022` backfilled every unfinished run's branch from its
 deltas, journal or chapter, so a marker still without one has no
 journal row, and action ids are global: neither read can pick between a
-row and its copy. Every other read is scoped, `deltas`' seven included;
+row and its copy. Every other read is scoped,
 `state-patch-actions.ts`'s and `close-agent/upkeep.ts`'s by an outer
-`and`.
+`and`, and so are `deltas`' seven statements by id: 6.1's five writes,
+its read-back and History's removal read.
 
 **Second to land.** Neither [Slice 6.3](./03-fork-core.md) nor
 [Slice 6.8](./08-per-branch-lead.md) had landed at this slice's final
