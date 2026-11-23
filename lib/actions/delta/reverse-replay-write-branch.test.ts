@@ -374,3 +374,52 @@ describe('a plan with a write branch reads the parent and writes the child', () 
     expect(parentVectorIds()).toEqual(['loc_wb_varn'])
   })
 })
+
+describe("the plan's fork lists", () => {
+  it('splits out the writes a fork runs, keeping ops and pruneOps whole', async () => {
+    const { created, holder } = await seedHeldPair()
+    const { survivor } = await seedSurvivor()
+    await seedPlaces()
+    const targets = ['act_wb_pass', 'act_wb_close', 'act_wb_varn', fx.deleteActionId]
+    const before = parentState()
+    cloneBranch(t.sqlite, PARENT, SELF)
+
+    const { plan } = await planOnParent(targets)
+
+    expect(plan.ops).toEqual([...plan.writeOps, ...plan.sweepOps])
+    expect(plan.sweepOps).not.toEqual([])
+    expect(plan.sweepOps.every((op) => /^DELETE FROM entities_vec_\d+ WHERE/.test(op.sql))).toBe(
+      true,
+    )
+    expect(plan.writeOps.some((op) => /_vec_\d+/.test(op.sql))).toBe(false)
+    expect(plan.reownOps).toEqual(plan.pruneOps.filter((op) => op.sql.startsWith('update')))
+    expect(plan.reownOps).toHaveLength(1)
+    expect(plan.pruneOps.length).toBeGreaterThan(plan.reownOps.length)
+    expect(plan.reownedDeltas).toEqual([created])
+    expect(plan.rewrittenHolders).toEqual([holder])
+    expect(plan.survivorRewrites.map(({ delta }) => delta.id)).toEqual([survivor.id])
+    expect(plan.droppedJournals.map((j) => j.actionId)).toEqual([fx.journalActionId])
+    expect(boundValues(plan)).not.toContain(PARENT)
+
+    // The fork's copy: every delta but the prune set, every journal but the dropped ones.
+    cloneBranch(t.sqlite, PARENT, CHILD)
+    for (const { id } of plan.prunedDeltas)
+      t.sqlite.prepare('DELETE FROM deltas WHERE branch_id = ? AND id = ?').run(CHILD, id)
+    for (const { actionId } of plan.droppedJournals)
+      t.sqlite
+        .prepare('DELETE FROM reversal_journals WHERE branch_id = ? AND action_id = ?')
+        .run(CHILD, actionId)
+    await ctx.runInTransaction([...plan.writeOps, ...plan.reownOps])
+    await reverseSelf(targets)
+
+    expectChildIsSelf(before)
+    expect(await deltaOn(CHILD, created.id)).toMatchObject({
+      source: 'user_edit',
+      actionId: 'act_wb_user',
+    })
+    expect((await deltaOn(CHILD, holder.id))?.undoPayload).not.toEqual(holder.undoPayload)
+    expect((await deltaOn(CHILD, survivor.id))?.undoPayload).toEqual({
+      state: { voice: 'low and dry' },
+    })
+  })
+})

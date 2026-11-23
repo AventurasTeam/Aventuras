@@ -113,8 +113,14 @@ export type ReversePlan = {
   rewrittenHolders: readonly Delta[]
   /** reversal_journals rows the planner drops (generation-pipeline.md → Reverse-replay), whole. */
   droppedJournals: readonly ReversalJournalRow[]
-  /** Their deletes, apart from pruneOps: a fork's copy will omit them (no forks yet, M6.1). */
+  /** Their deletes, apart from pruneOps: a fork's copy omits them. */
   journalOps: readonly SqlOp[]
+  /** The plan's writes but the vector sweeps, in `ops`' order. */
+  writeOps: readonly SqlOp[]
+  /** The vector sweeps of the rows the reversal deletes; `ops` ends with them. */
+  sweepOps: readonly SqlOp[]
+  /** The re-own of each kept create, apart from the prune deletes `pruneOps` interleaves. */
+  reownOps: readonly SqlOp[]
 }
 
 export type SurvivorRewrite = { readonly delta: Delta; readonly payload: Record<string, unknown> }
@@ -213,7 +219,7 @@ export async function buildReverseAndPrunePlan(
     writeBranchId,
   )
   return {
-    ops: built.ops,
+    ops: [...built.writeOps, ...built.sweepOps],
     pruneOps: logged.map(reownOrPrune),
     patches: built.patches,
     survivorRewrites: built.survivorRewrites,
@@ -222,6 +228,9 @@ export async function buildReverseAndPrunePlan(
     rewrittenHolders: built.rewrittenHolders,
     droppedJournals: journals.droppedJournals,
     journalOps: journals.journalOps,
+    writeOps: built.writeOps,
+    sweepOps: built.sweepOps,
+    reownOps: reownedDeltas.map(reownOrPrune),
   }
 }
 
@@ -294,7 +303,9 @@ function endsAbsent(state: RowState): boolean {
 }
 
 type BuiltUndo = {
-  ops: SqlOp[]
+  /** Every op but the vector sweeps, in the walk's order. */
+  writeOps: SqlOp[]
+  sweepOps: SqlOp[]
   patches: PatchEmission[]
   /** Kept create's delta id → the action of the oldest user write that kept its row. */
   reowned: Map<string, string>
@@ -886,11 +897,13 @@ async function buildUndoOps(
     )
 
   // One vec0 scan per family table, not per row: each statement scans the whole table.
+  const sweepOps: SqlOp[] = []
   for (const { table, branchId, ids } of walk.swept.values())
-    walk.ops.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
+    sweepOps.push(...(await vecSweepIdsOps(table, branchId, ids, listVecTables)))
 
   return {
-    ops: walk.ops,
+    writeOps: walk.ops,
+    sweepOps,
     patches: walk.patches,
     reowned: walk.reowned,
     prunedHolders: pruned,
