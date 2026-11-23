@@ -717,8 +717,11 @@ export const ProseFailedWalk: Story = {
   play: async () => {
     const [row] = await screen.findAllByTestId('delta-log-row', {}, WAIT)
     await waitFor(() => expect(failingPopulate).toHaveBeenCalled(), WAIT)
-    // The rejection settles a beat later; the summary has to outlast it.
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await expect(failingPopulate.mock.results[0].value).rejects.toThrow(
+      'no row, head delete or held copy',
+    )
+    // TanStack tells the row of the error on a zero-delay timer, which a frame outlasts.
+    await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(within(row).getByText('Modified Voice')).toBeVisible()
   },
 }
