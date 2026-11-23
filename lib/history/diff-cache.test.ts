@@ -158,6 +158,7 @@ describe('createDiffCache', () => {
       const second = cache.populate(delta('dl_1'))
       await settle()
       const third = cache.populate(delta('dl_1'))
+      await settle()
 
       expect(walk).toHaveBeenCalledTimes(1)
       expect(walk.mock.calls[0][0].map((d) => d.id)).toEqual(['dl_1'])
@@ -291,6 +292,24 @@ describe('createDiffCache', () => {
         branchId: 'br_b',
         error: 'listener broke',
       })
+    })
+
+    it('drops the branch before telling listeners, so a listener reads past the eviction', async () => {
+      const walk = answering()
+      const cache = createDiffCache({ walk })
+      await cache.populate(delta('dl_1'))
+      const seen: (DiffCacheEntry | undefined)[] = []
+      const repopulated: Promise<unknown>[] = []
+      cache.onEvict((branchId) => {
+        seen.push(cache.peek(branchId, 'dl_1'))
+        repopulated.push(cache.populate(delta('dl_1')))
+      })
+
+      cache.evictBranch('br_b')
+
+      expect(seen).toEqual([undefined])
+      await Promise.all(repopulated)
+      expect(walk).toHaveBeenCalledTimes(2)
     })
   })
 
