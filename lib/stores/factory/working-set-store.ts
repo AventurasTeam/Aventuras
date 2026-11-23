@@ -3,9 +3,29 @@ import { createStore } from 'zustand/vanilla'
 
 import type { StorePatch } from '@/lib/actions'
 
+export type RowsHook<Row> = {
+  <T>(branchId: string | null, selector: (rows: ReadonlyMap<string, Row>) => T): T
+  /** @deprecated Unscoped read: name the branch. */
+  <T>(selector: (rows: ReadonlyMap<string, Row>) => T): T
+}
+export type RowsGetter<Row> = {
+  (branchId: string | null): ReadonlyMap<string, Row>
+  /** @deprecated Unscoped read: name the branch. */
+  (): ReadonlyMap<string, Row>
+}
+export type ByIdGetter<Row> = {
+  (branchId: string | null, id: string): Row | undefined
+  /** @deprecated Unscoped read: name the branch. */
+  (id: string): Row | undefined
+}
+
 export type WorkingSetStore<Row extends { id: string }> = {
-  useRows: <T>(selector: (rows: ReadonlyMap<string, Row>) => T) => T
-  getRows: () => ReadonlyMap<string, Row>
+  /** A branch the store doesn't hold, or `null`, reads as one shared empty map. Select the map or a primitive, never a fresh array. */
+  useRows: RowsHook<Row>
+  /** The branch's live rows (replaced on the next write; never mutate), else the shared empty map. */
+  getRows: RowsGetter<Row>
+  getById: ByIdGetter<Row>
+  useById: (branchId: string | null, id: string) => Row | undefined
   getLoadedBranch: () => string | null
   patch: (branchId: string, patch: StorePatch) => void
   insertMany: (branchId: string, rows: readonly Row[]) => void
@@ -17,6 +37,17 @@ export type WorkingSetStore<Row extends { id: string }> = {
 }
 
 type State<Row extends { id: string }> = { rows: Map<string, Row>; loadedBranch: string | null }
+type Selector<Row, T> = (rows: ReadonlyMap<string, Row>) => T
+
+// One reference for every store and call, so a selector that returns it stays stable.
+const EMPTY_ROWS: ReadonlyMap<string, never> = new Map<string, never>()
+
+function rowsOf<Row extends { id: string }>(
+  state: State<Row>,
+  branchId: string | null,
+): ReadonlyMap<string, Row> {
+  return branchId != null && state.loadedBranch === branchId ? state.rows : EMPTY_ROWS
+}
 
 export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetStore<Row> {
   const store = createStore<State<Row>>()(() => ({ rows: new Map(), loadedBranch: null }))
@@ -52,10 +83,37 @@ export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetS
   const hydrate = (branchId: string, rows: Row[]) =>
     store.setState({ loadedBranch: branchId, rows: new Map(rows.map((r) => [r.id, r])) })
 
+  // loadedBranch and rows are read in one selector, so a hydrate for another branch re-renders.
+  function useRows<T>(branchId: string | null, selector: Selector<Row, T>): T
+  function useRows<T>(selector: Selector<Row, T>): T
+  function useRows<T>(...args: [Selector<Row, T>] | [string | null, Selector<Row, T>]): T {
+    return useStore(store, (s) =>
+      args.length === 2 ? args[1](rowsOf(s, args[0])) : args[0](s.rows),
+    )
+  }
+
+  function getRows(branchId: string | null): ReadonlyMap<string, Row>
+  function getRows(): ReadonlyMap<string, Row>
+  function getRows(...args: [] | [string | null]): ReadonlyMap<string, Row> {
+    const s = store.getState()
+    return args.length === 0 ? s.rows : rowsOf(s, args[0])
+  }
+
+  function getById(branchId: string | null, id: string): Row | undefined
+  function getById(id: string): Row | undefined
+  function getById(...args: [string] | [string | null, string]): Row | undefined {
+    const s = store.getState()
+    return args.length === 2 ? rowsOf(s, args[0]).get(args[1]) : s.rows.get(args[0])
+  }
+
+  const useById = (branchId: string | null, id: string): Row | undefined =>
+    useStore(store, (s) => rowsOf(s, branchId).get(id))
+
   return {
-    useRows: (selector) => useStore(store, (s) => selector(s.rows)),
-    // ReadonlyMap is a type-level guard; this is the live snapshot — do not mutate (replaced on next patch).
-    getRows: () => store.getState().rows,
+    useRows,
+    getRows,
+    getById,
+    useById,
     getLoadedBranch: () => store.getState().loadedBranch,
     patch,
     insertMany,
