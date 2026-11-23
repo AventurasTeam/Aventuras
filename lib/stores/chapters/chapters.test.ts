@@ -35,7 +35,7 @@ describe('chaptersStore', () => {
     expect(chaptersStore.getById('br_1', 'chap_1')?.title).toBe('One')
     expect(chaptersStore.getBySequenceNumber('br_1', 2)?.id).toBe('chap_2')
     expect(chaptersStore.getBySequenceNumber('br_1', 9)).toBeUndefined()
-    expect(chaptersStore.getChapters().size).toBe(2)
+    expect(chaptersStore.getChapters('br_1').size).toBe(2)
   })
 
   it('reads the highest-numbered chapter whatever order the rows were stored in', () => {
@@ -47,7 +47,7 @@ describe('chaptersStore', () => {
       chapterRow('chap_0', 0, 'Zero'),
     ])
     expect(chaptersStore.getLatest('br_1')?.id).toBe('chap_3')
-    expect(chaptersStore.selectLatest(chaptersStore.getChapters())?.id).toBe('chap_3')
+    expect(chaptersStore.selectLatest(chaptersStore.getChapters('br_1'))?.id).toBe('chap_3')
   })
 
   it('reads no chapter by sequence number or as latest for a branch it does not hold', () => {

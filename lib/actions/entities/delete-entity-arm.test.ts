@@ -142,7 +142,7 @@ describe('deleteEntity', () => {
     expect(await ctx.db.select().from(happeningAwareness)).toEqual([])
     expect(await ctx.db.select().from(characterRelationships)).toEqual([])
     expect(await ctx.db.select().from(translations)).toEqual([])
-    expect(characterRelationshipsStore.getRelationshipRows().has('rel_1')).toBe(false)
+    expect(characterRelationshipsStore.getRelationshipRows('b1').has('rel_1')).toBe(false)
 
     const rows = (await ctx.db
       .select()

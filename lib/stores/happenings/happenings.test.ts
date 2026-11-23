@@ -26,7 +26,7 @@ describe('happeningsStore', () => {
     happeningsStore.__reset()
     happeningsStore.hydrate('br_1', [row('hap_1', 'Duel'), row('hap_2', 'Coronation')])
     expect(happeningsStore.getById('br_1', 'hap_1')?.title).toBe('Duel')
-    expect(happeningsStore.getHappenings().size).toBe(2)
+    expect(happeningsStore.getHappenings('br_1').size).toBe(2)
   })
 
   it('no-ops a patch for a non-held branch', () => {

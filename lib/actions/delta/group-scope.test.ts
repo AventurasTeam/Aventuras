@@ -119,7 +119,7 @@ describe('applyDeltaActionGroup — group scope and cascade patches', () => {
     )
 
     expect(result).toEqual({ status: 'ok' })
-    expect(store.getRows().has('child_1')).toBe(false)
+    expect(store.getRows('b1').has('child_1')).toBe(false)
   })
 
   it('patches captured children on the single-action path too, which has no group scope', async () => {
@@ -143,7 +143,7 @@ describe('applyDeltaActionGroup — group scope and cascade patches', () => {
     )
 
     expect(deleted.status).toBe('ok')
-    expect(store.getRows().has('child_1')).toBe(false)
+    expect(store.getRows('b1').has('child_1')).toBe(false)
     expect(seen).toEqual([undefined])
   })
 })

@@ -1023,7 +1023,7 @@ describe('updateStoryEntryContent classifier invalidation', () => {
 
     await updateStoryEntryContent('b1', 'e2', 'new', ctx)
 
-    expect(happeningsStore.getHappenings().has('hap_2')).toBe(false)
+    expect(happeningsStore.getHappenings('b1').has('hap_2')).toBe(false)
   })
 
   it('leaves the watermark alone when it already sits behind the edited entry', async () => {

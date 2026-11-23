@@ -47,7 +47,7 @@ type Reading = { patched: StoreChapter | undefined; hydrated: StoreChapter | und
 // The row the patches left beside a fresh hydrate's; the patched rows go back after, so the
 // next step of the walk starts from patches alone.
 async function readBoth(fx: CloseFixture, chapterId: string): Promise<Reading> {
-  const patchedRows = [...chaptersStore.getChapters().values()]
+  const patchedRows = [...chaptersStore.getChapters(fx.branchId).values()]
   const patched = chaptersStore.getById(fx.branchId, chapterId)
   expect(await loadOpenStory(fx.branchId, fx.ctx)).toMatchObject({ status: 'ok' })
   const hydrated = chaptersStore.getById(fx.branchId, chapterId)

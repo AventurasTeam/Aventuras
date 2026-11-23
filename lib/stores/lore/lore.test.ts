@@ -26,7 +26,7 @@ describe('loreStore', () => {
     loreStore.__reset()
     loreStore.hydrate('br_1', [loreRow('lore_1', 'Magic'), loreRow('lore_2', 'Religion')])
     expect(loreStore.getById('br_1', 'lore_1')?.title).toBe('Magic')
-    expect(loreStore.getLore().size).toBe(2)
+    expect(loreStore.getLore('br_1').size).toBe(2)
   })
 
   it('no-ops a patch for a non-held branch', () => {

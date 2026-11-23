@@ -27,7 +27,7 @@ describe('threadsStore', () => {
     threadsStore.__reset()
     threadsStore.hydrate('br_1', [threadRow('thr_1', 'Quest'), threadRow('thr_2', 'Arc')])
     expect(threadsStore.getById('br_1', 'thr_1')?.title).toBe('Quest')
-    expect(threadsStore.getThreads().size).toBe(2)
+    expect(threadsStore.getThreads('br_1').size).toBe(2)
   })
 
   it('no-ops a patch for a non-held branch', () => {

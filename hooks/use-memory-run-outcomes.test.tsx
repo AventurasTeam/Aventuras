@@ -422,7 +422,7 @@ describe('useMemoryRunOutcomes', () => {
           stoppedTasks: 0,
         }),
       )
-      const rows = chaptersStore.getChapters()
+      const rows = chaptersStore.getChapters('br_1')
       expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 1 })?.id).toBe('chap_2')
     })
 
@@ -467,7 +467,7 @@ describe('useMemoryRunOutcomes', () => {
       resolveRead({ chapterId: 'chap_2', report: report('act_close') })
       await vi.waitFor(() => expect(held()?.openSeq).toBe(1))
 
-      const rows = chaptersStore.getChapters()
+      const rows = chaptersStore.getChapters('br_1')
       expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 2 })).toBeNull()
       expect(closeResultChapter(held(), rows, { branchId: 'br_1', openSeq: 1 })?.id).toBe('chap_2')
     })

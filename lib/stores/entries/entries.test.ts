@@ -25,7 +25,7 @@ describe('entriesStore', () => {
     entriesStore.hydrate('b1', [row('e1', 1), row('e2', 2)])
     expect(entriesStore.getLoadedBranch()).toBe('b1')
     expect(entriesStore.getById('b1', 'e1')?.content).toBe('ce1')
-    expect(entriesStore.getEntries().size).toBe(2)
+    expect(entriesStore.getEntries('b1').size).toBe(2)
   })
 
   it('applies create / update / delete patches to the held branch', () => {

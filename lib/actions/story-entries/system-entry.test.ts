@@ -97,7 +97,7 @@ describe('clearSystemEntry', () => {
   describe('the reader store', () => {
     const hydrateAll = async () =>
       entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
-    const heldIds = () => [...entriesStore.getEntries().keys()].sort()
+    const heldIds = () => [...entriesStore.getEntries('b1').keys()].sort()
 
     // A card the store kept would offer a Retry for a row that's gone, and Dismiss reloads nothing.
     it('takes the card out with the row, and nothing else', async () => {
@@ -145,7 +145,7 @@ describe('raiseSystemEntry', () => {
 
   const hydrateAll = async () =>
     entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
-  const heldIds = () => [...entriesStore.getEntries().keys()].sort()
+  const heldIds = () => [...entriesStore.getEntries('b1').keys()].sort()
   const failureOf = async (id: string) =>
     (await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id)))[0]?.metadata
       ?.systemFailure
@@ -242,7 +242,7 @@ describe('raiseSystemEntry', () => {
     await raiseSystemEntry({ branchId: 'b1', content: 'close failed', failure: CLOSE_FAILURE }, ctx)
 
     expect(entriesStore.getLoadedBranch()).toBe('b2')
-    expect(heldIds()).toEqual([])
+    expect([...entriesStore.getEntries('b2').keys()]).toEqual([])
     expect(await systemRows()).toHaveLength(1)
   })
 })

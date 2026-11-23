@@ -127,7 +127,7 @@ describe('entities CRUD arms', () => {
       status: 'rejected',
     })
     expect((await rowFor(db, 'char_1')).description).toBe('a wandering knight')
-    expect(entitiesStore.getEntities().get('char_1')?.name).toBe('Kael')
+    expect(entitiesStore.getEntities('br_1').get('char_1')?.name).toBe('Kael')
     expect((await db.select().from(deltas)).length).toBe(1)
     expect(await update('char_9', { description: 'rewritten' })).toMatchObject({
       status: 'rejected',

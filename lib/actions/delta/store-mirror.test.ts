@@ -169,7 +169,7 @@ describe('store-mirror contract (AC6)', () => {
     )
     const [dbRow] = await db.select().from(widgets).where(eq(widgets.id, 'w1'))
     expect(dbRow.label).toBe('hello')
-    expect(store.getRows().get('w1')?.label).toBe('hello')
+    expect(store.getRows('b1').get('w1')?.label).toBe('hello')
 
     await applyDeltaAction(
       {
@@ -185,7 +185,7 @@ describe('store-mirror contract (AC6)', () => {
     )
     const [updatedRow] = await db.select().from(widgets).where(eq(widgets.id, 'w1'))
     expect(updatedRow.label).toBe('world')
-    expect(store.getRows().get('w1')?.label).toBe('world')
+    expect(store.getRows('b1').get('w1')?.label).toBe('world')
 
     await applyDeltaAction(
       {
@@ -200,7 +200,7 @@ describe('store-mirror contract (AC6)', () => {
       ctx,
     )
     expect((await db.select().from(widgets).where(eq(widgets.id, 'w1'))).length).toBe(0)
-    expect(store.getRows().has('w1')).toBe(false)
+    expect(store.getRows('b1').has('w1')).toBe(false)
   })
 
   it('reverse of create un-creates the row and removes it from the store', async () => {
@@ -216,13 +216,13 @@ describe('store-mirror contract (AC6)', () => {
       },
       ctx,
     )
-    expect(store.getRows().get('w1')?.label).toBe('hello')
+    expect(store.getRows('b1').get('w1')?.label).toBe('hello')
 
     await reverseReplayDeltas('act_x', ctx)
 
     const rows = await db.select().from(widgets).where(eq(widgets.id, 'w1'))
     expect(rows.length).toBe(0)
-    expect(store.getRows().has('w1')).toBe(false)
+    expect(store.getRows('b1').has('w1')).toBe(false)
   })
 
   it('reverse of update restores the prior label in the store', async () => {
@@ -250,13 +250,13 @@ describe('store-mirror contract (AC6)', () => {
       },
       ctx,
     )
-    expect(store.getRows().get('w1')?.label).toBe('world')
+    expect(store.getRows('b1').get('w1')?.label).toBe('world')
 
     await reverseReplayDeltas('act_upd', ctx)
 
     const [dbRow] = await db.select().from(widgets).where(eq(widgets.id, 'w1'))
     expect(dbRow.label).toBe('hello')
-    expect(store.getRows().get('w1')?.label).toBe('hello')
+    expect(store.getRows('b1').get('w1')?.label).toBe('hello')
   })
 
   it('non-held-branch no-op: SQLite write succeeds but store is untouched', async () => {
@@ -279,7 +279,7 @@ describe('store-mirror contract (AC6)', () => {
     expect(dbRow.label).toBe('other')
 
     // Patcher branch-guards: store loaded for b1, patch arrived for b2 → no-op.
-    expect(store.getRows().has('w2')).toBe(false)
-    expect(store.getRows().size).toBe(0)
+    expect(store.getRows('b1').has('w2')).toBe(false)
+    expect(store.getRows('b1').size).toBe(0)
   })
 })

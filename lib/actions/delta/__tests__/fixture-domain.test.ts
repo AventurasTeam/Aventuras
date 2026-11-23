@@ -170,7 +170,7 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
     )
     const [createdDb] = await db.select().from(fixtures).where(eq(fixtures.id, 'f1'))
     expect(createdDb.label).toBe('hello')
-    expect(store.getRows().get('f1')?.label).toBe('hello')
+    expect(store.getRows('b1').get('f1')?.label).toBe('hello')
 
     await applyDeltaAction(
       {
@@ -186,7 +186,7 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
     )
     const [updatedDb] = await db.select().from(fixtures).where(eq(fixtures.id, 'f1'))
     expect(updatedDb.label).toBe('world')
-    expect(store.getRows().get('f1')?.label).toBe('world')
+    expect(store.getRows('b1').get('f1')?.label).toBe('world')
 
     await applyDeltaAction(
       {
@@ -201,7 +201,7 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
       ctx,
     )
     expect((await db.select().from(fixtures).where(eq(fixtures.id, 'f1'))).length).toBe(0)
-    expect(store.getRows().has('f1')).toBe(false)
+    expect(store.getRows('b1').has('f1')).toBe(false)
   })
 
   it('reverse-replay undoes a freshly-registered domain action end-to-end', async () => {
@@ -217,14 +217,14 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
       },
       ctx,
     )
-    expect(store.getRows().get('f1')?.label).toBe('hello')
+    expect(store.getRows('b1').get('f1')?.label).toBe('hello')
 
     const reversed = await reverseReplayDeltas('act_undo_me', ctx)
     // Count proves reverse-replay found + processed the delta (didn't short-circuit to 0).
     expect(reversed).toBe(1)
 
     expect((await db.select().from(fixtures).where(eq(fixtures.id, 'f1'))).length).toBe(0)
-    expect(store.getRows().has('f1')).toBe(false)
+    expect(store.getRows('b1').has('f1')).toBe(false)
   })
 
   it('rejects a branch-mismatch payload without writing a row or a delta', async () => {
@@ -250,7 +250,7 @@ describe('fixture domain self-registration + roundtrip (AC5)', () => {
     expect(result.status).toBe('rejected')
     expect((await db.select().from(fixtures)).length).toBe(0)
     expect((await db.select().from(deltas)).length).toBe(0)
-    expect(store.getRows().size).toBe(0)
+    expect(store.getRows('b1').size).toBe(0)
   })
 
   it('reverse-and-prune: post-commit patcher failure reports committed; DB stays reversed', async () => {

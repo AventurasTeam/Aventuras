@@ -60,7 +60,7 @@ const byWindow =
     entriesStore.getById(branchId, entryId)?.branchId === branchId ? 'slice' : 'read'
 
 const loadedPositions = () =>
-  [...entriesStore.getEntries().values()].map((r) => r.position).sort((a, b) => a - b)
+  [...entriesStore.getEntries(BRANCH).values()].map((r) => r.position).sort((a, b) => a - b)
 
 function expectContiguous(from: number, through: number) {
   expect(loadedPositions()).toEqual(span(from, through).map((r) => r.position))

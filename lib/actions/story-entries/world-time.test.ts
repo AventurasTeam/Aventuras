@@ -118,8 +118,8 @@ describe('updateEntryWorldTime', () => {
 
     expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(45)
     expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
-    expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(45)
-    expect(entriesStore.getEntries().get('e1')?.metadata?.worldTime).toBe(60)
+    expect(entriesStore.getEntries('b1').get('e2')?.metadata?.worldTime).toBe(45)
+    expect(entriesStore.getEntries('b1').get('e1')?.metadata?.worldTime).toBe(60)
     // Contrast with the suppression test below: a real write does clear the
     // global redo stack, which is why suppressing a no-op write matters.
     expect(undoRedoStore.hasRedo()).toBe(false)
@@ -175,14 +175,14 @@ describe('updateEntryWorldTime', () => {
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
     expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(120)
-    expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(120)
+    expect(entriesStore.getEntries('b1').get('e2')?.metadata?.worldTime).toBe(120)
 
     // The prior turn is untouched: its delta and the entry it created survive.
     const remaining = await branchDeltas(db)
     expect(remaining.length).toBe(1)
     expect(remaining[0]).toMatchObject({ op: 'create', targetId: 'e4' })
     expect(await storedEntry(db, 'e4')).toBeDefined()
-    expect(entriesStore.getEntries().get('e4')).toBeDefined()
+    expect(entriesStore.getEntries('b1').get('e4')).toBeDefined()
   })
 
   // 0 is the accept boundary of the storage invariant, not an edge to reject:
@@ -197,7 +197,7 @@ describe('updateEntryWorldTime', () => {
 
     expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(0)
     expect((await branchDeltas(db)).length).toBe(1)
-    expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(0)
+    expect(entriesStore.getEntries('b1').get('e2')?.metadata?.worldTime).toBe(0)
   })
 
   it('suppresses a write that would not change the stored seconds', async () => {

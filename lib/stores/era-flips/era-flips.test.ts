@@ -16,7 +16,7 @@ describe('eraFlipsStore', () => {
       flipRow('ef_2', 2000, 'Age of Storms'),
     ])
     expect(eraFlipsStore.getById('br_1', 'ef_1')?.eraName).toBe('Age of Ash')
-    expect(eraFlipsStore.getEraFlips().size).toBe(2)
+    expect(eraFlipsStore.getEraFlips('br_1').size).toBe(2)
   })
 
   it('no-ops a patch for a non-held branch', () => {
