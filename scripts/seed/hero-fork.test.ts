@@ -5,11 +5,14 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { ensureVecTablesSql, isVecFamilyTable, sourceHash } from '@/lib/db'
 import { countTokens } from '@/lib/tokens'
 
 import { parseCli } from './cli'
 import { seedDatabase } from './run'
+import { openTestDb } from '../../lib/db/__tests__/test-db'
 import { branchSnapshot } from '../../lib/db/__tests__/two-branch'
+import { plantVec } from '../../lib/db/__tests__/vec-fixtures'
 import {
   HERO_FORK as WEB_HERO_FORK,
   heroForkTurns as webHeroForkTurns,
@@ -208,4 +211,81 @@ describe('the web bundle stub', () => {
     expect(WEB_HERO_FORK).toEqual(HERO_FORK)
     expect(() => webHeroForkTurns(0)).toThrow(/pnpm db:seed/)
   })
+})
+
+// The wipe reaches no vec0 table through dbSchema, and the fork copies main's vectors under keys
+// a later reseed's copy would collide with.
+describe('reseeding a database whose main was embedded', () => {
+  let reseedDir: string
+  beforeAll(() => {
+    reseedDir = mkdtempSync(join(tmpdir(), 'hero-fork-reseed-'))
+  })
+  afterAll(() => rmSync(reseedDir, { recursive: true, force: true }))
+
+  async function plantMainVectors(path: string): Promise<void> {
+    const opened = await openTestDb(path)
+    try {
+      for (const ddl of ensureVecTablesSql(8)) opened.sqlite.exec(ddl)
+      const { id } = opened.sqlite
+        .prepare(`SELECT id FROM entities WHERE branch_id = ? ORDER BY id LIMIT 1`)
+        .get(MAIN) as { id: string }
+      for (const dim of [384, 8])
+        plantVec(opened.sqlite, {
+          kind: 'entity',
+          id,
+          branchId: MAIN,
+          modelId: `m${dim}`,
+          dim,
+          sourceHash: sourceHash('h'),
+          vector: new Uint8Array(new Float32Array(dim).buffer),
+        })
+    } finally {
+      opened.sqlite.close()
+    }
+  }
+
+  async function seededState(
+    path: string,
+  ): Promise<{ forks: number; vectors: Record<string, number> }> {
+    const { sqlite } = await openTestDb(path)
+    try {
+      const { forks } = sqlite
+        .prepare('SELECT COUNT(*) AS forks FROM branches WHERE id = ?')
+        .get(FORK) as { forks: number }
+      const tables = (
+        sqlite.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as {
+          name: string
+        }[]
+      )
+        .map((row) => row.name)
+        .filter(isVecFamilyTable)
+      const vectors = Object.fromEntries(
+        tables.map((table) => [
+          table,
+          (sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n,
+        ]),
+      )
+      return { forks, vectors }
+    } finally {
+      sqlite.close()
+    }
+  }
+
+  it('wipes every vector family, so each later seed forks again', async () => {
+    const path = join(reseedDir, 'dev.db')
+    await seedDatabase(path, parseCli([path]))
+    await plantMainVectors(path)
+    for (let run = 1; run <= 2; run++) {
+      await seedDatabase(path, parseCli([path]))
+      const { forks, vectors } = await seededState(path)
+      expect(forks, `reseed ${run}`).toBe(1)
+      expect(Object.keys(vectors), `reseed ${run}`).toEqual(
+        expect.arrayContaining(['entities_vec_384', 'entities_vec_8']),
+      )
+      expect(
+        Object.entries(vectors).filter(([, n]) => n > 0),
+        `reseed ${run}`,
+      ).toEqual([])
+    }
+  }, 120_000)
 })

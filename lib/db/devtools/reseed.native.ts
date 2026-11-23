@@ -1,5 +1,6 @@
 import { getTableName } from 'drizzle-orm'
 
+import { listVecFamilyTables } from '../embeddings/vec-tables'
 import { db, expoDb } from '../runtime/client.native'
 import { dbSchema } from '../schema'
 import { buildSeedSteps } from './seed-dataset'
@@ -22,6 +23,11 @@ export async function reseedDevDatabase(): Promise<ReseedSummary> {
   try {
     for (const table of Object.values(dbSchema)) {
       expoDb.execSync(`DELETE FROM "${getTableName(table)}";`)
+    }
+    // vec0 tables sit outside dbSchema, and the seed carries no vector: a kept one would outlive
+    // its rows and collide with the vectors the seed's fork copies.
+    for (const table of await listVecFamilyTables(db)) {
+      expoDb.execSync(`DELETE FROM "${table}";`)
     }
     expoDb.execSync('COMMIT;')
   } catch (err) {
