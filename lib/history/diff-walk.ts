@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, gt, inArray, sql } from 'drizzle-orm'
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { isPayloadMetaKey, undoneColumnOf } from '@/lib/actions'
@@ -99,12 +99,13 @@ const sameTarget = (delta: Delta, first: Delta): boolean =>
   delta.targetId === first.targetId
 
 // A link row removed with its other end lives on in that end's delete payload, under its cascade
-// key (generation-pipeline.md → Reverse-replay).
+// key (generation-pipeline.md → Reverse-replay). That delete comes after the row's last delta.
 async function heldCopy(
   db: DbCtx['db'],
   branchId: string,
   table: HistoryLinkTable,
   targetId: string,
+  headPosition: number,
 ): Promise<Record<string, unknown> | null> {
   const key = HELD_KEY[table]
   const holders = await db
@@ -113,6 +114,7 @@ async function heldCopy(
     .where(
       and(
         eq(deltas.branchId, branchId),
+        gt(deltas.logPosition, headPosition),
         eq(deltas.op, 'delete'),
         inArray(deltas.targetTable, HOLDING_TABLES),
         sql`EXISTS (SELECT 1 FROM json_each(${deltas.undoPayload}, ${`$.${key}`}) AS held
@@ -130,8 +132,6 @@ async function heldCopy(
   return null
 }
 
-// The row as it stands, else the copy a later delete holds: the chain's own delete, else another
-// row's delete that removed it.
 async function seedOf(
   db: DbCtx['db'],
   snapshot: ChainSnapshot,
@@ -142,7 +142,10 @@ async function seedOf(
   if (snapshot.row != null) return snapshot.row
   const head = snapshot.chain.at(-1)
   if (head?.op === 'delete' && head.undoPayload != null) return head.undoPayload
-  const held = isLinkTable(table) ? await heldCopy(db, branchId, table, targetId) : null
+  const held =
+    head !== undefined && isLinkTable(table)
+      ? await heldCopy(db, branchId, table, targetId, head.logPosition)
+      : null
   if (held != null) return held
   throw new DiffWalkError(`no row, head delete or held copy for ${table} ${targetId}`)
 }

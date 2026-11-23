@@ -77,6 +77,7 @@ async function onlyUpdate(actionId: string): Promise<UpdateDelta> {
 // land a write right after a batch returns.
 function spiedDb() {
   const reads = { batch: 0, single: 0 }
+  const singles: { query: string; params: unknown[] }[] = []
   const hooks: { afterBatch: (() => Promise<void>) | null; failSingle: Error | null } = {
     afterBatch: null,
     failSingle: null,
@@ -86,6 +87,7 @@ function spiedDb() {
   const db = drizzle(
     async (query, params, method) => {
       reads.single += 1
+      singles.push({ query, params })
       if (hooks.failSingle != null) throw hooks.failSingle
       return single(query, params, method)
     },
@@ -99,7 +101,7 @@ function spiedDb() {
     },
     { schema: dbSchema },
   )
-  return { db, reads, hooks }
+  return { db, reads, singles, hooks }
 }
 
 const CHARACTER_STATE: CharacterState = {
@@ -269,6 +271,26 @@ describe('walkTarget', () => {
     expect(result.entries.get(update.id)).toEqual(RIVAL)
     expect(result.gone.size).toBe(0)
     expect(spied.reads).toEqual({ batch: 1, single: 1 })
+  })
+
+  it('bounds the held-copy read to after the chain head, on the log-position index', async () => {
+    const { update } = await seedRelationship()
+    await act('act_del_mira', deleteEntity('char_mira'))
+    const spied = spiedDb()
+
+    await walkTarget(spied.db, [update])
+
+    expect(spied.singles).toHaveLength(1)
+    const [held] = spied.singles
+    expect(held.params).toContain(update.logPosition)
+    const plan = (
+      t.sqlite.prepare(`EXPLAIN QUERY PLAN ${held.query}`).all(...(held.params as never[])) as {
+        detail: string
+      }[]
+    ).map((step) => step.detail)
+    expect(plan).toContain(
+      'SEARCH deltas USING INDEX deltas_log_position_uniq (branch_id=? AND log_position>?)',
+    )
   })
 
   it('seeds from the held row with the target id when the delete holds several', async () => {
