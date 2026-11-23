@@ -30,6 +30,8 @@ type ActionEntry = {
   disabledReason?: string
   /** Fired after the substrate closes the overlay. */
   onActivate: () => void
+  /** Opens a Sheet of its own: on phone it fires once the menu's Sheet has left. */
+  opensSheet?: boolean
 }
 
 type ActionGroup = {
@@ -179,6 +181,7 @@ function ActionsMenu({
         .map((e) => ({
           id: e.id,
           disabled: e.disabled,
+          opensSheet: e.opensSheet,
           data: {
             label: e.label,
             disabled: e.disabled,

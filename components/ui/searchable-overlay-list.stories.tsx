@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { useTier } from '@/hooks/use-tier'
 
@@ -371,6 +371,109 @@ export const InitialScrollRowAsTriggerTypingDrops: Story = {
     await userEvent.click(input)
     await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'))
     await expectRowCentered(SCROLL_TARGET_NAME)
+  },
+}
+
+type Action = { label: string }
+
+const ACTION_SECTIONS: Section<Action>[] = [
+  {
+    id: 'actions',
+    rows: [
+      { id: 'plain', data: { label: 'Plain action' } },
+      { id: 'opens-sheet', opensSheet: true, data: { label: 'Opens a sheet' } },
+    ],
+  },
+]
+
+const plainActivated = fn()
+const sheetActivated = fn()
+
+// Controlled, as the Actions menu is: its shortcut opens the list without the substrate's setOpen.
+function OpensSheetDemo() {
+  const [open, setOpen] = useState(false)
+  const tier = useTier()
+  return (
+    <View className="min-h-screen w-80 flex-col items-stretch gap-3 p-8">
+      <SearchableOverlayList<Action>
+        searchPlacement="in-overlay"
+        open={open}
+        onOpenChange={setOpen}
+        ariaLabel="Action list"
+        searchPlaceholder="Search actions…"
+        sections={ACTION_SECTIONS}
+        onQueryChange={() => undefined}
+        renderTrigger={(p) => (
+          <Button {...p}>
+            <Text>Open actions</Text>
+          </Button>
+        )}
+        renderRow={(row) => <Text size="sm">{row.data.label}</Text>}
+        onActivate={(row) => (row.id === 'opens-sheet' ? sheetActivated() : plainActivated())}
+      />
+      <Button onPress={() => setOpen(true)}>
+        <Text>Reopen from code</Text>
+      </Button>
+      <Text testID="tier" variant="muted" size="xs">
+        {tier}
+      </Text>
+    </View>
+  )
+}
+
+const LIST_WAIT = { timeout: 5000 }
+const EXIT_HEAD_START_MS = 80
+
+const listGone = () => waitFor(() => expect(screen.queryByRole('listbox')).toBeNull(), LIST_WAIT)
+
+/** Phone: a row that opens its own Sheet runs after this one's exit; a reopen first drops it. */
+export const OpensSheetWaitsForExit: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  render: () => <OpensSheetDemo />,
+  play: async () => {
+    plainActivated.mockClear()
+    sheetActivated.mockClear()
+    await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('phone'))
+    const trigger = screen.getByRole('button', { name: 'Open actions' })
+
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Plain action' }, LIST_WAIT))
+    expect(plainActivated).toHaveBeenCalledTimes(1)
+    await listGone()
+
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Opens a sheet' }, LIST_WAIT))
+    expect(sheetActivated).not.toHaveBeenCalled()
+    // The exit animation outlasts this wait: the row follows the exit, not the press.
+    await new Promise((resolve) => setTimeout(resolve, EXIT_HEAD_START_MS))
+    expect(sheetActivated).not.toHaveBeenCalled()
+    await waitFor(() => expect(sheetActivated).toHaveBeenCalledTimes(1), LIST_WAIT)
+    await listGone()
+
+    // The dismiss that would release the held row can still fire after the reopen.
+    sheetActivated.mockClear()
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Opens a sheet' }, LIST_WAIT))
+    await userEvent.click(screen.getByRole('button', { name: 'Reopen from code' }))
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'true'))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(trigger).toHaveAttribute('aria-expanded', 'false'), LIST_WAIT)
+    await listGone()
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(sheetActivated).not.toHaveBeenCalled()
+  },
+}
+
+/** Desktop: the Popover has no exit to wait out, so the same row runs at once. */
+export const OpensSheetActsAtOnceOffPhone: Story = {
+  render: () => <OpensSheetDemo />,
+  play: async () => {
+    sheetActivated.mockClear()
+    await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('desktop'))
+    await userEvent.click(screen.getByRole('button', { name: 'Open actions' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Opens a sheet' }, LIST_WAIT))
+    expect(sheetActivated).toHaveBeenCalledTimes(1)
   },
 }
 
