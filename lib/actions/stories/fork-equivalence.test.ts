@@ -1,20 +1,25 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { emptyEntityState, type CharacterState, type NewEntity } from '@/lib/db'
+import { assets, emptyEntityState, type CharacterState, type NewEntity } from '@/lib/db'
 import { resetAllStores } from '@/lib/stores'
 
 import type { PipelineAction } from '../types'
 import {
   appendTurns,
   assertFork,
+  closeByHand,
   createEntityAction,
   createHappeningAction,
   deltaRowsOf,
   entryAt,
+  entryIdsOn,
   FORK_CHILD_ID,
   forkPlan,
+  idsOn,
+  journalIdsOn,
   landWrites,
   openForkWorld,
+  rerunByHand,
   rowOn,
   rowsOn,
   seedVectorsWithWindowLore,
@@ -346,5 +351,148 @@ describe('a fork rewrites the log it keeps on the child alone', () => {
     expect(stateOn(childId, TAMSIN)).toMatchObject({ faction_id: null })
     expect(stateOn(w.parentId, PIER)).toMatchObject({ parent_location_id: QUAY })
     expect(stateOn(w.parentId, TAMSIN)).toMatchObject({ faction_id: WARDENS })
+  })
+})
+
+describe('a fork across a close, its assets and its re-run', () => {
+  const TOBIN = 'char_fork_tobin'
+  const CHAPTER = 'chap_fork_crossing'
+  const RERUN = 'act_fork_rerun'
+
+  // Tobin before B; entries 1-7; a close of entries 1-5, run while entries 6 and 7 stood.
+  async function closedParent(): Promise<ForkWorld> {
+    const w = await openForkWorld(1)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, TOBIN, 'Tobin'),
+    ])
+    await appendTurns(w, 2)
+    await closeByHand(w, {
+      chapterId: CHAPTER,
+      actionId: 'act_fork_close',
+      startPosition: 1,
+      endPosition: 5,
+      loreId: 'lore_fork_close',
+    })
+    return w
+  }
+
+  async function rerunParent(): Promise<ForkWorld> {
+    const w = await closedParent()
+    await rerunByHand(w, {
+      chapterId: CHAPTER,
+      endEntryId: entryAt(5),
+      actionId: RERUN,
+      runId: 'run_fork_rerun',
+      loreId: 'lore_fork_rerun',
+    })
+    expect(journalIdsOn(w, w.parentId)).toEqual([RERUN])
+    return w
+  }
+
+  const chapterIdsOn = (w: ForkWorld, branchId: string) =>
+    entryIdsOn(w, branchId).map((id) => rowOn(w, 'story_entries', branchId, id)?.chapter_id)
+
+  it('drops a chapter that ends after the fork entry and reopens the entries it keeps', async () => {
+    const w = await closedParent()
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: TOBIN })
+    expect(chapterIdsOn(w, w.parentId)).toEqual([
+      CHAPTER,
+      CHAPTER,
+      CHAPTER,
+      CHAPTER,
+      CHAPTER,
+      null,
+      null,
+    ])
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    expect(rowOn(w, 'chapters', childId, CHAPTER)).toBeUndefined()
+    expect(chapterIdsOn(w, childId)).toEqual([null, null, null])
+    expect(rowOn(w, 'chapters', w.parentId, CHAPTER)).toBeDefined()
+  })
+
+  it('keeps the entry_assets row on a kept entry and drops the one on a removed entry', async () => {
+    const w = await openForkWorld(1)
+    await w.ctx.db.insert(assets).values({
+      id: 'asset_fork_map',
+      kind: 'image',
+      filePath: 'assets/asset_fork_map.png',
+      createdAt: 1,
+    })
+    const assetOn = (entryId: string, id: string): PipelineAction => ({
+      kind: 'createEntryAsset',
+      source: 'user_edit',
+      payload: {
+        entry: {
+          id,
+          branchId: w.parentId,
+          entryId,
+          assetId: 'asset_fork_map',
+          role: 'illustration',
+          position: 0,
+        },
+      },
+    })
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, TOBIN, 'Tobin'),
+      assetOn(entryAt(3), 'ea_fork_kept'),
+    ])
+    await appendTurns(w, 2)
+    await landWrites(w, { actionId: 'act_fork_asset', entryId: null }, [
+      assetOn(entryAt(5), 'ea_fork_gone'),
+    ])
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: TOBIN })
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    expect(idsOn(w, 'entry_assets', childId)).toEqual(['ea_fork_kept'])
+    expect(idsOn(w, 'entry_assets', w.parentId)).toEqual(['ea_fork_gone', 'ea_fork_kept'])
+  })
+
+  describe("the re-run's journal across a fork", () => {
+    it('1. copies it when the fork entry is the narrative tail', async () => {
+      const w = await rerunParent()
+      await seedVectorsWithWindowLore(w, entryAt(7), { kind: 'entity', id: TOBIN })
+
+      const { childId, facts } = await assertFork(w, entryAt(7))
+
+      expect(facts).toMatchObject({ hasB: false, droppedJournalIds: [] })
+      expect(journalIdsOn(w, childId)).toEqual([RERUN])
+    })
+
+    it('2. drops it when the chapter ends after the fork entry', async () => {
+      const w = await rerunParent()
+      await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: TOBIN })
+
+      const { childId, facts } = await assertFork(w, entryAt(3))
+
+      expect(facts).toMatchObject({ hasB: true, droppedJournalIds: [RERUN] })
+      expect(journalIdsOn(w, childId)).toEqual([])
+      expect(rowOn(w, 'chapters', childId, CHAPTER)).toBeUndefined()
+    })
+
+    it('3. copies it when the chapter ends at or before the fork entry and the re-run came before B', async () => {
+      const w = await rerunParent()
+      await appendTurns(w, 1)
+      await seedVectorsWithWindowLore(w, entryAt(9), { kind: 'entity', id: TOBIN })
+
+      const { childId, facts } = await assertFork(w, entryAt(7))
+
+      expect(facts).toMatchObject({ hasB: true, droppedJournalIds: [] })
+      expect(journalIdsOn(w, childId)).toEqual([RERUN])
+      expect(rowOn(w, 'chapters', childId, CHAPTER)).toBeDefined()
+    })
+
+    it('4. drops it when the chapter ends at or before the fork entry and the re-run came after B', async () => {
+      const w = await rerunParent()
+      await seedVectorsWithWindowLore(w, entryAt(7), { kind: 'entity', id: TOBIN })
+
+      const { childId, facts } = await assertFork(w, entryAt(5))
+
+      expect(facts).toMatchObject({ hasB: true, droppedJournalIds: [RERUN] })
+      expect(journalIdsOn(w, childId)).toEqual([])
+      expect(rowOn(w, 'chapters', childId, CHAPTER)).toBeDefined()
+    })
   })
 })

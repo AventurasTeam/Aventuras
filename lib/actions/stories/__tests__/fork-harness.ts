@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 import { eq, getTableColumns } from 'drizzle-orm'
 import { expect } from 'vitest'
 
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import {
   branchCopyOps,
   branches,
@@ -15,6 +16,7 @@ import {
   KIND_FIELDS,
   lore,
   packFloat32,
+  pipelineRuns,
   SOURCE_TABLES,
   sourceHash,
   threads,
@@ -31,7 +33,8 @@ import {
 } from '@/lib/pipeline/definitions/__tests__/close-fixture'
 import { undoRedoStore } from '@/lib/stores'
 
-import { applyDeltaAction } from '../../delta/apply-delta-action'
+import { applyDeltaAction, applyDeltaActionGroup } from '../../delta/apply-delta-action'
+import { reverseCloseForRerun } from '../../delta/rerun-journal'
 import type { ReversePlan } from '../../delta/reverse-replay'
 import {
   getRollbackCounts,
@@ -311,6 +314,122 @@ export async function seedVectorsWithWindowLore(
   ])
   seedForkVectors(w, { created: { kind: 'lore', id: WINDOW_LORE_ID }, kept })
   return WINDOW_LORE_ID
+}
+
+const CLOSED_AT = 1_767_350_000_000
+const RERUN_AT = CLOSED_AT + 1_000
+
+function closeReportAction(w: ForkWorld, chapterId: string, actionId: string): PipelineAction {
+  return {
+    kind: 'updateChapter',
+    source: 'chapter_close',
+    payload: {
+      branchId: w.parentId,
+      id: chapterId,
+      patch: { closeReport: { version: 1, actionId, calls: [], stopped: [], noToolCalls: true } },
+    },
+  }
+}
+
+/**
+ * A close of entries `startPosition..endPosition` as a close logs it, every write under
+ * `actionId` and anchored on the end entry.
+ */
+export async function closeByHand(
+  w: ForkWorld,
+  close: {
+    readonly chapterId: string
+    readonly actionId: string
+    readonly startPosition: number
+    readonly endPosition: number
+    readonly loreId: string
+  },
+): Promise<void> {
+  const { chapterId, actionId, startPosition, endPosition, loreId } = close
+  const endEntryId = entryAt(endPosition)
+  const stamps: PipelineAction[] = []
+  for (let position = startPosition; position <= endPosition; position++)
+    stamps.push({
+      kind: 'stampEntryChapter',
+      source: 'chapter_close',
+      payload: { branchId: w.parentId, id: entryAt(position), chapterId },
+    })
+  const group = await applyDeltaActionGroup(
+    [
+      {
+        kind: 'createChapter',
+        source: 'chapter_close',
+        payload: {
+          entry: {
+            id: chapterId,
+            branchId: w.parentId,
+            sequenceNumber: 1,
+            title: 'The Crossing at Harrow',
+            summary: "Wren crosses the river at night on the ferryman's word.",
+            theme: 'a guarded passage',
+            keywords: ['ferry'],
+            startEntryId: entryAt(startPosition),
+            endEntryId,
+            tokenCount: 64,
+            closedAt: CLOSED_AT,
+            createdAt: CLOSED_AT,
+            updatedAt: CLOSED_AT,
+          },
+        },
+      },
+      ...stamps,
+    ],
+    { actionId, branchId: w.parentId, entryId: endEntryId },
+    w.ctx,
+  )
+  if (group.status !== 'ok')
+    throw new Error(`fork fixture: the close of ${chapterId} refused: ${group.reason}`)
+  await landWrites(w, { actionId, entryId: endEntryId }, [
+    createLoreAction(w, loreId, 'The Harrow ferry', 'chapter_close'),
+    closeReportAction(w, chapterId, actionId),
+  ])
+}
+
+/**
+ * A finished re-run of the close: its marker, the journaled reversal, its own lore and report, the
+ * marker closed.
+ */
+export async function rerunByHand(
+  w: ForkWorld,
+  rerun: {
+    readonly chapterId: string
+    readonly endEntryId: string
+    readonly actionId: string
+    readonly runId: string
+    readonly loreId: string
+  },
+): Promise<void> {
+  const { chapterId, endEntryId, actionId, runId, loreId } = rerun
+  await w.ctx.db.insert(pipelineRuns).values({
+    runId,
+    kind: CHAPTER_CLOSE_KIND,
+    actionId,
+    storyId: w.storyId,
+    branchId: w.parentId,
+    startedAt: RERUN_AT,
+  })
+  await reverseCloseForRerun({ branchId: w.parentId, chapterId, actionId }, w.ctx)
+  await landWrites(w, { actionId, entryId: endEntryId }, [
+    createLoreAction(w, loreId, 'The night ferry', 'chapter_close'),
+    closeReportAction(w, chapterId, actionId),
+  ])
+  // Left open, the marker would refuse every fork whose copy keeps its journal.
+  await w.ctx.db
+    .update(pipelineRuns)
+    .set({ finishedAt: RERUN_AT + 1, outcome: 'completed' })
+    .where(eq(pipelineRuns.runId, runId))
+}
+
+export function journalIdsOn(w: ForkWorld, branchId: string): string[] {
+  const rows = w.sqlite
+    .prepare('SELECT action_id AS id FROM reversal_journals WHERE branch_id = ? ORDER BY action_id')
+    .all(branchId) as { id: string }[]
+  return rows.map(({ id }) => id)
 }
 
 export function snapshotParent(w: ForkWorld): ParentSnapshot {
