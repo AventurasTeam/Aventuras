@@ -345,10 +345,26 @@ describe('forkBranchCore', () => {
 
   it('points the story at the child with makeCurrent, in the batch that copies its rows and vectors', async () => {
     await seedKeptVector()
+    const columns = (
+      f.sqlite.prepare("SELECT name FROM pragma_table_info('stories')").all() as { name: string }[]
+    )
+      .map(({ name }) => name)
+      .filter((name) => name !== 'id' && name !== 'current_branch_id')
+      .join(', ')
+    f.sqlite
+      .prepare(
+        `INSERT INTO stories (id, current_branch_id, ${columns}) SELECT 'story_other', 'br_other', ${columns} FROM stories WHERE id = ?`,
+      )
+      .run(f.storyId)
 
     expect(await forkBranchCore(input({ makeCurrent: true }), f.ctx)).toEqual(ok(CHILD))
 
     expect(await currentBranchOf()).toBe(CHILD)
+    expect(
+      f.sqlite
+        .prepare("SELECT current_branch_id AS id FROM stories WHERE id = 'story_other'")
+        .get(),
+    ).toEqual({ id: 'br_other' })
     expect(entityIdsOf(CHILD)).toEqual(['char_fork_tobin'])
     expect(vectorCount(CHILD)).toBe(1)
   })
@@ -425,6 +441,18 @@ describe('forkBranchCore refusals (AC 4)', () => {
     await expectRefused(FORK_REFUSAL.entryMissing, () =>
       forkBranchCore(input({ forkEntryId: 'entry_close_404' }), f.ctx),
     )
+  })
+
+  it('refuses a fork entry only a sibling branch holds', async () => {
+    expect(await forkBranchCore(input(), f.ctx)).toEqual(ok(CHILD))
+
+    await expectRefused(FORK_REFUSAL.entryMissing, () =>
+      forkBranchCore(
+        input({ parentBranchId: CHILD, forkEntryId: entryAt(7), newBranchId: 'br_fork_grand' }),
+        f.ctx,
+      ),
+    )
+    expect(await lockIsFree(CHILD)).toBe(true)
   })
 
   it('refuses a parent branch that does not exist', async () => {
