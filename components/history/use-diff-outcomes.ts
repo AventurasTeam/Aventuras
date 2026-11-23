@@ -69,13 +69,19 @@ export function useDiffOutcomes(
       return outcomes
     },
   })
-  useEffect(
-    () =>
-      loader.onEvict((evicted) => {
-        // C9: invalidate, never remove; a removal notifies no mounted row.
-        if (evicted === branchId) void client.invalidateQueries({ queryKey: ['diff', evicted] })
-      }),
-    [loader, client, branchId],
-  )
+  useEffect(() => {
+    const unsubscribe = loader.onEvict((evicted) => {
+      // C9: invalidate, never remove; a removal notifies no mounted row.
+      if (evicted === branchId) void client.invalidateQueries({ queryKey: ['diff', evicted] })
+    })
+    // A row seeded at render, before this subscription, can miss an eviction; a seed the cache no
+    // longer returns as the same entry marks one, so its branch re-reads as the listener would.
+    const missed = updates.some((delta) => {
+      const held = client.getQueryData<DiffOutcome>(['diff', branchId, delta.id])
+      return held?.kind === 'entry' && loader.peek(delta.branchId, delta.id) !== held.entry
+    })
+    if (missed) void client.invalidateQueries({ queryKey: ['diff', branchId] })
+    return unsubscribe
+  }, [loader, client, branchId, updates])
   return useMemo(() => new Map(Object.entries(byId)), [byId])
 }
