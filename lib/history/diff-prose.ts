@@ -9,10 +9,12 @@ import type { DiffCacheEntry } from './diff-walk'
 import { fieldPathLabel } from './field-labels'
 import { diffPaths, proseFieldOf, type DiffTable, type ProseFieldKind } from './prose-fields'
 
-export type ProseContext = {
-  table: DiffTable
-  /** The tab's side of a relationship row; null for every other table. */
-  side: 'a' | 'b' | null
+/** The table whose labels a clause takes, and for a relationship row the tab's side of it. */
+export type ProseTarget =
+  | { table: 'character_relationships'; side: 'a' | 'b' }
+  | { table: Exclude<DiffTable, 'character_relationships'>; side: null }
+
+export type ProseContext = ProseTarget & {
   /** The working set's name for the row on the tab's branch, or null when the working set lacks it. */
   liveName: (id: string) => string | null
   /** `entry #n` for an entry the branch's index holds, else null. */
@@ -84,10 +86,10 @@ function valueAt(values: Readonly<Record<string, unknown>>, path: string): unkno
   return current
 }
 
-function labelOf(path: string, { table, side }: ProseContext): string {
-  if (table !== 'character_relationships') return fieldPathLabel(table, path)
-  if (side === null) throw new Error('A relationship clause needs the tab side, a or b')
-  return fieldPathLabel(table, path, side)
+function labelOf(path: string, target: ProseTarget): string {
+  return target.table === 'character_relationships'
+    ? fieldPathLabel(target.table, path, target.side)
+    : fieldPathLabel(target.table, path)
 }
 
 const isText = (value: unknown): value is string | null | undefined =>

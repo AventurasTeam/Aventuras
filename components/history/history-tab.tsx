@@ -14,6 +14,7 @@ import {
   type HistorySort,
   type HistoryTable,
   type ProseContext,
+  type ProseTarget,
 } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { entitiesStore, generationStore, happeningsStore } from '@/lib/stores'
@@ -88,15 +89,15 @@ function useOtherEndChanges(
   }, [names, ids, searching, onChange])
 }
 
-type ProseTarget = Pick<ProseContext, 'table' | 'side'>
-
 // The labels an update row's prose reads: its own table's, or the link's by the tab's side.
 function proseTarget(row: HistoryRow, targetTable: HistoryTable): ProseTarget | null {
   switch (row.via.kind) {
     case 'own':
       return { table: targetTable, side: null }
     case 'link':
-      return { table: row.via.table, side: row.via.side }
+      if (row.via.table === 'character_relationships')
+        return { table: row.via.table, side: row.via.side }
+      return { table: row.via.table, side: null }
     case 'removed':
       return null
   }

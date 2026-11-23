@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { diffProse, type ProseContext } from './diff-prose'
+import { diffProse, type ProseContext, type ProseTarget } from './diff-prose'
 import type { DiffCacheEntry } from './diff-walk'
 import type { DiffTable } from './prose-fields'
 
@@ -10,12 +10,19 @@ const entryOf = (
   names: Record<string, string> = {},
 ): DiffCacheEntry => ({ old, new: next, names })
 
-const contextOf = (table: DiffTable, over: Partial<ProseContext> = {}): ProseContext => ({
-  table,
-  side: null,
-  liveName: () => null,
-  entryLabel: () => null,
-  ...over,
+type Lookups = Pick<ProseContext, 'liveName' | 'entryLabel'>
+
+const NO_LOOKUPS: Lookups = { liveName: () => null, entryLabel: () => null }
+
+const contextOf = (
+  table: Exclude<DiffTable, 'character_relationships'>,
+  over: Partial<Lookups> = {},
+): ProseContext => ({ table, side: null, ...NO_LOOKUPS, ...over })
+
+const relationshipContext = (side: 'a' | 'b'): ProseContext => ({
+  table: 'character_relationships',
+  side,
+  ...NO_LOOKUPS,
 })
 
 const ENTITIES = contextOf('entities')
@@ -68,22 +75,22 @@ describe('diffProse — shape', () => {
 
   it("reads a relationship's kind by the tab's side", () => {
     const entry = entryOf({ kind: 'rival' }, { kind: 'ally' })
-    expect(diffProse(entry, contextOf('character_relationships', { side: 'a' }))).toBe(
-      'Your view: "rival" → "ally"',
-    )
-    expect(diffProse(entry, contextOf('character_relationships', { side: 'b' }))).toBe(
-      'Their view: "rival" → "ally"',
-    )
+    expect(diffProse(entry, relationshipContext('a'))).toBe('Your view: "rival" → "ally"')
+    expect(diffProse(entry, relationshipContext('b'))).toBe('Their view: "rival" → "ally"')
   })
 
   it("reads a relationship's inverseKind as the other view", () => {
     const entry = entryOf({ inverseKind: 'wary' }, { inverseKind: 'fond' })
-    expect(diffProse(entry, contextOf('character_relationships', { side: 'a' }))).toBe(
-      'Their view: "wary" → "fond"',
-    )
-    expect(diffProse(entry, contextOf('character_relationships', { side: 'b' }))).toBe(
-      'Your view: "wary" → "fond"',
-    )
+    expect(diffProse(entry, relationshipContext('a'))).toBe('Their view: "wary" → "fond"')
+    expect(diffProse(entry, relationshipContext('b'))).toBe('Your view: "wary" → "fond"')
+  })
+
+  it('types a relationship target as naming its side, and no other target as having one', () => {
+    // @ts-expect-error a relationship's labels depend on the tab's side
+    const sideless: ProseTarget = { table: 'character_relationships', side: null }
+    // @ts-expect-error only a relationship row has sides
+    const sided: ProseTarget = { table: 'entities', side: 'a' }
+    expect([sideless.side, sided.side]).toStrictEqual([null, 'a'])
   })
 })
 
