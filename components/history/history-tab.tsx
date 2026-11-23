@@ -4,16 +4,22 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useEntryIndex } from '@/hooks/use-entry-index'
 import { formatEntryRef } from '@/lib/entry-refs'
 import {
+  diffProse,
   humanizeDelta,
+  namesAnEntry,
+  refIdsOf,
+  type DiffOutcome,
   type HistoryOp,
   type HistoryRow,
   type HistorySort,
   type HistoryTable,
+  type ProseContext,
 } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { entitiesStore, generationStore, happeningsStore } from '@/lib/stores'
 
 import { HistoryTabView } from './history-tab-view'
+import { useDiffOutcomes } from './use-diff-outcomes'
 import { useHistoryChunks } from './use-history-chunks'
 import { historyTargetName, useHistoryTarget } from './use-history-target'
 import { useLinkVersion } from './use-link-version'
@@ -82,6 +88,53 @@ function useOtherEndChanges(
   }, [names, ids, searching, onChange])
 }
 
+type ProseTarget = Pick<ProseContext, 'table' | 'side'>
+
+// The labels an update row's prose reads: its own table's, or the link's by the tab's side.
+function proseTarget(row: HistoryRow, targetTable: HistoryTable): ProseTarget | null {
+  switch (row.via.kind) {
+    case 'own':
+      return { table: targetTable, side: null }
+    case 'link':
+      return { table: row.via.table, side: row.via.side }
+    case 'removed':
+      return null
+  }
+}
+
+function refIdsOfRows(
+  rows: readonly HistoryRow[],
+  outcomes: ReadonlyMap<string, DiffOutcome>,
+  targetTable: HistoryTable,
+): string[] {
+  const ids = new Set<string>()
+  for (const row of rows) {
+    const outcome = outcomes.get(row.delta.id)
+    const target = proseTarget(row, targetTable)
+    if (outcome?.kind !== 'entry' || target == null) continue
+    for (const id of refIdsOf(target.table, outcome.entry)) ids.add(id)
+  }
+  return [...ids]
+}
+
+type ProseLookups = Pick<ProseContext, 'liveName' | 'entryLabel'> & {
+  /** The branch's entry index has read; until then a row naming an entry keeps its summary. */
+  entryIndexRead: boolean
+}
+
+// world.md → Change prose: null keeps the field-name summary (pending, failed, gone, no wording).
+function changeProse(
+  row: HistoryRow,
+  outcome: DiffOutcome | undefined,
+  targetTable: HistoryTable,
+  { liveName, entryLabel, entryIndexRead }: ProseLookups,
+): string | null {
+  const target = proseTarget(row, targetTable)
+  if (outcome?.kind !== 'entry' || target == null) return null
+  if (!entryIndexRead && namesAnEntry(target.table, outcome.entry)) return null
+  return diffProse(outcome.entry, { ...target, liveName, entryLabel })
+}
+
 function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: HistoryTabProps) {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)
@@ -110,7 +163,15 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
   )
   const storeNames = useStoreNames(branchId, otherIds)
   useOtherEndChanges(storeNames, otherIds, search !== '', otherEndChanged)
+  const outcomes = useDiffOutcomes(branchId, chunks.rows)
+  const refIds = useMemo(
+    () => refIdsOfRows(chunks.rows, outcomes, targetTable),
+    [chunks.rows, outcomes, targetTable],
+  )
+  // Read as the other ends are, so a ref the store holds on another branch reads (deleted).
+  const refNames = useStoreNames(branchId, refIds)
   const name = historyTargetName(row) ?? t('history:unknownTarget')
+  const entryIndexRead = entryIndex.ready && !entryIndex.failed
   const rows = useMemo(() => {
     const nowMs = Date.now()
     const entryLabel = (entryId: string) => {
@@ -119,10 +180,33 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
     }
     // The working set first, so a renamed other end reads its new name.
     const otherName = (id: string) => storeNames.get(id) ?? chunks.names[id] ?? null
-    return chunks.rows.map((historyRow) =>
-      humanizeDelta(historyRow, { targetTable, targetName: name, otherName, entryLabel, nowMs }),
-    )
-  }, [chunks.rows, chunks.names, entryIndex.index, targetTable, name, storeNames])
+    const lookups: ProseLookups = {
+      liveName: (id) => refNames.get(id) ?? null,
+      entryLabel,
+      entryIndexRead,
+    }
+    return chunks.rows.map((historyRow) => {
+      const view = humanizeDelta(historyRow, {
+        targetTable,
+        targetName: name,
+        otherName,
+        entryLabel,
+        nowMs,
+      })
+      const prose = changeProse(historyRow, outcomes.get(historyRow.delta.id), targetTable, lookups)
+      return prose == null ? view : { ...view, summary: prose }
+    })
+  }, [
+    chunks.rows,
+    chunks.names,
+    entryIndex.index,
+    entryIndexRead,
+    targetTable,
+    name,
+    storeNames,
+    refNames,
+    outcomes,
+  ])
 
   return (
     <HistoryTabView

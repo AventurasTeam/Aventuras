@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createQueryClient } from '@/lib/cache'
 import type { CharacterRelationship, Delta, Happening, HappeningAwareness } from '@/lib/db'
-import type { HistoryChunk, HistoryQuery, HistoryRow, HistoryTable } from '@/lib/history'
+import {
+  createDiffCache,
+  type DiffCache,
+  type DiffCacheEntry,
+  type DiffWalk,
+  type HistoryChunk,
+  type HistoryQuery,
+  type HistoryRow,
+  type HistoryTable,
+} from '@/lib/history'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import {
   characterRelationshipsStore,
@@ -14,15 +25,22 @@ import {
   happeningsStore,
 } from '@/lib/stores'
 
+import { DiffLoaderProvider, type DiffLoader } from './diff-loader'
 import { HistoryLoaderProvider, type HistoryLoader } from './history-loader'
 import { HistoryTab, REFRESH_COALESCE_MS } from './history-tab'
 import type { HistoryTabViewProps } from './history-tab-view'
 
-const view = vi.hoisted(() => ({ props: null as HistoryTabViewProps | null, renders: 0 }))
+const view = vi.hoisted(() => ({
+  props: null as HistoryTabViewProps | null,
+  renders: 0,
+  // Every summary any render showed, so a check can say one never appeared.
+  summaries: new Set<string>(),
+}))
 vi.mock('./history-tab-view', () => ({
   HistoryTabView: (props: HistoryTabViewProps) => {
     view.props = props
     view.renders += 1
+    for (const row of props.rows) view.summaries.add(row.summary)
     return null
   },
 }))
@@ -134,19 +152,46 @@ function loader(rows: (query: HistoryQuery) => HistoryRow[], names: Record<strin
   )
 }
 
-function renderTab(load: HistoryLoader, targetId: string, targetTable: HistoryTable = 'entities') {
+type TabOptions = {
+  diffs?: DiffLoader
+  client?: QueryClient
+  onOpenEntry?: (entryId: string) => void
+}
+
+// A walk that never settles, so an update row keeps its field-name summary.
+const unresolvedDiffs = (): DiffCache =>
+  createDiffCache({ walk: () => new Promise<never>(() => {}) })
+
+function renderTab(
+  load: HistoryLoader,
+  targetId: string,
+  targetTable: HistoryTable = 'entities',
+  {
+    diffs = unresolvedDiffs(),
+    client = createQueryClient(),
+    onOpenEntry = () => {},
+  }: TabOptions = {},
+) {
   view.props = null
   view.renders = 0
-  return render(
-    <HistoryLoaderProvider value={load}>
-      <HistoryTab
-        branchId={BRANCH}
-        targetTable={targetTable}
-        targetId={targetId}
-        onOpenEntry={() => {}}
-      />
-    </HistoryLoaderProvider>,
+  view.summaries.clear()
+  // A fresh element tree on each call, so a rerender reaches the tab.
+  const tree = () => (
+    <QueryClientProvider client={client}>
+      <HistoryLoaderProvider value={load}>
+        <DiffLoaderProvider value={diffs}>
+          <HistoryTab
+            branchId={BRANCH}
+            targetTable={targetTable}
+            targetId={targetId}
+            onOpenEntry={onOpenEntry}
+          />
+        </DiffLoaderProvider>
+      </HistoryLoaderProvider>
+    </QueryClientProvider>
   )
+  const result = render(tree())
+  return { ...result, rerenderTab: () => result.rerender(tree()) }
 }
 
 // A refetch waits for its triggers to hold still, so "no refetch" holds only once that has passed.
@@ -510,17 +555,11 @@ describe('HistoryTab entry links', () => {
       excerpt: '',
     })
     const onOpenEntry = vi.fn()
-    render(
-      <HistoryLoaderProvider
-        value={loader(() => [anchored('d_live', 'entry_live'), anchored('d_gone', 'entry_gone')])}
-      >
-        <HistoryTab
-          branchId={BRANCH}
-          targetTable="entities"
-          targetId="char_aria"
-          onOpenEntry={onOpenEntry}
-        />
-      </HistoryLoaderProvider>,
+    renderTab(
+      loader(() => [anchored('d_live', 'entry_live'), anchored('d_gone', 'entry_gone')]),
+      'char_aria',
+      'entities',
+      { onOpenEntry },
     )
     await waitFor(() => expect(view.props?.rows).toHaveLength(2))
     expect(view.props?.onOpenEntry).toBe(onOpenEntry)
@@ -528,5 +567,361 @@ describe('HistoryTab entry links', () => {
       { label: 'entry #47', id: 'entry_live' },
       null,
     ])
+  })
+})
+
+type WalkResult = Awaited<ReturnType<DiffWalk>>
+
+function walked(entries: Record<string, DiffCacheEntry>, gone: readonly string[] = []): WalkResult {
+  return { entries: new Map(Object.entries(entries)), gone: new Set(gone) }
+}
+
+const entry = (
+  old: Record<string, unknown>,
+  next: Record<string, unknown>,
+  names: Record<string, string> = {},
+): DiffCacheEntry => ({ old, new: next, names })
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((settle) => {
+    resolve = settle
+  })
+  return { promise, resolve }
+}
+
+// TanStack notifies observers on a timer, so a "nothing changed" check waits past it.
+const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)))
+
+const update = (
+  id: string,
+  targetTable: string,
+  targetId: string,
+  undoPayload: Record<string, unknown>,
+  logPosition = 3,
+): Delta => ({ ...VIEW_EDIT, id, targetTable, targetId, undoPayload, logPosition })
+
+const own = (delta: Delta): HistoryRow => ({ delta, via: { kind: 'own' } })
+
+const onAriasRelationship = (delta: Delta): HistoryRow => ({
+  delta,
+  via: {
+    kind: 'link',
+    table: 'character_relationships',
+    linkId: delta.targetId,
+    otherId: 'char_kael',
+    side: 'a',
+  },
+})
+
+const VOICE = update('delta_voice', 'entities', 'char_aria', { state: { voice: 'low' } })
+const VOICE_ENTRY = entry(
+  { state: { voice: 'low' } },
+  { state: { voice: 'gravelly', traits: ['wary'] } },
+)
+const VOICE_PROSE = 'Voice: "low" → "gravelly"'
+const HOARSE_ENTRY = entry({ state: { voice: 'low' } }, { state: { voice: 'hoarse' } })
+const HOARSE_PROSE = 'Voice: "low" → "hoarse"'
+
+const FACTION = update('delta_faction', 'entities', 'char_aria', { state: { faction_id: null } })
+const FACTION_ENTRY = entry(
+  { state: { faction_id: null } },
+  { state: { faction_id: 'fac_iron', traits: [] } },
+  { fac_iron: 'Iron Pact' },
+)
+
+const OCCURRED = update('delta_occurred', 'happenings', 'hap_fire', { occurredAtEntryId: null })
+const OCCURRED_ENTRY = entry({ occurredAtEntryId: null }, { occurredAtEntryId: 'entry_12' })
+
+describe('HistoryTab change prose', () => {
+  afterEach(() => {
+    entryIndex.ready = true
+    entryIndex.failed = false
+    entryIndex.index.clear()
+  })
+
+  it('shows the field-name summary first, then the prose once the walk resolves', async () => {
+    const walk = deferred<WalkResult>()
+    const diffs = createDiffCache({ walk: () => walk.promise })
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs },
+    )
+    expect((await firstRow())?.summary).toBe('Modified Voice')
+    await act(async () => walk.resolve(walked({ [VOICE.id]: VOICE_ENTRY })))
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
+  })
+
+  it('keeps the summary when the walk rejects, and when it finds the delta gone', async () => {
+    const failedClient = createQueryClient()
+    const failing = vi
+      .fn<DiffWalk>()
+      .mockRejectedValue(new Error('no row, head delete or held copy'))
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs: createDiffCache({ walk: failing }), client: failedClient },
+    )
+    await waitFor(() =>
+      expect(failedClient.getQueryState(['diff', BRANCH, VOICE.id])?.status).toBe('error'),
+    )
+    await settle()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Voice')
+    cleanup()
+
+    const goneClient = createQueryClient()
+    const gone = vi.fn<DiffWalk>().mockResolvedValue(walked({}, [VOICE.id]))
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs: createDiffCache({ walk: gone }), client: goneClient },
+    )
+    await waitFor(() =>
+      expect(goneClient.getQueryData(['diff', BRANCH, VOICE.id])).toEqual({ kind: 'gone' }),
+    )
+    await settle()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Voice')
+  })
+
+  it('reads no diff for create, delete and removal rows', async () => {
+    const walk = vi.fn<DiffWalk>(async (requested) =>
+      walked(Object.fromEntries(requested.map((delta) => [delta.id, VOICE_ENTRY]))),
+    )
+    const diffs = createDiffCache({ walk })
+    const populate = vi.spyOn(diffs, 'populate')
+    const deleted: HistoryRow = {
+      delta: { ...VIEW_EDIT, id: 'delta_rel_gone', op: 'delete', undoPayload: { id: 'rel_1' } },
+      via: ON_ARIAS_TAB.via,
+    }
+    const removed: HistoryRow = {
+      delta: {
+        ...VIEW_EDIT,
+        id: 'delta_kael_gone',
+        targetTable: 'entities',
+        targetId: 'char_kael',
+        op: 'delete',
+        undoPayload: { id: 'char_kael', name: 'Kael' },
+      },
+      via: { kind: 'removed', tables: ['character_relationships'], otherId: 'char_kael' },
+    }
+    renderTab(
+      loader(() => [INVOLVES_FIRE, deleted, removed, own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs },
+    )
+    await waitFor(() => expect(view.props?.rows[3]?.summary).toBe(VOICE_PROSE))
+    expect(populate.mock.calls.map(([delta]) => delta.id)).toEqual([VOICE.id])
+    expect(walk).toHaveBeenCalledTimes(1)
+  })
+
+  it('walks once per target for a chunk of update rows', async () => {
+    const rows = [
+      own(update('delta_v1', 'entities', 'char_aria', { state: { voice: 'low' } }, 3)),
+      own(update('delta_v2', 'entities', 'char_aria', { description: 'old' }, 4)),
+      onAriasRelationship(
+        update('delta_k1', 'character_relationships', 'rel_1', { kind: 'ally' }, 5),
+      ),
+      onAriasRelationship(
+        update('delta_k2', 'character_relationships', 'rel_1', { inverseKind: 'rival' }, 6),
+      ),
+    ]
+    const walk = vi.fn<DiffWalk>(async (requested) =>
+      walked(Object.fromEntries(requested.map((delta) => [delta.id, entry({}, {})]))),
+    )
+    renderTab(
+      loader(() => rows),
+      'char_aria',
+      'entities',
+      { diffs: createDiffCache({ walk }) },
+    )
+    await waitFor(() => expect(walk).toHaveBeenCalledTimes(2))
+    await settle()
+    expect(walk).toHaveBeenCalledTimes(2)
+    expect(
+      walk.mock.calls.map(([requested]) => requested.map((delta) => delta.id).sort()).sort(),
+    ).toEqual([
+      ['delta_k1', 'delta_k2'],
+      ['delta_v1', 'delta_v2'],
+    ])
+  })
+
+  it("re-reads a mounted row when the cache evicts the tab's branch, and only then", async () => {
+    const walk = vi
+      .fn<DiffWalk>()
+      .mockResolvedValueOnce(walked({ [VOICE.id]: VOICE_ENTRY }))
+      .mockResolvedValueOnce(walked({ [VOICE.id]: HOARSE_ENTRY }))
+    const diffs = createDiffCache({ walk })
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs },
+    )
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
+
+    act(() => diffs.evictBranch('br_other'))
+    await settle()
+    expect(walk).toHaveBeenCalledTimes(1)
+    expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE)
+
+    act(() => diffs.evictBranch(BRANCH))
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(HOARSE_PROSE))
+    expect(walk).toHaveBeenCalledTimes(2)
+  })
+
+  it('ends on the walk after an eviction that lands while the first walk is pending', async () => {
+    const stale = deferred<WalkResult>()
+    const walk = vi
+      .fn<DiffWalk>()
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce(walked({ [VOICE.id]: HOARSE_ENTRY }))
+    const diffs = createDiffCache({ walk })
+    renderTab(
+      loader(() => [own(VOICE)]),
+      'char_aria',
+      'entities',
+      { diffs },
+    )
+    await waitFor(() => expect(walk).toHaveBeenCalledTimes(1))
+
+    act(() => diffs.evictBranch(BRANCH))
+    await act(async () => stale.resolve(walked({ [VOICE.id]: VOICE_ENTRY })))
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(HOARSE_PROSE))
+    expect(walk).toHaveBeenCalledTimes(2)
+    expect(view.summaries).not.toContain(VOICE_PROSE)
+  })
+
+  it('reads again on a remount after an eviction the unmounted tab did not hear', async () => {
+    const client = createQueryClient()
+    const walk = vi
+      .fn<DiffWalk>()
+      .mockResolvedValueOnce(walked({ [VOICE.id]: VOICE_ENTRY }))
+      .mockResolvedValueOnce(walked({ [VOICE.id]: HOARSE_ENTRY }))
+    const diffs = createDiffCache({ walk })
+    const load = loader(() => [own(VOICE)])
+    renderTab(load, 'char_aria', 'entities', { diffs, client })
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(VOICE_PROSE))
+
+    cleanup()
+    act(() => diffs.evictBranch(BRANCH))
+    // Past the unmounted query's gc, well inside the client's 30 s default.
+    await settle()
+    renderTab(load, 'char_aria', 'entities', { diffs, client })
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe(HOARSE_PROSE))
+    expect(walk).toHaveBeenCalledTimes(2)
+  })
+
+  it('renames a ref in the prose from the working set, without walking again', async () => {
+    act(() =>
+      entitiesStore.patch(BRANCH, {
+        op: 'create',
+        id: 'fac_iron',
+        row: makeEntity({ id: 'fac_iron', kind: 'faction', name: 'Iron Pact' }),
+      }),
+    )
+    const walk = vi.fn<DiffWalk>().mockResolvedValue(walked({ [FACTION.id]: FACTION_ENTRY }))
+    renderTab(
+      loader(() => [own(FACTION)]),
+      'char_aria',
+      'entities',
+      { diffs: createDiffCache({ walk }) },
+    )
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Faction: none → Iron Pact'))
+
+    act(() =>
+      entitiesStore.patch(BRANCH, {
+        op: 'update',
+        id: 'fac_iron',
+        columns: { name: 'Iron Pact Reborn' },
+      }),
+    )
+    await waitFor(() =>
+      expect(view.props?.rows[0]?.summary).toBe('Faction: none → Iron Pact Reborn'),
+    )
+    expect(walk).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks a ref (deleted) when the working set holds its id only on another branch', async () => {
+    entitiesStore.hydrate('br_other', [
+      makeEntity({ id: 'fac_iron', branchId: 'br_other', kind: 'faction', name: 'Iron Pact' }),
+    ])
+    const walk = vi.fn<DiffWalk>().mockResolvedValue(walked({ [FACTION.id]: FACTION_ENTRY }))
+    renderTab(
+      loader(() => [own(FACTION)]),
+      'char_aria',
+      'entities',
+      { diffs: createDiffCache({ walk }) },
+    )
+    await waitFor(() =>
+      expect(view.props?.rows[0]?.summary).toBe('Faction: none → Iron Pact (deleted)'),
+    )
+  })
+
+  it('holds an entry-ref row on its summary until the entry index has read', async () => {
+    entryIndex.index.set('entry_12', {
+      id: 'entry_12',
+      position: 12,
+      kind: 'ai_reply',
+      chapterId: null,
+      excerpt: '',
+    })
+    entryIndex.ready = false
+    const client = createQueryClient()
+    const walk = vi.fn<DiffWalk>().mockResolvedValue(walked({ [OCCURRED.id]: OCCURRED_ENTRY }))
+    const tab = renderTab(
+      loader(() => [own(OCCURRED)]),
+      'hap_fire',
+      'happenings',
+      { diffs: createDiffCache({ walk }), client },
+    )
+    await waitFor(() =>
+      expect(client.getQueryData(['diff', BRANCH, OCCURRED.id])).toEqual({
+        kind: 'entry',
+        entry: OCCURRED_ENTRY,
+      }),
+    )
+    await settle()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Occurred at')
+
+    entryIndex.failed = true
+    tab.rerenderTab()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Occurred at')
+
+    entryIndex.ready = true
+    entryIndex.failed = false
+    tab.rerenderTab()
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Occurred at: none → entry #12'))
+  })
+
+  it("reads a relationship row's prose by the tab's side", async () => {
+    const kind = update('delta_kind', 'character_relationships', 'rel_1', { kind: 'rival' })
+    const walk = vi
+      .fn<DiffWalk>()
+      .mockResolvedValue(walked({ [kind.id]: entry({ kind: 'rival' }, { kind: 'ally' }) }))
+    const diffs = createDiffCache({ walk })
+    const load = loader((query): HistoryRow[] => [
+      {
+        delta: kind,
+        via: {
+          kind: 'link',
+          table: 'character_relationships',
+          linkId: 'rel_1',
+          otherId: query.targetId === 'char_aria' ? 'char_kael' : 'char_aria',
+          side: query.targetId === 'char_aria' ? 'a' : 'b',
+        },
+      },
+    ])
+    renderTab(load, 'char_aria', 'entities', { diffs })
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Your view: "rival" → "ally"'))
+    cleanup()
+    renderTab(load, 'char_kael', 'entities', { diffs })
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Their view: "rival" → "ally"'))
+    // The second tab reads the cached entry through `peek`, so nothing walks again.
+    expect(walk).toHaveBeenCalledTimes(1)
   })
 })
