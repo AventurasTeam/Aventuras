@@ -324,10 +324,10 @@ id-only store read as fact goes with it.
 **The branch reads.**
 
 - `lib/stores/factory/working-set-store.test.ts`: with branch A loaded,
-  the branch read returns the store's map, the same reference the raw
-  getter returns; for B, or before any hydrate, it returns the empty
-  map, the same reference on two calls. The row read returns A's row
-  for `(A, id)` and `undefined` for `(B, id)`.
+  the branch read returns the store's live map, the same reference on
+  two calls; for B, or before any hydrate, it returns the one shared
+  empty map. The row read returns A's row for `(A, id)` and
+  `undefined` for `(B, id)`.
 - The same file: a subscriber of the branch hook, `useRows(A, identity)`
   (each store's `useX`, as shipped), re-renders and reads the empty map
   after `hydrate(B, …)` with rows under the same ids, and reads A's
@@ -614,9 +614,11 @@ redo map.
   parameter: their callers pass a chapter read on the open branch.
 - Pure helpers whose input came from a store now take branch-named
   inputs and drop the `branchId` they no longer read:
-  `entityLinkRows`, `entityDeleteImpact`, `relationshipLinksFor`,
-  `involvementsFor`, `happeningLinksFor`, `latestReplyOf`,
-  `chapterTimelineData`, `MergeLinkInput` and `CollisionSources`.
+  `entityLinkRows`, `relationshipLinksFor`, `involvementsFor`,
+  `happeningLinksFor`, `latestReplyOf`, `chapterTimelineData`,
+  `MergeLinkInput` and `CollisionSources`. `entityDeleteImpact` takes
+  branch-named inputs too, and keeps its `branchId` for the delete
+  plan.
   `EntityMergeInput` declares its own `branchId`, the branch the merge
   writes on.
 - `undo-copy.ts`'s `liveUndoRow` became `liveRowsOf(branchId)`: the
@@ -640,12 +642,13 @@ redo map.
   write. [Slice 6.8](./08-per-branch-lead.md) deletes the call.
 
 **Id reads on branch-scoped tables.** `readWideExcerpts` and
-`raiseSystemEntry`'s read-back select by branch and id. The re-check at
-this slice's base and again at its final merge of main found two reads
-that select by id alone, both in `rerun-journal.ts` (6.1's file), and
-both stay. `planWriteBack`'s chapter read and `readJournal`'s journal
-read drop the branch only for a run marker that records none, and
-migration `0022` backfilled every unfinished run's branch from its
+`raiseSystemEntry`'s read-back select by branch and id. The grep at
+this slice's base and again at its final merge of main found one read
+that selects by id alone, in `rerun-journal.ts` (6.1's file); a later
+look found `readJournal`'s, in the same file. Both stay.
+`planWriteBack`'s chapter read and `readJournal`'s journal read drop
+the branch only for a run marker that records none, and migration
+`0022` backfilled every unfinished run's branch from its
 deltas, journal or chapter, so a marker still without one has no
 journal row, and action ids are global: neither read can pick between a
 row and its copy. Every other read is scoped, `deltas`' seven included;

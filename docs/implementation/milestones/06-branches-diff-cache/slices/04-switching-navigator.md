@@ -753,9 +753,9 @@ input keeps its caret through a mid-string edit.
   ([Slice 6.2 → Implementation notes](./02-scoped-reads-redo.md#implementation-notes)).
   The switch's read step and its synchronous fill carry it like the
   other ten, or the store keeps the old branch and reads as empty on the
-  new one. `load-open-story.test.ts` pins `loadAndPublish`'s cancellation
-  checks by count (12, one after each read); a read added there raises
-  it.
+  new one. `load-open-story.test.ts` pins at least 12
+  cancellation checks before any hydrate (one after each read); a read
+  added there needs the count raised by hand.
 
 ## Implementation notes
 

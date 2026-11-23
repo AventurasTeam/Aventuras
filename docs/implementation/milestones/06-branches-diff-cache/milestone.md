@@ -381,7 +381,7 @@ it.
 
 Provider: [Slice 6.2](./slices/02-scoped-reads-redo.md), and
 [Slice 6.10](./slices/10-register-branch-pairs.md) for the register
-pairs. Consumers: every slice landing after them.
+pairs. Consumers: every slice landing after 6.2.
 
 The working-set stores hold one branch, keyed by id alone, and expose
 no reactive loaded branch: `useRows` selects rows only
