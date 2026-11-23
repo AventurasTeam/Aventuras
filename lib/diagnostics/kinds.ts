@@ -11,6 +11,7 @@ export type LogSubsystem =
   | 'calendar'
   | 'app'
   | 'reader'
+  | 'history'
 
 export type LogKind = `${LogSubsystem}.${string}`
 
