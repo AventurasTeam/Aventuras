@@ -53,9 +53,10 @@ touch, and lands after it.
 
 **The surface track** makes a second branch reachable.
 [Slice 6.2](./slices/02-scoped-reads-redo.md) gives the working-set
-stores a branch-scoped accessor, replaces 54 inline filters, proves
-every action register's branch condition against a second branch, and
-makes the redo stack a map by branch.
+stores a branch-scoped accessor, replaces 54 inline filters, and makes
+the redo stack a map by branch.
+[Slice 6.10](./slices/10-register-branch-pairs.md) then proves every
+action register's branch condition against a second branch.
 [Slice 6.4](./slices/04-switching-navigator.md) builds the branch
 chip, the navigator, rename, `Browse branches…` and the switch itself,
 on the seed's second branch, with no fork. A switch gives a fresh
@@ -107,7 +108,7 @@ save. The composer draft doesn't survive a switch, and nothing prompts.
   copy and its device probes (C1, C2, C3, C4)
 - [Slice 6.2](./slices/02-scoped-reads-redo.md) — branch-scoped reads
   and per-branch redo: the store accessor, the filter and id-only
-  sweeps, register two-branch tests, the redo map (C5, C6)
+  sweeps, the redo map (C5, C6)
 - [Slice 6.3](./slices/03-fork-core.md) — fork core: the planner's
   write branch, the survivor copy, `forkBranch`, the equivalence
   harness, the seed's real fork (C7)
@@ -128,6 +129,10 @@ save. The composer draft doesn't survive a switch, and nothing prompts.
 - [Slice 6.9](./slices/09-lead-in-prompts.md) — the lead in prompts:
   lead marks, the chapter context's lead and narration, the
   third-person rule
+- [Slice 6.10](./slices/10-register-branch-pairs.md) — register
+  two-branch pairs: each of the 55 registered handlers against a second
+  branch holding the same ids, and the chapter delete's branch reads
+  (C5)
 
 ## Dependency graph
 
@@ -140,6 +145,7 @@ day one:  6.1   6.2   6.7   6.8        6.3*   6.4*
 6.3, 6.4 ──────→ 6.5
 6.1, 6.2, 6.4 ─→ 6.6
 6.8 ───────────→ 6.9
+6.2 ───────────→ 6.10
 
 6.1 ┄ 6.7    (no edge: the second to land writes the two-branch cache test)
 6.3 ┄ 6.8    (no edge: the second to land adds a lead switch to the harness
@@ -149,6 +155,8 @@ day one:  6.1   6.2   6.7   6.8        6.3*   6.4*
 6.2 ┄ 6.8    (no edge: the second to land carries the three lead lines, C5)
 6.2 ┄ 6.3    (no edge: the second to land adds the check that a fork's
               child starts with an empty redo stack)
+6.8 ┄ 6.10   (no edge: if 6.8 lands first, 6.10 keeps its isLead pair
+              in the entities branch scope block)
 ```
 
 Each "second to land" job is an acceptance criterion in both slices of
@@ -170,6 +178,8 @@ has to meet it, so it can't be skipped with every test green.
   the redo map and the navigator's row. Duplicate needs the copier and
   the branch read. Neither needs the fork.
 - **6.9 follows 6.8** for the flag, the stamps and the DB lead read.
+- **6.10 follows 6.2.** Its register pairs go in the suites whose store
+  reads 6.2 migrates. Nothing waits on it.
 - **The rulings gate tasks, not starts.** R1's canon lands before
   6.1's run-record tasks, R2's before 6.4's switch, R3's before 6.7's
   eviction (C12).
@@ -369,8 +379,9 @@ it.
 
 ### C5 — Branch-scoped store reads
 
-Provider: [Slice 6.2](./slices/02-scoped-reads-redo.md). Consumers:
-every slice landing after it.
+Provider: [Slice 6.2](./slices/02-scoped-reads-redo.md), and
+[Slice 6.10](./slices/10-register-branch-pairs.md) for the register
+pairs. Consumers: every slice landing after them.
 
 The working-set stores hold one branch, keyed by id alone, and expose
 no reactive loaded branch: `useRows` selects rows only
@@ -386,11 +397,12 @@ no reactive loaded branch: `useRows` selects rows only
   (`components/history/use-history-target.ts`).
 - Code landing after 6.2 uses the accessor. Code landing before keeps
   the inline form, and 6.2's last task sweeps main again at its final
-  rebase. A lint rule or a source-scan test from 6.2 then holds it, so
-  a later slice can't add one back unnoticed. The rule bans the domain
-  stores' raw row reads outside `lib/stores/`, tests and stories
-  exempt: a filter over store rows and one over run state look alike to
-  a linter, and a raw read is what it can see.
+  rebase. The stores' signatures then hold it, so a later slice can't
+  add one back unnoticed: every row read, `getById` and derived getter
+  takes the branch, no store keeps an unscoped read, and
+  `pnpm typecheck` fails on one. 6.2's planning chose the signature
+  over a lint rule, which would have needed its own member list and
+  left `lib/stores/` unchecked.
 - **Database reads by id alone.** 6.2 also sweeps the reads that select
   a branch-scoped row from the DB without its branch. After a copy,
   `readWideExcerpts` can return another branch's entry
@@ -399,9 +411,10 @@ no reactive loaded branch: `useRows` selects rows only
   freshly minted id, so it can't, but it takes the branch for the same
   reason C1's read-back does.
 - **Register tests after 6.2.** A slice that adds or changes a register
-  handler once 6.2 has landed adds that handler's two-branch pair. 6.2
-  itself covers all 55 registered handlers: the 39 the register files
-  define and the 16 the entities register takes from
+  handler once 6.2 has landed adds that handler's two-branch pair.
+  [Slice 6.10](./slices/10-register-branch-pairs.md) covers all 55
+  registered handlers: the 39 the register files define and the 16 the
+  entities register takes from
   `lib/actions/entities/state-patch-actions.ts`.
 - **One caller 6.2 can't finish.** The review window's chapter lookup
   (`lib/stores/ui/chapter-overlays.ts:101-103`) has no branch to pass
@@ -409,8 +422,8 @@ no reactive loaded branch: `useRows` selects rows only
   there so its own typecheck holds, and 6.4 replaces it.
 - 6.2 leaves `lib/world/lead.ts` and the lead lines at its callers to
   6.8 (C10), with one exception: three of those lines hand a raw entity
-  map to `resolveLead`, which the rule would flag
-  (`lib/pipeline/definitions/generation-context.ts:496`,
+  map to `resolveLead`, which stops compiling once the unscoped reads
+  go (`lib/pipeline/definitions/generation-context.ts:496`,
   `periodic-classifier.ts:204-205`,
   `app/reader-composer/[branchId].tsx:356-358`). There 6.2 swaps the map
   argument for the branch read and changes nothing else.
@@ -647,7 +660,9 @@ meets 6.1, 6.2 and 6.3.
 - **The flag.** `entities.is_lead`, with its `CHECK`, on
   `lib/db/entities/entities.table.ts:16-55`; `isLead` joins the
   register's logged columns (`lib/actions/entities/register.ts:104-117`),
-  with its two-branch pair (C5).
+  with its two-branch pair (C5), beside
+  [Slice 6.10](./slices/10-register-branch-pairs.md)'s pairs for the
+  other handlers.
 - **The definition.** `storyDefinitionSchema` loses `leadEntityId` and
   the refine that requires it
   (`lib/db/stories/story-config-schema.ts:52-61`) in the same change as
@@ -718,13 +733,13 @@ resolves the rest.
 | `lib/actions/stories/delete-story.ts`                                                                        | 6.1: `BRANCH_SCOPED`. 6.2: the stacks. 6.6: the records, and the per-table delete loop lifted into a helper both deletes share.                                                                                                                                                                                                            |
 | `lib/actions/stories/operational.ts`                                                                         | 6.2: the hydrate list, for the dead mirrors. 6.4: the switch and its publish. 6.8: the definition parse.                                                                                                                                                                                                                                   |
 | `lib/stores/generation/generation.ts`                                                                        | 6.6: `dropBranchRecords`. 6.4: a gate read with no hold, if it adds one.                                                                                                                                                                                                                                                                   |
-| `lib/actions/entities/register.ts` and its test                                                              | 6.2: a `branch scope` block appended to the test. 6.8: the flag and its pair.                                                                                                                                                                                                                                                              |
+| `lib/actions/entities/register.ts` and its test                                                              | 6.2: the test's store reads. 6.10: a `branch scope` block appended to the test. 6.8: the flag and its pair.                                                                                                                                                                                                                                |
 | `lib/history/field-labels.ts`, `lib/history/humanize.ts`                                                     | 6.7: the prose. 6.8: the flag's label. 6.1 only checks `humanize.ts` reads the new anchor.                                                                                                                                                                                                                                                 |
 | `lib/actions/world/resolve-collision.ts`, `components/world/use-collision-resolve.ts`                        | 6.2: the helper lines. 6.8: the lead refusal's lines.                                                                                                                                                                                                                                                                                      |
 | `app/world/[branchId].tsx`                                                                                   | 6.2: the filter lines. 6.8: the lead lines and `Set as lead`'s branch.                                                                                                                                                                                                                                                                     |
 | `lib/db/devtools/seed-dataset.ts`                                                                            | 6.3: the fork's rows. 6.8: the definition, the flag and main's stamps.                                                                                                                                                                                                                                                                     |
 | `lib/stores/ui/chapter-overlays.ts`                                                                          | 6.2: the filter lines. 6.4: the review window's branch.                                                                                                                                                                                                                                                                                    |
-| `eslint.config.js` and `lib/stores/__tests__/generation-mutators-lint.test.ts`                               | 6.2: the raw-read rule. 6.6: the record owners. 6.7: any boundary rule its hook needs. 6.3: the owner lists, only if its planning has the fork raise the reversal barrier or carry a record to the child.                                                                                                                                  |
+| `eslint.config.js` and `lib/stores/__tests__/generation-mutators-lint.test.ts`                               | 6.6: the record owners. 6.7: any boundary rule its hook needs. 6.3: the owner lists, only if its planning has the fork raise the reversal barrier or carry a record to the child.                                                                                                                                                          |
 | `lib/actions/delta/apply-delta-action.ts`                                                                    | 6.1: the read-back at `:220-223`. 6.2: the clears at `:213` and `:390`.                                                                                                                                                                                                                                                                    |
 | `lib/pipeline/definitions/generation-context.ts`, `periodic-classifier.ts`, `chapter-close-metadata-call.ts` | 6.2: the filter lines and the map argument (C5). 6.8: the lead lines. 6.9: the projections and inputs.                                                                                                                                                                                                                                     |
 | `components/reader/rail/use-rail-data.ts`                                                                    | 6.2: the filter lines. 6.8: the lead lines.                                                                                                                                                                                                                                                                                                |
@@ -783,9 +798,11 @@ resolves the rest.
   (vitest). The vector copy is probed on Electron and Android, and the
   result is in Slice 6.1's notes.
 - **Scoped reads.** No inline branch filter over store rows remains
-  outside the accessor. Every one of the 55 registered handlers has a
-  two-branch test that fails when its branch condition is removed
-  (vitest, with a mutation check per handler).
+  outside the accessor, and no store exposes a row read without a
+  branch: a type-level pin fails `pnpm typecheck` on one (6.2). Every
+  one of the 55 registered handlers has a two-branch test that fails
+  when its branch condition is removed (vitest, with a mutation check
+  per handler; 6.10).
 - **Redo.** Undo on one branch, switch away: Redo is absent there, and
   present on return (vitest in 6.2; Slice 6.4's E2E). A fork leaves the
   parent's Redo (vitest in 6.3; Slice 6.5's E2E).
@@ -852,8 +869,9 @@ resolves the rest.
   refuses under the gate. The tombstone construction has two readings
   of the code behind it, the auditor's and Slice 6.3's writer's, and no
   run. What the slice writers' reports changed after the audit is
-  unaudited too: C2's third backfill source, C5's raw-read rule, C6's
-  group branch, C7's core and its seed turns, C8's step order, its
+  unaudited too: C2's third backfill source, C5's raw-read rule (which
+  6.2's planning replaced with the stores' signatures), C6's group
+  branch, C7's core and its seed turns, C8's step order, its
   failed-load rules and the stack replacement, and C10's stamping rule
   and R4. The final audit's fixes had no audit of their own either:
   C8's hold from a switch's or a fork's start to its navigation, its
@@ -922,10 +940,12 @@ resolves the rest.
   moves to 6.3 and duplicate waits on the planner. 6.3's planner is
   priced by analogy, with no close precedent. M5's plans held 3 to 7
   tasks more than its planning estimates, so check each at its plan
-  skeleton. 6.2 was planned at 15 and is nearer 17: its sweep is 111
+  skeleton. 6.2 was planned at 15 and was nearer 17: its sweep is 111
   raw reads in 36 files, and its register tests cover 55 handlers, not
-  the 39 first counted. If it passes 20, the register two-branch tests
-  split off, since nothing waits on them. 6.8 was planned at 17 and is
+  the 39 first counted. Its planning (2026-11-23) split the register
+  two-branch tests off into 6.10, since nothing waits on them and 6.4's
+  landing would have; 6.2's plan holds 17 tasks without them. 6.8 was
+  planned at 17 and is
   nearer 19 after R4's reach to stamped characters and the tests the
   final audit added; check it against the same line.
 - **6.3 beside 6.1.** 6.3 starts in `reverse-replay.ts` while 6.1 edits

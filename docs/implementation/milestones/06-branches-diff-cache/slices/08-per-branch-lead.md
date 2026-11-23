@@ -8,8 +8,9 @@
   the stamps and the DB lead read this slice ships.
 - **Meets, with no edge:** [Slice 6.1](./01-copy-substrate.md) (the
   migration chain, C4; `submitTurn`'s lines, C10),
-  [Slice 6.2](./02-scoped-reads-redo.md) (the store accessor and the
-  register pairs, C5; the redo clear, C6),
+  [Slice 6.2](./02-scoped-reads-redo.md) (the store accessor, C5; the
+  redo clear, C6), [Slice 6.10](./10-register-branch-pairs.md) (the
+  register pairs, C5),
   [Slice 6.3](./03-fork-core.md) (the harness's lead switch, C10; the
   seed's fork, C7) and [Slice 6.7](./07-diff-cache.md) (the flag's
   prose, C9).
@@ -329,10 +330,11 @@ change, or a merge could remove the lead.
   `app/reader-composer/[branchId].tsx:356-358` and
   `app/world/[branchId].tsx:166`. How the two kinds of caller say which
   they are, an option or two functions, is planning's.
-- **Store reads after 6.2 (C5).** 6.2's lint rule bans the domain
-  stores' raw row reads outside `lib/stores/`, so 6.2 swaps only the map
-  argument on the three lead lines that hand `resolveLead` a raw entity
-  map: `generation-context.ts:496`, `periodic-classifier.ts:204-205` and
+- **Store reads after 6.2 (C5).** 6.2 removes the stores' unscoped row
+  reads, so a read that names no branch stops compiling, and it swaps
+  only the map argument on the three lead lines that hand `resolveLead`
+  a raw entity map: `generation-context.ts:496`,
+  `periodic-classifier.ts:204-205` and
   `app/reader-composer/[branchId].tsx:356-358`. If 6.2 lands first, this
   slice's rewrite of those lines rebases over that swap and keeps its
   branch read. Every store read this slice adds goes through 6.2's
@@ -496,12 +498,14 @@ Seeds.
 - **6.1 (C10).** 6.1 anchors the `user_action` create's delta on its
   entry (`submit-turn.ts:179`); this slice owns that function's
   metadata line (`:157`) and its refusal.
-- **6.2 (C5, C10).** The `isLead` update's two-branch pair goes in
-  `lib/actions/entities/register.test.ts`, in the shape of
+- **6.2 and 6.10 (C5, C10).** The `isLead` update's two-branch pair
+  goes in `lib/actions/entities/register.test.ts`, in the shape of
   `lib/actions/story-entries/register.test.ts:224-300`, shown red by
-  removing the handler's branch condition. If 6.2 landed first, its
-  pairs for `createEntity` and `deleteEntity`, whose bodies this slice
-  changes, are run again with their mutation check.
+  removing the handler's branch condition.
+  [Slice 6.10](./10-register-branch-pairs.md) took the register pairs
+  from 6.2; if it landed first, its pairs for `createEntity` and
+  `deleteEntity`, whose bodies this slice changes, are run again with
+  their mutation check.
 - **6.3 (C10).** The flag and the stamps copy as columns and JSON
   ([C3](../milestone.md#c3--the-manifest-and-the-copier)). The second of
   6.3 and 6.8 to land adds a lead switch after the fork entry to the
@@ -532,7 +536,7 @@ Seeds.
   `lib/db/devtools/seed-dataset.ts` with its test, `scripts/seed/` and
   `e2e/harness/seed.ts` (the flag and the stamps, beside 6.3's fork);
   `field-labels.ts` (the flag's label); `register.ts` and its test (the
-  flag and its pair, beside 6.2's `branch scope` block).
+  flag and its pair, beside 6.10's `branch scope` block).
 
 ### Forward pointers and copy (C12)
 
@@ -805,8 +809,9 @@ whichever of the pair lands second meets it.
 40. If 6.2 has landed: the three lead lines 6.2 swapped
     (`generation-context.ts:496`, `periodic-classifier.ts:204-205`,
     `app/reader-composer/[branchId].tsx:356-358`) read the branch's rows
-    through 6.2's read under this slice's rewrite, and `pnpm lint`
-    passes 6.2's raw-read rule on every file this slice touches.
+    through 6.2's read under this slice's rewrite, and `pnpm typecheck`
+    passes with 6.2's branch-taking reads on every file this slice
+    touches.
 41. If 6.3 has landed: `lib/actions/stories/fork-equivalence.test.ts`
     holds a fixture with a lead switch after the fork entry, made by
     this slice's set, in which the child's lead is the parent's as of

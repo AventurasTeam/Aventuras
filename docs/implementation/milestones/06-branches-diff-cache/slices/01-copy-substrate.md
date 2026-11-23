@@ -484,10 +484,11 @@ and the restore stamp are canon already.
   owner list: [Slice 6.6](./06-delete-duplicate.md).
 - The redo map and a group's own branch:
   [Slice 6.2](./02-scoped-reads-redo.md) (C6).
-- The register two-branch tests, and the DB reads of other tables by id
-  alone (`lib/entry-refs/read.ts:94-97`,
+- The DB reads of other tables by id alone
+  (`lib/entry-refs/read.ts:94-97`,
   `lib/actions/story-entries/system-entry.ts:86`):
-  [Slice 6.2](./02-scoped-reads-redo.md) (C5).
+  [Slice 6.2](./02-scoped-reads-redo.md) (C5). The register two-branch
+  tests: [Slice 6.10](./10-register-branch-pairs.md) (C5).
 - The eviction hook. The commit tails at `reverse-replay.ts:929-930` and
   `:991-993` and `redo.ts:364` stay as they are:
   [Slice 6.7](./07-diff-cache.md) (C9).
