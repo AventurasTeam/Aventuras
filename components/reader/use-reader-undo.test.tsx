@@ -397,6 +397,56 @@ describe('useReaderUndo — refusals', () => {
   })
 })
 
+describe('useReaderUndo — one redo stack per branch', () => {
+  const turnGroup = (branchId: string) =>
+    __redoGroupForTest(
+      branchId,
+      [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+      'act_turn',
+    )
+
+  it("shows no Redo on a branch whose stack is empty, though another branch's holds a group", async () => {
+    undoRedoStore.pushRedoGroup(turnGroup('b1'))
+    const r = render({ branchId: 'b2' })
+    expect(r.result.current.redoLabel).toBeNull()
+
+    act(() => r.result.current.redo('menu'))
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Nothing to redo.'])
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+  })
+
+  it("names its own branch's group once it is on that branch", () => {
+    undoRedoStore.pushRedoGroup(turnGroup('b1'))
+    const r = render({ branchId: 'b2' })
+
+    r.rerender(LIVE)
+
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+  })
+
+  it("offers Redo after an undo on its branch, though another branch's group is newer", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockImplementation(async (branchId) => {
+      undoRedoStore.pushRedoGroup(turnGroup(branchId))
+      // Newest across the map, so a read that ignored the branch would find this group instead.
+      undoRedoStore.pushRedoGroup(__redoGroupForTest('b2', [], 'act_elsewhere'))
+      return OK
+    })
+    const r = render()
+
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+
+    expect(toasts).toHaveLength(1)
+    expect(toasts[0].message).toBe('Undid the turn at entry #2')
+    expect(toasts[0].action?.label).toBe('Redo')
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+  })
+})
+
 describe('useReaderUndo — review fixes', () => {
   function deferred<T>() {
     let resolve!: (value: T) => void

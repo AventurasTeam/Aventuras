@@ -264,13 +264,12 @@ export async function redoLastAction(
   if (!group) return { status: 'rejected', code: 'nothing-to-apply', reason: 'nothing to redo' }
   const moved = movedFrom(expectedActionId, group.actionId)
   if (moved != null) return moved
-  // The redo stack is a single global stack, not partitioned per branch. Guard
-  // against applying another branch's snapshot to this context.
+  // A group whose snapshots name another branch is broken: redone here, it would write there.
   if (group.snapshots.some((s) => s.delta.branchId !== branchId))
     return {
       status: 'rejected',
       code: 'integrity',
-      reason: 'redo stack does not belong to this branch',
+      reason: 'redo group names another branch',
     }
 
   // Bracketed like every reversal, so no pass starts mid-sweep.
