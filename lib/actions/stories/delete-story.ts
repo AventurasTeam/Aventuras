@@ -25,7 +25,7 @@ import {
   wizardSessions,
   type SqlOp,
 } from '@/lib/db'
-import { embedderSwapStore, generationStore, rehydrateStories } from '@/lib/stores'
+import { embedderSwapStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -86,5 +86,6 @@ export async function deleteStory(
   embedderSwapStore.clearDeferredUpgradeFor(storyId)
   // In memory and keyed by branch: a deleted branch's records would otherwise outlive it.
   for (const branchId of branchIds) generationStore.dropBranchRecords(branchId)
+  for (const branchId of branchIds) undoRedoStore.drop(branchId)
   await rehydrateStories(ctx.db)
 }

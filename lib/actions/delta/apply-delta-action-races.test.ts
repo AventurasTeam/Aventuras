@@ -461,9 +461,10 @@ describe('a classifier write racing a user Save on one row', () => {
     },
   )
 
-  // Production keeps the two apart: every delta-logged write clears the redo stack, and the
-  // redo's bracket holds writers off. Raced anyway, a write that took the slot the undo freed
-  // fails the redo on the position backstop, atomically, rather than restoring over it.
+  // Production keeps the two apart: every delta-logged write clears its own branch's redo
+  // stack, and the redo's bracket holds writers off. Raced anyway, a write that took the slot
+  // the undo freed fails the redo on the position backstop, atomically, rather than restoring
+  // over it.
   it('fails a redo whole when a classifier append took its slot, else keeps their log order', async () => {
     const ctx = await setup()
     const redoFailed = new Set<number>()

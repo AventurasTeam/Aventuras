@@ -120,8 +120,8 @@ describe('updateEntryWorldTime', () => {
     expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
     expect(entriesStore.getEntries('b1').get('e2')?.metadata?.worldTime).toBe(45)
     expect(entriesStore.getEntries('b1').get('e1')?.metadata?.worldTime).toBe(60)
-    // Contrast with the suppression test below: a real write does clear the
-    // global redo stack, which is why suppressing a no-op write matters.
+    // Contrast with the suppression test below: a real write clears the branch's
+    // redo stack, which is why suppressing a no-op write matters.
     expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
@@ -216,8 +216,7 @@ describe('updateEntryWorldTime', () => {
       worldTime: 120,
       summary: 's',
     })
-    // The harm a no-op delta would do: applyDeltaAction clears the redo stack,
-    // which is global rather than per-branch.
+    // The harm a no-op delta would do: applyDeltaAction clears the branch's redo stack.
     expect(undoRedoStore.hasRedo('b1')).toBe(true)
   })
 

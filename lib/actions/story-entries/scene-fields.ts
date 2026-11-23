@@ -77,7 +77,7 @@ async function updateEntrySceneFieldsLocked(
     currentLocationId:
       edit.currentLocationId === undefined ? before.currentLocationId : edit.currentLocationId,
   }
-  // A no-op delta would clear the global redo stack for nothing. Membership, not
+  // A no-op delta would clear the branch's redo stack for nothing. Membership, not
   // order: the scene is a set, and the editor's control emits in its own order.
   if (
     sameMembers(after.sceneEntities, before.sceneEntities) &&

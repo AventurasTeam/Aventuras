@@ -42,7 +42,7 @@ const meta: Meta<typeof SceneEditForm> = {
 export default meta
 type Story = StoryObj<typeof SceneEditForm>
 
-// A no-op Save must not write: the delta would clear the global redo stack for nothing.
+// A no-op Save must not write: the delta would clear the branch's redo stack for nothing.
 export const NoChangeTakesTheCancelRoute: Story = {
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
