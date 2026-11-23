@@ -15,7 +15,7 @@ describe('eraFlipsStore', () => {
       flipRow('ef_1', 1000, 'Age of Ash'),
       flipRow('ef_2', 2000, 'Age of Storms'),
     ])
-    expect(eraFlipsStore.getById('ef_1')?.eraName).toBe('Age of Ash')
+    expect(eraFlipsStore.getById('br_1', 'ef_1')?.eraName).toBe('Age of Ash')
     expect(eraFlipsStore.getEraFlips().size).toBe(2)
   })
 
@@ -23,6 +23,6 @@ describe('eraFlipsStore', () => {
     eraFlipsStore.__reset()
     eraFlipsStore.hydrate('br_1', [])
     eraFlipsStore.patch('br_2', { op: 'create', id: 'ef_9', row: flipRow('ef_9', 9000, 'Ghost') })
-    expect(eraFlipsStore.getById('ef_9')).toBeUndefined()
+    expect(eraFlipsStore.getById('br_1', 'ef_9')).toBeUndefined()
   })
 })

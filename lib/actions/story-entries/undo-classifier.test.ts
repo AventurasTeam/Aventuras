@@ -217,7 +217,7 @@ describe('AC1 — undo of turn B spares facts anchored to surviving turn A', () 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
     // B and everything anchored to it is gone.
-    expect(entriesStore.getById('e_b')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e_b')).toBeUndefined()
     expect((await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_b'))).length).toBe(0)
     expect((await db.select().from(happenings).where(eq(happenings.id, 'hap_b1'))).length).toBe(0)
     expect(
@@ -226,7 +226,7 @@ describe('AC1 — undo of turn B spares facts anchored to surviving turn A', () 
     ).toBe(0)
 
     // A and its facts — including the LAGGING pass-2 fact committed above B — survive.
-    expect(entriesStore.getById('e_a')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_a')).toBeDefined()
     expect((await db.select().from(happenings).where(eq(happenings.id, 'hap_a1'))).length).toBe(1)
     expect((await db.select().from(happenings).where(eq(happenings.id, 'hap_a2'))).length).toBe(1)
 
@@ -243,7 +243,7 @@ describe('AC1 — undo of turn B spares facts anchored to surviving turn A', () 
     // Redo restores the whole unit — entry (with its piggyback metadata),
     // B-anchored facts, and their delta rows — without touching the watermark.
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
-    expect(entriesStore.getById('e_b')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_b')).toBeDefined()
     const [eB] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_b'))
     expect(eB.metadata).toEqual(B_METADATA)
     expect((await db.select().from(happenings).where(eq(happenings.id, 'hap_b1'))).length).toBe(1)
@@ -290,8 +290,8 @@ describe('AC2 — classifier group at the literal head', () => {
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
     // The turn beneath the classifier group was the target…
-    expect(entriesStore.getById('e_b')).toBeUndefined()
-    expect(entriesStore.getById('e_a')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_b')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e_a')).toBeDefined()
     // …and the head classifier group was carried down with the suffix.
     expect((await db.select().from(happenings).where(eq(happenings.id, 'hap_b1'))).length).toBe(0)
     const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).map(
@@ -324,7 +324,7 @@ describe('AC3 — user field-edit above a classifier group', () => {
     // Group path: only the edit reversed — the row survives with its old title.
     const [row] = await db.select().from(happenings).where(eq(happenings.id, 'hap_a1'))
     expect(row.title).toBe('Original title')
-    expect(entriesStore.getById('e_a')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_a')).toBeDefined()
     const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).map(
       (d) => d.id,
     )
@@ -352,9 +352,9 @@ describe('AC6 — undo floor in a wizard-created story', () => {
     entriesStore.hydrate('b1', [entry('e_opening', 1, 'opening'), entry('e_t1', 2, 'user_action')])
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
-    expect(entriesStore.getById('e_t1')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e_t1')).toBeUndefined()
     expect((await undoLastAction('b1', ctx)).status).toBe('rejected')
-    expect(entriesStore.getById('e_opening')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_opening')).toBeDefined()
   })
 })
 
@@ -400,13 +400,13 @@ describe('AC4 — CTRL-Z of the turn with a classifier run mid-flight', () => {
     // unbracketed sweep would have finished within this flush (in-memory SQLite,
     // no real I/O), so the entry still standing is the barrier's own evidence.
     await new Promise((r) => setTimeout(r, 0))
-    expect(entriesStore.getById('e_t1')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_t1')).toBeDefined()
 
     // What the orchestrator does at the end of an abort: deregister, then resolve the terminal.
     generationStore.abortRun('run_c', 'aborted')
     resolveTerminal()
     expect((await done).status).toBe('ok')
-    expect(entriesStore.getById('e_t1')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e_t1')).toBeUndefined()
   })
 })
 
@@ -568,7 +568,7 @@ describe('CTRL-Z of the turn under a running close', () => {
     expect(deferrals).toEqual([
       expect.objectContaining({ kind: CHAPTER_CLOSE_KIND, work: 'close' }),
     ])
-    expect(entriesStore.getById('e_t1')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e_t1')).toBeUndefined()
     expect(await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_t1'))).toEqual([])
   })
 
@@ -587,6 +587,6 @@ describe('CTRL-Z of the turn under a running close', () => {
     })
     expect(await db.select().from(chapters)).toHaveLength(1)
     expect(generationStore.getTxState().deferred.size).toBe(0)
-    expect(entriesStore.getById('e_t1')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e_t1')).toBeDefined()
   })
 })

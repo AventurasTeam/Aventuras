@@ -232,7 +232,7 @@ describe('raiseSystemEntry', () => {
     expect(heldIds()).toEqual(['e1', 'e2', id].sort())
     expect(heldIds()).not.toContain(standing)
     const [row] = await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, id))
-    expect(entriesStore.getById(id)).toEqual(row)
+    expect(entriesStore.getById('b1', id)).toEqual(row)
   })
 
   it('leaves the store alone when it holds another branch', async () => {

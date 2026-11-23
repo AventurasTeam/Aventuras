@@ -24,7 +24,7 @@ describe('entriesStore', () => {
   it('hydrates a branch and reads rows back by id', () => {
     entriesStore.hydrate('b1', [row('e1', 1), row('e2', 2)])
     expect(entriesStore.getLoadedBranch()).toBe('b1')
-    expect(entriesStore.getById('e1')?.content).toBe('ce1')
+    expect(entriesStore.getById('b1', 'e1')?.content).toBe('ce1')
     expect(entriesStore.getEntries().size).toBe(2)
   })
 
@@ -33,13 +33,13 @@ describe('entriesStore', () => {
     entriesStore.patch('b1', { op: 'create', id: 'e2', row: row('e2', 2) })
     entriesStore.patch('b1', { op: 'update', id: 'e1', columns: { content: 'edited' } })
     entriesStore.patch('b1', { op: 'delete', id: 'e2' })
-    expect(entriesStore.getById('e1')?.content).toBe('edited')
-    expect(entriesStore.getById('e2')).toBeUndefined()
+    expect(entriesStore.getById('b1', 'e1')?.content).toBe('edited')
+    expect(entriesStore.getById('b1', 'e2')).toBeUndefined()
   })
 
   it('ignores a patch for a non-held branch', () => {
     entriesStore.hydrate('b1', [row('e1', 1)])
     entriesStore.patch('other', { op: 'delete', id: 'e1' })
-    expect(entriesStore.getById('e1')).toBeDefined()
+    expect(entriesStore.getById('b1', 'e1')).toBeDefined()
   })
 })

@@ -133,7 +133,7 @@ describe('updateStoryEntryContent', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
     expect(row.content).toBe('new text')
-    expect(entriesStore.getById('e1')?.content).toBe('new text')
+    expect(entriesStore.getById('b1', 'e1')?.content).toBe('new text')
 
     const logged = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
     expect(logged).toHaveLength(1)
@@ -1056,7 +1056,7 @@ describe('updateStoryEntryContent classifier invalidation', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
     expect(row.content).toBe('new')
-    expect(entriesStore.getById('e2')?.content).toBe('new')
+    expect(entriesStore.getById('b1', 'e2')?.content).toBe('new')
   })
 })
 
@@ -1074,7 +1074,7 @@ describe('updateStoryEntryContent invalidation scope', () => {
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
     expect(row.content).toBe('reworded')
-    expect(entriesStore.getById('e1')?.content).toBe('reworded')
+    expect(entriesStore.getById('b1', 'e1')?.content).toBe('reworded')
     const haps = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
     expect(haps.map((h) => h.id).sort()).toEqual(['hap_1', 'hap_2'])
     const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))) as Delta[]
@@ -1651,7 +1651,7 @@ describe('head-turn edits during a pass', () => {
     expect(await start.origin).toMatchObject({ outcome: 'aborted', actionId: held.actionId })
     // hap_3 goes with the edit; the pass's own happening, anchored to e1, only through the abort.
     expect(await happeningIds(db)).toEqual(['hap_1', 'hap_2'])
-    expect(entriesStore.getById('e3')?.content).toBe('rewritten reply')
+    expect(entriesStore.getById('b1', 'e3')?.content).toBe('rewritten reply')
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
     expect(deferrals).toHaveLength(1)
   })
@@ -1665,7 +1665,7 @@ describe('head-turn edits during a pass', () => {
 
     expect(await start.origin).toMatchObject({ outcome: 'aborted' })
     expect(await happeningIds(db)).toEqual(['hap_1'])
-    expect(entriesStore.getById('e2')?.content).toBe('rewritten action')
+    expect(entriesStore.getById('b1', 'e2')?.content).toBe('rewritten action')
     expect(generationStore.getTxState().deferred.get('b1')).toEqual({ pass: true })
   })
 
@@ -1712,7 +1712,7 @@ describe('head-turn edits during a pass', () => {
         value: expect.objectContaining({ status: 'rejected', code: 'in-flight-gated' }),
       },
     ])
-    expect(entriesStore.getById('e3')?.content).toBe('first rewrite')
+    expect(entriesStore.getById('b1', 'e3')?.content).toBe('first rewrite')
     expect(await start.origin).toMatchObject({ outcome: 'aborted' })
   })
 
@@ -1725,7 +1725,7 @@ describe('head-turn edits during a pass', () => {
       code: 'in-flight-gated',
     })
 
-    expect(entriesStore.getById('e3')?.content).toBe('reply')
+    expect(entriesStore.getById('b1', 'e3')?.content).toBe('reply')
     expect(runningPass('b1')?.actionId).toBe(held.actionId)
     held.finish('completed')
     expect(await start.origin).toMatchObject({ outcome: 'completed' })

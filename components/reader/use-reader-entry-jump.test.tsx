@@ -47,7 +47,7 @@ const KEY = 7
 // A slice that is the window: a row in it lands at once, one outside it is read.
 const WINDOW_SLICE: JumpSlice = {
   classifyJump: (entryId): JumpClass =>
-    entriesStore.getById(entryId)?.branchId === BRANCH ? 'slice' : 'read',
+    entriesStore.getById(BRANCH, entryId)?.branchId === BRANCH ? 'slice' : 'read',
   placeLanding: () => KEY,
   topLoaded: () => {},
 }

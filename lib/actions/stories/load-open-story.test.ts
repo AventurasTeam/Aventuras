@@ -254,7 +254,7 @@ describe('loadOpenStory', () => {
 
     expect(loreStore.getLoadedBranch()).toBe('br_1')
     expect([...loreStore.getLore().values()].map((l) => l.id)).toEqual(['lore_1'])
-    expect(loreStore.getById('lore_2')).toBeUndefined()
+    expect(loreStore.getById('br_1', 'lore_2')).toBeUndefined()
 
     expect(threadsStore.getLoadedBranch()).toBe('br_1')
     expect([...threadsStore.getThreads().values()].map((r) => r.id)).toEqual(['thread_1'])
@@ -410,7 +410,7 @@ describe('loadOpenStory', () => {
       ['chap_4', false, null],
       ['chap_5', false, null],
     ] as const) {
-      const stored = chaptersStore.getById(id)
+      const stored = chaptersStore.getById('br_1', id)
       expect(stored).toBeDefined()
       const { hasCloseReport: flag, closeReportActionId, ...storeRest } = stored!
       const [row] = await db.select().from(chapters).where(eq(chapters.id, id))

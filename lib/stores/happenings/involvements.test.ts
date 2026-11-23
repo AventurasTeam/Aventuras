@@ -22,7 +22,7 @@ describe('happeningInvolvementsStore', () => {
       row('hinv_3', 'hap_2', 'char_1'),
     ])
     expect(happeningInvolvementsStore.getByHappening('br_1', 'hap_1').length).toBe(2)
-    expect(happeningInvolvementsStore.getById('hinv_3')?.entityId).toBe('char_1')
+    expect(happeningInvolvementsStore.getById('br_1', 'hinv_3')?.entityId).toBe('char_1')
   })
 
   it('reads nothing by happening for a branch it does not hold', () => {
@@ -46,6 +46,6 @@ describe('happeningInvolvementsStore', () => {
       id: 'hinv_9',
       row: row('hinv_9', 'hap_9', 'char_9'),
     })
-    expect(happeningInvolvementsStore.getById('hinv_9')).toBeUndefined()
+    expect(happeningInvolvementsStore.getById('br_1', 'hinv_9')).toBeUndefined()
   })
 })

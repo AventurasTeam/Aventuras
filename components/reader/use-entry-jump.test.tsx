@@ -57,7 +57,7 @@ const span = (from: number, through: number): StoryEntry[] =>
 const byWindow =
   (branchId: string) =>
   (entryId: string): JumpClass =>
-    entriesStore.getById(entryId)?.branchId === branchId ? 'slice' : 'read'
+    entriesStore.getById(branchId, entryId)?.branchId === branchId ? 'slice' : 'read'
 
 const loadedPositions = () =>
   [...entriesStore.getEntries().values()].map((r) => r.position).sort((a, b) => a - b)
@@ -185,12 +185,12 @@ describe('useEntryJump', () => {
     })
     let sameTick: boolean | null = null
     topLoaded.mockImplementation(() => {
-      if (entriesStore.getById(idAt(1)) !== undefined) {
+      if (entriesStore.getById(BRANCH, idAt(1)) !== undefined) {
         sameTick = writeTickOpen
         return
       }
       queueMicrotask(() => {
-        sameTick = entriesStore.getById(idAt(1)) !== undefined
+        sameTick = entriesStore.getById(BRANCH, idAt(1)) !== undefined
       })
     })
 
@@ -245,7 +245,7 @@ describe('useEntryJump', () => {
   it('lands only after the rows are in the store', async () => {
     let inStoreAtLanding = false
     land.mockImplementation((id) => {
-      inStoreAtLanding = entriesStore.getById(id) !== undefined
+      inStoreAtLanding = entriesStore.getById(BRANCH, id) !== undefined
     })
 
     await jump()(idAt(1))
@@ -979,7 +979,7 @@ describe('useEntryJump: jumping', () => {
     const classify = (): JumpClass => 'read'
     const { result } = renderHook(() => useEntryJump(BRANCH, ctx, classify, land, () => {}))
     await act(() => result.current.jump('entry_71'))
-    expect(entriesStore.getById('entry_70')).toBeDefined()
+    expect(entriesStore.getById(BRANCH, 'entry_70')).toBeDefined()
     expect(land).toHaveBeenCalledExactlyOnceWith('entry_71')
   })
 

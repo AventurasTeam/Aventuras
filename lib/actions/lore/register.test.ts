@@ -54,7 +54,7 @@ describe('lore CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'lore_1')).title).toBe('Aether')
-    expect(loreStore.getById('lore_1')?.keywords).toEqual(['aether', 'mana'])
+    expect(loreStore.getById('br_1', 'lore_1')?.keywords).toEqual(['aether', 'mana'])
   })
 
   it('a write to a non-held branch no-ops against the store', async () => {
@@ -69,7 +69,7 @@ describe('lore CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'lore_1')).title).toBe('Aether') // DB written
-    expect(loreStore.getById('lore_1')).toBeUndefined() // store no-op
+    expect(loreStore.getById('br_2', 'lore_1')).toBeUndefined() // store no-op
   })
 
   it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
@@ -131,7 +131,7 @@ describe('lore CRUD arms', () => {
       status: 'rejected',
     })
     expect((await rowFor(db, 'lore_1')).priority).toEqual(10)
-    expect(loreStore.getById('lore_1')?.title).toBe('Aether')
+    expect(loreStore.getById('br_1', 'lore_1')?.title).toBe('Aether')
     expect((await db.select().from(deltas)).length).toBe(1)
     expect(await update('lore_9', { priority: 7 })).toMatchObject({
       status: 'rejected',
@@ -190,7 +190,7 @@ describe('lore CRUD arms', () => {
 
     // forward applied to DB + store
     expect((await rowFor(db, 'lore_1')).priority).toBe(50)
-    expect(loreStore.getById('lore_1')?.tags).toEqual(['magic', 'core', 'arcane'])
+    expect(loreStore.getById('br_1', 'lore_1')?.tags).toEqual(['magic', 'core', 'arcane'])
 
     // reverse-replay restores the whole prior arrays + scalar
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
@@ -198,7 +198,7 @@ describe('lore CRUD arms', () => {
     expect(back.priority).toBe(10)
     expect(back.tags).toEqual(['magic', 'core'])
     expect(back.keywords).toEqual(['aether', 'mana'])
-    expect(loreStore.getById('lore_1')?.tags).toEqual(['magic', 'core'])
+    expect(loreStore.getById('br_1', 'lore_1')?.tags).toEqual(['magic', 'core'])
   })
 
   it('delete captures the full row; reverse-replay re-inserts + store create-patch', async () => {
@@ -224,11 +224,11 @@ describe('lore CRUD arms', () => {
       ctx,
     )
     expect(await rowFor(db, 'lore_1')).toBeUndefined()
-    expect(loreStore.getById('lore_1')).toBeUndefined()
+    expect(loreStore.getById('br_1', 'lore_1')).toBeUndefined()
 
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'lore_1')).title).toBe('Aether')
-    expect(loreStore.getById('lore_1')?.title).toBe('Aether')
+    expect(loreStore.getById('br_1', 'lore_1')?.title).toBe('Aether')
   })
 
   it('defaults embedding_stale to 1 on create', async () => {
@@ -363,7 +363,7 @@ describe('setLoreKeywords', () => {
     await createdBy(ctx, 'lore_agent')
     expect(await outcomesOf(ctx, [setKeywords(['ley line'], ['MANA'])])).toStrictEqual([LANDED])
     expect((await rowFor(db, 'lore_1')).keywords).toEqual(['aether', 'ley line'])
-    expect(loreStore.getById('lore_1')?.keywords).toEqual(['aether', 'ley line'])
+    expect(loreStore.getById('br_1', 'lore_1')?.keywords).toEqual(['aether', 'ley line'])
     const [delta] = await db.select().from(deltas).where(eq(deltas.actionId, 'act_k'))
     expect(delta.undoPayload).toEqual({ keywords: ['aether', 'mana'] })
     expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)

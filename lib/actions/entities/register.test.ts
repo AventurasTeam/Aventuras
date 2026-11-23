@@ -64,8 +64,10 @@ describe('entities CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'char_1')).name).toBe('Kael')
-    expect(entitiesStore.getById('char_1')?.kind).toBe('character')
-    expect(entitiesStore.getById('char_1')?.state).toMatchObject({ visual: { attire: 'cloak' } })
+    expect(entitiesStore.getById('br_1', 'char_1')?.kind).toBe('character')
+    expect(entitiesStore.getById('br_1', 'char_1')?.state).toMatchObject({
+      visual: { attire: 'cloak' },
+    })
   })
 
   it('rejects an empty-set update (no updatable fields → no throw, no delta)', async () => {
@@ -145,7 +147,7 @@ describe('entities CRUD arms', () => {
       ctx,
     )
     expect((await rowFor(db, 'char_1')).name).toBe('Kael') // DB written
-    expect(entitiesStore.getById('char_1')).toBeUndefined() // store no-op
+    expect(entitiesStore.getById('br_2', 'char_1')).toBeUndefined() // store no-op
   })
 
   it('rejects an out-of-bounds state on create (no row, no delta)', async () => {
@@ -203,7 +205,7 @@ describe('entities CRUD arms', () => {
 
     // forward applied to DB + store
     expect((await rowFor(db, 'char_1')).name).toBe('Kaelin')
-    expect(entitiesStore.getById('char_1')?.state).toMatchObject({
+    expect(entitiesStore.getById('br_1', 'char_1')?.state).toMatchObject({
       visual: { attire: 'armor' },
       voice: 'gruff',
       current_location_id: null,
@@ -223,7 +225,7 @@ describe('entities CRUD arms', () => {
     expect((back.state as { stackables: Record<string, number> }).stackables).not.toHaveProperty(
       'arrows',
     )
-    expect(entitiesStore.getById('char_1')?.state).toMatchObject({
+    expect(entitiesStore.getById('br_1', 'char_1')?.state).toMatchObject({
       visual: { attire: 'cloak' },
       current_location_id: 'loc_1',
     })
@@ -252,11 +254,11 @@ describe('entities CRUD arms', () => {
       ctx,
     )
     expect(await rowFor(db, 'char_1')).toBeUndefined()
-    expect(entitiesStore.getById('char_1')).toBeUndefined()
+    expect(entitiesStore.getById('br_1', 'char_1')).toBeUndefined()
 
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'char_1')).name).toBe('Kael')
-    expect(entitiesStore.getById('char_1')?.name).toBe('Kael')
+    expect(entitiesStore.getById('br_1', 'char_1')?.name).toBe('Kael')
   })
 
   it('defaults embedding_stale to 1 on create', async () => {
@@ -371,7 +373,7 @@ describe('entities CRUD arms', () => {
     expect(row.priority).toBe(4)
     // keywords is not in KIND_FIELDS.entity: re-embedding on an alias edit is pure cost.
     expect(row.embeddingStale).toBe(0)
-    expect(entitiesStore.getById('char_1')?.keywords).toEqual(['the grey wolf'])
+    expect(entitiesStore.getById('br_1', 'char_1')?.keywords).toEqual(['the grey wolf'])
   })
 
   // user-precedence.ts reads an update's undo payload keys as the columns the user wrote.
@@ -655,7 +657,7 @@ describe('collision flag columns', () => {
   }
 
   function storeFlagColumns(id: string) {
-    const row = entitiesStore.getById(id)
+    const row = entitiesStore.getById('br_1', id)
     return [row?.nameCollisionFlag, row?.nameCollisionPartnerId, row?.nameCollisionReason]
   }
 
@@ -734,7 +736,7 @@ describe('collision flag columns', () => {
 
     expect(await rowFor(db, 'char_1')).toBeUndefined()
     expect(await db.select().from(deltas)).toHaveLength(0)
-    expect(entitiesStore.getById('char_1')).toBeUndefined()
+    expect(entitiesStore.getById('br_1', 'char_1')).toBeUndefined()
   })
 
   it('clears all three in one delta whose reversal re-flags, without dirtying the vector', async () => {

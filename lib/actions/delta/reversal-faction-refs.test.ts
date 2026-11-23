@@ -154,7 +154,7 @@ describe('a character names its faction', () => {
     await reverse(set)
     expect(await entityRow('fact_f')).toBeUndefined()
     expect(await factionOf('char_x')).toBeNull()
-    expect((entitiesStore.getById('char_x')?.state as CharacterState).faction_id).toBeNull()
+    expect((entitiesStore.getById('b1', 'char_x')?.state as CharacterState).faction_id).toBeNull()
     expect(labels(await deltasOf('act_pass'))).toEqual(['update entities:char_x'])
   })
 
@@ -321,7 +321,7 @@ describe('a reversal or redo never restores a dead id', () => {
 
     expect(await entityRow('fact_f')).toBeUndefined()
     expect(await factionOf('char_x')).toBeNull()
-    expect(entitiesStore.getById('char_x')).toEqual(await entityRow('char_x'))
+    expect(entitiesStore.getById('b1', 'char_x')).toEqual(await entityRow('char_x'))
   })
 
   it('writes null when a redo would restore a faction no row holds', async () => {
@@ -349,7 +349,7 @@ describe('a reversal or redo never restores a dead id', () => {
     await applyRedo(__redoGroupForTest([{ delta, rowBeforeUndo }]), ctx)
 
     expect(await factionOf('char_x')).toBeNull()
-    expect(entitiesStore.getById('char_x')).toEqual(await entityRow('char_x'))
+    expect(entitiesStore.getById('b1', 'char_x')).toEqual(await entityRow('char_x'))
   })
 
   it('writes null when a redo puts back a faction only a sweep had set', async () => {
@@ -375,6 +375,6 @@ describe('a reversal or redo never restores a dead id', () => {
     expect(await entityRow('fact_f')).toBeDefined()
     expect(await entityRow('fact_z')).toBeUndefined()
     expect(await factionOf('char_x')).toBeNull()
-    expect((entitiesStore.getById('char_x')?.state as CharacterState).faction_id).toBeNull()
+    expect((entitiesStore.getById('b1', 'char_x')?.state as CharacterState).faction_id).toBeNull()
   })
 })

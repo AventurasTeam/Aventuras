@@ -48,9 +48,9 @@ type Reading = { patched: StoreChapter | undefined; hydrated: StoreChapter | und
 // next step of the walk starts from patches alone.
 async function readBoth(fx: CloseFixture, chapterId: string): Promise<Reading> {
   const patchedRows = [...chaptersStore.getChapters().values()]
-  const patched = chaptersStore.getById(chapterId)
+  const patched = chaptersStore.getById(fx.branchId, chapterId)
   expect(await loadOpenStory(fx.branchId, fx.ctx)).toMatchObject({ status: 'ok' })
-  const hydrated = chaptersStore.getById(chapterId)
+  const hydrated = chaptersStore.getById(fx.branchId, chapterId)
   chaptersStore.hydrate(fx.branchId, patchedRows)
   return { patched, hydrated }
 }

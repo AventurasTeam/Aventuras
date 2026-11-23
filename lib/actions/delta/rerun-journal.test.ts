@@ -795,7 +795,7 @@ describe('rerunWriteBack', () => {
       entity: world.entities.find((row) => row.id === TOBIN.id)?.embeddingStale,
       thread: world.threads.find((row) => row.id === THREAD_KEPT.id)?.embeddingStale,
       happening: (await happeningRows(c.fx)).find((row) => row.id === TOLD.id)?.embeddingStale,
-      store: loreStore.getById(CLOSE_LORE_ID)?.embeddingStale,
+      store: loreStore.getById(c.fx.branchId, CLOSE_LORE_ID)?.embeddingStale,
     }).toEqual({ lore: 1, entity: 1, thread: 1, happening: 1, store: 1 })
     // No drain runs after the write-back: it would clear the flag this reads.
   })
@@ -804,7 +804,7 @@ describe('rerunWriteBack', () => {
     const c = await workedClose()
     await reverseForRerun(c)
     await rerunWritesWithMerge(c)
-    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
+    expect(happeningsStore.getById(c.fx.branchId, ASKED.id)).toBeUndefined()
     const patched = vi.spyOn(happeningsStore, 'patch')
 
     await reverseWithWriteBack(c.fx, RERUN)
@@ -812,8 +812,8 @@ describe('rerunWriteBack', () => {
     expect(
       patched.mock.calls.filter(([, patch]) => patch.id === ASKED.id).map(([, patch]) => patch.op),
     ).toEqual(['create', 'delete'])
-    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
-    expect(happeningsStore.getById(TOLD.id)?.description).toBe(MERGED_HAPPENING)
+    expect(happeningsStore.getById(c.fx.branchId, ASKED.id)).toBeUndefined()
+    expect(happeningsStore.getById(c.fx.branchId, TOLD.id)?.description).toBe(MERGED_HAPPENING)
   })
 
   it('undoes the close altogether when a delta outside the group sits above the floor', async () => {
@@ -1163,12 +1163,12 @@ describe('reverseRunGroup', () => {
     const c = await workedClose()
     await reverseForRerun(c)
     await rerunWritesWithMerge(c)
-    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
+    expect(happeningsStore.getById(c.fx.branchId, ASKED.id)).toBeUndefined()
 
     await reverseRunGroup({ actionId: RERUN, branchId: c.fx.branchId }, c.fx.ctx)
 
-    expect(happeningsStore.getById(ASKED.id)).toBeUndefined()
-    expect(happeningsStore.getById(TOLD.id)?.description).toBe(MERGED_HAPPENING)
+    expect(happeningsStore.getById(c.fx.branchId, ASKED.id)).toBeUndefined()
+    expect(happeningsStore.getById(c.fx.branchId, TOLD.id)?.description).toBe(MERGED_HAPPENING)
   })
 
   it('puts back the report of a close that changed nothing, aborted before its first write', async () => {

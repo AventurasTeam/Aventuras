@@ -157,8 +157,8 @@ describe('selectReversalSet — a place names its parent', () => {
     expect(await entityIds()).toEqual(['loc_docks', 'loc_pier', 'loc_quarter'])
     expect(await stateOf('loc_docks')).toEqual(UNPLACED)
     expect((await entityRow('loc_docks')).name).toBe('The Docks')
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual(UNPLACED)
-    expect(entitiesStore.getById('loc_varn')).toBeUndefined()
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(UNPLACED)
+    expect(entitiesStore.getById('b1', 'loc_varn')).toBeUndefined()
     expect(await parentOf('loc_pier')).toBe('loc_docks')
     expect(await parentOf('loc_fork')).toBe('loc_varn')
     expect(labels(await deltasOf('act_pass', 'act_rename'))).toEqual([
@@ -396,13 +396,15 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     await undo()
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter'])
     expect(await stateOf('loc_docks')).toEqual(UNPLACED)
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual(UNPLACED)
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(UNPLACED)
 
     await applyRedo(group, ctx)
     expect(await entityIds()).toEqual(['loc_docks', 'loc_quarter', 'loc_varn'])
     expect(await stateOf('loc_docks')).toEqual({ parent_location_id: 'loc_varn' })
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: 'loc_varn' })
-    expect(entitiesStore.getById('loc_varn')).toBeDefined()
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual({
+      parent_location_id: 'loc_varn',
+    })
+    expect(entitiesStore.getById('b1', 'loc_varn')).toBeDefined()
     expect(labels(await deltasOf('act_varn', 'act_pass'))).toEqual([
       'create entities:loc_docks',
       'create entities:loc_varn',
@@ -467,7 +469,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
 
     const restored = { parent_location_id: 'loc_varn', condition: 'flooded' }
     expect((await entityRow('loc_docks')).state).toEqual(restored)
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual(restored)
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(restored)
   })
 
   // A sweep's rows stay out of redo, so redo puts back the parent alone.
@@ -497,7 +499,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
 
     const redone = { parent_location_id: 'loc_varn', condition: 'dry' }
     expect((await entityRow('loc_docks')).state).toEqual(redone)
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual(redone)
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(redone)
   })
 
   it('keeps a child cleared through a parent only a sweep removed', async () => {
@@ -543,7 +545,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     await applyRedo(__redoGroupForTest([{ delta, rowBeforeUndo }]), ctx)
 
     expect(await stateOf('loc_quarter')).toEqual(UNPLACED)
-    expect(entitiesStore.getById('loc_quarter')?.state).toEqual(UNPLACED)
+    expect(entitiesStore.getById('b1', 'loc_quarter')?.state).toEqual(UNPLACED)
   })
 
   // Redo puts the field back as it stood before the undo: a top-level place stays top-level.
@@ -568,7 +570,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     await applyRedo(group, ctx)
 
     expect(await stateOf('loc_docks')).toEqual({ parent_location_id: null })
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual({ parent_location_id: null })
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual({ parent_location_id: null })
   })
 
   it('leaves a child unplaced when its redo would put back a parent only a sweep had set', async () => {
@@ -599,7 +601,7 @@ describe('redo of a CTRL-Z that cleared a parent', () => {
     expect(await entityRow('loc_varn')).toBeDefined()
     expect(await entityRow('loc_z')).toBeUndefined()
     expect(await stateOf('loc_docks')).toEqual(UNPLACED)
-    expect(entitiesStore.getById('loc_docks')?.state).toEqual(UNPLACED)
+    expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(UNPLACED)
   })
 
   it('refuses a CTRL-Z whose redo would restore the parent of a held child it clears', async () => {

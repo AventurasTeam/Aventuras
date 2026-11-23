@@ -233,7 +233,7 @@ describe('character_relationships upsert', () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(upsert('char_aria', 'char_kael', 'brother', 'act_1'), ctx)
     const [created] = await pairRow(db, 'char_aria', 'char_kael')
-    expect(characterRelationshipsStore.getById(created.id)?.kind).toBe('brother')
+    expect(characterRelationshipsStore.getById('br_1', created.id)?.kind).toBe('brother')
     await applyDeltaAction(
       {
         action: {
@@ -247,9 +247,9 @@ describe('character_relationships upsert', () => {
       ctx,
     )
     expect((await pairRow(db, 'char_aria', 'char_kael')).length).toBe(0)
-    expect(characterRelationshipsStore.getById(created.id)).toBeUndefined()
+    expect(characterRelationshipsStore.getById('br_1', created.id)).toBeUndefined()
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
-    expect(characterRelationshipsStore.getById(created.id)?.kind).toBe('brother')
+    expect(characterRelationshipsStore.getById('br_1', created.id)?.kind).toBe('brother')
   })
 
   // World's Save sends this in one group with the pane's other writes.
@@ -306,7 +306,7 @@ describe('both-perspective upsert (World relationship editor)', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ kind: 'brother', inverseKind: 'sister' })
     expect(await deltasFor(db, 'act_1')).toHaveLength(1)
-    expect(characterRelationshipsStore.getById(rows[0].id)).toMatchObject({
+    expect(characterRelationshipsStore.getById('br_1', rows[0].id)).toMatchObject({
       kind: 'brother',
       inverseKind: 'sister',
     })
@@ -335,7 +335,7 @@ describe('both-perspective upsert (World relationship editor)', () => {
     await applyDeltaAction(upsertBoth('char_aria', 'char_kael', 'rival', 'wary', 'act_2'), ctx)
     const [updated] = await pairRow(db, 'char_aria', 'char_kael')
     expect(updated).toMatchObject({ kind: 'rival', inverseKind: 'wary' })
-    expect(characterRelationshipsStore.getById(updated.id)).toMatchObject({
+    expect(characterRelationshipsStore.getById('br_1', updated.id)).toMatchObject({
       kind: 'rival',
       inverseKind: 'wary',
     })
@@ -344,7 +344,7 @@ describe('both-perspective upsert (World relationship editor)', () => {
     expect(await reverseReplayDeltas('act_2', ctx)).toBe(1)
     const [reverted] = await pairRow(db, 'char_aria', 'char_kael')
     expect(reverted).toMatchObject({ kind: 'brother', inverseKind: null })
-    expect(characterRelationshipsStore.getById(reverted.id)).toMatchObject({
+    expect(characterRelationshipsStore.getById('br_1', reverted.id)).toMatchObject({
       kind: 'brother',
       inverseKind: null,
     })
@@ -356,7 +356,7 @@ describe('both-perspective upsert (World relationship editor)', () => {
     await applyDeltaAction(upsertBoth('char_aria', 'char_kael', 'brother', null, 'act_2'), ctx)
     const [cleared] = await pairRow(db, 'char_aria', 'char_kael')
     expect(cleared).toMatchObject({ kind: 'brother', inverseKind: null })
-    expect(characterRelationshipsStore.getById(cleared.id)).toMatchObject({
+    expect(characterRelationshipsStore.getById('br_1', cleared.id)).toMatchObject({
       kind: 'brother',
       inverseKind: null,
     })

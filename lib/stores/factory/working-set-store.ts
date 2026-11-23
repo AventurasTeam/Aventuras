@@ -13,11 +13,7 @@ export type RowsGetter<Row> = {
   /** @deprecated Unscoped read: name the branch. */
   (): ReadonlyMap<string, Row>
 }
-export type ByIdGetter<Row> = {
-  (branchId: string | null, id: string): Row | undefined
-  /** @deprecated Unscoped read: name the branch. */
-  (id: string): Row | undefined
-}
+export type ByIdGetter<Row> = (branchId: string | null, id: string) => Row | undefined
 
 export type WorkingSetStore<Row extends { id: string }> = {
   /**
@@ -102,12 +98,8 @@ export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetS
     return args.length === 0 ? s.rows : rowsOf(s, args[0])
   }
 
-  function getById(branchId: string | null, id: string): Row | undefined
-  function getById(id: string): Row | undefined
-  function getById(...args: [string] | [string | null, string]): Row | undefined {
-    const s = store.getState()
-    return args.length === 2 ? rowsOf(s, args[0]).get(args[1]) : s.rows.get(args[0])
-  }
+  const getById = (branchId: string | null, id: string): Row | undefined =>
+    rowsOf(store.getState(), branchId).get(id)
 
   const useById = (branchId: string | null, id: string): Row | undefined =>
     useStore(store, (s) => rowsOf(s, branchId).get(id))

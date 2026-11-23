@@ -841,8 +841,8 @@ describe('reverse-replay and embedding_stale', () => {
     // Neither link table is embeddable, so the child arm must leave them alone.
     // Compared against the DB row, not key-wise: drizzle drops unknown keys silently,
     // so an ungated flag surfaces only as store/DB drift.
-    expect(happeningInvolvementsStore.getById('inv_1')).toEqual(involvements[0])
-    expect(happeningAwarenessStore.getById('haw_1')).toEqual(awareness[0])
+    expect(happeningInvolvementsStore.getById('b1', 'inv_1')).toEqual(involvements[0])
+    expect(happeningAwarenessStore.getById('b1', 'haw_1')).toEqual(awareness[0])
   })
 })
 

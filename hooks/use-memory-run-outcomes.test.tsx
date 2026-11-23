@@ -696,7 +696,7 @@ describe('useMemoryRunOutcomes', () => {
       const storeHadReport: (boolean | undefined)[] = []
       const show = chapterOverlaysStore.showCloseResult
       vi.spyOn(chapterOverlaysStore, 'showCloseResult').mockImplementation((result) => {
-        storeHadReport.push(chaptersStore.getById(result.chapterId)?.hasCloseReport)
+        storeHadReport.push(chaptersStore.getById(fx.branchId, result.chapterId)?.hasCloseReport)
         show(result)
       })
       render(<Probe />)
@@ -718,7 +718,7 @@ describe('useMemoryRunOutcomes', () => {
         }),
       )
       expect(storeHadReport).toEqual([true])
-      expect(chaptersStore.getById(chapterId)?.hasCloseReport).toBe(true)
+      expect(chaptersStore.getById(fx.branchId, chapterId)?.hasCloseReport).toBe(true)
     })
   })
 
