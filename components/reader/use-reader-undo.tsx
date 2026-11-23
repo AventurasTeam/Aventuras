@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 
 import { chapterImpactLines } from '@/components/chapters/chapter-impact-lines'
 import {
@@ -65,6 +65,10 @@ const CLOSE_KINDS: ReadonlySet<UndoDescription['kind']> = new Set(['close', 'rer
 
 function redoNames(group: RedoGroup, branchId: string): UndoNames {
   return undoNames(firstRowOf(liveRowsOf(branchId), snapshotRowsOf(group.snapshots)))
+}
+
+function redoMenuLabel(group: RedoGroup): string {
+  return undoTargetText(describeRedoTarget(group), redoNames(group, group.branchId), 'redoMenu')
 }
 
 function rowLines(target: Target, branchId: string): string[] {
@@ -137,6 +141,8 @@ export function useReaderUndo({
   confirm: JSX.Element | null
 } {
   const [menuTarget, setMenuTarget] = useState<Target | null>(null)
+  // Redo's names read live rows no hook here subscribes to, so each menu open labels it afresh.
+  const [openedRedo, setOpenedRedo] = useState<{ group: RedoGroup; label: string } | null>(null)
   const menuTargetRef = useRef<Target | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const busyRef = useRef(false)
@@ -363,6 +369,8 @@ export function useReaderUndo({
       const seq = ++resolveSeqRef.current
       showMenuTarget(null)
       if (!open) return
+      const top = undoRedoStore.peekRedoGroup(branchId)
+      setOpenedRedo(top == null ? null : { group: top, label: redoMenuLabel(top) })
       resolve().then(
         (target) => {
           if (resolveSeqRef.current === seq) showMenuTarget(target)
@@ -378,13 +386,12 @@ export function useReaderUndo({
   )
 
   const redoTop = undoRedoStore.useRedoTop(branchId)
-  const redoLabel = useMemo(
-    () =>
-      redoTop == null
-        ? null
-        : undoTargetText(describeRedoTarget(redoTop), redoNames(redoTop, branchId), 'redoMenu'),
-    [redoTop, branchId],
-  )
+  const redoLabel =
+    redoTop == null
+      ? null
+      : redoTop === openedRedo?.group
+        ? openedRedo.label
+        : redoMenuLabel(redoTop)
   const undoLabel =
     menuTarget == null
       ? t('reader:actions.undo')

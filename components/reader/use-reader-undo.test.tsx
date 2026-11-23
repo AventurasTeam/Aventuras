@@ -446,6 +446,73 @@ describe('useReaderUndo — one redo stack per branch', () => {
   })
 })
 
+describe('useReaderUndo — the Redo label reads the rows as the menu opens', () => {
+  // A delete's undo re-creates its row, so the snapshot holds none: only the live row names it.
+  const deleteGroup = () =>
+    __redoGroupForTest(
+      'b1',
+      LORE_SAVE.deltas.map((d) => ({ delta: d, rowBeforeUndo: null })),
+      LORE_SAVE.actionId,
+    )
+
+  async function openMenu(r: ReturnType<typeof render>) {
+    act(() => r.result.current.onMenuOpenChange(true))
+    await settle()
+  }
+
+  beforeEach(() => actions.readUndoTarget.mockResolvedValue(null))
+
+  it('names the row once the stores load the branch after the reader mounted', async () => {
+    undoRedoStore.pushRedoGroup(deleteGroup())
+    // Another story's branch is still held when the reader mounts on b1.
+    loreStore.hydrate('b_other', [makeLore({ id: 'lore_x', title: 'Elsewhere' })])
+    const r = render()
+    expect(r.result.current.redoLabel).toBe('Redo the latest change')
+
+    act(() => loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })]))
+    await openMenu(r)
+
+    expect(r.result.current.redoLabel).toBe('Redo deleting The toll')
+  })
+
+  it('names the row as it reads at each open, renamed since the last', async () => {
+    loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
+    undoRedoStore.pushRedoGroup(deleteGroup())
+    const r = render()
+    await openMenu(r)
+    expect(r.result.current.redoLabel).toBe('Redo deleting The toll')
+    act(() => r.result.current.onMenuOpenChange(false))
+
+    act(() =>
+      loreStore.patch('b1', { op: 'update', id: 'lore_1', columns: { title: 'The bridge' } }),
+    )
+    await openMenu(r)
+
+    expect(r.result.current.redoLabel).toBe('Redo deleting The bridge')
+  })
+
+  it('follows the stack top after an open, and has none once the stack empties', async () => {
+    loreStore.hydrate('b1', [makeLore({ id: 'lore_1', title: 'The toll' })])
+    undoRedoStore.pushRedoGroup(deleteGroup())
+    const r = render()
+    await openMenu(r)
+
+    act(() =>
+      undoRedoStore.pushRedoGroup(
+        __redoGroupForTest(
+          'b1',
+          [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+          'act_turn',
+        ),
+      ),
+    )
+    expect(r.result.current.redoLabel).toBe('Redo the turn at entry #2')
+
+    act(() => undoRedoStore.clear('b1'))
+    expect(r.result.current.redoLabel).toBeNull()
+  })
+})
+
 describe('useReaderUndo — review fixes', () => {
   function deferred<T>() {
     let resolve!: (value: T) => void
