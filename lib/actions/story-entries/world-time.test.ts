@@ -120,8 +120,7 @@ describe('updateEntryWorldTime', () => {
     expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
     expect(entriesStore.getEntries('b1').get('e2')?.metadata?.worldTime).toBe(45)
     expect(entriesStore.getEntries('b1').get('e1')?.metadata?.worldTime).toBe(60)
-    // Contrast with the suppression test below: a real write clears the branch's
-    // redo stack, which is why suppressing a no-op write matters.
+    // A real write clears the branch's redo stack; contrast the suppression test below.
     expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 

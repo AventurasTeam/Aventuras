@@ -125,8 +125,7 @@ const CLOSE_UNDONE: UndoResult = { status: 'ok', closeUndone: { chapterNumber: 3
 
 let toasts: ToastItem[] = []
 
-// An undo that lands pushes the redo group it took onto its branch's stack, as undoLastAction
-// does: the target's rows as they stood before it.
+// An undo that lands pushes its redo group onto its branch's stack, as undoLastAction does.
 function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> | null = null) {
   actions.undoLastAction.mockImplementation(async (branchId) => {
     const snapshots = read.deltas.map((d) => ({ delta: d, rowBeforeUndo }))

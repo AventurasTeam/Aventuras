@@ -343,9 +343,8 @@ async function applyRedoLocked(
     // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
     if (restored) restoredDeltas.push(delta)
   }
-  // At its own position: every delta-logged write clears its branch's redo stack, so nothing has
-  // logged into the slot the undo freed, and log order stays write order
-  // (data-model.md -> Entry mutability & rollback).
+  // At its own position: every delta-logged write clears its branch's redo stack, so nothing
+  // logged into the freed slot and log order stays write order (data-model.md → Entry mutability).
   const deltaOps = restoredDeltas.map((delta) => ctx.db.insert(deltas).values(delta).toSQL())
   // The survivors sit on snapshot rows, so the row locks above cover them.
   for (const { id, branchId, undoPayload } of survivorPayloads)
