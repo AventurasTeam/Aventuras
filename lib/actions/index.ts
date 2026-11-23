@@ -119,6 +119,16 @@ export {
   declineEmbeddingUpgrade,
   type DeclineEmbeddingUpgradeFn,
 } from './stories/embedding-upgrade'
+export {
+  FORK_REFUSAL,
+  forkBranch,
+  forkBranchCore,
+  type ForkBranchCoreInput,
+  type ForkBranchInput,
+  type ForkRefusal,
+  type ForkRefusalCode,
+  type ForkResult,
+} from './stories/fork-branch'
 export { resetStorySettings } from './stories/reset-settings'
 export {
   LEAD_REJECTION,
