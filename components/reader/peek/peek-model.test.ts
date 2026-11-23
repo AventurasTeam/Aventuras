@@ -200,18 +200,16 @@ describe('peekModelOf', () => {
     })
   })
 
-  it('counts a happening’s involvement and awareness rows on this branch only', () => {
+  it('counts a happening’s involvement and awareness rows', () => {
     const links: PeekLinks = {
       involvements: byId([
         involvement('inv_1', 'h_ambush'),
         involvement('inv_2', 'h_ambush'),
         involvement('inv_3', 'h_ambush'),
-        involvement('inv_4', 'h_ambush', 'br_2'),
         involvement('inv_5', 'h_pact'),
       ]),
       awareness: byId([
         awareness('aw_1', 'h_ambush'),
-        awareness('aw_2', 'h_ambush', 'br_2'),
         awareness('aw_3', 'h_pact'),
         awareness('aw_4', 'h_pact'),
       ]),

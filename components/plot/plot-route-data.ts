@@ -14,22 +14,18 @@ export function distinctCategories(rows: readonly { category: string | null }[])
 const NO_LINKS: HappeningLinks = { involvements: [], awareness: [] }
 
 /**
- * A happening's committed link rows. No happening (a thread, create mode, nothing selected)
- * returns one shared empty value, so the pane's draft baseline keeps its identity.
+ * A happening's committed link rows, from one branch's link reads. No happening (a thread, create
+ * mode, nothing selected) returns one shared empty value, so the pane's draft baseline keeps its
+ * identity.
  */
 export function happeningLinksFor(
   happeningId: string | null,
-  branchId: string,
-  involvements: ReadonlyMap<string, HappeningInvolvement>,
-  awareness: ReadonlyMap<string, HappeningAwareness>,
+  branchInvolvements: ReadonlyMap<string, HappeningInvolvement>,
+  branchAwareness: ReadonlyMap<string, HappeningAwareness>,
 ): HappeningLinks {
   if (happeningId == null) return NO_LINKS
   return {
-    involvements: [...involvements.values()].filter(
-      (l) => l.branchId === branchId && l.happeningId === happeningId,
-    ),
-    awareness: [...awareness.values()].filter(
-      (l) => l.branchId === branchId && l.happeningId === happeningId,
-    ),
+    involvements: [...branchInvolvements.values()].filter((l) => l.happeningId === happeningId),
+    awareness: [...branchAwareness.values()].filter((l) => l.happeningId === happeningId),
   }
 }

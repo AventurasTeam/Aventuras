@@ -42,13 +42,10 @@ function mount(ctx: DbCtx, initialBranch = BRANCH) {
   const commits: Commit[] = []
   const hook = renderHook(
     ({ branchId }) => {
-      const rows = entriesStore.useEntries((m) => m)
+      const rows = entriesStore.useEntries(branchId, (m) => m)
       const entries = useMemo(
-        () =>
-          [...rows.values()]
-            .filter((entry) => entry.branchId === branchId)
-            .sort((a, b) => a.position - b.position),
-        [rows, branchId],
+        () => [...rows.values()].sort((a, b) => a.position - b.position),
+        [rows],
       )
       const slice = useReaderSlice(branchId, entries, ctx.db)
       useLayoutEffect(() => {

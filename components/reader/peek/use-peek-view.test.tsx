@@ -8,12 +8,22 @@ import type { RailData } from '@/components/reader/rail/use-rail-data'
 import { EntryIndexReadProvider } from '@/hooks/use-entry-index'
 import { createQueryClient } from '@/lib/cache'
 import { DEFAULT_CALENDAR_ID, EARTH_GREGORIAN } from '@/lib/calendar'
-import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type StoryEntry } from '@/lib/db'
+import {
+  STORY_SETTINGS_DEFAULTS,
+  storyDefinitionSchema,
+  type Happening,
+  type StoryEntry,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { EntryRef } from '@/lib/entry-refs'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import type { RailPeek } from '@/lib/reader-rail'
-import { currentStoryStore, entriesStore, resetAllStores } from '@/lib/stores'
+import {
+  currentStoryStore,
+  entriesStore,
+  happeningInvolvementsStore,
+  resetAllStores,
+} from '@/lib/stores'
 
 import { usePeekView } from './use-peek-view'
 
@@ -92,6 +102,23 @@ function entry(
   }
 }
 
+function happening(id: string): Happening {
+  return {
+    id,
+    branchId: 'br_1',
+    title: id,
+    description: null,
+    category: null,
+    icon: null,
+    temporal: null,
+    occurredAtEntryId: null,
+    commonKnowledge: 0,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+}
+
 beforeEach(() => {
   resetAllStores()
   read.mockReset()
@@ -163,5 +190,18 @@ describe('usePeekView', () => {
     openStory('br_1', 'other-calendar')
     const { result } = renderPeek(null)
     expect(result.current.entityContext.calendar.id).toBe('other-calendar')
+  })
+
+  it("counts a happening's links on the rail's branch, none from another branch loaded", async () => {
+    const data: RailData = { ...DATA, happenings: [happening('h_ambush')] }
+    const peek: RailPeek = { category: 'happening', id: 'h_ambush' }
+    const link = { id: 'hi_1', happeningId: 'h_ambush', entityId: 'char_kael', role: null }
+    happeningInvolvementsStore.hydrate('br_2', [{ ...link, branchId: 'br_2' }])
+    const { result } = renderHook(() => usePeekView(peek, data), { wrapper })
+    expect(result.current.model).toMatchObject({ kind: 'happening', involved: 0 })
+
+    act(() => happeningInvolvementsStore.hydrate('br_1', [{ ...link, branchId: 'br_1' }]))
+    expect(result.current.model).toMatchObject({ kind: 'happening', involved: 1 })
+    await waitFor(() => expect(result.current.entryIndex.state).toBe('ready'))
   })
 })

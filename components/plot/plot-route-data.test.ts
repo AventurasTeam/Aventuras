@@ -45,26 +45,18 @@ describe('distinctCategories', () => {
 })
 
 describe('happeningLinksFor', () => {
-  const involvements = byId([
-    involvement('inv_1', 'hap_1'),
-    involvement('inv_2', 'hap_2'),
-    involvement('inv_3', 'hap_1', 'br_other'),
-  ])
-  const aware = byId([
-    awareness('aw_1', 'hap_1'),
-    awareness('aw_2', 'hap_2'),
-    awareness('aw_3', 'hap_1', 'br_other'),
-  ])
+  const involvements = byId([involvement('inv_1', 'hap_1'), involvement('inv_2', 'hap_2')])
+  const aware = byId([awareness('aw_1', 'hap_1'), awareness('aw_2', 'hap_2')])
 
-  it("returns only the happening's rows on the branch", () => {
-    const links = happeningLinksFor('hap_1', 'br_1', involvements, aware)
+  it("returns only the happening's rows", () => {
+    const links = happeningLinksFor('hap_1', involvements, aware)
     expect(links.involvements.map((l) => l.id)).toEqual(['inv_1'])
     expect(links.awareness.map((l) => l.id)).toEqual(['aw_1'])
   })
 
   it('returns one shared empty value when no happening is selected', () => {
-    const first = happeningLinksFor(null, 'br_1', involvements, aware)
+    const first = happeningLinksFor(null, involvements, aware)
     expect(first).toEqual({ involvements: [], awareness: [] })
-    expect(happeningLinksFor(null, 'br_2', new Map(), new Map())).toBe(first)
+    expect(happeningLinksFor(null, new Map(), new Map())).toBe(first)
   })
 })

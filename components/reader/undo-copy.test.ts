@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { Delta } from '@/lib/db'
-import { entriesStore } from '@/lib/stores'
+import type { Delta, StoryEntry } from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
+import { entitiesStore, entriesStore, resetAllStores } from '@/lib/stores'
 import type { UndoDescription } from '@/lib/undo'
 
 import {
   deletedRowsOf,
   firstRowOf,
+  liveRowsOf,
   snapshotRowsOf,
   undoConfirmRows,
   undoConfirmTitle,
@@ -16,7 +18,9 @@ import {
   type UndoRowSource,
 } from './undo-copy'
 
-afterEach(() => entriesStore.__reset())
+afterEach(() => {
+  resetAllStores()
+})
 
 const NAMES: UndoNames = {
   entryRef: (id) => (id === 'e4' ? 'entry #4' : null),
@@ -120,6 +124,18 @@ const ROWS: Record<string, Record<string, unknown>> = {
 }
 const rows: UndoRowSource = ({ table, id }) => ROWS[`${table}:${id}`]
 
+const LOADED_ENTRY: StoryEntry = {
+  id: 'e_loaded',
+  branchId: 'b1',
+  position: 7,
+  kind: 'ai_reply',
+  content: 'x',
+  contentTokens: null,
+  chapterId: null,
+  metadata: null,
+  createdAt: 1,
+}
+
 describe('undoNames', () => {
   it("names a row History's way, a chapter by number and a link by its entity end", () => {
     const names = undoNames(rows)
@@ -138,21 +154,9 @@ describe('undoNames', () => {
   })
 
   it('reads an entry number from the read positions, then the loaded window, then the row', () => {
-    entriesStore.hydrate('b1', [
-      {
-        id: 'e_loaded',
-        branchId: 'b1',
-        position: 7,
-        kind: 'ai_reply',
-        content: 'x',
-        contentTokens: null,
-        chapterId: null,
-        metadata: null,
-        createdAt: 1,
-      },
-    ])
+    entriesStore.hydrate('b1', [LOADED_ENTRY])
     const names = undoNames(
-      firstRowOf(rows, ({ table, id }) =>
+      firstRowOf(liveRowsOf('b1'), rows, ({ table, id }) =>
         table === 'story_entries' && id === 'e_gone' ? { position: 9 } : undefined,
       ),
       { e_read: 4 },
@@ -161,6 +165,19 @@ describe('undoNames', () => {
     expect(names.entryRef('e_loaded')).toBe('entry #7')
     expect(names.entryRef('e_gone')).toBe('entry #9')
     expect(names.entryRef('e_nowhere')).toBeNull()
+  })
+
+  it('reads the working set of its own branch only', () => {
+    entriesStore.hydrate('b1', [LOADED_ENTRY])
+    entitiesStore.hydrate('b1', [
+      makeEntity({ id: 'ent_live', kind: 'character', name: 'Pell', branchId: 'b1' }),
+    ])
+    const own = undoNames(liveRowsOf('b1'))
+    expect(own.entryRef('e_loaded')).toBe('entry #7')
+    expect(own.rowName({ table: 'entities', id: 'ent_live' })).toBe('Pell')
+    const other = undoNames(liveRowsOf('b2'))
+    expect(other.entryRef('e_loaded')).toBeNull()
+    expect(other.rowName({ table: 'entities', id: 'ent_live' })).toBeNull()
   })
 
   it('reads a row a redo brings back, and its entry number, from the snapshot', () => {

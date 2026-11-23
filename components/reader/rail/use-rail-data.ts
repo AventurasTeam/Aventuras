@@ -52,32 +52,16 @@ export function railChipTintOf(data: RailData): RecentlyClassified | undefined {
  */
 export function useRailData(branchId: string): RailData {
   // Raw maps are stable between patches; arrays via useMemo.
-  const entityRows = entitiesStore.useEntities((m) => m)
-  const entities = useMemo(
-    () => [...entityRows.values()].filter((e) => e.branchId === branchId),
-    [entityRows, branchId],
-  )
-  const loreRows = loreStore.useLore((m) => m)
-  const lore = useMemo(
-    () => [...loreRows.values()].filter((l) => l.branchId === branchId),
-    [loreRows, branchId],
-  )
-  const threadRows = threadsStore.useThreads((m) => m)
-  const threads = useMemo(
-    () => [...threadRows.values()].filter((r) => r.branchId === branchId),
-    [threadRows, branchId],
-  )
-  const happeningRows = happeningsStore.useHappenings((m) => m)
-  const happenings = useMemo(
-    () => [...happeningRows.values()].filter((r) => r.branchId === branchId),
-    [happeningRows, branchId],
-  )
-  const chapterRows = chaptersStore.useChapters((m) => m)
+  const entityRows = entitiesStore.useEntities(branchId, (m) => m)
+  const entities = useMemo(() => [...entityRows.values()], [entityRows])
+  const loreRows = loreStore.useLore(branchId, (m) => m)
+  const lore = useMemo(() => [...loreRows.values()], [loreRows])
+  const threadRows = threadsStore.useThreads(branchId, (m) => m)
+  const threads = useMemo(() => [...threadRows.values()], [threadRows])
+  const happeningRows = happeningsStore.useHappenings(branchId, (m) => m)
+  const happenings = useMemo(() => [...happeningRows.values()], [happeningRows])
   // The chapters store holds closed chapters only; the open region has no row.
-  const hasClosedChapters = useMemo(
-    () => [...chapterRows.values()].some((c) => c.branchId === branchId),
-    [chapterRows, branchId],
-  )
+  const hasClosedChapters = chaptersStore.useChapters(branchId, (m) => m.size > 0)
   const { inScene, recentlyClassified } = useRowSignals(branchId)
   const rowTints = recentlyClassified.rows
   const byCategory = recentlyClassified.byCategory

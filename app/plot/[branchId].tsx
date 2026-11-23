@@ -138,8 +138,8 @@ export default function PlotRoute() {
 
   const selectedHappeningId = selection?.type === 'happening' ? selection.row.id : null
   const links = useMemo(
-    () => happeningLinksFor(selectedHappeningId, branchId, involvementRows, awarenessRows),
-    [selectedHappeningId, branchId, involvementRows, awarenessRows],
+    () => happeningLinksFor(selectedHappeningId, involvementRows, awarenessRows),
+    [selectedHappeningId, involvementRows, awarenessRows],
   )
 
   const { activeRunKind, editBlocked, gateReason, beforeTurn, cancelPillRun } =

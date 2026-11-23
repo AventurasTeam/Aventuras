@@ -261,38 +261,24 @@ describe('armSettledText', () => {
 })
 
 describe('latestReplyOf', () => {
-  const row = (id: string, branchId: string, kind: string, position: number) => ({
-    id,
-    branchId,
-    kind,
-    position,
-  })
+  const row = (id: string, kind: string, position: number) => ({ id, kind, position })
 
-  it("picks the branch's reply at the highest position, whatever the store's order", () => {
-    const rows = [
-      row('r2', 'b1', 'ai_reply', 4),
-      row('r3', 'b1', 'ai_reply', 6),
-      row('r1', 'b1', 'ai_reply', 2),
-    ]
-    expect(latestReplyOf(rows, 'b1')?.id).toBe('r3')
-  })
-
-  it("skips another branch's later reply", () => {
-    const rows = [row('mine', 'b1', 'ai_reply', 4), row('theirs', 'b2', 'ai_reply', 9)]
-    expect(latestReplyOf(rows, 'b1')?.id).toBe('mine')
+  it("picks the reply at the highest position, whatever the store's order", () => {
+    const rows = [row('r2', 'ai_reply', 4), row('r3', 'ai_reply', 6), row('r1', 'ai_reply', 2)]
+    expect(latestReplyOf(rows)?.id).toBe('r3')
   })
 
   it('skips later entries that are not replies', () => {
     const rows = [
-      row('reply', 'b1', 'ai_reply', 4),
-      row('action', 'b1', 'user_action', 5),
-      row('failure', 'b1', 'system', 6),
+      row('reply', 'ai_reply', 4),
+      row('action', 'user_action', 5),
+      row('failure', 'system', 6),
     ]
-    expect(latestReplyOf(rows, 'b1')?.id).toBe('reply')
+    expect(latestReplyOf(rows)?.id).toBe('reply')
   })
 
-  it('finds nothing on a branch without a reply', () => {
-    expect(latestReplyOf([row('opening', 'b1', 'opening', 1)], 'b1')).toBeUndefined()
+  it('finds nothing without a reply', () => {
+    expect(latestReplyOf([row('opening', 'opening', 1)])).toBeUndefined()
   })
 })
 
