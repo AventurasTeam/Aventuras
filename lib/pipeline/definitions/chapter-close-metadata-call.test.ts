@@ -401,6 +401,20 @@ describe('readMetadataInputs', () => {
     expect(readMetadataInputs(phaseCtx())).toMatchObject({ previousChapterSummary: null })
   })
 
+  it('reads no summary or thread from stores loaded for another branch', () => {
+    chaptersStore.hydrate('b2', [
+      { ...chapter(1, 'On another branch the keep never fell.'), id: 'chap_b2', branchId: 'b2' },
+    ])
+    threadsStore.hydrate('b2', [
+      { ...thread('thr_b2', 'Rebuild the keep', 'active'), branchId: 'b2' },
+    ])
+
+    const inputs = readMetadataInputs(phaseCtx())
+
+    expect(inputs).toHaveProperty('previousChapterSummary', null)
+    expect(inputs).toHaveProperty('threads', [])
+  })
+
   it.each([
     { name: 'no story is open', unload: () => currentStoryStore.clear() },
     { name: 'the stores hold another branch', unload: () => entitiesStore.hydrate('b2', []) },
