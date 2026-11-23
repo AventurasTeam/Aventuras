@@ -92,11 +92,11 @@ describe('renameBranch', () => {
       await renameBranch({ storyId: 'story_1', branchId: 'br_fork', name: 'The trap' }, ctx),
     ).toEqual({ status: 'ok' })
 
-    expect(await nameOf(db, 'br_fork')).toBe('The trap')
     expect(branchesStore.getBranches('story_1').map(({ id, name }) => ({ id, name }))).toEqual([
       { id: 'br_main', name: 'Main' },
       { id: 'br_fork', name: 'The trap' },
     ])
+    expect(await nameOf(db, 'br_fork')).toBe('The trap')
   })
 
   it('stores the name trimmed at its ends, keeping inner whitespace', async () => {
