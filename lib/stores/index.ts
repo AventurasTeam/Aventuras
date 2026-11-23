@@ -1,5 +1,6 @@
 import { appSettingsStore, hydrateAppSettings } from './app-settings/app-settings'
 import { rehydrateAppSettings } from './app-settings/app-settings-read'
+import { branchesStore } from './branches/branches'
 import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
 import { currentStoryStore } from './current-story/current-story'
@@ -33,6 +34,7 @@ import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
+  branchesStore.__reset()
   chaptersStore.__reset()
   characterRelationshipsStore.__reset()
   currentStoryStore.__reset()
@@ -100,6 +102,12 @@ export {
 
 export { closeReportFields } from './chapters/chapter-store-projection'
 export { createWorkingSetStore } from './factory/working-set-store'
+export {
+  branchesStore,
+  readStoryBranches,
+  refreshBranches,
+  type BranchRow,
+} from './branches/branches'
 
 export { openEmbedderSwapDialog } from './ui/embedder-swap'
 
