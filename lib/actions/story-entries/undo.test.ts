@@ -354,7 +354,7 @@ describe('undoLastAction / redoLastAction', () => {
     expect(undoRedoStore.hasRedo('b1')).toBe(false)
   })
 
-  it("keeps a branch's redo through another branch's refusal and committed write", async () => {
+  it("keeps each branch's redo through the other's refusal, committed write and redo", async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
@@ -395,11 +395,15 @@ describe('undoLastAction / redoLastAction', () => {
     )
     expect(write.status).toBe('ok')
     expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+    // Pushed after b2's write, whose clear would take it.
+    const b2Group = __redoGroupForTest('b2')
+    undoRedoStore.pushRedoGroup(b2Group)
 
     entriesStore.hydrate('b1', [OPENING_ROW])
     expect(await redoLastAction('b1', ctx)).toEqual({ status: 'ok' })
     expect(entriesStore.getById('b1', 'e_turn')).toBeDefined()
     expect(undoRedoStore.hasRedo('b1')).toBe(false)
+    expect(undoRedoStore.peekRedoGroup('b2')).toBe(b2Group)
   })
 
   it('refuses integrity for a group on its stack whose snapshots name another branch', async () => {
@@ -453,6 +457,25 @@ describe('undoLastAction / redoLastAction', () => {
     expect(await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).toHaveLength(1)
     expect(undoRedoStore.hasRedo('b1')).toBe(false)
     expect(undoRedoStore.peekRedoGroup('b2')).toBe(elsewhere)
+  })
+
+  it('keeps the deeper group when a redo commits and only its store sync throws', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    const deeper = __redoGroupForTest('b1', [], 'act_deeper')
+    undoRedoStore.pushRedoGroup(deeper)
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+    vi.spyOn(entriesStore, 'patch').mockImplementation(() => {
+      throw new Error('store sync boom')
+    })
+
+    await expect(redoLastAction('b1', ctx)).rejects.toBeInstanceOf(DeltaReplayError)
+
+    expect(await db.select().from(deltas).where(eq(deltas.id, 'd_turn'))).toHaveLength(1)
+    expect(undoRedoStore.peekRedoGroup('b1')).toBe(deeper)
   })
 
   it('preserves the redo snapshot when reversal commits but post-commit store sync fails', async () => {
