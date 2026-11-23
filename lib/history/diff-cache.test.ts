@@ -311,6 +311,25 @@ describe('createDiffCache', () => {
       await Promise.all(repopulated)
       expect(walk).toHaveBeenCalledTimes(2)
     })
+
+    it('drops a remembered failure before telling listeners, so a listener walks again', async () => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
+      const walk = vi
+        .fn<DiffWalk>()
+        .mockRejectedValueOnce(new Error('SQLITE_BUSY'))
+        .mockResolvedValueOnce(resultOf(FRESH))
+      const cache = createDiffCache({ walk })
+      await expect(cache.populate(delta('dl_1'))).rejects.toThrow('SQLITE_BUSY')
+      const repopulated: Promise<unknown>[] = []
+      cache.onEvict(() => {
+        repopulated.push(cache.populate(delta('dl_1')))
+      })
+
+      cache.evictBranch('br_b')
+
+      await expect(repopulated[0]).resolves.toEqual({ kind: 'entry', entry: FRESH })
+      expect(walk).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('gone and failed walks', () => {
