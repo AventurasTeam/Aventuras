@@ -57,14 +57,14 @@ function happening(id: string, title: string): Happening {
   }
 }
 
-function involvement(id: string, happeningId: string, branchId = BRANCH): HappeningInvolvement {
-  return { id, branchId, happeningId, entityId: 'char_kael', role: null }
+function involvement(id: string, happeningId: string): HappeningInvolvement {
+  return { id, branchId: BRANCH, happeningId, entityId: 'char_kael', role: null }
 }
 
-function awareness(id: string, happeningId: string, branchId = BRANCH): HappeningAwareness {
+function awareness(id: string, happeningId: string): HappeningAwareness {
   return {
     id,
-    branchId,
+    branchId: BRANCH,
     happeningId,
     characterId: 'char_kael',
     learnedAtEntryId: null,

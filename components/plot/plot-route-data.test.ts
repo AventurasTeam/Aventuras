@@ -4,14 +4,14 @@ import type { HappeningAwareness, HappeningInvolvement } from '@/lib/db'
 
 import { distinctCategories, happeningLinksFor } from './plot-route-data'
 
-function involvement(id: string, happeningId: string, branchId = 'br_1'): HappeningInvolvement {
-  return { id, branchId, happeningId, entityId: 'char_1', role: null }
+function involvement(id: string, happeningId: string): HappeningInvolvement {
+  return { id, branchId: 'br_1', happeningId, entityId: 'char_1', role: null }
 }
 
-function awareness(id: string, happeningId: string, branchId = 'br_1'): HappeningAwareness {
+function awareness(id: string, happeningId: string): HappeningAwareness {
   return {
     id,
-    branchId,
+    branchId: 'br_1',
     happeningId,
     characterId: 'char_1',
     learnedAtEntryId: null,

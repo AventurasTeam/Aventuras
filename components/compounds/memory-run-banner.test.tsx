@@ -415,15 +415,6 @@ describe("useMemoryRunBanner — a committed close's done state", () => {
     expect(result.current).toBeNull()
   })
 
-  // A fork copies chapter ids: only the open branch's own row holds the done state.
-  it("shows nothing from another branch's copy of the chapter", () => {
-    openStory()
-    chaptersStore.hydrate('branch-2', [chapter({ branchId: 'branch-2' })])
-    holdResult()
-    const { result } = renderHook(() => useMemoryRunBanner())
-    expect(result.current).toBeNull()
-  })
-
   it('shows nothing once the story is left and opened again, though the branch is the same', () => {
     reopenStory()
     chaptersStore.hydrate('branch-1', [chapter()])

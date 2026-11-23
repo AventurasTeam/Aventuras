@@ -58,6 +58,8 @@ type Confirm = {
   lines: string[]
 }
 
+type OpenedRedo = { group: RedoGroup; label: string }
+
 const NOTHING: Refusal = { code: 'nothing-to-apply', reason: 'nothing to apply' }
 const GATED: Refusal = { code: 'gated', reason: 'generation in flight' }
 
@@ -69,6 +71,12 @@ function redoNames(group: RedoGroup): UndoNames {
 
 function redoMenuLabel(group: RedoGroup): string {
   return undoTargetText(describeRedoTarget(group), redoNames(group), 'redoMenu')
+}
+
+function redoLabelOf(top: RedoGroup | undefined, opened: OpenedRedo | null): string | null {
+  if (top == null) return null
+  if (top === opened?.group) return opened.label
+  return redoMenuLabel(top)
 }
 
 function rowLines(target: Target, branchId: string): string[] {
@@ -142,7 +150,7 @@ export function useReaderUndo({
 } {
   const [menuTarget, setMenuTarget] = useState<Target | null>(null)
   // Redo's names read live rows no hook here subscribes to, so each menu open labels it afresh.
-  const [openedRedo, setOpenedRedo] = useState<{ group: RedoGroup; label: string } | null>(null)
+  const [openedRedo, setOpenedRedo] = useState<OpenedRedo | null>(null)
   const menuTargetRef = useRef<Target | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const busyRef = useRef(false)
@@ -382,12 +390,7 @@ export function useReaderUndo({
   )
 
   const redoTop = undoRedoStore.useRedoTop(branchId)
-  const redoLabel =
-    redoTop == null
-      ? null
-      : redoTop === openedRedo?.group
-        ? openedRedo.label
-        : redoMenuLabel(redoTop)
+  const redoLabel = redoLabelOf(redoTop, openedRedo)
   const undoLabel =
     menuTarget == null
       ? t('reader:actions.undo')
