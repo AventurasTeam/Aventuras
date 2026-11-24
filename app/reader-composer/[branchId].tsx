@@ -1392,6 +1392,7 @@ function ReaderComposerBody({
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
             dispatchInFlight: isDispatchBlocked(),
+            readerMounted: aliveRef.current,
           }),
         )
       } catch (err) {
@@ -1422,7 +1423,7 @@ function ReaderComposerBody({
         countedAtSettle,
       })
     },
-    [branchId, isDispatchBlocked],
+    [branchId, aliveRef, isDispatchBlocked],
   )
 
   const showLiveCounts = useCallback(
@@ -1487,6 +1488,7 @@ function ReaderComposerBody({
             loadedBranchId: entriesStore.getLoadedBranch(),
             dispatchInFlight: isDispatchBlocked(),
             headReversalBlocked: generationStore.isHeadReversalBlocked(startedBranchId),
+            readerMounted: aliveRef.current,
           }),
         )
       } catch (err) {
@@ -1536,7 +1538,7 @@ function ReaderComposerBody({
       // Both confirm kinds open as a regenerate confirm; the modal derives copy from the counts.
       setRollback({ mode: 'regenerate', targetId: entryId, targetNumber, counts, countedAtSettle })
     },
-    [branchId, runRegenerate, branchUnchanged, isDispatchBlocked],
+    [branchId, aliveRef, runRegenerate, branchUnchanged, isDispatchBlocked],
   )
 
   // Chips are finished prose, so the draft is replaced outright and the mode
