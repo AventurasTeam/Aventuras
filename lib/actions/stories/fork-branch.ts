@@ -83,13 +83,16 @@ export async function forkBranchCore(input: ForkBranchCoreInput, ctx: DbCtx): Pr
   // No branch: the parent's own hold doesn't refuse; what its open run would carry decides.
   if (isUserEditBlocked(generationStore.getTxState()))
     return refused(FORK_REFUSAL.gated, 'generation in flight')
+  // Captured before the await: a caller mutating the input mid-acquire must not move the hold.
+  const request = { ...input }
+  const { parentBranchId, newBranchId } = request
   // Holds are idempotent per id: under a shared id one fork's release would free another's.
-  const holdId = `fork:${input.newBranchId}`
-  await holdBranchWriteExclusive(input.parentBranchId, holdId)
+  const holdId = `fork:${newBranchId}`
+  await holdBranchWriteExclusive(parentBranchId, holdId)
   try {
-    return await forkHeld(input, ctx)
+    return await forkHeld(request, ctx)
   } finally {
-    releaseBranchWriteExclusive(input.parentBranchId, holdId)
+    releaseBranchWriteExclusive(parentBranchId, holdId)
   }
 }
 
