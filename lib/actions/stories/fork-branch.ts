@@ -40,7 +40,11 @@ export const FORK_REFUSAL = {
   integrity: 'integrity',
 } as const
 export type ForkRefusalCode = (typeof FORK_REFUSAL)[keyof typeof FORK_REFUSAL]
-export type ForkRefusal = { status: 'rejected'; code: ForkRefusalCode; reason: string }
+export type ForkRefusal<C extends ForkRefusalCode = ForkRefusalCode> = {
+  status: 'rejected'
+  code: C
+  reason: string
+}
 export type ForkResult = { status: 'ok'; branchId: string } | ForkRefusal
 
 export type ForkBranchInput = {
@@ -58,7 +62,9 @@ export type ForkBranchCoreInput = ForkBranchInput & {
 /** The plan on the parent; null when the fork entry is the narrative tail. */
 export type ForkPlan = { swept: ResolvedSweep; plan: ReversePlan } | null
 
-const refused = (code: ForkRefusalCode, reason: string): ForkRefusal => ({
+type PlanRefusal = ForkRefusal<typeof FORK_REFUSAL.rollbackFloor | typeof FORK_REFUSAL.integrity>
+
+const refused = <C extends ForkRefusalCode>(code: C, reason: string): ForkRefusal<C> => ({
   status: 'rejected',
   code,
   reason,
@@ -165,7 +171,7 @@ export async function planFork(
   forkPosition: number,
   newBranchId: string,
   ctx: DbCtx,
-): Promise<{ status: 'planned'; fork: ForkPlan } | ForkRefusal> {
+): Promise<{ status: 'planned'; fork: ForkPlan } | PlanRefusal> {
   const [next] = await ctx.db
     .select({ id: storyEntries.id })
     .from(storyEntries)
@@ -196,7 +202,7 @@ export async function planFork(
   }
 }
 
-function sweepRefusal(rejection: StoryEntryRejection): ForkRefusal {
+function sweepRefusal(rejection: StoryEntryRejection): PlanRefusal {
   if (rejection.code === STORY_ENTRY_REJECTION.rollbackFloor)
     return refused(FORK_REFUSAL.rollbackFloor, rejection.reason)
   // resolveSweep logged the closure's refusal already.

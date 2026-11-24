@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { forkBranchCore } from '@/lib/actions'
+import { forkBranchCore } from '@/lib/actions/stories/fork-branch'
 import { branchCopyOps, storyEntries } from '@/lib/db'
 
 import { captureInput, seededDb } from './__tests__/fixtures'

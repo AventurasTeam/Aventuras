@@ -122,10 +122,9 @@ export {
 export {
   FORK_REFUSAL,
   forkBranch,
-  forkBranchCore,
   planFork,
-  type ForkBranchCoreInput,
   type ForkBranchInput,
+  type ForkPlan,
   type ForkRefusal,
   type ForkRefusalCode,
   type ForkResult,

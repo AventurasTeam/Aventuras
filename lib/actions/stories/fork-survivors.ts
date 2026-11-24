@@ -2,8 +2,7 @@ import { and, inArray, notInArray, or, sql, type SQL } from 'drizzle-orm'
 
 import { BIND_CHUNK, deltas, reversalJournals, type CopyPredicate } from '@/lib/db'
 
-import type { ReversePlan } from '../delta/reverse-replay'
-import type { ResolvedSweep } from '../story-entries/operational'
+import type { ForkPlan } from './fork-branch'
 
 export type SurvivorPredicates = { deltas: CopyPredicate; reversal_journals: CopyPredicate }
 
@@ -11,9 +10,7 @@ export type SurvivorPredicates = { deltas: CopyPredicate; reversal_journals: Cop
  * Fork copy filters (data-model.md → Branch model): deltas outside the window less the pruned,
  * plus re-owned creates in it; journals less the dropped. Null `planned` (tail fork): all copy.
  */
-export function forkSurvivorPredicates(
-  planned: { swept: ResolvedSweep; plan: ReversePlan } | null,
-): SurvivorPredicates {
+export function forkSurvivorPredicates(planned: ForkPlan): SurvivorPredicates {
   if (planned === null) return { deltas: 'all', reversal_journals: 'all' }
   const { swept, plan } = planned
   // The window is pruned by its predicate, never by id, so every window row must be in the set.
