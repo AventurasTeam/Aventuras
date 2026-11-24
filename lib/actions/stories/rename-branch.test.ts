@@ -109,6 +109,17 @@ describe('renameBranch', () => {
     expect(await nameOf(db, 'br_fork')).toBe('The  trap')
   })
 
+  it('stores a name a sibling branch already has', async () => {
+    const { db, ctx } = await setup()
+
+    expect(
+      await renameBranch({ storyId: 'story_1', branchId: 'br_fork', name: 'Main' }, ctx),
+    ).toEqual({ status: 'ok' })
+
+    expect(await nameOf(db, 'br_fork')).toBe('Main')
+    expect(await nameOf(db, 'br_main')).toBe('Main')
+  })
+
   it.each([
     ['an empty name', ''],
     ['a whitespace-only name', '   '],

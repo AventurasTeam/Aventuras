@@ -117,6 +117,20 @@ async function seed() {
   return { ctx: { db, runInTransaction } }
 }
 
+const loadedBranches = () => ({
+  entries: entriesStore.getLoadedBranch(),
+  entities: entitiesStore.getLoadedBranch(),
+  lore: loreStore.getLoadedBranch(),
+  threads: threadsStore.getLoadedBranch(),
+  happenings: happeningsStore.getLoadedBranch(),
+  involvements: happeningInvolvementsStore.getLoadedBranch(),
+  awareness: happeningAwarenessStore.getLoadedBranch(),
+  chapters: chaptersStore.getLoadedBranch(),
+  relationships: characterRelationshipsStore.getLoadedBranch(),
+  translations: translationsStore.getLoadedBranch(),
+  eraFlips: eraFlipsStore.getLoadedBranch(),
+})
+
 beforeEach(() => {
   resetAllStores()
 })
@@ -135,8 +149,19 @@ describe('readBranchWorkingSet', () => {
     expect(read.set.entries.map((r) => r.id)).toEqual(['e_2'])
     expect(read.set.entities.map((r) => r.id)).toEqual(['char_2'])
     expect(read.set.lore.map((r) => r.id)).toEqual(['lore_2'])
-    expect(entriesStore.getLoadedBranch()).toBeNull()
-    expect(eraFlipsStore.getLoadedBranch()).toBeNull()
+    expect(loadedBranches()).toEqual({
+      entries: null,
+      entities: null,
+      lore: null,
+      threads: null,
+      happenings: null,
+      involvements: null,
+      awareness: null,
+      chapters: null,
+      relationships: null,
+      translations: null,
+      eraFlips: null,
+    })
     expect(currentStoryStore.getCurrentStory()).toBeNull()
   })
 })
@@ -149,19 +174,7 @@ describe('fillWorkingSet', () => {
 
     fillWorkingSet(read.set)
 
-    expect({
-      entries: entriesStore.getLoadedBranch(),
-      entities: entitiesStore.getLoadedBranch(),
-      lore: loreStore.getLoadedBranch(),
-      threads: threadsStore.getLoadedBranch(),
-      happenings: happeningsStore.getLoadedBranch(),
-      involvements: happeningInvolvementsStore.getLoadedBranch(),
-      awareness: happeningAwarenessStore.getLoadedBranch(),
-      chapters: chaptersStore.getLoadedBranch(),
-      relationships: characterRelationshipsStore.getLoadedBranch(),
-      translations: translationsStore.getLoadedBranch(),
-      eraFlips: eraFlipsStore.getLoadedBranch(),
-    }).toEqual({
+    expect(loadedBranches()).toEqual({
       entries: 'br_2',
       entities: 'br_2',
       lore: 'br_2',

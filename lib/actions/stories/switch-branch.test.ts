@@ -277,11 +277,11 @@ function guardedStack(initial: NavRoute[]) {
   }
 }
 
-async function pointer(db: TestDb): Promise<string | null> {
+async function pointer(db: TestDb, storyId = 'story_1'): Promise<string | null> {
   const [row] = await db
     .select({ branchId: stories.currentBranchId })
     .from(stories)
-    .where(eq(stories.id, 'story_1'))
+    .where(eq(stories.id, storyId))
   return row?.branchId ?? null
 }
 
@@ -297,6 +297,7 @@ async function corruptDefinition(db: TestDb): Promise<void> {
 
 async function expectStillOnLeft(db: TestDb): Promise<void> {
   expect(await pointer(db)).toBe('br_a')
+  expect(await pointer(db, 'story_2')).toBe('br_other')
   expect(storiesRowBranch()).toBe('br_a')
   expect(entriesStore.getLoadedBranch()).toBe('br_a')
   expect(eraFlipsStore.getLoadedBranch()).toBe('br_a')
@@ -447,6 +448,7 @@ describe('switchBranch', () => {
     const liveSettings = { ...STORY_SETTINGS_DEFAULTS }
     currentStoryStore.set({ ...currentStoryStore.getCurrentStory()!, settings: liveSettings })
     chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    storiesStore.setOpenFailure({ storyId: 'story_1', kind: 'settings-corrupt' })
     const stack = fakeStack()
     const atFill: { storiesRow: string | null | undefined; published: string | undefined }[] = []
     const off = entriesStore.subscribe(() => {
@@ -462,6 +464,8 @@ describe('switchBranch', () => {
 
     expect(result).toEqual({ status: 'ok' })
     expect(await pointer(db)).toBe('br_b')
+    expect(await pointer(db, 'story_2')).toBe('br_other')
+    expect(storiesStore.getStories().openFailures).toEqual({})
     expect(stack.calls).toEqual([
       { branchId: 'br_b', held: true, loaded: 'br_a', published: 'br_a' },
     ])
@@ -595,6 +599,7 @@ describe('switchBranch', () => {
     const { db, ctx } = await setup()
     chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
     const stack = fakeStack(false)
 
     const result = await switchBranch(input({ replaceStack: stack.replaceStack }), ctx)
@@ -610,6 +615,7 @@ describe('switchBranch', () => {
       toBranchId: 'br_b',
       cause: 'reset-refused',
     })
+    expect(error).not.toHaveBeenCalled()
   })
 
   it('puts the pointer back when a run starts on the story during the stories re-read', async () => {
@@ -1098,6 +1104,8 @@ describe('showBranch', () => {
       branchId: 'br_b',
       readStatus: 'failed',
     })
+    // The new reader's own load meets the same failure; the story list keeps its badge till then.
+    expect(storiesStore.getStories().openFailures).toEqual({ story_1: 'definition-corrupt' })
     expect(stack.replaceStack).toHaveBeenCalledTimes(1)
     expect(stack.replaceStack).toHaveBeenCalledWith('br_b')
     expect(entriesStore.getLoadedBranch()).toBe('br_a')
