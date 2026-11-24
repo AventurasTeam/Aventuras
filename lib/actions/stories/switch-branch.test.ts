@@ -603,6 +603,38 @@ describe('switchBranch', () => {
     })
   })
 
+  it('puts the pointer back when a run starts on the story during the stories re-read', async () => {
+    const { db, ctx } = await setup()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const reached = deferred()
+    const release = deferred()
+    vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
+      reached.resolve()
+      await release.promise
+      return readStories(database)
+    })
+    const stack = fakeStack()
+
+    const running = switchBranch(input({ replaceStack: stack.replaceStack }), ctx)
+    try {
+      await reached.promise
+      generationStore.startRun(hardGateRun('run_late', { gateBehavior: 'no-gate' }))
+    } finally {
+      release.resolve()
+      await running
+    }
+
+    expect(await running).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(stack.replaceStack).not.toHaveBeenCalled()
+    await expectStillOnLeft(db)
+    expect(kicks).toEqual([])
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_switch_navigation_blocked', {
+      storyId: 'story_1',
+      fromBranchId: 'br_a',
+      toBranchId: 'br_b',
+    })
+  })
+
   it('puts the pointer back when the stack reset throws', async () => {
     const { db, ctx } = await setup()
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
