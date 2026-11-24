@@ -57,13 +57,21 @@ function RowHarness(props: BranchRenameInputProps) {
 }
 
 const rowPressed = fn()
+// RN-Web never calls onPress for a key released on an <input>; a propagated keydown still starts a press.
+const rowPressStarted = fn()
 
 /** The input inside a pressable, as a row body would hold it: no key may press the row. */
 function InPressableHarness(props: BranchRenameInputProps) {
   return (
     <View className="w-80 gap-3 p-4">
       <TierMark />
-      <Pressable accessibilityRole="button" aria-label="Row" onPress={rowPressed} className="p-2">
+      <Pressable
+        accessibilityRole="button"
+        aria-label="Row"
+        onPress={rowPressed}
+        onPressIn={rowPressStarted}
+        className="p-2"
+      >
         <BranchRenameInput {...props} />
       </Pressable>
     </View>
@@ -314,11 +322,13 @@ export const KeysStayInTheInput: Story = {
   render: (args) => <InPressableHarness {...args} />,
   play: async ({ args }) => {
     rowPressed.mockClear()
+    rowPressStarted.mockClear()
     await waitForTier('desktop')
     await renameField()
     await userEvent.keyboard('a b{Enter}')
     await waitFor(() => expect(args.onSave).toHaveBeenCalledWith('a b'))
     await expect(rowPressed).not.toHaveBeenCalled()
+    await expect(rowPressStarted).not.toHaveBeenCalled()
   },
 }
 
