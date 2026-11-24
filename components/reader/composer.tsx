@@ -36,15 +36,15 @@ type ComposerProps = {
   sendBlocked?: boolean
   /**
    * Rendered under the composer when `disabled`; the Send hint in either case. Wins over
-   * `modesUnavailableReason` in the reason line when both are set.
+   * `leadMissingReason` in the reason line when both are set.
    */
   disabledReason?: string
   /**
-   * Lead gone: do/say/think can't wrap, so the picker disables with this reason and the mode
-   * resets to free (it stays free once the lead is back); also the visible reason line, since
-   * Android has no web tooltip.
+   * The branch needs a lead and has none: Send refuses with the draft kept, the picker disables on
+   * Free (the mode stays Free once the lead is back), and this is the reason line (Android has no
+   * tooltip).
    */
-  modesUnavailableReason?: string
+  leadMissingReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
   onCancel: () => void
 }
@@ -92,7 +92,7 @@ export const Composer = forwardRef(function Composer(
     disabled = false,
     sendBlocked = false,
     disabledReason,
-    modesUnavailableReason,
+    leadMissingReason,
     onSend,
     onCancel,
   }: ComposerProps,
@@ -104,7 +104,7 @@ export const Composer = forwardRef(function Composer(
 
   // Reset, not masked: the lead coming back (undo, Set as lead) must not re-arm a
   // mode under a draft typed while the picker read Free (principles.md → Composer mode).
-  if (modesUnavailableReason != null && mode !== 'free') setMode('free')
+  if (leadMissingReason != null && mode !== 'free') setMode('free')
 
   // Mirrored during render: the handle is built once, so reading `text` /
   // `mode` through its closure would hand back mount-time values forever.
@@ -147,17 +147,19 @@ export const Composer = forwardRef(function Composer(
   }, [text])
 
   const canSend = text.trim().length > 0
-  const sendDisabled = disabled || sendBlocked || !canSend
-  const modesUsable = modesEnabled && modesUnavailableReason == null
+  const leadMissing = leadMissingReason != null
+  const sendDisabled = disabled || sendBlocked || leadMissing || !canSend
+  const modesUsable = modesEnabled && !leadMissing
   const reasonLine =
     disabled && disabledReason != null && disabledReason.length > 0
       ? disabledReason
-      : modesUnavailableReason != null && modesUnavailableReason.length > 0
-        ? modesUnavailableReason
+      : leadMissingReason != null && leadMissingReason.length > 0
+        ? leadMissingReason
         : undefined
 
   function handleSubmit() {
-    if (!canSend) return
+    // Send's own disabled value: a press that refuses keeps the draft, which clears only after onSend.
+    if (sendDisabled) return
     // Dismissing also blurs (`keepFocus` defaults false): on Android a focused
     // input under a hidden keyboard is the state a tap won't reopen. The guard
     // is a no-op on web and with a hardware keyboard.
@@ -190,8 +192,8 @@ export const Composer = forwardRef(function Composer(
               onValueChange={(value) => setMode(value as ComposerMode)}
               mode="dropdown"
               size="sm"
-              disabled={disabled || modesUnavailableReason != null}
-              disabledReason={modesUnavailableReason}
+              disabled={disabled || leadMissing}
+              disabledReason={leadMissingReason}
               label={t('reader:composerModeLabel')}
               renderTrigger={({ selected }) => (
                 <View className="flex-row items-baseline gap-1.5">
@@ -228,7 +230,7 @@ export const Composer = forwardRef(function Composer(
             <Button
               variant="primary"
               disabled={sendDisabled}
-              disabledReason={disabled || sendBlocked ? disabledReason : undefined}
+              disabledReason={disabled || sendBlocked ? disabledReason : leadMissingReason}
               onPress={handleSubmit}
             >
               <Text>{t('reader:send')}</Text>

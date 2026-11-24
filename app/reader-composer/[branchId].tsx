@@ -2114,7 +2114,7 @@ function ReaderComposerBody({
                   swapPending,
                   gateReason,
                 })}
-                modesUnavailableReason={modesUnavailableReason}
+                leadMissingReason={modesUnavailableReason}
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
