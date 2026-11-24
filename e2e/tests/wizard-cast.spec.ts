@@ -101,12 +101,8 @@ test.describe('create-story wizard — mixed cast', () => {
     const [branchId, storyStatus] = storyRows[0] as [string, string]
     expect(storyStatus, 'story committed active').toBe('active')
 
-    // The two-character trap this spec sets up (one active, one staged) is
-    // pointless unless something reads which one actually became the lead.
-    // createStoryWithBranch's guard only requires the lead to be SOME cast
-    // character — the staged one qualifies — so a wrong-lead commit
-    // (activeLead exists precisely to forbid this) would pass every check
-    // above and still slip through unnoticed without these assertions.
+    // createStoryWithBranch's guard accepts ANY cast character as lead, the staged one
+    // included, so a wrong-lead commit passes every check above without these assertions.
     const leadRows = (await queryApp(
       app.window,
       `SELECT id, is_lead FROM entities WHERE branch_id = ? AND kind = 'character'`,

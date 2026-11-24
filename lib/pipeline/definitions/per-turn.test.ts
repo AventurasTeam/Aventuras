@@ -754,8 +754,7 @@ describe('per-turn pipeline declaration', () => {
       settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     hydrateEntries(phaseDb, 'b1', [])
-    // 'c99' is never allocated (the branch holds no entity), so it's
-    // placeholder-shaped but unresolvable — MalformedPlaceholderError.
+    // 'c99' is never allocated: placeholder-shaped but unresolvable (MalformedPlaceholderError).
     entitiesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
