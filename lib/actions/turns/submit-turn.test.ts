@@ -37,6 +37,7 @@ import {
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
 import { __redoGroupForTest } from '../delta/redo'
+import { setBranchLead } from '../stories/set-lead'
 
 // The retrieval phase's own coverage lives in per-turn-retrieval.test.ts; here
 // it only has to let the turn through, and its real pass would reach for a DB
@@ -365,6 +366,56 @@ describe('submitTurn', () => {
         ),
       )
 
+      expect((await entryOfKind(db, 'user_action'))?.metadata?.leadId).toBe(MIRA)
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
+    })
+
+    it('stamps the user action and its reply alike when a lead set is still writing at Send', async () => {
+      const { ctx, db } = await makeHarness()
+      await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+      await openStory(db, 's1', 'b1')
+      await seedCast(db, KAEL)
+      entriesStore.hydrate('b1', [])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      // The set passed its gate before Send and its transaction hasn't opened. It opens at the
+      // turn's first transaction, or after a pause if the turn waits on it instead.
+      let dispatched!: () => void
+      const hasDispatched = new Promise<void>((resolve) => {
+        dispatched = resolve
+      })
+      let release!: () => void
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const pause = setTimeout(release, 100)
+      const setCtx: typeof ctx = {
+        ...ctx,
+        runInTransaction: async (fn) => {
+          dispatched()
+          await released
+          return ctx.runInTransaction(fn)
+        },
+      }
+      const turnCtx: typeof ctx = {
+        ...ctx,
+        runInTransaction: (fn) => {
+          release()
+          return ctx.runInTransaction(fn)
+        },
+      }
+      const setting = setBranchLead('b1', MIRA, setCtx)
+      await hasDispatched
+
+      const outcome = await submitTurn(
+        { storyId: 's1', branchId: 'b1' },
+        { content: 'I look around.', composerMode: 'do' },
+        turnCtx,
+      )
+      clearTimeout(pause)
+
+      expect(await setting).toEqual({ status: 'ok' })
+      expectRan(outcome)
       expect((await entryOfKind(db, 'user_action'))?.metadata?.leadId).toBe(MIRA)
       expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
     })

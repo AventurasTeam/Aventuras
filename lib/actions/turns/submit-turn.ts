@@ -19,7 +19,7 @@ import {
 } from '@/lib/pipeline'
 import { generationStore, isBranchHeld, RERUN_HELD, type DeferredWorkKind } from '@/lib/stores'
 
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, settleUserWrites } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 import { withBranchQueue, withPendingTurn } from './branch-queue'
@@ -151,7 +151,9 @@ export async function submitTurn(
           .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
           .orderBy(desc(storyEntries.position))
           .limit(1)
-        // Under the turn's mark, which holds the edit gate: no set lands before the run starts.
+        // The mark keeps new user writes out; waiting first lets one already dispatched land, so the
+        // lead read here holds through the run's own read.
+        await settleUserWrites()
         const lead = await readBranchLead(ids.branchId, ctx.db)
         const position = (tail?.position ?? 0) + 1
         const entryId = generateId('entry')
