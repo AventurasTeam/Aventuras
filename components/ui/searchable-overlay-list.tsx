@@ -60,7 +60,7 @@ import { cn } from '@/lib/utils'
 type Row<T> = {
   id: string
   disabled?: boolean
-  /** Phone: activation waits for the Sheet's exit, since gorhom restores a covered Sheet. */
+  /** Phone: activation waits for the Sheet's exit, so the Sheet it opens never presents mid-exit. */
   opensSheet?: boolean
   data: T
 }
