@@ -1,7 +1,23 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import { branches, deltas, entities, stories, type EntityState, type NewEntity } from '@/lib/db'
+import {
+  branches,
+  characterRelationships,
+  deltas,
+  entities,
+  happeningAwareness,
+  happeningInvolvements,
+  happenings,
+  stories,
+  type CharacterRelationship,
+  type Entity,
+  type EntityState,
+  type HappeningAwareness,
+  type HappeningInvolvement,
+  type NewEntity,
+  type NewHappening,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { entitiesStore } from '@/lib/stores'
@@ -11,6 +27,11 @@ import { registerEntities } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { registerHappeningAwareness } from '../happenings/register-awareness'
+import { registerHappenings } from '../happenings/register-happenings'
+import { registerHappeningInvolvements } from '../happenings/register-involvements'
+import { registerCharacterRelationships } from '../relationships/register'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   // Registration is process-global; reset so only entities is live for this test.
@@ -991,4 +1012,305 @@ describe('collision flag columns', () => {
       expect(await flagColumns(db, 'char_1')).toEqual([0, null, null])
     })
   })
+})
+
+// Entity ids repeat across branches (the key is branch and id), so every read and write is scoped.
+describe('branch scope', () => {
+  type BranchId = 'br_1' | 'br_2'
+
+  const SIBLING: Entity = {
+    id: 'char_1',
+    branchId: 'br_1',
+    kind: 'character',
+    name: 'Kael',
+    description: 'a wandering knight',
+    status: 'active',
+    retiredReason: null,
+    injectionMode: 'auto',
+    nameCollisionFlag: 0,
+    nameCollisionPartnerId: null,
+    nameCollisionReason: null,
+    state: {
+      visual: { attire: 'cloak' },
+      traits: ['brave'],
+      drives: [],
+      current_location_id: 'loc_1',
+      equipped_items: [],
+      inventory: [],
+      stackables: { gold: 5 },
+      faction_id: null,
+      lastSeenAt: null,
+    },
+    tags: ['knight'],
+    keywords: ['kael'],
+    priority: 3,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  // Stale already: an update and any reversal stamp embedding_stale 1.
+  const WRITTEN: Entity = {
+    id: 'char_1',
+    branchId: 'br_2',
+    kind: 'character',
+    name: 'Kael the Exile',
+    description: 'a knight cast out',
+    status: 'retired',
+    retiredReason: 'exiled',
+    injectionMode: 'always',
+    nameCollisionFlag: 1,
+    nameCollisionPartnerId: 'char_2',
+    nameCollisionReason: 'alike',
+    state: {
+      visual: { attire: 'rags' },
+      traits: ['bitter'],
+      drives: ['go home'],
+      current_location_id: 'loc_2',
+      equipped_items: [],
+      inventory: ['item_sword'],
+      stackables: { gold: 1 },
+      faction_id: null,
+      lastSeenAt: null,
+    },
+    tags: ['exile'],
+    keywords: ['the exile'],
+    priority: 5,
+    embeddingStale: 1,
+    createdAt: 2,
+    updatedAt: 2,
+  }
+  const SIBLING_INV: HappeningInvolvement = {
+    id: 'hinv_1',
+    branchId: 'br_1',
+    happeningId: 'hap_1',
+    entityId: 'char_1',
+    role: 'witness',
+  }
+  const WRITTEN_INV: HappeningInvolvement = { ...SIBLING_INV, branchId: 'br_2', role: 'duelist' }
+  const SIBLING_AW: HappeningAwareness = {
+    id: 'haw_1',
+    branchId: 'br_1',
+    happeningId: 'hap_1',
+    characterId: 'char_1',
+    learnedAtEntryId: 'entry_1',
+    decayResistance: 0.9,
+    retrievalCount: 9,
+    source: 'a letter',
+  }
+  const WRITTEN_AW: HappeningAwareness = {
+    ...SIBLING_AW,
+    branchId: 'br_2',
+    learnedAtEntryId: 'entry_2',
+    decayResistance: 0.3,
+    retrievalCount: 4,
+    source: 'overheard',
+  }
+  const SIBLING_REL: CharacterRelationship = {
+    id: 'rel_1',
+    branchId: 'br_1',
+    aId: 'char_1',
+    bId: 'char_2',
+    kind: 'ally',
+    inverseKind: null,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const WRITTEN_REL: CharacterRelationship = {
+    ...SIBLING_REL,
+    branchId: 'br_2',
+    kind: 'rival',
+    inverseKind: 'wary',
+    createdAt: 2,
+    updatedAt: 2,
+  }
+  const siblingChildren = {
+    involvements: [SIBLING_INV],
+    awareness: [SIBLING_AW],
+    relationships: [SIBLING_REL],
+  }
+  const writtenChildren = {
+    involvements: [WRITTEN_INV],
+    awareness: [WRITTEN_AW],
+    relationships: [WRITTEN_REL],
+  }
+  const partner = (branchId: BranchId): NewEntity => ({
+    id: 'char_2',
+    branchId,
+    kind: 'character',
+    name: 'Mira',
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  const fire = (branchId: BranchId): NewHappening => ({
+    id: 'hap_1',
+    branchId,
+    title: 'The fire',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+
+  type Harness = Awaited<ReturnType<typeof setup>>
+
+  // An id-only read scans in insertion order, so sibling rows go in first. The delete's reversal
+  // restores the involvement, awareness and relationship rows, checking the happenings they name.
+  async function twoBranches({ written = true }: { written?: boolean } = {}) {
+    const harness = await setup()
+    registerHappenings()
+    registerHappeningInvolvements()
+    registerHappeningAwareness()
+    registerCharacterRelationships()
+    const { db } = harness
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await db
+      .insert(entities)
+      .values([SIBLING, partner('br_1'), ...(written ? [WRITTEN] : []), partner('br_2')])
+    await db.insert(happenings).values([fire('br_1'), ...(written ? [fire('br_2')] : [])])
+    await db.insert(happeningInvolvements).values([SIBLING_INV, ...(written ? [WRITTEN_INV] : [])])
+    await db.insert(happeningAwareness).values([SIBLING_AW, ...(written ? [WRITTEN_AW] : [])])
+    await db.insert(characterRelationships).values([SIBLING_REL, ...(written ? [WRITTEN_REL] : [])])
+    return harness
+  }
+
+  const onWritten = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+
+  const entityOn = async (db: Harness['db'], branchId: BranchId, id: string) =>
+    (
+      await db
+        .select()
+        .from(entities)
+        .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
+    )[0]
+
+  const childrenOn = async (db: Harness['db'], branchId: BranchId) => ({
+    involvements: await db
+      .select()
+      .from(happeningInvolvements)
+      .where(eq(happeningInvolvements.branchId, branchId)),
+    awareness: await db
+      .select()
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.branchId, branchId)),
+    relationships: await db
+      .select()
+      .from(characterRelationships)
+      .where(eq(characterRelationships.branchId, branchId)),
+  })
+
+  const loggedBy = (db: Harness['db'], actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+
+  it("createEntity pair: creates beside the sibling's row and reverses", async () => {
+    const { db, ctx } = await twoBranches({ written: false })
+    const create: PipelineAction = {
+      kind: 'createEntity',
+      source: 'user_edit',
+      payload: { entry: WRITTEN },
+    }
+
+    expect(await onWritten(ctx, create, 'act_c')).toMatchObject({ status: 'ok' })
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await entityOn(db, 'br_2', 'char_1')).toBeUndefined()
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+  })
+
+  it('updateEntity pair: updates from its own row and reverses', async () => {
+    const { db, ctx } = await twoBranches()
+    const patch = { name: 'Kael the Returned', description: 'a knight come home', priority: 7 }
+    const update: PipelineAction = {
+      kind: 'updateEntity',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'char_1', patch },
+    }
+
+    expect(await onWritten(ctx, update, 'act_u')).toMatchObject({ status: 'ok' })
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual({ ...WRITTEN, ...patch })
+    const [logged] = await loggedBy(db, 'act_u')
+    expect(logged.undoPayload).toEqual({
+      name: 'Kael the Exile',
+      description: 'a knight cast out',
+      priority: 5,
+    })
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+  })
+
+  it('deleteEntity pair: deletes its own row and children and restores them', async () => {
+    const { db, ctx } = await twoBranches()
+    const remove: PipelineAction = {
+      kind: 'deleteEntity',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'char_1' },
+    }
+
+    expect(await onWritten(ctx, remove, 'act_d')).toMatchObject({ status: 'ok' })
+    expect(await entityOn(db, 'br_2', 'char_1')).toBeUndefined()
+    expect(await childrenOn(db, 'br_2')).toEqual({
+      involvements: [],
+      awareness: [],
+      relationships: [],
+    })
+    const [logged] = await loggedBy(db, 'act_d')
+    expect(logged.undoPayload).toEqual({ ...WRITTEN, ...writtenChildren, translations: [] })
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+    expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
+    expect(await childrenOn(db, 'br_2')).toEqual(writtenChildren)
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+    expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
+  })
+
+  // The payload names the sibling, a valid target there: without the check the write lands on it.
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: { entry: { ...SIBLING, id: 'char_9' } },
+      },
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_1', patch: { name: 'Kael the Returned' } },
+      },
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+    {
+      action: {
+        kind: 'deleteEntity',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'char_1' },
+      },
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: refuses a payload naming the sibling branch',
+    async (_kind, { action, reason }) => {
+      const { db, ctx } = await twoBranches()
+
+      expect(await onWritten(ctx, action, 'act_payload')).toEqual({ status: 'rejected', reason })
+
+      expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+      expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
+      expect(await db.select().from(entities)).toHaveLength(4)
+      expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
+      expect(await childrenOn(db, 'br_2')).toEqual(writtenChildren)
+      expect(await loggedBy(db, 'act_payload')).toEqual([])
+    },
+  )
 })

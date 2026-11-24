@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { applyDeltaAction, reverseReplayDeltas } from '@/lib/actions'
-import { branches, deltas, stories, storyEntries, type DbCtx } from '@/lib/db'
+import { applyDeltaAction, reverseReplayDeltas, type PipelineAction } from '@/lib/actions'
+import { branches, deltas, stories, storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { promptProse } from '@/lib/piggyback'
 import { entriesStore } from '@/lib/stores'
@@ -222,73 +222,115 @@ describe('opening invariants', () => {
 
 // Entry ids repeat across branches (the key is branch and id), so every read and write is scoped.
 describe('branch scope', () => {
-  async function twoBranches() {
+  const main: StoryEntry = {
+    id: 'e1',
+    branchId: 'b1',
+    position: 1,
+    kind: 'ai_reply',
+    content: 'On main.',
+    contentTokens: countTokens('On main.'),
+    chapterId: 'chap_main',
+    metadata: { sceneEntities: ['char_main'], currentLocationId: 'loc_main', worldTime: 20 },
+    createdAt: 1,
+  }
+  const fork: StoryEntry = {
+    id: 'e1',
+    branchId: 'b2',
+    position: 2,
+    kind: 'user_action',
+    content: 'On the fork.',
+    contentTokens: countTokens('On the fork.'),
+    chapterId: 'chap_fork',
+    metadata: { sceneEntities: [], currentLocationId: 'loc_fork', worldTime: 10 },
+    createdAt: 2,
+  }
+
+  // An id-only read scans in insertion order, so the sibling's row goes in first.
+  async function twoBranches({ written = true }: { written?: boolean } = {}) {
     const { db, runInTransaction } = await createTestDb()
     await seed(db)
-    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 1 })
-    const row = (branchId: string, content: string, locationId: string) => ({
-      id: 'e1',
-      branchId,
-      position: 1,
-      kind: 'ai_reply' as const,
-      content,
-      contentTokens: countTokens(content),
-      chapterId: null,
-      metadata: { sceneEntities: [], currentLocationId: locationId, worldTime: 10 },
-      createdAt: 1,
-    })
-    const main = row('b1', 'On main.', 'loc_main')
-    const fork = row('b2', 'On the fork.', 'loc_fork')
-    await db.insert(storyEntries).values([main, fork])
-    const read = async (branchId: string) =>
+    await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 2 })
+    await db.insert(storyEntries).values([main, ...(written ? [fork] : [])])
+    const read = async (branchId: 'b1' | 'b2') =>
       (
         await db
           .select()
           .from(storyEntries)
           .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, 'e1')))
       )[0]
-    return { ctx: { db, runInTransaction }, main, fork, read }
+    const undoPayloadsOf = async (actionId: string) =>
+      (await db.select().from(deltas).where(eq(deltas.actionId, actionId))).map(
+        (delta) => delta.undoPayload,
+      )
+    return { ctx: { db, runInTransaction }, read, undoPayloadsOf }
   }
 
-  it("updates only its own branch's row, merging over that row", async () => {
-    const { ctx, main, read } = await twoBranches()
-    const result = await applyDeltaAction(
-      {
-        action: {
-          kind: 'updateStoryEntryMetadata',
-          source: 'user_edit',
-          payload: { branchId: 'b2', id: 'e1', metadata: { worldTime: 99 } },
-        },
-        actionId: 'act_u',
-        branchId: 'b2',
-        entryId: null,
-      },
-      ctx,
-    )
-    expect(result).toMatchObject({ status: 'ok' })
+  const onFork = (ctx: DbCtx, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'b2', entryId: null }, ctx)
+
+  it("createStoryEntry pair: creates the row on its own branch beside another branch's same id, and its reversal removes only that row", async () => {
+    const { ctx, read } = await twoBranches({ written: false })
+    const { contentTokens: _counted, ...entry } = fork
+    expect(
+      await onFork(
+        ctx,
+        { kind: 'createStoryEntry', source: 'user_edit', payload: { entry } },
+        'act_c',
+      ),
+    ).toMatchObject({ status: 'ok' })
+    expect(await read('b2')).toEqual(fork)
+    expect(await read('b1')).toEqual(main)
+
+    await reverseReplayDeltas('act_c', ctx)
+    expect(await read('b2')).toBeUndefined()
+    expect(await read('b1')).toEqual(main)
+  })
+
+  it("updateStoryEntryMetadata pair: updates only its own branch's row, merging over that row, and its reversal restores it", async () => {
+    const { ctx, read } = await twoBranches()
+    const update: PipelineAction = {
+      kind: 'updateStoryEntryMetadata',
+      source: 'user_edit',
+      payload: { branchId: 'b2', id: 'e1', metadata: { worldTime: 99 } },
+    }
+    expect(await onFork(ctx, update, 'act_u')).toMatchObject({ status: 'ok' })
     expect((await read('b2'))?.metadata).toEqual({
       sceneEntities: [],
       currentLocationId: 'loc_fork',
       worldTime: 99,
     })
     expect(await read('b1')).toEqual(main)
+
+    await reverseReplayDeltas('act_u', ctx)
+    expect(await read('b2')).toEqual(fork)
+    expect(await read('b1')).toEqual(main)
   })
 
-  it("deletes only its own branch's row, and its reversal restores that row", async () => {
-    const { ctx, main, fork, read } = await twoBranches()
-    await applyDeltaAction(
-      {
-        action: {
-          kind: 'deleteStoryEntry',
-          source: 'user_edit',
-          payload: { branchId: 'b2', id: 'e1' },
-        },
-        actionId: 'act_d',
-        branchId: 'b2',
-        entryId: null,
-      },
-      ctx,
-    )
+  it("stampEntryChapter pair: stamps only its own branch's row, recording that row's chapter, and its reversal restores it", async () => {
+    const { ctx, read, undoPayloadsOf } = await twoBranches()
+    const stamp: PipelineAction = {
+      kind: 'stampEntryChapter',
+      source: 'chapter_close',
+      payload: { branchId: 'b2', id: 'e1', chapterId: 'chap_new' },
+    }
+    expect(await onFork(ctx, stamp, 'act_s')).toMatchObject({ status: 'ok' })
+    expect(await read('b2')).toEqual({ ...fork, chapterId: 'chap_new' })
+    expect(await read('b1')).toEqual(main)
+    expect(await undoPayloadsOf('act_s')).toEqual([{ chapterId: 'chap_fork' }])
+
+    await reverseReplayDeltas('act_s', ctx)
+    expect(await read('b2')).toEqual(fork)
+    expect(await read('b1')).toEqual(main)
+  })
+
+  it("deleteStoryEntry pair: deletes only its own branch's row, and its reversal restores that row", async () => {
+    const { ctx, read } = await twoBranches()
+    const remove: PipelineAction = {
+      kind: 'deleteStoryEntry',
+      source: 'user_edit',
+      payload: { branchId: 'b2', id: 'e1' },
+    }
+    expect(await onFork(ctx, remove, 'act_d')).toMatchObject({ status: 'ok' })
     expect(await read('b2')).toBeUndefined()
     expect(await read('b1')).toEqual(main)
 
@@ -296,6 +338,62 @@ describe('branch scope', () => {
     expect(await read('b2')).toEqual(fork)
     expect(await read('b1')).toEqual(main)
   })
+
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
+        kind: 'createStoryEntry',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'e2',
+            branchId: 'b1',
+            position: 2,
+            kind: 'ai_reply',
+            content: 'Elsewhere.',
+            createdAt: 3,
+          },
+        },
+      },
+      reason: 'branch mismatch: delta branch b2 vs entry branch b1',
+    },
+    {
+      action: {
+        kind: 'updateStoryEntryMetadata',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'e1', metadata: { worldTime: 99 } },
+      },
+      reason: 'branch mismatch: delta branch b2 vs target branch b1',
+    },
+    {
+      action: {
+        kind: 'stampEntryChapter',
+        source: 'chapter_close',
+        payload: { branchId: 'b1', id: 'e1', chapterId: 'chap_new' },
+      },
+      reason: 'branch mismatch: delta branch b2 vs target branch b1',
+    },
+    {
+      action: {
+        kind: 'deleteStoryEntry',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'e1' },
+      },
+      reason: 'branch mismatch: delta branch b2 vs target branch b1',
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: refuses a payload naming another branch and writes neither branch',
+    async (_kind, { action, reason }) => {
+      const { ctx, read, undoPayloadsOf } = await twoBranches()
+      expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
+      expect(await read('b1')).toEqual(main)
+      expect(await read('b2')).toEqual(fork)
+      expect(await ctx.db.select().from(storyEntries).where(eq(storyEntries.id, 'e2'))).toEqual([])
+      expect(await undoPayloadsOf('act_p')).toEqual([])
+    },
+  )
 })
 
 describe('deleteStoryEntry arm', () => {

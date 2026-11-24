@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Delta, HappeningAwareness } from '@/lib/db'
+import type { Delta, HappeningAwareness, NewEntity } from '@/lib/db'
 import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { humanizeDelta, loadHistoryChunk } from '@/lib/history'
@@ -1739,4 +1739,316 @@ describe("upsertHappeningAwareness copying a row's pin owner", () => {
       expect(await loggedBy(harness.db, 'act_m')).toEqual([])
     })
   })
+})
+
+// Awareness ids repeat across branches (key: branch and id), so every read and write is scoped.
+describe('branch scope', () => {
+  type BranchId = typeof BRANCH | typeof OTHER_BRANCH
+  type RowOn<B extends BranchId> = HappeningAwareness & { branchId: B }
+
+  const SIBLING: RowOn<typeof BRANCH> = {
+    id: 'haw_1',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_a',
+    learnedAtEntryId: 'entry_1',
+    decayResistance: 0.9,
+    retrievalCount: 9,
+    source: 'a letter',
+  }
+  const WRITTEN: RowOn<typeof OTHER_BRANCH> = {
+    id: 'haw_1',
+    branchId: OTHER_BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_a',
+    learnedAtEntryId: 'entry_2',
+    decayResistance: 0.3,
+    retrievalCount: 4,
+    source: 'overheard',
+  }
+  const SIBLING_KEPT: RowOn<typeof BRANCH> = {
+    id: 'haw_kept',
+    branchId: BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_b',
+    learnedAtEntryId: null,
+    decayResistance: 0.95,
+    retrievalCount: 2,
+    source: 'a dream',
+  }
+  const WRITTEN_KEPT: RowOn<typeof OTHER_BRANCH> = {
+    id: 'haw_kept',
+    branchId: OTHER_BRANCH,
+    happeningId: 'hap_1',
+    characterId: 'char_b',
+    learnedAtEntryId: 'entry_4',
+    decayResistance: 0.7,
+    retrievalCount: 1,
+    source: 'smelled the smoke',
+  }
+
+  const character = (id: string, name: string, branchId: BranchId): NewEntity => ({
+    id,
+    branchId,
+    kind: 'character',
+    name,
+    status: 'active',
+    injectionMode: 'auto',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+
+  // Sibling rows go in first: an id-only read scans in insertion order and would find them.
+  async function twoBranches(
+    sibling: RowOn<typeof BRANCH>[],
+    written: RowOn<typeof OTHER_BRANCH>[],
+  ) {
+    const harness = await setup([...sibling, ...written])
+    await harness.db
+      .insert(entities)
+      .values([
+        character('char_b', 'Bren', BRANCH),
+        character('char_a', 'Aria', OTHER_BRANCH),
+        character('char_b', 'Bren', OTHER_BRANCH),
+      ])
+    await harness.db.insert(happenings).values({
+      id: 'hap_1',
+      branchId: OTHER_BRANCH,
+      title: 'The fire',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    return harness
+  }
+
+  const onWritten = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: OTHER_BRANCH }, ctx)
+
+  const awarenessOn = async (db: Ctx['db'], branchId: BranchId, id: string) =>
+    (
+      await db
+        .select()
+        .from(happeningAwareness)
+        .where(and(eq(happeningAwareness.branchId, branchId), eq(happeningAwareness.id, id)))
+    )[0]
+
+  const pairOn = (db: Ctx['db'], branchId: BranchId) =>
+    db
+      .select()
+      .from(happeningAwareness)
+      .where(
+        and(
+          eq(happeningAwareness.branchId, branchId),
+          eq(happeningAwareness.characterId, 'char_a'),
+          eq(happeningAwareness.happeningId, 'hap_1'),
+        ),
+      )
+
+  const allRows = (db: Ctx['db']) =>
+    db
+      .select()
+      .from(happeningAwareness)
+      .orderBy(asc(happeningAwareness.branchId), asc(happeningAwareness.id))
+
+  const loggedBy = async (db: Ctx['db'], actionId: string) =>
+    (await db.select().from(deltas).where(eq(deltas.actionId, actionId))) as Delta[]
+
+  const learn = (branchId: BranchId): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source: 'ai_classifier',
+    payload: {
+      branchId,
+      characterId: 'char_a',
+      happeningId: 'hap_1',
+      learnedAtEntryId: 'entry_3',
+      decayResistance: 0.5,
+      source: 'a rumour',
+      proseEntryId: null,
+    },
+  })
+
+  const pin = (branchId: BranchId, decayResistance: number): PipelineAction => ({
+    kind: 'upsertHappeningAwareness',
+    source: 'user_edit',
+    payload: {
+      branchId,
+      characterId: 'char_a',
+      happeningId: 'hap_1',
+      decayResistance,
+      proseEntryId: null,
+    },
+  })
+
+  it('upsertHappeningAwareness pair: update path, from its own row, and reverses', async () => {
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
+
+    expect(await onWritten(ctx, learn(OTHER_BRANCH), 'act_up')).toMatchObject({ status: 'ok' })
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual({
+      ...WRITTEN,
+      source: 'a rumour',
+      decayResistance: 0.5,
+    })
+    const [logged] = await loggedBy(db, 'act_up')
+    expect(logged.undoPayload).toEqual({ source: 'overheard', decayResistance: 0.3 })
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_up', ctx)).toBe(1)
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual(WRITTEN)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+  })
+
+  it("upsertHappeningAwareness pair: create path, beside the sibling's row, and reverses", async () => {
+    const { db, ctx } = await twoBranches([SIBLING], [])
+
+    expect(await onWritten(ctx, learn(OTHER_BRANCH), 'act_up')).toMatchObject({ status: 'ok' })
+    expect(await pairOn(db, OTHER_BRANCH)).toEqual([
+      {
+        id: expect.stringMatching(/^haw_/),
+        branchId: OTHER_BRANCH,
+        happeningId: 'hap_1',
+        characterId: 'char_a',
+        learnedAtEntryId: 'entry_3',
+        decayResistance: 0.5,
+        retrievalCount: 0,
+        source: 'a rumour',
+      },
+    ])
+    expect(await loggedBy(db, 'act_up')).toMatchObject([{ op: 'create', undoPayload: null }])
+    expect(await pairOn(db, BRANCH)).toEqual([SIBLING])
+
+    expect(await reverseReplayDeltas('act_up', ctx)).toBe(1)
+    expect(await pairOn(db, OTHER_BRANCH)).toEqual([])
+    expect(await pairOn(db, BRANCH)).toEqual([SIBLING])
+  })
+
+  it('carryAwarenessPin pair: carries within its branch and reverses', async () => {
+    const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT], [WRITTEN, WRITTEN_KEPT])
+    expect((await onWritten(ctx, pin(OTHER_BRANCH, 0.2), 'act_pin')).status).toBe('ok')
+    const pinned = { ...WRITTEN, decayResistance: 0.2 }
+    const carryPin: PipelineAction = {
+      kind: 'carryAwarenessPin',
+      source: 'user_edit',
+      payload: { branchId: OTHER_BRANCH, id: 'haw_kept', pinFrom: 'haw_1' },
+    }
+
+    expect(await onWritten(ctx, carryPin, 'act_carry')).toMatchObject({ status: 'ok' })
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_kept')).toEqual({
+      ...WRITTEN_KEPT,
+      decayResistance: 0.2,
+    })
+    const [logged] = await loggedBy(db, 'act_carry')
+    expect(logged.undoPayload).toEqual({ decayResistance: 0.7 })
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual(pinned)
+    expect(await awarenessOn(db, BRANCH, 'haw_kept')).toEqual(SIBLING_KEPT)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_carry', ctx)).toBe(1)
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_kept')).toEqual(WRITTEN_KEPT)
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual(pinned)
+    expect(await awarenessOn(db, BRANCH, 'haw_kept')).toEqual(SIBLING_KEPT)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+  })
+
+  it('deleteHappeningAwareness pair: deletes its own row and restores it', async () => {
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
+    const remove: PipelineAction = {
+      kind: 'deleteHappeningAwareness',
+      source: 'user_edit',
+      payload: { branchId: OTHER_BRANCH, id: 'haw_1' },
+    }
+
+    expect(await onWritten(ctx, remove, 'act_d')).toMatchObject({ status: 'ok' })
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toBeUndefined()
+    const [logged] = await loggedBy(db, 'act_d')
+    expect(logged.undoPayload).toEqual(WRITTEN)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual(WRITTEN)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+  })
+
+  it('bumpAwarenessRetrieval pair: counts its own row and reverses', async () => {
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
+    const bumpWritten: PipelineAction = {
+      kind: 'bumpAwarenessRetrieval',
+      source: 'ai_classifier',
+      payload: { branchId: OTHER_BRANCH, id: 'haw_1', priorCount: 4 },
+    }
+
+    expect(await onWritten(ctx, bumpWritten, 'act_bump')).toMatchObject({ status: 'ok' })
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual({ ...WRITTEN, retrievalCount: 5 })
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_bump', ctx)).toBe(1)
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual(WRITTEN)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+  })
+
+  it('resetAwarenessRetrieval pair: zeroes its own row and reverses', async () => {
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
+    const resetWritten: PipelineAction = {
+      kind: 'resetAwarenessRetrieval',
+      source: 'chapter_close',
+      payload: { branchId: OTHER_BRANCH, id: 'haw_1', priorCount: 4 },
+    }
+
+    expect(await onWritten(ctx, resetWritten, 'act_reset')).toMatchObject({ status: 'ok' })
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual({ ...WRITTEN, retrievalCount: 0 })
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_reset', ctx)).toBe(1)
+    expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual(WRITTEN)
+    expect(await awarenessOn(db, BRANCH, 'haw_1')).toEqual(SIBLING)
+  })
+
+  // The payload names the sibling, a valid target there (its pin is the user's, so a carry lands):
+  // with the check gone, the write lands on it.
+  const PAYLOAD_CASES: PipelineAction[] = [
+    learn(BRANCH),
+    {
+      kind: 'carryAwarenessPin',
+      source: 'user_edit',
+      payload: { branchId: BRANCH, id: 'haw_kept', pinFrom: 'haw_1' },
+    },
+    {
+      kind: 'deleteHappeningAwareness',
+      source: 'user_edit',
+      payload: { branchId: BRANCH, id: 'haw_1' },
+    },
+    {
+      kind: 'bumpAwarenessRetrieval',
+      source: 'ai_classifier',
+      payload: { branchId: BRANCH, id: 'haw_1', priorCount: 9 },
+    },
+    {
+      kind: 'resetAwarenessRetrieval',
+      source: 'chapter_close',
+      payload: { branchId: BRANCH, id: 'haw_1', priorCount: 9 },
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((a) => [a.kind, a] as const))(
+    '%s payload: refuses a payload naming the sibling branch',
+    async (_kind, action) => {
+      const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT], [WRITTEN, WRITTEN_KEPT])
+      expect(
+        (
+          await applyDeltaAction(
+            { action: pin(BRANCH, 0.6), actionId: 'act_pin', branchId: BRANCH },
+            ctx,
+          )
+        ).status,
+      ).toBe('ok')
+      const before = await allRows(db)
+
+      expect(await onWritten(ctx, action, 'act_payload')).toEqual({
+        status: 'rejected',
+        reason: 'branch mismatch: delta br_2 vs target br_1',
+      })
+
+      expect(await allRows(db)).toEqual(before)
+      expect(await loggedBy(db, 'act_payload')).toEqual([])
+    },
+  )
 })

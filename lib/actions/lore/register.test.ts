@@ -1,7 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, deltas, lore, stories, type NewLore } from '@/lib/db'
+import { branches, deltas, lore, stories, type Lore, type NewLore } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { loreStore } from '@/lib/stores'
 
@@ -440,5 +440,198 @@ describe('setLoreKeywords', () => {
     const row = await rowFor(db, 'lore_1')
     expect(row.body).toBe('The magic that binds, and the tithe it takes.')
     expect(row.keywords).toEqual(['aether', 'mana'])
+  })
+})
+
+// Lore ids repeat across branches (the key is branch and id). The sibling br_1 is seeded first,
+// so a read that drops its branch finds the sibling's row.
+describe('branch scope', () => {
+  type Harness = Awaited<ReturnType<typeof setup>>
+  type BranchId = 'br_1' | 'br_2'
+
+  const SIBLING: Lore = {
+    id: 'lore_1',
+    branchId: 'br_1',
+    title: 'Wyrd',
+    body: 'Old runes bind.',
+    category: 'rune',
+    tags: ['old'],
+    keywords: ['wyrd', 'rune'],
+    injectionMode: 'disabled',
+    priority: 3,
+    embeddingStale: 0,
+    createdAt: 2,
+    updatedAt: 2,
+  }
+  // Stale already: an update and any reversal stamp embedding_stale 1.
+  const WRITTEN: Lore = {
+    id: 'lore_1',
+    branchId: 'br_2',
+    title: 'Aether',
+    body: 'The magic that binds.',
+    category: 'magic',
+    tags: ['magic', 'core'],
+    keywords: ['aether', 'mana'],
+    injectionMode: 'auto',
+    priority: 10,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const TARGET_MISMATCH = 'branch mismatch: delta br_2 vs target br_1'
+
+  async function twoBranches({ written }: { written: boolean }) {
+    const harness = await setup()
+    const { db } = harness
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await db.insert(lore).values(SIBLING)
+    if (written) await db.insert(lore).values(WRITTEN)
+    return harness
+  }
+
+  const loreOn = async (db: Harness['db'], branchId: BranchId) =>
+    (
+      await db
+        .select()
+        .from(lore)
+        .where(and(eq(lore.branchId, branchId), eq(lore.id, 'lore_1')))
+    )[0]
+  const allLore = (db: Harness['db']) => db.select().from(lore).orderBy(lore.branchId, lore.id)
+  const deltasOf = (db: Harness['db'], actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+  const undoOf = async (db: Harness['db'], actionId: string) =>
+    (await deltasOf(db, actionId))[0]?.undoPayload
+  const onFork = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+  const createWritten: PipelineAction = {
+    kind: 'createLore',
+    source: 'lore_agent',
+    payload: { entry: WRITTEN },
+  }
+
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
+        kind: 'createLore',
+        source: 'lore_agent',
+        payload: { entry: { ...WRITTEN, id: 'lore_9', branchId: 'br_1' } },
+      },
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
+        kind: 'updateLore',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'lore_1', patch: { priority: 50 }, proseEntryId: null },
+      },
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
+        kind: 'setLoreKeywords',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'br_1',
+          id: 'lore_1',
+          add: ['ley line'],
+          remove: [],
+          proseEntryId: null,
+        },
+      },
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
+        kind: 'deleteLore',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'lore_1' },
+      },
+      reason: TARGET_MISMATCH,
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: names the sibling branch and is refused, both rows unchanged',
+    async (_kind, { action, reason }) => {
+      const { db, ctx } = await twoBranches({ written: true })
+      expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
+      expect(await allLore(db)).toEqual([SIBLING, WRITTEN])
+      expect(await deltasOf(db, 'act_p')).toEqual([])
+    },
+  )
+
+  it('createLore pair: creates the row on its own branch, and the reversal removes only that row', async () => {
+    const { db, ctx } = await twoBranches({ written: false })
+    expect(await onFork(ctx, createWritten, 'act_c')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await loreOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await loreOn(db, 'br_2')).toBeUndefined()
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("updateLore pair: patches its own branch's row from that row, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches({ written: true })
+    const patch = { body: 'The tide that turns.', category: 'tide', priority: 50 }
+    const update: PipelineAction = {
+      kind: 'updateLore',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'lore_1', patch, proseEntryId: null },
+    }
+    expect(await onFork(ctx, update, 'act_u')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_u')).toEqual({
+      body: 'The magic that binds.',
+      category: 'magic',
+      priority: 10,
+    })
+    expect(await loreOn(db, 'br_2')).toEqual({ ...WRITTEN, ...patch })
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await loreOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  // Created through a machine action, so its create delta makes `mana` a removable machine term.
+  it("setLoreKeywords pair: edits its own branch's list from that list, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches({ written: false })
+    expect(await onFork(ctx, createWritten, 'act_c')).toEqual({ status: 'ok', logPosition: 1 })
+    const edit: PipelineAction = {
+      kind: 'setLoreKeywords',
+      source: 'chapter_close',
+      payload: {
+        branchId: 'br_2',
+        id: 'lore_1',
+        add: ['ley line'],
+        remove: ['mana'],
+        proseEntryId: null,
+      },
+    }
+    expect(await onFork(ctx, edit, 'act_k')).toEqual({ status: 'ok', logPosition: 2 })
+    expect(await undoOf(db, 'act_k')).toEqual({ keywords: ['aether', 'mana'] })
+    expect(await loreOn(db, 'br_2')).toEqual({ ...WRITTEN, keywords: ['aether', 'ley line'] })
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_k', ctx)).toBe(1)
+    expect(await loreOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("deleteLore pair: deletes its own branch's row, and the reversal restores only that row", async () => {
+    const { db, ctx } = await twoBranches({ written: true })
+    const remove: PipelineAction = {
+      kind: 'deleteLore',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'lore_1' },
+    }
+    expect(await onFork(ctx, remove, 'act_d')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_d')).toEqual({ ...WRITTEN, translations: [] })
+    expect(await loreOn(db, 'br_2')).toBeUndefined()
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await loreOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await loreOn(db, 'br_1')).toEqual(SIBLING)
   })
 })

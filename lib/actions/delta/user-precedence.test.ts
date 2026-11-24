@@ -49,18 +49,23 @@ async function setup() {
 
 type Ctx = Awaited<ReturnType<typeof setup>>['ctx']
 
-async function apply(ctx: Ctx, action: PipelineAction, actionId: string): Promise<number> {
-  const result = await applyDeltaAction({ action, actionId, branchId: 'br_1' }, ctx)
+async function apply(
+  ctx: Ctx,
+  action: PipelineAction,
+  actionId: string,
+  branchId = 'br_1',
+): Promise<number> {
+  const result = await applyDeltaAction({ action, actionId, branchId }, ctx)
   if (result.status !== 'ok' || result.logPosition == null)
     throw new Error(`${actionId} did not land: ${JSON.stringify(result)}`)
   return result.logPosition
 }
 
-const createEntry = (id: string, position: number): PipelineAction => ({
+const createEntry = (id: string, position: number, branchId = 'br_1'): PipelineAction => ({
   kind: 'createStoryEntry',
   source: 'ai_classifier',
   payload: {
-    entry: { id, branchId: 'br_1', position, kind: 'ai_reply', content: 'prose', createdAt: 1 },
+    entry: { id, branchId, position, kind: 'ai_reply', content: 'prose', createdAt: 1 },
   },
 })
 
@@ -79,32 +84,45 @@ const updateEntity = (
   source: DeltaSource,
   id: string,
   patch: Record<string, unknown>,
-): PipelineAction => ({ kind: 'updateEntity', source, payload: { branchId: 'br_1', id, patch } })
+  branchId = 'br_1',
+): PipelineAction => ({ kind: 'updateEntity', source, payload: { branchId, id, patch } })
 
-async function pairRowId(ctx: Ctx, aId: string, bId: string): Promise<string> {
+async function pairRowId(ctx: Ctx, aId: string, bId: string, branchId = 'br_1'): Promise<string> {
   const [row] = await ctx.db
     .select({ id: characterRelationships.id })
     .from(characterRelationships)
-    .where(and(eq(characterRelationships.aId, aId), eq(characterRelationships.bId, bId)))
-  if (row == null) throw new Error(`fixture: ${aId}/${bId} row missing`)
+    .where(
+      and(
+        eq(characterRelationships.branchId, branchId),
+        eq(characterRelationships.aId, aId),
+        eq(characterRelationships.bId, bId),
+      ),
+    )
+  if (row == null) throw new Error(`fixture: ${aId}/${bId} row missing on ${branchId}`)
   return row.id
 }
 
-const deletePair = (id: string): PipelineAction => ({
+const deletePair = (id: string, branchId = 'br_1'): PipelineAction => ({
   kind: 'deleteCharacterRelationship',
   source: 'user_edit',
-  payload: { branchId: 'br_1', id },
+  payload: { branchId, id },
 })
 
 async function seedChars(ctx: Ctx, ...ids: string[]): Promise<void> {
   await ctx.db.insert(entities).values(ids.map((id) => ({ ...CHAR, id })))
 }
 
-const relate = (subjectId: string, objectId: string): PipelineAction => ({
+const relate = (subjectId: string, objectId: string, branchId = 'br_1'): PipelineAction => ({
   kind: 'upsertCharacterRelationship',
   source: 'user_edit',
-  payload: { branchId: 'br_1', subjectId, objectId, kind: 'ally', inverseKind: 'ally' },
+  payload: { branchId, subjectId, objectId, kind: 'ally', inverseKind: 'ally' },
 })
+
+async function addFork(ctx: Ctx): Promise<void> {
+  await ctx.db
+    .insert(branches)
+    .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 2 })
+}
 
 describe('proseLogPosition', () => {
   it('is 0 for an entry the log has no create or content edit for', async () => {
@@ -135,6 +153,17 @@ describe('proseLogPosition', () => {
     expect(await proseLogPosition(ctx, 'br_1', 'e_1')).toBeGreaterThan(created)
     expect(await proseLogPosition(ctx, 'br_1', 'e_2')).toBe(created + 1)
   })
+
+  it("reads its own branch's log: another branch's later create of the same entry doesn't move it", async () => {
+    const { ctx } = await setup()
+    await addFork(ctx)
+    await apply(ctx, createEntry('e_pad', 1, 'br_2'), 'act_fork_pad', 'br_2')
+    await apply(ctx, createEntry('e_1', 2, 'br_2'), 'act_fork_e', 'br_2')
+    await apply(ctx, createEntry('e_1', 1), 'act_e')
+
+    expect(await proseLogPosition(ctx, 'br_1', 'e_1')).toBe(1)
+    expect(await proseLogPosition(ctx, 'br_2', 'e_1')).toBe(2)
+  })
 })
 
 describe('userEditsSince', () => {
@@ -155,6 +184,39 @@ describe('userEditsSince', () => {
     const edits = await userEditsSince(ctx, 'br_1', 'entities', 'char_1', since)
     expect(edits.map((d) => d.logPosition)).toEqual([first, second])
     expect(edits.map((d) => d.undoPayload)).toEqual([{ status: 'active' }, { name: 'Kael II' }])
+  })
+
+  it("reads its own branch's log: another branch's user edit of the row after the position isn't returned", async () => {
+    const { ctx } = await setup()
+    await addFork(ctx)
+    const forkChar: NewEntity = { ...CHAR, branchId: 'br_2' }
+    await apply(
+      ctx,
+      { kind: 'createEntity', source: 'user_edit', payload: { entry: forkChar } },
+      'a_fork_c',
+      'br_2',
+    )
+    await apply(
+      ctx,
+      updateEntity('user_edit', 'char_1', { name: 'Kael of the fork' }, 'br_2'),
+      'a_fork_1',
+      'br_2',
+    )
+    await apply(
+      ctx,
+      updateEntity('user_edit', 'char_1', { status: 'retired' }, 'br_2'),
+      'a_fork_2',
+      'br_2',
+    )
+    await apply(ctx, { kind: 'createEntity', source: 'user_edit', payload: { entry: CHAR } }, 'a0')
+    await apply(ctx, updateEntity('user_edit', 'char_1', { name: 'Kael I' }), 'a1')
+
+    const edits = await userEditsSince(ctx, 'br_1', 'entities', 'char_1', 1)
+    expect(edits.map((d) => [d.branchId, d.logPosition, d.undoPayload])).toEqual([
+      ['br_1', 2, { name: 'Kael' }],
+    ])
+    const forkEdits = await userEditsSince(ctx, 'br_2', 'entities', 'char_1', 1)
+    expect(forkEdits.map((d) => d.logPosition)).toEqual([2, 3])
   })
 })
 
@@ -339,6 +401,28 @@ describe('userDeletedPairSince', () => {
     expect(await userDeletedPairSince(ctx, 'br_1', 'char_kael', 'char_mira', deleted - 1)).toBe(
       true,
     )
+  })
+
+  it("reads its own branch's log: another branch's later delete of the same pair doesn't count", async () => {
+    const { ctx } = await setup()
+    await addFork(ctx)
+    await ctx.db
+      .insert(entities)
+      .values(['char_kael', 'char_mira'].map((id) => ({ ...CHAR, id, branchId: 'br_2' })))
+    await apply(ctx, relate('char_kael', 'char_mira', 'br_2'), 'a_fork_r', 'br_2')
+    await apply(ctx, createEntry('e_fork', 1, 'br_2'), 'a_fork_e', 'br_2')
+    await apply(
+      ctx,
+      deletePair(await pairRowId(ctx, 'char_kael', 'char_mira', 'br_2'), 'br_2'),
+      'a_fork_d',
+      'br_2',
+    )
+    await seedChars(ctx, 'char_kael', 'char_mira')
+    await apply(ctx, relate('char_kael', 'char_mira'), 'a0')
+    await apply(ctx, createEntry('e_1', 1), 'a1')
+
+    expect(await userDeletedPairSince(ctx, 'br_1', 'char_kael', 'char_mira', 2)).toBe(false)
+    expect(await userDeletedPairSince(ctx, 'br_2', 'char_kael', 'char_mira', 2)).toBe(true)
   })
 })
 

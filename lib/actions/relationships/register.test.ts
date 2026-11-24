@@ -1,7 +1,15 @@
 import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, characterRelationships, deltas, entities, stories } from '@/lib/db'
+import {
+  branches,
+  characterRelationships,
+  deltas,
+  entities,
+  stories,
+  type CharacterRelationship,
+  type NewEntity,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entriesStore, undoRedoStore } from '@/lib/stores'
 
@@ -13,6 +21,7 @@ import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
 import { registerEntities } from '../entities/register'
 import { registerStoryEntries } from '../story-entries/register'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   __resetRegistry()
@@ -629,5 +638,196 @@ describe('single-perspective upsert against a user edit newer than the prose', (
     expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
     expect((await applyDeltaAction(classify('ally', 'act_k2'), ctx)).status).toBe('ok')
     expect((await pairRow(db, 'char_kael', 'char_mira'))[0].kind).toBe('ally')
+  })
+})
+
+// Relationship ids repeat across branches (the key is branch and id). The sibling br_1 is seeded
+// first, so a read that drops its branch finds the sibling's row.
+describe('branch scope', () => {
+  type Harness = Awaited<ReturnType<typeof setup>>
+  type BranchId = 'br_1' | 'br_2'
+
+  const SIBLING: CharacterRelationship = {
+    id: 'rel_1',
+    branchId: 'br_1',
+    aId: 'char_aria',
+    bId: 'char_kael',
+    kind: 'rival',
+    inverseKind: 'wary',
+    createdAt: 2,
+    updatedAt: 2,
+  }
+  const WRITTEN: CharacterRelationship = {
+    id: 'rel_1',
+    branchId: 'br_2',
+    aId: 'char_aria',
+    bId: 'char_kael',
+    kind: 'brother',
+    inverseKind: 'sister',
+    createdAt: 1,
+    updatedAt: 1,
+  }
+
+  async function twoBranches(written: CharacterRelationship | null) {
+    const harness = await setup()
+    const { db } = harness
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await db.insert(entities).values(
+      ['char_aria', 'char_kael', 'char_mira'].map(
+        (id): NewEntity => ({
+          id,
+          branchId: 'br_2',
+          kind: 'character',
+          name: id,
+          status: 'active',
+          injectionMode: 'auto',
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+      ),
+    )
+    await db.insert(characterRelationships).values(SIBLING)
+    if (written) await db.insert(characterRelationships).values(written)
+    return harness
+  }
+
+  const pairOn = async (db: Harness['db'], branchId: BranchId) =>
+    (
+      await db
+        .select()
+        .from(characterRelationships)
+        .where(
+          and(
+            eq(characterRelationships.branchId, branchId),
+            eq(characterRelationships.aId, 'char_aria'),
+            eq(characterRelationships.bId, 'char_kael'),
+          ),
+        )
+    )[0]
+  const allPairs = (db: Harness['db']) =>
+    db.select().from(characterRelationships).orderBy(characterRelationships.branchId)
+  const undoOf = async (db: Harness['db'], actionId: string) =>
+    (await deltasFor(db, actionId))[0]?.undoPayload
+  const onFork = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+  const classify = (branchId: BranchId, kind: string | null): PipelineAction => ({
+    kind: 'upsertCharacterRelationship',
+    source: 'ai_classifier',
+    payload: { branchId, subjectId: 'char_aria', objectId: 'char_kael', kind, proseEntryId: null },
+  })
+
+  const PAYLOAD_ACTIONS: PipelineAction[] = [
+    classify('br_1', 'ally'),
+    {
+      kind: 'deleteCharacterRelationship',
+      source: 'user_edit',
+      payload: { branchId: 'br_1', id: 'rel_1' },
+    },
+  ]
+
+  it.each(PAYLOAD_ACTIONS.map((a) => [a.kind, a] as const))(
+    '%s payload: names the sibling branch and is refused, both rows unchanged',
+    async (_kind, action) => {
+      const { db, ctx } = await twoBranches(WRITTEN)
+      expect(await onFork(ctx, action, 'act_p')).toEqual({
+        status: 'rejected',
+        reason: 'branch mismatch: delta br_2 vs target br_1',
+      })
+      expect(await allPairs(db)).toEqual([SIBLING, WRITTEN])
+      expect(await deltasFor(db, 'act_p')).toEqual([])
+    },
+  )
+
+  it("upsertCharacterRelationship pair: both views update their own branch's row, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches(WRITTEN)
+    const bothViews: PipelineAction = {
+      kind: 'upsertCharacterRelationship',
+      source: 'user_edit',
+      payload: {
+        branchId: 'br_2',
+        subjectId: 'char_aria',
+        objectId: 'char_kael',
+        kind: 'mentor',
+        inverseKind: 'pupil',
+      },
+    }
+    expect(await onFork(ctx, bothViews, 'act_u')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_u')).toEqual({ kind: 'brother', inverseKind: 'sister' })
+    expect(await pairOn(db, 'br_2')).toEqual({ ...WRITTEN, kind: 'mentor', inverseKind: 'pupil' })
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await pairOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("upsertCharacterRelationship pair: a single view updates its own branch's row, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches(WRITTEN)
+    expect(await onFork(ctx, classify('br_2', 'ally'), 'act_u')).toEqual({
+      status: 'ok',
+      logPosition: 1,
+    })
+    expect(await undoOf(db, 'act_u')).toEqual({ kind: 'brother' })
+    expect(await pairOn(db, 'br_2')).toEqual({ ...WRITTEN, kind: 'ally' })
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await pairOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("upsertCharacterRelationship pair: clearing the last view deletes its own branch's row, and the reversal restores it", async () => {
+    const lastView: CharacterRelationship = { ...WRITTEN, inverseKind: null }
+    const { db, ctx } = await twoBranches(lastView)
+    expect(await onFork(ctx, classify('br_2', null), 'act_u')).toEqual({
+      status: 'ok',
+      logPosition: 1,
+    })
+    expect(await undoOf(db, 'act_u')).toEqual(lastView)
+    expect(await pairOn(db, 'br_2')).toBeUndefined()
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await pairOn(db, 'br_2')).toEqual(lastView)
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it('upsertCharacterRelationship pair: creates the pair on its own branch while only the sibling holds it, and the reversal removes it', async () => {
+    const { db, ctx } = await twoBranches(null)
+    expect(await onFork(ctx, classify('br_2', 'ally'), 'act_c')).toEqual({
+      status: 'ok',
+      logPosition: 1,
+    })
+    const created = await pairOn(db, 'br_2')
+    expect(created).toMatchObject({
+      branchId: 'br_2',
+      aId: 'char_aria',
+      bId: 'char_kael',
+      kind: 'ally',
+      inverseKind: null,
+    })
+    expect(created.id).not.toBe(SIBLING.id)
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await pairOn(db, 'br_2')).toBeUndefined()
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("deleteCharacterRelationship pair: deletes its own branch's row, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches(WRITTEN)
+    const remove: PipelineAction = {
+      kind: 'deleteCharacterRelationship',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'rel_1' },
+    }
+    expect(await onFork(ctx, remove, 'act_d')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_d')).toEqual(WRITTEN)
+    expect(await pairOn(db, 'br_2')).toBeUndefined()
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await pairOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await pairOn(db, 'br_1')).toEqual(SIBLING)
   })
 })

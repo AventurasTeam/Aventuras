@@ -14,6 +14,7 @@ import {
   type CharacterState,
   type StorySettings,
 } from '@/lib/db'
+import { branchSnapshot, cloneBranch } from '@/lib/db/__tests__/two-branch'
 import {
   openCloseFixture,
   type CloseFixture,
@@ -54,6 +55,7 @@ import {
   editLore,
   seedPlaces,
   placeUnder,
+  entryRows,
 } from './__tests__/chapter-delete-fixture'
 import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
 import type { DeltaSource, PipelineAction } from '../types'
@@ -703,6 +705,110 @@ describe('getChapterDeletePreview', () => {
     expect(
       await getChapterDeletePreview(fx.branchId, chapter.id, previewStory(fx), fx.ctx),
     ).toMatchObject({ chapterNumber: 1, turnsSince: 3 })
+  })
+
+  describe('branch scope', () => {
+    const COPY = 'br_copy'
+    // With no close tasks, the close writes only its divider; three replies follow its end, and the
+    // region sits far under the default threshold with auto-close on.
+    const COPY_PREVIEW = {
+      chapterNumber: 1,
+      createdLore: { count: 0, userEdited: false },
+      otherChanges: 0,
+      turnsSince: 3,
+      after: 'waits',
+    }
+
+    // Inserted after the parent's rows: a read without its branch term finds the parent's first.
+    async function openCopy() {
+      const c = await openClosed()
+      cloneBranch(c.fx.sqlite, c.fx.branchId, COPY)
+      const copy: CloseFixture = { ...c.fx, branchId: COPY }
+      return {
+        c,
+        copy,
+        preview: (settings: Partial<StorySettings> = {}) =>
+          getChapterDeletePreview(COPY, c.chapter.id, previewStory(copy, settings), c.fx.ctx),
+        parentRows: () => branchSnapshot(c.fx.sqlite, c.fx.branchId),
+      }
+    }
+
+    it('reads its own chapter row, not the same id on the parent', async () => {
+      const { c, preview, parentRows } = await openCopy()
+      await c.fx.ctx.db
+        .update(chapters)
+        .set({ sequenceNumber: 4 })
+        .where(and(eq(chapters.branchId, c.fx.branchId), eq(chapters.id, c.chapter.id)))
+      const parent = parentRows()
+
+      await expect(preview()).resolves.toEqual(COPY_PREVIEW)
+      expect(parentRows()).toEqual(parent)
+      await expect(
+        getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
+      ).resolves.toMatchObject({ chapterNumber: 4 })
+    })
+
+    it('checks latest against its own chapters, not a later one on the parent', async () => {
+      const { c, preview, parentRows } = await openCopy()
+      await c.fx.ctx.db.insert(chapters).values({
+        id: 'chap_parent_later',
+        branchId: c.fx.branchId,
+        sequenceNumber: 2,
+        title: 'The far bank',
+        summary: 'Closed on the parent after the copy was made.',
+        theme: 'None',
+        startEntryId: c.fx.entries[7].id,
+        endEntryId: c.fx.replyIds[4],
+        tokenCount: 1,
+        closedAt: CLOSED_AT + 1,
+        createdAt: CLOSED_AT + 1,
+        updatedAt: CLOSED_AT + 1,
+      })
+      const parent = parentRows()
+
+      await expect(preview()).resolves.toEqual(COPY_PREVIEW)
+      expect(parentRows()).toEqual(parent)
+      await expect(
+        getChapterDeletePreview(c.fx.branchId, c.chapter.id, previewStory(c.fx), c.fx.ctx),
+      ).resolves.toMatchObject({ status: 'rejected', code: CHAPTER_DELETE_REFUSAL.notLatest })
+    })
+
+    it('sums its own stamped entries, not the same ids on the parent', async () => {
+      const { c, copy, preview, parentRows } = await openCopy()
+      const tokensOf = async (fx: CloseFixture, chapterId: string | null) =>
+        (await entryRows(fx))
+          .filter((row) => row.kind !== 'system' && row.chapterId === chapterId)
+          .reduce((sum, row) => sum + (row.contentTokens ?? 0), 0)
+      // The chapter's entries rejoin the open ones after it.
+      const tokensAfter = (await tokensOf(copy, c.chapter.id)) + (await tokensOf(copy, null))
+      expect(await tokensOf(c.fx, c.chapter.id)).toBeGreaterThan(0)
+      const parent = parentRows()
+
+      await expect(preview({ chapterTokenThreshold: tokensAfter })).resolves.toEqual({
+        ...COPY_PREVIEW,
+        after: 'closes-next-send',
+      })
+      await expect(preview({ chapterTokenThreshold: tokensAfter + 1 })).resolves.toEqual(
+        COPY_PREVIEW,
+      )
+      expect(parentRows()).toEqual(parent)
+    })
+
+    it('reads no manual close when only the parent has one pending', async () => {
+      const { c, preview, parentRows } = await openCopy()
+      generationStore.setPendingClose(c.fx.branchId, { endEntryId: c.fx.replyIds[5] })
+      const parent = parentRows()
+
+      await expect(preview()).resolves.toEqual(COPY_PREVIEW)
+      await expect(preview({ chapterAutoClose: false })).resolves.toEqual({
+        ...COPY_PREVIEW,
+        after: 'stays-open',
+      })
+      expect(parentRows()).toEqual(parent)
+
+      generationStore.setPendingClose(COPY, { endEntryId: c.fx.replyIds[5] })
+      await expect(preview()).resolves.toMatchObject({ after: 'closes-next-send' })
+    })
   })
 })
 
