@@ -1,7 +1,15 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, storyEntries, threads, type NewThread } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  stories,
+  storyEntries,
+  threads,
+  type NewThread,
+  type Thread,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, threadsStore } from '@/lib/stores'
 
@@ -1024,5 +1032,195 @@ describe('updateThread — columns that already stand, and the user edits a mach
       'ok',
     )
     expect((await rowFor(db, 'thr_1')).title).toBe('Claim the relic')
+  })
+})
+
+// Thread ids repeat across branches (the key is branch and id). The sibling br_1 is seeded first,
+// so a read that drops its branch finds the sibling's row.
+describe('branch scope', () => {
+  type Harness = Awaited<ReturnType<typeof setup>>
+
+  const SIBLING: Thread = {
+    id: 'thr_1',
+    branchId: 'br_1',
+    title: 'Guard the gate',
+    description: 'A night watch.',
+    category: 'duty',
+    icon: 'shield',
+    status: 'failed',
+    injectionMode: 'disabled',
+    triggeredAtEntryId: null,
+    resolvedAtEntryId: null,
+    embeddingStale: 0,
+    createdAt: 2,
+    updatedAt: 2,
+  }
+  // Carries entry refs, which the sibling lacks; stale already, as a reversal re-stamps it.
+  const WRITTEN: Thread = {
+    id: 'thr_1',
+    branchId: 'br_2',
+    title: 'Recover the relic',
+    description: 'A quest line.',
+    category: 'quest',
+    icon: 'sword',
+    status: 'active',
+    injectionMode: 'auto',
+    triggeredAtEntryId: 'e_setup',
+    resolvedAtEntryId: 'e_turn',
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const TARGET_MISMATCH = 'branch mismatch: delta br_2 vs target br_1'
+
+  async function twoBranches({ written }: { written: boolean }): Promise<Harness> {
+    const harness = await setup()
+    const { db } = harness
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await db.insert(threads).values(SIBLING)
+    if (written) await db.insert(threads).values(WRITTEN)
+    return harness
+  }
+
+  const threadOn = async (db: Harness['db'], branchId: string) =>
+    (
+      await db
+        .select()
+        .from(threads)
+        .where(and(eq(threads.branchId, branchId), eq(threads.id, 'thr_1')))
+    )[0]
+  const allThreads = (db: Harness['db']) =>
+    db.select().from(threads).orderBy(threads.branchId, threads.id)
+  const onFork = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+
+  it.each<[string, PipelineAction, string]>([
+    [
+      'createThread',
+      {
+        kind: 'createThread',
+        source: 'chapter_close',
+        payload: { entry: { ...WRITTEN, id: 'thr_9', branchId: 'br_1' } },
+      },
+      'branch mismatch: delta br_2 vs entry br_1',
+    ],
+    [
+      'updateThread',
+      {
+        kind: 'updateThread',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'thr_1',
+          patch: { title: 'Hold the line' },
+          proseEntryId: null,
+        },
+      },
+      TARGET_MISMATCH,
+    ],
+    [
+      'setThreadStatus',
+      {
+        kind: 'setThreadStatus',
+        source: 'periodic_classifier',
+        payload: { branchId: 'br_1', id: 'thr_1', status: 'active', proseEntryId: null },
+      },
+      TARGET_MISMATCH,
+    ],
+    [
+      'deleteThread',
+      { kind: 'deleteThread', source: 'user_edit', payload: { branchId: 'br_1', id: 'thr_1' } },
+      TARGET_MISMATCH,
+    ],
+  ])(
+    '%s payload: names the sibling branch and is refused, both rows unchanged',
+    async (_kind, action, reason) => {
+      const { db, ctx } = await twoBranches({ written: true })
+      expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
+      expect(await allThreads(db)).toEqual([SIBLING, WRITTEN])
+      expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_p'))).toEqual([])
+    },
+  )
+
+  it('createThread pair: creates the row on its own branch, and the reversal removes only that row', async () => {
+    const { db, ctx } = await twoBranches({ written: false })
+    const create: PipelineAction = {
+      kind: 'createThread',
+      source: 'chapter_close',
+      payload: { entry: WRITTEN },
+    }
+    expect(await onFork(ctx, create, 'act_c')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await threadOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await threadOn(db, 'br_2')).toBeUndefined()
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("updateThread pair: patches its own branch's row from that row, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches({ written: true })
+    const patch = { status: 'resolved' as const, description: 'Home at last.' }
+    const update: PipelineAction = {
+      kind: 'updateThread',
+      source: 'chapter_close',
+      payload: { branchId: 'br_2', id: 'thr_1', patch, proseEntryId: null },
+    }
+    expect(await onFork(ctx, update, 'act_u')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_u')).toEqual({
+      status: 'active',
+      description: 'A quest line.',
+      resolvedAtEntryId: 'e_turn',
+    })
+    expect(await threadOn(db, 'br_2')).toEqual({ ...WRITTEN, ...patch })
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await threadOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("setThreadStatus pair: moves its own branch's row from that row's status, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches({ written: true })
+    const resolve: PipelineAction = {
+      kind: 'setThreadStatus',
+      source: 'periodic_classifier',
+      payload: {
+        branchId: 'br_2',
+        id: 'thr_1',
+        status: 'resolved',
+        resolvedAtEntryId: 'e_end',
+        proseEntryId: null,
+      },
+    }
+    expect(await onFork(ctx, resolve, 'act_s')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_s')).toEqual({ status: 'active', resolvedAtEntryId: 'e_turn' })
+    expect(await threadOn(db, 'br_2')).toEqual({
+      ...WRITTEN,
+      status: 'resolved',
+      resolvedAtEntryId: 'e_end',
+    })
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_s', ctx)).toBe(1)
+    expect(await threadOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("deleteThread pair: deletes its own branch's row, and the reversal restores only that row", async () => {
+    const { db, ctx } = await twoBranches({ written: true })
+    const remove: PipelineAction = {
+      kind: 'deleteThread',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'thr_1' },
+    }
+    expect(await onFork(ctx, remove, 'act_d')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_d')).toEqual({ ...WRITTEN, translations: [] })
+    expect(await threadOn(db, 'br_2')).toBeUndefined()
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await threadOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await threadOn(db, 'br_1')).toEqual(SIBLING)
   })
 })
