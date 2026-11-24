@@ -23,12 +23,15 @@ async function waitForTier(tier: 'desktop' | 'tablet' | 'phone') {
 }
 
 /** Stands in for the navigator row: the input while renaming, the stored name once `onDone` runs.
- * F2 toggles the input from the document, as the navigator closing does: no blur runs. */
+ * F2 toggles the input from the document, as the navigator closing does: no blur runs. F3 renames
+ * the stored branch elsewhere, under the open input. */
 function RowHarness(props: BranchRenameInputProps) {
   const [editing, setEditing] = useState(true)
+  const [name, setName] = useState(props.name)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F2') setEditing((value) => !value)
+      if (event.key === 'F3') setName('Fork')
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
@@ -39,13 +42,14 @@ function RowHarness(props: BranchRenameInputProps) {
       {editing ? (
         <BranchRenameInput
           {...props}
+          name={name}
           onDone={() => {
             props.onDone()
             setEditing(false)
           }}
         />
       ) : (
-        <Text testID="stored-name">{props.name}</Text>
+        <Text testID="stored-name">{name}</Text>
       )}
       <Pressable accessibilityRole="button" aria-label="Elsewhere" className="p-2">
         <Text>Elsewhere</Text>
@@ -214,6 +218,31 @@ export const BlurSaves: Story = {
     await waitFor(() => expect(args.onDone).toHaveBeenCalledTimes(1))
     await expect(args.onSave).toHaveBeenCalledTimes(1)
     await expect(args.onSave).toHaveBeenCalledWith('The trap')
+  },
+}
+
+export const UntouchedDraftNeverOverwritesANewerName: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await renameField()
+    await userEvent.keyboard('{F3}')
+    await userEvent.click(screen.getByRole('button', { name: 'Elsewhere' }))
+    await waitFor(() => expect(args.onDone).toHaveBeenCalledTimes(1))
+    await expect(await screen.findByTestId('stored-name')).toHaveTextContent('Fork')
+    await pause(50)
+    await expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
+export const UnmountedUntouchedDraftSavesNothing: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await renameField()
+    await userEvent.keyboard('{F3}')
+    await userEvent.keyboard('{F2}')
+    await screen.findByTestId('stored-name')
+    await pause(50)
+    await expect(args.onSave).not.toHaveBeenCalled()
   },
 }
 

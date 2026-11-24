@@ -31,6 +31,8 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
   // Enter, blur, Esc and an unmount can each end the edit; only the first one counts.
   const phase = useRef<Phase>('editing')
   const draftRef = useRef(name)
+  // An untouched draft is the name at mount: saving it would overwrite a name changed since.
+  const typed = useRef(false)
   const latest = useRef({ name, onSave })
   useEffect(() => {
     latest.current = { name, onSave }
@@ -39,7 +41,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
   // An unmount mid-edit, as when the navigator closes, saves a valid change and drops the rest.
   useEffect(
     () => () => {
-      if (phase.current !== 'editing') return
+      if (phase.current !== 'editing' || !typed.current) return
       const next = draftRef.current.trim()
       if (next === '' || next === latest.current.name.trim()) return
       phase.current = 'saving'
@@ -50,6 +52,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
 
   const change = (text: string) => {
     draftRef.current = text
+    typed.current = true
     setDraft(text)
     if (text.trim() !== '') setInvalid(false)
   }
@@ -61,7 +64,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
       setInvalid(true)
       return
     }
-    if (next === name.trim()) {
+    if (!typed.current || next === name.trim()) {
       phase.current = 'settled'
       onDone()
       return
