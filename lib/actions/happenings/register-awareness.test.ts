@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Delta, HappeningAwareness } from '@/lib/db'
+import type { Delta, HappeningAwareness, NewEntity } from '@/lib/db'
 import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { humanizeDelta, loadHistoryChunk } from '@/lib/history'
@@ -1787,13 +1787,13 @@ describe('branch scope', () => {
     source: 'smelled the smoke',
   }
 
-  const character = (id: string, name: string, branchId: BranchId) => ({
+  const character = (id: string, name: string, branchId: BranchId): NewEntity => ({
     id,
     branchId,
-    kind: 'character' as const,
+    kind: 'character',
     name,
-    status: 'active' as const,
-    injectionMode: 'auto' as const,
+    status: 'active',
+    injectionMode: 'auto',
     createdAt: 1,
     updatedAt: 1,
   })
