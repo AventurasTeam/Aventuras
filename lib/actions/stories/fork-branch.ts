@@ -50,7 +50,7 @@ export type ForkResult = { status: 'ok'; branchId: string } | ForkRefusal
 export type ForkBranchInput = {
   readonly parentBranchId: string
   readonly forkEntryId: string
-  /** Stored as given; the creation modal trims (C8). */
+  /** Stored as given; no creation modal trims it yet (C8, M6.5). */
   readonly name: string
   readonly makeCurrent: boolean
 }

@@ -30,7 +30,7 @@ type ForkLeaves = {
   readonly chapters: ReadonlySet<string>
 }
 
-/** R1: the first unfinished run on `parentBranchId` whose writes the fork would carry. */
+/** C2: the first unfinished run on `parentBranchId` whose writes the fork would carry. */
 export async function unfinishedRunCarried(
   parentBranchId: string,
   plan: ReversePlan | null,
