@@ -560,7 +560,8 @@ invalidation, and, if the E2E has a survivor, its registration check.
   eviction fired" (C9: a fork's commit is its own batch). The milestone's
   dependency graph lists no 6.3 ┄ 6.7 pair, so whichever of the two
   lands second adds that clause to `lib/actions/stories/fork-branch.test.ts`'s
-  AC 9 test. Found by Slice 6.3's slice review (2026-11-24).
+  AC 9 test. Found by Slice 6.3's slice review (2026-11-24). _Resolved:_
+  6.3 landed first, so this slice added it to that test (Second to land).
 - **The read's mechanism.** Neither platform sets WAL or has a read
   transaction; the desktop bridge has `query`, `exec` and a write-only
   `transaction(ops)` (`electron/preload.ts:34-38`). Options:
@@ -742,6 +743,13 @@ invalidation, and, if the E2E has a survivor, its registration check.
   (`group.branchId`).
 - **Criterion 13.** Did not apply: 6.8 had not landed when this PR
   opened.
+- **Second to land.** [Slice 6.3](./03-fork-core.md) landed first
+  (`7c6202fbb`) and was merged in, so this slice adds its Acceptance
+  criteria 9's no-eviction check: the AC 9 test in
+  `lib/actions/stories/fork-branch.test.ts` hears `onLogRewritten`
+  around the fork and expects no call. The fork commits one batch of its
+  own and reaches none of the commits that fire the hook, so it evicts
+  nothing on either branch.
 - **Device smoke** (slot AVD, non-blocking): ran on `Aventuras_Slot_2`
   with a debug x86_64 build, whose bundle carried the native read. A World
   edit of Mira's description read as before-and-after prose in History;
