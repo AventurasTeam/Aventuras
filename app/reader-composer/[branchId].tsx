@@ -1719,7 +1719,8 @@ function ReaderComposerBody({
       if (storyId == null || dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
       guardEdit(() => {
         // The guard can answer after its dialog or a bridge query; the reader may have moved on.
-        if (!aliveRef.current || dispatchInFlightRef.current) return
+        if (!aliveRef.current || dispatchInFlightRef.current || readerHoldStore.isHeld(branchId))
+          return
         logger.debug('reader.branch_switch_started', { branchId, toBranchId })
         const hold = readerHoldStore.take(branchId)
         void switchBranch(
