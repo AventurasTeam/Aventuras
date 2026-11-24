@@ -139,6 +139,15 @@ function writePointer(ctx: DbCtx, storyId: string, branchId: string): Promise<vo
   ])
 }
 
+// One retry: a transient failure here would leave the pointer on a branch the reader doesn't show.
+async function writeRestoreWithRetry(ctx: DbCtx, storyId: string, branchId: string): Promise<void> {
+  try {
+    await writePointer(ctx, storyId, branchId)
+  } catch {
+    await writePointer(ctx, storyId, branchId)
+  }
+}
+
 // A pointer left on a branch the reader doesn't show would open that branch from the story list.
 async function restoreThen(
   input: SwitchBranchInput,
@@ -147,7 +156,7 @@ async function restoreThen(
 ): Promise<SwitchBranchResult> {
   const { storyId, fromBranchId, toBranchId } = input
   try {
-    await writePointer(ctx, storyId, fromBranchId)
+    await writeRestoreWithRetry(ctx, storyId, fromBranchId)
   } catch (err) {
     logger.error('action_layer.branch_switch_restore_failed', {
       storyId,

@@ -635,6 +635,60 @@ describe('switchBranch', () => {
     })
   })
 
+  // The switch's own pointer write is the first transaction; the restore is the second.
+  function failingRestores(ctx: TestCtx, failures: number): TestCtx {
+    let writes = 0
+    return {
+      ...ctx,
+      runInTransaction: vi.fn(async (ops: Parameters<TestCtx['runInTransaction']>[0]) => {
+        writes += 1
+        if (writes > 1 && writes <= 1 + failures) throw new Error('disk busy')
+        return ctx.runInTransaction(ops)
+      }),
+    }
+  }
+
+  it('retries a restore write that fails once, and logs nothing', async () => {
+    const { db, ctx } = await setup()
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const flaky = failingRestores(ctx, 1)
+
+    const result = await switchBranch(input({ replaceStack: fakeStack(false).replaceStack }), flaky)
+
+    expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(flaky.runInTransaction).toHaveBeenCalledTimes(3)
+    await expectStillOnLeft(db)
+    expect(error).not.toHaveBeenCalledWith(
+      'action_layer.branch_switch_restore_failed',
+      expect.anything(),
+    )
+  })
+
+  it('logs a restore write that fails twice, once, and returns the same result', async () => {
+    const { ctx } = await setup()
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const broken = failingRestores(ctx, 2)
+
+    const result = await switchBranch(
+      input({ replaceStack: fakeStack(false).replaceStack }),
+      broken,
+    )
+
+    expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(broken.runInTransaction).toHaveBeenCalledTimes(3)
+    expect(
+      error.mock.calls.filter(([kind]) => kind === 'action_layer.branch_switch_restore_failed'),
+    ).toEqual([
+      [
+        'action_layer.branch_switch_restore_failed',
+        { storyId: 'story_1', fromBranchId: 'br_a', toBranchId: 'br_b', error: 'disk busy' },
+      ],
+    ])
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+  })
+
   it('puts the pointer back when the stack reset throws', async () => {
     const { db, ctx } = await setup()
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
