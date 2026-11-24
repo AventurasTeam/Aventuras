@@ -244,7 +244,11 @@ export function useReaderUndo({
       const result = await timedReversal('reader.redo_measured', actionId, () =>
         redoLastAction(branchId, ctx, { expectedActionId: actionId }),
       )
-      if (!aliveRef.current) return
+      // The keyboard origin logs a refusal and never toasts: a gone reader still owes the log.
+      if (!aliveRef.current) {
+        if (result.status === 'rejected') report('redo', result, 'keyboard')
+        return
+      }
       if (result.status === 'rejected') report('redo', result, origin)
       else announce(notice)
     },
@@ -288,11 +292,11 @@ export function useReaderUndo({
         })
         return undone
       })
-      // A reader gone under the await posts no notice and no refusal; this warning reports a state
-      // change and offers no action, so it still shows.
+      // A reader gone under the await posts no notice and no refusal toast, though the refusal is
+      // still logged; the close-undone warning reports a state change and offers no action.
       if (!aliveRef.current) {
-        if (result.status === 'ok' && result.closeUndone != null)
-          warnCloseUndone(result.closeUndone.chapterNumber)
+        if (result.status === 'rejected') report('undo', result, 'keyboard')
+        else if (result.closeUndone != null) warnCloseUndone(result.closeUndone.chapterNumber)
         return
       }
       showMenuTarget(null)

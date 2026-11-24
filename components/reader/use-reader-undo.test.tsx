@@ -1208,3 +1208,105 @@ describe('useReaderUndo — a reader that unmounted', () => {
     expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
   })
 })
+
+// A refusal is a diagnostic as well as a toast: the toast goes with the reader, the log stays.
+describe('useReaderUndo — a refusal that settles after the reader unmounted', () => {
+  beforeEach(() => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+  })
+  afterEach(() => __resetDiagnosticsGate())
+
+  const logged = (...kinds: string[]) =>
+    getDiagnosticsSnapshot()
+      .logEntries.filter(({ kind }) => kinds.includes(kind))
+      .map(({ kind, level, fields }) => ({ kind, level, fields }))
+
+  async function undoRefusedAfterUnmount(result: UndoResult) {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    let settleUndo!: (value: UndoResult) => void
+    actions.undoLastAction.mockReturnValue(
+      new Promise<UndoResult>((resolve) => {
+        settleUndo = resolve
+      }),
+    )
+    const r = renderHook((props: Props) => useReaderUndo({ ctx, ...props }), {
+      initialProps: LIVE,
+    })
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+    r.unmount()
+    await act(async () => settleUndo(result))
+    await settle()
+  }
+
+  async function redoRefusedAfterUnmount(result: UndoResult) {
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest(
+        'b1',
+        [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+        'act_turn',
+      ),
+    )
+    let settleRedo!: (value: UndoResult) => void
+    actions.redoLastAction.mockReturnValue(
+      new Promise<UndoResult>((resolve) => {
+        settleRedo = resolve
+      }),
+    )
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledTimes(1)
+    r.unmount()
+    await act(async () => settleRedo(result))
+    await settle()
+  }
+
+  const INTEGRITY: UndoResult = {
+    status: 'rejected',
+    code: 'integrity',
+    reason: 'scope unreadable',
+  }
+  const MOVED: UndoResult = { status: 'rejected', code: 'target-moved', reason: 'moved' }
+
+  it('logs an undo integrity refusal once at error and posts no toast', async () => {
+    await undoRefusedAfterUnmount(INTEGRITY)
+
+    expect(logged('reader.undo_failed', 'reader.undo_rejected')).toEqual([
+      {
+        kind: 'reader.undo_failed',
+        level: 'error',
+        fields: { branchId: 'b1', code: 'integrity', reason: 'scope unreadable' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('logs a redo integrity refusal once at error and posts no toast', async () => {
+    await redoRefusedAfterUnmount(INTEGRITY)
+
+    expect(logged('reader.redo_failed', 'reader.redo_rejected')).toEqual([
+      {
+        kind: 'reader.redo_failed',
+        level: 'error',
+        fields: { branchId: 'b1', code: 'integrity', reason: 'scope unreadable' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('logs a lesser undo refusal once at debug and posts no toast', async () => {
+    await undoRefusedAfterUnmount(MOVED)
+
+    expect(logged('reader.undo_failed', 'reader.undo_rejected')).toEqual([
+      {
+        kind: 'reader.undo_rejected',
+        level: 'debug',
+        fields: { branchId: 'b1', code: 'target-moved', reason: 'moved' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
+})
