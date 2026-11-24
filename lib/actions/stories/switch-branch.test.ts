@@ -1184,8 +1184,8 @@ describe('showBranch', () => {
     const watched: TestCtx = {
       ...ctx,
       runInTransaction: vi.fn(async (ops: Parameters<TestCtx['runInTransaction']>[0]) => {
+        await ctx.runInTransaction(ops)
         heldAtWrite.push(readerHoldStore.isHeld('br_a'))
-        return ctx.runInTransaction(ops)
       }),
     }
     const stack = fakeStack(false)
