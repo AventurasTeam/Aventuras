@@ -641,7 +641,6 @@ describe('resolveCollision — merge', () => {
     expect((await entityRow('loc_b'))?.nameCollisionFlag).toBe(1)
   })
 
-  // The stored definition still names char_lead: only the flag makes Brannoc's row the lead.
   it('refuses a merge whose loser is the flagged lead with lead-entity, writing nothing', async () => {
     await setLeadFlag('char_b')
     const before = await worldSnapshot()

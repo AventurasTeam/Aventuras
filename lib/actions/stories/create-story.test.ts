@@ -1051,7 +1051,6 @@ describe('createStoryWithBranch — the lead flag', () => {
       createStoryWithBranch(
         {
           title: 'No such lead',
-          // The definition holds no lead to refuse on, so only the leadId guard can.
           definition: makeDefinition(),
           settings: buildStorySettings('creative', NO_APP_DEFAULTS),
           openingContent: 'x',

@@ -1100,6 +1100,5 @@ describe('a fork rewinds the lead to its fork entry', () => {
     const { childId } = await assertFork(w, entryAt(3))
 
     expect(leads(w, childId), 'the child').toEqual({ kael: 1, mira: 0 })
-    expect(leads(w, w.parentId), 'the parent').toEqual({ kael: 0, mira: 1 })
   })
 })

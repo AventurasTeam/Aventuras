@@ -354,7 +354,7 @@ describe('stories column writes', () => {
 })
 
 describe('story open and the lead', () => {
-  // As the schema stores a definition now: the lead is a flag on a branch's row, not a key here.
+  // The lead is a flag on a branch's row, not a key on the definition.
   const ADVENTURE: StoryDefinition = {
     mode: 'adventure',
     narration: 'second',
