@@ -471,11 +471,14 @@ describe('setBranchLead', () => {
     const { release, held } = holdKaelRow()
     const pending = setBranchLead('br_1', 'char_mira', ctx)
     await flush()
-    await ctx.db
-      .delete(entities)
-      .where(and(eq(entities.branchId, 'br_1'), eq(entities.id, 'char_kael')))
-    release()
-    await held
+    try {
+      await ctx.db
+        .delete(entities)
+        .where(and(eq(entities.branchId, 'br_1'), eq(entities.id, 'char_kael')))
+    } finally {
+      release()
+      await Promise.allSettled([held, pending])
+    }
 
     expect(await pending).toEqual({ status: 'rejected', code: 'failed' })
     expect(await deltaRows()).toEqual([])
