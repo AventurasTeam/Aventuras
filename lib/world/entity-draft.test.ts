@@ -53,6 +53,7 @@ const KAEL: Entity = {
   keywords: ['the courier'],
   priority: 30,
   embeddingStale: 0,
+  isLead: 0,
   createdAt: 1,
   updatedAt: 1,
 }

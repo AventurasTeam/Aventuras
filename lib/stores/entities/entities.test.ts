@@ -22,6 +22,7 @@ function ent(id: string, kind: Entity['kind'], name: string, branchId = 'br_1'):
     keywords: [],
     priority: 0,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }

@@ -98,6 +98,7 @@ function newRow(args: {
     priority: 0,
     // Nothing embeds on the write path: the sync stage owns the vector.
     embeddingStale: 1,
+    isLead: 0,
     createdAt: at,
     updatedAt: at,
   }

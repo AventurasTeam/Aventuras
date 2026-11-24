@@ -17,6 +17,7 @@ export function makeEntity(
     keywords: [],
     priority: 0,
     embeddingStale: 1,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,

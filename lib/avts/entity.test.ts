@@ -25,6 +25,7 @@ const ROW_BASE = {
   keywords: [],
   priority: 0,
   embeddingStale: 0,
+  isLead: 0,
   createdAt: 1_700_000_000_000,
   updatedAt: 1_700_000_500_000,
 } satisfies Partial<Entity>

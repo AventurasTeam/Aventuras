@@ -47,6 +47,7 @@ function entity(id: string, kind: Entity['kind'], extra: Partial<Entity> = {}): 
     keywords: [],
     priority: 0,
     embeddingStale: 1,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
     ...extra,

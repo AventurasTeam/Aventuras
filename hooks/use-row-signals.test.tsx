@@ -77,6 +77,7 @@ function entity(id: string, kind: Entity['kind'], branchId = 'br_1'): Entity {
     keywords: [],
     priority: 0,
     embeddingStale: 1,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }

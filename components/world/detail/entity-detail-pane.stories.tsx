@@ -46,6 +46,7 @@ function makeEntity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind' | 'n
     keywords: [],
     priority: 0,
     embeddingStale: 1,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,

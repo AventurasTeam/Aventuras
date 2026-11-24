@@ -40,6 +40,7 @@ export const entities = sqliteTable(
       .default(sql`'[]'`),
     priority: integer('priority').notNull().default(0),
     embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
+    isLead: integer('is_lead').notNull().default(0).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },

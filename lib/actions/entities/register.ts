@@ -140,6 +140,7 @@ function fullRow(entry: NewEntity): Entity {
     // A new row has no vector by definition — default dirty. Clearing happens via a
     // same-batch stale-clear op once the embed lands, never via an explicit 0.
     embeddingStale: entry.embeddingStale ?? 1,
+    isLead: entry.isLead ?? 0,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
