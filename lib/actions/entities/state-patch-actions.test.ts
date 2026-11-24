@@ -3651,4 +3651,253 @@ describe('branch scope', () => {
       { keywords: ['the knight', 'the wanderer'] },
     )
   })
+
+  it('setEntityKeywords pair: removes a term past a flag only the other branch holds, and reverses only there', async () => {
+    const seeded = await seedPair(
+      [
+        character(BARD, { status: 'active', name: 'the veiled stranger', keywords: ['the veil'] }),
+        character(BARD, {
+          id: 'char_9',
+          status: 'active',
+          name: 'Mira',
+          nameCollisionFlag: 1,
+          nameCollisionPartnerId: 'char_1',
+          nameCollisionReason: 'alike',
+        }),
+      ],
+      [],
+    )
+    // A pass's create, so the close may remove the terms it wrote.
+    const passCreate: PipelineAction = {
+      kind: 'createEntity',
+      source: 'periodic_classifier',
+      payload: {
+        entry: on(
+          'br_2',
+          character(KAEL, {
+            status: 'active',
+            name: 'the hooded stranger',
+            keywords: ['Mira', 'the stranger'],
+          }),
+        ),
+      },
+    }
+    expect((await applyOn(seeded.ctx, 'br_2', passCreate, 'act_c_w')).status).toBe('ok')
+    await expectPair(
+      seeded,
+      'char_1',
+      {
+        kind: 'setEntityKeywords',
+        source: 'chapter_close',
+        payload: {
+          branchId: 'br_2',
+          id: 'char_1',
+          add: ['the wanderer'],
+          remove: ['Mira'],
+          proseEntryId: null,
+        },
+      },
+      { keywords: ['the stranger', 'the wanderer'] },
+    )
+  })
+
+  it("retireEntity pair: lands on its own branch's row as read from it, and reverses only there", async () => {
+    await expectPair(
+      await seedPair(
+        [character(BARD, { status: 'staged', retiredReason: 'a stale note' })],
+        [character(KAEL, { status: 'active' })],
+      ),
+      'char_1',
+      {
+        kind: 'retireEntity',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'br_2',
+          id: 'char_1',
+          retiredReason: 'fell at the ford',
+          proseEntryId: null,
+        },
+      },
+      { status: 'retired', retiredReason: 'fell at the ford' },
+    )
+  })
+
+  it("setCharacterFaction pair: lands on its own branch's row as read from it, and reverses only there", async () => {
+    await expectPair(
+      await seedPair(
+        [
+          { ...CIRCLE, state: { standing: 'outlawed', agenda: [] } },
+          character(BARD, { status: 'active' }),
+        ],
+        [CIRCLE, character(KAEL, { status: 'active' })],
+      ),
+      'char_1',
+      {
+        kind: 'setCharacterFaction',
+        source: 'periodic_classifier',
+        payload: { branchId: 'br_2', id: 'char_1', factionId: 'fact_circle', proseEntryId: null },
+      },
+      { state: { ...KAEL, faction_id: 'fact_circle' } },
+    )
+  })
+
+  it("placeLocation pair: moves its own branch's place against its own story, and reverses only there", async () => {
+    const seeded = await seedPair(
+      [
+        placeAt('loc_reach', { parent_location_id: null }),
+        placeAt('loc_marsh', { parent_location_id: null }),
+        placeAt('loc_thorn', { parent_location_id: null }, { status: 'retired' }),
+        placeAt('loc_varn', { parent_location_id: 'loc_marsh', condition: 'ruined' }),
+      ],
+      [
+        placeAt('loc_reach', { parent_location_id: null }),
+        placeAt('loc_marsh', { parent_location_id: null }),
+        placeAt('loc_thorn', { parent_location_id: null }, { injectionMode: 'disabled' }),
+        placeAt('loc_varn', { parent_location_id: 'loc_reach', condition: 'walled' }),
+      ],
+    )
+    const told = (
+      branchId: string,
+      id: string,
+      position: number,
+      kind: 'ai_reply' | 'user_action',
+      at: string,
+    ) => ({
+      id,
+      branchId,
+      position,
+      kind,
+      content: `At ${at}.`,
+      metadata: { sceneEntities: [], currentLocationId: at, worldTime: 0 },
+      createdAt: position,
+    })
+    // br_1's story runs further and stands in loc_varn: read without its branch, the move hides it.
+    await seeded.db
+      .insert(storyEntries)
+      .values([
+        told('br_1', 'e_reply_1', 3, 'ai_reply', 'loc_varn'),
+        told('br_1', 'e_action_1', 4, 'user_action', 'loc_varn'),
+        told('br_2', 'e_reply_2', 1, 'ai_reply', 'loc_marsh'),
+        told('br_2', 'e_action_2', 2, 'user_action', 'loc_marsh'),
+      ])
+    await expectPair(
+      seeded,
+      'loc_varn',
+      {
+        kind: 'placeLocation',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'br_2',
+          id: 'loc_varn',
+          placement: { kind: 'under', parentId: 'loc_thorn' },
+          proseEntryId: null,
+        },
+      },
+      { state: { parent_location_id: 'loc_thorn', condition: 'walled' } },
+    )
+  })
+
+  it("renameEntity pair: renames past a holder only the other branch's copy names, and reverses only there", async () => {
+    await expectPair(
+      await seedPair(
+        [
+          character(BARD, {
+            status: 'active',
+            name: 'the masked rider',
+            keywords: ['the rider'],
+            embeddingStale: 0,
+          }),
+          character(BARD, { id: 'char_2', status: 'active', name: 'Mira' }),
+        ],
+        [
+          character(KAEL, {
+            status: 'active',
+            name: 'the hooded stranger',
+            keywords: ['the stranger'],
+            embeddingStale: 1,
+          }),
+          character(KAEL, { id: 'char_2', status: 'active', name: 'Bram' }),
+        ],
+      ),
+      'char_1',
+      {
+        kind: 'renameEntity',
+        source: 'periodic_classifier',
+        payload: { branchId: 'br_2', id: 'char_1', name: 'Mira', proseEntryId: null },
+      },
+      { name: 'Mira', keywords: ['the stranger', 'the hooded stranger'], embeddingStale: 1 },
+    )
+  })
+
+  it("raiseCollisionFlag pair: flags its own branch's row past the other branch's flag, and reverses only there", async () => {
+    await expectPair(
+      await seedPair(
+        [
+          character(BARD, { id: 'char_2', status: 'active', name: 'Mara' }),
+          character(BARD, {
+            status: 'active',
+            name: 'the masked rider',
+            keywords: ['Mara'],
+            nameCollisionFlag: 1,
+            nameCollisionPartnerId: 'char_2',
+            nameCollisionReason: 'alike',
+          }),
+        ],
+        [
+          character(KAEL, { id: 'char_2', status: 'active', name: 'Mira' }),
+          character(KAEL, { status: 'active', name: 'the hooded stranger', keywords: ['Mira'] }),
+        ],
+      ),
+      'char_1',
+      {
+        kind: 'raiseCollisionFlag',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'br_2',
+          id: 'char_1',
+          partnerId: 'char_2',
+          reason: 'name-taken',
+          proseEntryId: null,
+        },
+      },
+      { nameCollisionFlag: 1, nameCollisionPartnerId: 'char_2', nameCollisionReason: 'name-taken' },
+    )
+  })
+
+  it("setFactionStanding pair: lands on its own branch's row as read from it, and reverses only there", async () => {
+    await expectPair(
+      await seedPair(
+        [{ ...CIRCLE, state: { standing: 'outlawed', agenda: ['buy the mines'] } }],
+        [CIRCLE],
+      ),
+      'fact_circle',
+      {
+        kind: 'setFactionStanding',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: 'br_2',
+          id: 'fact_circle',
+          standing: 'at war with the crown',
+          proseEntryId: null,
+        },
+      },
+      { state: { standing: 'at war with the crown', agenda: ['corner the iron trade'] } },
+    )
+  })
+
+  it("returnFromRetirement pair: lands on its own branch's row as read from it, and reverses only there", async () => {
+    await expectPair(
+      await seedPair(
+        [character(BARD, { status: 'staged', retiredReason: 'a stale note' })],
+        [character(KAEL, { status: 'retired', retiredReason: 'fell at the ford' })],
+      ),
+      'char_1',
+      {
+        kind: 'returnFromRetirement',
+        source: 'periodic_classifier',
+        payload: { branchId: 'br_2', id: 'char_1', proseEntryId: null },
+      },
+      { status: 'active', retiredReason: null },
+    )
+  })
 })
