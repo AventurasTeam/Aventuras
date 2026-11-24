@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, renderHook } from '@testing-library/react'
-import { StrictMode, useLayoutEffect, type MutableRefObject } from 'react'
+import { StrictMode, useLayoutEffect, type RefObject } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { useAliveRef } from './use-alive-ref'
@@ -26,7 +26,7 @@ describe('useAliveRef', () => {
 
   it('is already false when a child unmounts in the same commit', () => {
     const seen: boolean[] = []
-    function Probe({ aliveRef }: { aliveRef: MutableRefObject<boolean> }) {
+    function Probe({ aliveRef }: { aliveRef: RefObject<boolean> }) {
       useLayoutEffect(
         () => () => {
           seen.push(aliveRef.current)

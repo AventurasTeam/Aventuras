@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef, type MutableRefObject } from 'react'
+import { useLayoutEffect, useRef, type RefObject } from 'react'
 
 // Layout, not passive: the commit that unmounts the reader (a switch, a leave) runs to
 // completion before any promise continuation, so no settling callback reads it still mounted.
-export function useAliveRef(): MutableRefObject<boolean> {
+export function useAliveRef(): RefObject<boolean> {
   const aliveRef = useRef(false)
   useLayoutEffect(() => {
     aliveRef.current = true
