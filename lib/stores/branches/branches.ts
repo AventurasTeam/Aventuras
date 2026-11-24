@@ -65,7 +65,7 @@ export async function refreshBranches(db: DbCtx['db'], storyId: string): Promise
     const rows = await readStoryBranches(db, storyId)
     if (seq === refreshSeq) store.setState({ storyId, rows })
   } catch (err) {
-    logger.error('app.branches_refresh_failed', {
+    logger.warn('app.branches_refresh_failed', {
       storyId,
       error: err instanceof Error ? err.message : String(err),
     })

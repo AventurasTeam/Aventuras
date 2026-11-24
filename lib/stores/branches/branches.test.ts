@@ -220,8 +220,8 @@ describe('refreshBranches', () => {
     expect(branchesStore.getBranches('s1')).toEqual([])
   })
 
-  it('resolves, logs and keeps the last rows when its read throws', async () => {
-    const error = vi.spyOn(logger, 'error')
+  it('resolves, warns and keeps the last rows when its read throws', async () => {
+    const warn = vi.spyOn(logger, 'warn')
     branchesStore.hydrate('s1', [row('br_b')])
     const held = branchesStore.getBranches('s1')
     const read = deferred<BranchRow[]>()
@@ -231,7 +231,7 @@ describe('refreshBranches', () => {
 
     await expect(refresh).resolves.toBeUndefined()
     expect(branchesStore.getBranches('s1')).toBe(held)
-    expect(error).toHaveBeenCalledWith('app.branches_refresh_failed', {
+    expect(warn).toHaveBeenCalledWith('app.branches_refresh_failed', {
       storyId: 's1',
       error: 'disk gone',
     })
