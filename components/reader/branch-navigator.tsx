@@ -4,6 +4,7 @@ import { useImperativeHandle, useRef, useState, type ReactElement, type Ref } fr
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler'
 
+import { firstFocusable, focusOpeners } from '@/components/ui/focus-return'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -118,17 +119,19 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
   }
   const shown = shownChip(chip)
 
-  // Radix returns focus to its trigger; a handle-opened navigator returns it to what opened it,
-  // and the hidden anchor takes none. Neither after an outside press/focus: focus is placed.
-  const opener = useRef<HTMLElement | null>(null)
+  // Radix returns focus to its trigger, and the hidden anchor takes none. A handle-opened navigator
+  // follows overlays.md → Close focus: what held focus as it opened, else the opener of the menu it
+  // came from, whose row is gone by now. None of it after an outside press/focus: focus is placed.
+  const openedFrom = useRef<(HTMLElement | null)[]>([])
   const interactedOutside = useRef(false)
   const returnFocus = (event: Event) => {
-    const target = opener.current
-    opener.current = null
+    const from = openedFrom.current
+    openedFrom.current = []
     const outside = interactedOutside.current
     interactedOutside.current = false
     if (outside) return
-    if (target != null && target.isConnected) {
+    const target = firstFocusable(from)
+    if (target != null) {
       event.preventDefault()
       target.focus()
     } else if (shown == null) {
@@ -138,10 +141,7 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
 
   useImperativeHandle(ref, () => ({
     open: () => {
-      if (Platform.OS === 'web') {
-        const active = document.activeElement
-        opener.current = active instanceof HTMLElement && active !== document.body ? active : null
-      }
+      openedFrom.current = focusOpeners()
       trigger.current?.open()
     },
     close,

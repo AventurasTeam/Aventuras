@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useWindowDimensions, View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
+import { ActionsMenu } from '@/components/compounds/actions-menu'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 
@@ -125,6 +126,33 @@ function HandleHarness(props: BranchNavigatorProps) {
   return <BranchNavigator {...props} ref={handle} />
 }
 
+// The reader's `Browse branches…`: the handle opens the navigator as the menu and its row unmount.
+function ActionsOpenerHarness(props: BranchNavigatorProps) {
+  const handle = useRef<BranchNavigatorHandle>(null)
+  return (
+    <>
+      <ActionsMenu
+        triggerLabel="Actions"
+        coreGroups={[
+          {
+            id: 'story-tools',
+            header: 'Story tools',
+            entries: [
+              {
+                id: 'browse-branches',
+                label: 'Browse branches…',
+                opensSheet: true,
+                onActivate: () => handle.current?.open(),
+              },
+            ],
+          },
+        ]}
+      />
+      <BranchNavigator {...props} ref={handle} />
+    </>
+  )
+}
+
 // F4 stands in for the gate opening while the navigator is open.
 function PauseLiftsHarness(props: BranchNavigatorProps) {
   const [paused, setPaused] = useState(true)
@@ -191,6 +219,10 @@ export const Desktop: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     await waitFor(() => expect(queryNavigator('Branches · 3')).toBeNull())
     await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+    // Opened from the chip, focus goes back to it.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'On The trap · 3 branches' })).toHaveFocus(),
+    )
   },
 }
 
@@ -357,6 +389,31 @@ export const SingleBranch: Story = {
     // Radix hands focus back to its trigger; the hidden anchor must not take it.
     await expect(anchor).not.toHaveFocus()
     await expect(args.onOpenChange).toHaveBeenLastCalledWith(false)
+  },
+}
+
+/** overlays.md → Close focus: the menu's row is gone by the close, so focus goes to its trigger. */
+export const OpenedFromActionsReturnsFocusToTheMenu: Story = {
+  args: SINGLE,
+  render: (args) => <ActionsOpenerHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    const actions = screen.getByRole('button', { name: /^Actions/ })
+    await userEvent.click(actions)
+    await userEvent.click(await screen.findByRole('option', { name: 'Browse branches…' }))
+    await waitFor(() => expect(navigator('Branches · 1')).toBeVisible(), ANIMATION)
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(queryNavigator('Branches · 1')).toBeNull())
+    await waitFor(() => expect(actions).toHaveFocus())
+
+    // An outside press places focus where it lands: nothing is handed back.
+    await userEvent.click(actions)
+    await userEvent.click(await screen.findByRole('option', { name: 'Browse branches…' }))
+    await waitFor(() => expect(navigator('Branches · 1')).toBeVisible(), ANIMATION)
+    await userEvent.click(screen.getByTestId('tier'))
+    await waitFor(() => expect(queryNavigator('Branches · 1')).toBeNull())
+    await pause(50)
+    await expect(actions).not.toHaveFocus()
   },
 }
 

@@ -67,6 +67,24 @@ function openOverlayOrigin(except: HTMLElement | null): HTMLElement | null {
   return null
 }
 
+/**
+ * Close focus steps 3 and 4, read as a surface opens: what holds focus now, then the origin of the
+ * overlay it opened from, still open or closed in the same breath. Takes any hand-off, so a stale
+ * one never reaches a later surface.
+ */
+export function focusOpeners(): (HTMLElement | null)[] {
+  const handedOff = takeHandedOff()
+  const focused = focusedElement()
+  return [focused, openOverlayOrigin(focused) ?? handedOff]
+}
+
+/** The first that can take focus now: connected, enabled, visible, not in a closing overlay. */
+export function firstFocusable(
+  elements: readonly (HTMLElement | null | undefined)[],
+): HTMLElement | null {
+  return elements.find(canTakeFocus) ?? null
+}
+
 type AutoFocusHandler = (event: Event) => void
 
 /**
@@ -86,11 +104,8 @@ export function useDialogFocusReturn({
   const openedFrom = useRef<(HTMLElement | null)[]>([])
   return {
     onOpenAutoFocus: (event) => {
-      // An overlay still open (a sheet mid-exit) is the one this dialog came from; a hand-off is
-      // taken either way, so a stale one never reaches a later dialog.
-      const handedOff = takeHandedOff()
-      const focused = focusedElement()
-      openedFrom.current = [focused, openOverlayOrigin(focused) ?? handedOff]
+      // An overlay still open (a sheet mid-exit) is the one this dialog came from.
+      openedFrom.current = focusOpeners()
       onOpenAutoFocus?.(event)
     },
     onCloseAutoFocus: (event) => {
@@ -99,7 +114,7 @@ export function useDialogFocusReturn({
       openedFrom.current = []
       if (event.defaultPrevented) return
       const named = returnFocusTo?.current
-      const target = [named instanceof HTMLElement ? named : null, ...from].find(canTakeFocus)
+      const target = firstFocusable([named instanceof HTMLElement ? named : null, ...from])
       if (target == null) return
       event.preventDefault()
       target.focus()
