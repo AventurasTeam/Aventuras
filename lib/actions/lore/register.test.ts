@@ -447,6 +447,7 @@ describe('setLoreKeywords', () => {
 // so a read that drops its branch finds the sibling's row.
 describe('branch scope', () => {
   type Harness = Awaited<ReturnType<typeof setup>>
+  type BranchId = 'br_1' | 'br_2'
 
   const SIBLING: Lore = {
     id: 'lore_1',
@@ -488,7 +489,7 @@ describe('branch scope', () => {
     return harness
   }
 
-  const loreOn = async (db: Harness['db'], branchId: string) =>
+  const loreOn = async (db: Harness['db'], branchId: BranchId) =>
     (
       await db
         .select()

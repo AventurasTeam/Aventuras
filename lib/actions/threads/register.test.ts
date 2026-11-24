@@ -1039,6 +1039,7 @@ describe('updateThread — columns that already stand, and the user edits a mach
 // so a read that drops its branch finds the sibling's row.
 describe('branch scope', () => {
   type Harness = Awaited<ReturnType<typeof setup>>
+  type BranchId = 'br_1' | 'br_2'
 
   const SIBLING: Thread = {
     id: 'thr_1',
@@ -1082,7 +1083,7 @@ describe('branch scope', () => {
     return harness
   }
 
-  const threadOn = async (db: Harness['db'], branchId: string) =>
+  const threadOn = async (db: Harness['db'], branchId: BranchId) =>
     (
       await db
         .select()

@@ -8,6 +8,7 @@ import {
   entities,
   stories,
   type CharacterRelationship,
+  type NewEntity,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { characterRelationshipsStore, entriesStore, undoRedoStore } from '@/lib/stores'
@@ -644,6 +645,7 @@ describe('single-perspective upsert against a user edit newer than the prose', (
 // first, so a read that drops its branch finds the sibling's row.
 describe('branch scope', () => {
   type Harness = Awaited<ReturnType<typeof setup>>
+  type BranchId = 'br_1' | 'br_2'
 
   const SIBLING: CharacterRelationship = {
     id: 'rel_1',
@@ -671,23 +673,25 @@ describe('branch scope', () => {
     const { db } = harness
     await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
     await db.insert(entities).values(
-      ['char_aria', 'char_kael', 'char_mira'].map((id) => ({
-        id,
-        branchId: 'br_2',
-        kind: 'character' as const,
-        name: id,
-        status: 'active' as const,
-        injectionMode: 'auto' as const,
-        createdAt: 1,
-        updatedAt: 1,
-      })),
+      ['char_aria', 'char_kael', 'char_mira'].map(
+        (id): NewEntity => ({
+          id,
+          branchId: 'br_2',
+          kind: 'character',
+          name: id,
+          status: 'active',
+          injectionMode: 'auto',
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+      ),
     )
     await db.insert(characterRelationships).values(SIBLING)
     if (written) await db.insert(characterRelationships).values(written)
     return harness
   }
 
-  const pairOn = async (db: Harness['db'], branchId: string) =>
+  const pairOn = async (db: Harness['db'], branchId: BranchId) =>
     (
       await db
         .select()
@@ -706,7 +710,7 @@ describe('branch scope', () => {
     (await deltasFor(db, actionId))[0]?.undoPayload
   const onFork = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
     applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
-  const classify = (branchId: string, kind: string | null): PipelineAction => ({
+  const classify = (branchId: BranchId, kind: string | null): PipelineAction => ({
     kind: 'upsertCharacterRelationship',
     source: 'ai_classifier',
     payload: { branchId, subjectId: 'char_aria', objectId: 'char_kael', kind, proseEntryId: null },
