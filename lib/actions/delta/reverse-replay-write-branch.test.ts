@@ -151,12 +151,14 @@ const withoutBranch = (snapshot: BranchSnapshot): BranchSnapshot =>
     ]),
   )
 
-function parentVectorIds(): string[] {
+function vectorIdsOn(branchId: string): string[] {
   const rows = t.sqlite
     .prepare('SELECT id FROM entities_vec_384 WHERE branch_id = ?')
-    .all(PARENT) as { id: string }[]
+    .all(branchId) as { id: string }[]
   return rows.map((row) => row.id).sort()
 }
+
+const parentVectorIds = (): string[] => vectorIdsOn(PARENT)
 
 type ParentState = { rows: BranchSnapshot; vectorIds: string[] }
 
@@ -210,11 +212,15 @@ function expectChildIsSelf(before: ParentState): void {
 const boundValues = (plan: ReversePlan): unknown[] =>
   [...plan.ops, ...plan.pruneOps, ...plan.journalOps].flatMap((op) => op.params)
 
-async function forkAgainstSelf(actionIds: readonly string[]): Promise<Planned> {
+async function forkAgainstSelf(
+  actionIds: readonly string[],
+  onChildCloned: () => void = () => {},
+): Promise<Planned> {
   const before = parentState()
   cloneBranch(t.sqlite, PARENT, SELF)
   const planned = await planOnParent(actionIds)
   cloneBranch(t.sqlite, PARENT, CHILD)
+  onChildCloned()
   const { plan } = planned
   await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps])
   await reverseSelf(actionIds)
@@ -273,10 +279,14 @@ async function seedRedress(): Promise<{ stateBefore: unknown }> {
 async function seedPlaces(): Promise<void> {
   await act('act_wb_varn', create('user_edit', place('loc_wb_varn', null)))
   await act('act_wb_docks', create('periodic_classifier', place('loc_wb_docks', 'loc_wb_varn')))
+  plantVarnVector(PARENT)
+}
+
+function plantVarnVector(branchId: string): void {
   plantVec(t.sqlite, {
     kind: 'entity',
     id: 'loc_wb_varn',
-    branchId: PARENT,
+    branchId,
     modelId: 'm384',
     dim: 384,
     sourceHash: sourceHash('h'),
@@ -362,7 +372,10 @@ describe('a plan with a write branch reads the parent and writes the child', () 
   it('deletes a created place on the child and clears its child place there', async () => {
     await seedPlaces()
 
-    const { set, plan } = await forkAgainstSelf(['act_wb_varn'])
+    const { set, plan } = await forkAgainstSelf(['act_wb_varn'], () => {
+      plantVarnVector(CHILD)
+      expect(vectorIdsOn(CHILD)).toEqual(['loc_wb_varn'])
+    })
 
     expect(set.refClears.map((c) => `${c.row.id}.${c.ref.path}`)).toEqual([
       'loc_wb_docks.parent_location_id',
@@ -371,6 +384,7 @@ describe('a plan with a write branch reads the parent and writes the child', () 
     expect(await entityOn(CHILD, 'loc_wb_varn')).toBeUndefined()
     expect((await entityOn(CHILD, 'loc_wb_docks'))?.state).toEqual(UNPLACED)
     expect(await entityOn(PARENT, 'loc_wb_varn')).toBeDefined()
+    expect(vectorIdsOn(CHILD)).toEqual([])
     expect(parentVectorIds()).toEqual(['loc_wb_varn'])
   })
 })
