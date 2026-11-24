@@ -735,6 +735,64 @@ describe('showBranch', () => {
     expect(ctx.runInTransaction).not.toHaveBeenCalled()
     expect(await pointer(db)).toBe('br_b')
   })
+
+  it('keeps the stores and the published story on the branch left while the stories re-read runs', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    const reached = deferred()
+    const release = deferred()
+    vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
+      reached.resolve()
+      await release.promise
+      return readStories(database)
+    })
+    const stack = fakeStack()
+
+    const running = showBranch(show({ replaceStack: stack.replaceStack }), ctx)
+    await reached.promise
+    expect(entriesStore.getLoadedBranch()).toBe('br_a')
+    expect(eraFlipsStore.getLoadedBranch()).toBe('br_a')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(stack.replaceStack).not.toHaveBeenCalled()
+
+    release.resolve()
+    expect(await running).toEqual({ status: 'ok' })
+    expect(entriesStore.getLoadedBranch()).toBe('br_b')
+  })
+
+  it('lets a microtask queued from the reset or the fill find the fill and the publish done', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    type Seen = { loaded: string | null; published: string | undefined; replaced: number }
+    let atReset: Seen | null = null
+    let atFill: Seen | null = null
+    let queued = false
+    const stack = fakeStack()
+    const seen = (): Seen => ({
+      loaded: entriesStore.getLoadedBranch(),
+      published: currentStoryStore.getCurrentStory()?.branchId,
+      replaced: stack.replaceStack.mock.calls.length,
+    })
+    const replaceStack = vi.fn((branchId: string) => {
+      queueMicrotask(() => {
+        atReset = seen()
+      })
+      return stack.replaceStack(branchId)
+    })
+    const off = entriesStore.subscribe(() => {
+      if (queued || entriesStore.getLoadedBranch() !== 'br_b') return
+      queued = true
+      queueMicrotask(() => {
+        atFill = seen()
+      })
+    })
+
+    await showBranch(show({ replaceStack }), ctx)
+    off()
+
+    expect(atReset).toEqual({ loaded: 'br_b', published: 'br_b', replaced: 1 })
+    expect(atFill).toEqual({ loaded: 'br_b', published: 'br_b', replaced: 1 })
+  })
 })
 
 // Back during a switch, then the story's card: the open reads the pointer once the abandoned
