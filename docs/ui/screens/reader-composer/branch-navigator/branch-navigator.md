@@ -29,10 +29,10 @@ Cross-cutting principles that govern these surfaces are in
 
 ```
 ─── Reader top bar ──────────────────────────────────────────
- ← │ <story> · Ch 5 · 🕒 ... │ [status] [⎇ 3] [⚲] [⛭] │
-                                       ↓
-                          (click chip — desktop popover)
-                                       ↓
+ ← │ <story> · Ch 5 · 🕒 ... · ⎇ 3 │ [status] [⚲] [⛭] │
+                              ↓
+                 (click chip — desktop popover)
+                              ↓
        ┌── Branches · 3 ──────────────── × ─┐
        │                                     │
        │  ✓  main                            │  ← current
@@ -86,6 +86,16 @@ reader loses focus or unmounts before the new branch shows. A switch
 isn't a story open: the
 [story-open upgrade prompt](../../../../memory/retrieval.md#the-story-open-upgrade-prompt)
 doesn't fire again.
+
+A switch shows nothing pending beyond the held reader and, should the
+navigator open again meanwhile, its paused rows. A press that races
+past the paused rows into a closed gate leaves the reader where it was
+and toasts the gate's reason, the copy its disabled controls show. A
+switch that fails, because the branch is gone, its load or the story
+list's re-read fails, or the screens it would replace refuse to close,
+toasts `Couldn't switch branches.` and leaves the reader where it was.
+An abandoned switch shows nothing: the user left. A press while a
+switch runs does nothing.
 
 ### Row actions — inline icons
 
@@ -187,6 +197,17 @@ Validation: empty / whitespace-only names are rejected at save
 time (the input border turns warn-colored, save is a no-op until
 the user fixes or cancels). Same uniqueness behavior as creation
 — the data model doesn't enforce it; the navigator doesn't either.
+
+The saved name is trimmed at both ends; spacing inside it stays. While
+the write runs the input holds: no further typing and no second save.
+A failed write toasts `Couldn't rename the branch.` and the row shows
+the stored name. Closing the navigator while a rename is open counts
+as a click outside: a valid changed name saves, an empty one is
+dropped.
+
+Rename is an unlogged write. `branches` sits above the
+[delta log](../../../../data-model.md#entry-mutability--rollback), so a
+rename writes no delta, can't be undone, and leaves no History row.
 
 ### Delete confirm
 
@@ -321,6 +342,10 @@ When `stories.current_branch_id` is the only branch in the story:
   menu (`Browse branches…`). Opening it on a single-branch story
   shows one row with `Rename` available and no `×`: the only branch
   is the current one. The header reads `Branches · 1`.
+- On desktop and tablet, the navigator opened that way anchors where
+  the chip would sit, after the time chip, so it opens where it will
+  once a second branch exists. On phone it is the Sheet, which needs
+  no anchor.
 - The **creation modal** is reachable as always — from the
   per-entry `⎇` action. Creating a second branch causes the chip
   to appear on next render.

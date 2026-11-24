@@ -44,7 +44,7 @@ Cross-cutting principles that govern this screen are in
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ [logo] <title ✎> · Chapter ▾ · 🕒 time    [status][⎇N][⚲][⛭][←]│ ← top bar (⛭ = Story Settings)
+│ [logo] <title ✎> · Chapter ▾ · 🕒 time · ⎇N   [status][⚲][⛭][←]│ ← top bar (⛭ = Story Settings)
 ├───────────────────────────────────────────────────────────────┤
 │ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░  (chapter progress strip)              │
 ├───────────────────────────────────────┬───────────────────────┤

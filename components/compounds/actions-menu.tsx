@@ -68,7 +68,8 @@ type ActionsMenuProps = {
    * When true, both the trigger and the `Cmd/Ctrl-K` shortcut are inert. Pass
    * this while the surface is mid-decision — a confirm the user must answer
    * before navigating away. Open sheets already gate themselves; this is the
-   * judgment half, which nothing can derive.
+   * judgment half, which nothing can derive. The reader also passes it while its
+   * hold for a branch switch is up.
    */
   blocked?: boolean
   /**

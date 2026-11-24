@@ -38,6 +38,7 @@ type AppActionsMenuProps = {
    * navigating away — per [`actions-menu.md`](../../docs/ui/patterns/actions-menu.md).
    * Open sheets gate themselves; only the judgment half is route-supplied, because
    * no signal distinguishes a confirm worth trapping from any other overlay.
+   * The reader also passes it while its hold for a branch switch is up.
    */
   blocked?: boolean
   /** Passed through to `ActionsMenu`: the reader resolves its Undo label as the menu opens. */

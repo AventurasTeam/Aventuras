@@ -63,8 +63,8 @@
   .reader-faux .fauxline.mid { width: 80%; }
 
   /* navigator popover (desktop) */
-  .popover-wrap { position: absolute; z-index: 5; top: 56px; right: 96px; }
-  .popover-arrow { position: absolute; top: -7px; right: 60px; width: 12px; height: 12px; background: var(--bg-region); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+  .popover-wrap { position: absolute; z-index: 5; top: 56px; left: 200px; }
+  .popover-arrow { position: absolute; top: -7px; left: 150px; width: 12px; height: 12px; background: var(--bg-region); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
   .popover { width: 360px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.10); overflow: hidden; }
   .popover-head { padding: 12px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line-soft); }
   .popover-title { font-size: 13px; font-weight: 600; color: var(--ink); }
@@ -96,6 +96,9 @@
   .branch-row.renaming .rename-input { flex: 1; padding: 4px 8px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; color: var(--ink); font-family: inherit; outline: none; }
   .branch-row.renaming .rename-input:focus { border-color: var(--ink); }
   .branch-row .rename-input { display: none; }
+  /* rename states (branch-navigator.md → Inline rename): an empty name warns; a save holds the input */
+  .branch-row.renaming .rename-input.warn { border-color: var(--warn); background: var(--warn-bg); }
+  .branch-row.renaming .rename-input:disabled { color: var(--ink-muted); background: var(--bg-highlight); }
 
   /* delete confirm — an AlertDialog over the navigator (branch-navigator.md → Delete confirm);
      a branch delete can't be undone and takes the branch's line, so it isn't the inline strip */
@@ -181,6 +184,8 @@
     <button class="rb-btn active" data-row-state="default">default (muted)</button>
     <button class="rb-btn" data-row-state="hover">row hover (icons brightened)</button>
     <button class="rb-btn" data-row-state="renaming">renaming</button>
+    <button class="rb-btn" data-row-state="renaming-empty">renaming &middot; empty (warn)</button>
+    <button class="rb-btn" data-row-state="renaming-saving">renaming &middot; saving (held)</button>
     <button class="rb-btn" data-row-state="confirming">delete confirm (AlertDialog)</button>
   </div>
   <div class="rb-group">
@@ -203,6 +208,11 @@
     <button class="rb-btn active" data-current="b1">main (the root)</button>
     <button class="rb-btn" data-current="b2">alt-ending-2 (root deletable)</button>
   </div>
+  <div class="rb-group">
+    <span class="gl">branches:</span>
+    <button class="rb-btn active" data-branch-mode="many">3</button>
+    <button class="rb-btn" data-branch-mode="single">1 (no chip; opened from Browse branches&hellip;, anchored where the chip sits)</button>
+  </div>
   <span class="rb-note">flip controls to inspect each state</span>
 </div>
 
@@ -224,10 +234,12 @@
       <span class="muted">Ch 5</span>
       <span class="sep">·</span>
       <span class="muted">🕒 22nd of Frostmoon</span>
+      <!-- the chip sits beside the title, after the chapter and time chips (reader-composer.md → Layout) -->
+      <span class="sep" id="chip-sep">·</span>
+      <div class="branch-chip" id="chip" title="On main · 3 branches">⎇ <span class="count" id="chip-count">3</span></div>
     </div>
     <div class="topbar-right">
       <div class="status-pill">idle</div>
-      <div class="branch-chip" id="chip">⎇ <span class="count" id="chip-count">3</span></div>
       <div class="icon-btn" title="Actions">&#9906;</div>
       <div class="icon-btn" title="Story settings">&#9965;</div>
       <div class="icon-btn" title="Back">←</div>
@@ -358,21 +370,27 @@
   ];
 
   let currentSurface = 'popover';      // 'popover' | 'drawer' | 'modal'
-  let rowState = 'default';            // 'default' | 'menu' | 'renaming' | 'confirming'
+  let rowState = 'default';            // 'default' | 'menu' | 'renaming' | 'renaming-empty' | 'renaming-saving' | 'confirming'
   let stateRowId = 'b2';               // which row carries the current rowState (for non-default)
   let genState = 'idle';               // 'idle' | 'in-flight' (paused)
   let swapState = 'none';              // 'none' | 'pending' (embedder swap; delete hidden)
   let onlyCount = '38';                // entries whose id no other branch holds
+  let branchMode = 'many';             // 'many' | 'single' (the current branch alone: no chip)
+
+  function visibleBranches() {
+    return branchMode === 'single' ? branches.filter(b => b.current) : branches;
+  }
 
   function renderRows(targetEl) {
     targetEl.innerHTML = '';
-    branches.forEach(b => {
+    visibleBranches().forEach(b => {
       const row = document.createElement('div');
       row.className = 'branch-row';
       if (b.current) row.classList.add('current');
-      if (b.id === stateRowId && rowState !== 'default' && rowState !== 'menu') {
-        if (rowState === 'renaming') row.classList.add('renaming');
-      }
+      // single-branch: the one row is the current one, and it renames like any other
+      const stateRow = branchMode === 'single' ? b.current : b.id === stateRowId;
+      const renaming = stateRow && rowState.startsWith('renaming');
+      if (renaming) row.classList.add('renaming');
 
       const marker = document.createElement('span');
       marker.className = 'marker';
@@ -388,6 +406,8 @@
       renameInput.className = 'rename-input';
       renameInput.type = 'text';
       renameInput.value = b.name;
+      if (renaming && rowState === 'renaming-empty') { renameInput.value = ''; renameInput.classList.add('warn'); }
+      if (renaming && rowState === 'renaming-saving') renameInput.disabled = true;
       row.appendChild(renameInput);
 
       // inline action icons (rename + delete; delete hidden on the current branch only —
@@ -438,10 +458,14 @@
     const target = branches.find(x => x.id === stateRowId);
     // the × is hidden in flight and while a swap is pending, so the confirm can't open then
     const deleteReachable = genState !== 'in-flight' && swapState !== 'pending';
-    const showDelete = rowState === 'confirming' && currentSurface !== 'modal' && target && !target.current && deleteReachable;
+    const shown = visibleBranches();
+    const showDelete = rowState === 'confirming' && currentSurface !== 'modal' && target && !target.current && deleteReachable && shown.includes(target);
     // header and chip counts follow the branch list (the chip updates when the navigator closes)
-    document.querySelectorAll('.popover-count').forEach(el => { el.textContent = '· ' + branches.length; });
-    document.getElementById('chip-count').textContent = String(branches.length);
+    document.querySelectorAll('.popover-count').forEach(el => { el.textContent = '· ' + shown.length; });
+    document.getElementById('chip-count').textContent = String(shown.length);
+    // one branch: no chip; the navigator opens from Browse branches… and anchors where the chip sits
+    document.getElementById('chip').style.display = shown.length > 1 ? '' : 'none';
+    document.getElementById('chip-sep').style.display = shown.length > 1 ? '' : 'none';
     document.getElementById('delete-backdrop').classList.toggle('show', !!showDelete);
     if (target) document.getElementById('delete-title').textContent = 'Delete ' + target.name + '?';
     document.getElementById('delete-count').innerHTML = onlyCount === '0'
@@ -526,6 +550,11 @@
     applySurface();
   }));
 
+  document.querySelectorAll('.rb-btn[data-branch-mode]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-branch-mode]').forEach(x => x.classList.toggle('active', x === b));
+    branchMode = b.dataset.branchMode;
+    applySurface();
+  }));
   // chip click toggles popover (illustrative)
   document.getElementById('chip').addEventListener('click', () => {
     currentSurface = 'popover';
