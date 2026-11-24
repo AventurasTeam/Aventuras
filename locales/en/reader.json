@@ -512,6 +512,12 @@
   },
   "branches": {
     "renameInput": "Branch name",
-    "chipLabel": "On {{name}} · {{count}} branches"
+    "chipLabel": "On {{name}} · {{count}} branches",
+    "title": "Branches · {{count}}",
+    "close": "Close",
+    "current": "Current branch",
+    "rename": "Rename {{name}}",
+    "delete": "Delete {{name}}",
+    "paused": "Generation in progress — switching paused."
   }
 }
