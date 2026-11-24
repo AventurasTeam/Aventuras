@@ -509,5 +509,8 @@
     "involved": "{{count}} involved",
     "aware": "{{count}} aware",
     "commonKnowledge": "Common knowledge"
+  },
+  "branches": {
+    "renameInput": "Branch name"
   }
 }
