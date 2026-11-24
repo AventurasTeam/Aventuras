@@ -411,3 +411,14 @@ slice-planning gate forces its resolution before that slice is planned.
   (`NewEntity` and the like) makes the typo a compile error. Slice
   6.10 typed its own `branch scope` builders; the older seeds are out
   of its scope. Found by Slice 6.10's slice review (2026-11-24).
+
+- **The `branch scope` blocks repeat their helpers.** The chapters,
+  entry-assets, era-flips and translations register suites each define
+  near-identical `forked`, `<table>On`, `undoPayloadsOf` and `onFork`
+  helpers and the same payload-case shape; lore, threads and
+  happenings share a second pattern (`twoBranches`, `deltasOf`,
+  `TARGET_MISMATCH`). A shared test module beside
+  `lib/db/__tests__/two-branch.ts` could hold them, at the cost of
+  table-generic typing the per-suite readers don't need. Slice 6.10's
+  simplifier left them, since the move needs a new home. Found by
+  Slice 6.10's slice review (2026-11-24).
