@@ -54,6 +54,11 @@ export const entities = sqliteTable(
       'entities_name_collision_pair',
       sql`(${t.nameCollisionFlag} = 0 AND ${t.nameCollisionPartnerId} IS NULL AND ${t.nameCollisionReason} IS NULL) OR (${t.nameCollisionFlag} = 1 AND ${t.nameCollisionPartnerId} IS NOT NULL AND ${t.nameCollisionReason} IS NOT NULL)`,
     ),
+    // data-model.md → The lead: the flag is 0 or 1, and 1 only on a character row.
+    check(
+      'entities_lead_character',
+      sql`${t.isLead} IN (0, 1) AND (${t.isLead} = 0 OR ${t.kind} = 'character')`,
+    ),
   ],
 )
 

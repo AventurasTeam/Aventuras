@@ -63,68 +63,30 @@ const VALID_SETTINGS = {
   packVariables: {},
 }
 
-describe('storyDefinitionSchema cross-field lead constraint', () => {
-  it('rejects creative + first-person + null lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'first',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(false)
-    if (!r.success) {
-      expect(r.error.issues[0].path).toEqual(['leadEntityId'])
+// The lead is a flag on a branch's character row (data-model.md → The lead), so no mode or
+// narration asks the definition for one.
+describe('storyDefinitionSchema and the lead', () => {
+  it.each([
+    ['adventure', 'first'],
+    ['adventure', 'second'],
+    ['adventure', 'third'],
+    ['creative', 'first'],
+    ['creative', 'second'],
+    ['creative', 'third'],
+  ] as const)('accepts %s + %s-person with no lead', (mode, narration) => {
+    const definition = {
+      mode,
+      narration,
+      genre: BASE_DEFINITION.genre,
+      tone: BASE_DEFINITION.tone,
+      setting: BASE_DEFINITION.setting,
+      calendarSystemId: BASE_DEFINITION.calendarSystemId,
+      worldTimeOrigin: BASE_DEFINITION.worldTimeOrigin,
     }
-  })
-
-  it('allows creative + third-person + null lead (omniscient ensemble)', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'third',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(true)
-  })
-
-  it('rejects adventure + third-person + null lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'adventure',
-      narration: 'third',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(false)
-  })
-
-  it('allows adventure + third-person + a lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'adventure',
-      narration: 'third',
-      leadEntityId: 'ent_1',
-    })
-    expect(r.success).toBe(true)
-  })
-
-  it('rejects creative + second-person + null lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'second',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(false)
-  })
-
-  it('allows creative + first-person + a lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'first',
-      leadEntityId: 'ent_1',
-    })
-    expect(r.success).toBe(true)
+    expect(storyDefinitionSchema.safeParse(definition).success).toBe(true)
+    expect(storyDefinitionSchema.safeParse({ ...definition, leadEntityId: null }).success).toBe(
+      true,
+    )
   })
 })
 
