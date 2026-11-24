@@ -47,6 +47,10 @@ import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
 import { useRailData } from '@/components/reader/rail/use-rail-data'
 import {
+  ReaderBranchNavigator,
+  type ReaderBranchNavigatorHandle,
+} from '@/components/reader/reader-branch-navigator'
+import {
   ReaderChapterChips,
   type ReaderChapterChipsHandle,
 } from '@/components/reader/reader-chapter-chips'
@@ -507,6 +511,7 @@ function ReaderComposerBody({
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
   const documentRef = useRef<ReaderDocumentRef>(null)
   const chapterChipsRef = useRef<ReaderChapterChipsHandle>(null)
+  const branchNavigatorRef = useRef<ReaderBranchNavigatorHandle>(null)
   const [chapterPopoverOpen, setChapterPopoverOpen] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
@@ -815,6 +820,10 @@ function ReaderComposerBody({
   const actionsBlocked = editBlocked || dispatchInFlight || readerHeld
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
   const headReversalBlocked = headReversalGateHeld || dispatchInFlight || readerHeld
+  // A switch reads the gate without its branch's hold: a held branch pauses nothing
+  // (branch-navigator.md → During generation).
+  const switchGateClosed = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
+  const branchSwitchPaused = switchGateClosed || dispatchInFlight || readerHeld
   const editGate = editGateOf({ editBlocked: actionsBlocked, headReversalBlocked })
   // A branch held until restart has no run to name; its controls name the hold.
   const gateRunKind = generationStore.useGeneration((s) =>
@@ -1685,6 +1694,12 @@ function ReaderComposerBody({
   // Settles: on native a rejection would re-reject inside the WebView unlogged.
   const handleJumpToBottom = useCallback(async () => jumpToBottom(), [jumpToBottom])
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
+  const openBranchNavigator = useCallback(() => branchNavigatorRef.current?.open(), [])
+  const handleSwitch = useCallback((_toBranchId: string) => {}, [])
+  const handleRename = useCallback(
+    async (_branchId: string, _name: string): Promise<void> => {},
+    [],
+  )
   const sendEntryLanding = useCallback((entryId: string, sliceKey: number) => {
     if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId, sliceKey)
     else documentRef.current?.jumpToEntry(entryId, sliceKey)
@@ -1794,6 +1809,16 @@ function ReaderComposerBody({
         ...(entries.length > 0
           ? [{ id: 'jump-to-bottom', label: t('reader:jumpToBottom'), onActivate: jumpToBottom }]
           : []),
+        // Never run-gated: the navigator pauses its own rows. The open waits for the phone
+        // Actions Sheet's exit, since gorhom restores a Sheet another one covered.
+        {
+          id: 'browse-branches',
+          label: t('reader:actions.browseBranches'),
+          disabled: !hydrationSucceeded,
+          disabledReason: hydrationSucceeded ? undefined : t('reader:hydrationLoading'),
+          opensSheet: true,
+          onActivate: openBranchNavigator,
+        },
       ],
     }
   }, [
@@ -1810,6 +1835,7 @@ function ReaderComposerBody({
     hydrationSucceeded,
     entries.length,
     jumpToBottom,
+    openBranchNavigator,
   ])
 
   // Short of the tail the reply streams below the slice, reached by scrolling or Jump to bottom.
@@ -1901,20 +1927,31 @@ function ReaderComposerBody({
         </TruncatedText>
       }
       centerExtras={
-        hydrationSucceeded ? (
-          <ReaderChapterChips
-            ref={chapterChipsRef}
-            branchId={branchId}
-            entries={entries}
-            frame={worldTimeFrame}
-            progress={chapterProgress}
-            chapterAutoClose={openForBranch?.settings.chapterAutoClose ?? true}
-            gateReason={gateReason}
-            isFocused={isFocused}
-            onJumpToEntry={followEntry}
-            onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
-            onOpenChange={setChapterPopoverOpen}
-          />
+        hydrationSucceeded && storyId != null ? (
+          <>
+            <ReaderChapterChips
+              ref={chapterChipsRef}
+              branchId={branchId}
+              entries={entries}
+              frame={worldTimeFrame}
+              progress={chapterProgress}
+              chapterAutoClose={openForBranch?.settings.chapterAutoClose ?? true}
+              gateReason={gateReason}
+              isFocused={isFocused}
+              onJumpToEntry={followEntry}
+              onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
+              onOpenChange={setChapterPopoverOpen}
+            />
+            <ReaderBranchNavigator
+              ref={branchNavigatorRef}
+              storyId={storyId}
+              branchId={branchId}
+              isFocused={isFocused}
+              paused={branchSwitchPaused}
+              onSwitch={handleSwitch}
+              onRename={handleRename}
+            />
+          </>
         ) : undefined
       }
       chapterProgress={chapterProgress}
