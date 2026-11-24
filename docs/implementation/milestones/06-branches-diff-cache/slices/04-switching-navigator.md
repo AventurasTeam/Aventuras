@@ -421,7 +421,7 @@ today, reachable through a review reopened after a switch.
   and it handles no Esc on native. Rename starts from `✎` only: the
   name swaps for an input prefilled, focused and selected, the marker
   stays and the icons collapse. Enter or blur saves, Esc cancels, and
-  an empty or whitespace-only name turns the border warn and saves
+  an empty or whitespace-only name shows the input's invalid state and saves
   nothing until the user fixes or cancels it. The input is `Input`,
   never a raw `TextInput`, since it sits in a portal on every tier.
 - `renameBranch`: one unlogged update of `branches.name` in a
@@ -604,7 +604,7 @@ stack builder:
 - The rename compound's stories (`components/reader/branch-rename-input.stories.tsx`
   by default): open prefilled and selected; Enter and blur save; Esc
   restores the name and saves nothing; an empty and a whitespace-only
-  name show the warn border and save nothing.
+  name show the invalid state and save nothing.
 - The reader's connected navigator closes when the reader loses focus,
   and stays shut on refocus, under jsdom beside
   `components/reader/reader-chapter-chips.test.tsx`.
@@ -913,7 +913,7 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   targets the rename input: Esc cancels the rename there and closes the
   navigator anywhere else, as the rename's canon says.
 - The invalid rename input shows `Input`'s danger border through
-  `aria-invalid`; canon and the wireframe still say warn. The two
-  haven't been reconciled.
+  `aria-invalid`; canon and the wireframe now name the invalid state,
+  resolving the earlier warn/danger mismatch (provisional answer).
 - The probe stays out of the tree (removed with this note); git history
   keeps it.

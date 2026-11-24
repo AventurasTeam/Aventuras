@@ -93,11 +93,11 @@
   .branch-row.renaming:hover { background: var(--bg); }
   .branch-row.renaming .row-actions { display: none; }
   .branch-row.renaming .name { display: none; }
-  .branch-row.renaming .rename-input { flex: 1; padding: 4px 8px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; color: var(--ink); font-family: inherit; outline: none; }
+  .branch-row.renaming .rename-input { display: block; flex: 1; padding: 4px 8px; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; color: var(--ink); font-family: inherit; outline: none; }
   .branch-row.renaming .rename-input:focus { border-color: var(--ink); }
   .branch-row .rename-input { display: none; }
-  /* rename states (branch-navigator.md → Inline rename): an empty name warns; a save holds the input */
-  .branch-row.renaming .rename-input.warn { border-color: var(--warn); background: var(--warn-bg); }
+  /* rename states (branch-navigator.md → Inline rename): an empty name shows the input's invalid state; a save holds the input */
+  .branch-row.renaming .rename-input.invalid { border-color: var(--warn); background: var(--warn-bg); }
   .branch-row.renaming .rename-input:disabled { color: var(--ink-muted); background: var(--bg-highlight); }
 
   /* delete confirm — an AlertDialog over the navigator (branch-navigator.md → Delete confirm);
@@ -184,7 +184,7 @@
     <button class="rb-btn active" data-row-state="default">default (muted)</button>
     <button class="rb-btn" data-row-state="hover">row hover (icons brightened)</button>
     <button class="rb-btn" data-row-state="renaming">renaming</button>
-    <button class="rb-btn" data-row-state="renaming-empty">renaming &middot; empty (warn)</button>
+    <button class="rb-btn" data-row-state="renaming-empty">renaming &middot; empty (invalid)</button>
     <button class="rb-btn" data-row-state="renaming-saving">renaming &middot; saving (held)</button>
     <button class="rb-btn" data-row-state="confirming">delete confirm (AlertDialog)</button>
   </div>
@@ -406,7 +406,7 @@
       renameInput.className = 'rename-input';
       renameInput.type = 'text';
       renameInput.value = b.name;
-      if (renaming && rowState === 'renaming-empty') { renameInput.value = ''; renameInput.classList.add('warn'); }
+      if (renaming && rowState === 'renaming-empty') { renameInput.value = ''; renameInput.classList.add('invalid'); }
       if (renaming && rowState === 'renaming-saving') renameInput.disabled = true;
       row.appendChild(renameInput);
 

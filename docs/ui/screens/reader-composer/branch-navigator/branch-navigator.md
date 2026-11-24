@@ -194,8 +194,10 @@ separate button row — they're keyboard-only:
   visibly committing by moving focus elsewhere).
 
 Validation: empty / whitespace-only names are rejected at save
-time (the input border turns warn-colored, save is a no-op until
-the user fixes or cancels). Same uniqueness behavior as creation
+time (the input shows its
+[invalid state](../../../patterns/forms.md#error-state-via-aria-invalid),
+the danger border every input uses; save is a no-op until the user
+fixes or cancels). Same uniqueness behavior as creation
 — the data model doesn't enforce it; the navigator doesn't either.
 
 The saved name is trimmed at both ends; spacing inside it stays. While
