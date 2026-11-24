@@ -190,5 +190,52 @@ suite asserts the database alone: 6.2 removed its store mirror.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+**The fixture (developer, 2026-11-24).** Each `branch scope` block
+hand-seeds its second branch, and the pair writes on the branch seeded
+second. A read that drops its branch term scans in insertion order and
+returns the first row, so a pair written on the first-seeded branch
+can't tell; a read built as a map keeps the last row, so it gets an id
+only the sibling holds. The sibling's rows differ from the written
+branch's in every column the handler reads or writes, and from the
+write's new value; for a state patch, also in a state key the patch
+leaves alone. This reverses the brief's "no deltas on the second
+branch": where a delta-log read is under test, the sibling holds
+deltas on the same row, landed by real actions under their own action
+ids at a log position above the written branch's, since positions
+count per branch. `cloneBranch` serves one case, the chapter delete's
+preview, whose close-group read needs the sibling to hold the same
+close action ids.
+
+**What a row proves (developer, 2026-11-24).** A condition in a
+handler's own code (its payload check, its reads and writes, a helper
+only its register file calls, its cascade) names a red test of that
+handler. A line several handlers reach was mutated once, and each
+handler reaching it has a row marked `shared` that names a red test
+from that run: the delta-log helpers, `live-refs.ts`, the translation
+cascade, the vector sweep, `parent-chain-check.ts`, each
+registration's descriptor `branchCol`, and the state-patch module's
+`loadCurrent` and write. A delete's descriptor row names its
+registration's create or update pair: undoing a delete only inserts,
+so its own pair never reads through the descriptor. Accepted risk: a
+handler that passes the wrong branch variable to a shared helper
+isn't caught by removing a condition.
+
+**One PR (developer, 2026-11-24).** Fifteen tasks shipped as one PR
+rather than a split: the tasks share no interface, and the PR stays
+far under the review cap.
+
+**Two lines the table treats apart.** `close-groups.ts:22`, the
+close-group read's action-id term, survives its removal while `:34`
+holds: a copied close's action ids are the parent's own, and an action
+id with no deltas on the read branch adds nothing. A note under the
+PR's table records it. `isStoryLead`'s `eq(branches.id)` in the entity
+delete scopes by story, not branch; its row names the cross-story case
+in `delete-entity-arm.test.ts`.
+
+**Handler bugs.** None: every pair passed against shipped code.
+
+**The final rebase.** `main` had changed no file a row cites, so the
+ledger stood as run. [Slice 6.8](./08-per-branch-lead.md) had not
+landed: it re-runs the `createEntity` and `deleteEntity` pairs, whose
+bodies it changes, and adds its `isLead` pair to the entities block
+([C10](../milestone.md#c10--the-leads-surface)).
