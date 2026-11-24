@@ -15,6 +15,7 @@ import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
+import { branchSwitchPaused } from '@/components/reader/branch-switch-paused'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
 import { closeHereEntryIds } from '@/components/reader/close-here-entries'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
@@ -832,10 +833,9 @@ function ReaderComposerBody({
   const actionsBlocked = editBlocked || dispatchInFlight || readerHeld
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
   const headReversalBlocked = headReversalGateHeld || dispatchInFlight || readerHeld
-  // A switch reads the gate without its branch's hold: a held branch pauses nothing
-  // (branch-navigator.md → During generation).
-  const switchGateClosed = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  const branchSwitchPaused = switchGateClosed || dispatchInFlight || readerHeld
+  const switchPaused = generationStore.useGeneration((s) =>
+    branchSwitchPaused({ txState: s.txState, dispatchInFlight, held: readerHeld }),
+  )
   const editGate = editGateOf({ editBlocked: actionsBlocked, headReversalBlocked })
   // A branch held until restart has no run to name; its controls name the hold.
   const gateRunKind = generationStore.useGeneration((s) =>
@@ -2012,7 +2012,7 @@ function ReaderComposerBody({
               storyId={storyId}
               branchId={branchId}
               isFocused={isFocused}
-              paused={branchSwitchPaused}
+              paused={switchPaused}
               onSwitch={handleSwitch}
               onRename={handleRename}
             />
