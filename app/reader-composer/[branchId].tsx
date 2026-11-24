@@ -1704,15 +1704,9 @@ function ReaderComposerBody({
         if (!aliveRef.current || isDispatchBlocked()) return
         logger.debug('reader.branch_switch_started', { branchId, toBranchId })
         const hold = readerHoldStore.take(branchId)
+        const isCurrentRequest = () => aliveRef.current && isFocusedRef.current
         void switchBranch(
-          {
-            storyId,
-            fromBranchId: branchId,
-            toBranchId,
-            hold,
-            isCurrentRequest: () => aliveRef.current && isFocusedRef.current,
-            replaceStack,
-          },
+          { storyId, fromBranchId: branchId, toBranchId, hold, isCurrentRequest, replaceStack },
           ctx,
         ).then(
           (result) => postSwitchNotice(result, storyId),
@@ -1722,7 +1716,8 @@ function ReaderComposerBody({
               toBranchId,
               error: error instanceof Error ? error.message : String(error),
             })
-            toast.error(t('reader:branches.switchFailed'))
+            // The action's abandon test: a reader that lost focus or unmounted shows nothing.
+            if (isCurrentRequest()) toast.error(t('reader:branches.switchFailed'))
           },
         )
       })
