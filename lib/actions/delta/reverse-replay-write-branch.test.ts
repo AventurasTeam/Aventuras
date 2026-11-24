@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from 'drizzle-orm'
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -25,7 +26,9 @@ import { entitiesStore, entriesStore, generationStore, undoRedoStore } from '@/l
 
 import { applyDeltaAction } from './apply-delta-action'
 import { __resetBranchWriteLocks } from './branch-write-lock'
-import { buildReverseAndPrunePlan, type ReversePlan } from './reverse-replay'
+import { __resetRegistrationGuard, registerAllDomains } from './registrations'
+import { __resetRegistry, register } from './registry'
+import { buildReverseAndPrunePlan, type PlanTarget, type ReversePlan } from './reverse-replay'
 import { selectReversalSet, type ReversalSet } from './row-closure'
 import type { DeltaSource, PipelineAction } from '../types'
 
@@ -435,5 +438,62 @@ describe("the plan's fork lists", () => {
     expect((await deltaOn(CHILD, survivor.id))?.undoPayload).toEqual({
       state: { voice: 'low and dry' },
     })
+  })
+})
+
+describe('a table with no branch column', () => {
+  const branchless = sqliteTable('wb_branchless', { id: text('id').notNull() })
+
+  afterEach(() => {
+    __resetRegistry()
+    __resetRegistrationGuard()
+    registerAllDomains()
+  })
+
+  // A create on the parent of a row in a table every branch shares.
+  async function planBranchlessCreate(target?: PlanTarget): Promise<ReversePlan> {
+    t.sqlite.exec('CREATE TABLE wb_branchless (id TEXT PRIMARY KEY NOT NULL)')
+    t.sqlite.prepare('INSERT INTO wb_branchless (id) VALUES (?)').run('row_wb_shared')
+    register({
+      table: 'wb_branchless',
+      descriptor: { table: branchless, idCol: branchless.id },
+      columnSchemas: {},
+      handlers: {},
+    })
+    const { top } = t.sqlite
+      .prepare('SELECT max(log_position) AS top FROM deltas WHERE branch_id = ?')
+      .get(PARENT) as { top: number }
+    const created: Delta = {
+      id: 'delta_wb_branchless',
+      branchId: PARENT,
+      entryId: null,
+      actionId: 'act_wb_branchless',
+      logPosition: top + 1,
+      source: 'user_edit',
+      targetTable: 'wb_branchless',
+      targetId: 'row_wb_shared',
+      op: 'create',
+      undoPayload: null,
+      encodingVersion: 1,
+      createdAt: 1,
+    }
+    await ctx.db.insert(deltas).values(created)
+    const set = await selectReversalSet(ctx, { branchId: PARENT, target: [created] })
+    return buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false }, target)
+  }
+
+  const sharedRowIds = (): string[] =>
+    (t.sqlite.prepare('SELECT id FROM wb_branchless').all() as { id: string }[]).map((r) => r.id)
+
+  it("refuses a plan that writes another branch, which would write the parent's row", async () => {
+    await expect(planBranchlessCreate({ writeBranchId: CHILD })).rejects.toThrow(/wb_branchless/)
+    expect(sharedRowIds()).toEqual(['row_wb_shared'])
+  })
+
+  it('plans a reversal on its own branch', async () => {
+    const plan = await planBranchlessCreate()
+
+    await ctx.runInTransaction([...plan.ops, ...plan.pruneOps])
+    expect(sharedRowIds()).toEqual([])
   })
 })

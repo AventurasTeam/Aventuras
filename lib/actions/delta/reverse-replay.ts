@@ -536,6 +536,9 @@ function rowTargetOf(
 ): RowTarget {
   const entry = tableEntryOf(table)
   const { readBranchId, writeBranchId } = walk
+  // With no branch column the where is the id alone, so the write would land on the read branch.
+  if (writeBranchId !== readBranchId && entry.descriptor.branchCol === undefined)
+    throw new Error(`reverse-replay: ${table} has no branch column to write ${writeBranchId} by`)
   return {
     ref: { table, id },
     branchId: writeBranchId,
