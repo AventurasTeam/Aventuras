@@ -570,7 +570,11 @@ export const LateSaveLeavesANewerEditorOpen: Story = {
   },
 }
 
+// A save still running, so only the close can end the rename.
+const pendingRename = () => fn(() => new Promise<void>(() => {}))
+
 export const CloseMidRenameSaves: Story = {
+  args: { onRename: pendingRename() },
   play: async ({ args }) => {
     await waitForTier('desktop')
     await openFromChip()
@@ -582,5 +586,55 @@ export const CloseMidRenameSaves: Story = {
     await waitFor(() => expect(queryNavigator('Branches · 3')).toBeNull())
     await expect(args.onRename).toHaveBeenCalledTimes(1)
     await expect(args.onRename).toHaveBeenCalledWith('br_main', 'Main hall')
+
+    await openFromChip()
+    await expect(screen.queryByRole('textbox', { name: 'Branch name' })).toBeNull()
+    await expect(screen.getByRole('button', { name: 'Main' })).toBeVisible()
+  },
+}
+
+export const CloseMidRenameSavesPhone: Story = {
+  globals: PHONE,
+  args: { onRename: pendingRename() },
+  render: (args) => <HandleHarness {...args} />,
+  play: async ({ args }) => {
+    await waitForTier('phone')
+    await openFromChip()
+    await waitForSheetSettled('Branches · 3')
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Main' }))
+    await renameField()
+    await userEvent.keyboard('Main hall{F3}')
+    await waitFor(() => expect(queryNavigator('Branches · 3')).toBeNull(), ANIMATION)
+    await expect(args.onRename).toHaveBeenCalledTimes(1)
+    await expect(args.onRename).toHaveBeenCalledWith('br_main', 'Main hall')
+
+    await openFromChip()
+    await waitForSheetSettled('Branches · 3')
+    await expect(screen.queryByRole('textbox', { name: 'Branch name' })).toBeNull()
+    await expect(screen.getByRole('button', { name: 'Main' })).toBeVisible()
+  },
+}
+
+/** Inline rename: the ✓ stays, the row's icons collapse. */
+export const RenameKeepsTheMarker: Story = {
+  args: { onDelete: fn() },
+  play: async () => {
+    await waitForTier('desktop')
+    await openFromChip()
+    await userEvent.click(screen.getByRole('button', { name: 'Rename The trap' }))
+    await renameField()
+    const current = within(await list()).getAllByTestId('branch-navigator-row')[0]
+    await expect(within(current).getByRole('textbox', { name: 'Branch name' })).toBeVisible()
+    await expect(within(current).getByRole('img', { name: 'Current branch' })).toBeVisible()
+    await expect(within(current).queryAllByRole('button')).toEqual([])
+
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Main' }))
+    await renameField()
+    const main = within(await list()).getAllByTestId('branch-navigator-row')[1]
+    await expect(within(main).getByRole('textbox', { name: 'Branch name' })).toBeVisible()
+    await expect(within(main).queryAllByRole('button')).toEqual([])
+    await expect(screen.queryByRole('button', { name: 'Delete Main' })).toBeNull()
+    await expect(screen.getByRole('button', { name: 'Delete The road not taken' })).toBeVisible()
   },
 }
