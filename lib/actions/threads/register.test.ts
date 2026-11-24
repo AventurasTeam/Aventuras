@@ -1056,7 +1056,8 @@ describe('branch scope', () => {
     createdAt: 2,
     updatedAt: 2,
   }
-  // Carries entry refs, which the sibling lacks; stale already, as a reversal re-stamps it.
+  // Carries entry refs, which the sibling lacks. Stale already: the update and any reversal of it
+  // stamp embedding_stale 1.
   const WRITTEN: Thread = {
     id: 'thr_1',
     branchId: 'br_2',
