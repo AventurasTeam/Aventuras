@@ -400,13 +400,14 @@ slice-planning gate forces its resolution before that slice is planned.
   the fork finds no entry. Options: log the seed's world rows as
   deltas (changes main's undo grouping, which E2E drives), or record
   the shape as the seed's contract. Found by Slice 6.3's slice review
+  (2026-11-24).
 
 - **A successful story load's open-failure clear is untested.**
   `loadAndPublish` in `lib/actions/stories/operational.ts` calls
   `storiesStore.clearOpenFailure(storyId)` before it publishes;
   deleting the line leaves the three load suites green (28 tests). The
-  line predates Slice 6.4, which only moved it. Found by Slice 6.4's
-  Task 3 review (2026-11-24).
+  line predates Slice 6.4, which only moved it. Found in Slice 6.4's
+  reviews (2026-11-24).
 
 - **Diagnostics settings show capture off in a dev build that forces it
   on.** The debug switch in
@@ -421,8 +422,7 @@ slice-planning gate forces its resolution before that slice is planned.
   story run of `components/ui/searchable-overlay-list.stories.tsx`
   logs an unhandled "ResizeObserver loop completed with undelivered
   notifications" and still passes; the stories Slice 6.4 added don't
-  log it when run alone. Found by Slice 6.4's Task 6 review
-  (2026-11-24).
+  log it when run alone. Found in Slice 6.4's reviews (2026-11-24).
 
 - **A phone Sheet opened over the reader's inline editor lands under
   its keyboard.** Canon says a sheet opened over an open keyboard
@@ -444,15 +444,16 @@ slice-planning gate forces its resolution before that slice is planned.
   no chip strip) and overflows at 390 px; in `reader-composer.html`
   (around line 951) the phone strip's branch chip never hides at one
   branch, since `setBranchCount` toggles only `#branch-chip` and its
-  separator. Both predate Slice 6.4's edit. Found by Slice 6.4's
-  Task 21 review (2026-11-24).
+  separator. Both predate Slice 6.4's edit. Found in Slice 6.4's
+  reviews (2026-11-24).
 
 - **`data-model.md` calls the stories row the only user-authored
-  content outside the log.** `docs/data-model.md:3274-3276`; a branch
-  name is a counterexample, and canon now says rename is an unlogged
-  write
+  content outside the log.**
+  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
+  says so; a branch name is a counterexample, and canon now says
+  rename is an unlogged write
   ([`branch-navigator.md`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)).
-  Found by Slice 6.4's Task 21 review (2026-11-24).
+  Found in Slice 6.4's reviews (2026-11-24).
 
 - **A second `beforeRemove` preventer replays its action and the arm
   registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
@@ -461,8 +462,12 @@ slice-planning gate forces its resolution before that slice is planned.
   swallowed by it only if a run started on the story between the
   switch's gate check and its reset: unreachable today, since every
   pipeline is `hard-gate` and `switchBranch` also refuses on
-  `isStoryBusy`. Pre-existing. Found by Slice 6.4's reviews
-  (2026-11-24).
+  `isStoryBusy`. `switchBranch` checks `isStoryBusy` again right before
+  its reset, with nothing awaited between, so a switch could meet it
+  only while the guard's arming render still lags a run that just
+  ended (read from the code, not run). The tail (`showBranch`) takes no
+  such check, so it is the path left to meet it. Pre-existing. Found
+  by Slice 6.4's reviews (2026-11-24).
 
 - **A late `onDismissed` from an earlier close can release a row held
   by a reopened presentation.** After a reopen during a dismiss, the
