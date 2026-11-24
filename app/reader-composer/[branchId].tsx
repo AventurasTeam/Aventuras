@@ -1,6 +1,14 @@
 import { useIsFocused } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react'
 import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
@@ -258,33 +266,54 @@ function readerPlaceholder(state: {
   return null
 }
 
-export default function ReaderComposerRoute() {
-  const router = useRouter()
-  const tier = useTier()
-  const showRail = tier !== 'phone'
-  const isFocused = useIsFocused()
+export default function ReaderComposerRoute(): ReactElement {
   const { branchId, entry } = useLocalSearchParams<{
     branchId: string
     entry?: string | string[]
   }>()
+  // Keyed on the branch: a switch mounts a fresh reader whatever the router reuses, so refs, the
+  // composer and every mount effect start over (reader-composer.md → Loaded-set model).
+  return <ReaderComposerBody key={branchId} branchId={branchId} entry={entry} />
+}
+
+function ReaderComposerBody({
+  branchId,
+  entry,
+}: {
+  branchId: string
+  entry?: string | string[]
+}): ReactElement {
+  const router = useRouter()
+  const tier = useTier()
+  const showRail = tier !== 'phone'
+  const isFocused = useIsFocused()
   const branchIdRef = useRef(branchId)
   // Assigned post-commit, not during render: a discarded render would otherwise
-  // publish a branch that never landed, and every reader of this ref treats a
-  // mismatch as "the user left" — dropping work that was still legitimate.
-  // Layout, not passive: the commit phase runs to completion before any promise
-  // continuation, so no settling callback can read the pre-switch branch back.
+  // publish a branch that never landed. The body is keyed on branchId, so this
+  // only backstops that key.
   useLayoutEffect(() => {
     branchIdRef.current = branchId
   }, [branchId])
+  // Layout, not passive: the commit that unmounts the reader (a switch, a leave) runs to
+  // completion before any promise continuation, so no settling callback reads it still mounted.
+  const aliveRef = useRef(false)
+  useLayoutEffect(() => {
+    aliveRef.current = true
+    return () => {
+      aliveRef.current = false
+    }
+  }, [])
   // One line per reader instance: a switch that mounts the reader twice shows in the log.
   useEffect(() => {
     logger.debug('reader.mounted', { branchId: branchIdRef.current })
   }, [])
-  // One composer and one lastSubmission serve every branch, so settle-time
-  // recovery must prove the branch didn't change under its awaits before handing
-  // the user's text back. Persisted recovery (the failure entry) is branch-bound
-  // and stays unconditional.
-  const branchUnchanged = useCallback((started: string) => branchIdRef.current === started, [])
+  // Settle-time recovery hands the user's text back only to a reader still mounted on the
+  // branch it started on. Persisted recovery (the failure entry) is branch-bound and stays
+  // unconditional.
+  const branchUnchanged = useCallback(
+    (started: string) => aliveRef.current && branchIdRef.current === started,
+    [],
+  )
 
   const [rollback, setRollback] = useState<ConfirmState | null>(null)
   const [lastSubmission, setLastSubmission] = useState<{
@@ -444,8 +473,8 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.models.suggestion != null,
   )
 
-  // The failure belongs to the entry it was fired on; a turn, a rollback or a
-  // branch switch replaces the strip's contents, so the error must not ride along.
+  // The failure belongs to the entry it was fired on; a turn or a rollback replaces the strip's
+  // contents, so the error must not ride along. branchId backstops the per-branch remount.
   useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
 
   const swapTarget = openForBranch?.settings.embedding_swap_target
@@ -499,10 +528,8 @@ export default function ReaderComposerRoute() {
     [entries, slice.rows, editSession?.entryId],
   )
 
-  // A branch switch must drop any in-flight buffer from the prior branch —
-  // it belongs to a different entry list and would otherwise leak forward.
-  // `lastSubmission` rides along: retry prefers it over the persisted copy, so
-  // carrying it across would offer the previous branch's text to this branch's
+  // A backstop for the per-branch remount: another branch's buffer would leak into this one's
+  // stream, and its `lastSubmission`, which retry prefers to the persisted copy, into this one's
   // system entry.
   useEffect(() => {
     streamBufferRef.current = null
@@ -510,10 +537,9 @@ export default function ReaderComposerRoute() {
     setLastSubmission(null)
   }, [branchId])
 
-  // Leaving the branch (switch or unmount) aborts an in-flight refresh: its
-  // target entry is on the branch being left, and letting it settle would hold
-  // the edit gate on the branch just entered
-  // (reader-composer.md → Edge cases → Branch switch with chips in flight).
+  // Unmounting aborts a refresh in flight: no strip is left to show its chips, and it holds the
+  // gate. A switch waits for one; Back from a reader pushed above World and a dismiss over an
+  // unfocused reader don't (reader-composer.md → Edge cases).
   useEffect(
     () => () => {
       // Unguarded: awaitRunTerminal resolves on no match, so a pre-flight check repeats it.
@@ -1062,8 +1088,8 @@ export default function ReaderComposerRoute() {
         }
         const { result } = regen
         if (result.outcome === 'completed') notifyUnappliedState(branchId)
-        // A branch switch under the dispatch makes the composer's draft another
-        // branch's, so it can neither decide this plan nor receive its text.
+        // A reader that unmounted under the dispatch has no draft to decide this plan or
+        // receive its text.
         const stillHere = branchUnchanged(branchId)
         const plan = planRegenerateOutcome({
           outcome: result.outcome,
@@ -1505,11 +1531,9 @@ export default function ReaderComposerRoute() {
     else void cancelPillRun(branchId)
   }, [branchId, sendPending, handleCancelComposer])
 
-  // Read at settle time, not from the closure: a branch-switch abort whose
-  // reverse-replay fails resolves 'failed' well after the switch, and the
-  // error belongs to the strip that fired it. The guard needs both refs: a
-  // fork's copy keeps the tail's entry id, so the entry ref alone can match
-  // another branch's tail.
+  // Read at settle time, not from the closure: the error belongs to the strip that fired it, and
+  // by then the tail may have moved. The guard needs both refs: a fork's copy keeps the tail's
+  // entry id, so the entry ref alone can match another branch's tail.
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   // Published from the commit, like branchIdRef: the guard below reads both, and
   // an anchor from a render that never landed would fail it against live state.
@@ -1540,13 +1564,13 @@ export default function ReaderComposerRoute() {
       ctx,
     )
       // 'rejected' is the self-block a second ⟳ hits while one runs, or a
-      // re-run's hold; 'aborted' is a cancel or a branch switch. Neither fails.
+      // re-run's hold; 'aborted' is a cancel or the reader unmounting. Neither fails.
       .then((result) => {
         if (result.outcome === 'failed') fail(result.error)
       })
       .catch((e: unknown) => {
-        // Logged outside the strip guard: a throw that lands after a branch
-        // switch still has to leave a trace, and beginRun's own unwind path
+        // Logged outside the strip guard: a throw that lands after the reader
+        // unmounted still has to leave a trace, and beginRun's own unwind path
         // rethrows without logging.
         logger.error('pipeline.suggestion_refresh_threw', {
           branchId: startedBranchId,
@@ -1805,6 +1829,15 @@ export default function ReaderComposerRoute() {
     hydrationSucceeded,
     isEmpty: entries.length === 0,
   })
+  // A switch's empty-paint signal on device: the empty placeholder after rows, which
+  // otherwise only a rollback of every entry shows.
+  const hadRowsRef = useRef(false)
+  const rowCount = entries.length
+  useEffect(() => {
+    if (!hydrationSucceeded) return
+    if (rowCount > 0) hadRowsRef.current = true
+    else if (hadRowsRef.current) logger.debug('reader.empty_after_rows', { branchId })
+  }, [branchId, hydrationSucceeded, rowCount])
 
   const surfaceProps = {
     rows: slice.rows,

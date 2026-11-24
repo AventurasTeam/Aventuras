@@ -117,9 +117,9 @@ export function useSceneEditing(
   const closeSceneEdit = useCallback(() => setSceneEditId(null), [])
 
   const target = sceneEditId != null ? entries.find((e) => e.id === sceneEditId) : undefined
-  // An undo, a rollback, a branch switch or a new turn can drop the entry under an
-  // open sheet — or move the tail off it. Dropping the id with it keeps a later redo
-  // from resurrecting the overlay on an entry that is no longer editable.
+  // An undo, a rollback or a new turn can drop the entry under an open sheet — or
+  // move the tail off it. Dropping the id with it keeps a later redo from
+  // resurrecting the overlay on an entry that is no longer editable.
   useEffect(() => {
     if (sceneEditId != null && (target == null || sceneEditId !== tailEntryId)) setSceneEditId(null)
   }, [sceneEditId, target, tailEntryId])

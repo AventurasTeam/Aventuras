@@ -157,7 +157,7 @@ export function useReaderUndo({
   const noticeRef = useRef<string | null>(null)
   // Each open resolves afresh; a resolution an older open started is dropped.
   const resolveSeqRef = useRef(0)
-  // Read after an await: a confirm resolved once the screen left or switched branch is dropped.
+  // Read after an await: a confirm resolved once focus left or an editor opened is dropped.
   const liveRef = useRef({ branchId, isFocused, held })
   useEffect(() => {
     liveRef.current = { branchId, isFocused, held }
@@ -330,7 +330,7 @@ export function useReaderUndo({
     (origin: 'menu' | 'keyboard') =>
       guarded('undo', async () => {
         const started = branchId
-        // Read after each await: the screen left, switched branch or opened an editor meanwhile.
+        // Read after each await: the screen lost focus or opened an editor meanwhile.
         const stale = () => {
           const live = liveRef.current
           return live.branchId !== started || !live.isFocused || live.held
