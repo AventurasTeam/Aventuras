@@ -20,8 +20,10 @@ export {
 export {
   checkCloseRerunParent,
   CLOSE_RERUN_REFUSAL,
+  CLOSE_RERUN_TURNS_FOLLOWED,
   getCloseRerunPreview,
   startCloseRerun,
+  startCloseRerunOnFork,
   type CloseRerunCountsChanged,
   type CloseRerunExpected,
   type CloseRerunParentCheck,
@@ -30,6 +32,7 @@ export {
   type CloseRerunRefusalCode,
   type CloseRerunShortcut,
   type CloseRerunStart,
+  type CloseRerunTurnsFollowed,
 } from './chapters/close-rerun'
 export { runPickedClose } from './chapters/picked-close'
 export { removeChapter, type RemoveChapterResult } from './chapters/remove-chapter'

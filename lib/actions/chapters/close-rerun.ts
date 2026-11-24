@@ -363,6 +363,15 @@ export type CloseRerunCountsChanged = {
   preview: CloseRerunPreview
 }
 
+/** The start on a new branch found turns after the close: it never rolls them back. */
+export const CLOSE_RERUN_TURNS_FOLLOWED = 'turns-followed'
+
+export type CloseRerunTurnsFollowed = {
+  status: 'rejected'
+  code: typeof CLOSE_RERUN_TURNS_FOLLOWED
+  reason: string
+}
+
 /** The chain's end, whose `kind` tells a catch-up pass's end from the re-run's, or the refusal. */
 export type CloseRerunStart =
   | ChainEnd
@@ -371,6 +380,7 @@ export type CloseRerunStart =
   | CloseRerunReadRefusal
   | CloseRerunCountsChanged
   | StoryEntryRejection
+  | CloseRerunTurnsFollowed
 
 function shownStill(expected: CloseRerunExpected, preview: CloseRerunPreview): boolean {
   const { shortcut, reversal } = preview
@@ -397,6 +407,14 @@ function countsChanged(preview: CloseRerunPreview): CloseRerunCountsChanged {
   }
 }
 
+function turnsFollowed(branchId: string): CloseRerunTurnsFollowed {
+  return {
+    status: 'rejected',
+    code: CLOSE_RERUN_TURNS_FOLLOWED,
+    reason: `a turn follows the close on branch ${branchId}`,
+  }
+}
+
 // The chain runs it again at its reserve, after the turns went; this one comes first.
 function closePreflight(open: Pick<OpenStory, 'settings'>): ConfigResolverError | null {
   return runPreflight(getPipeline(CHAPTER_CLOSE_KIND), preflightSnapshot(open.settings))
@@ -418,7 +436,8 @@ async function catchUpPreflight(
 type RerunStartArgs = {
   branchId: string
   chapterId: string
-  expected: CloseRerunExpected
+  /** Null on a branch a fork just made: the confirm's counts were checked on its parent. */
+  expected: CloseRerunExpected | null
   story: OpenStory
   onStarted?: () => void
 }
@@ -465,21 +484,11 @@ export async function checkCloseRerunParent(
   return { status: 'clear', preview: { ...fresh, shortcut } }
 }
 
-/**
- * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
- * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or
- * the chain's origin throws. Settings come from the store's open story.
- */
-export async function startCloseRerun(
+// The in-place start's refusals, then `start` under the pending mark this takes.
+async function checkedStart(
   branchId: string,
-  chapterId: string,
-  expected: CloseRerunExpected,
   ctx: DbCtx,
-  /**
-   * onStarted fires once, when the chain's first run reserves (after the mark ends); never on a
-   * refusal.
-   */
-  opts?: { onStarted?: () => void },
+  start: (open: OpenStory, own: PendingMark) => Promise<CloseRerunStart>,
 ): Promise<CloseRerunStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
     return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
@@ -499,9 +508,45 @@ export async function startCloseRerun(
   ensureChapterClosePipelineRegistered()
   const failed = closePreflight(open)
   if (failed) return { outcome: 'preflight-failed', error: failed }
-  return generationStore.bracketPendingTurn(branchId, (_endEarly, own) =>
+  return generationStore.bracketPendingTurn(branchId, (_endEarly, own) => start(open, own))
+}
+
+/**
+ * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
+ * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or
+ * the chain's origin throws. Settings come from the store's open story.
+ */
+export async function startCloseRerun(
+  branchId: string,
+  chapterId: string,
+  expected: CloseRerunExpected,
+  ctx: DbCtx,
+  /**
+   * onStarted fires once, when the chain's first run reserves (after the mark ends); never on a
+   * refusal.
+   */
+  opts?: { onStarted?: () => void },
+): Promise<CloseRerunStart> {
+  return checkedStart(branchId, ctx, (story, own) =>
+    startUnderMark({ branchId, chapterId, expected, story, onStarted: opts?.onStarted }, ctx, own),
+  )
+}
+
+/**
+ * chapter-close.md → Re-running a close, on the branch a fork just made current: the in-place
+ * start's refusals there, then the re-run with no shortcut, its expectations read under its mark.
+ * A turn after the close refuses `turns-followed`. Rejects as startCloseRerun does.
+ */
+export async function startCloseRerunOnFork(
+  branchId: string,
+  chapterId: string,
+  ctx: DbCtx,
+  /** As startCloseRerun's. */
+  opts?: { onStarted?: () => void },
+): Promise<CloseRerunStart> {
+  return checkedStart(branchId, ctx, (story, own) =>
     startUnderMark(
-      { branchId, chapterId, expected, story: open, onStarted: opts?.onStarted },
+      { branchId, chapterId, expected: null, story, onStarted: opts?.onStarted },
       ctx,
       own,
     ),
@@ -516,7 +561,10 @@ async function startUnderMark(
   const { branchId, chapterId, expected, story } = args
   const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
   if ('status' in fresh) return fresh
-  if (!shownStill(expected, fresh)) return countsChanged(fresh)
+  if (expected === null) {
+    // The confirm showed no rollback here, so a turn after the close is never swept for it.
+    if (fresh.shortcut !== null) return turnsFollowed(branchId)
+  } else if (!shownStill(expected, fresh)) return countsChanged(fresh)
   const passFailed = await catchUpPreflight(args, ctx)
   if (passFailed) return { outcome: 'preflight-failed', error: passFailed }
   if (fresh.shortcut !== null) {

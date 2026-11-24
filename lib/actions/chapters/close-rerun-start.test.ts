@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { generateStructured, generateToolStep } from '@/lib/ai'
@@ -51,14 +51,18 @@ import { MANUAL_CLOSE_REFUSAL } from './close-chain'
 import {
   checkCloseRerunParent,
   CLOSE_RERUN_REFUSAL,
+  CLOSE_RERUN_TURNS_FOLLOWED,
   getCloseRerunPreview,
   startCloseRerun,
+  startCloseRerunOnFork,
   type CloseRerunExpected,
   type CloseRerunPreview,
   type CloseRerunStart,
 } from './close-rerun'
 import { startManualClose } from './start-manual-close'
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { forkBranch } from '../stories/fork-branch'
+import { loadOpenStory } from '../stories/operational'
 import { shownCounts } from '../story-entries/__tests__/shown-counts'
 import { rollbackToEntry } from '../story-entries/operational'
 import {
@@ -1111,5 +1115,163 @@ describe('checkCloseRerunParent (AC 13)', () => {
       error: { kind: 'config-resolver', failure: 'profile-missing', target: 'classifier' },
     })
     await expectCheckedOnly(c.h, before)
+  })
+})
+
+async function entryIdsOn(h: CloseHarness, branchId: string): Promise<string[]> {
+  const rows = await h.fx.ctx.db
+    .select({ id: storyEntries.id })
+    .from(storyEntries)
+    .where(eq(storyEntries.branchId, branchId))
+    .orderBy(asc(storyEntries.position))
+  return rows.map((row) => row.id)
+}
+
+async function reportActionOn(
+  h: CloseHarness,
+  branchId: string,
+  chapterId: string,
+): Promise<string | undefined> {
+  const [row] = await h.fx.ctx.db
+    .select({ report: chapters.closeReport })
+    .from(chapters)
+    .where(and(eq(chapters.branchId, branchId), eq(chapters.id, chapterId)))
+  return row?.report?.actionId
+}
+
+// What the fork path's commit leaves: the child current in the DB, every store still on the parent.
+async function forkAt(h: CloseHarness, forkEntryId: string): Promise<string> {
+  const forked = await forkBranch(
+    { parentBranchId: h.fx.branchId, forkEntryId, name: 'Ch. 1 re-run', makeCurrent: true },
+    h.fx.ctx,
+  )
+  if (forked.status !== 'ok') throw new Error(`the fork refused: ${forked.code}`)
+  return forked.branchId
+}
+
+// As the show-branch tail's publish leaves it: the open story on the child.
+async function publish(h: CloseHarness, branchId: string): Promise<void> {
+  expect(await loadOpenStory(branchId, h.fx.ctx)).toMatchObject({ status: 'ok' })
+  expect(openStory().branchId).toBe(branchId)
+}
+
+function startOnFork(
+  { h, chapterId }: Closed,
+  child: string,
+  onStarted?: () => void,
+): Promise<CloseRerunStart> {
+  script(generateToolStepMock, [STAND_IN_STEP])
+  return startCloseRerunOnFork(child, chapterId, h.fx.ctx, { onStarted })
+}
+
+// A refusal on the new branch removes no entry there and leaves no record or mark behind.
+async function expectNothingStartedOn(
+  h: CloseHarness,
+  child: string,
+  entries: readonly string[],
+): Promise<void> {
+  expect(await entryIdsOn(h, child), 'the child entries').toEqual(entries)
+  expect(
+    await h.fx.ctx.db.select().from(reversalJournals).where(eq(reversalJournals.branchId, child)),
+    'reversal_journals',
+  ).toEqual([])
+  expect(generationStore.getTxState().pendingRerun.has(child), 'pendingRerun').toBe(false)
+  expect(generationStore.getTxState().pendingTurns.size, 'pending marks').toBe(0)
+}
+
+describe('startCloseRerunOnFork (AC 18)', () => {
+  it("re-runs the chapter on a fresh fork at N whatever shortcut the parent's confirm showed", async () => {
+    const c = await closed()
+    const { reply } = await turnSince(c.h)
+    const shown = await previewOf(c)
+    const shortcut = defined(shown.shortcut ?? undefined, 'the confirm showed no turn since')
+    expect(shortcut.turns).toBe(1)
+    const child = await forkAt(c.h, shortcut.forkPoint.entryId)
+    await publish(c.h, child)
+    const kept = c.h.fx.entries.map((entry) => entry.id)
+    expect(await entryIdsOn(c.h, child), 'the fork kept every entry before B').toEqual(kept)
+    const parentEntries = await entryIdsOn(c.h, c.h.fx.branchId)
+    const seen: { marks: number; runs: string[] }[] = []
+    const onStarted = () => {
+      const tx = generationStore.getTxState()
+      seen.push({
+        marks: tx.pendingTurns.size,
+        runs: [...tx.runs.values()]
+          .filter((run) => run.branchId === child)
+          .map((run) => `${run.kind}:${String(run.interruptible)}`),
+      })
+    }
+
+    const end = chainEnd(await startOnFork(c, child, onStarted))
+
+    expect(end).toMatchObject({ kind: CHAPTER_CLOSE_KIND, result: { outcome: 'completed' } })
+    expect(seen, 'onStarted, once, at the reserve').toEqual([
+      { marks: 0, runs: [`${CHAPTER_CLOSE_KIND}:rerun`] },
+    ])
+    expect(await entryIdsOn(c.h, child), 'no entry went on the child').toEqual(kept)
+    expect(await reportActionOn(c.h, child, c.chapterId)).toBe(end.result.actionId)
+    expect(end.result.actionId).not.toBe(c.h.actionId())
+    expect(await reportActionOn(c.h, c.h.fx.branchId, c.chapterId)).toBe(c.h.actionId())
+    expect(await entryIdsOn(c.h, c.h.fx.branchId), 'the parent keeps the turn since').toEqual(
+      parentEntries,
+    )
+    expect(parentEntries).toContain(reply)
+    expect(generationStore.getTxState().pendingRerun.has(child)).toBe(false)
+  })
+
+  it('refuses turns-followed on a branch forked at its tail, removing no entry', async () => {
+    const c = await closed()
+    const { reply } = await turnSince(c.h)
+    const child = await forkAt(c.h, reply)
+    await publish(c.h, child)
+    const entries = await entryIdsOn(c.h, child)
+    expect(entries).toContain(reply)
+    const onStarted = vi.fn()
+
+    const result = await startOnFork(c, child, onStarted)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      code: CLOSE_RERUN_TURNS_FOLLOWED,
+      reason: expect.any(String),
+    })
+    expect(CLOSE_RERUN_TURNS_FOLLOWED).toBe('turns-followed')
+    await expectNothingStartedOn(c.h, child, entries)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('refuses story-busy while a run started on the parent holds the story', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const shortcut = defined((await previewOf(c)).shortcut ?? undefined, 'no turn since')
+    const child = await forkAt(c.h, shortcut.forkPoint.entryId)
+    await publish(c.h, child)
+    holdStoryWithTurn(c.h)
+    const entries = await entryIdsOn(c.h, child)
+    const onStarted = vi.fn()
+
+    expect(await startOnFork(c, child, onStarted)).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+    })
+    await expectNothingStartedOn(c.h, child, entries)
+    expect(onStarted).not.toHaveBeenCalled()
+  })
+
+  it('refuses branch-not-open while the open story is still on the parent', async () => {
+    const c = await closed()
+    await turnSince(c.h)
+    const shortcut = defined((await previewOf(c)).shortcut ?? undefined, 'no turn since')
+    const child = await forkAt(c.h, shortcut.forkPoint.entryId)
+    expect(openStory().branchId).toBe(c.h.fx.branchId)
+    const entries = await entryIdsOn(c.h, child)
+    const onStarted = vi.fn()
+
+    expect(await startOnFork(c, child, onStarted)).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen,
+    })
+    await expectNothingStartedOn(c.h, child, entries)
+    expect(onStarted).not.toHaveBeenCalled()
   })
 })
