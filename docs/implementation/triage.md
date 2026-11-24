@@ -542,3 +542,16 @@ slice-planning gate forces its resolution before that slice is planned.
   table-generic typing the per-suite readers don't need. Slice 6.10's
   simplifier left them, since the move needs a new home. Found by
   Slice 6.10's slice review (2026-11-24).
+
+- **Web dialogs size to their content, not to their width class.**
+  `DialogContent`'s panel takes `w-full` inside Radix's unstyled
+  `role="dialog"` wrapper, which shrinks to fit inside a centred flex
+  column, so `w-full` fills nothing and every `sm:max-w-*` override
+  (`close-chapter-modal-view.tsx`'s 480 px, `embedder-download-dialog.tsx`'s
+  560 px) only caps a content-sized panel: it opens narrow and widens
+  when a longer line renders. The base `max-w-[calc(100%-2rem)]` also
+  resolves against that wrapper, so a definite width there loses 32 px.
+  The comment above the class list assumes otherwise
+  (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
+  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`. Found by Slice
+  6.5's task review (2026-11-24).
