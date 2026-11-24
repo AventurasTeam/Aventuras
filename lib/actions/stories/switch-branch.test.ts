@@ -1086,12 +1086,18 @@ describe('showBranch', () => {
     await pointerMovedTo(db, 'br_b')
     await corruptDefinition(db)
     chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const stack = fakeStack()
 
     expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
       status: 'shown-unloaded',
     })
 
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_show_load_refused', {
+      storyId: 'story_1',
+      branchId: 'br_b',
+      readStatus: 'failed',
+    })
     expect(stack.replaceStack).toHaveBeenCalledTimes(1)
     expect(stack.replaceStack).toHaveBeenCalledWith('br_b')
     expect(entriesStore.getLoadedBranch()).toBe('br_a')
@@ -1167,6 +1173,32 @@ describe('showBranch', () => {
     expect(readerHoldStore.isHeld('br_a')).toBe(false)
     expect(kicks).toEqual([])
     expect(ctx.runInTransaction).not.toHaveBeenCalled()
+    expect(await pointer(db)).toBe('br_b')
+  })
+
+  it('fills nothing, logs the throw and answers navigation-blocked when the stack reset throws', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const replaceStack = vi.fn((_branchId: string): boolean => {
+      throw new Error('dispatch exploded')
+    })
+
+    expect(await showBranch(show({ replaceStack }), ctx)).toEqual({
+      status: 'navigation-blocked',
+    })
+
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_show_navigation_blocked', {
+      storyId: 'story_1',
+      branchId: 'br_b',
+      error: 'dispatch exploded',
+    })
+    expect(entriesStore.getLoadedBranch()).toBe('br_a')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(chapterOverlaysStore.getState().closeResult).toEqual(CLOSE_RESULT)
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+    expect(kicks).toEqual([])
     expect(await pointer(db)).toBe('br_b')
   })
 

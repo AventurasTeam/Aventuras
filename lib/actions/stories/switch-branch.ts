@@ -254,7 +254,18 @@ export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<Sh
       logger.warn('action_layer.branch_show_stories_reread_failed', { storyId, branchId })
     }
     // As in the switch: the reset first, then nothing awaited to the publish.
-    if (!replaceStack(branchId)) {
+    let took: boolean
+    try {
+      took = replaceStack(branchId)
+    } catch (err) {
+      logger.warn('action_layer.branch_show_navigation_blocked', {
+        storyId,
+        branchId,
+        error: errorText(err),
+      })
+      return { status: 'navigation-blocked' }
+    }
+    if (!took) {
       logger.warn('action_layer.branch_show_navigation_blocked', { storyId, branchId })
       return { status: 'navigation-blocked' }
     }
@@ -275,9 +286,9 @@ async function readForShow(
   branchId: string,
   ctx: DbCtx,
 ): Promise<BranchWorkingSet | null> {
+  let read: ReadBranchResult
   try {
-    const read = await readBranchWorkingSet(branchId, ctx, () => true)
-    return read.status === 'ok' ? read.set : null
+    read = await readBranchWorkingSet(branchId, ctx, () => true)
   } catch (err) {
     logger.error('action_layer.branch_show_load_failed', {
       storyId,
@@ -286,4 +297,11 @@ async function readForShow(
     })
     return null
   }
+  if (read.status === 'ok') return read.set
+  logger.warn('action_layer.branch_show_load_refused', {
+    storyId,
+    branchId,
+    readStatus: read.status,
+  })
+  return null
 }
