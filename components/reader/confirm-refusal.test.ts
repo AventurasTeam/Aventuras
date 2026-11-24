@@ -92,6 +92,10 @@ describe('regenerateRefusalCopy', () => {
   it('offers no retry for a regenerate that cannot succeed', () => {
     expect(regenerateRefusalCopy(refused('sweep-refused'))).toBe('reader:regenerateUnavailable')
   })
+
+  it('names the missing lead, as the composer reason line does', () => {
+    expect(regenerateRefusalCopy(refused('lead-missing'))).toBe('reader:composerLeadMissing')
+  })
 })
 
 describe('regenerateRefusalToast', () => {

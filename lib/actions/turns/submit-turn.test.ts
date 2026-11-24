@@ -7,6 +7,7 @@ import {
   deltas,
   emptyEntityState,
   entities,
+  pipelineRuns,
   stories,
   storyEntries,
   type NewEntity,
@@ -72,6 +73,17 @@ vi.mock('../delta/apply-delta-action', async (importOriginal) => {
 
 const OK_RETRIEVAL = retrievalSuccess()
 
+// The one shape that needs no lead (principles.md → Mode, lead, and narration).
+async function reshapeToCreativeThird(
+  db: Awaited<ReturnType<typeof makeHarness>>['db'],
+): Promise<void> {
+  const definition = { ...STORY_DEFINITION, mode: 'creative' as const, narration: 'third' as const }
+  await db.update(stories).set({ definition }).where(eq(stories.id, 's1'))
+  const open = currentStoryStore.getCurrentStory()
+  if (open == null) throw new Error('story not open')
+  currentStoryStore.set({ ...open, definition })
+}
+
 describe('submitTurn', () => {
   beforeEach(() => {
     resetSingletons()
@@ -126,6 +138,46 @@ describe('submitTurn', () => {
     expect(branchEntries('b1')).toEqual([])
     const rows = await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))
     expect(rows).toEqual([])
+  })
+
+  // principles.md → Composer mode: a branch without the lead it needs can't take a turn.
+  it('refuses a turn on a branch that needs a lead and has none, writing nothing', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1', { lead: false })
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const result = await submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'I draw my blade.', composerMode: 'do' },
+      ctx,
+    )
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'lead-missing', converged: true })
+    expect(await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))).toEqual([])
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toEqual([])
+    expect(await db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  it('takes a turn on a creative third-person branch with no lead', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1', { lead: false })
+    await reshapeToCreativeThird(db)
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const result = await submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'The rain keeps on.', composerMode: 'free' },
+      ctx,
+    )
+
+    expect(expectRan(result).outcome).toBe('completed')
+    const kinds = branchEntries('b1')
+      .sort((a, b) => a.position - b.position)
+      .map((e) => e.kind)
+    expect(kinds).toEqual(['user_action', 'ai_reply'])
   })
 
   it('rejects a swap requested while a turn is waiting to commit its user action', async () => {
@@ -371,7 +423,7 @@ describe('submitTurn', () => {
 
     it("stamps the user action, and its reply, with the branch's flagged lead", async () => {
       const { ctx, db } = await makeHarness()
-      await openStory(db, 's1', 'b1')
+      await openStory(db, 's1', 'b1', { lead: false })
       await seedCast(db, MIRA)
       entriesStore.hydrate('b1', [])
       await hydrateAppSettings(async () => WORKING_CONFIG)
@@ -391,7 +443,7 @@ describe('submitTurn', () => {
     it('stamps the user action and its reply alike when a lead set is still writing at Send', async () => {
       const { ctx, db } = await makeHarness()
       await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
-      await openStory(db, 's1', 'b1')
+      await openStory(db, 's1', 'b1', { lead: false })
       await seedCast(db, KAEL)
       entriesStore.hydrate('b1', [])
       await hydrateAppSettings(async () => WORKING_CONFIG)
@@ -464,7 +516,8 @@ describe('submitTurn', () => {
         createdAt: 1,
       }
       await ctx.db.insert(storyEntries).values(tail)
-      await openStory(db, 's1', 'b1')
+      await openStory(db, 's1', 'b1', { lead: false })
+      await reshapeToCreativeThird(db)
       await seedCast(db, null)
       entriesStore.hydrate('b1', [tail])
       await hydrateAppSettings(async () => WORKING_CONFIG)
@@ -484,7 +537,7 @@ describe('submitTurn', () => {
 
     it('leaves the stamp absent on a creative third-person branch with no lead', async () => {
       const { ctx, db } = await makeHarness()
-      await openStory(db, 's1', 'b1')
+      await openStory(db, 's1', 'b1', { lead: false })
       const creativeThird = {
         ...STORY_DEFINITION,
         mode: 'creative' as const,

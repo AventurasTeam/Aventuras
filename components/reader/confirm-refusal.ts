@@ -1,5 +1,6 @@
 import {
   CHAPTER_DELETE_REFUSAL,
+  LEAD_MISSING,
   MANUAL_CLOSE_REFUSAL,
   STORY_ENTRY_REJECTION,
   type CountsChangedRejection,
@@ -34,6 +35,7 @@ const REGENERATE_REJECTION_COPY = {
   'not-an-ai-reply': 'reader:regenerateUnavailable',
   'no-origin': 'reader:regenerateUnavailable',
   'sweep-refused': 'reader:regenerateUnavailable',
+  [LEAD_MISSING]: 'reader:composerLeadMissing',
 } as const satisfies Record<RegenerateRejectionCode, string>
 
 export function regenerateRefusalCopy(

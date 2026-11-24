@@ -204,6 +204,7 @@ export {
 } from './story-entries/scene-fields'
 export { updateEntryWorldTime, type UpdateWorldTimeResult } from './story-entries/world-time'
 export { refreshSuggestions } from './suggestions/refresh-suggestions'
+export { LEAD_MISSING } from './refusal-codes'
 export {
   regenerateTurn,
   type RegenerateRejectionCode,

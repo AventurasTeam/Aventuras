@@ -6,6 +6,7 @@ import {
   branches,
   chapters,
   deltas,
+  entities,
   happenings,
   openRegionSeries,
   pipelineRuns,
@@ -584,6 +585,21 @@ describe('Send with deferred work', () => {
     const result = await within(send(ctx, 'I wait.'), 'the refused Send')
 
     expect(result).toEqual({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true })
+    expect(pass.runs).toEqual([])
+    expect(await db.select().from(pipelineRuns)).toEqual([])
+    expect(await userActionsReading(db, 'I wait.')).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // Before the owed work: a branch that can't take the turn runs no pass for it. The stand-in pass
+  // holds until finished, so a pass started here would hang the Send past `within`.
+  it('refuses a Send on a branch that needs a lead and has none before its owed pass starts', async () => {
+    const { ctx, db, pass } = await setUp(3, BACKLOG)
+    await db.update(entities).set({ isLead: 0 }).where(eq(entities.branchId, 'b1'))
+
+    const result = await within(send(ctx, 'I wait.'), 'the refused Send')
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'lead-missing', converged: true })
     expect(pass.runs).toEqual([])
     expect(await db.select().from(pipelineRuns)).toEqual([])
     expect(await userActionsReading(db, 'I wait.')).toEqual([])
