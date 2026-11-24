@@ -194,8 +194,8 @@ export const narration = (prose: string, scene?: Pick<Turn, 'scene' | 'location'
 })
 
 /**
- * The window's entries from position 1, each turn's scene defaulting to the window's, each
- * stamped with `lead`, in the id scheme the window's rows use.
+ * Entries from position 1: each turn's scene defaults to the window's, each stamped with `lead`;
+ * ids follow the window's row scheme.
  */
 export function entries(
   window: string,

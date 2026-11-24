@@ -212,8 +212,8 @@ async function commitMerge(
     branchId,
     ctx,
     async (head) => {
-      // A stamp's reach, read before the in-tick build; an entry written since is stamped with
-      // the flagged lead, which the build's own check sees.
+      // Stamp reach, read before the build; a newer entry is stamped with the flagged lead,
+      // which the build's own check sees.
       const [sceneSource, stamped] = await Promise.all([
         readSceneSource(ctx.db, branchId),
         readStampedLeadIds(branchId, [resolution.loserId], ctx.db),

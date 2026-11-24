@@ -772,7 +772,7 @@ export const EveryControlBlocked: Story = {
     ).toHaveAttribute('aria-disabled', 'true')
     const remove = screen.getByRole('menuitem', { name: `Delete entity, ${BLOCKED_REASON}` })
     await expect(remove).toHaveAttribute('aria-disabled', 'true')
-    // rn-primitives don't gate a disabled press on web, so a forced click proves nothing is handed up.
+    // aria-disabled alone blocks nothing: the forced click proves the press never reaches onDelete.
     fireEvent.click(remove)
     await expect(args.onDelete).not.toHaveBeenCalled()
   },

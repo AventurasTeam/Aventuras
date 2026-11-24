@@ -119,8 +119,7 @@ describe('wizard full-flow integration', () => {
     expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
   })
 
-  // AC2 — adventure+first: the flagged lead row, the opening's stamp and its ref
-  // all resolve to the SAME real (generated, not fixture-literal) UUID.
+  // AC2 — the flagged lead row, the opening's stamp and its ref share one generated UUID.
   it('AC2: adventure+first writes the lead entity flagged, its stamp and opening ref to one real UUID', async () => {
     const { db, ctx } = await setup()
     const leadId = generateId('char')
@@ -237,8 +236,7 @@ describe('wizard full-flow integration', () => {
         .from(storyEntries)
         .where(eq(storyEntries.branchId, branchRows[0].id))
 
-      // The load-bearing chain: committed opening ref === flagged lead row id
-      // === the opening's stamp === the one real UUID minted at the top.
+      // Chain under test: opening ref === flagged lead row id === stamp === the minted UUID.
       expect(entryRows[0].metadata!.sceneEntities[0]).toBe(leadId)
       expect(entityRows[0].id).toBe(leadId)
       expect(entityRows[0].isLead).toBe(1)

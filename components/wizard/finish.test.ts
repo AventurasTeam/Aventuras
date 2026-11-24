@@ -385,12 +385,10 @@ describe('finishWizard', () => {
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
     expect(entryRows[0].metadata!.model).toBe('gpt-x')
-    // The opening carried a location id that no cast row materializes — it must
-    // not commit as a ref to a row that will never exist.
+    // A location id no cast row materializes must not commit as a dangling ref.
     expect(entryRows[0].metadata!.currentLocationId).toBeNull()
 
-    // The load-bearing id-consistency invariant: the committed opening ref, its
-    // stamp and the flagged lead row are all the SAME real id.
+    // Invariant: the opening ref, its lead stamp and the flagged lead row share ONE real id.
     expect(entityRows[0].id).toBe(entryRows[0].metadata!.sceneEntities[0])
     expect(entityRows[0].isLead).toBe(1)
     expect(entryRows[0].metadata!.leadId).toBe(entityRows[0].id)
@@ -454,9 +452,8 @@ describe('finishWizard', () => {
   it('drops opening refs pointing at rows the commit never materializes', async () => {
     const { db, ctx } = await setup()
 
-    // creative+third with an empty cast, but the opening carries a ref minted on
-    // an earlier pass — the commit must not persist a dangling entity ref, and
-    // the unresolvable lead must flag and stamp nothing.
+    // Empty cast but the opening carries a ref minted on an earlier pass: no dangling
+    // entity ref may persist, and the unresolvable lead flags and stamps nothing.
     const result = await finishWizard(
       makeState({
         title: 'Reframed',
@@ -982,9 +979,8 @@ describe('finishWizard', () => {
   it('creative+third commits a starred lead even though the path does not require one', async () => {
     const { db, ctx } = await setup()
 
-    // Deliberate: `⭐ Set as lead` gates on canSetLead (kind + status), not on
-    // needsLead, so a creative-mode author can star a character and Finish must
-    // flag it.
+    // `⭐ Set as lead` gates on canSetLead, not needsLead, so a creative author can
+    // star a character and Finish must flag it.
     const result = await finishWizard(
       makeState({
         title: 'Creative With A Lead',

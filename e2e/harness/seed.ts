@@ -356,10 +356,9 @@ function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: num
 }
 
 /**
- * Append `count` filler turns and park the classifier watermark at `processedThrough`,
- * so the branch carries a backlog deeper than the reader's entry window. Each filler
- * body embeds its position, so a spec can tell which turns a pass actually read, and
- * each is stamped with the branch's lead, as a reply is written. Runs before launch.
+ * Append `count` filler turns (body embeds its position, stamped with the branch's lead)
+ * and park the classifier watermark at `processedThrough`, leaving a backlog deeper than
+ * the reader's entry window. Runs before launch.
  */
 export function seedClassifierBacklog(
   dbPath: string,
