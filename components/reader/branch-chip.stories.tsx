@@ -207,6 +207,11 @@ export const AnchorUnderTrigger: Story = {
     await userEvent.tab()
     await expect(screen.getByRole('button', { name: 'After' })).toHaveFocus()
 
+    // pointer-events stop a pointer, not a script's click: the anchor carries no click handler.
+    anchor.click()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await expect(screen.queryByRole('dialog', { name: 'Branches' })).toBeNull()
+
     // Still an anchor: a handle's open places the content at it.
     await userEvent.keyboard('{F2}')
     const dialog = await screen.findByRole('dialog', { name: 'Branches' })

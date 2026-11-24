@@ -412,8 +412,8 @@ export const HeldWhileSaving: Story = {
     const field = await renameField()
     await userEvent.keyboard('The trap{Enter}')
     await expect(field).toHaveAttribute('readonly')
-    // A second Enter and a blur while the write runs save nothing more.
-    await userEvent.keyboard('{Enter}')
+    // A second Enter, an Esc and a blur while the write runs neither save again nor collapse it.
+    await userEvent.keyboard('{Enter}{Escape}')
     await userEvent.click(screen.getByRole('button', { name: 'Elsewhere' }))
     await expect(args.onSave).toHaveBeenCalledTimes(1)
     await expect(args.onDone).not.toHaveBeenCalled()
