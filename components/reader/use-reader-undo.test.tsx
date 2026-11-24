@@ -614,6 +614,21 @@ describe('useReaderUndo — review fixes', () => {
     expect(toasts).toHaveLength(0)
   })
 
+  it('starts no undo whose target resolves after a switch took the reader hold', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    readerHoldStore.take('b1')
+
+    await act(async () => read.resolve(TURN))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toHaveLength(0)
+  })
+
   it('names a created row in the notice although the undo removed it', async () => {
     const created: UndoTargetRead = {
       actionId: 'act_add',

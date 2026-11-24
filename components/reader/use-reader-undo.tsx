@@ -357,9 +357,16 @@ export function useReaderUndo({
       guarded('undo', async () => {
         const started = branchId
         // Read after each await: the reader unmounted, lost focus or opened an editor meanwhile.
+        // A switch's hold is read from the store: the ref follows a render, which may not have run.
         const stale = () => {
           const live = liveRef.current
-          return !aliveRef.current || live.branchId !== started || !live.isFocused || live.held
+          return (
+            !aliveRef.current ||
+            live.branchId !== started ||
+            !live.isFocused ||
+            live.held ||
+            readerHoldStore.isHeld(started)
+          )
         }
         const target = (origin === 'menu' ? menuTargetRef.current : null) ?? (await resolve())
         if (target == null) {
