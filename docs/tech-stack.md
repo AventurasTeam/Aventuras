@@ -164,9 +164,10 @@ UI-string translation: menus, buttons, labels, settings, error messages — ever
 
 ### 12. TanStack Query (React Query)
 
-Adopted off-label, as a cache for values computed from SQLite that no Zustand store holds: the per-branch token series, the entry index, row signals, chapter time ranges and numbers, and later the diff cache. Zustand stays the loaded-data store (item 2).
+Adopted off-label, as a cache for values computed from SQLite that no Zustand store holds: the per-branch token series, the entry index, row signals, chapter time ranges and numbers, and History's reads of the diff cache. Zustand stays the loaded-data store (item 2).
 
 - `createQueryClient` (`lib/cache/query-client.ts`) sets the defaults for local reads: never stale, no automatic refetch, no retry, network mode `always` so a read doesn't pause on the window's `offline` event, and a 30 s gc
+- History's diff queries (`['diff', branchId, deltaId]`, `components/history/use-diff-outcomes.ts`) set `gcTime: 0`: the diff cache retains their entries, and a query that outlived its tab would miss the eviction that invalidates it
 - Not a network cache: external calls (LLM, image generation, TTS) are one-shot operations that persist artifacts, and the Vercel AI SDK's own hooks handle streaming state
 
 ---

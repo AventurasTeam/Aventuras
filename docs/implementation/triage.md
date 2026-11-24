@@ -211,6 +211,167 @@ slice-planning gate forces its resolution before that slice is planned.
   a small compiled-hook layer for hooks that read stores outside a
   subscription. Found by Slice 6.2's slice review (2026-11-23).
 
+- **A re-run's empty group with no recorded branch fires the log hook
+  for `''`.** `lib/actions/delta/rerun-journal.ts:513-517` names the
+  reversal set's branch `target[0]?.branchId ?? args.branchId ?? ''`; on
+  a restored write-back the post-commit hook then fires for the set's
+  branch (`lib/actions/delta/reverse-replay.ts:959`), so an empty group
+  with a null `args.branchId` tells the diff cache `''` instead of the
+  journal's branch, and that branch's entries survive the write-back.
+  It needs a `pipeline_runs.branch_id` that is null, which only rows
+  older than that column have (`lib/db/system/system.table.ts:54-55`),
+  met at boot recovery (`lib/pipeline/runtime/recovery.ts:73-78`), when
+  the cache is still empty. Migration 0022 backfills an unfinished run's
+  `branch_id` from its deltas, then its reversal journal, then its
+  re-run chapter, so a marker still null has no delta, no journal and no
+  chapter row under its ids: the restored write-back can't reach it, and
+  the path serves only a dead pre-6.1 marker, at boot, with an empty
+  cache. Not reachable in practice today. Found in Slice 6.7's reviews
+  (2026-11-23); CodeRabbit raised it on PR #789, kept here
+  (provisional, coordinator).
+
+- **The test database collapses same-named result columns.**
+  `rowsOf` in `lib/db/__tests__/test-db.ts:35-47` reads row objects and
+  maps them with `Object.values`, so two columns of one name collapse
+  and an integer-like alias moves first. Electron main's `queryOn`
+  (`electron/db/service.ts:52-54`) calls `setReturnArrays(true)` to
+  avoid exactly that: `SELECT 1 AS id, 2 AS id, 3 AS "1"` gives
+  `[3, 2]` on the test database and `[1, 2, 3]` on main (checked on
+  `node:sqlite`, 2026-11-23). A query that only misreads on one of
+  them passes its tests. Pre-existing; the new batch callback inherits
+  it. Found in Slice 6.7's reviews (2026-11-23).
+
+- **The native boot warn calls M1 the present.**
+  `lib/db/runtime/client.native.ts:20` logs "sqlite-vec load failed
+  (non-fatal in M1)", describing a shipped milestone as current, which
+  `.claude/rules/code.md`'s commenting discipline rules out for
+  comments and the same staleness applies to the message. Pre-existing.
+  Found in Slice 6.7's reviews (2026-11-23).
+
+- **Does the fork's refusal cover a refused admission's reversal?**
+  [Slice 6.1](./milestones/06-branches-diff-cache/slices/01-copy-substrate.md#scope-out)
+  kept `reverseReplayDeltas`'s read by `action_id` alone
+  (`lib/actions/delta/reverse-replay.ts:986-1002`) on purpose: its one
+  caller reverses a live turn's refused admission
+  (`lib/actions/turns/submit-turn.ts:196-201`), and canon lets a live
+  run select by its id. What's new: a fork copies action ids, and a
+  refused admission has no `pipeline_runs` row (its run was never
+  reserved), so the fork's refusal of an unfinished run can't see it. A
+  fork committed between the turn's `user_action` write and its
+  reversal would give the group a second branch, `selectReversalSet`
+  would refuse the set (`lib/actions/delta/row-closure.ts:490-494`), and
+  the `user_action` entry would stand with no marker for boot to retry.
+  The turn's pending mark spans that window
+  (`bracketPendingTurn`, `lib/stores/generation/generation.ts:344-371`),
+  and Slice 6.3's gate refuses while any turn is pending, which may be
+  what covers it; the fork core (Slice 6.3, in flight) answers it.
+  [Slice 6.10's Open questions](./milestones/06-branches-diff-cache/slices/10-register-branch-pairs.md#open-questions)
+  meet the same refusal from the test-fixture side. Found in Slice 6.7's
+  reviews (2026-11-23).
+
+- **Two E2E comments say GO TO World returns to the same World.**
+  `e2e/flows/navigation.ts:7-8` and `e2e/tests/world.spec.ts:65-66`
+  say the Reader → World GO TO round trip "pops to the World instance
+  already on the stack, which keeps its category and selection".
+  `hooks/use-surface-navigate.ts:70-73` dismisses down to the Reader on
+  GO TO Reader, so World is popped and comes back fresh with nothing
+  selected. The callers pick their category either way, so only the
+  comments mislead. Pre-existing. Found in Slice 6.7's reviews
+  (2026-11-23).
+
+- **A third retrieval-bump predicate with its own shape.**
+  `isRetrievalBumpOnly` (`lib/row-signals/link-owners.ts:72-78`) has no
+  table check and calls `{}` a bump, beside `isRetrievalBump`
+  (`lib/history/link-rows.ts:17-22`) and History's `NOT_RETRIEVAL_BUMP`
+  SQL (`lib/history/query.ts:133-137`), which share two constants and a
+  test; nothing keeps the third in step. Found in Slice 6.7's reviews
+  (2026-11-23).
+
+- **The on-device reseed holds a transaction open across `await`s.**
+  `lib/db/devtools/reseed.native.ts:34-40` runs `BEGIN`, then
+  `await db.insert(…)` per table, on the app's native connection. Each
+  insert is synchronous, but the JS thread yields between them. A read
+  in a gap sees rows a `ROLLBACK` may discard, and an app transaction
+  there runs `withTransactionSync`, whose `BEGIN` SQLite refuses inside
+  an open transaction; its catch then runs `ROLLBACK` (expo-sqlite's
+  `SQLiteDatabase.ts:298-307`), ending the reseed's transaction under
+  it. The native read's ESLint guard bans async expo-sqlite calls, not
+  this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's
+  reviews (2026-11-23).
+
+- **Change prose can show two sides that read identically.** Three
+  cases.
+  (1) _Term-list display._ `termListChange` in
+  `lib/history/diff-prose.ts:273-281` shows each term through `cutTerm`
+  (`:218-224`), which collapses whitespace and keeps a head of 40
+  characters; free text gets a window cut around its first difference
+  ([Long text](../ui/screens/world/world.md#long-text--change-prose)).
+  A tail edit past the 40th character of a long agenda item renders as
+  `Agenda: added "Seize control of the harbor district…"` followed by
+  `removed "Seize control of the harbor district…"`, the same text
+  twice. A respelling between NFD and NFC forms in a normalized list
+  renders `Tags: respelled "Eldrá" as "Eldrá"`. Needs a design pass on
+  how a term list shows two forms that collide once cut or collapsed.
+  (2) _Exact-list write side._ The entity `state` term lists (`traits`,
+  `drives`, `agenda`) match exactly
+  (`lib/actions/entities/register.ts:401-407`, `termKeyOf` in
+  `lib/actions/delta/term-list.ts:9-11`) and store terms with no
+  whitespace or Unicode normalization, unlike `keywords` and `tags`,
+  which key by `normalizeTerm`. `'brave  heart'` and `'brave heart'`, or
+  NFD and NFC forms of one term, are distinct values, so a change
+  between them reads `Traits: added "brave heart", removed "brave heart"`
+  (the display collapses the spacing). Whether those lists should
+  normalize on write, and what that does to existing rows and the delta
+  history, is a write-side question, not only display.
+  (3) _Namesake refs._ A row ref and a ref list's items (and a place's
+  parent and a collision partner) compare by id but read by name
+  (`rowRefChange` and `refListChange`,
+  `lib/history/diff-prose.ts:332-343`), so two live rows sharing a name
+  read alike: `Faction: Iron Pact → Iron Pact`, or
+  `Carried: added Rope, removed Rope`. The World panel's keep-as-distinct
+  resolution keeps both rows of a name
+  ([Collision review](../ui/screens/world/world.md#collision-review-and-entity-merge)).
+  The code follows canon literally, a row ref reading the row's name; it
+  needs the same design pass as (1).
+  Slice 6.7 shipped the prose as `world.md → Change prose` reads. Cases
+  (1) and (2) found in Slice 6.7's final review (2026-11-23); developer
+  ruled to ship canon-literal and route here. Case (3) found in
+  Slice 6.7's slice review (2026-11-23).
+
+- **A row label scrambles a name holding `{{entry}}`.**
+  `history:rowLabelWithEntry` (`{{op}} {{name}}, {{entry}}`) is the
+  label `DeltaLogRow` gives a pressable row with an entry
+  (`components/compounds/delta-log-row.tsx:95-102`); History's rows take
+  the name from `lib/history/humanize.ts`. i18next fills a placeholder
+  at the first match of its text, including inside a value it already
+  inserted, so a target named `Rope {{entry}} x` reads
+  `update Rope entry_7 x, {{entry}}` (i18next 26.3.0, checked on
+  2026-11-23). `history:rowLabel` (`{{op}} {{name}}`) and
+  `history:link.target` (`{{label}} · {{name}}`, `humanize.ts:90-93`)
+  put the user's text last, so they hold in English and would break
+  only under a locale that reorders their placeholders. The change
+  prose's `fill` helper (`lib/history/diff-prose.ts:54-65`) is the
+  pattern that fixes it. Pre-existing. Found in Slice 6.7's slice review
+  (2026-11-23).
+
+- **The diff cache repeats rules the action layer owns.** Two copies
+  sit across the `lib/actions` → `lib/history` boundary, which only
+  `lib/history` may cross:
+  - `firstSpellings` (`lib/history/diff-prose.ts:224`) restates the
+    private first-occurrence rule of `spellings`
+    (`lib/actions/delta/term-list.ts:15`), so a change to how a list's
+    spelling is picked would leave the prose naming another spelling
+    than the reversal restores.
+  - `COLLISION_COLUMNS` (`lib/history/prose-fields.ts:119`) is the
+    fourth copy of the collision trio, beside `FLAG_COLUMNS`
+    (`lib/actions/entities/register.ts:120`), `COLLISION_FLAG_COLUMNS`
+    (`lib/actions/delta/user-precedence.ts:218`) and `FLAG_FIELDS`
+    (`lib/pipeline/definitions/close-agent/lifecycle-tools.ts:68`).
+
+  Folding either needs a new export on the `lib/actions` barrel.
+  Found by Slice 6.7's slice review (2026-11-23); the simplifier left
+  them.
+
 - **The M6 milestone doc names the fork planner by its old canon
   name.** `milestones/06-branches-diff-cache/milestone.md:32` still
   says canon calls the rewind's planner `planReversal` with a target

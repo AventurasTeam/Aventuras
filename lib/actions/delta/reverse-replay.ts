@@ -35,6 +35,7 @@ import {
   type ReversalChains,
   type SurvivorEdit,
 } from './own-write'
+import { logRewritten } from './post-commit-hook'
 import {
   branchKeyOf,
   resolveByTable,
@@ -331,7 +332,12 @@ function undoneValue(schema: ZodType | undefined, partial: unknown, current: unk
 
 // A place's parent and unplaced mark restore as one field: the clear logs nothing, so a
 // parent-only partial can land on a place it unplaced.
-function undoneColumn(entry: TableEntry, col: string, partial: unknown, current: unknown): unknown {
+export function undoneColumn(
+  entry: TableEntry,
+  col: string,
+  partial: unknown,
+  current: unknown,
+): unknown {
   const undone = undoneValue(entry.columnSchemas[col], partial, current)
   if (entry.table !== 'entities' || col !== 'state') return undone
   if (!isJsonObject(partial) || !isJsonObject(undone)) return undone
@@ -961,7 +967,10 @@ function oldestKeepingWrite(edits: readonly Delta[], columns: readonly string[])
 export type ReverseCommitHooks = {
   /** Read inside the key locks after planning; its ops lead the transaction. */
   opsFromPlan?: (plan: ReversePlan) => Promise<readonly SqlOp[]>
-  /** Emitted after the plan's patches, under the same store-sync stage. */
+  /**
+   * Emitted after the plan's patches, same store-sync stage. Marks a journal write-back, which may
+   * restore deltas, so `logRewritten` fires even on an empty set (at worst one spare re-walk).
+   */
   patchesAfter?: readonly PatchEmission[]
 }
 
@@ -1001,6 +1010,8 @@ export async function reverseAndPruneDeltaRows(
         ...plan.journalOps,
         ...extraOps,
       ])
+      // Only a reversal or a journal write-back changes an earlier delta, never a forward write.
+      if (set.rows.length > 0 || patchesAfter !== undefined) logRewritten(set.branchId)
     } catch (e) {
       if (e instanceof ReversalIntegrityError) throw e
       throw new DeltaReplayError('Reverse-and-prune failed', {
@@ -1068,6 +1079,8 @@ export async function reverseReplayGroup(
 
       plan = await buildReverseAndPrunePlan(set, ctx, { keepRedoExact: false })
       await ctx.runInTransaction([...plan.ops, ...plan.pruneOps, ...plan.journalOps, ...settle])
+      // A settle-only commit rewrites no log, and an empty group has no branch.
+      if (set.rows.length > 0) logRewritten(set.branchId)
     } catch (e) {
       throw replayFailure(e, actionId)
     }

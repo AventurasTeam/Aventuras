@@ -34,6 +34,7 @@
   "rowLabel": "{{op}} {{name}}",
   "rowLabelWithEntry": "{{op}} {{name}}, {{entry}}",
   "unknownTarget": "Unknown row",
+  "unknownEntry": "Unknown entry",
   "linkLabel": {
     "character_relationships": "Relationship",
     "happening_involvements": "Involvement",
@@ -97,5 +98,24 @@
     "decayResistance": "Decay resistance",
     "learnedAt": "Learned at",
     "retrievalCount": "Retrieval count"
+  },
+  "prose": {
+    "clause": "{{field}}: {{change}}",
+    "separator": "; ",
+    "listSeparator": ", ",
+    "changed": "{{old}} → {{new}}",
+    "quoted": "\"{{text}}\"",
+    "ellipsis": "…",
+    "none": "none",
+    "yes": "yes",
+    "no": "no",
+    "added": "added {{terms}}",
+    "removed": "removed {{terms}}",
+    "respelled": "respelled {{pairs}}",
+    "respelledPair": "{{old}} as {{new}}",
+    "quantity": "{{name}} {{change}}",
+    "lastSeen": "{{entry}} at {{place}}",
+    "lastSeenNoPlace": "{{entry}}",
+    "deletedName": "{{name}} (deleted)"
   }
 }

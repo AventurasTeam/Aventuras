@@ -35,6 +35,7 @@ const dbBridge: DbBridge = {
   query: (sql, params, method) => ipcRenderer.invoke('db:query', sql, params, method),
   exec: (sql) => ipcRenderer.invoke('db:exec', sql),
   transaction: (ops) => ipcRenderer.invoke('db:transaction', ops),
+  batch: (queries) => ipcRenderer.invoke('db:batch', queries),
 }
 
 contextBridge.exposeInMainWorld('aventurasDb', dbBridge)

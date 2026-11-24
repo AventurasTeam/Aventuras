@@ -63,6 +63,9 @@ export const plot = {
   // Tab triggers carry a count suffix on the link tabs.
   tab: (page: Page, tab: 'overview' | 'involvements' | 'awareness' | 'history'): Locator =>
     page.getByRole('tab', { name: new RegExp(`^${t(`plot:detail.tabs.${tab}`)}`) }),
+  // Rows share one role and similar labels; the testID anchors counting them (testing.md →
+  // Selector strategy, Tier 3). Visible only: a screen hidden on the stack renders the same rows.
+  historyRows: (page: Page): Locator => page.getByTestId('delta-log-row').filter({ visible: true }),
 
   // The Overview description Textarea is named by its own aria-label; only one of
   // Thread/Happening Overview renders at once, so it needs no further scoping.

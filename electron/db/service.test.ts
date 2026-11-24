@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { queryOn } from './service'
+import { batchOn, queryOn } from './service'
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getPath: () => '/tmp' } }))
 
@@ -26,5 +26,43 @@ describe('queryOn', () => {
 
   it('answers a get that matched nothing with no row', () => {
     expect(queryOn(db(), 'SELECT id FROM a WHERE id = ?', [9], 'get').rows).toBeUndefined()
+  })
+})
+
+describe('batchOn', () => {
+  it("answers each query in queryOn's shape, in query order", () => {
+    expect(
+      batchOn(db(), [
+        { sql: 'SELECT id, x FROM a', params: [], method: 'all' },
+        { sql: 'SELECT id FROM b WHERE id = ?', params: [3], method: 'get' },
+        { sql: 'SELECT id FROM a WHERE id = ?', params: [9], method: 'get' },
+        { sql: 'UPDATE a SET x = ? WHERE id = ?', params: ['ay', 1], method: 'run' },
+      ]),
+    ).toEqual([{ rows: [[1, 'ax']] }, { rows: [3] }, { rows: undefined }, { rows: [] }])
+  })
+
+  it('answers in the call itself, not with a promise', () => {
+    const answer = batchOn(db(), [{ sql: 'SELECT id FROM a', params: [], method: 'all' }])
+    expect(answer).not.toBeInstanceOf(Promise)
+    expect(answer).toEqual([{ rows: [[1]] }])
+  })
+
+  // One synchronous call: a write queued while it runs can land only after it returns.
+  it('lands a write queued during the first read only after the second read', async () => {
+    const sqlite = db()
+    sqlite.function('queue_write', () => {
+      queueMicrotask(() => sqlite.exec('INSERT INTO b VALUES (4, 1)'))
+      return 1
+    })
+
+    const [first, second] = batchOn(sqlite, [
+      { sql: 'SELECT queue_write()', params: [], method: 'all' },
+      { sql: 'SELECT count(*) FROM b', params: [], method: 'all' },
+    ])
+
+    expect(first).toEqual({ rows: [[1]] })
+    expect(second).toEqual({ rows: [[1]] })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(queryOn(sqlite, 'SELECT count(*) FROM b', [], 'all').rows).toEqual([[2]])
   })
 })

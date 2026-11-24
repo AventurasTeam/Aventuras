@@ -286,6 +286,7 @@ describe('useEntryIndex', () => {
       renderProbe({ client, seed: true })
       expect(latest?.ready).toBe(true)
       expect(latest?.updating).toBe(true)
+      expect(latest?.stale).toBe(true)
       expect(latest?.entries.map((e) => e.id)).toEqual(['e1'])
       expect(latest?.index.get('e1')?.position).toBe(1)
 
@@ -293,6 +294,7 @@ describe('useEntryIndex', () => {
         land([ref('e2', 2), ref('e1', 1)])
       })
       await waitFor(() => expect(latest?.updating).toBe(false))
+      expect(latest?.stale).toBe(false)
       expect(latest?.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
     })
 
@@ -377,6 +379,42 @@ describe('useEntryIndex', () => {
     expect(latest?.ready).toBe(true)
     expect(latest?.failed).toBe(false)
 
+    warnSpy.mockRestore()
+  })
+
+  it('reads stale until its latest read has landed, and again after a read fails', async () => {
+    entriesStore.hydrate('br_1', [entry('e1', 1)])
+    const landFirst = deferredRead()
+    renderProbe()
+    expect(latest?.stale).toBe(true)
+
+    await act(async () => landFirst([ref('e1', 1)]))
+    await waitFor(() => expect(latest?.ready).toBe(true))
+    expect(latest?.stale).toBe(false)
+
+    const landRefetch = deferredRead()
+    act(() => generationStore.startRun(run('r1')))
+    act(() => generationStore.finishRun('r1'))
+    await waitFor(() => expect(latest?.updating).toBe(true))
+    expect(latest?.stale).toBe(true)
+    await act(async () => landRefetch([ref('e2', 2), ref('e1', 1)]))
+    await waitFor(() => expect(latest?.updating).toBe(false))
+    expect(latest?.stale).toBe(false)
+
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    reads.index.mockRejectedValueOnce(new Error('boom'))
+    act(() => generationStore.startRun(run('r2')))
+    act(() => generationStore.finishRun('r2'))
+    await waitFor(() => expect(warnSpy).toHaveBeenCalledTimes(1))
+    expect(latest?.ready).toBe(true)
+    expect(latest?.failed).toBe(false)
+    expect(latest?.updating).toBe(false)
+    expect(latest?.stale).toBe(true)
+
+    reads.index.mockResolvedValueOnce([ref('e3', 3), ref('e2', 2), ref('e1', 1)])
+    act(() => latest?.retry())
+    await waitFor(() => expect(latest?.entries.map((e) => e.id)).toEqual(['e3', 'e2', 'e1']))
+    expect(latest?.stale).toBe(false)
     warnSpy.mockRestore()
   })
 

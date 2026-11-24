@@ -72,6 +72,12 @@ const SYNTAX_BANS = [
     message:
       'Set keyboardShouldPersistTaps (usually "handled"): the default spends the first tap on dismissing the keyboard. See docs/ui/foundations/mobile/touch.md.',
   },
+  // The native chain read is atomic only while every call on the app's connection is synchronous.
+  {
+    selector: "MemberExpression[object.name='expoDb'][property.name=/Async$/]",
+    message:
+      "expo-sqlite's async API runs off the JS thread and can land between the native chain read's two sync reads, or show them uncommitted rows. Use the *Sync form. See docs/architecture.md#walk-algorithm.",
+  },
 ]
 
 // Builtins Android's Hermes lacks, matched by a name nothing else uses (Set's `union` collides with
@@ -84,6 +90,15 @@ const HERMES_BUILTIN_BANS = [
   "MemberExpression[object.name='Promise'][property.name='withResolvers']",
   "MemberExpression[object.name='Array'][property.name='fromAsync']",
 ].map((selector) => ({ selector, message: HERMES_BUILTIN_MESSAGE }))
+
+// Native-only like the Hermes bans: drizzle's expo-sqlite driver has no batch, though the app
+// db's sqlite-proxy type declares one on every platform.
+const DB_BATCH_BAN = {
+  selector:
+    "MemberExpression[property.name='batch']:matches([object.name='db'], [object.property.name='db'])",
+  message:
+    "Native has no db.batch: drizzle's expo-sqlite driver lacks it, so the call passes unit tests and desktop and throws on Android. Read atomically through readChainSnapshot. See docs/architecture.md#walk-algorithm.",
+}
 
 module.exports = defineConfig([
   expoConfig,
@@ -120,7 +135,7 @@ module.exports = defineConfig([
     },
     rules: {
       // The wildcard-import ban and the other selectors: see SYNTAX_BANS at the top of this file.
-      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS],
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS, DB_BATCH_BAN],
 
       // generationStore's mutators, by owner: see the constants at the top of this file.
       'no-restricted-properties': [
@@ -188,6 +203,13 @@ module.exports = defineConfig([
               ],
               message:
                 'lib/pipeline takes no value import of the lib/actions barrel: it imports @/lib/pipeline back, a cycle. Read from lib/db, or import types from @/lib/actions/types.',
+            },
+            // The diff cache in lib/history hears a rewritten log through the action layer's hook.
+            {
+              from: [{ type: 'lib-module', captured: { name: 'actions' } }],
+              disallow: [{ to: [{ type: 'lib-module', captured: { name: 'history' } }] }],
+              message:
+                'lib/actions imports nothing from lib/history: lib/history imports the lib/actions barrel, a cycle. Hear a rewritten log through onLogRewritten instead. See docs/architecture.md#concurrency-rollback-error-path.',
             },
             // lib/diagnostics is zero-dependency infrastructure; importing
             // lib/stores would invert the layering and close an import cycle
@@ -266,6 +288,27 @@ module.exports = defineConfig([
 
       'react-native/no-inline-styles': 'error',
       'react-native/no-color-literals': 'error',
+    },
+  },
+
+  // A second expo-sqlite handle beside expoDb could interleave with the native chain read.
+  {
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['lib/db/runtime/client.native.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'expo-sqlite',
+              allowTypeImports: true,
+              message:
+                'Only lib/db/runtime/client.native.ts opens expo-sqlite: a second handle beside expoDb breaks the native chain read. Type imports are fine. See docs/architecture.md#walk-algorithm.',
+            },
+          ],
+        },
+      ],
     },
   },
 
@@ -364,6 +407,15 @@ module.exports = defineConfig([
     files: ['**/*.test.{ts,tsx}', '**/__tests__/**', '**/*.stories.tsx'],
     rules: {
       'no-restricted-properties': 'off',
+    },
+  },
+
+  // readChainSnapshot splits by platform here, so the runtime may batch. Sits before the Hermes
+  // block, which still governs the runtime's tests.
+  {
+    files: ['lib/db/runtime/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS],
     },
   },
 
