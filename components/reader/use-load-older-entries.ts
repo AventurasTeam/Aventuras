@@ -43,7 +43,6 @@ export function useLoadOlderEntries(
   db: DbCtx['db'],
   onBoundary: (hasOlder: boolean) => void,
 ): () => Promise<void> {
-  // Keyed by branch, so a load still out for another branch never blocks this one's.
   const loadingRef = useRef(new Set<string>())
   return useCallback(async () => {
     if (loadingRef.current.has(branchId)) return
