@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react'
-import { createRef } from 'react'
+import { createRef, type RefObject } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '@/lib/db'
@@ -51,9 +51,16 @@ const TRAP = branch('br_trap', 'The trap', 3)
 const onSwitch = vi.fn<(branchId: string) => void>()
 const onRename = vi.fn<(branchId: string, name: string) => Promise<unknown>>(async () => {})
 
-function connected(overrides: { isFocused?: boolean; paused?: boolean } = {}) {
+function connected(
+  overrides: {
+    isFocused?: boolean
+    paused?: boolean
+    ref?: RefObject<ReaderBranchNavigatorHandle | null>
+  } = {},
+) {
   return (
     <ReaderBranchNavigator
+      ref={overrides.ref}
       storyId="story_1"
       branchId="br_main"
       isFocused={overrides.isFocused ?? true}
@@ -150,6 +157,40 @@ describe('ReaderBranchNavigator', () => {
       />,
     )
     ref.current?.open()
+    expect(stubs.handle.open).toHaveBeenCalledTimes(1)
+  })
+
+  // A held open (phone `Browse branches…`, run after the Actions Sheet's exit) can land after a
+  // Go-to row pushed another screen.
+  it('opens nothing while the reader is out of focus', () => {
+    const ref = createRef<ReaderBranchNavigatorHandle>()
+    const { rerender } = render(connected({ ref }))
+    rerender(connected({ ref, isFocused: false }))
+    ref.current?.open()
+    expect(stubs.handle.open).not.toHaveBeenCalled()
+    rerender(connected({ ref }))
+    ref.current?.open()
+    expect(stubs.handle.open).toHaveBeenCalledTimes(1)
+  })
+
+  it("refreshes the rows as it opens while they lack the reader's branch", () => {
+    const ref = createRef<ReaderBranchNavigatorHandle>()
+    branchesStore.hydrate('story_1', [FORK])
+    render(connected({ ref }))
+    ref.current?.open()
+    expect(stubs.refresh.mock.calls).toEqual([
+      [db, 'story_1'],
+      [db, 'story_1'],
+    ])
+    expect(stubs.handle.open).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens on the rows it holds when they hold the reader's branch", () => {
+    const ref = createRef<ReaderBranchNavigatorHandle>()
+    branchesStore.hydrate('story_1', [MAIN, FORK])
+    render(connected({ ref }))
+    ref.current?.open()
+    expect(stubs.refresh.mock.calls).toEqual([[db, 'story_1']])
     expect(stubs.handle.open).toHaveBeenCalledTimes(1)
   })
 

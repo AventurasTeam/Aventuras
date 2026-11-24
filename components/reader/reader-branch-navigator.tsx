@@ -49,7 +49,21 @@ export function ReaderBranchNavigator({
   }, [storyId])
 
   const navigatorRef = useRef<BranchNavigatorHandle>(null)
-  useImperativeHandle(ref, () => ({ open: () => navigatorRef.current?.open() }), [])
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: () => {
+        // A held open (phone, after the Actions Sheet's exit) can land after a push took focus.
+        if (!isFocused) return
+        // A failed read leaves the rows without this branch, and nothing else reads them again.
+        if (!branchesStore.getBranches(storyId).some((row) => row.id === branchId)) {
+          void refreshBranches(db, storyId)
+        }
+        navigatorRef.current?.open()
+      },
+    }),
+    [isFocused, storyId, branchId],
+  )
   // A portaled overlay would keep painting over the screen pushed on top of this one.
   useEffect(() => {
     if (!isFocused) navigatorRef.current?.close()
