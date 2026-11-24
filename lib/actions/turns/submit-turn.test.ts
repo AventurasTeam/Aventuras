@@ -2,7 +2,16 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, deltas, storyEntries, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  emptyEntityState,
+  entities,
+  stories,
+  storyEntries,
+  type NewEntity,
+  type StoryEntry,
+} from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { startStorySwap } from '@/lib/embedder-swap'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
@@ -10,6 +19,7 @@ import { runRetrieval } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
+  entitiesStore,
   entriesStore,
   generationStore,
   hydrateAppSettings,
@@ -20,6 +30,7 @@ import {
   branchEntries,
   openStory,
   sseFetch,
+  STORY_DEFINITION,
   STORY_SETTINGS,
   WORKING_CONFIG,
 } from './__tests__/fixtures'
@@ -294,6 +305,100 @@ describe('submitTurn', () => {
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'user_action')))
     expect(ua?.metadata?.worldTime).toBe(5)
     expect(ua?.position).toBe(3)
+  })
+
+  describe('the lead stamp', () => {
+    const KAEL = 'char_00000000-0000-4000-8000-000000000001'
+    const MIRA = 'char_00000000-0000-4000-8000-000000000002'
+
+    function character(id: string, name: string, isLead: 0 | 1): NewEntity {
+      return {
+        id,
+        branchId: 'b1',
+        kind: 'character',
+        name,
+        status: 'active',
+        injectionMode: 'auto',
+        state: emptyEntityState('character'),
+        isLead,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    }
+
+    async function seedCast(
+      db: Awaited<ReturnType<typeof makeHarness>>['db'],
+      lead: string | null,
+    ): Promise<void> {
+      await db
+        .insert(entities)
+        .values([
+          character(KAEL, 'Kael', lead === KAEL ? 1 : 0),
+          character(MIRA, 'Mira', lead === MIRA ? 1 : 0),
+        ])
+      entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+    }
+
+    async function entryOfKind(
+      db: Awaited<ReturnType<typeof makeHarness>>['db'],
+      kind: 'user_action' | 'ai_reply',
+    ) {
+      const [row] = await db
+        .select()
+        .from(storyEntries)
+        .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, kind)))
+      return row
+    }
+
+    it("stamps the user action, and its reply, with the branch's flagged lead", async () => {
+      const { ctx, db } = await makeHarness()
+      await openStory(db, 's1', 'b1')
+      await seedCast(db, MIRA)
+      entriesStore.hydrate('b1', [])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'I look around.', composerMode: 'do' },
+          ctx,
+        ),
+      )
+
+      expect((await entryOfKind(db, 'user_action'))?.metadata?.leadId).toBe(MIRA)
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
+    })
+
+    it('leaves the stamp absent on a creative third-person branch with no lead', async () => {
+      const { ctx, db } = await makeHarness()
+      await openStory(db, 's1', 'b1')
+      const creativeThird = {
+        ...STORY_DEFINITION,
+        mode: 'creative' as const,
+        narration: 'third' as const,
+      }
+      await db.update(stories).set({ definition: creativeThird }).where(eq(stories.id, 's1'))
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition: creativeThird,
+        settings: STORY_SETTINGS,
+      })
+      await seedCast(db, null)
+      entriesStore.hydrate('b1', [])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'The rain keeps on.', composerMode: 'free' },
+          ctx,
+        ),
+      )
+
+      expect((await entryOfKind(db, 'user_action'))?.metadata).not.toHaveProperty('leadId')
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata).not.toHaveProperty('leadId')
+    })
   })
 
   it('positions the new user action at MAX(position)+1, not the store row count', async () => {

@@ -1928,6 +1928,72 @@ describe('narrative fold — creates', () => {
     return row
   }
 
+  describe('the lead stamp', () => {
+    const leadWorld = (): Entity[] =>
+      baseWorld().map((row): Entity => (row.id === HERO ? { ...row, isLead: 1 } : row))
+
+    it("stamps the reply with the branch's lead, the real id, when the fold supplies its metadata", async () => {
+      await seedTurn(leadWorld())
+      const { events, intermediates } = await foldTurn(CREATE_REPLY)
+      expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: true })
+
+      expect(replyOf(events).metadata?.leadId).toBe(HERO)
+      // The prompt names the lead by its per-call placeholder, which the stamp must not take.
+      const context = renderTemplateMock.mock.calls.find(
+        ([id]) => id === TEMPLATE_IDS.perTurnNarrative,
+      )?.[1] as { lead: { id: string; name: string } | null }
+      expect(context.lead?.name).toBe('Aria')
+      expect(context.lead?.id).not.toBe(HERO)
+    })
+
+    it('stamps no lead when the branch has none', async () => {
+      await seedTurn()
+      const { events } = await foldTurn(CREATE_REPLY)
+
+      expect(replyOf(events).metadata).not.toHaveProperty('leadId')
+    })
+
+    it("keeps the stamp through the fallback classifier's partial merge", async () => {
+      await seedTurn(leadWorld())
+      const failing = CREATE_REPLY.replace(
+        '<world_time_delta>60</world_time_delta>',
+        '<world_time_delta>soon</world_time_delta>',
+      )
+      const fold = await foldTurn(failing)
+      await applyEvents(fold.events)
+      const replyId = replyOf(fold.events).id
+      const folded = (await storedEntry(replyId))?.metadata
+      expect(folded?.leadId).toBe(HERO)
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        recoverable: [],
+        value: fallbackClassifierSchema.parse({
+          sceneEntities: ['c1'],
+          newLocations: [
+            {
+              handle: 'new:docks',
+              name: 'Smuggler Docks',
+              description: 'a rotting pier',
+              parent: 'l1',
+            },
+          ],
+          currentLocation: 'new:docks',
+          worldTimeDelta: 30,
+          newItems: [{ handle: 'new:key', name: 'rusted key', description: 'an iron key' }],
+          transfers: { items: [{ id: 'new:key', to: 'c1', slot: 'inventory' }], stackables: [] },
+        }),
+      })
+      const fallback = await drain(phaseAt(3)(phaseCtx(fold.intermediates)))
+      await applyEvents(fallback.events)
+
+      const merged = (await storedEntry(replyId))?.metadata
+      // The fallback wrote its partial onto the reply, and the stamp survived it.
+      expect(merged).not.toEqual(folded)
+      expect(merged?.leadId).toBe(HERO)
+    })
+  })
+
   it('creates the new place and item, and moves the scene and the hero there', async () => {
     await seedTurn()
     const { events, intermediates } = await foldTurn(CREATE_REPLY)

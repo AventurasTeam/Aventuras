@@ -570,6 +570,8 @@ export async function buildGenerationContext(
     stateShownIds,
     // Real ids: the reply records them (data-model.md → Entry metadata shape).
     injectedHappenings: retrievedHappenings.map((row) => row.id),
+    // Real id: `context.lead.id` is a per-call placeholder after substituteIds.
+    leadId: lead?.id ?? null,
     // Beside the context, not in it: the context is the template's variable set.
     ...(priceHistory ? { historyProse: historyProseOf(buffer) } : {}),
   }

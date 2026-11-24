@@ -1,7 +1,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata, readBranchLead, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission, EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
@@ -151,10 +151,15 @@ export async function submitTurn(
           .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
           .orderBy(desc(storyEntries.position))
           .limit(1)
+        // Under the turn's mark, which holds the edit gate: no set lands before the run starts.
+        const lead = await readBranchLead(ids.branchId, ctx.db)
         const position = (tail?.position ?? 0) + 1
         const entryId = generateId('entry')
         const createdAt = Date.now()
-        const metadata: EntryMetadata = inheritedEntryMetadata(sceneTail?.metadata)
+        const metadata: EntryMetadata = {
+          ...inheritedEntryMetadata(sceneTail?.metadata),
+          ...(lead == null ? {} : { leadId: lead.id }),
+        }
 
         const result = await applyDeltaAction(
           {
