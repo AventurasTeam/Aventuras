@@ -438,7 +438,8 @@ convention, and the expectation that subsystems route through
   `close_rerun_fork_not_opened` (warn: the fork committed but the
   story's screens couldn't be replaced, so the pointer went back to the
   parent and nothing started, with `branchId`, `newBranchId` and
-  `chapterId`), `close_rerun_fork_start_failed` (warn: the fork
+  `chapterId`; a warning toast says to switch to it and retry from the
+  Timeline), `close_rerun_fork_start_failed` (warn: the fork
   committed, but the start refused or threw, the story had been left,
   showing the new branch threw, or the new reader opened with nothing
   loaded, with `branchId`, `newBranchId`, `chapterId` and the `cause`;

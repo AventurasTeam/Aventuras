@@ -331,10 +331,11 @@ again; its line replaces the last.
 | anything else                                        | `Couldn't create the branch.`, with the reason logged                               |
 
 A pending embedder swap is known before any press, so the modal opens
-with its line and `Create` disabled, and `Create` comes back when the
-swap ends, as
+with its line and `Create` disabled, as
 [Duplicate's](../../story-list/story-list.md#duplicate-a-story)
-refusals do. `⎇` itself stays live under a swap.
+refusals on open do. Unlike those, which are checked once, the swap's
+line and the disabled `Create` follow the swap: `Create` comes back
+when it ends. `⎇` itself stays live under a swap.
 
 **Failed.** If the fork throws, nothing was written: the modal stays
 open with `Couldn't create the branch.` above the buttons, and the
@@ -350,7 +351,8 @@ error is logged.
    and points `stories.current_branch_id` at the new branch.
 2. A fresh reader on the new branch replaces the story's screen
    stack, as a [switch](#per-row-anatomy) does (content is
-   byte-identical up to the fork point). From the confirm to that
+   byte-identical up to the fork point), and opens at its bottom, on
+   entry N, the new branch's last entry. From the confirm to that
    navigation the reader holds its gated controls and its ways out.
    The chip's count badge increments and now shows; `Esc → Esc`
    cycle of "open navigator → see new branch highlighted" is the
