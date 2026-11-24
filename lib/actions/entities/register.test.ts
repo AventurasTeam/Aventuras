@@ -1092,6 +1092,43 @@ describe('the lead flag', () => {
     expect(await deltasOf(db, 'act_machine')).toEqual([])
   })
 
+  it('refuses a lead flag on a location as a rejection, not the CHECK, writing nothing', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'user_edit',
+          payload: { entry: loc('loc_1', null) },
+        },
+        actionId: 'act_loc',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'loc_1', patch: { isLead: 1 } },
+        },
+        actionId: 'act_lead_loc',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'invalid entity patch: only a character can be the lead',
+    })
+    expect((await rowFor(db, 'loc_1')).isLead).toBe(0)
+    expect(entitiesStore.getById('br_1', 'loc_1')?.isLead).toBe(0)
+    expect(await deltasOf(db, 'act_lead_loc')).toEqual([])
+  })
+
   it.each(['user_edit', 'periodic_classifier'] as const)(
     'refuses a %s create that carries the flag, writing nothing',
     async (source) => {

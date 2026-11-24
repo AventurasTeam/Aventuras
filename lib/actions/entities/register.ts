@@ -278,6 +278,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     return { status: 'rejected', reason: `invalid entity patch: ${scalars.error.message}` }
   const flagIssue = flagPatchIssue(patch, current)
   if (flagIssue != null) return { status: 'rejected', reason: `invalid entity patch: ${flagIssue}` }
+  // Refused here rather than failing as the entities_lead_character CHECK.
+  if (patch.isLead === 1 && current.kind !== 'character')
+    return { status: 'rejected', reason: 'invalid entity patch: only a character can be the lead' }
 
   if (patch.state !== undefined) {
     const parsed = entityStateSchemaForKind(current.kind).safeParse(patch.state)
