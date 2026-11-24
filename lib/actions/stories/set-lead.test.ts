@@ -311,7 +311,6 @@ describe('setBranchLead', () => {
     ])
   })
 
-  // Oldest first, not by id: the undo's description names the group's first write.
   it('clears the other flagged rows oldest first', async () => {
     await ctx.db.insert(entities).values(entity('char_ash', 'br_1', { isLead: 1, createdAt: 5 }))
     await hydrateMain()

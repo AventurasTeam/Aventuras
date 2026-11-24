@@ -7,7 +7,7 @@ import { entities } from './entities.table'
 
 /**
  * The branch's lead by the flag, whatever its status; null with none, or with two, which it logs
- * (data-model.md → The lead). For a caller with no store: the turn actions and the close.
+ * (data-model.md → The lead). Reads the table, for a caller with no store.
  */
 export async function readBranchLead(branchId: string, db: DbCtx['db']): Promise<Entity | null> {
   const flagged = await db
