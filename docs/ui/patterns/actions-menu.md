@@ -177,8 +177,9 @@ reader's edit gate. Undo disables only while a head reversal is held,
 since undoing a turn passes through a pass or a close
 ([`principles.md → Pipelines covered`](../principles.md#pipelines-covered)).
 Both disable while an entry's inline editor is open
-([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session));
-`Jump to bottom` is absent on an empty entry list.
+([`reader-composer.md → Inline edit session`](../screens/reader-composer/reader-composer.md#inline-edit-session)).
+Both also disable, with the `Loading story…` reason, while the reader
+route hydrates; `Jump to bottom` is absent on an empty entry list.
 
 `Browse branches…` opens the
 [branch navigator](../screens/reader-composer/branch-navigator/branch-navigator.md).
@@ -189,7 +190,11 @@ It sits in the reader's zone, not `STORY TOOLS`, since branch
 navigation is the reader's alone
 ([`principles.md → Top-bar design rule`](../principles.md#top-bar-design-rule)).
 Never in-flight-gated: it only opens the navigator, which pauses
-switching and hides delete itself.
+switching and hides delete itself. It disables, with the
+`Loading story…` reason, only while the reader route hydrates. On
+phone the navigator's Sheet opens once the menu's Sheet has finished
+leaving, as a row flagged `opensSheet` waits
+([`searchable-overlay-list.md → Filter, keyboard, focus & lifecycle`](./searchable-overlay-list.md#filter-keyboard-focus--lifecycle)).
 
 ## Surface coverage
 
@@ -233,7 +238,10 @@ screen cannot forget.
 trigger do nothing while another Sheet, a modal dialog, a Select
 dropdown or a searchable picker is open — Sheet-over-Sheet is
 disallowed per [`overlays.md`](./overlays.md) — or while the surface
-is mid-decision.
+is mid-decision. The reader passes `blocked` for a second case: while its
+reader hold is up during a branch switch, the menu is one of the
+controls the hold stops
+([`branch-navigator.md → Per-row anatomy`](../screens/reader-composer/branch-navigator/branch-navigator.md#per-row-anatomy)).
 
 The two halves are gated differently because only one of them can be
 derived. Blocking overlays register themselves, so the menu reads the

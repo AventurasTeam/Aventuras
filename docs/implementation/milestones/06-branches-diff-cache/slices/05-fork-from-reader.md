@@ -645,6 +645,42 @@ Pointers, canon and hygiene:
   on desktop and the JS thread on Android, so the modal's pending spinner
   may not animate on Android while it runs. 6.3's measure decides whether
   that matters.
+- **A tail whose caller's reader is gone.** `showBranch` takes no abandon
+  check, by design: the fork has committed, so canon keeps the new branch.
+  A caller whose reader is already gone, as the re-run path's root host
+  can be, still gets the stack reset and the story published over
+  whatever is open, which can be another story the user has since
+  opened. Planning decides whether the create and re-run callers accept
+  that or check the open story before calling the tail.
+- **The root-host hold and the reader's unmount.** The reader's unmount
+  calls `readerHoldStore.clear(branchId)`, which ends every token on its
+  branch, the re-run path's root-host take included
+  ([Slice 6.4](./04-switching-navigator.md#implementation-notes)).
+  Planning decides whether that hold should survive the reader's unmount,
+  which `clear` doesn't allow today, or whether ending it there is right
+  once the reader is gone.
+- **The undo confirm reads no hold.** `confirmUndo`
+  (`components/reader/use-reader-undo.tsx:434-438`) runs the reversal
+  with no hold, mounted or staleness check, and `UndoConfirm` takes no
+  blocked prop. Unreachable in
+  [Slice 6.4](./04-switching-navigator.md#implementation-notes): the
+  confirm is modal, the Actions menu is blocked while it is open, and
+  the reader's own switch is the only hold-taker. Reachable if this
+  slice's root host can take a hold while the confirm is open. Planning
+  decides whether the confirm reads the hold.
+- **The tail after a failed stories re-read, with a native inline editor
+  open.** On native, a switch's stack reset goes through with an entry's
+  inline editor open only because the switch's stories re-read writes
+  `storiesStore` just before the reset, and that write's render commits
+  the edit guard's pending disarm (React 19 renders the pending lanes
+  together). `showBranch` carries on after a failed re-read
+  (`lib/actions/stories/switch-branch.ts:226-228`), so with a native
+  editor open `useReplaceStoryStack` still sees the guard armed and
+  refuses the reset: `navigation-blocked`, the fork committed, the
+  reader left on the parent. Reachable only
+  through this slice's callers; the mechanism is probe-verified, not
+  device-verified. Planning decides whether the tail's caller disarms
+  the guard first or the reset skips the held reader's own route.
 
 ## Implementation notes
 

@@ -588,7 +588,7 @@ redo map.
   `loadAndPublish` hydrates it, an eleventh store, for M7.2's era
   displays. [Slice 6.4](./04-switching-navigator.md)'s switch fills the
   stores itself, so its fill must include it
-  ([its Open questions](./04-switching-navigator.md#open-questions)).
+  ([its Implementation notes](./04-switching-navigator.md#implementation-notes)).
 - `getLoadedBranch()` keeps 12 reads outside `lib/stores/`, not the 13
   listed under Scope: `hooks/use-memory-run-outcomes.ts`'s guard went,
   since `getLatest(branchId)` already answers `undefined` for a branch

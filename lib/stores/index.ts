@@ -1,5 +1,6 @@
 import { appSettingsStore, hydrateAppSettings } from './app-settings/app-settings'
 import { rehydrateAppSettings } from './app-settings/app-settings-read'
+import { branchesStore } from './branches/branches'
 import { chaptersStore } from './chapters/chapters'
 import { characterRelationshipsStore } from './character-relationships/character-relationships'
 import { currentStoryStore } from './current-story/current-story'
@@ -20,12 +21,14 @@ import {
   chapterOverlaysStore,
   overlayChapter,
   reportChapter,
+  reviewWindowChapter,
   useCloseResultChapter,
   useRerunConfirmChapter,
 } from './ui/chapter-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { listCollapseStore } from './ui/list-collapse'
+import { readerHoldStore } from './ui/reader-hold'
 import { readerRailStore } from './ui/reader-rail'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
@@ -33,6 +36,7 @@ import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
+  branchesStore.__reset()
   chaptersStore.__reset()
   characterRelationshipsStore.__reset()
   currentStoryStore.__reset()
@@ -54,6 +58,7 @@ export function resetAllStores(): void {
   blockingOverlaysStore.__reset()
   chapterOverlaysStore.__reset()
   listCollapseStore.__reset()
+  readerHoldStore.__reset()
   readerRailStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.__reset()
@@ -88,6 +93,7 @@ export {
   rehydrateAppSettings,
   rehydrateStories,
   reportChapter,
+  reviewWindowChapter,
   storiesStore,
   threadsStore,
   translationsStore,
@@ -100,8 +106,15 @@ export {
 
 export { closeReportFields } from './chapters/chapter-store-projection'
 export { createWorkingSetStore } from './factory/working-set-store'
+export {
+  branchesStore,
+  readStoryBranches,
+  refreshBranches,
+  type BranchRow,
+} from './branches/branches'
 
 export { openEmbedderSwapDialog } from './ui/embedder-swap'
+export { readerHoldStore, type ReaderHoldToken } from './ui/reader-hold'
 
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
 export type { StoreChapter } from './chapters/chapters'

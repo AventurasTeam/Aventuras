@@ -15,6 +15,8 @@ import {
   stories,
   threads,
   translations,
+  type StoryDefinition,
+  type StorySettings,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { kickStoryDrain } from '@/lib/embedder-swap'
@@ -42,6 +44,7 @@ import { warmTokenEncoder } from '@/lib/tokens'
 
 import { readRecentEntries } from '../story-entries/recent-window'
 import type { DbCtx } from '../types'
+import { awaitRunningSwitch } from './switch-in-flight'
 
 const TOKEN_WARM_TIMEOUT_MS = 2_000
 
@@ -104,14 +107,41 @@ const alwaysCurrent: IsCurrentRequest = () => true
 const REPORT_ACTION_ID = sql<string | null>`CASE json_type(${chapters.closeReport}, '$.actionId')
   WHEN 'text' THEN json_extract(${chapters.closeReport}, '$.actionId') END`
 
-// Single place every story-open path (landing, wizard, deep link) shares, so hydration and
-// currentStoryStore updates stay in lockstep across them.
-async function loadAndPublish(
+type Rows<S extends { hydrate: (branchId: string, rows: never) => void }> = Parameters<
+  S['hydrate']
+>[1]
+
+export type BranchWorkingSet = {
+  storyId: string
+  branchId: string
+  definition: StoryDefinition
+  settings: StorySettings
+  entries: Rows<typeof entriesStore>
+  entities: Rows<typeof entitiesStore>
+  lore: Rows<typeof loreStore>
+  threads: Rows<typeof threadsStore>
+  happenings: Rows<typeof happeningsStore>
+  involvements: Rows<typeof happeningInvolvementsStore>
+  awareness: Rows<typeof happeningAwarenessStore>
+  chapters: Rows<typeof chaptersStore>
+  relationships: Rows<typeof characterRelationshipsStore>
+  translations: Rows<typeof translationsStore>
+  eraFlips: Rows<typeof eraFlipsStore>
+}
+
+export type ReadBranchResult =
+  | { status: 'ok'; set: BranchWorkingSet }
+  | { status: 'no-story' }
+  | { status: 'failed'; kind: OpenFailureKind }
+  | { status: 'cancelled' }
+
+// The read half every branch load shares: it fills no store. A parse failure badges the story; a
+// DB error throws.
+export async function readBranchWorkingSet(
   branchId: string,
   ctx: DbCtx,
   isCurrentRequest: IsCurrentRequest,
-  publish: (open: OpenStory) => void,
-): Promise<LoadOpenStoryResult> {
+): Promise<ReadBranchResult> {
   const [row] = await ctx.db
     .select({ storyId: stories.id, definition: stories.definition, settings: stories.settings })
     .from(branches)
@@ -198,30 +228,81 @@ async function loadAndPublish(
     .where(eq(branchEraFlips.branchId, branchId))
   if (!isCurrentRequest()) return { status: 'cancelled' }
 
-  storiesStore.clearOpenFailure(row.storyId)
-  entriesStore.hydrate(branchId, entryRows)
-  entitiesStore.hydrate(branchId, entityRows)
-  loreStore.hydrate(branchId, loreRows)
-  threadsStore.hydrate(branchId, threadRows)
-  happeningsStore.hydrate(branchId, happeningRows)
-  happeningInvolvementsStore.hydrate(branchId, involvementRows)
-  happeningAwarenessStore.hydrate(branchId, awarenessRows)
-  chaptersStore.hydrate(branchId, chapterRows)
-  characterRelationshipsStore.hydrate(branchId, relationshipRows)
-  translationsStore.hydrate(branchId, translationRows)
-  eraFlipsStore.hydrate(branchId, eraFlipRows)
-  publish({ storyId: row.storyId, branchId, definition, settings })
+  return {
+    status: 'ok',
+    set: {
+      storyId: row.storyId,
+      branchId,
+      definition,
+      settings,
+      entries: entryRows,
+      entities: entityRows,
+      lore: loreRows,
+      threads: threadRows,
+      happenings: happeningRows,
+      involvements: involvementRows,
+      awareness: awarenessRows,
+      chapters: chapterRows,
+      relationships: relationshipRows,
+      translations: translationRows,
+      eraFlips: eraFlipRows,
+    },
+  }
+}
+
+/** The eleven working-set hydrates, synchronous, in the load's order. */
+export function fillWorkingSet(set: BranchWorkingSet): void {
+  const { branchId } = set
+  entriesStore.hydrate(branchId, set.entries)
+  entitiesStore.hydrate(branchId, set.entities)
+  loreStore.hydrate(branchId, set.lore)
+  threadsStore.hydrate(branchId, set.threads)
+  happeningsStore.hydrate(branchId, set.happenings)
+  happeningInvolvementsStore.hydrate(branchId, set.involvements)
+  happeningAwarenessStore.hydrate(branchId, set.awareness)
+  chaptersStore.hydrate(branchId, set.chapters)
+  characterRelationshipsStore.hydrate(branchId, set.relationships)
+  translationsStore.hydrate(branchId, set.translations)
+  eraFlipsStore.hydrate(branchId, set.eraFlips)
+}
+
+/** After a branch publishes: the drain kick, then the idle token-encoder warm-up. */
+export function afterBranchPublished(storyId: string): void {
   // Warm the vec cache for a story opened with pre-existing stale rows; no-op
   // until boot wires the drain controller, and the sync stage owns correctness.
-  kickStoryDrain(row.storyId)
+  kickStoryDrain(storyId)
   // Off the open's own task, so the encoder's build doesn't land on the first Send. React Native
   // has no real idle signal, so on Android it runs during the open, ahead of the reader's first
   // paint.
   globalThis.requestIdleCallback?.(warmTokenEncoder, { timeout: TOKEN_WARM_TIMEOUT_MS })
-  return { status: 'ok', storyId: row.storyId, branchId }
 }
 
-// Route hydration (reload, deep link, branch switch): re-publishes without marking an open.
+// Single place every story-open path (landing, wizard, deep link) shares, so hydration and
+// currentStoryStore updates stay in lockstep across them.
+async function loadAndPublish(
+  branchId: string,
+  ctx: DbCtx,
+  isCurrentRequest: IsCurrentRequest,
+  publish: (open: OpenStory) => void,
+): Promise<LoadOpenStoryResult> {
+  const read = await readBranchWorkingSet(branchId, ctx, isCurrentRequest)
+  if (read.status !== 'ok') return read
+  // Awaiting the read yields after its last check, so a request can go stale before the fill.
+  if (!isCurrentRequest()) return { status: 'cancelled' }
+  const { set } = read
+  storiesStore.clearOpenFailure(set.storyId)
+  fillWorkingSet(set)
+  publish({
+    storyId: set.storyId,
+    branchId: set.branchId,
+    definition: set.definition,
+    settings: set.settings,
+  })
+  afterBranchPublished(set.storyId)
+  return { status: 'ok', storyId: set.storyId, branchId: set.branchId }
+}
+
+// Route hydration (reload, deep link, a fork shown unloaded): re-publishes without marking an open.
 export function loadOpenStory(
   branchId: string,
   ctx: DbCtx,
@@ -237,6 +318,8 @@ export async function openStory(
   nowMs: number = Date.now(),
   isCurrentRequest: IsCurrentRequest = alwaysCurrent,
 ): Promise<OpenStoryResult> {
+  // An abandoned or failed switch puts the pointer back before it settles.
+  await awaitRunningSwitch()
   const [row] = await ctx.db
     .select({ branchId: stories.currentBranchId })
     .from(stories)

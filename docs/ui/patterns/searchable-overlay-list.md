@@ -67,7 +67,7 @@ consumer-side.
 ## API surface
 
 `Row` carries an opaque consumer payload under `data` — the
-substrate only ever reads `id` and `disabled`. The payload is nested
+substrate only ever reads `id`, `disabled` and `opensSheet`. The payload is nested
 rather than intersected so a consumer whose natural identity is not
 globally unique (two provider instances can serve the same
 `modelId`) can still supply a distinct, composite `id`.
@@ -76,6 +76,7 @@ globally unique (two provider instances can serve the same
 type Row<T> = {
   id: string // globally unique within the picker; highlight key + React key
   disabled?: boolean // non-interactive; skipped by ↓/↑ highlight nav
+  opensSheet?: boolean // phone: activation waits for this Sheet's exit (see Activation and close)
   data: T // opaque consumer payload, returned to renderRow + onActivate
 }
 
@@ -299,6 +300,15 @@ interactive elements inside `renderRow` (a row's favorite toggle,
 say) own their press and stop propagation — no activation, no close;
 the sticky footer sits outside the listbox, so interacting with it
 never activates or closes.
+
+A row flagged `opensSheet` acts differently on phone: its
+`onActivate` waits until the overlay's Sheet has finished leaving, as
+`OverflowMenu`'s `opensSheet` entries do, so the Sheet the row opens
+never presents while this one is still leaving. Reopening the overlay
+before that exit drops the held action, and so does the overlay
+unmounting. A tier change off phone during the exit runs it at once,
+since the Sheet whose exit it waits for is gone. Off phone the row
+acts at once, like any other.
 
 **Open/close behavior.** On close, focus returns to the trigger and
 `query` resets to the empty string — the overlay always opens fresh.

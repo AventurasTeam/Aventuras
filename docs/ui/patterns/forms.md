@@ -50,6 +50,10 @@ All branches]` as a semantic two-option pick; dropdown-mode
 - [Story list](../screens/story-list/story-list.md#duplicate-a-story)
   (Input for the Duplicate dialog's name; Select primitive in explicit
   dropdown mode for its branch pick, with an all-branches option)
+- [Branch navigator](../screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)
+  (Input primitive for a row's inline rename; its
+  [`aria-invalid` error state](#error-state-via-aria-invalid) on an
+  empty name)
 
 ---
 

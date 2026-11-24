@@ -230,6 +230,12 @@ describe('rerunEndNotice', () => {
   ] as const)('speaks for a re-run %s', (_name, end, severity, message) => {
     expect(rerunEndNotice(end, 2)).toStrictEqual({ severity, message })
   })
+
+  it('tells a held re-run that its branch, not the story, waits on the restart', () => {
+    expect(rerunEndNotice(END.failedUnreversed, 2)?.message).toBe(
+      "The re-run couldn't be undone. Restart the app to restore chapter 2's close; until then, this branch can't be changed.",
+    )
+  })
 })
 
 describe('rerunStartOutcome', () => {

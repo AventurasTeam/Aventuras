@@ -7,6 +7,8 @@ type ConfirmPreflightState = {
   currentBranchId: string
   loadedBranchId: string | null
   dispatchInFlight: boolean
+  /** A remount on the same branch matches every branch field; this marks the old reader gone. */
+  readerMounted: boolean
 }
 
 type RegeneratePreflightState = ConfirmPreflightState & {
@@ -18,6 +20,7 @@ type RegeneratePreflightState = ConfirmPreflightState & {
 // running: opened over one, its action could only toast a refusal.
 function canContinueConfirmPreflight(args: ConfirmPreflightState): boolean {
   return (
+    args.readerMounted &&
     args.currentBranchId === args.startedBranchId &&
     args.loadedBranchId === args.startedBranchId &&
     !args.dispatchInFlight

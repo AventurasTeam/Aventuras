@@ -290,6 +290,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(confirmView.mounted).toBe(false)
     expect(chapterOverlaysStore.getState().review).toStrictEqual({
+      branchId: 'br_1',
       chapterId: 'chap_2',
       actionId: 'act_close_2',
     })
@@ -499,6 +500,7 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
       await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
       expect(confirmView.mounted).toBe(false)
       expect(chapterOverlaysStore.getState().review).toStrictEqual({
+        branchId: 'br_1',
         chapterId: 'chap_2',
         actionId: 'act_close_2',
       })

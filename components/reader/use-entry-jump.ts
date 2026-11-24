@@ -60,7 +60,7 @@ async function readFromAbove(
   return rows === null ? null : { rows, branchTop: above === null }
 }
 
-/** A superseded jump is logged but not toasted: a newer jump or a branch change replaced it. */
+/** A superseded jump is logged, not toasted: a newer jump or another branch loading replaced it. */
 function reportJumpFailure(
   branchId: string,
   entryId: string,
@@ -209,8 +209,8 @@ export function useEntryJump(
     },
     [drop],
   )
-  // A branch change unmounts the surface on both platforms, so a pending landing never signals; a
-  // read still out then must not land or start a bound, even back on this branch.
+  // A switch unmounts the reader on both platforms, so a pending landing never signals; a read
+  // still out then must not land or start a bound.
   useEffect(
     () => () => {
       generationRef.current += 1

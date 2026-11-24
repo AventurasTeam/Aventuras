@@ -401,3 +401,123 @@ slice-planning gate forces its resolution before that slice is planned.
   deltas (changes main's undo grouping, which E2E drives), or record
   the shape as the seed's contract. Found by Slice 6.3's slice review
   (2026-11-24).
+
+- **A successful story load's open-failure clear is untested.**
+  `loadAndPublish` in `lib/actions/stories/operational.ts` calls
+  `storiesStore.clearOpenFailure(storyId)` before it publishes;
+  deleting the line leaves the three load suites green (28 tests). The
+  line predates Slice 6.4, which only moved it. Found in Slice 6.4's
+  reviews (2026-11-24).
+
+- **Diagnostics settings show capture off in a dev build that forces it
+  on.** The debug switch in
+  `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
+  on the stored flag, while a dev build forces capture on
+  (`lib/boot/bootstrap.ts:39-42`). So the panel reads capture off and
+  debug disabled while capture runs, and turning debug on needs capture
+  toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
+  passes (2026-11-24).
+
+- **Older overlay-list stories log a `ResizeObserver` loop error.** The
+  story run of `components/ui/searchable-overlay-list.stories.tsx`
+  logs an unhandled "ResizeObserver loop completed with undelivered
+  notifications" and still passes; the stories Slice 6.4 added don't
+  log it when run alone. Found in Slice 6.4's reviews (2026-11-24).
+
+- **A phone Sheet opened over the reader's inline editor lands under
+  its keyboard.** Canon says a sheet opened over an open keyboard
+  dismisses it first
+  ([`overlays.md`](../ui/patterns/overlays.md#sheet--keyboard-handling)),
+  and `components/ui/sheet.tsx:390-399` does so through
+  `dismissKeyboard()` before `present()`. On the slot AVD (Android 16),
+  with an entry's inline editor holding the keyboard, tapping the
+  branch chip opened the navigator Sheet under it: its rows sat under
+  the keyboard and a tap landed on a key, until Back hid it. With the
+  composer's keyboard up the same tap dismissed it as canon says.
+  Inferred, not probed: the dismiss doesn't reach the input method of
+  the reader's WebView document, so any phone Sheet opened from the
+  reader during an inline edit (the chapter chip's too) would do the
+  same. Found in Slice 6.4's device pass (2026-11-24).
+
+- **Two reader wireframes drift from the shipped phone chip strip.**
+  `branch-navigator.html` draws the phone chip in the top bar (it has
+  no chip strip) and overflows at 390 px; in `reader-composer.html`
+  (around line 951) the phone strip's branch chip never hides at one
+  branch, since `setBranchCount` toggles only `#branch-chip` and its
+  separator. Both predate Slice 6.4's edit. Found in Slice 6.4's
+  reviews (2026-11-24).
+
+- **`data-model.md` calls the stories row the only user-authored
+  content outside the log.**
+  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
+  says so; a branch name is a counterexample, and canon now says
+  rename is an unlogged write
+  ([`branch-navigator.md`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)).
+  Found in Slice 6.4's reviews (2026-11-24).
+
+- **A second `beforeRemove` preventer replays its action and the arm
+  registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
+  keeps `data.action` and replays it on "Cancel & leave", and
+  `isUnsavedPopArmed` doesn't cover it. A switch's stack reset could be
+  swallowed by it only if a run started on the story between the
+  switch's gate check and its reset: unreachable today, since every
+  pipeline is `hard-gate` and `switchBranch` also refuses on
+  `isStoryBusy`. `switchBranch` checks `isStoryBusy` again right before
+  its reset, with nothing awaited between. A switch could still meet
+  the guard only while its arming render lags a run that just ended,
+  which needs the run's end and the switch's last step in one
+  microtask checkpoint; none was found (each desktop IPC reply is its
+  own task, and a zustand write renders before the next task; read
+  from the code, not run on a device). The tail (`showBranch`) takes
+  no such check, so it is the path left to meet it. Pre-existing.
+  Found by Slice 6.4's reviews (2026-11-24).
+
+- **A late `onDismissed` from an earlier close can release a row held
+  by a reopened presentation.** After a reopen during a dismiss, the
+  earlier close's `onDismissed` runs the held row (e.g. the phone
+  `Browse branches…`) when that earlier exit ends rather than its own
+  (`components/ui/searchable-overlay-list.tsx` around :1361;
+  `OverflowMenu` has the same shape). Benign per Slice 6.4's recorded
+  gorhom fact: a Sheet presented during another's dismiss presents, and
+  the dismissing one doesn't come back, on web and the AVD. Scoping
+  `onDismissed` to the presentation that started the close is a
+  Sheet-primitive change. Found in Slice 6.4's PR review (2026-11-24).
+
+- **The reader's undo shortcut and the notice's Redo don't wait out a
+  Send's dispatch.** The menu's Undo and Redo disable while the
+  reader's dispatch flag is up, but the Ctrl+Z / Ctrl+Shift+Z handler
+  (`app/reader-composer/[branchId].tsx:1678`) checks only an open
+  editor and the reader hold, and the undo notice's Redo
+  (`components/reader/use-reader-undo.tsx:320`) only the mounted flag
+  and the hold. So an undo can land in a Send's pre-registration
+  window: `runSubmit` awaits the system tail's drop before it calls
+  `submitTurn`. Read from `lib/actions/story-entries/undo.ts:127-161`,
+  the undo's own bracket then reorders or refuses the Send rather than
+  corrupting anything; the Send's refusal surface isn't traced.
+  Pre-existing: before Slice 6.4 the shortcut checked only
+  `if (editorOpen) return`. Found in Slice 6.4's reviews (2026-11-24).
+
+- **`Input` has no 44 px phone floor at `size="sm"`.**
+  [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
+  floors phone form inputs at 44 px, through `--control-h-md` and a
+  defensive floor at the input wrapper; `components/ui/input.tsx` maps
+  `sm` to `h-control-sm`, under 44 px at the compact and regular
+  densities, with no floor. The branch rename input was its only
+  production `size="sm"` use and now sets its own 44 px floor on phone.
+  Pre-existing substrate. Found in Slice 6.4's reviews (2026-11-24).
+
+- **The reader's state chips repeat one class string.** The branch
+  chip (`components/reader/branch-chip.tsx`), the chapter chip
+  (`components/reader/chapter-chip.tsx`) and the rail's browse chip
+  (`components/reader/rail/browse-chip.tsx`) each spell the same chip classes
+  and web focus ring; a change to the chip's look has to land in all
+  three. A shared chip primitive or class helper is the fix; it needs
+  a home outside any one reader surface. Found in Slice 6.4's reviews
+  (2026-11-24).
+
+- **Storybook tier helpers are copied per story file.** `waitForTier`
+  and `TierMark` are written out in five story files (the branch chip,
+  navigator and rename input stories, the chapter popover's, and the
+  chapter-in-progress card's), two of them older than Slice 6.4. A
+  shared story helper beside the viewport lesson's pattern would hold
+  them once. Found in Slice 6.4's reviews (2026-11-24).

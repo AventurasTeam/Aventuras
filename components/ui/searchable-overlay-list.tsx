@@ -52,6 +52,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { swallowKeyRepeats } from '@/components/ui/swallow-key-repeats'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_NONE } from '@/constants/styles'
+import { useHeldUntilDismissed } from '@/hooks/use-held-until-dismissed'
 import { useTier } from '@/hooks/use-tier'
 import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
@@ -59,6 +60,8 @@ import { cn } from '@/lib/utils'
 type Row<T> = {
   id: string
   disabled?: boolean
+  /** Phone: activation waits for the Sheet's exit, so the Sheet it opens never presents mid-exit. */
+  opensSheet?: boolean
   data: T
 }
 
@@ -1132,6 +1135,13 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     [isControlled, onOpenChange],
   )
 
+  const afterDismiss = useHeldUntilDismissed(isPhone)
+  // Any open drops a held row, however it opened (the trigger, or a controlled `open`): the dismiss
+  // that would release it can still fire afterwards.
+  useLayoutEffect(() => {
+    if (open) afterDismiss.clear()
+  }, [open, afterDismiss])
+
   // Tier flips while open are asymmetric. Entering desktop hands the overlay
   // off — the popover mounts open and the unmounting sheet vanishes instantly
   // (gorhom's portal-unmount dismissal is patched to zero duration). Entering
@@ -1187,9 +1197,10 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
       if (row.disabled) return
       // Close-before-act: substrate dismisses, then the consumer commits.
       setOpen(false)
-      onActivate(row)
+      if (isPhone && row.opensSheet === true) afterDismiss.hold(() => onActivate(row))
+      else onActivate(row)
     },
-    [setOpen, onActivate],
+    [setOpen, onActivate, isPhone, afterDismiss],
   )
 
   const onSubmit = useCallback(() => {
@@ -1345,6 +1356,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
             anchor="bottom"
             size={sheetSize}
             suppressOverlayRegistration={suppressOverlayRegistration}
+            onDismissed={afterDismiss.runHeld}
           >
             {body}
           </SheetContent>

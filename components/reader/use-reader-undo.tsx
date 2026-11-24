@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 
 import { chapterImpactLines } from '@/components/chapters/chapter-impact-lines'
 import {
@@ -20,10 +20,9 @@ import {
   startStallMeter,
 } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { generationStore, undoRedoStore } from '@/lib/stores'
+import { generationStore, readerHoldStore, undoRedoStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { describeRedoTarget, describeUndoGroup, type UndoDescription } from '@/lib/undo'
-import { runAction } from '@/lib/utils'
 
 import { UndoConfirm } from './undo-confirm'
 import {
@@ -38,6 +37,7 @@ import {
   type UndoNames,
   type UnseenUndoDescription,
 } from './undo-copy'
+import { useAliveRef } from './use-alive-ref'
 
 type Op = 'undo' | 'redo'
 /** The keyboard's refusals are silent, by the native convention; every other origin's toast. */
@@ -157,23 +157,26 @@ export function useReaderUndo({
   const noticeRef = useRef<string | null>(null)
   // Each open resolves afresh; a resolution an older open started is dropped.
   const resolveSeqRef = useRef(0)
-  // Read after an await: a confirm resolved once the screen left or switched branch is dropped.
+  // Read after an await: a confirm resolved once focus left or an editor opened is dropped.
   const liveRef = useRef({ branchId, isFocused, held })
   useEffect(() => {
     liveRef.current = { branchId, isFocused, held }
   })
+  const aliveRef = useAliveRef()
 
   const showMenuTarget = useCallback((target: Target | null) => {
     menuTargetRef.current = target
     setMenuTarget(target)
   }, [])
 
-  // The notice's Redo belongs to the branch it was shown on.
-  useEffect(() => {
+  // The notice's Redo belongs to the reader that showed it, so it goes with that reader.
+  useLayoutEffect(() => {
     showMenuTarget(null)
     setConfirm(null)
-    if (noticeRef.current != null) toast.dismiss(noticeRef.current)
-    noticeRef.current = null
+    return () => {
+      if (noticeRef.current != null) toast.dismiss(noticeRef.current)
+      noticeRef.current = null
+    }
   }, [branchId, showMenuTarget])
 
   // A confirm held on a screen that lost focus would undo unasked once it came back.
@@ -203,15 +206,16 @@ export function useReaderUndo({
       if (refusal.code === 'integrity')
         logger.error(isUndo ? 'reader.undo_failed' : 'reader.redo_failed', fields)
       else logger.debug(isUndo ? 'reader.undo_rejected' : 'reader.redo_rejected', fields)
-      if (origin === 'keyboard') return
+      if (origin === 'keyboard' || !aliveRef.current) return
       if (refusal.code === 'integrity')
         toast.error(t(isUndo ? 'reader:actions.undoFailed' : 'reader:actions.redoFailed'))
       else if (refusal.code === 'target-moved' && isUndo) toast.info(t('reader:undo.targetMoved'))
       else if (refusal.code === 'nothing-to-apply' || refusal.code === 'target-moved')
         toast.info(t(isUndo ? 'reader:actions.nothingToUndo' : 'reader:actions.nothingToRedo'))
       else if (refusal.code === 'gated') toast.info(t('reader:actions.blockedWhileGenerating'))
+      else if (refusal.code === 'branch-not-loaded') toast.info(t('reader:hydrationLoading'))
     },
-    [branchId],
+    [aliveRef, branchId],
   )
 
   // A newer notice replaces the older, so a notice's Redo is always the redo stack's top.
@@ -237,23 +241,38 @@ export function useReaderUndo({
         redoLastAction(branchId, ctx, { expectedActionId: actionId }),
       )
       if (result.status === 'rejected') report('redo', result, origin)
-      else announce(notice)
+      else if (aliveRef.current) announce(notice)
     },
-    [announce, branchId, ctx, report],
+    [aliveRef, announce, branchId, ctx, report],
   )
 
-  const guarded = useCallback((op: Op, run: () => Promise<void>) => {
-    if (busyRef.current) return
-    busyRef.current = true
-    runAction(
-      run().finally(() => {
-        busyRef.current = false
-      }),
-      {
-        event: op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed',
-        toastMessage: t(op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed'),
-      },
-    )
+  const guarded = useCallback(
+    (op: Op, run: () => Promise<void>) => {
+      if (busyRef.current) return
+      busyRef.current = true
+      // Not runAction: its toast can't see whether the reader is gone.
+      void run()
+        .finally(() => {
+          busyRef.current = false
+        })
+        .catch((err: unknown) => {
+          logger.error(op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+          if (aliveRef.current)
+            toast.error(
+              t(op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed'),
+            )
+        })
+    },
+    [aliveRef],
+  )
+
+  // Its Redo would be stale: the undo cleared the stack.
+  const warnCloseUndone = useCallback((chapterNumber: number) => {
+    if (noticeRef.current != null) toast.dismiss(noticeRef.current)
+    noticeRef.current = null
+    toast.warning(t('reader:undo.closeUndone', { number: chapterNumber }))
   }, [])
 
   const runUndo = useCallback(
@@ -277,26 +296,27 @@ export function useReaderUndo({
         report('undo', result, origin)
         return
       }
+      // It reports a state change and offers no action, so it posts though the reader is gone.
       if (result.closeUndone != null) {
-        // Its Redo would be stale: the undo cleared the stack.
-        if (noticeRef.current != null) toast.dismiss(noticeRef.current)
-        noticeRef.current = null
-        toast.warning(t('reader:undo.closeUndone', { number: result.closeUndone.chapterNumber }))
+        warnCloseUndone(result.closeUndone.chapterNumber)
         return
       }
+      if (!aliveRef.current) return
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
       const redoable = undoRedoStore.peekRedoGroup(branchId)?.actionId === target.actionId
       announce(
         notice,
         redoable
           ? () => {
+              // redoLastAction doesn't read the reader hold, and a gone reader has no Redo left.
+              if (!aliveRef.current || readerHoldStore.isHeld(branchId)) return
               if (liveRef.current.held) toast.info(t('reader:editFocus.held'))
               else guarded('redo', () => runRedo('notice', target.actionId))
             }
           : undefined,
       )
     },
-    [announce, branchId, ctx, guarded, report, runRedo, showMenuTarget],
+    [aliveRef, announce, branchId, ctx, guarded, report, runRedo, showMenuTarget, warnCloseUndone],
   )
 
   const confirmLines = useCallback(
@@ -330,17 +350,24 @@ export function useReaderUndo({
     (origin: 'menu' | 'keyboard') =>
       guarded('undo', async () => {
         const started = branchId
-        // Read after each await: the screen left, switched branch or opened an editor meanwhile.
+        // Read after each await: the reader unmounted, lost focus or opened an editor meanwhile.
+        // A switch's hold is read from the store: the ref follows a render, which may not have run.
         const stale = () => {
           const live = liveRef.current
-          return live.branchId !== started || !live.isFocused || live.held
+          return (
+            !aliveRef.current ||
+            live.branchId !== started ||
+            !live.isFocused ||
+            live.held ||
+            readerHoldStore.isHeld(started)
+          )
         }
         const target = (origin === 'menu' ? menuTargetRef.current : null) ?? (await resolve())
+        if (stale()) return
         if (target == null) {
           report('undo', NOTHING, origin)
           return
         }
-        if (stale()) return
         const { description } = target
         if (description.seen) {
           await runUndo(target, origin)
@@ -360,7 +387,7 @@ export function useReaderUndo({
           lines,
         })
       }),
-    [branchId, confirmLines, guarded, report, resolve, runUndo],
+    [aliveRef, branchId, confirmLines, guarded, report, resolve, runUndo],
   )
 
   const redo = useCallback(

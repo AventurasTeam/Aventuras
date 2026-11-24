@@ -44,6 +44,7 @@ describe('regenerate dispatch preflight', () => {
     loadedBranchId: 'br_1',
     dispatchInFlight: false,
     headReversalBlocked: false,
+    readerMounted: true,
   }
 
   it('requires the captured branch and both dispatch gates to remain current', () => {
@@ -52,6 +53,25 @@ describe('regenerate dispatch preflight', () => {
     expect(canContinueRegeneratePreflight({ ...current, headReversalBlocked: true })).toBe(false)
     expect(canContinueRegeneratePreflight({ ...current, currentBranchId: 'br_2' })).toBe(false)
     expect(canContinueRegeneratePreflight({ ...current, loadedBranchId: 'br_2' })).toBe(false)
+  })
+
+  // A → B → A during the read: every branch field matches again, but for a reader that is gone.
+  it('discards counts read for a reader since unmounted, though the branch is back', async () => {
+    expect(canContinueRegeneratePreflight({ ...current, readerMounted: false })).toBe(false)
+    let readerMounted = true
+    const result = loadRegenerateCountsIfCurrent(
+      async () => ({
+        entries: 1,
+        chapters: 0,
+        worldStateChanges: 0,
+        closeWrites: 0,
+        reopenedChapter: null,
+        removedChapters: [],
+      }),
+      () => ({ ...current, readerMounted }),
+    )
+    readerMounted = false
+    expect(await result).toBeNull()
   })
 
   it('discards counts when another dispatch starts while the query is awaiting', async () => {
@@ -129,13 +149,15 @@ describe('rollback confirm preflight', () => {
     currentBranchId: 'br_1',
     loadedBranchId: 'br_1',
     dispatchInFlight: false,
+    readerMounted: true,
   }
 
-  it('discards counts when a dispatch starts or the branch moves while they load', async () => {
+  it('discards counts when a dispatch, a branch move or an unmount lands mid-read', async () => {
     for (const moved of [
       { dispatchInFlight: true },
       { currentBranchId: 'br_2' },
       { loadedBranchId: 'br_2' },
+      { readerMounted: false },
     ]) {
       let state = current
       const result = loadRollbackCountsIfCurrent(

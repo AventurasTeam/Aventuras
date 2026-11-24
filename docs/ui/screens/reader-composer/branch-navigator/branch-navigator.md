@@ -29,10 +29,10 @@ Cross-cutting principles that govern these surfaces are in
 
 ```
 ─── Reader top bar ──────────────────────────────────────────
- ← │ <story> · Ch 5 · 🕒 ... │ [status] [⎇ 3] [⚲] [⛭] │
-                                       ↓
-                          (click chip — desktop popover)
-                                       ↓
+ ← │ <story> · Ch 5 · 🕒 ... · ⎇ 3 │ [status] [⚲] [⛭] │
+                              ↓
+                 (click chip — desktop popover)
+                              ↓
        ┌── Branches · 3 ──────────────── × ─┐
        │                                     │
        │  ✓  main                            │  ← current
@@ -45,7 +45,11 @@ Cross-cutting principles that govern these surfaces are in
 ```
 
 Anchored to the top-bar branch chip. Click outside or `Esc` to
-dismiss.
+dismiss. Closing returns focus to the chip when the chip opened it; opened
+from the Actions menu's `Browse branches…`, whose row is gone by then,
+it returns focus to the Actions trigger, as
+[a dialog's close focus](../../../patterns/overlays.md#close-focus)
+does for an overlay closed to open it.
 
 ## Navigator — popover (desktop)
 
@@ -86,6 +90,18 @@ reader loses focus or unmounts before the new branch shows. A switch
 isn't a story open: the
 [story-open upgrade prompt](../../../../memory/retrieval.md#the-story-open-upgrade-prompt)
 doesn't fire again.
+
+A switch shows nothing pending beyond the held reader and, should the
+navigator open again meanwhile, its paused rows. A press that races
+past the paused rows into a closed gate, or a switch a run blocks just
+before its navigation, leaves the reader where it was and toasts the
+gate's reason, the copy its disabled controls show. A
+switch that fails, because the branch is gone, its load or the story
+list's re-read fails, the screens it would replace refuse to close, or
+the branch pointer's write or the check that the branch exists throws,
+toasts `Couldn't switch branches.` and leaves the reader where it was.
+An abandoned switch shows nothing, whatever ended it: the user left.
+A press while a switch runs does nothing.
 
 ### Row actions — inline icons
 
@@ -184,9 +200,23 @@ separate button row — they're keyboard-only:
   visibly committing by moving focus elsewhere).
 
 Validation: empty / whitespace-only names are rejected at save
-time (the input border turns warn-colored, save is a no-op until
-the user fixes or cancels). Same uniqueness behavior as creation
+time (the input shows its
+[invalid state](../../../patterns/forms.md#error-state-via-aria-invalid),
+the danger border every input uses; save is a no-op until the user
+fixes or cancels). Same uniqueness behavior as creation
 — the data model doesn't enforce it; the navigator doesn't either.
+
+The saved name is trimmed at both ends; spacing inside it stays. While
+the write runs the input holds: no further typing and no second save.
+A failed write toasts `Couldn't rename the branch.` and the row shows
+the stored name. Closing the navigator while a rename is open saves a
+valid changed name. An empty one is dropped with the rename rather
+than held as a click outside holds it, since the input closes with the
+navigator.
+
+Rename is an unlogged write. `branches` sits above the
+[delta log](../../../../data-model.md#entry-mutability--rollback), so a
+rename writes no delta, can't be undone, and leaves no History row.
 
 ### Delete confirm
 
@@ -321,6 +351,10 @@ When `stories.current_branch_id` is the only branch in the story:
   menu (`Browse branches…`). Opening it on a single-branch story
   shows one row with `Rename` available and no `×`: the only branch
   is the current one. The header reads `Branches · 1`.
+- On desktop and tablet, the navigator opened that way anchors where
+  the chip would sit, after the time chip, so it opens where it will
+  once a second branch exists. On phone it is the Sheet, which needs
+  no anchor.
 - The **creation modal** is reachable as always — from the
   per-entry `⎇` action. Creating a second branch causes the chip
   to appear on next render.

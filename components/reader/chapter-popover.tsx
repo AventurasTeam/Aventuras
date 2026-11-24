@@ -4,7 +4,6 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
-  useState,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -36,6 +35,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useHeldUntilDismissed, type HeldUntilDismissed } from '@/hooks/use-held-until-dismissed'
+import { useReportedOpen } from '@/hooks/use-reported-open'
 import { useTier } from '@/hooks/use-tier'
 import { isReadyToClose, openChapterNumber, type ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
@@ -108,28 +108,6 @@ export function ChapterPopover(props: ChapterPopoverProps): ReactElement {
   ) : (
     <PopoverArm {...props} number={number} />
   )
-}
-
-// TriggerRef.close() calls onOpenChange on a closed popover too; only a change is reported.
-function useReportedOpen(onOpenChange: ChapterPopoverProps['onOpenChange']) {
-  const [open, setOpen] = useState(false)
-  const change = (next: boolean) => {
-    if (next === open) return
-    setOpen(next)
-    onOpenChange?.(next)
-  }
-  // A tier flip swaps the arms, and the open one unmounts without closing.
-  const committed = useRef({ open, onOpenChange })
-  useEffect(() => {
-    committed.current = { open, onOpenChange }
-  })
-  useEffect(
-    () => () => {
-      if (committed.current.open) committed.current.onOpenChange?.(false)
-    },
-    [],
-  )
-  return [open, change] as const
 }
 
 // Radix closes on an outside pointerdown, before the click: an opener outside would reopen what its

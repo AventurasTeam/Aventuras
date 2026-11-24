@@ -81,6 +81,9 @@ type ScreenShellProps = {
   /** Wires the ⛭ Story Settings icon (`in-story`, unless self-ref). */
   onOpenStorySettings?: () => void
 
+  /** In-story only. When set, ⛭ renders disabled with this reason. */
+  storySettingsDisabledReason?: string
+
   /** Wires the ⚲ Actions icon (every variant). */
   onOpenActions?: () => void
 
@@ -110,6 +113,7 @@ export function ScreenShell({
   onBack,
   onOpenAppSettings,
   onOpenStorySettings,
+  storySettingsDisabledReason,
   onOpenActions,
   actions,
   children,
@@ -144,6 +148,8 @@ export function ScreenShell({
           icon={SlidersVertical}
           label={t('chrome.storySettings')}
           onPress={onOpenStorySettings}
+          disabled={storySettingsDisabledReason != null}
+          disabledReason={storySettingsDisabledReason}
           size="lg"
         />
       ) : null}
