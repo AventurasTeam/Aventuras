@@ -526,7 +526,7 @@ describe.each(LINK_TABLES)('userDeletedHappeningLink over $name', ({ add, remove
   })
 })
 
-// Involvement ids repeat across branches (the key is branch and id), so every read and write is scoped.
+// Involvement ids repeat across branches (key: branch and id), so every read and write is scoped.
 describe('branch scope', () => {
   type BranchId = 'br_1' | 'br_2'
 
