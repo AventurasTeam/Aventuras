@@ -57,6 +57,16 @@ export function reportChapter<C extends HeldReport>(
   return held != null && held.closeReportActionId === actionId ? held : null
 }
 
+/** C7: the review window's chapter while it holds its report on the open branch; else null. */
+export function reviewWindowChapter<C extends HeldReport>(
+  review: ReviewRequest | null,
+  branchChapters: ReadonlyMap<string, C>,
+  openBranchId: string | null,
+): C | null {
+  if (review == null || review.branchId !== openBranchId) return null
+  return reportChapter(branchChapters.get(review.chapterId), review.actionId)
+}
+
 /** C7: a close result's chapter while it is this open's and stands; else null. */
 export function closeResultChapter<C extends HeldReport>(
   result: CloseResult | null,

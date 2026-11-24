@@ -33,7 +33,7 @@ import {
   isStoryBusy,
   loreStore,
   overlayChapter,
-  reportChapter,
+  reviewWindowChapter,
   threadsStore,
   useCloseResultChapter,
   useRerunConfirmChapter,
@@ -54,15 +54,11 @@ import { useReviewWindowPresence } from './use-review-window-presence'
 
 const ctx = { db, runInTransaction }
 
-// `reviewChapter`'s rule, not the bare request: a desktop exit reports before the prune clears it.
+// The window's chapter, not the bare request: a desktop exit reports before the prune clears it.
 const reviewRequested = () => {
   const { review } = chapterOverlaysStore.getState()
-  if (review == null) return false
   const openBranchId = currentStoryStore.getCurrentStory()?.branchId ?? null
-  if (review.branchId !== openBranchId) return false
-  return (
-    reportChapter(chaptersStore.getById(openBranchId, review.chapterId), review.actionId) != null
-  )
+  return reviewWindowChapter(review, chaptersStore.getChapters(openBranchId), openBranchId) != null
 }
 
 type ReviewSources = {
@@ -136,11 +132,8 @@ export function ChapterOverlaysHost(): ReactElement | null {
   const rerunConfirm = chapterOverlaysStore.useOverlays((s) => s.rerunConfirm)
   const openBranchId = currentStoryStore.useCurrentStory((open) => open?.branchId ?? null)
   const openSeq = currentStoryStore.useOpenSeq()
-  // A fork copies the chapter's id and its report's action: only the branch tells them apart.
   const reviewChapter = chaptersStore.useChapters(openBranchId, (rows) =>
-    review == null || review.branchId !== openBranchId
-      ? null
-      : reportChapter(rows.get(review.chapterId), review.actionId),
+    reviewWindowChapter(review, rows, openBranchId),
   )
   const resultHolds =
     useCloseResultChapter(closeResult, { branchId: openBranchId, openSeq }) != null

@@ -21,6 +21,7 @@ import {
   chapterOverlaysStore,
   overlayChapter,
   reportChapter,
+  reviewWindowChapter,
   useCloseResultChapter,
   useRerunConfirmChapter,
 } from './ui/chapter-overlays'
@@ -92,6 +93,7 @@ export {
   rehydrateAppSettings,
   rehydrateStories,
   reportChapter,
+  reviewWindowChapter,
   storiesStore,
   threadsStore,
   translationsStore,

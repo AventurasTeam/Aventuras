@@ -8,6 +8,7 @@ import {
   overlayChapter,
   reportChapter,
   rerunConfirmChapter,
+  reviewWindowChapter,
   type CloseResult,
   type OverlaySurface,
 } from './chapter-overlays'
@@ -447,6 +448,17 @@ describe('the overlays hold rule', () => {
     expect(reportChapter(held, 'act_rerun')).toBeNull()
     expect(reportChapter(held, null)).toBeNull()
     expect(reportChapter({ ...held, hasCloseReport: false }, 'act_1')).toBeNull()
+  })
+
+  // A fork copies the chapter's id and its report's action: only the branch tells them apart.
+  it("holds the review window's chapter only on the request's own branch, with its report", () => {
+    const review = { branchId: 'br_1', chapterId: 'chap_1', actionId: 'act_1' }
+    expect(reviewWindowChapter(review, chapters, 'br_1')).toBe(held)
+    expect(reviewWindowChapter(null, chapters, 'br_1')).toBeNull()
+    expect(reviewWindowChapter(review, chapters, 'br_fork')).toBeNull()
+    expect(reviewWindowChapter(review, chapters, null)).toBeNull()
+    expect(reviewWindowChapter({ ...review, actionId: 'act_rerun' }, chapters, 'br_1')).toBeNull()
+    expect(reviewWindowChapter({ ...review, chapterId: 'chap_9' }, chapters, 'br_1')).toBeNull()
   })
 
   it("gives back a close result's own chapter while the result is the open's and it stands", () => {
