@@ -108,7 +108,7 @@ import {
   suggestionRefreshHoldReason,
 } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
-import { switchGateReason, switchResultNotice } from '@/components/reader/switch-result-notice'
+import { switchResultNotice } from '@/components/reader/switch-result-notice'
 import {
   closeResolvedEntry,
   describeCloseFailure,
@@ -280,8 +280,13 @@ function readerPlaceholder(state: {
   return null
 }
 
-function postSwitchNotice(result: SwitchBranchResult, storyId: string): void {
-  const notice = switchResultNotice(result, switchGateReason(generationStore.getTxState(), storyId))
+function postSwitchNotice(result: SwitchBranchResult, storyId: string, fromBranchId: string): void {
+  const notice = switchResultNotice(result, {
+    txState: generationStore.getTxState(),
+    storyId,
+    fromBranchId,
+    turnBodyActive: generationStore.isTurnBodyActive(fromBranchId),
+  })
   if (notice == null) return
   if (notice.kind === 'info') toast.info(notice.message)
   else toast.error(notice.message)
@@ -1709,7 +1714,7 @@ function ReaderComposerBody({
           { storyId, fromBranchId: branchId, toBranchId, hold, isCurrentRequest, replaceStack },
           ctx,
         ).then(
-          (result) => postSwitchNotice(result, storyId),
+          (result) => postSwitchNotice(result, storyId, branchId),
           (error: unknown) => {
             logger.error('reader.branch_switch_threw', {
               branchId,
