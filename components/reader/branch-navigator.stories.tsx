@@ -479,6 +479,27 @@ export const EscInRenameKeepsNavigatorPhone: Story = {
     await expect(screen.getByRole('button', { name: 'Main' })).toBeVisible()
     await pause(300)
     await expect(navigator('Branches · 3')).toBeVisible()
+    // A Sheet mid-exit still reads visible; the close it reports at once does not.
+    await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
+    await expect(args.onRename).not.toHaveBeenCalled()
+  },
+}
+
+/** Esc from outside the input, with an empty name left open, closes as usual and saves nothing. */
+export const EscOutsideRenameCloses: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await openFromChip()
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Main' }))
+    const field = await renameField()
+    await userEvent.keyboard('{Backspace}')
+    // The blur refuses the empty name, so the row stays in rename with focus off the input.
+    await userEvent.click(screen.getByText('Branches · 3'))
+    await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'))
+    await expect(field).toBeInTheDocument()
+    await expect(field).not.toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(queryNavigator('Branches · 3')).toBeNull())
     await expect(args.onRename).not.toHaveBeenCalled()
   },
 }

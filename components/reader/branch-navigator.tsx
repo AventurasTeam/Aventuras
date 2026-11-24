@@ -170,9 +170,9 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
       <PopoverContent
         align="start"
         className="w-[360px] p-0"
-        // Radix hears Esc first, on the document; while a row renames, Esc is the input's cancel.
+        // Radix hears Esc first, on the document; Esc aimed at the rename input is its cancel.
         onEscapeKeyDown={(event) => {
-          if (renamingId != null) event.preventDefault()
+          if (renamingId != null && event.target instanceof HTMLInputElement) event.preventDefault()
         }}
         onInteractOutside={() => {
           interactedOutside.current = true
