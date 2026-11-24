@@ -31,6 +31,11 @@ export type DiffCache = {
   evictBranch(branchId: string): void
   /** Hears each evicted branch. Returns its unregister. */
   onEvict(listener: (branchId: string) => void): () => void
+  /**
+   * Whether no eviction of the branch has come since the walk that produced this entry, which the
+   * LRU may have dropped since. An object the cache never produced is not current.
+   */
+  isCurrent(branchId: string, entry: DiffCacheEntry): boolean
 }
 
 type Waiting = {
@@ -83,6 +88,8 @@ export function createDiffCache({
   const failures = new Map<string, { readonly branchId: string; readonly error: unknown }>()
   // Bumped by each eviction, so a walk that started before one can tell it settled after it.
   const generations = new Map<string, number>()
+  // Weak, so a dropped entry goes once no host holds it, and answers `isCurrent` until then.
+  const insertedIn = new WeakMap<DiffCacheEntry, number>()
   // One entry per registration, so a function registered twice unregisters one at a time.
   const registrations = new Set<{ readonly listener: (branchId: string) => void }>()
   let queued: Waiting[] = []
@@ -101,6 +108,7 @@ export function createDiffCache({
     const key = keyOf(branchId, deltaId)
     entries.delete(key)
     entries.set(key, { branchId, entry })
+    insertedIn.set(entry, generationOf(branchId))
     for (const oldest of entries.keys()) {
       if (entries.size <= capacity) break
       entries.delete(oldest)
@@ -212,6 +220,8 @@ export function createDiffCache({
         registrations.delete(registration)
       }
     },
+
+    isCurrent: (branchId, entry) => insertedIn.get(entry) === generationOf(branchId),
   }
   return cache
 }

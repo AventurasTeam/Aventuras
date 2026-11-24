@@ -1672,6 +1672,7 @@ populate(delta: UpdateDelta): Promise<DiffOutcome>            // async; runs the
 populateBatch(deltas: readonly UpdateDelta[]): Promise<void>  // groups by branch and target
 evictBranch(branchId: string): void              // the post-commit hook's listener
 onEvict(listener: (branchId: string) => void): () => void  // a host hears each evicted branch
+isCurrent(branchId: string, entry: DiffCacheEntry): boolean  // no eviction since entry's walk, LRU drop or not
 ```
 
 `populate` resolves `gone` for any requested delta its walk gave no

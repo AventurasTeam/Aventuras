@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { logger } from '@/lib/diagnostics'
 
-import { createDiffCache, DIFF_CACHE_CAPACITY, DiffEvictedError } from './diff-cache'
+import {
+  createDiffCache,
+  DIFF_CACHE_CAPACITY,
+  DiffEvictedError,
+  type DiffOutcome,
+} from './diff-cache'
 import {
   DiffWalkError,
   type DiffCacheEntry,
@@ -72,6 +77,12 @@ const resultOf = (entry: DiffCacheEntry): WalkResult => ({
   entries: new Map([['dl_1', entry]]),
   gone: new Set<string>(),
 })
+
+async function entryOf(pending: Promise<DiffOutcome>): Promise<DiffCacheEntry> {
+  const outcome = await pending
+  if (outcome.kind !== 'entry') throw new Error(`expected an entry, got ${outcome.kind}`)
+  return outcome.entry
+}
 
 describe('createDiffCache', () => {
   it('misses, populates through the walk, then hits on peek and populate', async () => {
@@ -374,6 +385,47 @@ describe('createDiffCache', () => {
 
       await expect(repopulated[0]).resolves.toEqual({ kind: 'entry', entry: FRESH })
       expect(walk).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('currency', () => {
+    it("keeps an entry current through another branch's eviction, not its own, and counts the re-walk's", async () => {
+      const cache = createDiffCache({ walk: answering() })
+      const walkedFirst = await entryOf(cache.populate(delta('dl_1')))
+      expect(cache.isCurrent('br_b', walkedFirst)).toBe(true)
+
+      cache.evictBranch('br_c')
+      expect(cache.isCurrent('br_b', walkedFirst)).toBe(true)
+
+      cache.evictBranch('br_b')
+      expect(cache.isCurrent('br_b', walkedFirst)).toBe(false)
+      const rewalked = await entryOf(cache.populate(delta('dl_1')))
+      expect(cache.isCurrent('br_b', rewalked)).toBe(true)
+      expect(cache.isCurrent('br_b', walkedFirst)).toBe(false)
+    })
+
+    it('keeps an entry the LRU dropped current while no eviction comes', async () => {
+      const walk = vi.fn<DiffWalk>(async () => ({
+        entries: new Map([
+          ['dl_1', FRESH],
+          ['dl_2', STALE],
+        ]),
+        gone: new Set<string>(),
+      }))
+      const cache = createDiffCache({ walk, capacity: 1 })
+
+      const dropped = await entryOf(cache.populate(delta('dl_1')))
+      expect(cache.peek('br_b', 'dl_1')).toBeUndefined()
+      expect(cache.isCurrent('br_b', dropped)).toBe(true)
+    })
+
+    it('counts no object it never produced current, even one equal to an entry it holds', async () => {
+      const cache = createDiffCache({ walk: answering() })
+      await cache.populate(delta('dl_1'))
+
+      const lookalike = { old: { title: 'The ford' }, new: { title: 'dl_1 on br_b' }, names: {} }
+      expect(cache.peek('br_b', 'dl_1')).toEqual(lookalike)
+      expect(cache.isCurrent('br_b', lookalike)).toBe(false)
     })
   })
 
