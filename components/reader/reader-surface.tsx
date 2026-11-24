@@ -542,7 +542,7 @@ export function ReaderSurface({
     )
   }, [reportedEntryId, editDirty])
 
-  // Branch switch: new window, scrolled to bottom, edit state dropped
+  // A branchKey change drops edit state; the reader remounts per branch, so this backstops it
   // (reader-composer.md → Loaded-set model).
   const landedBranchRef = useRef<string | null>(null)
   useEffect(() => {
@@ -745,7 +745,7 @@ export function ReaderSurface({
     arbiterRef.current.onHasNewerChange(hasNewer)
   }, [hasNewer])
 
-  // Ahead of open-at-bottom so branch cleanup never clears the new branch's bottom pin.
+  // Ahead of open-at-bottom, so the branch reset never clears the pin open-at-bottom starts.
   useLayoutEffect(() => {
     stopLanding()
     arbiterRef.current.onBranchChange()
@@ -845,7 +845,7 @@ export function ReaderSurface({
   }, [shown, writeScrollTop])
 
   // After the anchor rule. Mid-gesture, a change above the anchor row (rows, breaks, top shimmer)
-  // holds that part until rest; below stays live. A jump's slice and a branch switch never wait.
+  // holds that part until rest; below stays live. A jump's slice and a new branchKey never wait.
   useLayoutEffect(() => {
     incomingRef.current = incoming
     const source = sourceRef.current

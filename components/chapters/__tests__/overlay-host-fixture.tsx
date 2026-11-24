@@ -76,8 +76,8 @@ export function renderHost() {
   )
 }
 
-export function openWindow(chapterId = 'chap_2'): void {
-  act(() => chapterOverlaysStore.openReviewWindow({ chapterId }))
+export function openWindow(chapterId = 'chap_2', branchId = 'br_1'): void {
+  act(() => chapterOverlaysStore.openReviewWindow({ branchId, chapterId }))
 }
 
 export function openRerun(input: { fromReview?: boolean } = {}): void {

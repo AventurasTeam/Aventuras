@@ -70,6 +70,8 @@
   .crumb-time.interactive:hover { color: var(--ink); }
   .crumb-time .chev { font-size: 9px; color: var(--ink-faint); margin-left: 2px; }
   .crumb-time:not(.interactive) .chev { display: none; }
+  /* branch chip — beside the title after the chapter and time chips, on every tier (navigation.md) */
+  .crumbs #branch-chip { align-self: center; flex-shrink: 0; }
   /* time-chip popover — same anchor pattern as chapter-popover; lighter content */
   .time-popover { position: absolute; top: calc(100% + 8px); left: 0; background: var(--bg-region); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.1); min-width: 240px; z-index: 20; display: none; padding: 10px 12px; }
   .time-popover.open { display: block; }
@@ -893,6 +895,8 @@
         <button class="time-popover-action" id="time-popover-flip">Flip era&hellip;</button>
       </div>
     </span>
+    <span class="crumb-sep" id="branch-chip-sep">&middot;</span>
+    <div class="icon-btn" id="branch-chip" title="On main &middot; 3 branches &middot; click to open Branch Navigator">&#x2387;<span class="count-badge" id="branch-count-badge">3</span></div>
 
     <div class="chapter-popover" id="chapter-popover">
       <div class="chapter-list">
@@ -927,7 +931,6 @@
         <button class="gen-cancel-action" id="gen-cancel-action">Cancel generation</button>
       </div>
     </div>
-    <div class="icon-btn" id="branch-chip" title="3 branches &middot; click to open Branch Navigator">&#x2387;<span class="count-badge" id="branch-count-badge">3</span></div>
     <div class="icon-btn" title="Actions (Cmd/Ctrl-K / tap to open)">&#9906;</div>
     <div class="icon-btn" title="Story settings">&#9965;</div>
     <div class="icon-btn" title="Back to story list">&larr;</div>
@@ -2509,12 +2512,14 @@
 
   // branch-chip visibility — chip is hidden when only 1 branch exists
   const branchChip = document.getElementById('branch-chip');
+  const branchChipSep = document.getElementById('branch-chip-sep');
   const branchCountBadge = document.getElementById('branch-count-badge');
   function setBranchCount(n) {
     const count = parseInt(n, 10);
     branchChip.style.display = count > 1 ? '' : 'none';
+    branchChipSep.style.display = count > 1 ? '' : 'none';
     branchCountBadge.textContent = String(count);
-    branchChip.title = count + ' branches · click to open Branch Navigator';
+    branchChip.title = 'On main · ' + count + ' branches · click to open Branch Navigator';
     document.querySelectorAll('[data-branch-count]').forEach(b => b.classList.toggle('active', b.dataset.branchCount === n));
   }
   document.querySelectorAll('[data-branch-count]').forEach(b => b.addEventListener('click', () => setBranchCount(b.dataset.branchCount)));

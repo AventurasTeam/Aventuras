@@ -869,6 +869,19 @@ describe('pending turns', () => {
     })
     await other.settle()
   })
+
+  it('reads a turn body as active on its branch until the body settles, past its mark', async () => {
+    const turn = holdTurn('b1')
+    expect(generationStore.isTurnBodyActive('b1')).toBe(true)
+    expect(generationStore.isTurnBodyActive('b2')).toBe(false)
+
+    turn.endEarly()
+    expect(pending()).toEqual([])
+    expect(generationStore.isTurnBodyActive('b1')).toBe(true)
+
+    await turn.settle()
+    expect(generationStore.isTurnBodyActive('b1')).toBe(false)
+  })
 })
 
 describe('generation store', () => {

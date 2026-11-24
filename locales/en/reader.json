@@ -367,7 +367,8 @@
     "redoFailed": "Couldn't redo. Please try again.",
     "blockedWhileGenerating": "Unavailable while generating.",
     "blockedWhileSwapping": "Unavailable while the embedder switch finishes.",
-    "unknownCalendar": "This story's calendar isn't available, so world time can't be edited."
+    "unknownCalendar": "This story's calendar isn't available, so world time can't be edited.",
+    "browseBranches": "Browse branches…"
   },
   "undo": {
     "menu": {
@@ -509,5 +510,17 @@
     "involved": "{{count}} involved",
     "aware": "{{count}} aware",
     "commonKnowledge": "Common knowledge"
+  },
+  "branches": {
+    "renameInput": "Branch name",
+    "chipLabel": "On {{name}} · {{count}} branches",
+    "title": "Branches · {{count}}",
+    "close": "Close",
+    "current": "Current branch",
+    "rename": "Rename {{name}}",
+    "delete": "Delete {{name}}",
+    "paused": "Generation in progress — switching paused.",
+    "switchFailed": "Couldn't switch branches.",
+    "renameFailed": "Couldn't rename the branch."
   }
 }

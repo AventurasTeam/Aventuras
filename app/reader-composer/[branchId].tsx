@@ -1,13 +1,21 @@
 import { useIsFocused } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react'
 import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { heldControl } from '@/components/compounds/entry-card-hold'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
+import { branchSwitchPaused } from '@/components/reader/branch-switch-paused'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
 import { closeHereEntryIds } from '@/components/reader/close-here-entries'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
@@ -25,6 +33,7 @@ import { useContentEditing } from '@/components/reader/content-editing'
 import { createEditRequests, type EditBridgeAnswer } from '@/components/reader/edit-bridge-requests'
 import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { inlineEditGuardArmed } from '@/components/reader/inline-edit-guard-armed'
 import { nativeEditPort, webEditPort } from '@/components/reader/inline-edit-port'
 import { routeJumpToBottom } from '@/components/reader/jump-to-bottom'
 import {
@@ -38,6 +47,10 @@ import { ReaderPeekDrawer } from '@/components/reader/peek/reader-peek-drawer'
 import { ReaderBrowseChip } from '@/components/reader/rail/reader-browse-chip'
 import { ReaderRailColumn } from '@/components/reader/rail/reader-rail-column'
 import { useRailData } from '@/components/reader/rail/use-rail-data'
+import {
+  ReaderBranchNavigator,
+  type ReaderBranchNavigatorHandle,
+} from '@/components/reader/reader-branch-navigator'
 import {
   ReaderChapterChips,
   type ReaderChapterChipsHandle,
@@ -68,7 +81,6 @@ import {
   inlineEditSaveGate,
   rowGateReason,
   rowReversalFlags,
-  undoHold,
 } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
@@ -96,6 +108,7 @@ import {
   suggestionRefreshHoldReason,
 } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
+import { switchResultNotice } from '@/components/reader/switch-result-notice'
 import {
   closeResolvedEntry,
   describeCloseFailure,
@@ -112,7 +125,11 @@ import {
   useProfileFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
+import { readerUndoRedoGates } from '@/components/reader/undo-redo-gates'
+import { useAliveRef } from '@/components/reader/use-alive-ref'
+import { useEmptyAfterRowsSignal } from '@/components/reader/use-empty-after-rows-signal'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
+import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useReaderSlice } from '@/components/reader/use-reader-slice'
 import { useReaderUndo } from '@/components/reader/use-reader-undo'
@@ -134,6 +151,7 @@ import { useInlineEditGuard } from '@/hooks/use-inline-edit-guard'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
 import { useOverlaySurface } from '@/hooks/use-overlay-surface'
+import { useReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
@@ -145,16 +163,19 @@ import {
   readRecentEntries,
   refreshSuggestions,
   regenerateTurn,
+  renameBranch,
   rollbackToEntry,
   runClassifierNow,
   runOwedClose,
   runPickedClose,
   sameRollbackCounts,
   submitTurn,
+  switchBranch,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RollbackCounts,
   type StoryEntryRejection,
+  type SwitchBranchResult,
 } from '@/lib/actions'
 import { copyText } from '@/lib/clipboard'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
@@ -189,6 +210,7 @@ import {
   isBranchHeld,
   isHeadReversalBlocked,
   isUserEditBlocked,
+  readerHoldStore,
   readerRailStore,
   RERUN_HELD,
   rehydrateStories,
@@ -258,29 +280,56 @@ function readerPlaceholder(state: {
   return null
 }
 
-export default function ReaderComposerRoute() {
-  const router = useRouter()
-  const tier = useTier()
-  const showRail = tier !== 'phone'
-  const isFocused = useIsFocused()
+function postSwitchNotice(result: SwitchBranchResult, storyId: string, fromBranchId: string): void {
+  const notice = switchResultNotice(result, {
+    txState: generationStore.getTxState(),
+    storyId,
+    fromBranchId,
+    turnBodyActive: generationStore.isTurnBodyActive(fromBranchId),
+  })
+  if (notice == null) return
+  if (notice.kind === 'info') toast.info(notice.message)
+  else toast.error(notice.message)
+}
+
+export default function ReaderComposerRoute(): ReactElement {
   const { branchId, entry } = useLocalSearchParams<{
     branchId: string
     entry?: string | string[]
   }>()
+  // Keyed on the branch: a switch mounts a fresh reader whatever the router reuses, so refs, the
+  // composer and every mount effect start over (reader-composer.md → Loaded-set model).
+  return <ReaderComposerBody key={branchId} branchId={branchId} entry={entry} />
+}
+
+function ReaderComposerBody({
+  branchId,
+  entry,
+}: {
+  branchId: string
+  entry?: string | string[]
+}): ReactElement {
+  const router = useRouter()
+  const tier = useTier()
+  const showRail = tier !== 'phone'
+  const isFocused = useIsFocused()
   const branchIdRef = useRef(branchId)
-  // Assigned post-commit, not during render: a discarded render would otherwise
-  // publish a branch that never landed, and every reader of this ref treats a
-  // mismatch as "the user left" — dropping work that was still legitimate.
-  // Layout, not passive: the commit phase runs to completion before any promise
-  // continuation, so no settling callback can read the pre-switch branch back.
+  // Post-commit, not in render: a discarded render would publish a branch that never landed
+  // (the body is keyed on branchId; this only backstops that).
   useLayoutEffect(() => {
     branchIdRef.current = branchId
   }, [branchId])
-  // One composer and one lastSubmission serve every branch, so settle-time
-  // recovery must prove the branch didn't change under its awaits before handing
-  // the user's text back. Persisted recovery (the failure entry) is branch-bound
-  // and stays unconditional.
-  const branchUnchanged = useCallback((started: string) => branchIdRef.current === started, [])
+  const aliveRef = useAliveRef()
+  // One line per reader instance: a switch that mounts the reader twice shows in the log.
+  useEffect(() => {
+    logger.debug('reader.mounted', { branchId: branchIdRef.current })
+  }, [])
+  // Settle-time recovery returns the user's text only to a reader still mounted;
+  // the persisted failure entry is branch-bound and unconditional.
+  const branchUnchanged = useCallback(
+    (started: string) => aliveRef.current && branchIdRef.current === started,
+    [aliveRef],
+  )
 
   const [rollback, setRollback] = useState<ConfirmState | null>(null)
   const [lastSubmission, setLastSubmission] = useState<{
@@ -440,8 +489,8 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.models.suggestion != null,
   )
 
-  // The failure belongs to the entry it was fired on; a turn, a rollback or a
-  // branch switch replaces the strip's contents, so the error must not ride along.
+  // The failure belongs to the entry it was fired on; a turn or a rollback replaces the strip's
+  // contents, so the error must not ride along. branchId backstops the per-branch remount.
   useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
 
   const swapTarget = openForBranch?.settings.embedding_swap_target
@@ -479,6 +528,7 @@ export default function ReaderComposerRoute() {
   const surfaceRef = useRef<ReaderSurfaceHandle>(null)
   const documentRef = useRef<ReaderDocumentRef>(null)
   const chapterChipsRef = useRef<ReaderChapterChipsHandle>(null)
+  const branchNavigatorRef = useRef<ReaderBranchNavigatorHandle>(null)
   const [chapterPopoverOpen, setChapterPopoverOpen] = useState(false)
   const [syncNonce, setSyncNonce] = useState(0)
   const [documentPainted, setDocumentPainted] = useState(false)
@@ -495,21 +545,17 @@ export default function ReaderComposerRoute() {
     [entries, slice.rows, editSession?.entryId],
   )
 
-  // A branch switch must drop any in-flight buffer from the prior branch —
-  // it belongs to a different entry list and would otherwise leak forward.
-  // `lastSubmission` rides along: retry prefers it over the persisted copy, so
-  // carrying it across would offer the previous branch's text to this branch's
-  // system entry.
+  // Backstop for the per-branch remount: another branch's buffer would leak into this stream, and
+  // its `lastSubmission` (retry prefers it to the persisted copy) into this system entry.
   useEffect(() => {
     streamBufferRef.current = null
     setStreaming(null)
     setLastSubmission(null)
   }, [branchId])
 
-  // Leaving the branch (switch or unmount) aborts an in-flight refresh: its
-  // target entry is on the branch being left, and letting it settle would hold
-  // the edit gate on the branch just entered
-  // (reader-composer.md → Edge cases → Branch switch with chips in flight).
+  // Unmounting aborts a refresh in flight: no strip is left to show its chips, and it holds the
+  // gate. A switch waits for one; Back from a reader pushed above World and a dismiss over an
+  // unfocused reader don't (reader-composer.md → Edge cases).
   useEffect(
     () => () => {
       // Unguarded: awaitRunTerminal resolves on no match, so a pre-flight check repeats it.
@@ -766,25 +812,24 @@ export default function ReaderComposerRoute() {
     [branchId],
   )
 
-  // `editBlocked` rises a queue hop and several awaits after the tap; only Send survives the gap
-  // (the composer clears), so each dispatch marks it: ref is the sync guard, state disables.
-  const dispatchInFlightRef = useRef(false)
-  const [dispatchInFlight, setDispatchInFlight] = useState(false)
-  const beginDispatch = useCallback((): boolean => {
-    if (dispatchInFlightRef.current) return false
-    dispatchInFlightRef.current = true
-    setDispatchInFlight(true)
-    return true
-  }, [])
-  const endDispatch = useCallback(() => {
-    dispatchInFlightRef.current = false
-    setDispatchInFlight(false)
-  }, [])
-  // What every user-edit affordance gates on: the generation gate alone leaves
-  // the pre-registration window open.
-  const actionsBlocked = editBlocked || dispatchInFlight
+  // A switch holds the reader from its guard's go-ahead to its navigation, so no write lands
+  // between its gate check and its publish (branch-navigator.md → Per-row anatomy).
+  const {
+    begin: beginDispatch,
+    end: endDispatch,
+    isBlocked: isDispatchBlocked,
+    isHeld: isReaderHeld,
+    inFlight: dispatchInFlight,
+    held: readerHeld,
+  } = useReaderDispatch(branchId)
+  // What every user-edit affordance gates on: the generation gate alone misses the
+  // pre-registration window and a switch's hold.
+  const actionsBlocked = editBlocked || dispatchInFlight || readerHeld
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
-  const headReversalBlocked = headReversalGateHeld || dispatchInFlight
+  const headReversalBlocked = headReversalGateHeld || dispatchInFlight || readerHeld
+  const switchPaused = generationStore.useGeneration((s) =>
+    branchSwitchPaused({ txState: s.txState, dispatchInFlight, held: readerHeld }),
+  )
   const editGate = editGateOf({ editBlocked: actionsBlocked, headReversalBlocked })
   // A branch held until restart has no run to name; its controls name the hold.
   const gateRunKind = generationStore.useGeneration((s) =>
@@ -802,8 +847,6 @@ export default function ReaderComposerRoute() {
     pill: gateRunKind,
   })
 
-  // reader-composer.md → Inline edit session: every leave runs this guard. Armed on dirty on web;
-  // on native on an open editor, since a dirty report can still be crossing the bridge.
   const editRequests = useMemo(
     () =>
       createEditRequests({
@@ -832,13 +875,18 @@ export default function ReaderComposerRoute() {
     }).reversalDisabled
       ? rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason })
       : undefined
+  // reader-composer.md → Inline edit session: every leave runs this guard.
   const {
     guard,
-    navigateGuarded,
+    navigateGuarded: navigateUnheld,
     dialog: editGuardDialog,
   } = useInlineEditGuard({
     port: editPort,
-    armed: Platform.OS === 'web' ? editSession?.dirty === true : editSession != null,
+    armed: inlineEditGuardArmed({
+      platform: Platform.OS === 'web' ? 'web' : 'native',
+      session: editSession,
+      held: readerHeld,
+    }),
     saveGate: inlineEditSaveGate({
       entryId: editSession?.entryId ?? null,
       headTurnIds: editHeadTurnIds,
@@ -846,14 +894,26 @@ export default function ReaderComposerRoute() {
       reasons: { gate: gateReason, headReversal: headReversalReason },
     }),
   })
-  // C7: review-row presses and the close modal run it first.
-  useOverlaySurface(guard)
   // Stable for every row's handlers: the guard's own identity follows each session transition.
   const guardRef = useRef(guard)
   useLayoutEffect(() => {
     guardRef.current = guard
   })
-  const guardEdit = useCallback((proceed: () => void) => guardRef.current(proceed), [])
+  // A held reader drops every guarded leave: its switch is on the way to its own navigation.
+  const guardEdit = useCallback(
+    (proceed: () => void) => {
+      if (!isReaderHeld()) guardRef.current(proceed)
+    },
+    [isReaderHeld],
+  )
+  const navigateGuarded = useCallback(
+    (path: string) => {
+      if (!isReaderHeld()) navigateUnheld(path)
+    },
+    [isReaderHeld, navigateUnheld],
+  )
+  // C7: review-row presses and the close modal run it first, so the hold covers them too.
+  useOverlaySurface(guardEdit)
   const guardedStripFix = useMemo(
     () =>
       stripErrorFix == null
@@ -1058,8 +1118,8 @@ export default function ReaderComposerRoute() {
         }
         const { result } = regen
         if (result.outcome === 'completed') notifyUnappliedState(branchId)
-        // A branch switch under the dispatch makes the composer's draft another
-        // branch's, so it can neither decide this plan nor receive its text.
+        // A reader that unmounted under the dispatch has no draft to decide this plan or
+        // receive its text.
         const stillHere = branchUnchanged(branchId)
         const plan = planRegenerateOutcome({
           outcome: result.outcome,
@@ -1319,7 +1379,7 @@ export default function ReaderComposerRoute() {
   const openRollback = useCallback(
     async (targetId: string) => {
       // As ↻'s: the dispatch's streaming card says why the tap opened nothing.
-      if (dispatchInFlightRef.current) return
+      if (isDispatchBlocked()) return
       // A tapped delete silently doing nothing reads as broken — and the count
       // read is a DB round trip that can reject as well as refuse.
       let counts: RollbackCounts | StoryEntryRejection | null
@@ -1331,7 +1391,8 @@ export default function ReaderComposerRoute() {
             startedBranchId: branchId,
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
-            dispatchInFlight: dispatchInFlightRef.current,
+            dispatchInFlight: isDispatchBlocked(),
+            readerMounted: aliveRef.current,
           }),
         )
       } catch (err) {
@@ -1362,7 +1423,7 @@ export default function ReaderComposerRoute() {
         countedAtSettle,
       })
     },
-    [branchId],
+    [branchId, aliveRef, isDispatchBlocked],
   )
 
   const showLiveCounts = useCallback(
@@ -1414,7 +1475,7 @@ export default function ReaderComposerRoute() {
     async (entryId: string) => {
       // Opening a confirm whose dispatch the in-flight guard will drop leaves
       // the user watching the modal close on nothing.
-      if (dispatchInFlightRef.current) return
+      if (isDispatchBlocked()) return
       const startedBranchId = branchId
       let counts: RollbackCounts | StoryEntryRejection | null
       const countedAtSettle = generationStore.getSettleCount()
@@ -1425,8 +1486,9 @@ export default function ReaderComposerRoute() {
             startedBranchId,
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
-            dispatchInFlight: dispatchInFlightRef.current,
+            dispatchInFlight: isDispatchBlocked(),
             headReversalBlocked: generationStore.isHeadReversalBlocked(startedBranchId),
+            readerMounted: aliveRef.current,
           }),
         )
       } catch (err) {
@@ -1476,7 +1538,7 @@ export default function ReaderComposerRoute() {
       // Both confirm kinds open as a regenerate confirm; the modal derives copy from the counts.
       setRollback({ mode: 'regenerate', targetId: entryId, targetNumber, counts, countedAtSettle })
     },
-    [branchId, runRegenerate, branchUnchanged],
+    [branchId, aliveRef, runRegenerate, branchUnchanged, isDispatchBlocked],
   )
 
   // Chips are finished prose, so the draft is replaced outright and the mode
@@ -1501,11 +1563,8 @@ export default function ReaderComposerRoute() {
     else void cancelPillRun(branchId)
   }, [branchId, sendPending, handleCancelComposer])
 
-  // Read at settle time, not from the closure: a branch-switch abort whose
-  // reverse-replay fails resolves 'failed' well after the switch, and the
-  // error belongs to the strip that fired it. The guard needs both refs: a
-  // fork's copy keeps the tail's entry id, so the entry ref alone can match
-  // another branch's tail.
+  // Read at settle time, not from the closure: the error belongs to the strip that fired it, and
+  // by then the tail may have moved. branchIdRef backstops the per-branch remount.
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   // Published from the commit, like branchIdRef: the guard below reads both, and
   // an anchor from a render that never landed would fail it against live state.
@@ -1514,9 +1573,7 @@ export default function ReaderComposerRoute() {
   }, [terminalEntry?.id])
 
   const handleRefreshSuggestions = useCallback(() => {
-    if (
-      suggestionRefreshBlocked(generationStore.getTxState(), branchId, dispatchInFlightRef.current)
-    )
+    if (suggestionRefreshBlocked(generationStore.getTxState(), branchId, isDispatchBlocked()))
       return
     const anchor = terminalEntry
     const story = openForBranch
@@ -1536,14 +1593,13 @@ export default function ReaderComposerRoute() {
       ctx,
     )
       // 'rejected' is the self-block a second ⟳ hits while one runs, or a
-      // re-run's hold; 'aborted' is a cancel or a branch switch. Neither fails.
+      // re-run's hold; 'aborted' is a cancel or the reader unmounting. Neither fails.
       .then((result) => {
         if (result.outcome === 'failed') fail(result.error)
       })
       .catch((e: unknown) => {
-        // Logged outside the strip guard: a throw that lands after a branch
-        // switch still has to leave a trace, and beginRun's own unwind path
-        // rethrows without logging.
+        // Outside the strip guard: a throw after unmount still needs a trace, and beginRun's
+        // unwind path rethrows without logging.
         logger.error('pipeline.suggestion_refresh_threw', {
           branchId: startedBranchId,
           entryId: startedEntryId,
@@ -1551,7 +1607,7 @@ export default function ReaderComposerRoute() {
         })
         fail({ kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) })
       })
-  }, [terminalEntry, openForBranch, branchId])
+  }, [terminalEntry, openForBranch, branchId, isDispatchBlocked])
 
   const documentPaintedRef = useRef(false)
   const { resetToTail: resetSliceToTail } = slice
@@ -1610,11 +1666,12 @@ export default function ReaderComposerRoute() {
   const editorOpen = editSession != null
   const handleUndoRedoShortcut = useCallback(
     (ev: KeyboardEvent) => {
-      if (editorOpen) return
+      // undoLastAction and redoLastAction don't read the reader hold, so the shortcut does.
+      if (editorOpen || isReaderHeld()) return
       if (ev.shiftKey) redoAction('keyboard')
       else undoAction('keyboard')
     },
-    [editorOpen, redoAction, undoAction],
+    [editorOpen, isReaderHeld, redoAction, undoAction],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
@@ -1637,6 +1694,60 @@ export default function ReaderComposerRoute() {
   // Settles: on native a rejection would re-reject inside the WebView unlogged.
   const handleJumpToBottom = useCallback(async () => jumpToBottom(), [jumpToBottom])
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
+  const openBranchNavigator = useCallback(() => branchNavigatorRef.current?.open(), [])
+  // Post-commit, as branchIdRef is: a switch whose reader lost focus is abandoned.
+  const isFocusedRef = useRef(isFocused)
+  useLayoutEffect(() => {
+    isFocusedRef.current = isFocused
+  }, [isFocused])
+  const replaceStack = useReplaceStoryStack()
+  // reader-composer.md → Inline edit session: a switch is a guarded leave, so the hold follows it.
+  const handleSwitch = useCallback(
+    (toBranchId: string) => {
+      if (storyId == null || isDispatchBlocked()) return
+      guardEdit(() => {
+        // The guard can answer after its dialog or a bridge query; the reader may have moved on.
+        if (!aliveRef.current || isDispatchBlocked()) return
+        logger.debug('reader.branch_switch_started', { branchId, toBranchId })
+        const hold = readerHoldStore.take(branchId)
+        const isCurrentRequest = () => aliveRef.current && isFocusedRef.current
+        void switchBranch(
+          { storyId, fromBranchId: branchId, toBranchId, hold, isCurrentRequest, replaceStack },
+          ctx,
+        ).then(
+          (result) => postSwitchNotice(result, storyId, branchId),
+          (error: unknown) => {
+            logger.error('reader.branch_switch_threw', {
+              branchId,
+              toBranchId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            // The action's abandon test: a reader that lost focus or unmounted shows nothing.
+            if (isCurrentRequest()) toast.error(t('reader:branches.switchFailed'))
+          },
+        )
+      })
+    },
+    [storyId, branchId, guardEdit, aliveRef, replaceStack, isDispatchBlocked],
+  )
+  // Owns the failure's toast and log, so it resolves whatever the write did.
+  const handleRename = useCallback(
+    async (id: string, name: string): Promise<void> => {
+      if (storyId == null) return
+      try {
+        const result = await renameBranch({ storyId, branchId: id, name }, ctx)
+        if (result.status === 'rejected' && result.code === 'missing')
+          toast.error(t('reader:branches.renameFailed'))
+      } catch (error) {
+        logger.error('reader.branch_rename_threw', {
+          branchId: id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        toast.error(t('reader:branches.renameFailed'))
+      }
+    },
+    [storyId],
+  )
   const sendEntryLanding = useCallback((entryId: string, sliceKey: number) => {
     if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId, sliceKey)
     else documentRef.current?.jumpToEntry(entryId, sliceKey)
@@ -1710,17 +1821,14 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
-    // Undo of the turn is a head reversal, live through a pass; the action refuses any other target
-    // with `gated`, and every target while a re-run runs. Redo never is one: whole gate. An open
-    // editor holds both, the gate's reason outranking its own.
-    const held = t('reader:editFocus.held')
-    const undoGate = undoHold({
+    const { undo, redo } = readerUndoRedoGates({
+      hydrated: hydrationSucceeded,
       headReversalBlocked,
       rerunRunning,
+      actionsBlocked,
+      editorOpen,
       reasons: { gate: gateReason, headReversal: headReversalReason },
     })
-    const undo = heldControl(undoGate.blocked, editorOpen, { gate: undoGate.reason, held })
-    const redo = heldControl(actionsBlocked, editorOpen, { gate: gateReason, held })
     return {
       id: 'reader',
       header: t('chrome.onThisScreen'),
@@ -1749,6 +1857,15 @@ export default function ReaderComposerRoute() {
         ...(entries.length > 0
           ? [{ id: 'jump-to-bottom', label: t('reader:jumpToBottom'), onActivate: jumpToBottom }]
           : []),
+        // Never run-gated: the navigator pauses its own rows.
+        {
+          id: 'browse-branches',
+          label: t('reader:actions.browseBranches'),
+          disabled: !hydrationSucceeded,
+          disabledReason: hydrationSucceeded ? undefined : t('reader:hydrationLoading'),
+          opensSheet: true,
+          onActivate: openBranchNavigator,
+        },
       ],
     }
   }, [
@@ -1762,8 +1879,10 @@ export default function ReaderComposerRoute() {
     rerunRunning,
     gateReason,
     editorOpen,
+    hydrationSucceeded,
     entries.length,
     jumpToBottom,
+    openBranchNavigator,
   ])
 
   // Short of the tail the reply streams below the slice, reached by scrolling or Jump to bottom.
@@ -1801,6 +1920,7 @@ export default function ReaderComposerRoute() {
     hydrationSucceeded,
     isEmpty: entries.length === 0,
   })
+  useEmptyAfterRowsSignal(branchId, hydrationSucceeded, entries.length)
 
   const surfaceProps = {
     rows: slice.rows,
@@ -1854,20 +1974,31 @@ export default function ReaderComposerRoute() {
         </TruncatedText>
       }
       centerExtras={
-        hydrationSucceeded ? (
-          <ReaderChapterChips
-            ref={chapterChipsRef}
-            branchId={branchId}
-            entries={entries}
-            frame={worldTimeFrame}
-            progress={chapterProgress}
-            chapterAutoClose={openForBranch?.settings.chapterAutoClose ?? true}
-            gateReason={gateReason}
-            isFocused={isFocused}
-            onJumpToEntry={followEntry}
-            onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
-            onOpenChange={setChapterPopoverOpen}
-          />
+        hydrationSucceeded && storyId != null ? (
+          <>
+            <ReaderChapterChips
+              ref={chapterChipsRef}
+              branchId={branchId}
+              entries={entries}
+              frame={worldTimeFrame}
+              progress={chapterProgress}
+              chapterAutoClose={openForBranch?.settings.chapterAutoClose ?? true}
+              gateReason={gateReason}
+              isFocused={isFocused}
+              onJumpToEntry={followEntry}
+              onManageChapters={() => navigateGuarded(`/chapter-timeline/${branchId}`)}
+              onOpenChange={setChapterPopoverOpen}
+            />
+            <ReaderBranchNavigator
+              ref={branchNavigatorRef}
+              storyId={storyId}
+              branchId={branchId}
+              isFocused={isFocused}
+              paused={switchPaused}
+              onSwitch={handleSwitch}
+              onRename={handleRename}
+            />
+          </>
         ) : undefined
       }
       chapterProgress={chapterProgress}
@@ -1890,6 +2021,7 @@ export default function ReaderComposerRoute() {
       onOpenStorySettings={() => {
         if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)
       }}
+      storySettingsDisabledReason={readerHeld ? gateReason : undefined}
       actions={
         <AppActionsMenu
           contextual={contextualActions}
@@ -1897,7 +2029,7 @@ export default function ReaderComposerRoute() {
           closeChapter={{ branchId, canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
-          blocked={rollback != null || timeEdit != null || undoConfirmOpen}
+          blocked={rollback != null || timeEdit != null || undoConfirmOpen || readerHeld}
           onOpenChange={onMenuOpenChange}
         />
       }

@@ -101,6 +101,11 @@ function cancelPillRunIn(scope: PillScope): void {
 }
 
 /** Why an in-story edit is blocked right now, or undefined when it isn't. */
+export function generationGateReason(editBlocked: true, runKind: string | null): string
+export function generationGateReason(
+  editBlocked: boolean,
+  runKind: string | null,
+): string | undefined
 export function generationGateReason(
   editBlocked: boolean,
   runKind: string | null,

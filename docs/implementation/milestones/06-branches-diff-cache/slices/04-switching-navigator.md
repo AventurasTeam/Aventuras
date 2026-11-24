@@ -40,7 +40,7 @@ shares, and a fresh reader instance keyed on its branch replaces the old
 one, so its refs, composer and mount effects start over. The working-set
 stores hold one branch keyed by id alone, so a route left showing the
 old branch renders empty and never re-hydrates
-(`app/reader-composer/[branchId].tsx:596-625`,
+(`app/reader-composer/[branchId].tsx:629-657`,
 `hooks/use-cold-open-story.ts:22-48`): a switch must leave no such route
 in the stack, and the old reader must never render a commit over the
 new branch's rows. The navigator is reader-only chrome, a Popover on
@@ -70,9 +70,8 @@ from `Browse branches…`.
   [`Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression)
   — what a switch resets and what guards it.
 - [`actions-menu.md → Contextual zone`](../../../../ui/patterns/actions-menu.md#contextual-zone)
-  — `Browse branches…`, always present and never gated.
-- [`principles.md → Top-bar design rule`](../../../../ui/principles.md#top-bar-design-rule)
-  (the right-cluster reading of the chip's place),
+  — `Browse branches…`, always present and never run-gated.
+- [`principles.md → Top-bar design rule`](../../../../ui/principles.md#top-bar-design-rule),
   [`Reader-only chrome`](../../../../ui/principles.md#reader-only-chrome),
   [`Edit restrictions during in-flight generation`](../../../../ui/principles.md#edit-restrictions-during-in-flight-generation),
   [`What's gated`](../../../../ui/principles.md#whats-gated),
@@ -153,10 +152,11 @@ Implementation notes.
   in Storybook on web and on the AVD. `Browse branches…` on phone asks
   for the navigator Sheet while the Actions Sheet leaves, since a row's
   activation closes the overlay and runs the entry in one call
-  (`components/ui/searchable-overlay-list.tsx:1185-1192`). If the
+  (`activate` in `components/ui/searchable-overlay-list.tsx`). If the
   present is dropped, the reader holds the navigator's open until the
   Actions Sheet's exit, as `useHeldUntilDismissed` holds the chapter
   popover's actions, which needs an exit callback out of `ActionsMenu`.
+  The slice waits for the exit whatever the result (Implementation notes).
 
 **The branch read and its store (C8).**
 
@@ -164,8 +164,8 @@ Implementation notes.
   (`lib/db/stories/stories.table.ts:39-49`): id, name, parent, fork
   entry and `created_at`, ordered by `created_at` then id. It takes a
   story id and a `db`, so it runs with no story open; 6.6's Duplicate
-  dialog calls it from the story list. Where it lives is an open
-  question.
+  dialog calls it from the story list. It lives in
+  `lib/stores/branches/`.
 - A store holding the open story's rows and the id of the story they
   belong to. Its rows for any other story are an empty list, as C5's
   accessor answers for another branch. A refresh re-reads one story's
@@ -176,8 +176,10 @@ Implementation notes.
   to the user (C8).
 - Who refreshes it: rename, after its commit; the reader, on mount for
   its story, which is the refresh after a switch's or a fork's
-  navigation that C8 asks for; delete in 6.6 and the fork's callers in
-  6.5. `resetAllStores` (`lib/stores/index.ts`) resets it.
+  navigation that C8 asks for; the navigator, when it opens while its
+  rows lack the reader's branch (a failed first refresh); delete in 6.6
+  and the fork's callers in 6.5. `resetAllStores`
+  (`lib/stores/index.ts`) resets it.
 
 **The reader hold (C8).** A switch or a fork holds the reader from its
 start to its navigation, so no Send starts a turn on the old branch
@@ -195,9 +197,9 @@ stack.
   load, an abandoned switch, a fork that refused. The reader's unmount
   clears any hold left on its branch.
 - While it holds, the reader treats its gated controls as blocked, as a
-  dispatch does (`dispatchInFlight`, `app/reader-composer/[branchId].tsx:781-795`),
-  and closes its ways out: the Actions menu (`blocked`, `:1910`), ⛭
-  (`:1900-1902`), and every link that leaves through `navigateGuarded`
+  dispatch does (`useReaderDispatch`, which the route reads for both),
+  and closes its ways out: the Actions menu (`blocked`), ⛭ (its
+  disabled reason), and every link that leaves through `navigateGuarded`
   or `guardEdit` (the chapter popover's `Manage chapters →`, the Browse
   chip's and the peek drawer's links, the pill's Memory link). The
   navigator's rows pause. Back and hardware back stay live: leaving
@@ -216,26 +218,31 @@ stack.
     a hard-gate run, a pending turn or a reversal closes. A branch in
     `heldBranches` blocks neither leaving it nor entering it;
   - a branch that is missing or belongs to another story;
-  - a switch already running.
+  - a switch already running;
+  - a story that is busy, or a turn body still active on the branch
+    left.
 
   The current branch is no switch: its row closes the navigator and
   nothing runs.
 
-- The steps, in C8's order: write `stories.current_branch_id`; read the
-  branch's rows, the read half of the load every open shares; re-read
-  the stories store (`rehydrateStories`); then, in one synchronous
-  block, fill the working-set stores, publish the branch with
+- The steps: write `stories.current_branch_id`; read the branch's rows,
+  the read half of the load every open shares; re-read the stories store
+  (`rehydrateStories`); then, in one synchronous block, navigate through
+  the stack-replace helper below and read the stack back, and only if
+  the reset took fill the working-set stores, publish the branch with
   `currentStoryStore.set`, never `open`, drop the overlays store's close
-  result, and navigate through the stack-replace helper below.
-  `navigationStore`'s branch follows, as `openStory` sets it.
+  result and release the hold. C8 lists the navigation last; the reset
+  goes first because a guard can prevent it, and a fill made before it
+  can't be taken back (Implementation notes). `navigationStore`'s
+  branch follows, as `openStory` sets it.
 - The load comes apart. `loadAndPublish` reads every table, then fills
   the working-set stores and publishes in one synchronous tail
   (`operational.ts:107-214`). Here its reads run at the read step and
   its fill moves into the synchronous block: the old reader's rows
   filter to nothing the moment the stores hold the new branch, so a
   fill before the awaited stories re-read would let it commit a render
-  over them, empty. Nothing is awaited between the fill, the publish
-  and the navigation. The load's other success effects stay, in its
+  over them, empty. Nothing is awaited between the reset, the fill
+  and the publish. The load's other success effects stay, in its
   order: `storiesStore.clearOpenFailure` before the publish, then
   `kickStoryDrain` and the token encoder's warm-up after it
   (`operational.ts:194,208,212`). The drain kick is the one that
@@ -248,6 +255,8 @@ stack.
   and returns a typed failure it logs (C8). A pointer left on a branch
   that can't load would fail every later open of the story from the
   list.
+- A reset that doesn't take counts as a failed load, whether a
+  `beforeRemove` prevention swallowed it or the helper refused it.
 - A failed stories re-read counts as a failed load. `rehydrateStories`
   logs and returns `false`, never throws, and keeps a store that still
   names the old branch; publishing over it would let Story Settings'
@@ -259,7 +268,8 @@ stack.
   started it lost focus or unmounted before the publish: its
   `isCurrentRequest`, as `loadOpenStory` takes one, answers false from
   then on. It fills, publishes and navigates nothing, and releases the
-  hold.
+  hold. A failure met once the reader has left reads as abandoned too:
+  it is logged, never toasted.
 - A switch is not a story open (C8). `openSeq` stays, so the embedding
   upgrade prompt isn't raised again
   (`lib/embedder-swap/upgrade-prompt.ts:37-44`). The close result is
@@ -268,13 +278,14 @@ stack.
   so its done state ends however fast the user comes back.
 - The show-branch tail, for a caller whose own transaction moved the
   pointer (6.5, after `forkBranch`, on the create path and the re-run
-  path): the same read, re-read, fill, publish, drop and navigation,
-  with no gate check and no pointer write, since its caller's own
-  refusal read the gate. It releases its caller's hold at the
-  navigation.
+  path): the same read, re-read and block, with no gate check and no
+  pointer write, since its caller's own refusal read the gate. It
+  releases its caller's hold at the navigation. A reset that doesn't
+  take fills and publishes nothing and leaves the pointer on the new
+  branch.
   - It never moves the pointer back (C8). If its load fails it fills
     and publishes nothing and still navigates, and the new reader's own
-    load (`app/reader-composer/[branchId].tsx:596-625`) handles the
+    load (`app/reader-composer/[branchId].tsx:629-657`) handles the
     failure, leaving for the Story List with its toast if that load
     fails too: once a fork has committed, canon keeps the route and the
     pointer on the new branch.
@@ -294,7 +305,9 @@ stack.
 
 - A helper that replaces the in-story stack with the reader for a
   branch in one navigation, leaving `[Story List, Reader(B)]` whatever
-  stood above the Story List, the new reader mounting once. It is
+  stood above the Story List, the new reader mounting once. It answers
+  whether the reset took, and dispatches nothing while any route in the
+  app Stack holds an armed unsaved-changes guard. It is
   callable from the root overlay host (`app/_layout.tsx:117`), where
   6.5's re-run confirm lives, as well as from a screen. The stack it
   builds is computed by a pure function beside `routePathname`
@@ -376,7 +389,7 @@ today, reachable through a review reopened after a switch.
   reads the store live, so it drops at once. This slice ships no
   latch: nothing it builds changes the count while the navigator is
   open.
-- Its place is an open question. The default rides `centerExtras`
+- Its place rides `centerExtras`
   beside the chapter and time chips
   (`components/reader/reader-chapter-chips.tsx`,
   `components/shells/screen-shell.tsx:28-34`): beside the title on
@@ -391,8 +404,8 @@ today, reachable through a review reopened after a switch.
   component switches arms by tier, as `ChapterPopover` does
   (`components/reader/chapter-popover.tsx:101-110`), and
   `Browse branches…` opens it through a handle, as the progress strip
-  opens the chapter popover. The Popover's anchor on a single-branch
-  story, which has no chip, is an open question.
+  opens the chapter popover. On a single-branch story, which has no
+  chip, the Popover anchors to an inert trigger in the chip's slot.
 - The header reads `Branches · N`, with a close affordance on desktop
   and tablet. A row holds `✓` on the current branch or a muted `○`, the
   name, then `✎`. The current branch comes first, the rest by
@@ -408,7 +421,7 @@ today, reachable through a review reopened after a switch.
 - Single-branch: one row, rename only, header `Branches · 1`.
 - It closes with the route: gated on `isFocused`, and closed when the
   reader loses focus, as `ReaderChapterChips` closes its popover
-  (`components/reader/reader-chapter-chips.tsx:93`).
+  (`components/reader/reader-chapter-chips.tsx:88-91`).
 - A long name truncates. A long list scrolls inside the Popover's
   bounded list and inside the short Sheet.
 
@@ -421,7 +434,7 @@ today, reachable through a review reopened after a switch.
   and it handles no Esc on native. Rename starts from `✎` only: the
   name swaps for an input prefilled, focused and selected, the marker
   stays and the icons collapse. Enter or blur saves, Esc cancels, and
-  an empty or whitespace-only name turns the border warn and saves
+  an empty or whitespace-only name shows the input's invalid state and saves
   nothing until the user fixes or cancels it. The input is `Input`,
   never a raw `TextInput`, since it sits in a portal on every tier.
 - `renameBranch`: one unlogged update of `branches.name` in a
@@ -518,43 +531,51 @@ the file the read's home puts it beside:
 
 **The hold.** `lib/stores/ui/reader-hold.test.ts`, or the file the
 hold's module puts it beside: a hold taken for a branch reads as held
-for that branch only, its release clears it, and a release from an
-older take leaves a newer one in place.
+for that branch only, its release clears it, a release from an older
+take leaves a newer one in place and a second release of one take
+changes nothing, and `clear` ends every take on its branch.
 
 **The switch.** `lib/actions/stories/switch-branch.test.ts`, on
 `createTestDb`:
 
 - A hard-gate run, a pending turn and a reversal each refuse with
-  nothing written. A `heldBranches` entry on the branch left or on the
-  branch entered refuses nothing. A branch of another story, a missing
-  branch and a second switch while one runs each refuse. Each refusal
-  releases the hold.
+  nothing written, as does a run that holds no gate while the story is
+  busy and a turn body still active on the branch left. A
+  `heldBranches` entry on the branch left or on the branch entered
+  refuses nothing. A branch of another story, a missing branch and a
+  second switch while one runs each refuse. Each refusal releases the
+  hold.
 - On success `stories.current_branch_id` names the new branch, the
   stories store's row names it before the publish, `currentStoryStore`
   holds it with `openSeq` unchanged, the close result is cleared, the
-  navigation runs once through the stack-replace helper, the hold is
-  released at the navigation, and `kickStoryDrain` is called for the
-  story after the publish.
+  navigation runs once through the stack-replace helper, ahead of the
+  fill, the hold is released with the publish, and `kickStoryDrain` is
+  called for the story after the publish.
 - While the stories re-read runs, the working-set stores and
   `currentStoryStore` still hold the branch left. A microtask queued
-  from the fill finds the publish done and the navigation already
-  called.
-- A failed read, and a stories re-read that returns `false`, each put
-  the pointer back on the branch left, leave `currentStoryStore` and the
-  stores on it, navigate nothing, release the hold, and return the
-  failure.
+  from the reset or the fill finds the fill, the publish and the
+  release done.
+- A failed read, a read that throws and a stories re-read that returns
+  `false`, each put the pointer back on the branch left, leave
+  `currentStoryStore` and the stores on it, navigate nothing, release
+  the hold, and return the failure.
+- A stack reset that doesn't take, or throws, puts the pointer back,
+  re-reads the stories store, fills and publishes nothing, releases the
+  hold and returns a failure. With an armed buried route refusing the
+  reset, nothing is left for a guard to replay.
 - An `isCurrentRequest` that turns false after the pointer write puts
   the pointer back, re-reads the stories store so its row names the
   branch left, fills, publishes and navigates nothing, and releases the
   hold.
 - A switch writes no `deltas` row and leaves every branch's redo stack
   as it was.
-- The tail reads, re-reads the stories store, fills, publishes, clears
-  the close result and navigates, and writes no pointer. When its read
-  fails it fills and publishes nothing, still navigates, and leaves
-  `stories.current_branch_id` on the branch its caller wrote. A stories
-  re-read that returns `false` is logged and the tail still publishes
-  and navigates.
+- The tail reads, re-reads the stories store, navigates, fills,
+  publishes and clears the close result, and writes no pointer. When
+  its read fails it fills and publishes nothing, still navigates, and
+  leaves `stories.current_branch_id` on the branch its caller wrote. A
+  stories re-read that returns `false` is logged and the tail still
+  publishes and navigates. A reset that doesn't take fills nothing,
+  releases the hold and leaves the pointer.
 - `lib/actions/stories/load-open-story.test.ts` and
   `lib/actions/stories/operational.test.ts` pass unchanged.
 
@@ -571,6 +592,9 @@ stack builder:
 - From `[List, Reader(A)]`, `[List, Settings, World(A), Reader(A)]`,
   `[List, Reader(A), Timeline(A)]` and a cold `[Reader(A)]`, it gives
   `[List, Reader(B)]`.
+- The hook answers `true` when its one reset took, and `false` when the
+  reset is prevented or lands elsewhere. It dispatches nothing while the
+  top route or a buried one holds an armed unsaved guard.
 
 **The review window.**
 
@@ -604,7 +628,7 @@ stack builder:
 - The rename compound's stories (`components/reader/branch-rename-input.stories.tsx`
   by default): open prefilled and selected; Enter and blur save; Esc
   restores the name and saves nothing; an empty and a whitespace-only
-  name show the warn border and save nothing.
+  name show the invalid state and save nothing.
 - The reader's connected navigator closes when the reader loses focus,
   and stays shut on refocus, under jsdom beside
   `components/reader/reader-chapter-chips.test.tsx`.
@@ -687,94 +711,217 @@ input keeps its caret through a mid-string edit.
 
 ## Open questions
 
-- **Unaudited contract text.** This slice builds on C8 wording the
-  milestone lists as unaudited
-  ([Open questions](../milestone.md#open-questions)): the switch's step
-  order, the failed-load rules for the switch and the tail, the stack
-  replacement, and the final audit's three rules, the reader hold from
-  start to navigation, the abandoned switch and the refresh after the
-  navigation. The planning session didn't walk them in the code. Read
-  them against `operational.ts`, the reader route and the story-leave
-  guard at slice planning. Two details here rest on them: the hold
-  leaves Back live, so a switch can be abandoned only by leaving; and
-  the tail takes no abandon check, so a user who backs out while a fork
-  commits is brought back to the new branch.
-- **The read's home.** The default puts the read and the store in
-  `lib/stores/branches/`, as `readStoryChapterNumbers` sits in the
-  stories store. A read in `lib/actions/stories/` is the other place.
-  Either way 6.6 imports the read from a module root.
-- **The chip's place.** Canon disagrees with itself: the right cluster
-  between the status pill and Actions (the reader doc's Layout, the
-  navigator's Layout sketch, `reader-composer.html`), or beside the
-  title (`navigation.md → Tablet`, which says desktop does the same,
-  and `ScreenShell.centerExtras`' own doc). The default is beside the
-  title: the shell already documents the slot, the phone strip takes
-  the same element, and the right cluster has no slot between status
-  and Actions. The developer decides at planning, and the PR moves
-  canon and the wireframe to the answer.
-- **The anchor on a single-branch story.** With no chip, the desktop
-  Popover has nothing to anchor to. Options: an anchor where the chip
-  would sit, the Actions trigger the entry came from, or a centered
-  presentation. The default is the first, so the navigator opens where
-  it will once a second branch exists.
-- **Switch and rename states.** Canon gives no pending, refused or
-  failed state for either. Defaults:
-  - a switch shows nothing pending beyond the held controls and paused
-    rows, unless the AVD shows a delay on the dataset story worth a
-    veil like `EntryJumpVeil`;
-  - a refusal that races past the paused rows toasts the gate's reason
-    in principles' tooltip copy;
-  - a failed switch toasts `Couldn't switch branches.` and leaves the
-    reader where it was;
-  - a rename holds its input until the write returns, and a failed one
-    toasts `Couldn't rename the branch.` with the row back on the
-    stored name.
-- **Rename's write path.** The default is an unlogged write with no
-  undo and no History row, since `branches` sits above the delta log;
-  its failure surface is the states item's. The trim is pinned (C8).
-- **Phone `Browse branches…`.** Settled by the first task; the fallback
-  is in Scope: in.
-- **The banner under other gates (R2).** The navigator also pauses for a
-  pending turn or a reversal, where no run shows in the pill. The
-  default keeps canon's one line for every gate: a pending turn is about
-  to raise a run, and a reversal is brief.
-- **The route's refresh abort (R2).** A switch now pauses through a
-  suggestion refresh, and leaving the story cancels its runs behind the
-  story-leave guard first, so the abort on the reader's unmount
-  (`app/reader-composer/[branchId].tsx:517-527`) looks unreachable. R2
-  keeps it as a backstop; planning confirms nothing else reaches it.
-- **Size.** Planned at 17 tasks, before the hold and the abandon rule
-  joined it. M5's plans held 3 to 7 more than their estimates. Past 20,
-  the plan records why it can't split: the navigator's surfaces, the
-  switch, the hold and the reader's fresh instance meet in one E2E, and
-  none ships usefully alone.
-- **The era-flips mirror (from Slice 6.2).** 6.2 made `eraFlipsStore`
-  live: `loadAndPublish` hydrates it, an eleventh working-set store
-  ([Slice 6.2 → Implementation notes](./02-scoped-reads-redo.md#implementation-notes)).
-  The switch's read step and its synchronous fill carry it like the
-  other ten, or the store keeps the old branch and reads as empty on the
-  new one. `load-open-story.test.ts` pins at least 12
-  cancellation checks before any hydrate (one after each read); a read
-  added there needs the count raised by hand.
-- **Undo and redo across a load, a leave or a switch (from Slice 6.2's
-  review).** Three gaps older than 6.2 that the switch and the reader's
-  fresh instance reach, all in `components/reader/use-reader-undo.tsx`:
-  - Redo pressed from the Actions menu while the route still hydrates
-    is refused `branch-not-loaded`, which `report` only debug-logs, so
-    nothing shows.
-  - `runUndo` checks nothing live after its await, so an undo that
-    settles after the branch changed or the screen left still posts its
-    "Undid …" notice with Redo.
-  - The notice, a toast, outlives the reader that posted it. Its Redo,
-    pressed from another reader, runs `redoLastAction` for the old
-    branch and is refused silently; under the per-branch map the old
-    branch's group survives, so the press is always silent.
-
-  The default: the notice goes when its reader unmounts or its branch
-  changes, an undo that settles after either posts none, and Redo waits
-  or says why while the branch loads.
+None open.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+**Facts.** Taken through a dev-only probe that called the stack-replace
+helper from the root overlay host's position (since removed from the
+tree; git history keeps it), and through the reader's `reader.mounted`
+and `reader.empty_after_rows` debug lines, which stay. On Android: the slot AVD (`Aventuras_Slot_4`,
+Android 16, x86_64) with a debug build and diagnostics debug on.
+
+- The stack-replace helper called from the root host, over a reader on
+  the same pattern, mounts the new reader once: one `reader.mounted`
+  line, the pathname moves to the fork and Back lands on the Story List
+  (`2fbb430b9`, desktop, Electron 41).
+- The same call on Android mounts the new reader once and hardware back
+  lands on the Story List. The platform default push shows the new
+  reader sliding in from the right while fading over the old one (one
+  mid-transition frame, settled within 60 ms); no empty-state frame of
+  the old reader was seen (`2fbb430b9`, AVD, Android 16). The new
+  reader showed `Loading story…` for about a second: inferred to be
+  the reader's own load, since the probe filled no store, plus its
+  document's boot.
+- A real switch shows `Loading story…` for about 0.6 s after the
+  mount: the new reader instance boots its own document and covers it
+  until first paint, with the composer and the chapter and time chips
+  already hydrated. At 10 frames a second the old reader fades out,
+  the placeholder shows for six to seven frames, then the fork's
+  entries paint; the reader's empty state never showed (`69f73e320`,
+  AVD). The one-commit hydration placeholder before it isn't what is
+  seen. `reader.mounted` fires from the mount effect, so the veil
+  rule's press-to-mount hold doesn't include the document boot.
+- A switch from the phone chip and one from `Browse branches…` each
+  mount one fresh reader, `reader.mounted` once, with no
+  `reader.empty_after_rows`; the screen shows the new branch's tail.
+  Hardware back closes the navigator Sheet and leaves the reader
+  (`69f73e320`, AVD). No `reader.empty_after_rows` appeared across
+  eleven switches, so the reader route keeps its default animation.
+- With an entry's inline editor open and unchanged (opened through the
+  WebView's DevTools, with no keyboard up), a row press switches at
+  once: one `reader.mounted`, no
+  `action_layer.branch_switch_navigation_blocked`. With the editor
+  dirty the unsaved-changes guard asks; Cancel leaves the pointer and
+  mounts nothing, Discard switches and mounts once (`69f73e320`, AVD).
+  A rerun with logcat kept running logged one
+  `reader.branch_switch_started` and one `reader.mounted` per switch;
+  opening the story from the Story List logs one `reader.mounted` with
+  no `reader.branch_switch_started`; Back from the new reader lands on
+  the Story List, so no second instance sits under it (`09f786926`,
+  AVD).
+- The rename input keeps its caret through a mid-string edit (`X` typed
+  six characters from the end lands as `The road notX taken`) and sits
+  above the on-screen keyboard (`69f73e320`, AVD).
+- With the inline editor's keyboard up, the phone Sheet doesn't lift:
+  its rows sit under the keyboard and a tap lands on a key. Back hides
+  the keyboard and leaves the Sheet open (`69f73e320`, AVD). The
+  composer's keyboard doesn't do this: opening the Sheet from the chip
+  with a draft typed dismisses that keyboard and the rows show
+  (`09f786926`, AVD). Inferred, not probed: the inline editor lives in
+  the reader's WebView, which keeps its own keyboard.
+- A Sheet that presents while another dismisses: B presents, and after B
+  closes A stays closed, on web (`97b013990`, Storybook, Chromium) and on
+  Android (`97b013990`, AVD, two runs).
+- Desktop: the chip reads `On Main · 2 branches` beside the title after
+  the chapter and time chips; a row switches to
+  `/reader-composer/br_hero_fork`; a rename round trip works; on a
+  single-branch story there is no chip, and `Browse branches…` opens
+  `Branches · 1` with one row and no delete button (`69f73e320`,
+  desktop, slot 4, Electron 41).
+- One switch from the desktop chip mounts the new reader once: each of
+  two switches logged one `reader.branch_switch_started` and one
+  `reader.mounted`, no `reader.empty_after_rows`, and Back from the new
+  reader lands on the Story List (`09f786926`, desktop, slot 4,
+  Electron 41, diagnostics debug on).
+
+**Decisions** (developer, 2026-11-23, unless marked).
+
+- The switch navigates first. C8 lists the fill, the publish, the
+  close result's drop and the navigation in that order; `switchBranch`
+  dispatches the stack reset first, in the same synchronous block, and
+  reads the stack back, then fills, publishes, drops the close result
+  and releases the hold only when the reset took. A reset fires
+  `beforeRemove` on every route it removes and any prevention swallows
+  it, and on native an open inline editor, dirty or not, prevents it;
+  a check after the fill couldn't undo the fill. A reset that doesn't
+  take is a failed switch: the pointer goes back, the stories store is
+  re-read, the hold is released, and the reader toasts
+  `Couldn't switch branches.` While its branch is held, the reader's
+  inline-edit guard is disarmed, since the press already asked.
+  `showBranch` makes the same check and leaves the pointer on the new
+  branch.
+- The stack reset doesn't dispatch into an armed guard (developer,
+  2026-11-24, extending the decision above): `replaceStoryStack`
+  refuses and answers `false` while any route in the app Stack has an
+  armed unsaved-changes guard (`isUnsavedPopArmed`), so no guard holds
+  the prevented reset to replay after the switch has failed. A dirty
+  buried route fails the switch without opening a guard on a hidden
+  screen. The post-dispatch read-back stays the backstop.
+- The chip sits beside the title on every tier: it rides
+  `centerExtras` after the chapter and time chips, inline on desktop
+  and tablet and after the time chip in the phone chip strip.
+  [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout),
+  [`branch-navigator.md → Layout`](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#layout)
+  and both wireframes moved to match.
+- On a single-branch story the desktop and tablet Popover anchors to
+  `BranchNavigatorAnchor`, a zero-width, inert, accessibility-hidden
+  trigger in the chip's slot, and `Browse branches…` opens the
+  navigator through one handle on every story. The phone Sheet takes
+  no trigger.
+- Switch and rename states, as
+  [`branch-navigator.md → Per-row anatomy`](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#per-row-anatomy)
+  and
+  [Inline rename](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)
+  now say: nothing pending beyond the held reader; a refusal under the
+  gate toasts the gate's reason; a failure toasts
+  `Couldn't switch branches.`; an abandoned switch and a press during a
+  switch show nothing; a rename holds its input until the write
+  returns, and a failed one toasts `Couldn't rename the branch.` On the
+  dataset seed's only two-branch story, `The Veilstone Courier`, the
+  slot AVD held a switch for a median of 171 ms from the press to the
+  new reader's mount, so no veil shipped. That hold ends at the mount effect and
+  doesn't see the new document's boot, which keeps `Loading story…` up
+  for about 0.6 s more. The dataset's played story, _Treasure Island_,
+  has one branch, so a long story's hold wasn't measured.
+- Undo and redo across a switch. `useReaderUndo` keeps a mounted flag
+  whose cleanup dismisses its notice; after unmount nothing posts but a
+  `closeUndone` warning, and the route's `branchUnchanged` and the
+  hook's `stale()` read the flag. Undo and Redo are disabled with
+  `Loading story…` while the route hydrates, and a menu Undo or Redo
+  refused `branch-not-loaded` toasts it.
+- The branch read and its store live in `lib/stores/branches/`:
+  `readStoryBranches(db, storyId)`, `branchesStore` and the free
+  `refreshBranches(db, storyId)`, all from the `lib/stores` root, which
+  [Slice 6.6](./06-delete-duplicate.md)'s Duplicate dialog imports. A
+  store that value-imported `lib/actions` would close a cycle.
+- `switchBranch` takes its navigation and its staleness from its
+  caller, `replaceStack` and `isCurrentRequest`, since `lib/actions`
+  can't import `hooks/`; [Slice 6.5](./05-fork-from-reader.md)'s root
+  host passes its own `useReplaceStoryStack()`. Beyond C8's refusals it
+  refuses while the story is busy, a run that holds no gate included,
+  and while a turn body is still active on the branch left (a failed
+  regenerate between its run and its sweep, with the gate open), and
+  it checks both again right before the reset (below). It publishes
+  the live story with the new branch when the live story is this one,
+  so a settings write that landed during the read survives.
+- The embedder swap's `refreshStores` reads the open story after its
+  settings read, so a switch publishing inside that await keeps its
+  branch.
+- The reader's refresh abort on unmount stays: Back from a reader
+  pushed above World, and a dismiss over an unfocused reader, still
+  reach it, both on the same branch.
+- The phone `Browse branches…` waits for the Actions Sheet's exit
+  (plan review): `SearchableOverlayList` rows take `opensSheet`, as
+  `OverflowMenu`'s entries do, so the navigator's Sheet never presents
+  while the menu's is still leaving. The gorhom fact above no longer
+  gates it.
+- `openStory` waits for a running switch before it reads the pointer,
+  so the story opened from the list during an abandoned switch opens
+  the branch the restore leaves.
+- `ReviewRequest` carries its branch, and the root host closes a review
+  whose branch isn't the open one.
+- The held re-run's error toast reads "until then, this branch can't
+  be changed", as R2's canon does.
+- The unaudited C8 text was walked against `operational.ts`, the reader
+  route and the story-leave guard at planning; the reset-first order,
+  the abandon rule and the hold's span above are what it became.
+- The reader hold is `lib/stores/ui/reader-hold.ts`, a set of tokens per
+  branch, so a caller outside the reader, as 6.5's root host is, takes
+  and releases its own. The reader's unmount calls `clear`, which ends
+  every token on its branch.
+- The navigator pauses on every closed gate under canon's one banner
+  line, `Generation in progress — switching paused.`, a pending turn and
+  a reversal included.
+- Rename is an unlogged write with no undo and no History row, as
+  [`branch-navigator.md → Inline rename`](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)
+  says; `branches` sits above the delta log.
+- The switch's read and fill carry `eraFlipsStore` with the other ten
+  working-set stores, through the shared read in `operational.ts`.
+- Planned and run as 22 tasks, one PR: the navigator's surfaces, the
+  switch, the hold and the reader's fresh instance meet in one E2E, and
+  none ships usefully alone.
+- Carried to [Slice 6.5](./05-fork-from-reader.md#open-questions): the
+  tail takes no abandon check, so a caller's reader that is gone still
+  has its stack reset; the reader's unmount clears a root-host hold.
+
+**Deviations from the plan.**
+
+- `useReportedOpen` is one hook, `hooks/use-reported-open.ts`, shared
+  by the branch navigator and the chapter popover, where the plan
+  copied it into the navigator.
+- The navigator's Esc guard prevents the Popover's close only when Esc
+  targets the rename input: Esc cancels the rename there and closes the
+  navigator anywhere else, as the rename's canon says.
+- The invalid rename input shows `Input`'s danger border through
+  `aria-invalid`; canon and the wireframe now name the invalid state,
+  resolving the earlier warn/danger mismatch (provisional: the developer
+  hasn't confirmed it).
+- Right before the reset, with nothing awaited between, `switchBranch`
+  checks again that the story isn't busy and that no turn body is open
+  on the branch left. Either one takes the failed-switch path with no
+  dispatch, so the story-leave guard has nothing to replay. `showBranch`
+  doesn't check this; 6.5's callers own its gate.
+- The restore retries a failed pointer write once, logging
+  `action_layer.branch_switch_restore_retried`, then logs
+  `action_layer.branch_switch_restore_failed` if the retry fails too,
+  with no recovery on the open path. A stories re-read that fails
+  during the restore is retried once, then logged as
+  `action_layer.branch_switch_restore_reread_failed` (provisional: the
+  developer hasn't confirmed either).
+- After a reopen during a dismiss, a late `onDismissed` from the earlier
+  close can release a row the reopened phone overlay list holds. This
+  is left as is and filed in
+  [triage](../../../triage.md): a Sheet presented during another's
+  dismiss presents, as the gorhom fact above records (provisional: the
+  developer hasn't confirmed it).

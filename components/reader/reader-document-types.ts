@@ -65,7 +65,7 @@ export type ReaderSurfaceProps = {
   worldTimeFrame: CalendarFrame | null
   /** Non-null only while the streaming row should be visible (host-gated). */
   streaming: StreamingPayload | null
-  /** Branch identity: switch resets edit state and re-lands at bottom. */
+  /** Branch identity: a change resets edit state and re-lands at the bottom. */
   branchKey: string
   /**
    * Rows may exist above the slice: in the window, or above it by window-size math (a short load

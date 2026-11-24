@@ -653,3 +653,71 @@ export const ReopenDuringExit: Story = {
     expect(screen.getByText('Host closed')).toBeInTheDocument()
   },
 }
+
+function SwapHarness() {
+  const [aOpen, setAOpen] = useState(false)
+  const [bOpen, setBOpen] = useState(false)
+  return (
+    <View className="min-h-screen items-start gap-4 p-4">
+      <Button onPress={() => setAOpen(true)}>
+        <Text>Open A</Text>
+      </Button>
+      <Text>{aOpen ? 'A open' : 'A closed'}</Text>
+      <Text>{bOpen ? 'B open' : 'B closed'}</Text>
+      <Sheet open={aOpen} onOpenChange={setAOpen} ariaLabel="Sheet A">
+        <SheetContent anchor="bottom" size="short">
+          <Text>Sheet A body</Text>
+          <Button
+            onPress={() => {
+              setAOpen(false)
+              setBOpen(true)
+            }}
+          >
+            <Text>Swap to B</Text>
+          </Button>
+        </SheetContent>
+      </Sheet>
+      <Sheet open={bOpen} onOpenChange={setBOpen} ariaLabel="Sheet B">
+        <SheetContent anchor="bottom" size="short">
+          <Text>Sheet B body</Text>
+          <Button onPress={() => setBOpen(false)}>
+            <Text>Close B</Text>
+          </Button>
+        </SheetContent>
+      </Sheet>
+    </View>
+  )
+}
+
+/**
+ * A closes and B opens in one handler, A first in the tree. Web: B presents while A dismisses,
+ * and A stays closed once B goes.
+ */
+export const PresentDuringAnotherDismiss: Story = {
+  globals: { viewport: { value: 'mobile1' } },
+  parameters: { layout: 'fullscreen' },
+  render: () => <SwapHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open A' }))
+    await waitForSheetAtRest(await screen.findByText('Sheet A body', {}, BACKDROP_WAIT))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Swap to B' }))
+    const bBody = await screen.findByText('Sheet B body', {}, BACKDROP_WAIT)
+    await waitForSheetAtRest(bBody)
+    expect(bBody).toBeVisible()
+    await waitFor(
+      () => expect(screen.queryByText('Sheet A body')).not.toBeInTheDocument(),
+      BACKDROP_WAIT,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close B' }))
+    await waitFor(
+      () => expect(screen.queryByText('Sheet B body')).not.toBeInTheDocument(),
+      BACKDROP_WAIT,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(screen.queryByText('Sheet A body')).not.toBeInTheDocument()
+    expect(screen.getByText('A closed')).toBeInTheDocument()
+    expect(screen.getByText('B closed')).toBeInTheDocument()
+  },
+}

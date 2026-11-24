@@ -469,10 +469,11 @@ async function refreshStores(storyId: string, ctx: DbCtx): Promise<void> {
     logger.warn('embedder.swap_store_refresh_failed', { storyId })
     return
   }
-  const open = currentStoryStore.getCurrentStory()
-  if (open?.storyId !== storyId) return
+  if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
   const settings = await readStorySettings(storyId, ctx)
-  if (settings) currentStoryStore.set({ ...open, settings })
+  // Read after the await: a branch switch can publish while the settings read runs.
+  const open = currentStoryStore.getCurrentStory()
+  if (settings && open?.storyId === storyId) currentStoryStore.set({ ...open, settings })
 }
 
 // Global, not per-story: embeddingStatusStore is a single slot, so the only

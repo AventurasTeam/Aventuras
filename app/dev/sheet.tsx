@@ -169,6 +169,53 @@ function SizeMorphProbe() {
   )
 }
 
+function PresentDuringDismissProbe() {
+  const [aOpen, setAOpen] = useState(false)
+  const [bOpen, setBOpen] = useState(false)
+  return (
+    <View>
+      <Heading level={3}>Present during another dismiss</Heading>
+      <Text variant="muted" size="xs" className="mt-1">
+        Open A, then Swap to B: A closes and B opens in one handler, A first in the tree. Note
+        whether B presents; then Close B and note whether A comes back.
+      </Text>
+      <Text size="xs" className="mt-1">
+        {`A ${aOpen ? 'open' : 'closed'} · B ${bOpen ? 'open' : 'closed'}`}
+      </Text>
+      <View className="mt-3">
+        <Button variant="secondary" onPress={() => setAOpen(true)}>
+          <Text>Open A</Text>
+        </Button>
+        <Sheet ariaLabel="Sheet A" open={aOpen} onOpenChange={setAOpen}>
+          <SheetContent anchor="bottom" size="short">
+            <View className="flex-col gap-3">
+              <Heading level={4}>Sheet A</Heading>
+              <Button
+                onPress={() => {
+                  setAOpen(false)
+                  setBOpen(true)
+                }}
+              >
+                <Text>Swap to B</Text>
+              </Button>
+            </View>
+          </SheetContent>
+        </Sheet>
+        <Sheet ariaLabel="Sheet B" open={bOpen} onOpenChange={setBOpen}>
+          <SheetContent anchor="bottom" size="short">
+            <View className="flex-col gap-3">
+              <Heading level={4}>Sheet B</Heading>
+              <Button onPress={() => setBOpen(false)}>
+                <Text>Close B</Text>
+              </Button>
+            </View>
+          </SheetContent>
+        </Sheet>
+      </View>
+    </View>
+  )
+}
+
 export default function SheetDevRoute() {
   const [noteValue, setNoteValue] = useState('')
 
@@ -179,6 +226,7 @@ export default function SheetDevRoute() {
         <KeyboardOrderingProbe />
         <PendingActionProbe />
         <SizeMorphProbe />
+        <PresentDuringDismissProbe />
 
         <View>
           <Heading level={3}>Default</Heading>

@@ -30,6 +30,8 @@ type ActionEntry = {
   disabledReason?: string
   /** Fired after the substrate closes the overlay. */
   onActivate: () => void
+  /** Opens a Sheet of its own: on phone it fires once the menu's Sheet has left. */
+  opensSheet?: boolean
 }
 
 type ActionGroup = {
@@ -66,7 +68,8 @@ type ActionsMenuProps = {
    * When true, both the trigger and the `Cmd/Ctrl-K` shortcut are inert. Pass
    * this while the surface is mid-decision — a confirm the user must answer
    * before navigating away. Open sheets already gate themselves; this is the
-   * judgment half, which nothing can derive.
+   * judgment half, which nothing can derive. Also pass it while the surface holds
+   * its controls for an action in flight.
    */
   blocked?: boolean
   /**
@@ -179,6 +182,7 @@ function ActionsMenu({
         .map((e) => ({
           id: e.id,
           disabled: e.disabled,
+          opensSheet: e.opensSheet,
           data: {
             label: e.label,
             disabled: e.disabled,

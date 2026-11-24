@@ -569,7 +569,9 @@ build on it.
   branch that can't load would break every later open. The gate it
   reads leaves out the branch's hold, which the store's own
   `isUserEditBlocked` adds (`generation.ts:89-93,404-405`): a held
-  branch doesn't block leaving it.
+  branch doesn't block leaving it. As shipped, the block dispatches the
+  stack reset first and fills only once the stack reads back reset
+  ([6.4's Implementation notes](./slices/04-switching-navigator.md#implementation-notes)).
 - **A switch is not a story open.** It publishes by the refresh path,
   `currentStoryStore.set`, not `open`
   (`lib/stores/current-story/current-story.ts:27-28,56-57`). An open

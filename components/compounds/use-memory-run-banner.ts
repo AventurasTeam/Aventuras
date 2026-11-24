@@ -110,14 +110,14 @@ export function useMemoryRunBanner(): MemoryRunBannerState | null {
   }
 
   if (result == null || held == null || held.id !== latestChapter?.id) return null
-  const { chapterId, stoppedTasks } = result
+  const { branchId: resultBranchId, chapterId, stoppedTasks } = result
   const clear = () => chapterOverlaysStore.clearCloseResult()
   return {
     kind: 'closed',
     tone: stoppedTasks === 0 ? 'info' : 'warning',
     label: closedLabel(result, held),
     onReview: () => {
-      if (chapterOverlaysStore.openReviewWindow({ chapterId })) clear()
+      if (chapterOverlaysStore.openReviewWindow({ branchId: resultBranchId, chapterId })) clear()
     },
     onDismiss: clear,
   }

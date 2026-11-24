@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, render as renderTree, renderHook, waitFor } from '@testing-library/react'
+import { useLayoutEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -24,6 +25,7 @@ import {
   entitiesStore,
   generationStore,
   loreStore,
+  readerHoldStore,
   undoRedoStore,
   type RunState,
 } from '@/lib/stores'
@@ -134,6 +136,22 @@ function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> 
   })
 }
 
+function turnGroup(branchId = 'b1') {
+  return __redoGroupForTest(
+    branchId,
+    [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+    'act_turn',
+  )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 type Props = { isFocused: boolean; held: boolean; branchId: string }
 
 function render(initial: Partial<Props> = {}) {
@@ -159,6 +177,7 @@ beforeEach(() => {
   undoRedoStore.__reset()
   entitiesStore.__reset()
   loreStore.__reset()
+  readerHoldStore.__reset()
   for (const fn of Object.values(actions)) fn.mockReset()
   actions.readUndoImpact.mockResolvedValue(null)
 })
@@ -397,13 +416,6 @@ describe('useReaderUndo — refusals', () => {
 })
 
 describe('useReaderUndo — one redo stack per branch', () => {
-  const turnGroup = (branchId: string) =>
-    __redoGroupForTest(
-      branchId,
-      [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
-      'act_turn',
-    )
-
   it("shows no Redo on a branch whose stack is empty, though another branch's holds a group", async () => {
     undoRedoStore.pushRedoGroup(turnGroup('b1'))
     const r = render({ branchId: 'b2' })
@@ -514,14 +526,6 @@ describe('useReaderUndo — the Redo label reads the rows as the menu opens', ()
 })
 
 describe('useReaderUndo — review fixes', () => {
-  function deferred<T>() {
-    let resolve!: (value: T) => void
-    const promise = new Promise<T>((res) => {
-      resolve = res
-    })
-    return { promise, resolve }
-  }
-
   it("holds the notice's Redo while an editor is open", async () => {
     actions.readUndoTarget.mockResolvedValue(TURN)
     undoLands(TURN, { id: 'e2', position: 2 })
@@ -610,6 +614,46 @@ describe('useReaderUndo — review fixes', () => {
 
     expect(actions.undoLastAction).not.toHaveBeenCalled()
     expect(toasts).toHaveLength(0)
+  })
+
+  it('starts no undo whose target resolves after a switch took the reader hold', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    readerHoldStore.take('b1')
+
+    await act(async () => read.resolve(TURN))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toHaveLength(0)
+  })
+
+  it('says nothing to undo when the pending read finds none and no hold was taken', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+
+    await act(async () => read.resolve(null))
+    await settle()
+
+    expect(toasts.map((toast) => toast.message)).toEqual(['Nothing to undo.'])
+  })
+
+  it('says nothing when the pending read finds none after a switch took the reader hold', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    readerHoldStore.take('b1')
+
+    await act(async () => read.resolve(null))
+    await settle()
+
+    expect(toasts).toEqual([])
   })
 
   it('names a created row in the notice although the undo removed it', async () => {
@@ -1004,5 +1048,422 @@ describe('useReaderUndo — a re-run undone, then its store sync fails', () => {
     await undoRerunThrowing(error)
 
     expect(shown()).toEqual([{ severity: 'error', message: "Couldn't undo. Please try again." }])
+  })
+})
+
+// reader-composer.md → Undo and redo: the notice and every late result belong to the reader that
+// started them, and a switch unmounts that reader.
+describe('useReaderUndo — a reader that unmounted', () => {
+  const NOT_LOADED: UndoResult = {
+    status: 'rejected',
+    code: 'branch-not-loaded',
+    reason: 'branch not loaded',
+  }
+
+  it('dismisses the notice when the reader unmounts', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Undid the turn at entry #2'])
+
+    r.unmount()
+
+    expect(toasts).toEqual([])
+  })
+
+  it('posts no notice for an undo that settles after the reader unmounted', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    const pending = deferred<UndoResult>()
+    actions.undoLastAction.mockReturnValue(pending.promise)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+
+    r.unmount()
+    await act(async () => pending.resolve(OK))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it.each([
+    ['a redo that lands', OK],
+    ['a redo the menu would report', { status: 'rejected', code: 'nothing-to-apply', reason: 'x' }],
+  ] as const)('posts nothing for %s after the reader unmounted', async (_label, result) => {
+    undoRedoStore.pushRedoGroup(turnGroup())
+    const pending = deferred<UndoResult>()
+    actions.redoLastAction.mockReturnValue(pending.promise)
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledTimes(1)
+
+    r.unmount()
+    await act(async () => pending.resolve(result))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it("still warns that a re-run's undo took its close, settling after the reader unmounted", async () => {
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    const pending = deferred<UndoResult>()
+    actions.undoLastAction.mockReturnValue(pending.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    r.unmount()
+    await act(async () => pending.resolve(CLOSE_UNDONE))
+    await settle()
+
+    expect(toasts.map(({ severity, message }) => ({ severity, message }))).toEqual([
+      {
+        severity: 'warning',
+        message: "Chapter 3's earlier close couldn't be restored, so its close was undone.",
+      },
+    ])
+  })
+
+  it('starts no undo whose target resolves after the reader unmounted', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+
+    r.unmount()
+    await act(async () => read.resolve(TURN))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toEqual([])
+  })
+
+  it('says nothing to undo for a read that settles in the commit removing the reader', async () => {
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    let reader!: ReturnType<typeof useReaderUndo>
+    let removeReader!: () => void
+    let removed = false
+    function Reader() {
+      reader = useReaderUndo({ ctx, ...LIVE })
+      return null
+    }
+    function SettlesOnRemoval() {
+      useLayoutEffect(
+        () => () => {
+          removed = true
+          read.resolve(null)
+        },
+        [],
+      )
+      return null
+    }
+    function Screen() {
+      const [shown, setShown] = useState(true)
+      removeReader = () => setShown(false)
+      return shown ? (
+        <>
+          <Reader />
+          <SettlesOnRemoval />
+        </>
+      ) : null
+    }
+    renderTree(<Screen />)
+    act(() => reader.undo('menu'))
+
+    // Outside act, as a switch removes the reader: passive cleanups run only after the read settles.
+    env.IS_REACT_ACT_ENVIRONMENT = false
+    try {
+      removeReader()
+      await vi.waitFor(() => expect(removed).toBe(true))
+    } finally {
+      env.IS_REACT_ACT_ENVIRONMENT = true
+    }
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it('says nothing to undo from no reader once it unmounted', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+
+    r.unmount()
+    await act(async () => read.resolve(null))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it("ignores the notice's Redo pressed after the reader unmounted", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    actions.redoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    const pressRedo = toasts[0].action?.onPress
+    expect(pressRedo).toBeDefined()
+
+    r.unmount()
+    act(() => pressRedo?.())
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+  })
+
+  it("holds the notice's Redo while a switch holds the reader", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    actions.redoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    const pressRedo = toasts[0].action?.onPress
+    expect(pressRedo).toBeDefined()
+    readerHoldStore.take('b1')
+
+    act(() => pressRedo?.())
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+  })
+
+  it('says the story is loading for an Undo the menu ran before the branch loaded', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockResolvedValue(NOT_LOADED)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Loading story…'])
+  })
+
+  it('stays silent for the same refusal on the keyboard', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockResolvedValue(NOT_LOADED)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts).toEqual([])
+  })
+
+  it('says the story is loading for a Redo the menu ran before the branch loaded', async () => {
+    undoRedoStore.pushRedoGroup(turnGroup())
+    actions.redoLastAction.mockResolvedValue(NOT_LOADED)
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Loading story…'])
+  })
+
+  it("leaves the old branch's Redo on its own stack across a keyed remount", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const first = render()
+    act(() => first.result.current.undo('keyboard'))
+    await settle()
+
+    first.unmount()
+    const second = render({ branchId: 'b2' })
+
+    expect(toasts).toEqual([])
+    expect(second.result.current.redoLabel).toBeNull()
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
+  })
+})
+
+// A refusal is a diagnostic as well as a toast: the toast goes with the reader, the log stays.
+describe('useReaderUndo — a refusal that settles after the reader unmounted', () => {
+  beforeEach(() => {
+    clearBuffers()
+    configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
+  })
+  afterEach(() => __resetDiagnosticsGate())
+
+  const logged = (...kinds: string[]) =>
+    getDiagnosticsSnapshot()
+      .logEntries.filter(({ kind }) => kinds.includes(kind))
+      .map(({ kind, level, fields }) => ({ kind, level, fields }))
+
+  async function undoRefusedAfterUnmount(result: UndoResult) {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    let settleUndo!: (value: UndoResult) => void
+    actions.undoLastAction.mockReturnValue(
+      new Promise<UndoResult>((resolve) => {
+        settleUndo = resolve
+      }),
+    )
+    const r = renderHook((props: Props) => useReaderUndo({ ctx, ...props }), {
+      initialProps: LIVE,
+    })
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+    r.unmount()
+    await act(async () => settleUndo(result))
+    await settle()
+  }
+
+  async function redoRefusedAfterUnmount(result: UndoResult) {
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest(
+        'b1',
+        [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+        'act_turn',
+      ),
+    )
+    let settleRedo!: (value: UndoResult) => void
+    actions.redoLastAction.mockReturnValue(
+      new Promise<UndoResult>((resolve) => {
+        settleRedo = resolve
+      }),
+    )
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledTimes(1)
+    r.unmount()
+    await act(async () => settleRedo(result))
+    await settle()
+  }
+
+  const INTEGRITY: UndoResult = {
+    status: 'rejected',
+    code: 'integrity',
+    reason: 'scope unreadable',
+  }
+  const MOVED: UndoResult = { status: 'rejected', code: 'target-moved', reason: 'moved' }
+
+  it('logs an undo integrity refusal once at error and posts no toast', async () => {
+    await undoRefusedAfterUnmount(INTEGRITY)
+
+    expect(logged('reader.undo_failed', 'reader.undo_rejected')).toEqual([
+      {
+        kind: 'reader.undo_failed',
+        level: 'error',
+        fields: { branchId: 'b1', code: 'integrity', reason: 'scope unreadable' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('logs a redo integrity refusal once at error and posts no toast', async () => {
+    await redoRefusedAfterUnmount(INTEGRITY)
+
+    expect(logged('reader.redo_failed', 'reader.redo_rejected')).toEqual([
+      {
+        kind: 'reader.redo_failed',
+        level: 'error',
+        fields: { branchId: 'b1', code: 'integrity', reason: 'scope unreadable' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  async function undoThrows(unmountFirst: boolean) {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    let failUndo!: (error: Error) => void
+    actions.undoLastAction.mockReturnValue(
+      new Promise<UndoResult>((_resolve, reject) => {
+        failUndo = reject
+      }),
+    )
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+    if (unmountFirst) r.unmount()
+    await act(async () => failUndo(new Error('boom')))
+    await settle()
+  }
+
+  async function redoThrows(unmountFirst: boolean) {
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest(
+        'b1',
+        [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+        'act_turn',
+      ),
+    )
+    let failRedo!: (error: Error) => void
+    actions.redoLastAction.mockReturnValue(
+      new Promise<UndoResult>((_resolve, reject) => {
+        failRedo = reject
+      }),
+    )
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledTimes(1)
+    if (unmountFirst) r.unmount()
+    await act(async () => failRedo(new Error('boom')))
+    await settle()
+  }
+
+  it('logs an undo that throws after the reader unmounted and posts no toast', async () => {
+    await undoThrows(true)
+
+    expect(logged('reader.undo_failed')).toEqual([
+      { kind: 'reader.undo_failed', level: 'error', fields: { error: 'boom' } },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('logs a redo that throws after the reader unmounted and posts no toast', async () => {
+    await redoThrows(true)
+
+    expect(logged('reader.redo_failed')).toEqual([
+      { kind: 'reader.redo_failed', level: 'error', fields: { error: 'boom' } },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('still toasts an undo that throws while the reader is mounted', async () => {
+    await undoThrows(false)
+
+    expect(logged('reader.undo_failed')).toHaveLength(1)
+    expect(toasts.map((toast) => toast.message)).toEqual(["Couldn't undo. Please try again."])
+  })
+
+  it('still toasts a redo that throws while the reader is mounted', async () => {
+    await redoThrows(false)
+
+    expect(logged('reader.redo_failed')).toHaveLength(1)
+    expect(toasts.map((toast) => toast.message)).toEqual(["Couldn't redo. Please try again."])
+  })
+
+  it('logs a lesser undo refusal once at debug and posts no toast', async () => {
+    await undoRefusedAfterUnmount(MOVED)
+
+    expect(logged('reader.undo_failed', 'reader.undo_rejected')).toEqual([
+      {
+        kind: 'reader.undo_rejected',
+        level: 'debug',
+        fields: { branchId: 'b1', code: 'target-moved', reason: 'moved' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('logs a lesser redo refusal once at debug and posts no toast', async () => {
+    await redoRefusedAfterUnmount(MOVED)
+
+    expect(logged('reader.redo_failed', 'reader.redo_rejected')).toEqual([
+      {
+        kind: 'reader.redo_rejected',
+        level: 'debug',
+        fields: { branchId: 'b1', code: 'target-moved', reason: 'moved' },
+      },
+    ])
+    expect(toasts).toEqual([])
   })
 })

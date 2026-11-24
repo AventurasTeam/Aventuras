@@ -513,26 +513,30 @@ convention, and the expectation that subsystems route through
   (`components/world/detail/stackables-editor.tsx` — after a quantity
   row's removal) are gated by the master gate like any other kind
 - `reader.*` — reader-composer dispatches routed through `runAction`
-  (`lib/utils.ts`) instead of a bare `void`: `undo_failed`, `redo_failed`,
-  `rollback_failed`, `regenerate_failed`, `pass_retry_failed`
+  (`lib/utils.ts`) instead of a bare `void`: `rollback_failed`,
+  `regenerate_failed`
+  (the rollback-confirm modal's regenerate variant, distinct from the
+  `pipeline.regenerate_*` kinds `runRegenerate` logs internally),
+  `pass_retry_failed`
   (a pass-failure entry's Retry, which runs the pass alone),
   `close_retry_failed` (a close-failure entry's Retry, which runs
   the close's catch-up passes and the close), and their refusals
   `pass_retry_rejected` / `close_retry_rejected` at debug, logged with
   their `blockedBy` because the toast names only the remedy
-  — plus `undo_rejected` / `redo_rejected` at debug for the refusals
-  that are routine (gated, nothing to apply, branch mid-switch), and
-  `rollback_counts_rejected` at debug for a refused read behind a delete
-  (a stale card, the rollback floor), `rollback_recount_rejected` (warn,
+  — plus `rollback_counts_rejected` at debug for a refused read behind
+  a delete (a stale card, the rollback floor),
+  `rollback_recount_rejected` (warn,
   `components/reader/use-live-rollback-counts.ts`: the rollback confirm's
   re-read after a run settled was refused, with `branchId`, `entryId`,
   `code` and `reason`; the confirm keeps the counts it shows) and
   `rollback_recount_failed` (error, the same file: that re-read threw,
-  with `error`), where
-  `undo_failed` / `redo_failed` carry the ones that mean the delta log
-  cannot produce the reversal it should
-  (the rollback-confirm modal's regenerate variant, distinct from the
-  `pipeline.regenerate_*` kinds `runRegenerate` logs internally). The
+  with `error`). The undo hook
+  (`components/reader/use-reader-undo.tsx`) logs and toasts its own
+  outside `runAction`, so a reader that has gone posts no failure toast:
+  `undo_failed` / `redo_failed` for a reversal that threw or a refusal
+  that means the delta log cannot produce the reversal it should, and
+  `undo_rejected` / `redo_rejected` at debug for the refusals that are
+  routine (gated, nothing to apply, branch mid-switch). The
   rail and the peek add two outside `runAction`:
   `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
   — a rail collapse-preference write that rejected) and

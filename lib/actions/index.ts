@@ -133,6 +133,7 @@ export {
   type ForkResult,
 } from './stories/fork-branch'
 export { forkSurvivorLists, type ForkSurvivorLists } from './stories/fork-survivors'
+export { renameBranch, type RenameBranchResult } from './stories/rename-branch'
 export { resetStorySettings } from './stories/reset-settings'
 export { seedHeroFork } from './stories/seed-hero-fork'
 export {
@@ -141,6 +142,14 @@ export {
   type LeadRejectionCode,
   type SetStoryLeadResult,
 } from './stories/set-lead'
+export {
+  showBranch,
+  switchBranch,
+  type ShowBranchInput,
+  type ShowBranchResult,
+  type SwitchBranchInput,
+  type SwitchBranchResult,
+} from './stories/switch-branch'
 export {
   saveStorySettingsSession,
   StorySettingsStaleStoreError,
