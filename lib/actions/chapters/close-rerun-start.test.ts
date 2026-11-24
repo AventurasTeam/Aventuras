@@ -4,12 +4,13 @@ import { describe, expect, it, vi } from 'vitest'
 import type { generateStructured, generateToolStep } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { chapters, reversalJournals, storyEntries } from '@/lib/db'
+import { branches, chapters, reversalJournals, storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   CLASSIFIER_HELD,
   CLOSE_PHASE,
   ensurePerTurnPipelineRegistered,
+  isClassifierHeld,
   PER_TURN_KIND,
   pipelineEventBus,
   type ChainEnd,
@@ -40,11 +41,15 @@ import {
   generationStore,
   hydrateAppSettings,
   interruptMemoryRuns,
+  isBranchHeld,
+  isStoryBusy,
+  RERUN_HELD,
   type OpenStory,
 } from '@/lib/stores'
 
 import { MANUAL_CLOSE_REFUSAL } from './close-chain'
 import {
+  checkCloseRerunParent,
   CLOSE_RERUN_REFUSAL,
   getCloseRerunPreview,
   startCloseRerun,
@@ -830,5 +835,281 @@ describe('pendingRerun is gone at every end of the start (AC 16)', () => {
     expect(atBoundary()).toEqual([true])
     expect(pendingRerunOn(c.h)).toBe(false)
     expect(starts.seen).toEqual([{ marks: 0, runs: [`${PERIODIC_CLASSIFIER_KIND}:pass`] }])
+  })
+})
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void
+  const promise = new Promise<void>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
+// A re-run whose abort's reversal didn't commit holds its branch until a restart; no run stays.
+function holdUntilRestart(h: CloseHarness): void {
+  generationStore.startRun({
+    runId: 'run_held_rerun',
+    kind: CHAPTER_CLOSE_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: 'rerun',
+    beforeTurn: false,
+    actionId: 'act_held_rerun',
+    storyId: h.fx.storyId,
+    branchId: h.fx.branchId,
+    abortController: new AbortController(),
+    currentPhase: '',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+  generationStore.abortRun('run_held_rerun', 'failed', { unreversed: true })
+}
+
+async function branchIdsOf(h: CloseHarness): Promise<string[]> {
+  const rows = await h.fx.ctx.db
+    .select({ id: branches.id })
+    .from(branches)
+    .where(eq(branches.storyId, h.fx.storyId))
+  return rows.map((row) => row.id)
+}
+
+// The check forks nothing and writes nothing, whatever it answers.
+async function expectCheckedOnly(h: CloseHarness, before: Snapshot): Promise<void> {
+  await expectNothingChanged(h, before)
+  expect(await branchIdsOf(h), 'branches').toEqual([h.fx.branchId])
+}
+
+// A turn since the close, and the counts the confirm then shows over it.
+async function shownWithTurn(c: Closed): Promise<CloseRerunExpected> {
+  await turnSince(c.h)
+  return expectedOf(await previewOf(c))
+}
+
+const checkParent = ({ h, chapterId }: Closed, expected: CloseRerunExpected) =>
+  checkCloseRerunParent(h.fx.branchId, chapterId, expected, h.fx.ctx)
+
+describe('checkCloseRerunParent (AC 13)', () => {
+  it('clears an orphan-held parent with its fresh preview, whose fork point is the reply before B', async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    // A pass left `running` with none live: the in-place start refuses this as classifier-held.
+    await setClassifierStatus(c.h.fx, { state: 'running', processedThrough: endPosition(c.h) })
+    expect(await isClassifierHeld(c.h.fx.branchId, c.h.fx.ctx)).toBe(true)
+    const before = await snapshot(c.h)
+
+    const result = await checkParent(c, expected)
+
+    expect(result).toEqual({ status: 'clear', preview: await previewOf(c) })
+    const last = defined(c.h.fx.entries.at(-1), 'the fixture has no entry')
+    expect(last.kind).toBe('ai_reply')
+    expect(result).toMatchObject({
+      preview: { shortcut: { forkPoint: { entryId: last.id, position: last.position } } },
+    })
+    expect(generationStore.getTxState().runs.size, 'runs').toBe(0)
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it('refuses branch-not-open while the open story is on another branch', async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    currentStoryStore.set({ ...openStory(), branchId: 'br_elsewhere' })
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it('refuses a pending embedder swap', async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    const open = openStory()
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, embedding_swap_target: 'other-embedder' },
+    })
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.swapPending,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it('refuses a branch held until a restart', async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    holdUntilRestart(c.h)
+    expect(isBranchHeld(generationStore.getTxState(), c.h.fx.branchId)).toBe(true)
+    expect(isStoryBusy(generationStore.getTxState(), c.h.fx.storyId, c.h.fx.branchId)).toBe(false)
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toEqual({
+      outcome: 'rejected',
+      blockedBy: RERUN_HELD,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it('refuses story-busy while a run holds the story', async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    holdStoryWithTurn(c.h)
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toEqual({
+      outcome: 'rejected',
+      blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it("refuses story-busy while a turn body still runs on the parent past its mark's end", async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    const before = await snapshot(c.h)
+    const sweep = deferred()
+    const body = generationStore.bracketPendingTurn(c.h.fx.branchId, async (endEarly) => {
+      endEarly()
+      await sweep.promise
+    })
+    try {
+      expect(isStoryBusy(generationStore.getTxState(), c.h.fx.storyId, c.h.fx.branchId)).toBe(false)
+      expect(generationStore.isTurnBodyActive(c.h.fx.branchId)).toBe(true)
+
+      expect(await checkParent(c, expected)).toEqual({
+        outcome: 'rejected',
+        blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+      })
+    } finally {
+      sweep.resolve()
+      await body
+    }
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it("refuses the close's failed pre-flight", async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    await flagToolCalling('lore-model', false)
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toEqual({
+      outcome: 'preflight-failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'tool-calling-off',
+        target: 'lore-mgmt',
+        phaseName: 'agent',
+        modelId: 'lore-model',
+      },
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it('refuses not-latest for a chapter a later close followed', async () => {
+    const c = await closed()
+    const later = expectRan(
+      await startManualClose(c.h.fx.branchId, c.h.fx.replyIds[4]!, c.h.fx.ctx),
+    )
+    expect(later.outcome).toBe('completed')
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, NOTHING_SHOWN)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.notLatest,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it('refuses no-close for a latest chapter no close wrote', async () => {
+    const c = await closed()
+    await c.h.fx.ctx.db.insert(chapters).values({
+      id: 'chap_by_hand',
+      branchId: c.h.fx.branchId,
+      sequenceNumber: 2,
+      title: 'By hand',
+      summary: 'Written with no close.',
+      theme: 'None',
+      startEntryId: c.h.fx.entries[7]!.id,
+      endEntryId: c.h.fx.replyIds[4]!,
+      tokenCount: 1,
+      closedAt: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const before = await snapshot(c.h)
+
+    expect(await checkParent({ ...c, chapterId: 'chap_by_hand' }, NOTHING_SHOWN)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.noClose,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it("refuses close-owed for the parent's pending pick below B", async () => {
+    const c = await closed()
+    const expected = await shownWithTurn(c)
+    generationStore.setPendingClose(c.h.fx.branchId, { endEntryId: c.h.fx.replyIds[4]! })
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.closeOwed,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it.each(MOVED)(
+    'refuses counts-changed when %s moved, carrying the fresh preview',
+    async (_label, move) => {
+      const c = await closed()
+      await turnSince(c.h)
+      const fresh = await previewOf(c)
+      const moved = move(expectedOf(fresh))
+      expect(moved, 'the row moved nothing').not.toEqual(expectedOf(fresh))
+      const before = await snapshot(c.h)
+
+      expect(await checkParent(c, moved)).toEqual({
+        status: 'rejected',
+        code: 'counts-changed',
+        reason: expect.any(String),
+        preview: fresh,
+      })
+      await expectCheckedOnly(c.h, before)
+    },
+  )
+
+  it('refuses counts-changed when no turn follows the close, carrying the fresh preview', async () => {
+    const c = await closed()
+    const fresh = await previewOf(c)
+    expect(fresh.shortcut).toBeNull()
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expectedOf(fresh))).toEqual({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: expect.any(String),
+      preview: fresh,
+    })
+    await expectCheckedOnly(c.h, before)
+  })
+
+  it("refuses a catch-up pass's missing memory profile", async () => {
+    const c = await closed()
+    await setClassifierStatus(c.h.fx, { state: 'idle', processedThrough: endPosition(c.h) - 1 })
+    const expected = await shownWithTurn(c)
+    await assignClassifier('prof_gone')
+    const before = await snapshot(c.h)
+
+    expect(await checkParent(c, expected)).toMatchObject({
+      outcome: 'preflight-failed',
+      error: { kind: 'config-resolver', failure: 'profile-missing', target: 'classifier' },
+    })
+    await expectCheckedOnly(c.h, before)
   })
 })

@@ -423,6 +423,48 @@ type RerunStartArgs = {
   onStarted?: () => void
 }
 
+/** The fork's start refusals on the parent before it forks; holds no mark, starts nothing. */
+export type CloseRerunParentCheck =
+  | { status: 'clear'; preview: CloseRerunPreview & { shortcut: CloseRerunShortcut } }
+  | RejectedStart
+  | PreflightFailedStart
+  | CloseRerunReadRefusal
+  | CloseRerunCountsChanged
+
+/**
+ * chapter-close.md → Re-running a close, Re-run on new branch: every start refusal checked on the
+ * parent before the fork commits. No pending mark, since forkBranch's gate counts every pending
+ * turn; writes nothing. A clear preview's fork point is the N the fork takes. Rejects when a read
+ * throws.
+ */
+export async function checkCloseRerunParent(
+  branchId: string,
+  chapterId: string,
+  expected: CloseRerunExpected,
+  ctx: DbCtx,
+): Promise<CloseRerunParentCheck> {
+  const open = currentStoryStore.getCurrentStory()
+  if (open?.branchId !== branchId) return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
+  if (isStorySwapPending(open.storyId)) return refusedStart(MANUAL_CLOSE_REFUSAL.swapPending)
+  // No classifier-held read: whether an orphan pass's writes would copy is forkBranch's call (C2).
+  const txState = generationStore.getTxState()
+  if (isBranchHeld(txState, branchId)) return refusedStart(RERUN_HELD)
+  // A busy story's leave guard would swallow the tail's reset; a turn body still writes here.
+  if (isStoryBusy(txState, open.storyId, branchId) || generationStore.isTurnBodyActive(branchId))
+    return refusedStart(MANUAL_CLOSE_REFUSAL.busy)
+  ensureChapterClosePipelineRegistered()
+  const failed = closePreflight(open)
+  if (failed) return { outcome: 'preflight-failed', error: failed }
+  const fresh = await getCloseRerunPreview(branchId, chapterId, open, ctx)
+  if ('status' in fresh) return fresh
+  // No turn since leaves nothing to keep on the parent: the confirm the user pressed is stale.
+  const { shortcut } = fresh
+  if (shortcut === null || !shownStill(expected, fresh)) return countsChanged(fresh)
+  const passFailed = await catchUpPreflight({ branchId, chapterId, story: open }, ctx)
+  if (passFailed) return { outcome: 'preflight-failed', error: passFailed }
+  return { status: 'clear', preview: { ...fresh, shortcut } }
+}
+
 /**
  * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
  * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or

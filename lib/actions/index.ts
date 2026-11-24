@@ -18,11 +18,13 @@ export {
   type ChapterDeleteRefusalCode,
 } from './chapters/chapter-delete-set'
 export {
+  checkCloseRerunParent,
   CLOSE_RERUN_REFUSAL,
   getCloseRerunPreview,
   startCloseRerun,
   type CloseRerunCountsChanged,
   type CloseRerunExpected,
+  type CloseRerunParentCheck,
   type CloseRerunPreview,
   type CloseRerunReadRefusal,
   type CloseRerunRefusalCode,
