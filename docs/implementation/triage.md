@@ -302,3 +302,14 @@ slice-planning gate forces its resolution before that slice is planned.
   pipeline is `hard-gate` and `switchBranch` also refuses on
   `isStoryBusy`. Pre-existing. Found by Slice 6.4's reviews
   (2026-11-24).
+
+- **A late `onDismissed` from an earlier close can release a row held
+  by a reopened presentation.** After a reopen during a dismiss, the
+  earlier close's `onDismissed` runs the held row (e.g. the phone
+  `Browse branches…`) when that earlier exit ends rather than its own
+  (`components/ui/searchable-overlay-list.tsx` around :1361;
+  `OverflowMenu` has the same shape). Benign per Slice 6.4's recorded
+  gorhom fact: a Sheet presented during another's dismiss presents, and
+  the dismissing one doesn't come back, on web and the AVD. Scoping
+  `onDismissed` to the presentation that started the close is a
+  Sheet-primitive change. Found in Slice 6.4's PR review (2026-11-24).
