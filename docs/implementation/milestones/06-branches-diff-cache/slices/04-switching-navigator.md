@@ -903,3 +903,19 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   hasn't confirmed it).
 - The probe stays out of the tree (removed with this note); git history
   keeps it.
+- Right before the reset, with nothing awaited between, `switchBranch`
+  checks again that the story isn't busy and that no turn body is open
+  on the branch left. Either one takes the failed-switch path with no
+  dispatch, so the story-leave guard has nothing to replay. `showBranch`
+  doesn't check this; 6.5's callers own its gate.
+- The restore retries a failed pointer write once, then logs
+  `action_layer.branch_switch_restore_failed`, with no recovery on the
+  open path. A stories re-read that fails during the restore is retried
+  once, then left logged (provisional: the developer hasn't confirmed
+  either).
+- After a reopen during a dismiss, a late `onDismissed` from the earlier
+  close can release a row the reopened phone overlay list holds. This
+  is left as is and filed in
+  [triage](../../../triage.md): a Sheet presented during another's
+  dismiss presents, as the gorhom fact above records (provisional: the
+  developer hasn't confirmed it).
