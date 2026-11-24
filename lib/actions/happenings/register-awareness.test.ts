@@ -1824,7 +1824,7 @@ describe('branch scope', () => {
   const onWritten = (ctx: Ctx, action: PipelineAction, actionId: string) =>
     applyDeltaAction({ action, actionId, branchId: OTHER_BRANCH }, ctx)
 
-  const awarenessOn = async (db: Ctx['db'], branchId: string, id: string) =>
+  const awarenessOn = async (db: Ctx['db'], branchId: BranchId, id: string) =>
     (
       await db
         .select()
@@ -1832,7 +1832,7 @@ describe('branch scope', () => {
         .where(and(eq(happeningAwareness.branchId, branchId), eq(happeningAwareness.id, id)))
     )[0]
 
-  const pairOn = (db: Ctx['db'], branchId: string) =>
+  const pairOn = (db: Ctx['db'], branchId: BranchId) =>
     db
       .select()
       .from(happeningAwareness)
@@ -1853,7 +1853,7 @@ describe('branch scope', () => {
   const loggedBy = async (db: Ctx['db'], actionId: string) =>
     (await db.select().from(deltas).where(eq(deltas.actionId, actionId))) as Delta[]
 
-  const learn = (branchId: string): PipelineAction => ({
+  const learn = (branchId: BranchId): PipelineAction => ({
     kind: 'upsertHappeningAwareness',
     source: 'ai_classifier',
     payload: {
@@ -1867,7 +1867,7 @@ describe('branch scope', () => {
     },
   })
 
-  const pin = (branchId: string, decayResistance: number): PipelineAction => ({
+  const pin = (branchId: BranchId, decayResistance: number): PipelineAction => ({
     kind: 'upsertHappeningAwareness',
     source: 'user_edit',
     payload: {

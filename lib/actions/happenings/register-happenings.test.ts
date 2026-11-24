@@ -924,6 +924,7 @@ describe('updateHappening — columns that already stand, and the user edits a m
 // The sibling br_1 is seeded first, so a read that drops its branch finds the sibling's rows.
 describe('branch scope', () => {
   type Harness = Awaited<ReturnType<typeof setup>>
+  type BranchId = 'br_1' | 'br_2'
 
   const SIBLING: Happening = {
     id: 'hap_1',
@@ -1024,14 +1025,14 @@ describe('branch scope', () => {
     return harness
   }
 
-  const hapOn = async (db: Harness['db'], branchId: string) =>
+  const hapOn = async (db: Harness['db'], branchId: BranchId) =>
     (
       await db
         .select()
         .from(happenings)
         .where(and(eq(happenings.branchId, branchId), eq(happenings.id, 'hap_1')))
     )[0]
-  const invOn = async (db: Harness['db'], branchId: string) =>
+  const invOn = async (db: Harness['db'], branchId: BranchId) =>
     (
       await db
         .select()
@@ -1040,7 +1041,7 @@ describe('branch scope', () => {
           and(eq(happeningInvolvements.branchId, branchId), eq(happeningInvolvements.id, 'inv_1')),
         )
     )[0]
-  const hawOn = async (db: Harness['db'], branchId: string) =>
+  const hawOn = async (db: Harness['db'], branchId: BranchId) =>
     (
       await db
         .select()

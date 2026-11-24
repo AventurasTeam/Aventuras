@@ -528,6 +528,8 @@ describe.each(LINK_TABLES)('userDeletedHappeningLink over $name', ({ add, remove
 
 // Involvement ids repeat across branches (the key is branch and id), so every read and write is scoped.
 describe('branch scope', () => {
+  type BranchId = 'br_1' | 'br_2'
+
   const SIBLING: HappeningInvolvement = {
     id: 'hinv_1',
     branchId: 'br_1',
@@ -568,7 +570,7 @@ describe('branch scope', () => {
   const onWritten = (ctx: Ctx, action: PipelineAction, actionId: string) =>
     applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
 
-  const involvementOn = async (db: Db, branchId: string, id: string) =>
+  const involvementOn = async (db: Db, branchId: BranchId, id: string) =>
     (
       await db
         .select()
