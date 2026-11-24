@@ -267,21 +267,21 @@ describe('setBranchLead', () => {
     expect(await setBranchLead('br_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
     expect(await undoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
     const patch = entitiesStore.patch
-    const flagCounts: number[] = []
-    const leads: (string | null)[] = []
+    const observations: { flags: number; lead: string | null }[] = []
     vi.spyOn(entitiesStore, 'patch').mockImplementation((branchId, p) => {
       patch(branchId, p)
       const rows = entitiesStore.getEntities('br_1')
-      flagCounts.push([...rows.values()].filter((e) => e.isLead === 1).length)
-      leads.push(resolveLead(rows, 'br_1')?.id ?? null)
+      observations.push({
+        flags: [...rows.values()].filter((e) => e.isLead === 1).length,
+        lead: resolveLead(rows, 'br_1')?.id ?? null,
+      })
     })
     const error = vi.spyOn(logger, 'error')
 
     expect(await redoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
 
-    expect(flagCounts).toContain(2)
-    expect(leads).toContain(null)
-    expect(leads.at(-1)).toBe('char_mira')
+    expect(observations.find((o) => o.flags === 2)).toEqual({ flags: 2, lead: null })
+    expect(observations.at(-1)).toEqual({ flags: 1, lead: 'char_mira' })
     expect(error).not.toHaveBeenCalled()
   })
 
