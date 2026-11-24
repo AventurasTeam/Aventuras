@@ -51,7 +51,7 @@ export const RUNNERS: readonly [string, Runner][] = [
   ['android', migrateLikeAndroid],
 ]
 
-/** In memory, sqlite-vec loaded and foreign keys on, as the app opens it, migrated through `tags`. */
+/** In memory, sqlite-vec loaded, foreign keys on (as the app opens it), migrated through `tags`. */
 export function openMigratedTo(tags: readonly string[]): DatabaseSync {
   const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
   sqlite.loadExtension(getLoadablePath())

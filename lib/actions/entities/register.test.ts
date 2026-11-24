@@ -1478,7 +1478,7 @@ describe('branch scope', () => {
     },
   )
 
-  // Each branch's row starts at its own flag value; a flag write must move only its own branch's row.
+  // Each branch's row starts at its own flag value; a flag write must move only its own row.
   async function twoBranchesLeading(sibling: 0 | 1, written: 0 | 1) {
     const harness = await twoBranches()
     const { db } = harness

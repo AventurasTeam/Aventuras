@@ -63,8 +63,7 @@ const VALID_SETTINGS = {
   packVariables: {},
 }
 
-// The lead is a flag on a branch's character row (data-model.md → The lead), so no mode or
-// narration asks the definition for one.
+// The lead is a flag on a branch's character row (data-model.md → The lead), not a definition one.
 describe('storyDefinitionSchema and the lead', () => {
   it.each([
     ['adventure', 'first'],
