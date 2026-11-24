@@ -386,9 +386,9 @@ describe('branch scope', () => {
     },
   ]
 
-  it.each(PAYLOAD_CASES)(
-    '$kind payload: refuses a payload naming another branch and writes neither branch',
-    async ({ action, reason }) => {
+  it.each(PAYLOAD_CASES.map((c) => [c.kind, c] as const))(
+    '%s payload: refuses a payload naming another branch and writes neither branch',
+    async (_kind, { action, reason }) => {
       const { ctx, read, undoPayloadsOf } = await twoBranches()
       expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
       expect(await read('b1')).toEqual(main)
