@@ -67,7 +67,7 @@ import {
   importLore,
   saveEntity,
   saveLore,
-  setStoryLead,
+  setBranchLead,
   type ImportRejectionCode,
 } from '@/lib/actions'
 import type { EntityImport, LoreImport } from '@/lib/avts'
@@ -486,16 +486,15 @@ export default function WorldRoute() {
   const onRejected = toast.error
   const onSetLead = useCallback(
     (id: string) => {
-      if (storyId == null) return
       const name = entities.find((e) => e.id === id)?.name ?? ''
-      setStoryLead(storyId, id, ctx).then(
+      setBranchLead(branchId, id, ctx).then(
         (result) => {
           if (result.status === 'ok') toast.success(t('world:lead.set', { name }))
           else toast.error(leadRejectionText(result.code))
         },
         (error: unknown) => {
           logger.error('app.world_set_lead_failed', {
-            storyId,
+            branchId,
             id,
             error: error instanceof Error ? error.message : String(error),
           })
@@ -503,7 +502,7 @@ export default function WorldRoute() {
         },
       )
     },
-    [storyId, entities],
+    [branchId, entities],
   )
 
   const selectedName = selectionName(selection)

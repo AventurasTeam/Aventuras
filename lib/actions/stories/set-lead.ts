@@ -1,8 +1,14 @@
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 
-import { branches, entities, stories, storyDefinitionSchema, type DbCtx } from '@/lib/db'
+import { branches, entities, stories, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { currentStoryStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
+import { generateId } from '@/lib/ids'
+import { generationStore, isUserEditBlocked } from '@/lib/stores'
+import { needsLead } from '@/lib/world'
+
+import { applyDeltaActionGroup, DELTA_REJECTION } from '../delta/apply-delta-action'
+import { withKeyLock } from '../delta/key-lock'
+import type { PipelineAction } from '../types'
 
 export const LEAD_REJECTION = {
   inFlight: 'in-flight',
@@ -10,69 +16,122 @@ export const LEAD_REJECTION = {
   wrongBranch: 'wrong-branch',
   notCharacter: 'not-character',
   notActive: 'not-active',
-  invalidDefinition: 'invalid-definition',
+  needsLead: 'needs-lead',
+  failed: 'failed',
 } as const
 
 export type LeadRejectionCode = (typeof LEAD_REJECTION)[keyof typeof LEAD_REJECTION]
 
-export type SetStoryLeadResult = { status: 'ok' } | { status: 'rejected'; code: LeadRejectionCode }
+export type SetLeadResult = { status: 'ok' } | { status: 'rejected'; code: LeadRejectionCode }
 
-function refuse(storyId: string, entityId: string, code: LeadRejectionCode): SetStoryLeadResult {
-  logger.warn('action_layer.story_lead_rejected', { storyId, entityId, code })
+function refuse(
+  branchId: string,
+  entityId: string | null,
+  code: LeadRejectionCode,
+  reason?: string,
+): SetLeadResult {
+  logger.warn('action_layer.lead_rejected', {
+    branchId,
+    entityId,
+    code,
+    ...(reason === undefined ? {} : { reason }),
+  })
   return { status: 'rejected', code }
 }
 
-/**
- * Sets `definition.leadEntityId` to an active character on the story's current branch. `stories`
- * is not delta-logged, so this is a direct write with no CTRL-Z.
- */
-export async function setStoryLead(
-  storyId: string,
+// Each reads the flagged rows before its group takes their row locks, so two at once on one
+// branch would each clear only what the other hadn't flagged yet: they run one at a time.
+function queued(branchId: string, run: () => Promise<SetLeadResult>): Promise<SetLeadResult> {
+  return withKeyLock(`lead:${branchId}`, run)
+}
+
+async function storyOf(branchId: string, ctx: DbCtx) {
+  const [owner] = await ctx.db
+    .select({ status: stories.status, definition: stories.definition })
+    .from(branches)
+    .innerJoin(stories, eq(stories.id, branches.storyId))
+    .where(eq(branches.id, branchId))
+  if (!owner) throw new Error('branch not found')
+  return owner
+}
+
+async function flaggedIds(branchId: string, ctx: DbCtx): Promise<string[]> {
+  const rows = await ctx.db
+    .select({ id: entities.id })
+    .from(entities)
+    .where(and(eq(entities.branchId, branchId), eq(entities.isLead, 1)))
+    .orderBy(asc(entities.createdAt), asc(entities.id))
+  return rows.map((row) => row.id)
+}
+
+function leadWrite(branchId: string, id: string, isLead: 0 | 1): PipelineAction {
+  return { kind: 'updateEntity', source: 'user_edit', payload: { branchId, id, patch: { isLead } } }
+}
+
+// The named branch's gate, its hold included. No await from the check to the group's dispatch:
+// a run reserving after the check settles this write before it reads.
+async function dispatch(
+  branchId: string,
+  entityId: string | null,
+  actions: readonly PipelineAction[],
+  ctx: DbCtx,
+): Promise<SetLeadResult> {
+  if (isUserEditBlocked(generationStore.getTxState(), branchId))
+    return refuse(branchId, entityId, LEAD_REJECTION.inFlight)
+  if (actions.length === 0) return { status: 'ok' }
+  const result = await applyDeltaActionGroup(
+    actions,
+    { actionId: generateId('act'), branchId },
+    ctx,
+  )
+  if (result.status === 'ok') return { status: 'ok' }
+  const code =
+    result.code === DELTA_REJECTION.reversalInProgress
+      ? LEAD_REJECTION.inFlight
+      : LEAD_REJECTION.failed
+  return refuse(branchId, entityId, code, result.reason)
+}
+
+/** data-model.md → The lead: every flagged row on the branch off, then `entityId` on. */
+export function setBranchLead(
+  branchId: string,
   entityId: string,
   ctx: DbCtx,
-  nowMs: number = Date.now(),
-): Promise<SetStoryLeadResult> {
-  const [story] = await ctx.db
-    .select({
-      status: stories.status,
-      definition: stories.definition,
-      currentBranchId: stories.currentBranchId,
-    })
-    .from(stories)
-    .where(eq(stories.id, storyId))
-  if (!story) throw new Error('Story not found')
-  if (story.status === 'draft') return refuse(storyId, entityId, LEAD_REJECTION.draftStory)
-  const [target] =
-    story.currentBranchId == null
-      ? []
-      : await ctx.db
-          .select({ kind: entities.kind, status: entities.status })
-          .from(entities)
-          .where(and(eq(entities.branchId, story.currentBranchId), eq(entities.id, entityId)))
-  if (!target) return refuse(storyId, entityId, LEAD_REJECTION.wrongBranch)
-  if (target.kind !== 'character') return refuse(storyId, entityId, LEAD_REJECTION.notCharacter)
-  // wizard.md → Lead requires status='active'.
-  if (target.status !== 'active') return refuse(storyId, entityId, LEAD_REJECTION.notActive)
-  const next = storyDefinitionSchema.safeParse({ ...story.definition, leadEntityId: entityId })
-  if (!next.success) return refuse(storyId, entityId, LEAD_REJECTION.invalidDefinition)
-  const storyBranches = await ctx.db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(eq(branches.storyId, storyId))
-  // No await between this gate and the write, so a run starting mid-read cannot slip past.
-  if (generationStore.isUserEditBlocked()) return refuse(storyId, entityId, LEAD_REJECTION.inFlight)
-  await ctx.runInTransaction([
-    ctx.db
-      .update(stories)
-      .set({ definition: next.data, updatedAt: nowMs })
-      .where(eq(stories.id, storyId))
-      .toSQL(),
-  ])
-  // Redo replays deletes without the arm's lead refusal, and the lead is the story's: this direct
-  // write invalidates redo on every branch of the story.
-  for (const { id } of storyBranches) undoRedoStore.clear(id)
-  const open = currentStoryStore.getCurrentStory()
-  if (open?.storyId === storyId) currentStoryStore.set({ ...open, definition: next.data })
-  await rehydrateStories(ctx.db)
-  return { status: 'ok' }
+): Promise<SetLeadResult> {
+  return queued(branchId, async () => {
+    const story = await storyOf(branchId, ctx)
+    if (story.status === 'draft') return refuse(branchId, entityId, LEAD_REJECTION.draftStory)
+    const [target] = await ctx.db
+      .select({ kind: entities.kind, status: entities.status })
+      .from(entities)
+      .where(and(eq(entities.branchId, branchId), eq(entities.id, entityId)))
+    if (!target) return refuse(branchId, entityId, LEAD_REJECTION.wrongBranch)
+    if (target.kind !== 'character') return refuse(branchId, entityId, LEAD_REJECTION.notCharacter)
+    if (target.status !== 'active') return refuse(branchId, entityId, LEAD_REJECTION.notActive)
+    const flagged = await flaggedIds(branchId, ctx)
+    const actions = [
+      ...flagged.filter((id) => id !== entityId).map((id) => leadWrite(branchId, id, 0)),
+      ...(flagged.includes(entityId) ? [] : [leadWrite(branchId, entityId, 1)]),
+    ]
+    return dispatch(branchId, entityId, actions, ctx)
+  })
+}
+
+/** Clears every flagged row on the branch; offered only on a story that needs no lead. */
+export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<SetLeadResult> {
+  return queued(branchId, async () => {
+    const story = await storyOf(branchId, ctx)
+    if (story.status === 'draft') return refuse(branchId, null, LEAD_REJECTION.draftStory)
+    // A story with no stored definition can't say it needs none, so the lead stays.
+    const { definition } = story
+    if (definition == null || needsLead(definition.mode, definition.narration))
+      return refuse(branchId, null, LEAD_REJECTION.needsLead)
+    const flagged = await flaggedIds(branchId, ctx)
+    return dispatch(
+      branchId,
+      null,
+      flagged.map((id) => leadWrite(branchId, id, 0)),
+      ctx,
+    )
+  })
 }

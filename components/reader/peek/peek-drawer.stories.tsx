@@ -72,7 +72,6 @@ function DrawerHarness({
         data={data}
         visible={visible}
         peek={peek}
-        storyId={null}
         blocked={blocked || gate.blocked}
         blockedReason={gate.reason ?? blockedReason}
         onClose={() => {

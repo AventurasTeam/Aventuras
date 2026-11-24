@@ -138,9 +138,10 @@ export { resetStorySettings } from './stories/reset-settings'
 export { seedHeroFork } from './stories/seed-hero-fork'
 export {
   LEAD_REJECTION,
-  setStoryLead,
+  setBranchLead,
+  unsetBranchLead,
   type LeadRejectionCode,
-  type SetStoryLeadResult,
+  type SetLeadResult,
 } from './stories/set-lead'
 export {
   showBranch,

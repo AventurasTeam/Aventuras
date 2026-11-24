@@ -202,7 +202,8 @@ const LEAD_REJECTION_TEXT: Record<LeadRejectionCode, () => string> = {
   [LEAD_REJECTION.wrongBranch]: () => t('world:lead.failed'),
   [LEAD_REJECTION.notCharacter]: () => t('world:lead.failed'),
   [LEAD_REJECTION.notActive]: () => t('world:lead.notActive'),
-  [LEAD_REJECTION.invalidDefinition]: () => t('world:lead.failed'),
+  [LEAD_REJECTION.needsLead]: () => t('world:lead.failed'),
+  [LEAD_REJECTION.failed]: () => t('world:lead.failed'),
 }
 
 export function leadRejectionText(code: LeadRejectionCode): string {

@@ -2009,7 +2009,6 @@ function ReaderComposerBody({
         tier === 'phone' ? (
           <ReaderBrowseChip
             data={railData}
-            storyId={storyId}
             blocked={actionsBlocked}
             blockedReason={gateReason}
             onNavigate={navigateGuarded}
@@ -2131,7 +2130,6 @@ function ReaderComposerBody({
             <ReaderPeekDrawer
               data={railData}
               isFocused={isFocused}
-              storyId={storyId}
               blocked={actionsBlocked}
               blockedReason={gateReason}
               onNavigate={navigateGuarded}
