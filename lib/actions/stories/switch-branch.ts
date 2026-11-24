@@ -165,7 +165,8 @@ async function restoreThen(
       error: errorText(err),
     })
   }
-  await rehydrateStories(ctx.db)
+  // A failed re-read logs itself; one more try keeps a transient failure off the story list.
+  if (!(await rehydrateStories(ctx.db))) await rehydrateStories(ctx.db)
   return result
 }
 

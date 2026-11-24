@@ -689,6 +689,22 @@ describe('switchBranch', () => {
     expect(readerHoldStore.isHeld('br_a')).toBe(false)
   })
 
+  it('reads the stories again when the re-read after the restore fails once', async () => {
+    const { ctx } = await setup()
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    // The switch's own re-read lands br_b in the store; the restore's first re-read fails.
+    vi.mocked(rehydrateStories)
+      .mockImplementationOnce((database) => readStories(database))
+      .mockImplementationOnce(() => Promise.resolve(false))
+      .mockImplementation((database) => readStories(database))
+
+    const result = await switchBranch(input({ replaceStack: fakeStack(false).replaceStack }), ctx)
+
+    expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(vi.mocked(rehydrateStories)).toHaveBeenCalledTimes(3)
+    expect(storiesRowBranch()).toBe('br_a')
+  })
+
   it('puts the pointer back when the stack reset throws', async () => {
     const { db, ctx } = await setup()
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
