@@ -88,10 +88,10 @@ suite asserts the database alone: 6.2 removed its store mirror.
 - **The fixture.** A hand-seeded second `branches` row, with rows under
   the same ids as the first branch's. The two rows of an id differ in
   every column the handler reads or writes, so a read from the wrong
-  row shows in the result, not only a write to it. No deltas are
-  seeded on it: until 6.1's composite key lands, a delta id can't
-  repeat. 6.1 has landed since this was written, which reopens the
-  choice ([Open questions](#open-questions)).
+  row shows in the result, not only a write to it. Where a delta-log
+  read is under test, the second branch holds deltas too: 6.1's
+  composite key lets a delta id repeat ([Implementation notes → The
+  fixture](#implementation-notes)).
 - **The pair.** Per handler: its write on one branch lands on that
   branch's row as computed from that row, and leaves the other
   branch's same-id row unchanged; and that write's reversal
@@ -170,23 +170,8 @@ suite asserts the database alone: 6.2 removed its store mirror.
 
 ## Open questions
 
-- **Register coverage.** 55 handlers in 13 suites. The 16 state-patch
-  handlers carry the most branch conditions, several through helpers,
-  and a pair per handler won't reach them all; the table in the PR
-  body is the measure, not the pair count.
-- **The fixture now that 6.1 has landed.** "No deltas on the second
-  branch" rested on delta ids that couldn't repeat; 6.1's composite
-  key lets them, and it shipped `lib/db/__tests__/two-branch.ts`
-  (`cloneBranch`, `seedCopyFixture`). Open: whether the fixture builds
-  on `cloneBranch`, and whether it seeds same-id deltas on the second
-  branch. `reverseReplayDeltas(actionId)` reads by action id alone, so
-  a pair whose action id repeats on the second branch would trip
-  `selectReversalSet`'s refusal of a set that spans branches. Default:
-  hand-seeded rows and no deltas on the second branch, as the
-  story-entries block has.
-- **Size.** Not estimated on its own. Planning sizes it against the
-  conventions' line: above about 20 plan tasks, it splits by suite
-  group or records why it can't.
+None open. Each was answered at slice planning or in the work; the
+answers are in [Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
@@ -209,15 +194,16 @@ close action ids.
 **What a row proves (developer, 2026-11-24).** A condition in a
 handler's own code (its payload check, its reads and writes, a helper
 only its register file calls, its cascade) names a red test of that
-handler. A line several handlers reach was mutated once per task that
-reaches it, and each handler reaching it has a row marked `shared`
-that names a red test from one of those runs: the delta-log helpers,
-`live-refs.ts`, the translation cascade, the vector sweep,
-`parent-chain-check.ts`, each registration's descriptor `branchCol`,
-and the state-patch module's `loadCurrent` and write. A delete's
-descriptor row names its registration's create or update pair: undoing
-a delete only inserts, so its own pair never reads through the
-descriptor. Accepted risk: a
+handler. A line several handlers reach was mutated once, and each
+handler reaching it has a row marked `shared` that names a red test
+from that run: the delta-log helpers, `live-refs.ts`, the translation
+cascade, the vector sweep, `parent-chain-check.ts`, each
+registration's descriptor `branchCol`, and the state-patch module's
+`loadCurrent` and write. The descriptor and the state-patch
+`loadCurrent` and write ran once in each task that tested them; the
+others ran once, in Task 1. A delete's descriptor row names its
+registration's create or update pair: undoing a delete only inserts,
+so its own pair never reads through the descriptor. Accepted risk: a
 handler that passes the wrong branch variable to a shared helper
 isn't caught by removing a condition.
 
