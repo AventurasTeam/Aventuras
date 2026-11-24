@@ -812,9 +812,8 @@ function ReaderComposerBody({
     [branchId],
   )
 
-  // A switch holds the reader from its guard's go-ahead (on phone, after the navigator Sheet's
-  // exit) to its navigation (branch-navigator.md → Per-row anatomy): no write on this branch may
-  // land between its gate check and its publish.
+  // A switch holds the reader from its guard's go-ahead to its navigation, so no write lands
+  // between its gate check and its publish (branch-navigator.md → Per-row anatomy).
   const {
     begin: beginDispatch,
     end: endDispatch,

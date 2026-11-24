@@ -20,8 +20,8 @@ export type SwitchLanding = {
 }
 
 /**
- * Why the gate refuses a switch, read from the state when the result lands: the rendered reason is
- * stale by then, and may name the reader hold or a restart hold, which refuse no switch.
+ * Why the gate refuses a switch, read when the result lands: the rendered reason is stale by then
+ * and may name the reader or a restart hold, which refuse no switch.
  */
 export function switchGateReason(txState: TxState, storyId: string): string {
   return generationGateReason(true, selectStorySettingsGenerationRunKind(txState, storyId))

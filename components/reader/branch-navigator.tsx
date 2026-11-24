@@ -119,9 +119,8 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
   }
   const shown = shownChip(chip)
 
-  // Radix returns focus to its trigger, and the hidden anchor takes none. A handle-opened navigator
-  // follows overlays.md → Close focus: what held focus as it opened, else the opener of the menu it
-  // came from, whose row is gone by now. None of it after an outside press/focus: focus is placed.
+  // The hidden anchor takes no Radix trigger focus: restore per overlays.md → Close focus (opener,
+  // else the menu's opener). Skipped after an outside press/focus, which already placed focus.
   const openedFrom = useRef<(HTMLElement | null)[]>([])
   const interactedOutside = useRef(false)
   const returnFocus = (event: Event) => {
