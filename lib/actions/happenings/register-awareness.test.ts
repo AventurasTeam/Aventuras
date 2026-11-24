@@ -2026,7 +2026,14 @@ describe('branch scope', () => {
     ],
   ])('%s payload: refuses a payload naming the sibling branch', async (_kind, action) => {
     const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT, WRITTEN, WRITTEN_KEPT])
-    await applyDeltaAction({ action: pin(BRANCH, 0.6), actionId: 'act_pin', branchId: BRANCH }, ctx)
+    expect(
+      (
+        await applyDeltaAction(
+          { action: pin(BRANCH, 0.6), actionId: 'act_pin', branchId: BRANCH },
+          ctx,
+        )
+      ).status,
+    ).toBe('ok')
     const before = await allRows(db)
 
     expect(await onWritten(ctx, action, 'act_payload')).toEqual({

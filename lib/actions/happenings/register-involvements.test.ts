@@ -634,7 +634,7 @@ describe('branch scope', () => {
     expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
   })
 
-  // The payload names the sibling, a valid target there: with the check gone, the write lands on it.
+  // With the check gone, the write lands on the sibling branch.
   it.each<[string, PipelineAction, string]>([
     [
       'createHappeningInvolvement',

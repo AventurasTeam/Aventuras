@@ -338,9 +338,8 @@ describe('branch scope', () => {
     expect(await read('b1')).toEqual(main)
   })
 
-  const PAYLOAD_CASES: { kind: string; action: PipelineAction; reason: string }[] = [
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
     {
-      kind: 'createStoryEntry',
       action: {
         kind: 'createStoryEntry',
         source: 'user_edit',
@@ -358,7 +357,6 @@ describe('branch scope', () => {
       reason: 'branch mismatch: delta branch b2 vs entry branch b1',
     },
     {
-      kind: 'updateStoryEntryMetadata',
       action: {
         kind: 'updateStoryEntryMetadata',
         source: 'user_edit',
@@ -367,7 +365,6 @@ describe('branch scope', () => {
       reason: 'branch mismatch: delta branch b2 vs target branch b1',
     },
     {
-      kind: 'stampEntryChapter',
       action: {
         kind: 'stampEntryChapter',
         source: 'chapter_close',
@@ -376,7 +373,6 @@ describe('branch scope', () => {
       reason: 'branch mismatch: delta branch b2 vs target branch b1',
     },
     {
-      kind: 'deleteStoryEntry',
       action: {
         kind: 'deleteStoryEntry',
         source: 'user_edit',
@@ -386,7 +382,7 @@ describe('branch scope', () => {
     },
   ]
 
-  it.each(PAYLOAD_CASES.map((c) => [c.kind, c] as const))(
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
     '%s payload: refuses a payload naming another branch and writes neither branch',
     async (_kind, { action, reason }) => {
       const { ctx, read, undoPayloadsOf } = await twoBranches()
