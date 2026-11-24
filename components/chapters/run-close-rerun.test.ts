@@ -47,11 +47,13 @@ const COUNTS: RollbackCounts = {
 
 const PREVIEW: CloseRerunPreview = {
   chapterNumber: 2,
+  branchName: 'Main',
   model: 'gemma-4-26b',
   tokens: 24_310,
   reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
   shortcut: {
     targetEntryId: 'entry_58',
+    forkPoint: { entryId: 'entry_57', position: 57 },
     turns: 7,
     entries: { count: 15, first: 58, last: 72 },
     counts: COUNTS,

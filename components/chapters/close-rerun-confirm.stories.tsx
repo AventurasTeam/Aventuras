@@ -48,11 +48,13 @@ const SHORTCUT_COUNTS: RollbackCounts = {
 // chapter-timeline.md → Re-run a close's sketch.
 const PREVIEW: CloseRerunPreview = {
   chapterNumber: 5,
+  branchName: 'Main',
   model: 'gemma-4-26b',
   tokens: 24310,
   reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
   shortcut: {
     targetEntryId: 'ent_91',
+    forkPoint: { entryId: 'ent_90', position: 90 },
     turns: 3,
     entries: { count: 6, first: 91, last: 96 },
     counts: SHORTCUT_COUNTS,
@@ -170,6 +172,7 @@ export const SingleOfEach: Story = {
       reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
       shortcut: {
         targetEntryId: 'ent_91',
+        forkPoint: { entryId: 'ent_90', position: 90 },
         turns: 1,
         entries: { count: 1, first: 91, last: 91 },
         counts: { ...SHORTCUT_COUNTS, entries: 1, worldStateChanges: 1 },

@@ -4,6 +4,7 @@ import { modelConfigOf, resolveModel } from '@/lib/ai'
 import { chapterProgressOf, isCloseOwed } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
+  branches,
   chapters,
   deltas,
   openRegionSeries,
@@ -64,18 +65,24 @@ const CLOSE_RERUN_PREVIEW_LOCK_ID = 'close-rerun-preview'
 
 export type CloseRerunPreview = {
   chapterNumber: number
+  /** The branch's name, for the fork sentence. */
+  branchName: string
   /** lore-mgmt's model for the story, override included; null when unresolved. */
   model: string | null
   tokens: number
   reversal: { createdLore: { count: number; userEdited: boolean }; otherChanges: number }
   shortcut: {
     targetEntryId: string
+    /** N: the highest-position non-system entry strictly before the target. */
+    forkPoint: { entryId: string; position: number }
     /** Replies the shortcut removes. */
     turns: number
     entries: { count: number; first: number; last: number }
     counts: RollbackCounts
   } | null
 }
+
+export type CloseRerunShortcut = NonNullable<CloseRerunPreview['shortcut']>
 
 export const CLOSE_RERUN_REFUSAL = {
   notFound: 'not-found',
@@ -93,7 +100,6 @@ export type CloseRerunReadRefusal = {
   reason: string
 }
 
-type Shortcut = NonNullable<CloseRerunPreview['shortcut']>
 type TurnStart = { id: string; position: number }
 
 function refused(code: CloseRerunRefusalCode, reason: string): CloseRerunReadRefusal {
@@ -186,7 +192,7 @@ async function spanFrom(
   branchId: string,
   position: number,
   ctx: Pick<DbCtx, 'db'>,
-): Promise<Pick<Shortcut, 'turns' | 'entries'>> {
+): Promise<Pick<CloseRerunShortcut, 'turns' | 'entries'>> {
   const [row] = await ctx.db
     .select({
       count: sql<number>`COUNT(*)`,
@@ -205,7 +211,28 @@ async function spanFrom(
   return { turns: row.turns, entries: { count: row.count, first: row.first, last: row.last } }
 }
 
-type ShortcutRead = { lines: Shortcut; reverses: readonly Delta[] }
+// chapter-close.md → Re-running a close: a fork at N keeps every entry before B and none after.
+async function forkPointBefore(
+  branchId: string,
+  position: number,
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<CloseRerunShortcut['forkPoint'] | null> {
+  const [row] = await ctx.db
+    .select({ entryId: storyEntries.id, position: storyEntries.position })
+    .from(storyEntries)
+    .where(
+      and(
+        eq(storyEntries.branchId, branchId),
+        lt(storyEntries.position, position),
+        ne(storyEntries.kind, 'system'),
+      ),
+    )
+    .orderBy(desc(storyEntries.position))
+    .limit(1)
+  return row ?? null
+}
+
+type ShortcutRead = { lines: CloseRerunShortcut; reverses: readonly Delta[] }
 
 // rollback-confirm.md → Counts at the turn, read inside this hold: getRollbackCounts takes its
 // own, and the lock isn't reentrant.
@@ -214,11 +241,25 @@ async function shortcutTo(
   turn: TurnStart,
   ctx: DbCtx,
 ): Promise<ShortcutRead | CloseRerunReadRefusal> {
+  const forkPoint = await forkPointBefore(branchId, turn.position, ctx)
+  if (forkPoint === null) {
+    // A closed chapter's end entry always stands before B: none means a broken branch.
+    logger.error('action_layer.close_rerun_fork_point_missing', {
+      branchId,
+      targetEntryId: turn.id,
+    })
+    return refused(CLOSE_RERUN_REFUSAL.integrity, `no entry before ${turn.id} on ${branchId}`)
+  }
   const swept = await resolveSweep(branchId, turn.id, ctx)
   if ('status' in swept) return refused(CLOSE_RERUN_REFUSAL.integrity, swept.reason)
   const span = await spanFrom(branchId, turn.position, ctx)
   return {
-    lines: { targetEntryId: turn.id, ...span, counts: await rollbackCountsOf(swept, ctx) },
+    lines: {
+      targetEntryId: turn.id,
+      forkPoint,
+      ...span,
+      counts: await rollbackCountsOf(swept, ctx),
+    },
     reverses: swept.set.rows,
   }
 }
@@ -252,8 +293,9 @@ function loreModelOf(settings: StorySettings): string | null {
 }
 
 /**
- * The re-run confirm's lines (chapter-timeline.md → Re-run a close): reversal counts, the
- * shortcut's when turns followed, and the cost. Writes nothing; held shared across its reads.
+ * The re-run confirm's lines (chapter-timeline.md → Re-run a close): the branch's name, reversal
+ * counts, the shortcut's and its fork point when turns followed, and the cost. Writes nothing;
+ * held shared across its reads.
  */
 export async function getCloseRerunPreview(
   branchId: string,
@@ -262,6 +304,11 @@ export async function getCloseRerunPreview(
   ctx: DbCtx,
 ): Promise<CloseRerunPreview | CloseRerunReadRefusal> {
   return withBranchWriteShared(branchId, CLOSE_RERUN_PREVIEW_LOCK_ID, async () => {
+    const [branch] = await ctx.db
+      .select({ name: branches.name })
+      .from(branches)
+      .where(eq(branches.id, branchId))
+    if (!branch) return refused(CLOSE_RERUN_REFUSAL.notFound, `branch ${branchId} not found`)
     const chapter = await latestChapter(branchId, chapterId, ctx)
     if ('status' in chapter) return chapter
     const groups = await readChapterCloseGroups(branchId, chapterId, ctx)
@@ -288,6 +335,7 @@ export async function getCloseRerunPreview(
       )
     return {
       chapterNumber: chapter.sequenceNumber,
+      branchName: branch.name,
       model: loreModelOf(story.settings),
       tokens: await ownEntryTokens(branchId, chapterId, ctx),
       // The shortcut runs first: its deltas count on its line, and the reversal's read after it.

@@ -313,6 +313,7 @@ const RERUN_REPORT: CloseReport = {
 
 const PREVIEW: CloseRerunPreview = {
   chapterNumber: 2,
+  branchName: 'Main',
   model: 'gemma-4-26b',
   tokens: 24_310,
   reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
