@@ -15,8 +15,13 @@ export type BranchRenameInputProps = {
 
 type Phase = 'editing' | 'saving' | 'settled'
 
+// RN-Web's own submit guard reads both signals, and runs after this handler; 229 is the key code
+// an IME's confirming Enter can carry with isComposing already false.
+const IME_KEY_CODE = 229
+
 const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
-  'isComposing' in nativeEvent && nativeEvent.isComposing === true
+  ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
+  ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
 /** A branch row's name as an input: Enter or blur saves a trimmed name, Esc cancels. */
 export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputProps): ReactElement {

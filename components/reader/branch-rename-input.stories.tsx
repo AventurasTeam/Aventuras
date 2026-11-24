@@ -178,6 +178,33 @@ export const EnterSavesTrimmed: Story = {
   },
 }
 
+/** An IME's confirming Enter can arrive with isComposing false and keyCode 229. */
+export const ImeConfirmEnterSavesNothing: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const field = await renameField()
+    await userEvent.keyboard('The trap')
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        isComposing: false,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+    await pause(50)
+    await expect(field).toBeInTheDocument()
+    await expect(field).toHaveFocus()
+    await expect(args.onSave).not.toHaveBeenCalled()
+    await expect(args.onDone).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onDone).toHaveBeenCalledTimes(1))
+    await expect(args.onSave).toHaveBeenCalledWith('The trap')
+  },
+}
+
 export const BlurSaves: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')
