@@ -1286,6 +1286,23 @@ flagged row whose parent names no row (`sharedParentName` in
 `components/world/use-collision-resolve.ts` returns undefined for root
 and missing alike). Folded in from triage 2026-10-11.
 
+#### An entry asset outlives a rewind of its entry
+
+The manifest has a rewind remove a branch's `entry_assets` rows for
+`B..head` ([Branch model](./data-model.md#branch-model)), but the
+entry-assets registration (`lib/actions/entry-assets/register.ts`)
+declares no link from `entry_id` to `story_entries`. A rollback or fork
+removes an asset row only when the
+[survival-anchor window](./data-model.md#survival-anchor) holds its
+create. A create anchored on an entry before `B` that points the row
+at an entry the window removes keeps the row, on the parent and on a
+fork alike.
+Nothing writes such a row: `createEntryAsset` has no production caller.
+Slice 6.3's equivalence suite pins the window-created case only.
+**Revisit signal:** the first production writer of `entry_assets`
+(uploaded images, or image generation above). Found by Slice 6.3's
+slice review (2026-11-24).
+
 #### A kept create in a redo group fails redo with a raw SQLite error
 
 When a user write keeps a machine create, the reversal re-owns the

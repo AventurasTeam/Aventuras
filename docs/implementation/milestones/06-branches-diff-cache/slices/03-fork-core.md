@@ -270,7 +270,8 @@ typed refusal. It lives in `lib/actions` (suggested:
 - **The lock.** The parent's branch write lock, held exclusive
   (`lib/actions/delta/branch-write-lock.ts:86-101`) from before the
   first plan read until the commit, and released in a `finally`. The
-  refusal reads run once the hold is granted: a delta-logged write
+  gate is checked before the hold, in the tick that requests it; the
+  other refusal reads run once the hold is granted: a delta-logged write
   queued ahead of the hold commits before the plan reads, and a run
   admitted while the fork holds it can write only after the commit, on
   the parent. The hold's id is unique per call:
@@ -704,11 +705,16 @@ files named are suggestions the plan may rename, with this doc amended.
 
 ## Open questions
 
+None open. Each was answered at slice planning or in the work; the
+answers are in [Implementation notes](#implementation-notes), and each
+question below ends on where.
+
 - **The split's shape.** Whether the write branch is an option on
   `buildReverseAndPrunePlan` or a field the walk carries, and what
   `ReversePlan` gains: separate re-own ops, separate vector-sweep ops,
   or a fork view over the plan. `ReversePlan` keeps its fields either
-  way.
+  way. _Resolved:_ an optional fourth argument, and three op lists
+  beside the old ones (The planner's write branch).
 - **One read still on the read branch.** [Slice 6.1](./01-copy-substrate.md)
   moved every stamp, key and patch C1 gave it off `delta.branchId`, and
   left one branch read the split must decide: `prepareUndo`'s
@@ -716,7 +722,9 @@ files named are suggestions the plan may rename, with this doc amended.
   (`lib/actions/delta/redo.ts:110`). That is the branch the undo wrote
   while the two are one; if the split reaches the survivor rewrites
   this callback takes, it must follow the write branch, and agree with
-  the group's own branch once C6 lands.
+  the group's own branch once C6 lands. _Resolved:_ it stays on
+  `set.branchId` (now `redo.ts:115`), since it serves CTRL-Z alone (The
+  planner's write branch).
 - **The seed's create deltas.** `entryCreateDeltas`
   (`lib/db/devtools/seed-dataset.ts:1364-1386`) logs every entry create
   with a null anchor and an action of its own, and
@@ -729,6 +737,7 @@ files named are suggestions the plan may rename, with this doc amended.
   action. Nothing on screen differs today; whether the seed's creates,
   main's and the fork's, follow the production shape is this slice's
   call when it rebuilds the seed (C11 gives 6.3 the fork's rows).
+  _Resolved:_ the seed's shape, for main and the fork alike (Decisions).
 - **How short the survivor copy's two lists stay.** The predicate is
   the default (C7). Whether the deltas the plan prunes outside the
   window, or the creates it re-owns, can pass the bind cap on a real
@@ -736,7 +745,11 @@ files named are suggestions the plan may rename, with this doc amended.
   are writes to rows reached by reference from removed rows, so a fork
   that removes a long stretch of a richly linked world adds the most.
   Planning reads it from the code and measures it on the dataset story.
-- **The fork's details canon leaves open.**
+  _Resolved:_ the predicate, with no fallback and a guard before any
+  write; the lists are still unmeasured at real scale (The survivor
+  copy, Cost).
+- **The fork's details canon leaves open.** _Resolved_ by the
+  developer, now in canon (Decisions).
   - `processedThrough` when the parent's is null (never processed, or
     a NULL column read as idle), and whether `lastSuccessAt` copies or
     resets.
@@ -771,24 +784,28 @@ files named are suggestions the plan may rename, with this doc amended.
   it. A journal survives unless `plan.droppedJournals` holds it. A
   re-run marker with `rerun_chapter_id` set carries its chapter's state
   even with no delta and no journal, so its chapter surviving the plan
-  refuses.
+  refuses. _Resolved:_ built as read here, in `fork-runs.ts`.
 - **How the seed runs an action.** How `scripts/seed` and the on-device
   reseed run the fork's core. `scripts/seed/index.ts`'s `--overlay` path already loads the
   action layer, but every E2E spec runs `pnpm db:seed`, so its load
   time lands on every spec. `reseedDevDatabase` sits in `lib/db`, which
   can't import `lib/actions` without a cycle, so its caller
   (`app/dev/reseed.tsx`) or an injected step runs the fork.
+  _Resolved_ by the developer: every seed mode, and the route after
+  the reseed (Decisions).
 - **Whether main forks at the seed's `N`.** Seed rows with no create
   delta that the closure reaches by reference refuse as `no-create`
   (`lib/actions/delta/row-closure.ts:329-330`). Whether the planner
   reaches one from `entry_hero_0040` is read at planning; a refusal
-  moves the fork entry, not the approach.
+  moves the fork entry, not the approach. _Resolved:_ it doesn't, so the
+  fork entry stays `entry_hero_0040`.
 - **The appended turns' lead stamps.** With
   [Slice 6.8](./08-per-branch-lead.md) on main, the appended turns
   carry `metadata.leadId` as main's entries do. C10 pins who stamps
   them: the second of 6.3 and 6.8 to land, as with the harness's lead
   switch. What is open is only how the stamp is written at seed time,
-  beside the other appended fields.
+  beside the other appended fields. _Resolved:_ 6.8 wasn't on main
+  here, so it writes them as the second to land (Second to land).
 - **Unaudited contract text.** Not rechecked by any audit round: C1's
   pin of the row target's branch, the two harness fixtures, the
   tombstone construction (two readings of the code, the auditor's and
@@ -797,13 +814,156 @@ files named are suggestions the plan may rename, with this doc amended.
   survivor copy, C8's hold from a fork's start to its navigation, and
   the "second to land" criteria. Read them against the code at planning
   ([milestone → Open questions](../milestone.md#open-questions)).
+  _Resolved:_ read at planning; the two fixtures reached their arms as
+  built (The two unrun fixtures).
 - **6.3 beside 6.1.** If the plan can't test anything before the op
   list splits, the edge becomes blocking and the planner starts after
-  6.1 merges.
+  6.1 merges. _Resolved:_ moot, since 6.1 merged before this slice
+  started, and the tests before 6.1's merge were never needed.
 - **Size.** Planned at 15 tasks, priced by analogy with no close
   precedent. M5's plans held 3 to 7 more than their estimates; check at
-  the plan skeleton.
+  the plan skeleton. _Resolved:_ it shipped in the 15 tasks, as one PR.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**The planner's write branch.** `buildReverseAndPrunePlan` takes an
+optional fourth argument, a `PlanTarget` (`{ writeBranchId }`), that
+only the fork passes; `ReversalOptions` is unchanged, so no shipped
+caller can name a write branch, and with none the write branch is the
+set's own. The walk carries both branches: `RowTarget` keeps
+`branchId`, `where` and `key` on the write branch and gains
+`readWhere`, which `rowStateOf` alone reads. `ReversePlan` keeps `ops`
+and `pruneOps` as they were and gains `writeOps` (`ops` without the
+vector sweeps), `sweepOps` and `reownOps` (the re-owns apart from the
+prune deletes); the fork passes `[...writeOps, ...reownOps]` as the
+copier's `between`. Redo's survivor restore, carried here from
+[Slice 6.1](./01-copy-substrate.md), keeps `set.branchId`
+(`redo.ts:115`): it serves CTRL-Z alone, whose write branch is its
+set's and its group's.
+
+**The survivor copy.** `resolveSweep` returns the predicate it read
+the window with, as `windowWhere`. A delta copies by
+`((window) IS NOT TRUE AND id NOT IN (…)) OR id IN (…)`: the first
+list is the deltas the plan prunes outside the window, the second the
+creates it re-owns inside it, and each clause is left out when its
+list is empty. `IS NOT TRUE`, not `NOT`: a delta anchored on an entry
+the parent doesn't hold makes the window NULL, which `resolveSweep`
+reads as kept. A journal copies unless the plan drops it. No temp
+table is built, so Acceptance criteria 12 doesn't apply: a guard
+throws before any write if a statement's lists would pass `BIND_CHUNK`
+(8,192 ids, a quarter of the bind cap), the delta lists together and
+the journal list apart. That departs from
+the plan's one summed guard, provisionally (the coordinator's call, for
+the developer's review in the PR).
+On the dataset story the lists were empty (Cost, below), so no fork at
+real scale has yet bound them.
+
+**Decisions.**
+
+- **The harness's vectors (developer, 2026-11-23).** Harness step 1
+  plants no vector for a restored row. The fork would copy one, since
+  vectors copy after the plan restores the row, while the reference
+  never holds it, since its copy runs while the row is deleted; and a
+  real parent never holds a vector for a deleted row, since a delete
+  sweeps it. The harness seeds a vector for a row the window creates
+  and one for a row it keeps, in two dimension families. Every op the
+  planner emits takes the write branch, the prune deletes, journal
+  deletes and vector sweeps included, and every read stays on the read
+  branch. So Acceptance criteria 14's vector items read: running the
+  vector copy before the plan's ops leaves the window-created row's
+  vector on the child, and a sweep reading `delta.branchId` kept in the
+  fork's ops fails a parent-untouched vector assertion.
+- **The seed runs the fork (developer, 2026-11-23).** Every
+  `pnpm db:seed` mode loads the action layer, as `--overlay` already
+  did, and runs `seedHeroFork` after the static rows. The script's
+  body moved into `seedDatabase(dbPath, cli)` in `scripts/seed/run.ts`,
+  so a test seeds through the script's path without spawning it. The
+  device reseed route runs the same step after `reseedDevDatabase()`,
+  since `lib/db` can't import `lib/actions`. Accepted cost: about half
+  a second per seed warm, two seconds cold.
+- **The fork details canon left open (developer, 2026-11-23)**, now in
+  [`data-model.md → Branch model`](../../../../data-model.md#branch-model):
+  the gate is `isUserEditBlocked` read with no branch, so a held parent
+  can fork; a `user_action` fork point is allowed, and the seed forks
+  at one; `deferred` and `pendingClose` don't follow the child; the
+  status is `idleStatus()` with the clamped watermark, a null one
+  staying null; and no reversal barrier, since the core reads the
+  pending swap again in the tick that posts its batch.
+- The seed fork's appended turns log their creates in main's seed
+  shape (`entryCreateDeltas`: an action each, a null anchor), not the
+  production shape, and main's creates are unchanged: moving main
+  would change the undo grouping the E2E specs drive, and nothing on
+  screen differs.
+- The refusals are one union, `FORK_REFUSAL`: `gated`, `swap-pending`,
+  `entry-missing`, `entry-system`, `unfinished-run`, and the sweep's
+  `rollback-floor` and `integrity` passed through. The hold's id is
+  `fork:<newBranchId>:<n>`, `n` a per-call counter, so two calls under
+  one explicit `newBranchId` still hold apart.
+- `/dev/fork-cost` reads the fork's plan through `planFork`, which the
+  actions barrel exports beside `forkBranch`; the planner itself stays
+  internal to `lib/actions`.
+- Both seed wipes (`scripts/seed/replace.ts` and the device's
+  `reseedDevDatabase`) clear every vector family. A fork seeded onto a
+  database the app had embedded copied main's leftover vectors and
+  collided on the third seed; the seed carries no vector
+  ([`testing.md → Embedder in E2E`](../../../../testing.md#embedder-in-e2e)),
+  so the wipe leaves none behind.
+
+**The two unrun fixtures.** The tombstone re-insert and the delete
+inside the window reached their arms as this doc builds them: each
+arm's mutation went red.
+
+**The four journal cases.** Canon's fork table read the re-run's
+first log position; it now reads the journal's floor, which the drop
+rule (`journalsToDrop`) compares against, and defers to that rule. The
+two agree on every reachable log: under the gate a re-run's writes
+start at the floor plus one. The fixtures match canon's summary in all
+four cases: case 2 drops its journal under all three of the rule's
+clauses at once, and case 4 under `sweepsBelow` alone. No fork fixture
+rewrites a delta at or below the floor, and none isolates `emptiesGroup`,
+which `journal-drop.test.ts` covers.
+
+**Cost (Acceptance criteria 25).** `/dev/fork-cost` forks the dataset
+story (`pnpm db:seed:dataset`: 133 entries, 1,106 deltas, no
+journals) at its earliest reply, position 3, and at its tail, timing
+the whole `forkBranch` call and its one batch. In the desktop dev app
+(2026-11-24), the earliest reply took 364.7 ms with a 23.8 ms batch,
+and the tail 20.8 ms with an 11.3 ms batch. On the slot AVD's dev
+client (emulator-5558, 2026-11-24), indicative only, the earliest
+reply took 1320.3 ms with a 210.5 ms batch, and the tail 27.7 ms with
+a 16 ms batch. At the earliest reply the plan pruned 1096 deltas, 0 of
+them outside the window, and re-owned 0 creates in it: 0 of the 8,192
+binds the guard allows. The route runs its own `planFork` just before
+the timed call, so the call is warm: its re-plan ran after an
+identical plan read (447.7 ms on the desktop, 1162.7 ms on the AVD),
+and a cold desktop call sits nearer that plan read plus the batch,
+about 470 ms. Each point is one sample. Both points read 0 binds, since
+the earliest reply's window is the whole set, so the survivor id-list
+path wasn't exercised at real scale.
+
+**Device reseed (Acceptance criteria 24).** On the slot AVD
+(emulator-5558, 2026-11-23), the dev reseed route left `br_hero_fork`
+a real fork, read from the device's database through run-as as
+Acceptance criteria 20 reads a seeded file. The device database held
+no vectors, so the reseed's vector wipe wasn't exercised there.
+
+**E2E.** `pnpm test:e2e` passed whole on 2026-11-24 at `d6b8d4356`:
+225 passed, 2 skipped, none flaky. `embedder-drain.spec.ts` marks the
+fork's rows clean before launch (`markBranchEmbeddingClean` in
+`e2e/harness/seed.ts`) and keeps its absence assertion. Four other
+specs now read the open branch, since the fork holds same-id copies of
+main's rows, and no assertion was dropped. `embedder-swap.spec.ts`
+counts the drained, holed and refill vectors, and hashes the lore, on
+`br_hero_main`; its relabel counts stay story-wide, so they still check
+that relabel moves the fork's vectors. `periodic-classifier.spec.ts`
+scopes its `threads` read and `entityOf` to the branch. `plot.spec.ts`
+scopes two `happenings` and three `happening_awareness` reads, because
+the fork's same-id copies had made an undo assertion unable to fail.
+`world.spec.ts` scopes `entitySnapshot`, which passed by row order
+alone.
+
+**Second to land.** Neither [Slice 6.7](./07-diff-cache.md) nor
+[Slice 6.8](./08-per-branch-lead.md) had landed at this slice's final
+rebase (`33ff68b7f`), so 6.7 adds Acceptance criteria 9's no-eviction
+check when it lands, and 6.8 the harness's lead switch (18) and the
+seed fork's `leadId` stamps (22) (C9, C10).

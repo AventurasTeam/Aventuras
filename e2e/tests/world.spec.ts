@@ -49,11 +49,11 @@ type EntitySnapshot = {
 }
 
 // JSON columns parsed, so a round trip compares values, not serializations.
-async function entitySnapshot(page: Page, id: string): Promise<EntitySnapshot> {
+async function entitySnapshot(page: Page, branchId: string, id: string): Promise<EntitySnapshot> {
   const [[description, tags, state]] = await queryApp(
     page,
-    `SELECT description, tags, state FROM entities WHERE id = ?`,
-    [id],
+    `SELECT description, tags, state FROM entities WHERE branch_id = ? AND id = ?`,
+    [branchId, id],
   )
   return {
     description,
@@ -375,7 +375,7 @@ test.describe.serial('World panel', () => {
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     const branchId = await goToWorld(page)
     const kael = await entityId(page, branchId, 'Kael')
-    const before = await entitySnapshot(page, kael)
+    const before = await entitySnapshot(page, branchId, kael)
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'character').click()
     await world.row(page, 'Kael').click()
@@ -389,7 +389,7 @@ test.describe.serial('World panel', () => {
     await saveSession.saveBarSave(page).click()
     await expect(saveSession.saveBarSave(page)).toHaveCount(0)
 
-    const saved = await entitySnapshot(page, kael)
+    const saved = await entitySnapshot(page, branchId, kael)
     expect(saved.description).toBe('A courier turned fugitive — E2E.')
     expect(saved.tags).toContain('fugitive')
     expect(saved.state.visual?.hair).toBe('dark, rain-soaked')
@@ -417,7 +417,9 @@ test.describe.serial('World panel', () => {
       reader.undoConfirm(page, undoText('title', 'edited', { name: 'Kael' })),
     ).toBeVisible()
     await reader.undoConfirmUndo(page).click()
-    await expect.poll(() => entitySnapshot(page, kael), { timeout: 30_000 }).toEqual(before)
+    await expect
+      .poll(() => entitySnapshot(page, branchId, kael), { timeout: 30_000 })
+      .toEqual(before)
   })
 
   test('a dirty pane guards a row switch: Cancel keeps the draft, Discard drops it', async () => {
@@ -425,7 +427,7 @@ test.describe.serial('World panel', () => {
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     const branchId = await goToWorld(page)
     const kael = await entityId(page, branchId, 'Kael')
-    const committed = (await entitySnapshot(page, kael)).description
+    const committed = (await entitySnapshot(page, branchId, kael)).description
     await world.categoryTrigger(page).click()
     await world.categoryOption(page, 'character').click()
     await world.row(page, 'Kael').click()
@@ -442,7 +444,7 @@ test.describe.serial('World panel', () => {
     await world.row(page, 'Mira').click()
     await saveSession.unsavedDiscard(page).click()
     await expect(world.subHeader(page)).toContainText('Mira')
-    expect((await entitySnapshot(page, kael)).description).toBe(committed)
+    expect((await entitySnapshot(page, branchId, kael)).description).toBe(committed)
   })
 
   test('[+] Blank on Locations creates a location on Save and selects it', async () => {
