@@ -30,11 +30,15 @@ export type ProseContext = ProseTarget & {
 }
 
 // One path's verdict: its change, SAME when its two sides are equal, UNWORDED when it has no
-// wording, or MISTYPED when a side isn't its field's type.
+// wording, or Mistyped at the path of a side that isn't its field's type (a group's own member).
 const SAME = Symbol('same')
 const UNWORDED = Symbol('unworded')
-const MISTYPED = Symbol('mistyped')
-type Change = string | typeof SAME | typeof UNWORDED | typeof MISTYPED
+type Mistyped = { readonly mistyped: string }
+type Change = string | typeof SAME | typeof UNWORDED | Mistyped
+
+const mistypedAt = (path: string): Mistyped => ({ mistyped: path })
+const isMistyped = (value: unknown): value is Mistyped =>
+  typeof value === 'object' && value !== null && Object.hasOwn(value, 'mistyped')
 
 type At = {
   readonly path: string
@@ -136,8 +140,8 @@ function cutLongText(before: string, after: string): [string, string] {
   return [cutSide(a, start, diff), cutSide(b, start, diff)]
 }
 
-function textChange({ old, new: next }: At): Change {
-  if (!isNullableString(old) || !isNullableString(next)) return MISTYPED
+function textChange({ path, old, new: next }: At): Change {
+  if (!isNullableString(old) || !isNullableString(next)) return mistypedAt(path)
   const before = oneLine(old ?? '')
   const after = oneLine(next ?? '')
   if (before === after) return SAME
@@ -175,14 +179,14 @@ function enumWords(table: DiffTable, path: string): EnumWords | undefined {
 function enumChange({ path, old, new: next }: At, context: ProseContext): Change {
   const words = enumWords(context.table, path)
   if (words === undefined) return UNWORDED
-  if (sameScalar(old, next)) return SAME
   const before = isEmpty(old) ? none() : words(old)
   const after = isEmpty(next) ? none() : words(next)
-  return before === undefined || after === undefined ? MISTYPED : changed(before, after)
+  if (before === undefined || after === undefined) return mistypedAt(path)
+  return sameScalar(old, next) ? SAME : changed(before, after)
 }
 
-function numberChange({ old, new: next }: At): Change {
-  if (!isNullableNumber(old) || !isNullableNumber(next)) return MISTYPED
+function numberChange({ path, old, new: next }: At): Change {
+  if (!isNullableNumber(old) || !isNullableNumber(next)) return mistypedAt(path)
   if (sameScalar(old, next)) return SAME
   return changed(old == null ? none() : String(old), next == null ? none() : String(next))
 }
@@ -200,10 +204,10 @@ function flagText(flag: boolean | null): string {
   return flag ? t('history:prose.yes') : t('history:prose.no')
 }
 
-function flagChange({ old, new: next }: At): Change {
+function flagChange({ path, old, new: next }: At): Change {
   const before = flagOf(old)
   const after = flagOf(next)
-  if (before === undefined || after === undefined) return MISTYPED
+  if (before === undefined || after === undefined) return mistypedAt(path)
   if (before === after) return SAME
   return changed(flagText(before), flagText(after))
 }
@@ -275,7 +279,7 @@ function listParts(
 function termListChange({ path, old, new: next }: At, context: ProseContext): Change {
   const before = listOf(old)
   const after = listOf(next)
-  if (before === undefined || after === undefined) return MISTYPED
+  if (before === undefined || after === undefined) return mistypedAt(path)
   const [column, ...inner] = path.split('.')
   const match = termMatchOf(context.table, column, inner.length > 0 ? inner : undefined)
   if (match === undefined) return UNWORDED
@@ -285,18 +289,18 @@ function termListChange({ path, old, new: next }: At, context: ProseContext): Ch
 const countText = (count: number | null | undefined) => (count == null ? none() : String(count))
 
 // A key's null in the old partial is a key absent before; a null partial is a record absent before.
-function recordChange({ old, new: next }: At): Change {
+function recordChange({ path, old, new: next }: At): Change {
   const after = next ?? {}
-  if (!isJsonObject(after)) return MISTYPED
+  if (!isJsonObject(after)) return mistypedAt(path)
   let before: Readonly<Record<string, unknown>> | null
   if (old == null) before = null
   else if (isJsonObject(old)) before = old
-  else return MISTYPED
+  else return mistypedAt(path)
   const parts: string[] = []
   for (const key of Object.keys(before ?? after)) {
     const was = before !== null && Object.hasOwn(before, key) ? before[key] : null
     const now = Object.hasOwn(after, key) ? after[key] : null
-    if (!isNullableNumber(was) || !isNullableNumber(now)) return MISTYPED
+    if (!isNullableNumber(was) || !isNullableNumber(now)) return mistypedAt(path)
     if ((was ?? null) === (now ?? null)) continue
     parts.push(
       fill('history:prose.quantity', {
@@ -325,21 +329,21 @@ function entryText(id: string | null | undefined, context: ProseContext): string
   return context.entryLabel(id) ?? t('history:unknownEntry')
 }
 
-function rowRefChange({ old, new: next, entry }: At, context: ProseContext): Change {
-  if (!isNullableString(old) || !isNullableString(next)) return MISTYPED
+function rowRefChange({ path, old, new: next, entry }: At, context: ProseContext): Change {
+  if (!isNullableString(old) || !isNullableString(next)) return mistypedAt(path)
   if (sameScalar(old, next)) return SAME
   return changed(refText(old, entry, context), refText(next, entry, context))
 }
 
-function refListChange({ old, new: next, entry }: At, context: ProseContext): Change {
+function refListChange({ path, old, new: next, entry }: At, context: ProseContext): Change {
   const before = listOf(old)
   const after = listOf(next)
-  if (before === undefined || after === undefined) return MISTYPED
+  if (before === undefined || after === undefined) return mistypedAt(path)
   return listParts(before, after, 'exact', (id) => refName(id, entry, context))
 }
 
-function entryRefChange({ old, new: next }: At, context: ProseContext): Change {
-  if (!isNullableString(old) || !isNullableString(next)) return MISTYPED
+function entryRefChange({ path, old, new: next }: At, context: ProseContext): Change {
+  if (!isNullableString(old) || !isNullableString(next)) return mistypedAt(path)
   if (sameScalar(old, next)) return SAME
   return changed(entryText(old, context), entryText(next, context))
 }
@@ -368,10 +372,10 @@ function seenText(seen: Seen | null, entry: DiffCacheEntry, context: ProseContex
 }
 
 // World time neither shows nor compares; a partial old takes the keys it lacks from new.
-function lastSeenChange({ old, new: next, entry }: At, context: ProseContext): Change {
+function lastSeenChange({ path, old, new: next, entry }: At, context: ProseContext): Change {
   const before = seenOf(isJsonObject(old) && isJsonObject(next) ? { ...next, ...old } : old)
   const after = seenOf(next)
-  if (before === undefined || after === undefined) return MISTYPED
+  if (before === undefined || after === undefined) return mistypedAt(path)
   if (sameSeen(before, after)) return SAME
   return changed(seenText(before, entry, context), seenText(after, entry, context))
 }
@@ -422,15 +426,16 @@ function placementChange({ entry }: At, context: ProseContext): Change {
     memberOf(oldState, newState, UNPLACED),
   )
   const after = placementOf(newState[PARENT], newState[UNPLACED])
-  if (before === undefined || after === undefined) return MISTYPED
+  if (before === undefined || after === undefined) return mistypedAt(`state.${PARENT}`)
   if (placementKey(before) === placementKey(after)) return SAME
   return changed(placementText(before, entry, context), placementText(after, entry, context))
 }
 
 // The flag reads its partner while raised; the reason never shows.
-function collisionPartner(flag: unknown, partner: unknown): string | null | undefined {
+function collisionPartner(flag: unknown, partner: unknown): string | null | Mistyped {
   const raised = flagOf(flag)
-  if (raised === undefined || !isNullableString(partner)) return undefined
+  if (raised === undefined) return mistypedAt(COLLISION_FLAG)
+  if (!isNullableString(partner)) return mistypedAt(COLLISION_PARTNER)
   return raised === true && partner != null && partner !== '' ? partner : null
 }
 
@@ -440,8 +445,9 @@ function collisionChange({ entry }: At, context: ProseContext): Change {
     memberOf(old, next, COLLISION_FLAG),
     memberOf(old, next, COLLISION_PARTNER),
   )
+  if (isMistyped(before)) return before
   const after = collisionPartner(next[COLLISION_FLAG], next[COLLISION_PARTNER])
-  if (before === undefined || after === undefined) return MISTYPED
+  if (isMistyped(after)) return after
   if (before === after) return SAME
   return changed(refText(before, entry, context), refText(after, entry, context))
 }
@@ -495,8 +501,8 @@ export function diffProse(entry: DiffCacheEntry, context: ProseContext): string 
     }
     const at: At = { path, old: valueAt(entry.old, path), new: valueAt(entry.new, path), entry }
     const change = changeOf(kind, at, context)
-    if (change === MISTYPED) {
-      context.onMistyped(path)
+    if (isMistyped(change)) {
+      context.onMistyped(change.mistyped)
       return null
     }
     if (change === UNWORDED) unworded = true

@@ -459,6 +459,37 @@ describe('diffProse — a value of the wrong type', () => {
     expect(reported).toEqual([path])
   })
 
+  it('reports an out-of-set enum value its two sides share', () => {
+    const { reported, context } = reporting('entities')
+    expect(
+      diffProse(
+        entryOf({ description: 'old', status: 'bogus' }, { description: 'new', status: 'bogus' }),
+        context,
+      ),
+    ).toBeNull()
+    expect(reported).toEqual(['status'])
+  })
+
+  it("reports a column group's failing member, not the path the group renders at", () => {
+    const { reported, context } = reporting('entities')
+    expect(
+      diffProse(
+        entryOf({ nameCollisionFlag: 0 }, { nameCollisionFlag: 1, nameCollisionPartnerId: 7 }),
+        context,
+      ),
+    ).toBeNull()
+    expect(
+      diffProse(
+        entryOf(
+          { state: { unplaced: true } },
+          { state: { parent_location_id: 7, unplaced: false } },
+        ),
+        context,
+      ),
+    ).toBeNull()
+    expect(reported).toEqual(['nameCollisionPartnerId', 'state.parent_location_id'])
+  })
+
   it('reports a wrong-typed old value', () => {
     const { reported, context } = reporting('entities')
     expect(diffProse(entryOf({ name: 7 }, { name: 'Kael' }), context)).toBeNull()
