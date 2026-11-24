@@ -38,7 +38,6 @@ import { checkConcurrencyContract } from '../runtime/concurrency'
 
 const definition = {
   mode: 'adventure' as const,
-  leadEntityId: null,
   narration: 'first' as const,
   genre: { label: 'Fantasy', promptBody: 'High fantasy.' },
   tone: { label: 'Wry', promptBody: '' },

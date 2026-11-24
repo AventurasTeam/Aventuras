@@ -588,7 +588,7 @@ describe('periodicClassifierPhase', () => {
             currentStoryStore.set({
               storyId: 's2',
               branchId: 'b2',
-              definition: { leadEntityId: null } as never,
+              definition: {} as never,
               settings: {
                 models: { classifier: { providerId: 'prov-1', modelId: 'other' } },
                 classifierMentionedPlaces: false,

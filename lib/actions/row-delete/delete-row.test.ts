@@ -14,7 +14,6 @@ import {
   translations,
   type Delta,
   type NewEntity,
-  type StoryDefinition,
   type Translation,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -56,7 +55,6 @@ beforeEach(async () => {
   await db.insert(stories).values({
     id: 's1',
     title: 'T',
-    definition: { leadEntityId: null } as StoryDefinition,
     createdAt: 1,
     updatedAt: 1,
   })

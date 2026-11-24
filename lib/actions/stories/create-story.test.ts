@@ -61,7 +61,6 @@ const NO_APP_DEFAULTS = {
 function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefinition {
   return {
     mode: 'creative',
-    leadEntityId: null,
     narration: 'third',
     genre: { label: 'Fantasy', promptBody: 'high fantasy' },
     tone: { label: 'Epic', promptBody: 'grand and sweeping' },
@@ -237,15 +236,12 @@ describe('createStoryWithBranch', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Aria Rising',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
         cast: [characterRow()],
+        leadId: LEAD_ID,
       },
       ctx,
       2000,
@@ -267,6 +263,32 @@ describe('createStoryWithBranch', () => {
     expect(entityRows[0].state).toEqual(emptyEntityState('character'))
 
     expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('stores no lead in the definition, even one a caller still passes', async () => {
+    const { db, ctx } = await setup()
+    const stale = {
+      ...makeDefinition({ mode: 'adventure', narration: 'first' }),
+      leadEntityId: LEAD_ID,
+    }
+
+    const { storyId } = await createStoryWithBranch(
+      {
+        title: 'Stale caller',
+        definition: stale,
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake at dawn.',
+        openingMetadata: metadata,
+        cast: [characterRow()],
+        leadId: LEAD_ID,
+      },
+      ctx,
+      2050,
+    )
+
+    const [story] = await db.select().from(stories).where(eq(stories.id, storyId))
+    expect(story!.definition).not.toHaveProperty('leadEntityId')
+    expect(story!.definition).toEqual(makeDefinition({ mode: 'adventure', narration: 'first' }))
   })
 
   it('commits every cast kind with its own state, status, description, and tags', async () => {
@@ -296,11 +318,7 @@ describe('createStoryWithBranch', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Mixed Cast',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
@@ -371,62 +389,6 @@ describe('createStoryWithBranch', () => {
     expect(storyRows[0].id).toBe(existingId)
     expect(await db.select().from(branches)).toHaveLength(0)
     expect(await db.select().from(storyEntries)).toHaveLength(0)
-    expect(await db.select().from(entities)).toHaveLength(0)
-  })
-
-  it('rejects a definition whose leadEntityId matches no cast row', async () => {
-    const { db, ctx } = await setup()
-
-    await expect(
-      createStoryWithBranch(
-        {
-          title: 'Orphan lead',
-          definition: makeDefinition({
-            mode: 'adventure',
-            narration: 'first',
-            leadEntityId: LEAD_ID,
-          }),
-          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-          openingContent: 'x',
-          openingMetadata: metadata,
-          // A cast that carries rows but not THIS id: the guard must resolve the
-          // pointer, not just check that some cast was supplied.
-          cast: [characterRow({ id: 'char_99999999-9999-9999-9999-999999999999', name: 'Nobody' })],
-        },
-        ctx,
-        5000,
-      ),
-    ).rejects.toThrow()
-
-    expect(await db.select().from(stories)).toHaveLength(0)
-    expect(await db.select().from(branches)).toHaveLength(0)
-    expect(await db.select().from(storyEntries)).toHaveLength(0)
-    expect(await db.select().from(entities)).toHaveLength(0)
-  })
-
-  it('rejects a leadEntityId pointing at a non-character cast row', async () => {
-    const { db, ctx } = await setup()
-
-    await expect(
-      createStoryWithBranch(
-        {
-          title: 'A place cannot lead',
-          definition: makeDefinition({
-            mode: 'adventure',
-            narration: 'first',
-            leadEntityId: LOCATION_ID,
-          }),
-          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-          openingContent: 'x',
-          openingMetadata: metadata,
-          cast: [locationRow()],
-        },
-        ctx,
-        5100,
-      ),
-    ).rejects.toThrow()
-
-    expect(await db.select().from(stories)).toHaveLength(0)
     expect(await db.select().from(entities)).toHaveLength(0)
   })
 
@@ -597,11 +559,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Embedded',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -641,11 +599,7 @@ describe('createStoryWithBranch — embed step', () => {
       createStoryWithBranch(
         {
           title: 'Doomed',
-          definition: makeDefinition({
-            mode: 'adventure',
-            narration: 'first',
-            leadEntityId: LEAD_ID,
-          }),
+          definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
           settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'You wake.',
           openingMetadata: metadata,
@@ -729,11 +683,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Combined',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -774,11 +724,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Padded',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -811,11 +757,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Blank category',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -1025,11 +967,7 @@ describe('createStoryWithBranch — the lead flag', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Aria Rising',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
@@ -1085,11 +1023,7 @@ describe('createStoryWithBranch — the lead flag', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Aria Rising',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: { ...metadata, leadId: MIRA_ID },
@@ -1117,7 +1051,7 @@ describe('createStoryWithBranch — the lead flag', () => {
       createStoryWithBranch(
         {
           title: 'No such lead',
-          // Creative third person carries no definition lead, so only the new guard can refuse.
+          // The definition holds no lead to refuse on, so only the leadId guard can.
           definition: makeDefinition(),
           settings: buildStorySettings('creative', NO_APP_DEFAULTS),
           openingContent: 'x',

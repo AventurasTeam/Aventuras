@@ -50,7 +50,6 @@ function openStoryWithPass(): void {
     branchId: 'branch-1',
     definition: storyDefinitionSchema.parse({
       mode: 'adventure',
-      leadEntityId: 'char_kael',
       narration: 'second',
       genre: { label: 'Fantasy', promptBody: '' },
       tone: { label: 'Wry', promptBody: '' },

@@ -88,14 +88,6 @@ export async function createStoryWithBranch(
   const metadata: EntryMetadata =
     input.leadId == null ? openingFields : { ...openingFields, leadId: input.leadId }
 
-  // leadEntityId lives in JSON, so no FK guards a definition whose lead is never
-  // materialized as an entity row — reject before the write instead of committing a dangling ref.
-  if (
-    definition.leadEntityId != null &&
-    !(input.cast ?? []).some((r) => r.id === definition.leadEntityId && r.kind === 'character')
-  ) {
-    throw new Error('definition.leadEntityId requires a matching cast character')
-  }
   if (
     input.leadId != null &&
     !(input.cast ?? []).some((r) => r.id === input.leadId && r.kind === 'character')

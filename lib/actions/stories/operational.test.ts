@@ -43,7 +43,6 @@ vi.mock('@/lib/tokens', async (importOriginal) => ({
 // the existing "resolves branch, touches, navigates" behavior stays reachable.
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
-  leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
   narration: 'third',
   genre: { label: 'Fantasy', promptBody: 'high fantasy' },
   tone: { label: 'Wry', promptBody: 'wry' },
@@ -242,7 +241,7 @@ describe('stories column writes', () => {
       updatedAt: 1,
       currentBranchId: 'br_corrupt',
       // Missing `mode` (and the rest) — fails storyDefinitionSchema.parse.
-      definition: { leadEntityId: null } as unknown as StoryDefinition,
+      definition: { narration: 'third' } as unknown as StoryDefinition,
     })
     await db
       .insert(branches)
@@ -354,6 +353,76 @@ describe('stories column writes', () => {
   })
 })
 
+describe('story open and the lead', () => {
+  // As the schema stores a definition now: the lead is a flag on a branch's row, not a key here.
+  const ADVENTURE: StoryDefinition = {
+    mode: 'adventure',
+    narration: 'second',
+    genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+    tone: { label: 'Wry', promptBody: 'wry' },
+    setting: 'A keep on a hill.',
+    calendarSystemId: 'gregorian',
+    worldTimeOrigin: { year: 0 },
+  }
+
+  async function addStory(
+    db: Awaited<ReturnType<typeof setup>>['db'],
+    id: string,
+    definition: StoryDefinition,
+  ): Promise<string> {
+    const branchId = `br_${id}`
+    await db.insert(stories).values({
+      id,
+      title: id,
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: branchId,
+      definition,
+      settings: STORY_SETTINGS,
+    })
+    await db.insert(branches).values({ id: branchId, storyId: id, name: 'main', createdAt: 1 })
+    return branchId
+  }
+
+  it('opens an adventure story whose branch flags no character', async () => {
+    const { db, ctx } = await setup()
+    const branchId = await addStory(db, 'story_unled', ADVENTURE)
+    await db.insert(entities).values({
+      id: 'char_00000000-0000-4000-8000-000000000002',
+      branchId,
+      kind: 'character',
+      name: 'Aria',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    expect(await loadOpenStory(branchId, ctx)).toEqual({
+      status: 'ok',
+      storyId: 'story_unled',
+      branchId,
+    })
+    expect(currentStoryStore.getCurrentStory()?.definition).toEqual(ADVENTURE)
+  })
+
+  it('opens a story whose stored definition still names a lead, without the key', async () => {
+    const { db, ctx } = await setup()
+    const stale = { ...ADVENTURE, leadEntityId: 'char_00000000-0000-4000-8000-000000000003' }
+    const branchId = await addStory(db, 'story_stale', stale)
+
+    expect(await loadOpenStory(branchId, ctx)).toEqual({
+      status: 'ok',
+      storyId: 'story_stale',
+      branchId,
+    })
+    expect(currentStoryStore.getCurrentStory()?.definition).not.toHaveProperty('leadEntityId')
+    expect(currentStoryStore.getCurrentStory()?.definition).toEqual(ADVENTURE)
+  })
+})
+
 describe('token encoder warm', () => {
   let openAtSchedule: string | null | undefined
   const idle = vi.fn<(callback: () => void, options: { timeout: number }) => number>(() => {
@@ -411,7 +480,7 @@ describe('token encoder warm', () => {
     const { db, ctx } = await setup()
     await db
       .update(stories)
-      .set({ definition: { leadEntityId: null } as unknown as StoryDefinition })
+      .set({ definition: { narration: 'third' } as unknown as StoryDefinition })
       .where(eq(stories.id, 'story_1'))
 
     const result = await openStory('story_1', ctx, vi.fn(), 999)

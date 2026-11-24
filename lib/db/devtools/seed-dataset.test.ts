@@ -10,6 +10,7 @@ import {
   deltas,
   entities,
   isCloseReasonKey,
+  stories,
   storyEntries,
   type Delta,
   type EntityKind,
@@ -811,6 +812,19 @@ describe('seeded classifier watermarks', () => {
 
 // lib/db re-exports the native reseed, so Android evaluates this module on every launch, and the
 // encoder takes about a second to build there.
+describe('the seeded lead', () => {
+  it('stores no definition holding leadEntityId', async () => {
+    const { db } = await seededDb()
+    const rows = await db.select({ id: stories.id, definition: stories.definition }).from(stories)
+    expect(rows.length).toBeGreaterThan(1)
+    expect(
+      rows
+        .filter((row) => row.definition == null || 'leadEntityId' in row.definition)
+        .map((row) => row.id),
+    ).toEqual([])
+  })
+})
+
 describe('importing the seed', () => {
   afterEach(stopCountingEncoderBuilds)
 

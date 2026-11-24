@@ -132,14 +132,12 @@ function validState(
 function definition(input: {
   mode: 'adventure' | 'creative'
   narration: 'first' | 'second' | 'third'
-  leadEntityId: string | null
   genre: string
   tone: string
   setting: string
 }): StoryDefinition {
   return storyDefinitionSchema.parse({
     mode: input.mode,
-    leadEntityId: input.leadEntityId,
     narration: input.narration,
     genre: { label: input.genre, promptBody: `Write in the ${input.genre} tradition.` },
     tone: { label: input.tone, promptBody: `Keep a ${input.tone} tone.` },
@@ -1490,7 +1488,6 @@ const fillers: Filler[] = [
     def: definition({
       mode: 'creative',
       narration: 'third',
-      leadEntityId: null,
       genre: 'gothic horror',
       tone: 'foreboding',
       setting: 'a storm-lashed coast',
@@ -1508,7 +1505,6 @@ const fillers: Filler[] = [
     def: definition({
       mode: 'creative',
       narration: 'third',
-      leadEntityId: null,
       genre: 'travelogue',
       tone: 'wistful',
       setting: 'a shifting archipelago',
@@ -1526,7 +1522,6 @@ const fillers: Filler[] = [
     def: definition({
       mode: 'adventure',
       narration: 'second',
-      leadEntityId: 'char_sable',
       genre: 'adventure',
       tone: 'curious',
       setting: 'a coast that will not hold still',
@@ -1545,7 +1540,6 @@ const fillers: Filler[] = [
     def: definition({
       mode: 'creative',
       narration: 'third',
-      leadEntityId: null,
       genre: 'literary',
       tone: 'melancholic',
       setting: 'a sunken parish',
@@ -1565,7 +1559,6 @@ const fillers: Filler[] = [
     def: definition({
       mode: 'creative',
       narration: 'third',
-      leadEntityId: null,
       genre: 'experimental',
       tone: 'playful',
       setting: 'a city of indices',
@@ -1812,7 +1805,6 @@ function richStoryRows(): { story: NewStory; branch: NewBranch; entries: NewStor
       definition: definition({
         mode: 'creative',
         narration: 'third',
-        leadEntityId: null,
         genre: 'surreal museum',
         tone: 'deadpan curatorial',
         setting: 'a gallery whose rooms are rendering testcases',
@@ -2062,7 +2054,6 @@ function ledgerStoryRows(): { story: NewStory; branch: NewBranch; entries: NewSt
       definition: definition({
         mode: 'creative',
         narration: 'third',
-        leadEntityId: null,
         genre: 'bureaucratic fable',
         tone: 'dry',
         setting: 'a counting-house that bills by the word',
@@ -2252,7 +2243,6 @@ export function buildSeedSteps(): SeedStep[] {
     definition: definition({
       mode: 'adventure',
       narration: 'second',
-      leadEntityId: ID.kael,
       genre: 'low fantasy',
       tone: 'rain-soaked noir',
       setting: 'the drowned city of Veil’s Hollow',

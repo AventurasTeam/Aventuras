@@ -73,7 +73,6 @@ vi.mock('@/lib/embedder-swap', async (importOriginal) => {
 
 const definition = {
   mode: 'adventure' as const,
-  leadEntityId: 'char_hero',
   narration: 'first' as const,
   genre: { label: 'Fantasy', promptBody: 'High fantasy.' },
   tone: { label: 'Wry', promptBody: 'Dry humor.' },

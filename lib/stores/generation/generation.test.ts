@@ -566,7 +566,6 @@ function openStoryOn(branchId: string): void {
     branchId,
     definition: storyDefinitionSchema.parse({
       mode: 'creative',
-      leadEntityId: null,
       narration: 'third',
       genre: { label: 'Fantasy', promptBody: '' },
       tone: { label: 'Wry', promptBody: '' },

@@ -40,7 +40,6 @@ vi.mock('@/lib/ai', async (importOriginal) => {
 
 const DEFINITION = {
   mode: 'adventure' as const,
-  leadEntityId: null,
   narration: 'second' as const,
   genre: { label: 'Fantasy', promptBody: '' },
   tone: { label: 'Wry', promptBody: '' },

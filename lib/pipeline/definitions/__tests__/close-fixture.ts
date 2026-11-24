@@ -164,7 +164,6 @@ export function twoPartWindow(entryCount: number): number {
 // loadOpenStory refuses a definition or settings its schemas reject.
 const DEFINITION = storyDefinitionSchema.parse({
   mode: 'creative',
-  leadEntityId: null,
   narration: 'third',
   genre: { label: 'Road story', promptBody: 'A courier crossing a river country.' },
   tone: { label: 'Watchful', promptBody: 'Spare and quiet.' },

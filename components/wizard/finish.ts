@@ -257,7 +257,6 @@ export async function finishWizard(
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,
-    leadEntityId: lead?.id ?? null,
     narration: s.definition.narration,
     genre: trimLabeledPrompt(s.definition.genre),
     tone: trimLabeledPrompt(s.definition.tone),

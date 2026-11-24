@@ -40,7 +40,6 @@ export const suggestionCategorySchema = z.object({
 
 export const storyDefinitionSchema = z.object({
   mode: z.enum(STORY_MODES),
-  leadEntityId: z.string().nullable().optional(),
   narration: z.enum(['first', 'second', 'third']),
   genre: labeledPromptSchema,
   tone: labeledPromptSchema,

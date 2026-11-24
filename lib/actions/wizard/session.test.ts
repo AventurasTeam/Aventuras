@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { emptyWorkingState, stories, wizardSessions } from '@/lib/db'
+import { emptyCastDraft, emptyWorkingState, stories, wizardSessions } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { storiesStore } from '@/lib/stores'
 import { toastStore } from '@/lib/toast'
@@ -144,6 +144,17 @@ describe('wizard session/draft actions', () => {
     const [story] = await ctx.db.select().from(stories).where(eq(stories.id, storyId))
     expect(story.description).toBe('A tale of woe')
     expect(story.definition?.mode).toBe(s.definition.mode)
+  })
+
+  // A draft has no branch to flag, so its lead lives in the session state alone.
+  it('saveStoryDraft keeps the lead in the session state, not the stored definition', async () => {
+    const s = emptyWorkingState()
+    s.leadEntityId = 'char_kade'
+    s.cast = [{ ...emptyCastDraft('character', 'char_kade'), name: 'Kade' }]
+    const { storyId } = await saveStoryDraft(s, ctx, 1)
+    const [story] = await ctx.db.select().from(stories).where(eq(stories.id, storyId))
+    expect(story.definition).not.toHaveProperty('leadEntityId')
+    expect((await loadDraft(storyId, ctx))?.state.leadEntityId).toBe('char_kade')
   })
 
   it('saveStoryDraft re-save preserves a favorited draft', async () => {

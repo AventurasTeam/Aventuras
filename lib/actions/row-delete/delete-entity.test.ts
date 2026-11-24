@@ -21,7 +21,6 @@ import {
   type Delta,
   type EntryMetadata,
   type NewEntity,
-  type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
@@ -109,7 +108,6 @@ beforeEach(async () => {
   await db.insert(stories).values({
     id: 's1',
     title: 'T',
-    definition: { leadEntityId: 'char_lead' } as StoryDefinition,
     createdAt: 1,
     updatedAt: 1,
   })
