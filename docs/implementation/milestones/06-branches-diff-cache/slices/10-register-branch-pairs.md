@@ -209,12 +209,12 @@ close action ids.
 **What a row proves (developer, 2026-11-24).** A condition in a
 handler's own code (its payload check, its reads and writes, a helper
 only its register file calls, its cascade) names a red test of that
-handler. A line several handlers reach was mutated once, and each
-handler reaching it has a row marked `shared` that names a red test
-from that run: the delta-log helpers, `live-refs.ts`, the translation
-cascade, the vector sweep, `parent-chain-check.ts`, each
-registration's descriptor `branchCol`, and the state-patch module's
-`loadCurrent` and write. A delete's descriptor row names its
+handler. A line several handlers reach was mutated once per task that
+reaches it, and each handler reaching it has a row marked `shared`
+that names a red test from one of those runs: the delta-log helpers,
+`live-refs.ts`, the translation cascade, the vector sweep,
+`parent-chain-check.ts`, each registration's descriptor `branchCol`,
+and the state-patch module's `loadCurrent` and write. A delete's descriptor row names its
 registration's create or update pair: undoing a delete only inserts,
 so its own pair never reads through the descriptor. Accepted risk: a
 handler that passes the wrong branch variable to a shared helper
