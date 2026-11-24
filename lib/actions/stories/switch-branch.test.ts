@@ -24,6 +24,7 @@ import {
   entriesStore,
   eraFlipsStore,
   generationStore,
+  isStoryBusy,
   isUserEditBlocked,
   navigationStore,
   readerHoldStore,
@@ -633,6 +634,43 @@ describe('switchBranch', () => {
       fromBranchId: 'br_a',
       toBranchId: 'br_b',
     })
+  })
+
+  it('puts the pointer back when a turn body starts on the branch left during the stories re-read', async () => {
+    const { db, ctx } = await setup()
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const reached = deferred()
+    const release = deferred()
+    vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
+      reached.resolve()
+      await release.promise
+      return readStories(database)
+    })
+    const sweep = deferred()
+    const stack = fakeStack()
+
+    const running = switchBranch(input({ replaceStack: stack.replaceStack }), ctx)
+    let body: Promise<unknown> = Promise.resolve()
+    try {
+      await reached.promise
+      body = generationStore.bracketPendingTurn('br_a', async (endEarly) => {
+        endEarly()
+        await sweep.promise
+      })
+      // The mark has ended early: only the body's own flag still names the branch.
+      expect(isStoryBusy(generationStore.getTxState(), 'story_1', 'br_a')).toBe(false)
+      expect(generationStore.isTurnBodyActive('br_a')).toBe(true)
+    } finally {
+      release.resolve()
+      await running
+      sweep.resolve()
+      await body
+    }
+
+    expect(await running).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(stack.replaceStack).not.toHaveBeenCalled()
+    await expectStillOnLeft(db)
+    expect(kicks).toEqual([])
   })
 
   // The switch's own pointer write is the first transaction; the restore is the second.

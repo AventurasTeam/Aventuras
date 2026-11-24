@@ -105,11 +105,13 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
   // Nothing awaited from the reset to the publish, so one commit takes all three; the reset goes
   // first because a route guard can swallow it, and a fill can't be taken back.
   if (!isCurrentRequest()) return restoreThen(input, ctx, { status: 'abandoned' })
-  // A run that started during the reads leaves the story-leave guard swallowing the reset.
+  // A run that started during the reads leaves the story-leave guard swallowing the reset, and a
+  // turn body's sweep can still write on the branch left once its mark has ended.
   let reset = false
   try {
     reset =
       !isStoryBusy(generationStore.getTxState(), storyId, fromBranchId) &&
+      !generationStore.isTurnBodyActive(fromBranchId) &&
       input.replaceStack(toBranchId)
   } catch (err) {
     return failAndRestore(input, ctx, 'navigation-blocked', err)
