@@ -413,10 +413,15 @@ export async function runCloseRerunOnBranch(args: {
 }): Promise<RerunOnBranchStep> {
   // Before the first await: a Send in the reader refuses from the press on (C8).
   const hold = readerHoldStore.take(args.branchId)
-  const forked = await checkAndFork(args)
-  if ('step' in forked) {
+  try {
+    const forked = await checkAndFork(args)
+    if ('step' in forked) {
+      readerHoldStore.release(hold)
+      return forked
+    }
+    return await showThenStart(args, hold, forked)
+  } finally {
+    // A throw past the steps' own catches would otherwise freeze the parent reader.
     readerHoldStore.release(hold)
-    return forked
   }
-  return showThenStart(args, hold, forked)
 }

@@ -905,6 +905,29 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(actions.show).not.toHaveBeenCalled()
   })
 
+  it('a sequence that throws past its own catches ends pending, logs, and keeps the confirm open', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => {
+      throw new Error('toast broke')
+    })
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    actions.check.mockRejectedValue(new Error('disk'))
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirmOnBranch())
+    await waitFor(() =>
+      expect(logError).toHaveBeenCalledWith('app.close_rerun_on_branch_threw', {
+        branchId: 'br_1',
+        chapterId: 'chap_2',
+        error: 'toast broke',
+      }),
+    )
+    expect(confirmView.props?.pending).toBe(false)
+    expect(confirmView.mounted).toBe(true)
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+    expect(actions.fork).not.toHaveBeenCalled()
+  })
+
   it('a check that finds the counts moved shows the fresh preview, ends the hold and forks nothing', async () => {
     const error = vi.spyOn(toast, 'error').mockReturnValue('')
     const fresh: CloseRerunPreview = {

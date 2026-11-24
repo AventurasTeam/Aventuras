@@ -477,6 +477,47 @@ describe('useBranchCreate — Create', () => {
     await act(async () => body.resolve())
   })
 
+  it('a throw past its own catches before the commit ends pending with the failed line, ends the hold and logs', async () => {
+    actions.fork.mockResolvedValue({ status: 'rejected', code: 'lock-timeout', reason: 'x' })
+    logWarn.mockImplementation(() => {
+      throw new Error('log broke')
+    })
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(modal(hook)).toMatchObject({ open: true, pending: false, message: COPY.failed })
+    expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
+    expect(logError).toHaveBeenCalledExactlyOnceWith('reader.branch_create_threw', {
+      branchId: BRANCH,
+      entryId: ENTRY,
+      error: 'log broke',
+    })
+  })
+
+  it('a throw past its own catches after the commit closes the modal and ends the hold', async () => {
+    actions.fork.mockImplementation(async () => {
+      openOn('br_other')
+      return { status: 'ok', branchId: CHILD }
+    })
+    branchList.refresh.mockImplementation(() => {
+      throw new Error('refresh broke')
+    })
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(hook.result.current.create.modal).toBeNull()
+    expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
+    expect(logError).toHaveBeenCalledExactlyOnceWith('reader.branch_create_threw', {
+      branchId: BRANCH,
+      entryId: ENTRY,
+      error: 'refresh broke',
+    })
+    await openModal(hook)
+    expect(modal(hook)).toMatchObject({ pending: false, message: null })
+  })
+
   it("on a tail that can't navigate, refreshes the list, closes the modal and warns", async () => {
     actions.show.mockResolvedValue({ status: 'navigation-blocked' })
     const hook = renderCreate()

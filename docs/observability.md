@@ -438,11 +438,16 @@ convention, and the expectation that subsystems route through
   `close_rerun_fork_not_opened` (warn: the fork committed but the
   story's screens couldn't be replaced, so the pointer went back to the
   parent and nothing started, with `branchId`, `newBranchId` and
-  `chapterId`) and `close_rerun_fork_start_failed` (warn: the fork
+  `chapterId`), `close_rerun_fork_start_failed` (warn: the fork
   committed, but the start refused or threw, the story had been left,
   showing the new branch threw, or the new reader opened with nothing
   loaded, with `branchId`, `newBranchId`, `chapterId` and the `cause`;
-  the warning toast says to retry from the Timeline),
+  the warning toast says to retry from the Timeline) and
+  `close_rerun_on_branch_threw` (error,
+  `components/chapters/chapter-overlays-host.tsx`: the sequence
+  rejected on a throw its steps don't catch, with `branchId`,
+  `chapterId` and `error`; the reader hold has ended, and the confirm
+  stops pending so it can be closed),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
@@ -570,10 +575,13 @@ convention, and the expectation that subsystems route through
   for, with `branchId`, `entryId` and the `code`),
   `branch_create_not_opened` (warn: the fork committed but the story's
   screens couldn't be replaced, so the pointer went back to the parent
-  and a warning toast says so, with `branchId` and `newBranchId`) and
+  and a warning toast says so, with `branchId` and `newBranchId`),
   `branch_create_show_threw` (error: showing the new branch threw after
   its navigation, with `branchId`, `newBranchId` and `error`; the new
-  reader's own load reports the failure). The
+  reader's own load reports the failure) and `branch_create_threw`
+  (error: a step threw that the others don't catch, with `branchId`,
+  `entryId` and `error`; the hold ends, and the modal shows the failed
+  line, or closes once the fork has committed). The
   rail and the peek add two outside `runAction`:
   `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
   — a rail collapse-preference write that rejected) and

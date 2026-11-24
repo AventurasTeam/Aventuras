@@ -617,6 +617,15 @@ describe('runCloseRerunOnBranch', () => {
     expect(readerHoldStore.isHeld('br_1')).toBe(false)
   })
 
+  it('ends the hold when a step past its own catches throws', async () => {
+    actions.check.mockRejectedValue(new Error('disk'))
+    error.mockImplementation(() => {
+      throw new Error('toast broke')
+    })
+    await expect(onBranch()).rejects.toThrow('toast broke')
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
   it('checks the parent, forks at N under the auto-name, shows the new branch through the stack reset, then refreshes and starts there', async () => {
     expect(await onBranch()).toStrictEqual({ step: 'forked' })
     expect(order).toStrictEqual(['check', 'fork', 'show', 'refresh', 'start'])

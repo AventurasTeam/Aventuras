@@ -42,6 +42,7 @@ import {
   type RerunConfirmRequest,
   type StoreChapter,
 } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 import { CloseChapterModal } from './close-chapter-modal'
@@ -471,11 +472,23 @@ function RerunConfirmHost({
       preview,
       replaceStack,
       closeRequest: closeOwn,
-    }).then((step) => {
-      onStarting(request, false)
-      // Past the commit it stays pending: the publish's prune or the sequence's close unmounts it.
-      if (step.step !== 'forked') afterStart(step)
     })
+      .then((step) => {
+        onStarting(request, false)
+        // Past the commit it stays pending: the publish's prune or the sequence's close unmounts it.
+        if (step.step !== 'forked') afterStart(step)
+      })
+      .catch((error: unknown) => {
+        // A pending confirm can't be closed, so a throw past the sequence's own catches ends it.
+        logger.error('app.close_rerun_on_branch_threw', {
+          branchId,
+          chapterId,
+          error: messageOf(error),
+        })
+        onStarting(request, false)
+        pendingRef.current = false
+        setPending(false)
+      })
   }
 
   const cancel = () => {
