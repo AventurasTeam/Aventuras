@@ -34,11 +34,10 @@ type AppActionsMenuProps = {
    */
   beforeLeaveStory: ((proceed: () => void) => void) | null
   /**
-   * Whether the surface is mid-decision — a confirm the user must answer before
-   * navigating away — per [`actions-menu.md`](../../docs/ui/patterns/actions-menu.md).
-   * Open sheets gate themselves; only the judgment half is route-supplied, because
-   * no signal distinguishes a confirm worth trapping from any other overlay.
-   * Also pass it while the surface holds its controls for an action in flight.
+   * Whether the surface is mid-decision (a confirm to answer before navigating away), per
+   * [`actions-menu.md`](../../docs/ui/patterns/actions-menu.md). Open sheets gate themselves; this
+   * half is route-supplied, no signal marking a confirm worth trapping. Also pass it while an
+   * action in flight holds the surface's controls.
    */
   blocked?: boolean
   /** Passed through to `ActionsMenu`: the reader resolves its Undo label as the menu opens. */

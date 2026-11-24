@@ -1,8 +1,7 @@
 /**
- * Whether a leave asks the editor first (reader-composer.md → Inline edit session): on web a
- * reported dirty draft; on native any open editor, since a dirty report can still be crossing the
- * bridge. Never while the reader is held: the press already asked, and an armed guard would
- * prevent the switch's stack reset.
+ * Whether a leave asks the editor first (reader-composer.md → Inline edit session): web, a reported
+ * dirty draft; native, any open editor (a dirty report may still be crossing the bridge). Never
+ * while held: the press already asked, and an armed guard would block the switch's stack reset.
  */
 export function inlineEditGuardArmed(input: {
   platform: 'web' | 'native'

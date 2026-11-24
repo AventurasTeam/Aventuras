@@ -102,9 +102,8 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
   }
   const shown = shownChip(chip)
 
-  // Radix returns focus to its trigger; a navigator the handle opened returns it to what opened
-  // it, and the hidden anchor takes none. Neither after an outside press or focus, which has put
-  // focus where the user wanted it.
+  // Radix returns focus to its trigger; a handle-opened navigator returns it to what opened it,
+  // and the hidden anchor takes none. Neither after an outside press/focus: focus is placed.
   const opener = useRef<HTMLElement | null>(null)
   const interactedOutside = useRef(false)
   const returnFocus = (event: Event) => {

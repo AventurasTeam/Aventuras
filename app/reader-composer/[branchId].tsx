@@ -308,9 +308,8 @@ function ReaderComposerBody({
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
   const branchIdRef = useRef(branchId)
-  // Assigned post-commit, not during render: a discarded render would otherwise
-  // publish a branch that never landed. The body is keyed on branchId, so this
-  // only backstops that key.
+  // Post-commit, not in render: a discarded render would publish a branch that never landed
+  // (the body is keyed on branchId; this only backstops that).
   useLayoutEffect(() => {
     branchIdRef.current = branchId
   }, [branchId])
@@ -319,9 +318,8 @@ function ReaderComposerBody({
   useEffect(() => {
     logger.debug('reader.mounted', { branchId: branchIdRef.current })
   }, [])
-  // Settle-time recovery hands the user's text back only to a reader still mounted on the
-  // branch it started on. Persisted recovery (the failure entry) is branch-bound and stays
-  // unconditional.
+  // Settle-time recovery returns the user's text only to a reader still on its starting branch;
+  // the persisted failure entry is branch-bound and unconditional.
   const branchUnchanged = useCallback(
     (started: string) => aliveRef.current && branchIdRef.current === started,
     [aliveRef],
@@ -541,9 +539,8 @@ function ReaderComposerBody({
     [entries, slice.rows, editSession?.entryId],
   )
 
-  // A backstop for the per-branch remount: another branch's buffer would leak into this one's
-  // stream, and its `lastSubmission`, which retry prefers to the persisted copy, into this one's
-  // system entry.
+  // Backstop for the per-branch remount: another branch's buffer would leak into this stream, and
+  // its `lastSubmission` (retry prefers it to the persisted copy) into this system entry.
   useEffect(() => {
     streamBufferRef.current = null
     setStreaming(null)
@@ -1609,9 +1606,8 @@ function ReaderComposerBody({
         if (result.outcome === 'failed') fail(result.error)
       })
       .catch((e: unknown) => {
-        // Logged outside the strip guard: a throw that lands after the reader
-        // unmounted still has to leave a trace, and beginRun's own unwind path
-        // rethrows without logging.
+        // Outside the strip guard: a throw after unmount still needs a trace, and beginRun's
+        // unwind path rethrows without logging.
         logger.error('pipeline.suggestion_refresh_threw', {
           branchId: startedBranchId,
           entryId: startedEntryId,

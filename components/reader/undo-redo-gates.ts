@@ -6,10 +6,9 @@ import { undoHold } from './row-reversal-flags'
 type Control = HeldControl
 
 /**
- * The menu's Undo and Redo gates. A branch still loading refuses both, so the load is named first.
- * Then: Undo of the turn is a head reversal, live through a pass; the action refuses any other
- * target with `gated`, and every target while a re-run runs. Redo never is one: whole gate. An open
- * editor holds both, the gate's reason outranking its own.
+ * The menu's Undo and Redo gates; a loading branch refuses both, naming the load first. Undo of
+ * the turn is a head reversal, live through a pass (the action `gated`-refuses other targets, and
+ * all while a re-run runs); Redo never is one. An open editor holds both, the gate's reason first.
  */
 export function readerUndoRedoGates(input: {
   hydrated: boolean

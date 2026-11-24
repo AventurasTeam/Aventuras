@@ -2,8 +2,7 @@ import type { Locator, Page } from '@playwright/test'
 
 import { copyPattern, t } from '../harness/i18n'
 
-// The reader's branch chip and navigator (components/reader/branch-chip.tsx, branch-navigator.tsx),
-// resolved through the app's own keys (docs/testing.md → Selector strategy, Tier 2). Branch names
+// Resolved through the app's own keys (docs/testing.md → Selector strategy, Tier 2). Branch names
 // are DB content, so a spec passes the stored name.
 const CHIP_ANY = copyPattern('reader:branches.chipLabel', { texts: ['name', 'count'] })
 const TITLE_ANY = copyPattern('reader:branches.title', { texts: ['count'] })

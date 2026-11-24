@@ -13,10 +13,8 @@ import { reader, undoText } from '../locators/reader'
 import { saveSession } from '../locators/save-session'
 import { storySettings } from '../locators/story-settings'
 
-// branch-navigator.md → Per-row anatomy: a switch moves the pointer and replaces the story's stack
-// with a fresh reader on the branch. What only a running router shows is here; the action, the hold
-// and the views are pinned in unit tests and Storybook (docs/testing.md → Coverage). The fork is the
-// seed's: its id, name and entries come from the DB, and no turn is taken on it (C7).
+// branch-navigator.md → Per-row anatomy. Only what a running router shows is here; the rest is in
+// unit tests and Storybook (docs/testing.md → Coverage). The seed's fork takes no turn (C7).
 const HERO_STORY = 'story_hero'
 const MAIN_EDIT = 'E2E-BRANCH-EDIT the reply was rewritten before the switch.'
 const COMPOSER_DRAFT = 'E2E-BRANCH-DRAFT the courier hesitates at the fork.'

@@ -18,10 +18,9 @@ export function switchGateReason(txState: TxState, storyId: string | undefined):
 }
 
 /**
- * What a switch's result says to the user (branch-navigator.md → Per-row anatomy). A landed or
- * abandoned switch says nothing, and so does a press that met a running one: the paused rows
- * already said it. `gateReason`: the live reason the caller computed when the result landed,
- * without the branch's hold.
+ * A switch result's user notice (branch-navigator.md → Per-row anatomy). Landed, abandoned and
+ * met-a-running-switch results say nothing: the paused rows already did. `gateReason`: computed
+ * live when the result landed, without the branch's hold.
  */
 export function switchResultNotice(
   result: SwitchBranchResult,

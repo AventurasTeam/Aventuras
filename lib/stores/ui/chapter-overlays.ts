@@ -11,10 +11,8 @@ export type OverlaySurface = {
 
 export type CloseModalRequest = { branchId: string; endEntryId?: string }
 
-/**
- * The open review window: its branch, its chapter and the report (`closeReportActionId`) it opened
- * on. A fork copies the chapter's id and its report's action, so only the branch tells them apart.
- */
+/** The open review window and its report (`closeReportActionId`). A fork copies chapter id and
+ * action, so only the branch tells them apart. */
 export type ReviewRequest = { branchId: string; chapterId: string; actionId: string | null }
 
 /** The re-run confirm's request; `reopenReview` when `Re-run…` closed the review window for it. */

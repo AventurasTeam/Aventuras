@@ -59,10 +59,7 @@ export type BranchNavigatorAnchorProps = Omit<ViewProps, 'children'> & { ref?: R
 // What `PopoverTrigger asChild` injects to make its child a button; the anchor only gives a place.
 const NOT_A_TRIGGER = { onPress: undefined, onClick: undefined, role: undefined } as object
 
-/**
- * Where the navigator's Popover opens on a story with one branch, which has no chip: zero-width,
- * inert, and out of the accessibility tree.
- */
+/** Popover anchor on a one-branch story (no chip): zero-width, inert, out of the a11y tree. */
 export function BranchNavigatorAnchor({
   className,
   style,

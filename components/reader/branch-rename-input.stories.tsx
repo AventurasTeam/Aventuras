@@ -22,10 +22,8 @@ async function waitForTier(tier: 'desktop' | 'tablet' | 'phone') {
   await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
 }
 
-/**
- * Stands in for the navigator row: the input while renaming, the stored name once `onDone` runs.
- * F2 toggles the input off and on from the document, as the navigator closing does: no blur runs.
- */
+/** Stands in for the navigator row: the input while renaming, the stored name once `onDone` runs.
+ * F2 toggles the input from the document, as the navigator closing does: no blur runs. */
 function RowHarness(props: BranchRenameInputProps) {
   const [editing, setEditing] = useState(true)
   useEffect(() => {
@@ -57,7 +55,8 @@ function RowHarness(props: BranchRenameInputProps) {
 }
 
 const rowPressed = fn()
-// RN-Web never calls onPress for a key released on an <input>; a propagated keydown still starts a press.
+// RN-Web never calls onPress for a key released on an <input>; a propagated keydown still
+// starts a press.
 const rowPressStarted = fn()
 
 /** The input inside a pressable, as a row body would hold it: no key may press the row. */

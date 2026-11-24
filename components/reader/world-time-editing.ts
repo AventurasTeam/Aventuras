@@ -95,9 +95,8 @@ export function useWorldTimeEditing(
   const closeTimeEdit = useCallback(() => setTimeEditId(null), [])
 
   const decoration = timeEditId != null ? worldTimeDecorations[timeEditId] : undefined
-  // An undo or a rollback can drop the entry under an open sheet. Dropping the
-  // id with it keeps a later redo from resurrecting the overlay on an entry
-  // that is gone.
+  // Undo or rollback can drop the entry under an open sheet; clearing the id keeps a later
+  // redo from resurrecting the overlay on a gone entry.
   useEffect(() => {
     if (timeEditId != null && decoration == null) setTimeEditId(null)
   }, [timeEditId, decoration])

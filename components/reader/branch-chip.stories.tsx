@@ -196,9 +196,8 @@ export const AnchorUnderTrigger: Story = {
     await expect(anchor).toHaveAttribute('tabindex', '-1')
     expect(getComputedStyle(anchor).pointerEvents).toBe('none')
     expect(anchor.getBoundingClientRect().width).toBe(0)
-    // Hidden nodes included: aria-hidden alone would also drop a button role from the default query.
-    // Scoped to the row: Storybook's preview body carries hidden buttons of its own.
-    // The Popover wraps the anchor in a view of its own, so the row is two levels up.
+    // hidden: aria-hidden alone drops the button role from the default query. Scoped to the row
+    // (the preview body has hidden buttons); the Popover wraps the anchor, so it is two levels up.
     const buttons = within(anchor.parentElement?.parentElement as HTMLElement)
       .getAllByRole('button', { hidden: true })
       .map((button) => button.getAttribute('aria-label'))
