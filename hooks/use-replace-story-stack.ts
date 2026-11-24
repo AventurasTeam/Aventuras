@@ -10,7 +10,7 @@ import { isUnsavedPopArmed } from './leave-guard-chain'
 
 export type StackRoute = { key?: string; name: string; params?: object }
 
-/** Replaces the app Stack in one reset; true when it took. Callable from a screen or the root host. */
+/** Replaces the app Stack in one reset, from anywhere in the container; true when it took. */
 export type ReplaceStoryStack = (branchId: string) => boolean
 
 const STORY_LIST = 'index'
@@ -57,8 +57,7 @@ export function replaceStoryStack(container: StackContainer, branchId: string): 
 }
 
 export function useReplaceStoryStack(): ReplaceStoryStack {
-  // Not router.* (it dispatches in an effect after a commit) nor NavigationContext (the root
-  // host's is __root's): the container ref reaches the app Stack in one dispatch from anywhere.
+  // router.* queues its dispatch; the container ref resets the app Stack now, from any caller.
   const ref = useNavigationContainerRef()
   return useCallback((branchId: string) => replaceStoryStack(ref, branchId), [ref])
 }
