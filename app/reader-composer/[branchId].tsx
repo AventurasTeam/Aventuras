@@ -107,6 +107,7 @@ import {
   suggestionRefreshHoldReason,
 } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
+import { switchResultNotice } from '@/components/reader/switch-result-notice'
 import {
   closeResolvedEntry,
   describeCloseFailure,
@@ -148,6 +149,7 @@ import { useInlineEditGuard } from '@/hooks/use-inline-edit-guard'
 import { useLeaveFailedStoryOpen } from '@/hooks/use-leave-failed-story-open'
 import { useSwapState } from '@/hooks/use-memory-health'
 import { useOverlaySurface } from '@/hooks/use-overlay-surface'
+import { useReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { useRouteLink } from '@/hooks/use-route-link'
 import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
@@ -159,16 +161,19 @@ import {
   readRecentEntries,
   refreshSuggestions,
   regenerateTurn,
+  renameBranch,
   rollbackToEntry,
   runClassifierNow,
   runOwedClose,
   runPickedClose,
   sameRollbackCounts,
   submitTurn,
+  switchBranch,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RollbackCounts,
   type StoryEntryRejection,
+  type SwitchBranchResult,
 } from '@/lib/actions'
 import { copyText } from '@/lib/clipboard'
 import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
@@ -271,6 +276,21 @@ function readerPlaceholder(state: {
   if (!state.hydrationSucceeded) return { title: t('reader:hydrationLoading') }
   if (state.isEmpty) return { title: t('reader:emptyTitle'), subtext: t('reader:emptyBody') }
   return null
+}
+
+// Read when the result lands: the rendered gateReason is stale by then, and may name the
+// branch's own hold, which refuses no switch.
+function postSwitchNotice(result: SwitchBranchResult, storyId: string): void {
+  const notice = switchResultNotice(
+    result,
+    generationGateReason(
+      true,
+      selectStorySettingsGenerationRunKind(generationStore.getTxState(), storyId),
+    ) ?? t('generationGate.inFlight'),
+  )
+  if (notice == null) return
+  if (notice.kind === 'info') toast.info(notice.message)
+  else toast.error(notice.message)
 }
 
 export default function ReaderComposerRoute(): ReactElement {
@@ -1695,10 +1715,63 @@ function ReaderComposerBody({
   const handleJumpToBottom = useCallback(async () => jumpToBottom(), [jumpToBottom])
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
   const openBranchNavigator = useCallback(() => branchNavigatorRef.current?.open(), [])
-  const handleSwitch = useCallback((_toBranchId: string) => {}, [])
+  // Post-commit, as branchIdRef was: a switch whose reader lost focus is abandoned.
+  const isFocusedRef = useRef(isFocused)
+  useLayoutEffect(() => {
+    isFocusedRef.current = isFocused
+  }, [isFocused])
+  const replaceStack = useReplaceStoryStack()
+  // reader-composer.md → Inline edit session: a switch is a guarded leave, so the hold follows it.
+  const handleSwitch = useCallback(
+    (toBranchId: string) => {
+      if (storyId == null || dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
+      guardEdit(() => {
+        // The guard can answer after its dialog or a bridge query; the reader may have moved on.
+        if (!aliveRef.current || dispatchInFlightRef.current) return
+        logger.debug('reader.branch_switch_started', { branchId, toBranchId })
+        const hold = readerHoldStore.take(branchId)
+        void switchBranch(
+          {
+            storyId,
+            fromBranchId: branchId,
+            toBranchId,
+            hold,
+            isCurrentRequest: () => aliveRef.current && isFocusedRef.current,
+            replaceStack,
+          },
+          ctx,
+        ).then(
+          (result) => postSwitchNotice(result, storyId),
+          (error: unknown) => {
+            logger.error('reader.branch_switch_threw', {
+              branchId,
+              toBranchId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            toast.error(t('reader:branches.switchFailed'))
+          },
+        )
+      })
+    },
+    [storyId, branchId, guardEdit, aliveRef, replaceStack],
+  )
+  // Resolves whatever the write did: the input collapses, and the row shows the stored name.
   const handleRename = useCallback(
-    async (_branchId: string, _name: string): Promise<void> => {},
-    [],
+    async (id: string, name: string): Promise<void> => {
+      if (storyId == null) return
+      try {
+        const result = await renameBranch({ storyId, branchId: id, name }, ctx)
+        if (result.status === 'rejected' && result.code === 'missing')
+          toast.error(t('reader:branches.renameFailed'))
+      } catch (error) {
+        logger.error('reader.branch_rename_threw', {
+          branchId: id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        toast.error(t('reader:branches.renameFailed'))
+      }
+    },
+    [storyId],
   )
   const sendEntryLanding = useCallback((entryId: string, sliceKey: number) => {
     if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId, sliceKey)

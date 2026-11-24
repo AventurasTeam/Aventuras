@@ -519,6 +519,8 @@
     "current": "Current branch",
     "rename": "Rename {{name}}",
     "delete": "Delete {{name}}",
-    "paused": "Generation in progress — switching paused."
+    "paused": "Generation in progress — switching paused.",
+    "switchFailed": "Couldn't switch branches.",
+    "renameFailed": "Couldn't rename the branch."
   }
 }
