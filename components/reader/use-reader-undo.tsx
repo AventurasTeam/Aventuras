@@ -371,11 +371,11 @@ export function useReaderUndo({
           )
         }
         const target = (origin === 'menu' ? menuTargetRef.current : null) ?? (await resolve())
+        if (stale()) return
         if (target == null) {
-          if (aliveRef.current) report('undo', NOTHING, origin)
+          report('undo', NOTHING, origin)
           return
         }
-        if (stale()) return
         const { description } = target
         if (description.seen) {
           await runUndo(target, origin)

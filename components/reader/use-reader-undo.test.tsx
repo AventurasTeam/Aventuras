@@ -629,6 +629,31 @@ describe('useReaderUndo — review fixes', () => {
     expect(toasts).toHaveLength(0)
   })
 
+  it('says nothing to undo when the pending read finds none and no hold was taken', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+
+    await act(async () => read.resolve(null))
+    await settle()
+
+    expect(toasts.map((toast) => toast.message)).toEqual(['Nothing to undo.'])
+  })
+
+  it('says nothing when the pending read finds none after a switch took the reader hold', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    readerHoldStore.take('b1')
+
+    await act(async () => read.resolve(null))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
   it('names a created row in the notice although the undo removed it', async () => {
     const created: UndoTargetRead = {
       actionId: 'act_add',
