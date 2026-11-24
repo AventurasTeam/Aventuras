@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import {
+  closeReportAction,
+  closeRunsOf,
+  committedRerunAfter,
+  LORE_TOOLS,
+  scriptRerunLore,
+  UNASKED_LANES,
+} from '../flows/close-rerun'
 import { goToChapterTimeline, goToReader, openStory } from '../flows/navigation'
 import {
   chapterByTitle,
@@ -34,8 +42,6 @@ const CLOSE_ACTION = 'act_chapter_2'
 const VORNE = 'Vorne'
 const TRAITS_AFTER_CLOSE = ['patient', 'merciless']
 const TRAITS_BEFORE_CLOSE = ['patient']
-// memory/chapter-close.md → Run order: Lore's tools key its lane; every other lane ends its task.
-const LORE_TOOLS = ['read_row', 'create_lore', 'update_lore'] as const
 const FIRST_LORE = {
   title: 'The Keep Bell Rota',
   body: 'The keep rings its bell on the hour from dusk to dawn.',
@@ -44,10 +50,6 @@ const SECOND_LORE = {
   title: 'The Watch Ledger',
   body: 'The Watch keeps a ledger of every name the bell tower hears.',
 }
-// A re-run makes no call in boundary or metadata (C2): neither lane is asked.
-const UNASKED = ['chapter-boundary', 'chapter-metadata']
-
-const call = (name: string, args: Record<string, unknown>) => ({ toolCalls: [{ name, args }] })
 
 // Serial, one app: the shortcut case runs first and leaves no turns after the chapter behind it.
 test.describe.serial('re-running a close', () => {
@@ -97,14 +99,7 @@ test.describe.serial('re-running a close', () => {
       [branchId, actionId],
     )
 
-  async function reportAction(): Promise<unknown> {
-    const rows = await queryApp(
-      page(),
-      `SELECT json_extract(close_report, '$.actionId') FROM chapters WHERE branch_id = ? AND id = ?`,
-      [branchId, chapter.id],
-    )
-    return rows[0]?.[0]
-  }
+  const reportAction = () => closeReportAction(page(), branchId, chapter.id)
 
   async function vorneTraits(): Promise<unknown> {
     const rows = await queryApp(
@@ -132,15 +127,7 @@ test.describe.serial('re-running a close', () => {
       [branchId, chapter.endPosition],
     )
 
-  async function closeRuns(): Promise<[string, string | null][]> {
-    const rows = await queryApp(
-      page(),
-      `SELECT action_id, outcome FROM pipeline_runs
-        WHERE kind = 'chapter-close' AND story_id = ? ORDER BY started_at, rowid`,
-      [HERO_STORY],
-    )
-    return rows.map(([actionId, outcome]) => [actionId as string, outcome as string | null])
-  }
+  const closeRuns = () => closeRunsOf(page(), HERO_STORY)
 
   const loreCount = (title: string) =>
     queryScalar(page(), `SELECT COUNT(*) FROM lore WHERE branch_id = ? AND title = ?`, [
@@ -157,12 +144,7 @@ test.describe.serial('re-running a close', () => {
       [branchId, title],
     )
 
-  // `setToolSteps` replaces the lane's queue, so each re-run scripts its own write.
-  function scriptLore(lore: { title: string; body: string }): void {
-    liveMock().setToolSteps(LORE_TOOLS, [
-      call('create_lore', { ...lore, turns: ['t1'], why: 'The chapter’s first turn sets it out.' }),
-    ])
-  }
+  const scriptLore = (lore: { title: string; body: string }) => scriptRerunLore(liveMock(), lore)
 
   async function expandCard(): Promise<void> {
     const head = chapterTimeline.cardHead(page(), chapter.id)
@@ -170,19 +152,8 @@ test.describe.serial('re-running a close', () => {
     await expect(head).toHaveAttribute('aria-expanded', 'true')
   }
 
-  // The run started after `before` runs: its action, once it committed.
-  async function committedRerun(before: number): Promise<string> {
-    await expect
-      .poll(async () => (await closeRuns()).slice(before), {
-        timeout: 120_000,
-        message: 'the re-run never finished',
-      })
-      .toEqual([[expect.any(String), expect.any(String)]])
-    const [[actionId, outcome]] = (await closeRuns()).slice(before)
-    expect(outcome, 'the re-run committed').toBe('completed')
-    expect(actionId).not.toBe(CLOSE_ACTION)
-    return actionId
-  }
+  const committedRerun = (before: number) =>
+    committedRerunAfter(page(), HERO_STORY, before, CLOSE_ACTION)
 
   async function expectRerunLanded(
     actionId: string,
@@ -202,7 +173,7 @@ test.describe.serial('re-running a close', () => {
       .requests.slice(requestsBefore)
       .map((request) => request.agent)
     expect(asked).toContain(toolLaneKey(LORE_TOOLS))
-    for (const agent of UNASKED) expect(asked).not.toContain(agent)
+    for (const agent of UNASKED_LANES) expect(asked).not.toContain(agent)
     await expect(memoryBanner.rerun(page(), chapter.sequenceNumber)).toBeVisible()
   }
 
@@ -256,7 +227,7 @@ test.describe.serial('re-running a close', () => {
     await expect(confirm.root).toContainText(t('chapters:rerunConfirm.rollbackWarning'))
     await expect(confirm.cancel).toBeEnabled()
     await expect(confirm.rollbackAndRerun).toBeEnabled()
-    await expect(confirm.rerunOnBranch).toBeDisabled()
+    await expect(confirm.rerunOnBranch).toBeEnabled()
     await expect(confirm.rerun).toHaveCount(0)
 
     const runsBefore = (await closeRuns()).length

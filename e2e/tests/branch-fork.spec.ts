@@ -1,15 +1,33 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { openStory } from '../flows/navigation'
-import { currentBranchId, queryApp, queryScalar } from '../harness/db'
+import {
+  closeReportAction,
+  closeRunsOf,
+  committedRerunAfter,
+  LORE_TOOLS,
+  scriptRerunLore,
+  UNASKED_LANES,
+} from '../flows/close-rerun'
+import { goToChapterTimeline, openStory } from '../flows/navigation'
+import { chapterByTitle, currentBranchId, queryApp, queryScalar } from '../harness/db'
 import { escapeRegExp, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { startMockLlm, toolLaneKey, type MockLlm } from '../harness/mock-llm'
+import { suppressNativeUnloadDialogRace } from '../harness/reload'
+import {
+  createSeededUserDataDir,
+  removeUserDataDir,
+  setChapterAutoClose,
+  setProviderEndpoint,
+} from '../harness/seed'
 import { branchCreate } from '../locators/branch-create'
 import { branchNavigator } from '../locators/branch-navigator'
+import { chapterTimeline } from '../locators/chapter-timeline'
 import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
+import { memoryBanner } from '../locators/memory-banner'
 import { reader, undoText } from '../locators/reader'
+import { rerunConfirm } from '../locators/rerun-confirm'
 
 // Creating a branch from the reader (branch-navigator.md → Branch creation — modal), UI-driven and
 // DB-asserted on the hero seed (lib/db/devtools/seed-dataset.ts): two closed chapters, turns after
@@ -19,6 +37,12 @@ const HERO_STORY = 'story_hero'
 const TYPED_NAME = '  Side quest  '
 const STORED_NAME = 'Side quest'
 const PARENT_EDIT = 'E2E-FORK-EDIT the reply was rewritten before the fork.'
+// By title, never by position (milestone C8): the hero's latest close, with turns after it.
+const RERUN_CHAPTER = 'The Keep Leans Closer'
+const FORK_LORE = {
+  title: 'The Ferry Toll Ledger',
+  body: 'The ferrymen write down every toll the river takes.',
+}
 
 type Entry = { id: string; position: number }
 
@@ -106,6 +130,41 @@ async function chaptersEndingBy(
 
 const onReader = (branchId: string): RegExp =>
   new RegExp(`/reader-composer/${escapeRegExp(branchId)}`)
+
+// N (chapter-close.md → Re-running a close): the last non-system entry before the first one past
+// the close, which is where the turns since begin.
+async function forkPointAfter(page: Page, branchId: string, endPosition: number): Promise<Entry> {
+  const rows = await queryApp(
+    page,
+    `SELECT id, position FROM story_entries
+      WHERE branch_id = ? AND kind <> 'system'
+        AND position < (SELECT MIN(position) FROM story_entries
+                         WHERE branch_id = ? AND kind <> 'system' AND position > ?)
+      ORDER BY position DESC LIMIT 1`,
+    [branchId, branchId, endPosition],
+  )
+  expect(rows, 'an entry before the first turn past the close').toHaveLength(1)
+  const [[id, position]] = rows
+  return { id: id as string, position: Number(position) }
+}
+
+async function idsPastEnd(page: Page, branchId: string, endPosition: number): Promise<unknown[]> {
+  const rows = await queryApp(
+    page,
+    `SELECT id FROM story_entries WHERE branch_id = ? AND position > ? ORDER BY position`,
+    [branchId, endPosition],
+  )
+  return rows.map(([id]) => id)
+}
+
+const loreCreateActions = (page: Page, branchId: string, title: string): Promise<unknown[][]> =>
+  queryApp(
+    page,
+    `SELECT d.action_id FROM deltas d
+       JOIN lore l ON l.branch_id = d.branch_id AND l.id = d.target_id
+      WHERE d.branch_id = ? AND l.title = ? AND d.op = 'create'`,
+    [branchId, title],
+  )
 
 // Serial, one launch: the second test opens the story the first left on the new branch. A retry
 // reruns the group from its first test, in a fresh launch.
@@ -249,5 +308,130 @@ test.describe.serial('⎇ — a branch from the reader', () => {
     ).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(branchNavigator.browseBranchesRow(page)).toHaveCount(0)
+  })
+})
+
+// Its own launch: the fork moves the story's current branch, and the re-run needs the mock.
+test.describe('Re-run on new branch — from the Chapter Timeline', () => {
+  let app: LaunchedApp | undefined
+  let mock: MockLlm | undefined
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    test.setTimeout(120_000)
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    // A re-run refuses while a close is owed; auto-close off keeps the region out of it.
+    setChapterAutoClose(seeded.dbPath, HERO_STORY, false)
+    mock = await startMockLlm()
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+    suppressNativeUnloadDialogRace(app)
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('forks where the turns since begin and re-runs the close there; the parent keeps its turns', async () => {
+    test.setTimeout(180_000)
+    if (!app || !mock) throw new Error('the app or the mock never started')
+    const page = app.window
+    const llm = mock
+    const loreLane = toolLaneKey(LORE_TOOLS)
+    await expect(home.newStory(page)).toBeVisible({ timeout: 20_000 })
+    const title = await heroTitle(page)
+    await openStory(page, title)
+    const parentId = await currentBranchId(page, HERO_STORY)
+    const parentName = await branchName(page, parentId)
+    const chapter = await chapterByTitle(page, parentId, RERUN_CHAPTER)
+    const forkPoint = await forkPointAfter(page, parentId, chapter.endPosition)
+    const autoName = t('chapters:rerunConfirm.autoName', { number: chapter.sequenceNumber })
+    const parentPastEnd = await idsPastEnd(page, parentId, chapter.endPosition)
+    expect(parentPastEnd.length, 'turns followed the close').toBeGreaterThan(0)
+    const closeAction = await closeReportAction(page, parentId, chapter.id)
+    if (typeof closeAction !== 'string') throw new Error('the latest close wrote no report')
+    const branchesBefore = await branchCount(page)
+
+    scriptRerunLore(llm, FORK_LORE)
+    await goToChapterTimeline(page)
+    const head = chapterTimeline.cardHead(page, chapter.id)
+    if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
+    await expect(head).toHaveAttribute('aria-expanded', 'true')
+    await expect(chapterTimeline.rerunClose(page, chapter.id)).toBeEnabled()
+    await chapterTimeline.rerunClose(page, chapter.id).click()
+    const confirm = rerunConfirm(page)
+    await expect(confirm.root).toBeVisible()
+    // The preview's N is the DB's.
+    await expect(confirm.root).toContainText(
+      t('chapters:rerunConfirm.forkSentence', {
+        branch: parentName,
+        position: forkPoint.position,
+        name: autoName,
+      }),
+    )
+    await expect(confirm.rerunOnBranch).toBeEnabled()
+
+    const runsBefore = (await closeRunsOf(page, HERO_STORY)).length
+    const requestsBefore = llm.requests.length
+    // Held mid-re-run, so the running banner can be read on the new branch's reader.
+    llm.holdNextStructured(loreLane)
+    try {
+      await confirm.rerunOnBranch.click()
+      await expect
+        .poll(() => llm.requests.slice(requestsBefore).some((r) => r.agent === loreLane), {
+          timeout: 60_000,
+          message: "the re-run never reached Lore's call",
+        })
+        .toBe(true)
+      await expect(confirm.root).toHaveCount(0)
+      await expect(page).toHaveURL(/\/reader-composer\//)
+      await expect(page).not.toHaveURL(onReader(parentId))
+      await expect(memoryBanner.closingTask(page, 'lore')).toBeVisible()
+    } finally {
+      llm.releaseStructured()
+    }
+
+    const childId = await currentBranchId(page, HERO_STORY)
+    expect(childId, 'the pointer names the new branch').not.toBe(parentId)
+    await expect(page).toHaveURL(onReader(childId))
+    expect(await branchCount(page)).toBe(branchesBefore + 1)
+    expect(
+      await queryApp(
+        page,
+        `SELECT name, parent_branch_id, fork_entry_id FROM branches WHERE id = ?`,
+        [childId],
+      ),
+      'the auto-name, the parent and N',
+    ).toEqual([[autoName, parentId, forkPoint.id]])
+
+    const rerun = await committedRerunAfter(page, HERO_STORY, runsBefore, closeAction)
+    await expect(memoryBanner.rerun(page, chapter.sequenceNumber)).toBeVisible()
+    await expect(branchNavigator.chip(page, autoName, branchesBefore + 1)).toBeVisible()
+    expect(
+      await idsPastEnd(page, childId, chapter.endPosition),
+      'the child holds no turn past the close',
+    ).toEqual([])
+    expect(await closeReportAction(page, childId, chapter.id), "the child's report").toBe(rerun)
+    expect(await loreCreateActions(page, childId, FORK_LORE.title)).toEqual([[rerun]])
+    const asked = llm.requests.slice(requestsBefore).map((request) => request.agent)
+    for (const lane of UNASKED_LANES) expect(asked).not.toContain(lane)
+
+    expect(await idsPastEnd(page, parentId, chapter.endPosition), "the parent's turns").toEqual(
+      parentPastEnd,
+    )
+    expect(await closeReportAction(page, parentId, chapter.id), "the parent's report").toBe(
+      closeAction,
+    )
+    expect(await loreCreateActions(page, parentId, FORK_LORE.title)).toEqual([])
+
+    await chrome.back(page).click()
+    await expect(home.openStory(page, title)).toBeVisible({ timeout: 10_000 })
+    await expect(reader.composer(page)).toHaveCount(0)
+
+    mock = undefined
+    await expect(llm.close(), 'every scripted step was taken').resolves.toBeUndefined()
   })
 })
