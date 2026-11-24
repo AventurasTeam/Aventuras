@@ -1045,6 +1045,7 @@ describe('branch scope', () => {
     keywords: ['kael'],
     priority: 3,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }
@@ -1076,6 +1077,7 @@ describe('branch scope', () => {
     keywords: ['the exile'],
     priority: 5,
     embeddingStale: 1,
+    isLead: 0,
     createdAt: 2,
     updatedAt: 2,
   }
