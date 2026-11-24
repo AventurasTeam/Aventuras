@@ -106,6 +106,15 @@ describe('readStoryBranches', () => {
 
     await expect(pending).rejects.toThrow('boom')
   })
+
+  it('types its rows read-only, since refreshBranches holds them as they are', () => {
+    // Never called: the compiler is the check.
+    const push = (rows: Awaited<ReturnType<typeof readStoryBranches>>) => {
+      // @ts-expect-error -- the read's rows are read-only.
+      rows.push(row('br_z'))
+    }
+    expect(push).toBeTypeOf('function')
+  })
 })
 
 describe('branchesStore', () => {

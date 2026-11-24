@@ -25,7 +25,10 @@ function rowsOf(state: BranchesState, storyId: string | null): readonly BranchRo
  * One story's branches by `created_at`, then `id`; runs with no story open. Throws on a read
  * failure.
  */
-export async function readStoryBranches(db: DbCtx['db'], storyId: string): Promise<BranchRow[]> {
+export async function readStoryBranches(
+  db: DbCtx['db'],
+  storyId: string,
+): Promise<readonly BranchRow[]> {
   const rows = await db
     .select({
       id: branches.id,
