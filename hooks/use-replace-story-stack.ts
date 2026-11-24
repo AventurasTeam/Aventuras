@@ -1,6 +1,12 @@
-import { CommonActions, type NavigationState } from '@react-navigation/native'
+import {
+  CommonActions,
+  type NavigationAction,
+  type NavigationState,
+} from '@react-navigation/native'
 import { useNavigationContainerRef } from 'expo-router'
 import { useCallback } from 'react'
+
+import { isUnsavedPopArmed } from './leave-guard-chain'
 
 export type StackRoute = { key?: string; name: string; params?: object }
 
@@ -23,27 +29,36 @@ function appStackOf(root: NavigationState | undefined): NavigationState | null {
   return state
 }
 
+/** The navigation container's calls the reset makes. */
+export type StackContainer = {
+  isReady: () => boolean
+  getRootState: () => NavigationState | undefined
+  dispatch: (action: NavigationAction) => void
+}
+
+/** One stack reset to `[Story List, Reader(branchId)]` through the container; true when it took. */
+export function replaceStoryStack(container: StackContainer, branchId: string): boolean {
+  if (!container.isReady()) return false
+  const stack = appStackOf(container.getRootState())
+  if (stack == null) return false
+  // A guard that prevents the reset keeps it to replay once released, after the switch has failed.
+  if (stack.routes.some((route) => isUnsavedPopArmed(route.key))) return false
+  const replacedTop = stack.routes[stack.index]?.key
+  const routes = storyStackRoutes(stack.routes, branchId)
+  container.dispatch({
+    ...CommonActions.reset({ ...stack, routes, index: routes.length - 1 }),
+    target: stack.key,
+  })
+  // A beforeRemove prevention swallows the whole reset and leaves the stack as it was.
+  const after = appStackOf(container.getRootState())
+  const top = after?.routes[after.index]
+  const params = top?.params as { branchId?: unknown } | undefined
+  return top?.name === READER && params?.branchId === branchId && top.key !== replacedTop
+}
+
 export function useReplaceStoryStack(): ReplaceStoryStack {
   // Not router.* (it dispatches in an effect after a commit) nor NavigationContext (the root
   // host's is __root's): the container ref reaches the app Stack in one dispatch from anywhere.
   const ref = useNavigationContainerRef()
-  return useCallback(
-    (branchId: string) => {
-      if (!ref.isReady()) return false
-      const stack = appStackOf(ref.getRootState())
-      if (stack == null) return false
-      const replacedTop = stack.routes[stack.index]?.key
-      const routes = storyStackRoutes(stack.routes, branchId)
-      ref.dispatch({
-        ...CommonActions.reset({ ...stack, routes, index: routes.length - 1 }),
-        target: stack.key,
-      })
-      // A beforeRemove prevention swallows the whole reset and leaves the stack as it was.
-      const after = appStackOf(ref.getRootState())
-      const top = after?.routes[after.index]
-      const params = top?.params as { branchId?: unknown } | undefined
-      return top?.name === READER && params?.branchId === branchId && top.key !== replacedTop
-    },
-    [ref],
-  )
+  return useCallback((branchId: string) => replaceStoryStack(ref, branchId), [ref])
 }

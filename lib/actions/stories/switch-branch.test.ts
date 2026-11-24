@@ -1,6 +1,9 @@
+import type { NavigationState } from '@react-navigation/native'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { armUnsavedPop, isUnsavedPopArmed } from '@/hooks/leave-guard-chain'
+import { replaceStoryStack, type StackContainer } from '@/hooks/use-replace-story-stack'
 import {
   branchEraFlips,
   branches,
@@ -56,6 +59,12 @@ vi.mock('@/lib/stores', async (importOriginal) => {
 })
 
 const readStories = (db: DbCtx['db']): Promise<boolean> => real.rehydrateStories!(db)
+
+// Stubbed: the real package reaches react-native's Flow source, which the unit bundler can't parse.
+vi.mock('@react-navigation/native', () => ({
+  CommonActions: { reset: (state: object) => ({ type: 'RESET', payload: state }) },
+}))
+vi.mock('expo-router', () => ({ useNavigationContainerRef: () => null }))
 
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
@@ -211,6 +220,59 @@ function blockSeen(replaceStack: { mock: { calls: unknown[] } }): BlockSeen {
     replaced: replaceStack.mock.calls.length,
     closeResult: chapterOverlaysStore.getState().closeResult,
     held: readerHoldStore.isHeld('br_a'),
+  }
+}
+
+type NavRoute = { key: string; name: string; params?: object }
+
+// The app Stack under expo-router's root slot. As react-navigation does, a reset that removes a
+// route whose guard is armed is prevented and held by that guard, which replays it once released.
+function guardedStack(initial: NavRoute[]) {
+  let routes = initial
+  const held: { payload: { routes: { key?: string; name: string }[] } }[] = []
+  const apply = (action: (typeof held)[number]): void => {
+    routes = action.payload.routes.map((route, index) => ({
+      ...route,
+      key: route.key ?? `fresh-${index}`,
+    }))
+  }
+  const dispatch = vi.fn((action: unknown) => {
+    const reset = action as (typeof held)[number]
+    if (routes.some((route) => isUnsavedPopArmed(route.key))) held.push(reset)
+    else apply(reset)
+  })
+  const container: StackContainer = {
+    isReady: () => true,
+    getRootState: () =>
+      ({
+        key: 'root-k',
+        index: 0,
+        routeNames: ['__root'],
+        type: 'stack',
+        stale: false,
+        routes: [
+          {
+            key: '__root-k',
+            name: '__root',
+            state: {
+              key: 'stack-k',
+              index: routes.length - 1,
+              routeNames: [],
+              type: 'stack',
+              stale: false,
+              routes,
+            },
+          },
+        ],
+      }) as unknown as NavigationState,
+    dispatch,
+  }
+  return {
+    container,
+    releaseGuards: () => {
+      for (const action of held.splice(0)) apply(action)
+    },
+    routeKeys: () => routes.map((route) => route.key),
   }
 }
 
@@ -526,6 +588,32 @@ describe('switchBranch', () => {
       fromBranchId: 'br_a',
       toBranchId: 'br_b',
     })
+  })
+
+  it('leaves nothing a guard could replay when an armed buried route refuses the reset', async () => {
+    const { db, ctx } = await setup()
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const nav = guardedStack([
+      { key: 'list-k', name: 'index' },
+      { key: 'settings-k', name: 'story-settings/[storyId]', params: { storyId: 'story_1' } },
+      { key: 'reader-a', name: 'reader-composer/[branchId]', params: { branchId: 'br_a' } },
+    ])
+    const release = armUnsavedPop('settings-k')
+
+    const result = await switchBranch(
+      input({ replaceStack: (branchId) => replaceStoryStack(nav.container, branchId) }),
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(nav.container.dispatch).not.toHaveBeenCalled()
+    await expectStillOnLeft(db)
+
+    release()
+    nav.releaseGuards()
+
+    expect(nav.routeKeys()).toEqual(['list-k', 'settings-k', 'reader-a'])
+    expect(await pointer(db)).toBe('br_a')
   })
 
   it('puts the pointer back when the reader goes away right after the pointer write', async () => {

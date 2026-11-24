@@ -2,6 +2,7 @@
 import { cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { armUnsavedPop } from './leave-guard-chain'
 import { storyStackRoutes, useReplaceStoryStack, type StackRoute } from './use-replace-story-stack'
 
 type FakeStack = {
@@ -101,8 +102,14 @@ beforeEach(() => {
   nav.dispatch.mockClear()
 })
 
+const arms: (() => void)[] = []
+const arm = (routeKey: string): void => {
+  arms.push(armUnsavedPop(routeKey))
+}
+
 afterEach(() => {
   cleanup()
+  for (const release of arms.splice(0)) release()
 })
 
 describe('storyStackRoutes', () => {
@@ -216,6 +223,44 @@ describe('useReplaceStoryStack', () => {
     expect(result.current('br_b')).toBe(false)
 
     expect(nav.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('answers false and dispatches nothing while the top route holds an armed unsaved guard', () => {
+    const { result } = renderHook(() => useReplaceStoryStack())
+    nav.state.stack = stackOf([list, readerA])
+    arm('reader-a')
+
+    expect(result.current('br_b')).toBe(false)
+
+    expect(nav.dispatch).not.toHaveBeenCalled()
+    expect(nav.state.stack?.routes).toEqual([list, readerA])
+  })
+
+  it('answers false and dispatches nothing while a buried route holds an armed unsaved guard', () => {
+    const { result } = renderHook(() => useReplaceStoryStack())
+    nav.state.stack = stackOf([list, settings, readerA])
+    arm('settings-k')
+
+    expect(result.current('br_b')).toBe(false)
+
+    expect(nav.dispatch).not.toHaveBeenCalled()
+    expect(nav.state.stack?.routes).toEqual([list, settings, readerA])
+  })
+
+  it('dispatches as before when no route in the app Stack is armed', () => {
+    const { result } = renderHook(() => useReplaceStoryStack())
+    nav.state.stack = stackOf([list, settings, readerA])
+    arm('reader-elsewhere')
+    const released = armUnsavedPop('settings-k')
+    released()
+
+    expect(result.current('br_b')).toBe(true)
+
+    expect(nav.dispatch).toHaveBeenCalledTimes(1)
+    expect(nav.state.stack?.routes).toEqual([
+      list,
+      { ...freshReaderB, key: 'reader-composer/[branchId]-fresh' },
+    ])
   })
 
   it('returns one function across renders, which reads the stack when called', () => {
