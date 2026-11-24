@@ -317,6 +317,22 @@ export const Pending: Story = {
   },
 }
 
+/** A click on `Create` disables the button it focused; focus stays in the dialog. */
+export const PendingFromClick: Story = {
+  render: (args) => <PendsOnCreate {...args} />,
+  play: async ({ args }) => {
+    const dialog = await findModal()
+    await userEvent.type(nameField(dialog), 'Side quest')
+    const create = button(dialog, COPY.create)
+    await userEvent.click(create)
+    await waitFor(() => expect(create).toHaveAttribute('aria-busy', 'true'), WAIT)
+    await waitFor(() => expect(create).not.toHaveFocus(), WAIT)
+    expect(document.activeElement).not.toBe(document.body)
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    expect(args.onCreate).toHaveBeenCalledTimes(1)
+  },
+}
+
 export const RefusedGate: Story = {
   render: (args) => <RefusesOnCreate {...args} line={t('generationGate.inFlight')} />,
   play: refusedPlay(COPY.gate),

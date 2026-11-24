@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 
 import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { FORK_REFUSAL, type ForkResult, type ShowBranchResult } from '@/lib/actions'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -48,6 +49,7 @@ const ENTRY = 'entry_47'
 const CTX = { db: {}, runInTransaction: expect.any(Function) }
 const COPY = {
   gate: 'Generation is in flight. Cancel to edit.',
+  closeGate: 'Chapter close in progress. Cancel to edit.',
   swap: 'Unavailable while the embedder switch finishes.',
   unfinishedRun:
     'The memory work after this entry never finished, so branch from an earlier entry.',
@@ -105,6 +107,17 @@ function passRun(): RunState {
     intermediates: {},
     terminal: Promise.resolve(),
     resolveTerminal: () => {},
+  }
+}
+
+// A chapter close of the story: the hard gate forkBranch's own check refuses on.
+function closeRun(): RunState {
+  return {
+    ...passRun(),
+    runId: 'run_close',
+    kind: CHAPTER_CLOSE_KIND,
+    gateBehavior: 'hard-gate',
+    actionId: 'act_close',
   }
 }
 
@@ -380,19 +393,23 @@ describe('useBranchCreate — Create', () => {
     expect(begun).toBe(true)
   })
 
+  // The gated row's run starts inside the fork, past the pre-check: its line names that run.
   it.each([
-    [FORK_REFUSAL.gated, COPY.gate, false],
-    [FORK_REFUSAL.swapPending, COPY.swap, false],
-    [FORK_REFUSAL.unfinishedRun, COPY.unfinishedRun, false],
-    [FORK_REFUSAL.entryMissing, COPY.entryGone, false],
-    [FORK_REFUSAL.entrySystem, COPY.entryGone, false],
-    [FORK_REFUSAL.rollbackFloor, COPY.failed, true],
-    [FORK_REFUSAL.integrity, COPY.failed, true],
-    ['lock-timeout', COPY.failed, true],
+    [FORK_REFUSAL.gated, COPY.closeGate, false, true],
+    [FORK_REFUSAL.swapPending, COPY.swap, false, false],
+    [FORK_REFUSAL.unfinishedRun, COPY.unfinishedRun, false, false],
+    [FORK_REFUSAL.entryMissing, COPY.entryGone, false, false],
+    [FORK_REFUSAL.entrySystem, COPY.entryGone, false, false],
+    [FORK_REFUSAL.rollbackFloor, COPY.failed, true, false],
+    [FORK_REFUSAL.integrity, COPY.failed, true, false],
+    ['lock-timeout', COPY.failed, true, false],
   ] as const)(
     'on %s keeps the modal open with its line and ends the hold; nothing follows',
-    async (code, line, logged) => {
-      actions.fork.mockResolvedValue({ status: 'rejected', code, reason: 'x' })
+    async (code, line, logged, runStarts) => {
+      actions.fork.mockImplementation(async () => {
+        if (runStarts) generationStore.startRun(closeRun())
+        return { status: 'rejected', code, reason: 'x' }
+      })
       const hook = renderCreate()
       await openModal(hook)
       press(hook, 'Side quest')

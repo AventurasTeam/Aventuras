@@ -31,7 +31,7 @@ const COPY = {
   rollbackAndRerun: 'Roll back & re-run',
   rerunOnBranch: 'Re-run on new branch',
   forkSentence:
-    'Re-run on new branch keeps them on Main and branches from entry 90 as "Ch. 5 re-run".',
+    'Re-run on new branch keeps them on Harbor watch and branches from entry 90 as "Ch. 5 re-run".',
 }
 const LORE_LINE = /lore rows? removed/
 const OTHER_LINE = /other changes? reversed/
@@ -104,6 +104,8 @@ type Story = StoryObj<typeof meta>
 
 /** Turns followed the close: their block, the fork's sentence before the warning, three buttons. */
 export const TurnsFollowed: Story = {
+  // Not the default branch's name, so a sentence that hard-codes it shows.
+  args: { preview: { ...PREVIEW, branchName: 'Harbor watch' } },
   play: async () => {
     const dialog = await findDialog()
     const lines = [

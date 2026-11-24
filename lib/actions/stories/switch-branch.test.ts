@@ -1222,8 +1222,16 @@ describe('showBranch', () => {
     const replaceStack = vi.fn((_branchId: string): boolean => {
       throw new Error('dispatch exploded')
     })
+    const heldAtWrite: boolean[] = []
+    const watched: TestCtx = {
+      ...ctx,
+      runInTransaction: vi.fn(async (ops: Parameters<TestCtx['runInTransaction']>[0]) => {
+        await ctx.runInTransaction(ops)
+        heldAtWrite.push(readerHoldStore.isHeld('br_a'))
+      }),
+    }
 
-    expect(await showBranch(show({ replaceStack }), ctx)).toEqual({
+    expect(await showBranch(show({ replaceStack }), watched)).toEqual({
       status: 'navigation-blocked',
     })
 
@@ -1232,7 +1240,8 @@ describe('showBranch', () => {
       branchId: 'br_b',
       error: 'dispatch exploded',
     })
-    expect(ctx.runInTransaction).toHaveBeenCalledTimes(1)
+    expect(watched.runInTransaction).toHaveBeenCalledTimes(1)
+    expect(heldAtWrite).toEqual([true])
     expect(await pointer(db)).toBe('br_a')
     expect(storiesRowBranch()).toBe('br_a')
     expect(entriesStore.getLoadedBranch()).toBe('br_a')
