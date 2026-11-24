@@ -16,27 +16,37 @@ import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { Text } from '@/components/ui/text'
 import { seedHeroFork } from '@/lib/actions'
-import { db, reseedDevDatabase, runInTransaction } from '@/lib/db'
+import { db, HERO_FORK, reseedDevDatabase, runInTransaction, type ReseedSummary } from '@/lib/db'
 
 type Status =
   | { phase: 'idle' }
   | { phase: 'running' }
   | { phase: 'done'; tables: number; rows: number }
   | { phase: 'error'; message: string }
+  | { phase: 'forkFailed'; cause: string }
+
+const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 export default function ReseedDevRoute() {
   const [status, setStatus] = useState<Status>({ phase: 'idle' })
 
   const runReseed = async () => {
     setStatus({ phase: 'running' })
+    let summary: ReseedSummary
     try {
-      const summary = await reseedDevDatabase()
+      summary = await reseedDevDatabase()
+    } catch (err) {
+      setStatus({ phase: 'error', message: messageOf(err) })
+      return
+    }
+    try {
       // lib/db can't call lib/actions, so the seed's fork (C7) runs here, as `pnpm db:seed` does.
       await seedHeroFork({ db, runInTransaction })
-      setStatus({ phase: 'done', ...summary })
     } catch (err) {
-      setStatus({ phase: 'error', message: err instanceof Error ? err.message : String(err) })
+      setStatus({ phase: 'forkFailed', cause: messageOf(err) })
+      return
     }
+    setStatus({ phase: 'done', ...summary })
   }
 
   return (
@@ -93,6 +103,13 @@ export default function ReseedDevRoute() {
           </Text>
         ) : null}
         {status.phase === 'error' ? <Text className="text-danger">{status.message}</Text> : null}
+        {status.phase === 'forkFailed' ? (
+          <Text className="text-danger">
+            The static seed was written, but {HERO_FORK.id} is missing or incomplete. Reseed again
+            once nothing is generating; for a pending embedder swap, restart the app first. Cause:{' '}
+            {status.cause}
+          </Text>
+        ) : null}
       </View>
     </ScrollView>
   )
