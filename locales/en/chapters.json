@@ -128,7 +128,7 @@
     "rollbackAndRerun": "Roll back & re-run",
     "rerunOnBranch": "Re-run on new branch",
     "autoName": "Ch. {{number}} re-run",
-    "rerunOnBranchLater": "Re-running on a new branch lands in a later milestone",
+    "forkSentence": "Re-run on new branch keeps them on {{branch}} and branches from entry {{position}} as \"{{name}}\".",
     "notLatest": "This is no longer the latest chapter.",
     "closeOwed": "Close the open chapter first.",
     "readFailed": "Couldn't read what a re-run would change."

@@ -12,12 +12,10 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import type { CloseRerunPreview } from '@/lib/actions'
+import type { CloseRerunPreview, CloseRerunShortcut } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 
 import { chapterImpactLines } from './chapter-impact-lines'
-
-type Shortcut = NonNullable<CloseRerunPreview['shortcut']>
 
 export type CloseRerunConfirmProps = {
   open: boolean
@@ -27,10 +25,12 @@ export type CloseRerunConfirmProps = {
    * Hidden while `pending`: the start trips the gate itself, so it would read as some other run.
    */
   blockedReason?: string
-  /** A start is in flight; every button disables, and an Esc does nothing. */
+  /** A start or a fork is in flight; every button disables, and an Esc does nothing. */
   pending: boolean
   onCancel: () => void
   onConfirm: () => void
+  /** Re-run on new branch; rendered only with turns since. */
+  onConfirmOnBranch: () => void
 }
 
 function reversalLines(preview: CloseRerunPreview): string[] {
@@ -38,7 +38,7 @@ function reversalLines(preview: CloseRerunPreview): string[] {
   return lines.length > 0 ? lines : [t('chapters:rerunConfirm.noChanges')]
 }
 
-function turnsLines(shortcut: Shortcut): string[] {
+function turnsLines(shortcut: CloseRerunShortcut): string[] {
   return [
     t('chapters:rerunConfirm.entries', {
       count: shortcut.entries.count,
@@ -49,10 +49,18 @@ function turnsLines(shortcut: Shortcut): string[] {
   ]
 }
 
+// The name comes from the one key the stored name and both of the fork's toasts read.
+function forkSentence(preview: CloseRerunPreview, shortcut: CloseRerunShortcut): string {
+  return t('chapters:rerunConfirm.forkSentence', {
+    branch: preview.branchName,
+    position: shortcut.forkPoint.position,
+    name: t('chapters:rerunConfirm.autoName', { number: preview.chapterNumber }),
+  })
+}
+
 /**
  * chapter-timeline.md → Re-run a close. With turns since, the three-button footer departs from
- * alert-dialog.md as the delete's does; the fork renders held until Re-run on new branch is
- * wired (C16, M6.5).
+ * alert-dialog.md as the delete's does.
  */
 export function CloseRerunConfirm({
   open,
@@ -61,6 +69,7 @@ export function CloseRerunConfirm({
   pending,
   onCancel,
   onConfirm,
+  onConfirmOnBranch,
 }: CloseRerunConfirmProps): ReactElement {
   const reason = pending ? undefined : blockedReason
   const actionsDisabled = pending || reason != null
@@ -94,7 +103,9 @@ export function CloseRerunConfirm({
                 {turnsLines(shortcut).map((line) => (
                   <Text key={line} size="sm">{`\n• ${line}`}</Text>
                 ))}
-                <Text size="sm">{`\n\n${t('chapters:rerunConfirm.rollbackWarning')}`}</Text>
+                <Text size="sm">
+                  {`\n\n${forkSentence(preview, shortcut)} ${t('chapters:rerunConfirm.rollbackWarning')}`}
+                </Text>
               </>
             ) : null}
             <Text size="sm">
@@ -125,8 +136,9 @@ export function CloseRerunConfirm({
               <ReasonButton
                 layout="stretch"
                 variant="primary"
-                disabled
-                disabledReason={t('chapters:rerunConfirm.rerunOnBranchLater')}
+                disabled={actionsDisabled}
+                disabledReason={reason}
+                onPress={onConfirmOnBranch}
               >
                 <Text>{t('chapters:rerunConfirm.rerunOnBranch')}</Text>
               </ReasonButton>

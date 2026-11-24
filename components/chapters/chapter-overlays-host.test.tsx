@@ -62,6 +62,10 @@ vi.mock('@/lib/db', async (importOriginal) => ({
 
 // The close-failure copy's module also holds a hook on expo-router, which the unit project can't load.
 vi.mock('expo-router', () => ({ useRouter: () => ({}) }))
+// The stack reset reads the navigation container, which the unit project doesn't mount.
+vi.mock('@/hooks/use-replace-story-stack', () => ({
+  useReplaceStoryStack: () => vi.fn(() => true),
+}))
 
 vi.mock('@/lib/history', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

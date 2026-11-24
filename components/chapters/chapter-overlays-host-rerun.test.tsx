@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
-import { act, cleanup, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { CloseRerunPreview, CloseRerunReadRefusal } from '@/lib/actions'
+import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
+import type {
+  CloseRerunParentCheck,
+  CloseRerunPreview,
+  CloseRerunReadRefusal,
+  CloseRerunShortcut,
+  ForkResult,
+  ShowBranchResult,
+} from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { type CloseReport, type Delta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -14,6 +22,7 @@ import {
   chaptersStore,
   currentStoryStore,
   generationStore,
+  readerHoldStore,
   resetAllStores,
 } from '@/lib/stores'
 import { toast, toastStore } from '@/lib/toast'
@@ -57,11 +66,33 @@ vi.mock('@/lib/history', async (importOriginal) => ({
   buildCloseReview: reads.build,
 }))
 
-const actions = vi.hoisted(() => ({ preview: vi.fn(), start: vi.fn() }))
+const actions = vi.hoisted(() => ({
+  preview: vi.fn(),
+  start: vi.fn(),
+  check: vi.fn(),
+  fork: vi.fn(),
+  show: vi.fn(),
+  startOnFork: vi.fn(),
+}))
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getCloseRerunPreview: actions.preview,
   startCloseRerun: actions.start,
+  checkCloseRerunParent: actions.check,
+  forkBranch: actions.fork,
+  showBranch: actions.show,
+  startCloseRerunOnFork: actions.startOnFork,
+}))
+
+const nav = vi.hoisted(() => ({
+  replaceStack: vi.fn((_branchId: string) => true),
+  refresh: vi.fn(async (_db: unknown, _storyId: string) => {}),
+}))
+// The stack reset reads the navigation container, which the unit project doesn't mount.
+vi.mock('@/hooks/use-replace-story-stack', () => ({ useReplaceStoryStack: () => nav.replaceStack }))
+vi.mock('@/lib/stores', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  refreshBranches: nav.refresh,
 }))
 
 vi.mock('@/hooks/use-surface-navigate', () => ({ useSurfaceNavigate: () => vi.fn() }))
@@ -211,6 +242,14 @@ function markPendingTurn(): { end: () => Promise<void> } {
         await marked
       }),
   }
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((settle) => {
+    resolve = settle
+  })
+  return { promise, resolve }
 }
 
 beforeEach(() => {
@@ -748,5 +787,177 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     expect(confirmView.props?.blockedReason).toBe(t('generationGate.inFlight'))
     act(() => generationStore.finishRun(run.runId))
     expect(confirmView.props?.blockedReason).toBeUndefined()
+  })
+})
+
+describe('ChapterOverlaysHost — Re-run on new branch', () => {
+  const SHORTCUT: CloseRerunShortcut = {
+    targetEntryId: 'entry_58',
+    forkPoint: { entryId: 'entry_57', position: 57 },
+    turns: 7,
+    entries: { count: 15, first: 58, last: 72 },
+    counts: {
+      entries: 15,
+      chapters: 0,
+      worldStateChanges: 12,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    },
+  }
+  const WITH_TURNS: CloseRerunPreview = { ...PREVIEW, branchName: 'Main', shortcut: SHORTCUT }
+  const CLEAR: CloseRerunParentCheck = {
+    status: 'clear',
+    preview: { ...WITH_TURNS, shortcut: SHORTCUT },
+  }
+  const CTX = { db: {}, runInTransaction: expect.any(Function) }
+
+  beforeEach(() => {
+    actions.preview.mockResolvedValue(WITH_TURNS)
+    actions.check.mockReset().mockResolvedValue(CLEAR)
+    actions.fork.mockReset().mockResolvedValue({ status: 'ok', branchId: 'br_child' })
+    // The tail's publish: the open story moves to the new branch.
+    actions.show.mockReset().mockImplementation(async () => {
+      openStory('br_child')
+      return { status: 'ok' }
+    })
+    actions.startOnFork.mockReset().mockImplementation(() => new Promise(() => {}))
+    nav.replaceStack.mockClear()
+    nav.refresh.mockReset().mockResolvedValue(undefined)
+  })
+
+  it('holds the parent reader and keeps the confirm pending from the press to the publish, which unmounts it and ends the hold', async () => {
+    const forked = deferred<ForkResult>()
+    const tail = deferred<ShowBranchResult>()
+    actions.fork.mockReturnValue(forked.promise)
+    actions.show.mockImplementation(async () => {
+      const shownTail = await tail.promise
+      openStory('br_child')
+      return shownTail
+    })
+    renderHost()
+    const reader = renderHook(() => useReaderDispatch('br_1'))
+    openRerun()
+    const props = await confirmShown()
+
+    act(() => props.onConfirmOnBranch())
+    expect(confirmView.props?.pending).toBe(true)
+    // A second press while the first runs forks nothing more.
+    act(() => confirmView.props?.onConfirmOnBranch())
+    await waitFor(() => expect(actions.fork).toHaveBeenCalledTimes(1))
+    expect(actions.check).toHaveBeenCalledTimes(1)
+    expect(actions.start).not.toHaveBeenCalled()
+
+    const expectHeld = () => {
+      expect(confirmView.mounted).toBe(true)
+      expect(confirmView.props?.pending).toBe(true)
+      expect(readerHoldStore.isHeld('br_1')).toBe(true)
+      // A Send in the reader: its dispatch guard refuses, and no pending turn registers.
+      expect(reader.result.current.begin()).toBe(false)
+      expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+    }
+    expectHeld()
+
+    await act(async () => forked.resolve({ status: 'ok', branchId: 'br_child' }))
+    await waitFor(() => expect(actions.show).toHaveBeenCalledTimes(1))
+    expectHeld()
+    expect(actions.show).toHaveBeenCalledExactlyOnceWith(
+      {
+        storyId: 'story_1',
+        branchId: 'br_child',
+        fromBranchId: 'br_1',
+        hold: expect.objectContaining({ branchId: 'br_1' }),
+        replaceStack: nav.replaceStack,
+      },
+      CTX,
+    )
+
+    await act(async () => tail.resolve({ status: 'ok' }))
+    await waitFor(() => expect(confirmView.mounted).toBe(false))
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+    // The hold, not a dispatch of the reader's own, refused that Send.
+    let begun = false
+    act(() => {
+      begun = reader.result.current.begin()
+    })
+    expect(begun).toBe(true)
+  })
+
+  it('a gate refusal from the fork keeps the confirm open and held, and ends the reader hold', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
+    actions.fork.mockResolvedValue({ status: 'rejected', code: 'gated', reason: 'x' })
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    // A background run the gate lets through: the hold alone disables the actions.
+    const pass = { ...gateRun(), runId: 'run_pass', gateBehavior: 'no-gate' as const }
+    act(() => generationStore.startRun(pass))
+    act(() => props.onConfirmOnBranch())
+    await waitFor(() =>
+      expect(confirmView.props?.blockedReason).toBe(t('reader:actions.blockedWhileGenerating')),
+    )
+    expect(confirmView.props?.pending).toBe(false)
+    expect(confirmView.mounted).toBe(true)
+    expect(chapterOverlaysStore.getState().rerunConfirm).not.toBeNull()
+    expect(error).toHaveBeenCalledExactlyOnceWith('Unavailable while generating.')
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+    expect(actions.show).not.toHaveBeenCalled()
+  })
+
+  it('a check that finds the counts moved shows the fresh preview, ends the hold and forks nothing', async () => {
+    const error = vi.spyOn(toast, 'error').mockReturnValue('')
+    const fresh: CloseRerunPreview = {
+      ...WITH_TURNS,
+      reversal: { createdLore: { count: 3, userEdited: true }, otherChanges: 31 },
+    }
+    actions.check.mockResolvedValue({
+      status: 'rejected',
+      code: 'counts-changed',
+      reason: 'x',
+      preview: fresh,
+    })
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirmOnBranch())
+    await waitFor(() => expect(confirmView.props?.preview).toBe(fresh))
+    expect(confirmView.props?.pending).toBe(false)
+    expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.countsChanged'))
+    expect(actions.fork).not.toHaveBeenCalled()
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
+  it("after the commit a window Re-run… closed stays closed, and nothing toasts before the start's reserve", async () => {
+    const show = vi.spyOn(toastStore, 'show')
+    await openReady()
+    openRerun({ fromReview: true })
+    const props = await confirmShown()
+    act(() => props.onConfirmOnBranch())
+    await waitFor(() => expect(confirmView.mounted).toBe(false))
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    await waitFor(() => expect(actions.startOnFork).toHaveBeenCalledTimes(1))
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(show).not.toHaveBeenCalled()
+  })
+
+  it("a tail that can't navigate closes the confirm with the window closed, warns, and starts nothing", async () => {
+    const warning = vi.spyOn(toast, 'warning').mockReturnValue('')
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    actions.show.mockResolvedValue({ status: 'navigation-blocked' })
+    await openReady()
+    openRerun({ fromReview: true })
+    const props = await confirmShown()
+    act(() => props.onConfirmOnBranch())
+    await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+    expect(confirmView.mounted).toBe(false)
+    expect(chapterOverlaysStore.getState().review).toBeNull()
+    expect(warning).toHaveBeenCalledExactlyOnceWith(
+      'Branched "Ch. 2 re-run" from entry 57, but couldn\'t open it. Switch to it, then retry from Chapter Timeline.',
+    )
+    expect(nav.refresh).toHaveBeenCalledExactlyOnceWith({}, 'story_1')
+    expect(actions.startOnFork).not.toHaveBeenCalled()
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
   })
 })

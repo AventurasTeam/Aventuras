@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 
 import { readerHref } from '@/components/reader/reader-href'
 import { useEntryIndex } from '@/hooks/use-entry-index'
+import { useReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import {
   getCloseRerunPreview,
@@ -33,6 +34,7 @@ import {
   isStoryBusy,
   loreStore,
   overlayChapter,
+  type OpenStory,
   reviewWindowChapter,
   threadsStore,
   useCloseResultChapter,
@@ -46,7 +48,7 @@ import { CloseChapterModal } from './close-chapter-modal'
 import { CloseRerunConfirm } from './close-rerun-confirm'
 import { reviewRowHref, type ReviewRowLiveness } from './review-row-href'
 import { ReviewWindow, type ReviewWindowState } from './review-window'
-import { runCloseRerun } from './run-close-rerun'
+import { runCloseRerun, runCloseRerunOnBranch, type RerunStartStep } from './run-close-rerun'
 import { runManualClose } from './run-manual-close'
 import { useCloseRerunConfirm } from './use-close-rerun-confirm'
 import { useRerunDisabledReason } from './use-rerun-disabled-reason'
@@ -355,7 +357,8 @@ function ReviewHost({
 
 /**
  * chapter-timeline.md → Re-run a close, mounted while its request holds. The start outlives it:
- * the confirm closes once the chain holds the branch, and `runCloseRerun` speaks for its end.
+ * the confirm closes once the chain holds the branch, and `runCloseRerun` speaks for its end. The
+ * fork keeps it pending past its commit, until the new branch publishes and the prune closes it.
  */
 function RerunConfirmHost({
   request,
@@ -371,7 +374,8 @@ function RerunConfirmHost({
   const storyBusy = generationStore.useGeneration(
     (s) => storyId != null && isStoryBusy(s.txState, storyId, branchId),
   )
-  // Read synchronously, so a second press returns before it reaches startCloseRerun.
+  const replaceStack = useReplaceStoryStack()
+  // Read synchronously, so a second press returns before it reaches the start or the fork.
   const pendingRef = useRef(false)
   const {
     target,
@@ -415,33 +419,62 @@ function RerunConfirmHost({
   if (target == null) return null
   const { preview } = target
 
-  const confirm = () => {
-    if (pendingRef.current || currentStoryStore.getCurrentStory()?.branchId !== branchId) return
+  // A request opened since, or already closed when the chain started, is not this one's.
+  const closeOwn = () => {
+    if (chapterOverlaysStore.getState().rerunConfirm === request)
+      chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+  }
+
+  // Read from the store, not the render: the rendered story lags a switch by a render.
+  const begin = (): OpenStory | null => {
+    const open = currentStoryStore.getCurrentStory()
+    if (pendingRef.current || open == null || open.branchId !== branchId) return null
     pendingRef.current = true
     setPending(true)
     setHeldInFlight(false)
     onStarting(request, true)
-    // A request opened since, or already closed when the chain started, is not this one's.
-    const closeOwn = () => {
-      if (chapterOverlaysStore.getState().rerunConfirm === request)
-        chapterOverlaysStore.closeRerunConfirm({ reopen: false })
+    return open
+  }
+
+  const afterStart = (step: RerunStartStep) => {
+    pendingRef.current = false
+    setPending(false)
+    switch (step.step) {
+      case 'replace':
+        replace(step.preview)
+        return
+      case 'keep-open':
+        setHeldInFlight(true)
+        return
+      case 'ended':
+      case 'refused':
+        closeOwn()
     }
+  }
+
+  const confirm = () => {
+    if (begin() == null) return
     // Once the chain's first run reserves every refusal is past, and the banner speaks.
     void runCloseRerun({ branchId, chapterId, preview, onStarted: closeOwn }).then((step) => {
-      pendingRef.current = false
-      setPending(false)
       onStarting(request, false)
-      switch (step.step) {
-        case 'replace':
-          replace(step.preview)
-          return
-        case 'keep-open':
-          setHeldInFlight(true)
-          return
-        case 'ended':
-        case 'refused':
-          closeOwn()
-      }
+      afterStart(step)
+    })
+  }
+
+  const confirmOnBranch = () => {
+    const open = begin()
+    if (open == null) return
+    void runCloseRerunOnBranch({
+      storyId: open.storyId,
+      branchId,
+      chapterId,
+      preview,
+      replaceStack,
+      closeRequest: closeOwn,
+    }).then((step) => {
+      onStarting(request, false)
+      // Past the commit it stays pending: the publish's prune or the sequence's close unmounts it.
+      if (step.step !== 'forked') afterStart(step)
     })
   }
 
@@ -458,6 +491,7 @@ function RerunConfirmHost({
       pending={pending}
       onCancel={cancel}
       onConfirm={confirm}
+      onConfirmOnBranch={confirmOnBranch}
     />
   )
 }
