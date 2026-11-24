@@ -1312,6 +1312,78 @@ describe('useReaderUndo — a refusal that settles after the reader unmounted', 
     expect(toasts).toEqual([])
   })
 
+  async function undoThrows(unmountFirst: boolean) {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    let failUndo!: (error: Error) => void
+    actions.undoLastAction.mockReturnValue(
+      new Promise<UndoResult>((_resolve, reject) => {
+        failUndo = reject
+      }),
+    )
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+    if (unmountFirst) r.unmount()
+    await act(async () => failUndo(new Error('boom')))
+    await settle()
+  }
+
+  async function redoThrows(unmountFirst: boolean) {
+    undoRedoStore.pushRedoGroup(
+      __redoGroupForTest(
+        'b1',
+        [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+        'act_turn',
+      ),
+    )
+    let failRedo!: (error: Error) => void
+    actions.redoLastAction.mockReturnValue(
+      new Promise<UndoResult>((_resolve, reject) => {
+        failRedo = reject
+      }),
+    )
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledTimes(1)
+    if (unmountFirst) r.unmount()
+    await act(async () => failRedo(new Error('boom')))
+    await settle()
+  }
+
+  it('logs an undo that throws after the reader unmounted and posts no toast', async () => {
+    await undoThrows(true)
+
+    expect(logged('reader.undo_failed')).toEqual([
+      { kind: 'reader.undo_failed', level: 'error', fields: { error: 'boom' } },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('logs a redo that throws after the reader unmounted and posts no toast', async () => {
+    await redoThrows(true)
+
+    expect(logged('reader.redo_failed')).toEqual([
+      { kind: 'reader.redo_failed', level: 'error', fields: { error: 'boom' } },
+    ])
+    expect(toasts).toEqual([])
+  })
+
+  it('still toasts an undo that throws while the reader is mounted', async () => {
+    await undoThrows(false)
+
+    expect(logged('reader.undo_failed')).toHaveLength(1)
+    expect(toasts.map((toast) => toast.message)).toEqual(["Couldn't undo. Please try again."])
+  })
+
+  it('still toasts a redo that throws while the reader is mounted', async () => {
+    await redoThrows(false)
+
+    expect(logged('reader.redo_failed')).toHaveLength(1)
+    expect(toasts.map((toast) => toast.message)).toEqual(["Couldn't redo. Please try again."])
+  })
+
   it('logs a lesser undo refusal once at debug and posts no toast', async () => {
     await undoRefusedAfterUnmount(MOVED)
 

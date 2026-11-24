@@ -23,7 +23,6 @@ import { t } from '@/lib/i18n'
 import { generationStore, readerHoldStore, undoRedoStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { describeRedoTarget, describeUndoGroup, type UndoDescription } from '@/lib/undo'
-import { runAction } from '@/lib/utils'
 
 import { UndoConfirm } from './undo-confirm'
 import {
@@ -258,15 +257,18 @@ export function useReaderUndo({
   const guarded = useCallback((op: Op, run: () => Promise<void>) => {
     if (busyRef.current) return
     busyRef.current = true
-    runAction(
-      run().finally(() => {
+    // Not runAction: its toast can't see whether the reader is gone.
+    void run()
+      .finally(() => {
         busyRef.current = false
-      }),
-      {
-        event: op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed',
-        toastMessage: t(op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed'),
-      },
-    )
+      })
+      .catch((err: unknown) => {
+        logger.error(op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        })
+        if (aliveRef.current)
+          toast.error(t(op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed'))
+      })
   }, [])
 
   // Its Redo would be stale: the undo cleared the stack.
