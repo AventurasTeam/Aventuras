@@ -1136,8 +1136,8 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   )
 
   const afterDismiss = useHeldUntilDismissed(isPhone)
-  // Any open drops a held row, however it opened (the trigger, or a consumer's own `open`, as the
-  // Actions menu's shortcut sets it): the dismiss that would release it can still fire afterwards.
+  // Any open drops a held row, however it opened (the trigger, or a controlled `open`): the dismiss
+  // that would release it can still fire afterwards.
   useLayoutEffect(() => {
     if (open) afterDismiss.clear()
   }, [open, afterDismiss])
@@ -1197,8 +1197,6 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
       if (row.disabled) return
       // Close-before-act: substrate dismisses, then the consumer commits.
       setOpen(false)
-      // gorhom restores a Sheet another one covered, so a row that opens its own waits for this
-      // one's exit animation to end.
       if (isPhone && row.opensSheet === true) afterDismiss.hold(() => onActivate(row))
       else onActivate(row)
     },
