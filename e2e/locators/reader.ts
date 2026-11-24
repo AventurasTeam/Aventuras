@@ -107,6 +107,11 @@ export const reader = {
     reader.row(page, entryId).getByRole('button', { name: reason }),
   deleteEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+  // ⎇ on a reply or the opening while the gate is open; gated, its name is the reason instead.
+  branchFrom: (page: Page, entryId: string): Locator =>
+    reader
+      .row(page, entryId)
+      .getByRole('button', { name: t('reader:entryCard.branchFromHere'), exact: true }),
   // The cascade confirm's "Discard and regenerate" also matches a substring
   // `name` query for "Regenerate"; the row scope — not exact:true — is what
   // excludes it, since that button portals outside `[data-entry-row]`.
