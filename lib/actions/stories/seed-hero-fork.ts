@@ -27,8 +27,7 @@ export async function seedHeroFork(ctx: DbCtx): Promise<void> {
     .from(deltas)
     .where(eq(deltas.branchId, HERO_FORK.id))
   const turns = heroForkTurns(copied?.top ?? 0)
-  // docs/testing.md → Fixture + seed contract: the turns are the fork's tail, so it parks on the
-  // last of them.
+  // docs/testing.md → Fixture + seed contract: the turns are the fork's tail; it parks on the last.
   const processedThrough = Math.max(...turns.entries.map((entry) => entry.position))
   await ctx.runInTransaction([
     ctx.db.insert(storyEntries).values(turns.entries).toSQL(),

@@ -224,7 +224,7 @@ async function forkAgainstSelf(actionIds: readonly string[]): Promise<Planned> {
   return planned
 }
 
-// The user's later edit keeps the pass's pair; deleting char_wb_p then holds the pair in its payload.
+// The user's later edit keeps the pass's pair, which deleting char_wb_p holds in its payload.
 async function seedHeldPair(): Promise<{ created: Delta; holder: Delta }> {
   await act('act_wb_users', create('user_edit', character('char_wb_p')))
   await act('act_wb_users', create('user_edit', character('char_wb_y')))

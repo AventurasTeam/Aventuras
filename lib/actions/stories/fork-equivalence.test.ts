@@ -560,7 +560,7 @@ describe('a fork at the edges of the log', () => {
   const BULK_TURNS = 32_800
   const BULK_AT = 1_767_500_000_000
 
-  // Entries after the tail and their create deltas, in raw SQL: the action layer would take minutes.
+  // Entries past the tail and their create deltas, in raw SQL: the action layer would take minutes.
   function appendBulkTurns(w: ForkWorld, count: number): void {
     const { top } = w.sqlite
       .prepare('SELECT max(log_position) AS top FROM deltas WHERE branch_id = ?')
@@ -713,9 +713,7 @@ describe('a fork at the edges of the log', () => {
   })
 })
 
-// data-model.md → Entry mutability & rollback: one redo stack per branch, and a fork leaves the
-// parent's. data-model.md → Branch model: a copy's JSON names the branch that wrote it, fork after
-// fork, and a restore stamps the branch it writes.
+// data-model.md → Entry mutability & rollback; data-model.md → Branch model.
 describe('around a fork: CTRL-Z, redo and a fork of a fork', () => {
   const STORY = 's_fka'
   const PARENT = 'br_fka_parent'
@@ -1006,7 +1004,7 @@ describe('around a fork: CTRL-Z, redo and a fork of a fork', () => {
       referenceId: GRAND_REF,
     })
 
-    // The delete sits in the grandchild's window, so its plan restores Rook from the copy's payload.
+    // The delete is in the grandchild's window, so its plan restores Rook from the copy's payload.
     expect(facts.prunedIds).toContain(copied.id)
     expect(branchesHolding('entities', ROOK)).toEqual([GRAND, GRAND_REF])
     expect(branchesHolding('character_relationships', relationship)).toEqual([GRAND, GRAND_REF])

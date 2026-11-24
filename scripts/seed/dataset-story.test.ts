@@ -22,8 +22,7 @@ const REFS = seedAppRefs(buildSeedSteps())
 
 let seeded: Seed
 
-// The hero story as `dataset:export-seed` writes it from a seeded database: every table the seed
-// carries has a row, and two branches, the fork a real one.
+// The hero story as `dataset:export-seed` writes it: a row in every seeded table, and a real fork.
 beforeAll(async () => {
   const t = await createTestDb()
   try {

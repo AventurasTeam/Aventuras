@@ -77,17 +77,9 @@ test.describe('embedder — drain on story open', () => {
     expect(await vecRows('entities_vec_384')).toBeGreaterThan(0)
     expect(await vecRows('lore_vec_384')).toBeGreaterThan(0)
 
-    // Assert only the post-drain state — the pill's pre-drain visibility
-    // depends on how much of the drain has already run by the time the composer
-    // paints, which isn't a stable window to assert against. The describe below
-    // is this assertion's positive control.
-    //
-    // Two writers feed the count behind the pill: the reader's mount-time
-    // refresh, which counts the whole story, and the drain sink, which reports
-    // only the open branch's remaining — and by the time this runs the sink
-    // wrote last. They agree with the branch-scoped poll above only because
-    // beforeAll marks the fork's copied rows clean: a stale row on a branch the
-    // reader never opens leaves a story-wide count the drain never clears.
+    // Post-drain only: pre-drain visibility races the drain (the describe below is the
+    // positive control). The pill's story-wide mount count matches the branch poll only
+    // because beforeAll cleans the fork; an unopened branch's stale rows never drain.
     await expect(statusPill.memoryIncomplete(app.window)).toBeHidden()
   })
 })

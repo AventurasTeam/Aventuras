@@ -88,7 +88,7 @@ export async function openForkWorld(turns: number): Promise<ForkWorld> {
   return { ctx: fx.ctx, sqlite: fx.sqlite, storyId: fx.storyId, parentId: fx.branchId }
 }
 
-/** The close fixture's entry id at `position` (`entry_close_NNN`), which `appendTurns` continues. */
+/** The close fixture's id at `position` (`entry_close_NNN`), which `appendTurns` continues. */
 export function entryAt(position: number): string {
   return `entry_close_${String(position).padStart(3, '0')}`
 }
@@ -390,10 +390,7 @@ export async function closeByHand(
   ])
 }
 
-/**
- * A finished re-run of the close: its marker, the journaled reversal, its own lore and report, the
- * marker closed.
- */
+/** A finished close re-run: marker, journaled reversal, own lore and report, marker closed. */
 export async function rerunByHand(
   w: ForkWorld,
   rerun: {

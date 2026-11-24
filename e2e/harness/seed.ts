@@ -191,9 +191,8 @@ export function markBranchEmbeddingStale(dbPath: string, branchId: string): void
 }
 
 /**
- * Marks a branch's embeddable rows clean, so a non-open branch adds nothing to the story count.
- * The pill counts the whole story and only the open branch drains (parked.md → Staleness pill on
- * non-open branches). Runs before launch.
+ * Marks a branch's embeddable rows clean so a non-open branch, which never drains, stays out of
+ * the story's pill count (parked.md → Staleness pill on non-open branches). Runs before launch.
  */
 export function markBranchEmbeddingClean(dbPath: string, branchId: string): void {
   const db = new DatabaseSync(dbPath)
@@ -394,9 +393,8 @@ export function seedClassifierBacklog(
 
 /**
  * Park the classifier watermark at the last `ai_reply` and return it, so a pass covers only turns
- * committed after launch. Equals the seed's park (last non-system row) when that row is a reply,
- * as on br_hero_main and br_hero_fork. Not MAX(position): the first Send's user_action takes a
- * trailing `system` row's position. Runs before launch.
+ * committed after launch (the seed parks at the last non-system row). Not MAX(position): the
+ * first Send's user_action takes a trailing `system` row's position. Runs before launch.
  */
 export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
   const db = new DatabaseSync(dbPath)

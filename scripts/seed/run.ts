@@ -79,8 +79,7 @@ async function writeSeedRows(
     console.log(`[seed] dataset branch: ${(branch as { id: string }).id}`)
 }
 
-// C7: every mode holds the hero story, so every mode forks it, through the core the reader's fork
-// runs.
+// C7: every mode holds the hero story, so every mode forks it through the reader's fork core.
 async function applyHeroFork(dbPath: string): Promise<void> {
   const [{ registerAllDomains, seedHeroFork }, { openTestDb }] = await Promise.all([
     import('../../lib/actions'),
@@ -120,7 +119,7 @@ async function applyOverlay(dbPath: string): Promise<void> {
   }
 }
 
-/** `pnpm db:seed`'s run on `dbPath`; a worker slot passes its mock's port for the seeded provider. */
+/** `pnpm db:seed` on `dbPath`; a worker slot passes its mock's port for the seeded provider. */
 export async function seedDatabase(dbPath: string, cli: SeedCli, mockPort?: number): Promise<void> {
   mkdirSync(dirname(dbPath), { recursive: true })
   console.log(`[seed] target DB: ${dbPath}`)

@@ -75,9 +75,8 @@ async function staleTotal(app: LaunchedApp): Promise<number> {
   return Number(n)
 }
 
-// The re-index re-embeds the fork's copied rows too, so a count that must match what the
-// open branch's drain wrote names that branch. Relabel moves every row, so its checks count
-// the whole story.
+// The re-index re-embeds the fork's copied rows too, so counts checked against the open
+// branch's drain name that branch; relabel moves every row, so its checks span the story.
 async function vecRowsFor(app: LaunchedApp, modelId: string, branchId?: string): Promise<number> {
   const slots = branchId === undefined ? [modelId] : [modelId, branchId]
   const params = Array.from({ length: 5 }, () => slots).flat()
@@ -131,8 +130,7 @@ test.describe('embedder — story settings swap flow', () => {
     // sum past the default budget, and a bare test timeout would cut off the
     // polls below before they can report which condition failed.
     test.setTimeout(240_000)
-    // Guards the vec0 table names in vecRowsForModelSql against a catalog
-    // dim change.
+    // Guards vecRowsForModelSql's vec0 table names against a catalog dim change.
     expect(dim).toBe(384)
 
     await home.openStory(app.window, HERO_TITLE).click()

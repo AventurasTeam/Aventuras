@@ -9,9 +9,8 @@ import { listVecFamilyTables } from '../../lib/db/embeddings/vec-tables'
 import { dbSchema } from '../../lib/db/schema'
 
 /**
- * Wipes every table, the vector families included, and inserts the steps in one transaction,
- * foreign keys deferred to the commit: the wipe needs no order, a broken reference still fails,
- * and any failure keeps the old rows.
+ * Wipes every table (vector families too) and inserts the steps in one transaction, FKs deferred
+ * to commit: the wipe needs no order, a broken reference still fails, any failure keeps old rows.
  */
 export async function replaceSeedRows(
   sqlite: DatabaseSync,

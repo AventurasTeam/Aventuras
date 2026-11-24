@@ -31,7 +31,7 @@ export default function ReseedDevRoute() {
     setStatus({ phase: 'running' })
     try {
       const summary = await reseedDevDatabase()
-      // lib/db can't run the action layer, so the seed's fork (C7) runs here, as `pnpm db:seed` runs it.
+      // lib/db can't call lib/actions, so the seed's fork (C7) runs here, as `pnpm db:seed` does.
       await seedHeroFork({ db, runInTransaction })
       setStatus({ phase: 'done', ...summary })
     } catch (err) {

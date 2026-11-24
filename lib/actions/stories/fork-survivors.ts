@@ -8,9 +8,8 @@ import type { ResolvedSweep } from '../story-entries/operational'
 export type SurvivorPredicates = { deltas: CopyPredicate; reversal_journals: CopyPredicate }
 
 /**
- * The fork copy's filters (data-model.md → Branch model): a delta copies outside the window unless
- * the plan prunes it, or inside it as a create the plan re-owns; a journal unless the plan drops
- * it. `swept`/`plan` null when the fork entry is the narrative tail: everything copies.
+ * Fork copy filters (data-model.md → Branch model): deltas outside the window less the pruned,
+ * plus re-owned creates in it; journals less the dropped. Null `planned` (tail fork): all copy.
  */
 export function forkSurvivorPredicates(
   planned: { swept: ResolvedSweep; plan: ReversePlan } | null,
