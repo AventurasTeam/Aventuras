@@ -1240,11 +1240,11 @@ describe('startCloseRerunOnFork (AC 18)', () => {
     expect(onStarted).not.toHaveBeenCalled()
   })
 
-  it('refuses story-busy while a run started on the parent holds the story', async () => {
+  it('refuses story-busy before turns-followed while a run started on the parent holds the story', async () => {
     const c = await closed()
-    await turnSince(c.h)
-    const shortcut = defined((await previewOf(c)).shortcut ?? undefined, 'no turn since')
-    const child = await forkAt(c.h, shortcut.forkPoint.entryId)
+    const { reply } = await turnSince(c.h)
+    // The child keeps the turn since, so only a check ahead of turns-followed can refuse this.
+    const child = await forkAt(c.h, reply)
     await publish(c.h, child)
     holdStoryWithTurn(c.h)
     const entries = await entryIdsOn(c.h, child)
@@ -1258,11 +1258,11 @@ describe('startCloseRerunOnFork (AC 18)', () => {
     expect(onStarted).not.toHaveBeenCalled()
   })
 
-  it('refuses branch-not-open while the open story is still on the parent', async () => {
+  it('refuses branch-not-open before turns-followed while the open story is still on the parent', async () => {
     const c = await closed()
-    await turnSince(c.h)
-    const shortcut = defined((await previewOf(c)).shortcut ?? undefined, 'no turn since')
-    const child = await forkAt(c.h, shortcut.forkPoint.entryId)
+    const { reply } = await turnSince(c.h)
+    // The child keeps the turn since, so only a check ahead of turns-followed can refuse this.
+    const child = await forkAt(c.h, reply)
     expect(openStory().branchId).toBe(c.h.fx.branchId)
     const entries = await entryIdsOn(c.h, child)
     const onStarted = vi.fn()
