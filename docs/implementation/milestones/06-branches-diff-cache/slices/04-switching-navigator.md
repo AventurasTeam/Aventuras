@@ -40,7 +40,7 @@ shares, and a fresh reader instance keyed on its branch replaces the old
 one, so its refs, composer and mount effects start over. The working-set
 stores hold one branch keyed by id alone, so a route left showing the
 old branch renders empty and never re-hydrates
-(`app/reader-composer/[branchId].tsx:631-660`,
+(`app/reader-composer/[branchId].tsx:629-657`,
 `hooks/use-cold-open-story.ts:22-48`): a switch must leave no such route
 in the stack, and the old reader must never render a commit over the
 new branch's rows. The navigator is reader-only chrome, a Popover on
@@ -70,9 +70,8 @@ from `Browse branches…`.
   [`Mobile expression`](../../../../ui/screens/reader-composer/reader-composer.md#mobile-expression)
   — what a switch resets and what guards it.
 - [`actions-menu.md → Contextual zone`](../../../../ui/patterns/actions-menu.md#contextual-zone)
-  — `Browse branches…`, always present and never gated.
-- [`principles.md → Top-bar design rule`](../../../../ui/principles.md#top-bar-design-rule)
-  (the right-cluster reading of the chip's place),
+  — `Browse branches…`, always present and never run-gated.
+- [`principles.md → Top-bar design rule`](../../../../ui/principles.md#top-bar-design-rule),
   [`Reader-only chrome`](../../../../ui/principles.md#reader-only-chrome),
   [`Edit restrictions during in-flight generation`](../../../../ui/principles.md#edit-restrictions-during-in-flight-generation),
   [`What's gated`](../../../../ui/principles.md#whats-gated),
@@ -231,9 +230,9 @@ stack.
   the reset took fill the working-set stores, publish the branch with
   `currentStoryStore.set`, never `open`, drop the overlays store's close
   result and release the hold. C8 lists the navigation last; the reset
-  goes first because a prevented reset can't be undone after the fill
-  (Implementation notes). `navigationStore`'s branch follows, as
-  `openStory` sets it.
+  goes first because a guard can prevent it, and a fill made before it
+  can't be taken back (Implementation notes). `navigationStore`'s
+  branch follows, as `openStory` sets it.
 - The load comes apart. `loadAndPublish` reads every table, then fills
   the working-set stores and publishes in one synchronous tail
   (`operational.ts:107-214`). Here its reads run at the read step and
@@ -283,7 +282,7 @@ stack.
   branch.
   - It never moves the pointer back (C8). If its load fails it fills
     and publishes nothing and still navigates, and the new reader's own
-    load (`app/reader-composer/[branchId].tsx:631-660`) handles the
+    load (`app/reader-composer/[branchId].tsx:629-657`) handles the
     failure, leaving for the Story List with its toast if that load
     fails too: once a fork has committed, canon keeps the route and the
     pointer on the new branch.
@@ -714,9 +713,9 @@ None open.
 ## Implementation notes
 
 **Facts.** Taken through a dev-only probe that called the stack-replace
-helper from the root overlay host's position (since removed), and
-through the reader's `reader.mounted` and `reader.empty_after_rows`
-debug lines, which stay. On Android: the slot AVD (`Aventuras_Slot_4`,
+helper from the root overlay host's position (since removed from the
+tree; git history keeps it), and through the reader's `reader.mounted`
+and `reader.empty_after_rows` debug lines, which stay. On Android: the slot AVD (`Aventuras_Slot_4`,
 Android 16, x86_64) with a debug build and diagnostics debug on.
 
 - The stack-replace helper called from the root host, over a reader on
@@ -746,16 +745,18 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   Hardware back closes the navigator Sheet and leaves the reader
   (`69f73e320`, AVD). No `reader.empty_after_rows` appeared across
   eleven switches, so the reader route keeps its default animation.
-- With an entry's inline editor open and unchanged, a row press
-  switches at once: one `reader.mounted`, no
+- With an entry's inline editor open and unchanged (opened through the
+  WebView's DevTools, with no keyboard up), a row press switches at
+  once: one `reader.mounted`, no
   `action_layer.branch_switch_navigation_blocked`. With the editor
   dirty the unsaved-changes guard asks; Cancel leaves the pointer and
   mounts nothing, Discard switches and mounts once (`69f73e320`, AVD).
-  Rerun with logcat kept running, each switch is one
-  `reader.branch_switch_started` and one `reader.mounted`; opening the
-  story from the Story List logs one `reader.mounted` with no
-  `reader.branch_switch_started`; Back from the new reader lands on the
-  Story List, so no second instance sits under it (`09f786926`, AVD).
+  A rerun with logcat kept running logged one
+  `reader.branch_switch_started` and one `reader.mounted` per switch;
+  opening the story from the Story List logs one `reader.mounted` with
+  no `reader.branch_switch_started`; Back from the new reader lands on
+  the Story List, so no second instance sits under it (`09f786926`,
+  AVD).
 - The rename input keeps its caret through a mid-string edit (`X` typed
   six characters from the end lands as `The road notX taken`) and sits
   above the on-screen keyboard (`69f73e320`, AVD).
@@ -764,8 +765,8 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   the keyboard and leaves the Sheet open (`69f73e320`, AVD). The
   composer's keyboard doesn't do this: opening the Sheet from the chip
   with a draft typed dismisses that keyboard and the rows show
-  (`09f786926`, AVD). The inline editor lives in the reader's WebView,
-  which keeps its own keyboard.
+  (`09f786926`, AVD). Inferred, not probed: the inline editor lives in
+  the reader's WebView, which keeps its own keyboard.
 - A Sheet that presents while another dismisses: B presents, and after B
   closes A stays closed, on web (`97b013990`, Storybook, Chromium) and on
   Android (`97b013990`, AVD, two runs).
@@ -806,7 +807,7 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   screen. The post-dispatch read-back stays the backstop.
 - The chip sits beside the title on every tier: it rides
   `centerExtras` after the chapter and time chips, inline on desktop
-  and tablet and last in the phone chip strip.
+  and tablet and after the time chip in the phone chip strip.
   [`reader-composer.md → Layout`](../../../../ui/screens/reader-composer/reader-composer.md#layout),
   [`branch-navigator.md → Layout`](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#layout)
   and both wireframes moved to match.
@@ -824,9 +825,9 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   `Couldn't switch branches.`; an abandoned switch and a press during a
   switch show nothing; a rename holds its input until the write
   returns, and a failed one toasts `Couldn't rename the branch.` On the
-  seeded two-branch story, `The Veilstone Courier`, the slot AVD held a
-  switch for a median of 171 ms from the press to the new reader's
-  mount, so no veil shipped. That hold ends at the mount effect and
+  dataset seed's only two-branch story, `The Veilstone Courier`, the
+  slot AVD held a switch for a median of 171 ms from the press to the
+  new reader's mount, so no veil shipped. That hold ends at the mount effect and
   doesn't see the new document's boot, which keeps `Loading story…` up
   for about 0.6 s more. The dataset's played story, _Treasure Island_,
   has one branch, so a long story's hold wasn't measured.
@@ -845,11 +846,12 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   caller, `replaceStack` and `isCurrentRequest`, since `lib/actions`
   can't import `hooks/`; [Slice 6.5](./05-fork-from-reader.md)'s root
   host passes its own `useReplaceStoryStack()`. Beyond C8's refusals it
-  refuses while a turn body is still active on the branch left (a
-  failed regenerate between its run and its sweep, with the gate
-  open). It publishes the live story with the new branch when the live
-  story is this one, so a settings write that landed during the read
-  survives.
+  refuses while the story is busy, a run that holds no gate included,
+  and while a turn body is still active on the branch left (a failed
+  regenerate between its run and its sweep, with the gate open), and
+  it checks both again right before the reset (below). It publishes
+  the live story with the new branch when the live story is this one,
+  so a settings write that landed during the read survives.
 - The embedder swap's `refreshStores` reads the open story after its
   settings read, so a switch publishing inside that await keeps its
   branch.
@@ -858,8 +860,9 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   reach it, both on the same branch.
 - The phone `Browse branches…` waits for the Actions Sheet's exit
   (plan review): `SearchableOverlayList` rows take `opensSheet`, as
-  `OverflowMenu`'s entries do, since gorhom restores a Sheet another
-  one covered. The gorhom fact above no longer gates it.
+  `OverflowMenu`'s entries do, so the navigator's Sheet never presents
+  while the menu's is still leaving. The gorhom fact above no longer
+  gates it.
 - `openStory` waits for a running switch before it reads the pointer,
   so the story opened from the list during an abandoned switch opens
   the branch the restore leaves.
@@ -901,8 +904,6 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   `aria-invalid`; canon and the wireframe now name the invalid state,
   resolving the earlier warn/danger mismatch (provisional: the developer
   hasn't confirmed it).
-- The probe stays out of the tree (removed with this note); git history
-  keeps it.
 - Right before the reset, with nothing awaited between, `switchBranch`
   checks again that the story isn't busy and that no turn body is open
   on the branch left. Either one takes the failed-switch path with no
