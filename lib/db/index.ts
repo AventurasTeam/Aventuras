@@ -25,6 +25,7 @@ export { characterRelationshipWriteSchema } from './entities/character-relations
 export type { CharacterRelationshipWrite } from './entities/character-relationship-schema'
 export { entityWriteSchema } from './entities/entity-schema'
 export type { EntityWrite } from './entities/entity-schema'
+export { readBranchLead } from './entities/branch-lead'
 export { happeningAwarenessWriteSchema } from './happenings/happening-awareness-schema'
 export type { HappeningAwarenessWrite } from './happenings/happening-awareness-schema'
 export { happeningInvolvementWriteSchema } from './happenings/happening-involvement-schema'
@@ -155,6 +156,7 @@ export { openRegionSeries, openRegionWhere } from './story-entries/open-region'
 export type { OpenRegionRow } from './story-entries/open-region'
 export { readChapterTimeRanges } from './story-entries/chapter-time-ranges'
 export { readEntryPosition } from './story-entries/entry-position'
+export { readStampedLeadIds } from './story-entries/lead-stamps'
 export type { ChapterTimeRange, ChapterTimeRanges } from './story-entries/chapter-time-ranges'
 export {
   appSettings,
