@@ -45,7 +45,11 @@ Cross-cutting principles that govern these surfaces are in
 ```
 
 Anchored to the top-bar branch chip. Click outside or `Esc` to
-dismiss.
+dismiss. Closing returns focus to the chip when the chip opened it; opened
+from the Actions menu's `Browse branches…`, whose row is gone by then,
+it returns focus to the Actions trigger, as
+[a dialog's close focus](../../../patterns/overlays.md#close-focus)
+does for an overlay closed to open it.
 
 ## Navigator — popover (desktop)
 
@@ -89,14 +93,15 @@ doesn't fire again.
 
 A switch shows nothing pending beyond the held reader and, should the
 navigator open again meanwhile, its paused rows. A press that races
-past the paused rows into a closed gate leaves the reader where it was
-and toasts the gate's reason, the copy its disabled controls show. A
+past the paused rows into a closed gate, or a switch a run blocks just
+before its navigation, leaves the reader where it was and toasts the
+gate's reason, the copy its disabled controls show. A
 switch that fails, because the branch is gone, its load or the story
 list's re-read fails, the screens it would replace refuse to close, or
 the branch pointer's write or the check that the branch exists throws,
 toasts `Couldn't switch branches.` and leaves the reader where it was.
-An abandoned switch shows nothing: the user left. A press while a
-switch runs does nothing.
+An abandoned switch shows nothing, whatever ended it: the user left.
+A press while a switch runs does nothing.
 
 ### Row actions — inline icons
 

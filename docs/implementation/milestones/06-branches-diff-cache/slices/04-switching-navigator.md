@@ -152,7 +152,7 @@ Implementation notes.
   in Storybook on web and on the AVD. `Browse branches…` on phone asks
   for the navigator Sheet while the Actions Sheet leaves, since a row's
   activation closes the overlay and runs the entry in one call
-  (`components/ui/searchable-overlay-list.tsx:1185-1192`). If the
+  (`activate` in `components/ui/searchable-overlay-list.tsx`). If the
   present is dropped, the reader holds the navigator's open until the
   Actions Sheet's exit, as `useHeldUntilDismissed` holds the chapter
   popover's actions, which needs an exit callback out of `ActionsMenu`.
@@ -176,8 +176,10 @@ Implementation notes.
   to the user (C8).
 - Who refreshes it: rename, after its commit; the reader, on mount for
   its story, which is the refresh after a switch's or a fork's
-  navigation that C8 asks for; delete in 6.6 and the fork's callers in
-  6.5. `resetAllStores` (`lib/stores/index.ts`) resets it.
+  navigation that C8 asks for; the navigator, when it opens while its
+  rows lack the reader's branch (a failed first refresh); delete in 6.6
+  and the fork's callers in 6.5. `resetAllStores`
+  (`lib/stores/index.ts`) resets it.
 
 **The reader hold (C8).** A switch or a fork holds the reader from its
 start to its navigation, so no Send starts a turn on the old branch
@@ -195,9 +197,9 @@ stack.
   load, an abandoned switch, a fork that refused. The reader's unmount
   clears any hold left on its branch.
 - While it holds, the reader treats its gated controls as blocked, as a
-  dispatch does (`dispatchInFlight`, `app/reader-composer/[branchId].tsx:781-795`),
-  and closes its ways out: the Actions menu (`blocked`, `:1910`), ⛭
-  (`:1900-1902`), and every link that leaves through `navigateGuarded`
+  dispatch does (`useReaderDispatch`, which the route reads for both),
+  and closes its ways out: the Actions menu (`blocked`), ⛭ (its
+  disabled reason), and every link that leaves through `navigateGuarded`
   or `guardEdit` (the chapter popover's `Manage chapters →`, the Browse
   chip's and the peek drawer's links, the pill's Memory link). The
   navigator's rows pause. Back and hardware back stay live: leaving
@@ -266,7 +268,8 @@ stack.
   started it lost focus or unmounted before the publish: its
   `isCurrentRequest`, as `loadOpenStory` takes one, answers false from
   then on. It fills, publishes and navigates nothing, and releases the
-  hold.
+  hold. A failure met once the reader has left reads as abandoned too:
+  it is logged, never toasted.
 - A switch is not a story open (C8). `openSeq` stays, so the embedding
   upgrade prompt isn't raised again
   (`lib/embedder-swap/upgrade-prompt.ts:37-44`). The close result is
@@ -909,11 +912,13 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   on the branch left. Either one takes the failed-switch path with no
   dispatch, so the story-leave guard has nothing to replay. `showBranch`
   doesn't check this; 6.5's callers own its gate.
-- The restore retries a failed pointer write once, then logs
-  `action_layer.branch_switch_restore_failed`, with no recovery on the
-  open path. A stories re-read that fails during the restore is retried
-  once, then left logged (provisional: the developer hasn't confirmed
-  either).
+- The restore retries a failed pointer write once, logging
+  `action_layer.branch_switch_restore_retried`, then logs
+  `action_layer.branch_switch_restore_failed` if the retry fails too,
+  with no recovery on the open path. A stories re-read that fails
+  during the restore is retried once, then logged as
+  `action_layer.branch_switch_restore_reread_failed` (provisional: the
+  developer hasn't confirmed either).
 - After a reopen during a dismiss, a late `onDismissed` from the earlier
   close can release a row the reopened phone overlay list holds. This
   is left as is and filed in

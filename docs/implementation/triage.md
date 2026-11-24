@@ -503,5 +503,5 @@ slice-planning gate forces its resolution before that slice is planned.
   defensive floor at the input wrapper; `components/ui/input.tsx` maps
   `sm` to `h-control-sm`, under 44 px at the compact and regular
   densities, with no floor. The branch rename input was its only
-  production `size="sm"` use and now sets its own size on phone.
+  production `size="sm"` use and now sets its own 44 px floor on phone.
   Pre-existing substrate. Found in Slice 6.4's reviews (2026-11-24).
