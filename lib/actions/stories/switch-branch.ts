@@ -176,3 +176,62 @@ function fillAndPublish(storyId: string, branchId: string, set: BranchWorkingSet
   )
   navigationStore.setCurrentBranch(branchId)
 }
+
+export type ShowBranchInput = {
+  storyId: string
+  branchId: string
+  hold: ReaderHoldToken
+  replaceStack: (branchId: string) => boolean
+}
+
+export type ShowBranchResult =
+  | { status: 'ok' }
+  /** Navigated with nothing filled: the new reader's own load takes over. */
+  | { status: 'shown-unloaded' }
+  | { status: 'navigation-blocked' }
+
+/**
+ * C8: shows a branch its caller's own transaction made current, as a fork does: the switch's read,
+ * re-read and block, with no gate, no pointer write and no abandon. It never moves the pointer.
+ */
+export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
+  const { storyId, branchId, hold, replaceStack } = input
+  try {
+    const set = await readForShow(storyId, branchId, ctx)
+    if (!(await rehydrateStories(ctx.db))) {
+      logger.warn('action_layer.branch_show_stories_reread_failed', { storyId, branchId })
+    }
+    // As in the switch: the reset first, then nothing awaited to the publish.
+    if (!replaceStack(branchId)) {
+      logger.warn('action_layer.branch_show_navigation_blocked', { storyId, branchId })
+      return { status: 'navigation-blocked' }
+    }
+    if (set != null) fillAndPublish(storyId, branchId, set)
+    chapterOverlaysStore.clearCloseResult()
+    readerHoldStore.release(hold)
+    if (set == null) return { status: 'shown-unloaded' }
+    afterBranchPublished(storyId)
+    return { status: 'ok' }
+  } finally {
+    readerHoldStore.release(hold)
+  }
+}
+
+// Null when the branch doesn't load here; the new reader's own load meets the failure and reports it.
+async function readForShow(
+  storyId: string,
+  branchId: string,
+  ctx: DbCtx,
+): Promise<BranchWorkingSet | null> {
+  try {
+    const read = await readBranchWorkingSet(branchId, ctx, () => true)
+    return read.status === 'ok' ? read.set : null
+  } catch (err) {
+    logger.error('action_layer.branch_show_load_failed', {
+      storyId,
+      branchId,
+      error: errorText(err),
+    })
+    return null
+  }
+}

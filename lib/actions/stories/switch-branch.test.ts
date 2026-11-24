@@ -33,7 +33,13 @@ import {
 } from '@/lib/stores'
 
 import { openStory } from './operational'
-import { switchBranch, type SwitchBranchInput, type SwitchBranchResult } from './switch-branch'
+import {
+  showBranch,
+  switchBranch,
+  type ShowBranchInput,
+  type SwitchBranchInput,
+  type SwitchBranchResult,
+} from './switch-branch'
 import { __redoGroupForTest } from '../delta/redo'
 
 const real = vi.hoisted(() => ({
@@ -596,5 +602,137 @@ describe('switchBranch', () => {
     expect(readerHoldStore.isHeld('br_a')).toBe(false)
     expect(await pointer(ctx.db)).toBe('br_a')
     expect(await switchBranch(input(), ctx)).toEqual({ status: 'ok' })
+  })
+})
+
+describe('showBranch', () => {
+  // The caller's own transaction moved the pointer, as a fork's does.
+  async function pointerMovedTo(db: TestDb, branchId: string): Promise<void> {
+    await db.update(stories).set({ currentBranchId: branchId }).where(eq(stories.id, 'story_1'))
+  }
+
+  function show(overrides: Partial<ShowBranchInput> = {}): ShowBranchInput {
+    return {
+      storyId: 'story_1',
+      branchId: 'br_b',
+      replaceStack: () => true,
+      ...overrides,
+      hold: overrides.hold ?? readerHoldStore.take('br_a'),
+    }
+  }
+
+  it('reads, re-reads, replaces the stack, fills and publishes, and writes no pointer', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    const stack = fakeStack()
+
+    expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(stack.calls).toEqual([
+      { branchId: 'br_b', held: true, loaded: 'br_a', published: 'br_a' },
+    ])
+    expect(storiesRowBranch()).toBe('br_b')
+    expect(entriesStore.getLoadedBranch()).toBe('br_b')
+    expect(eraFlipsStore.getLoadedBranch()).toBe('br_b')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_b')
+    expect(currentStoryStore.getOpenSeq()).toBe(1)
+    expect(navigationStore.getNavigation().currentBranchId).toBe('br_b')
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+    expect(kicks).toEqual([{ storyId: 'story_1', published: 'br_b', held: false }])
+    expect(ctx.runInTransaction).not.toHaveBeenCalled()
+    expect(await pointer(db)).toBe('br_b')
+  })
+
+  it('still replaces the stack and leaves the pointer when the read fails', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    await corruptDefinition(db)
+    chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    const stack = fakeStack()
+
+    expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
+      status: 'shown-unloaded',
+    })
+
+    expect(stack.replaceStack).toHaveBeenCalledTimes(1)
+    expect(stack.replaceStack).toHaveBeenCalledWith('br_b')
+    expect(entriesStore.getLoadedBranch()).toBe('br_a')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(navigationStore.getNavigation().currentBranchId).toBe('br_a')
+    expect(chapterOverlaysStore.getState().closeResult).toBeNull()
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+    expect(kicks).toEqual([])
+    expect(ctx.runInTransaction).not.toHaveBeenCalled()
+    expect(await pointer(db)).toBe('br_b')
+  })
+
+  it('still replaces the stack when the read throws', async () => {
+    const { db, sqlite, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    sqlite.exec('DROP TABLE lore')
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const stack = fakeStack()
+
+    expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
+      status: 'shown-unloaded',
+    })
+
+    expect(stack.replaceStack).toHaveBeenCalledTimes(1)
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+    expect(await pointer(db)).toBe('br_b')
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.branch_show_load_failed',
+      expect.objectContaining({ storyId: 'story_1', branchId: 'br_b', error: expect.any(String) }),
+    )
+  })
+
+  it('logs a failed stories re-read and still publishes and navigates', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    vi.mocked(rehydrateStories).mockResolvedValueOnce(false)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const stack = fakeStack()
+
+    expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
+      status: 'ok',
+    })
+
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_show_stories_reread_failed', {
+      storyId: 'story_1',
+      branchId: 'br_b',
+    })
+    expect(stack.replaceStack).toHaveBeenCalledTimes(1)
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_b')
+    expect(storiesRowBranch()).toBe('br_a')
+    expect(await pointer(db)).toBe('br_b')
+  })
+
+  it('fills nothing and leaves the pointer when the stack reset does not take', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const stack = fakeStack(false)
+
+    expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
+      status: 'navigation-blocked',
+    })
+
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_show_navigation_blocked', {
+      storyId: 'story_1',
+      branchId: 'br_b',
+    })
+    expect(entriesStore.getLoadedBranch()).toBe('br_a')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(chapterOverlaysStore.getState().closeResult).toEqual(CLOSE_RESULT)
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+    expect(kicks).toEqual([])
+    expect(ctx.runInTransaction).not.toHaveBeenCalled()
+    expect(await pointer(db)).toBe('br_b')
   })
 })

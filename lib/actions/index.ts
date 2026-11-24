@@ -128,7 +128,10 @@ export {
   type SetStoryLeadResult,
 } from './stories/set-lead'
 export {
+  showBranch,
   switchBranch,
+  type ShowBranchInput,
+  type ShowBranchResult,
   type SwitchBranchInput,
   type SwitchBranchResult,
 } from './stories/switch-branch'
