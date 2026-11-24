@@ -82,10 +82,11 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
 
   const handleKeyPress = (event: TextInputKeyPressEvent) => {
     const { key } = event.nativeEvent
+    if (isComposing(event)) return
     if (key === 'Escape') {
       event.preventDefault?.()
       cancel()
-    } else if (key === 'Enter' && Platform.OS === 'web' && !isComposing(event)) {
+    } else if (key === 'Enter' && Platform.OS === 'web') {
       // RN-Web blurs after Enter whatever `submitBehavior` says; this keeps a refused name focused.
       event.preventDefault?.()
       commit()

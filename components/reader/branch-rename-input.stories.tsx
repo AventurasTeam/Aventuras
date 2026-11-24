@@ -246,6 +246,31 @@ export const UnmountedUntouchedDraftSavesNothing: Story = {
   },
 }
 
+/** An IME may leave Escape unconsumed mid-composition; it must not cancel the rename. */
+export const EscDuringCompositionKeepsTheRename: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const field = await renameField()
+    await userEvent.keyboard('The trap')
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Escape',
+        isComposing: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+    await pause(50)
+    await expect(field).toBeInTheDocument()
+    await expect(field).toHaveValue('The trap')
+    await expect(args.onDone).not.toHaveBeenCalled()
+
+    await userEvent.keyboard('{Escape}')
+    await expect(args.onDone).toHaveBeenCalledTimes(1)
+    await expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
 export const EscCancels: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')
