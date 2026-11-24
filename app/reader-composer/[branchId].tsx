@@ -107,7 +107,7 @@ import {
   suggestionRefreshHoldReason,
 } from '@/components/reader/suggestion-refresh-gate'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
-import { switchResultNotice } from '@/components/reader/switch-result-notice'
+import { switchGateReason, switchResultNotice } from '@/components/reader/switch-result-notice'
 import {
   closeResolvedEntry,
   describeCloseFailure,
@@ -278,16 +278,8 @@ function readerPlaceholder(state: {
   return null
 }
 
-// Read when the result lands: the rendered gateReason is stale by then, and may name the
-// branch's own hold, which refuses no switch.
 function postSwitchNotice(result: SwitchBranchResult, storyId: string): void {
-  const notice = switchResultNotice(
-    result,
-    generationGateReason(
-      true,
-      selectStorySettingsGenerationRunKind(generationStore.getTxState(), storyId),
-    ) ?? t('generationGate.inFlight'),
-  )
+  const notice = switchResultNotice(result, switchGateReason(generationStore.getTxState(), storyId))
   if (notice == null) return
   if (notice.kind === 'info') toast.info(notice.message)
   else toast.error(notice.message)

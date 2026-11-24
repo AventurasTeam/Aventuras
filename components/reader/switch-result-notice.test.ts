@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SwitchBranchResult } from '@/lib/actions'
+import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
+import type { RunState, TxState } from '@/lib/stores'
 
-import { switchResultNotice } from './switch-result-notice'
+import { switchGateReason, switchResultNotice } from './switch-result-notice'
 
 const GATE_REASON = 'Chapter close in progress. Cancel to edit.'
 
@@ -35,5 +37,53 @@ describe('switchResultNotice', () => {
       kind: 'error',
       message: "Couldn't switch branches.",
     })
+  })
+})
+
+function closeRun(storyId: string): RunState {
+  return {
+    runId: `run-close-${storyId}`,
+    kind: CHAPTER_CLOSE_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: 'close',
+    beforeTurn: false,
+    actionId: 'action-close',
+    storyId,
+    branchId: 'branch-1',
+    abortController: new AbortController(),
+    currentPhase: 'running',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  }
+}
+
+function txState(runs: RunState[], heldBranchIds: string[] = []): TxState {
+  return {
+    runs: new Map(runs.map((run) => [run.runId, run])),
+    reversalInProgress: false,
+    pendingTurns: new Set(),
+    deferred: new Map(),
+    pendingClose: new Map(),
+    pendingRerun: new Map(),
+    heldBranches: new Map(heldBranchIds.map((id) => [id, { storyId: 'story-1' }])),
+  }
+}
+
+describe('switchGateReason', () => {
+  it("names the run that holds the story's gate", () => {
+    expect(switchGateReason(txState([closeRun('story-1')]), 'story-1')).toBe(GATE_REASON)
+  })
+
+  it('never names a re-run hold, which refuses no switch', () => {
+    expect(switchGateReason(txState([], ['branch-1']), 'story-1')).toBe(
+      'Generation is in flight. Cancel to edit.',
+    )
+  })
+
+  it("ignores another story's run", () => {
+    expect(switchGateReason(txState([closeRun('story-2')]), 'story-1')).toBe(
+      'Generation is in flight. Cancel to edit.',
+    )
   })
 })

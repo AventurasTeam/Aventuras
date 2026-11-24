@@ -1,5 +1,21 @@
+import {
+  generationGateReason,
+  selectStorySettingsGenerationRunKind,
+} from '@/components/story-settings/generation-run'
 import type { SwitchBranchResult } from '@/lib/actions'
 import { t } from '@/lib/i18n'
+import type { TxState } from '@/lib/stores'
+
+/**
+ * Why the gate refuses a switch, read from the state when the result lands: the rendered reason is
+ * stale by then, and may name the branch's own hold or a re-run hold, which refuse no switch.
+ */
+export function switchGateReason(txState: TxState, storyId: string | undefined): string {
+  return (
+    generationGateReason(true, selectStorySettingsGenerationRunKind(txState, storyId)) ??
+    t('generationGate.inFlight')
+  )
+}
 
 /**
  * What a switch's result says to the user (branch-navigator.md → Per-row anatomy). A landed or
