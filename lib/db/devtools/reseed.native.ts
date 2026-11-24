@@ -1,15 +1,14 @@
 import { getTableName } from 'drizzle-orm'
 
+import { listVecFamilyTables } from '../embeddings/vec-tables'
 import { db, expoDb } from '../runtime/client.native'
 import { dbSchema } from '../schema'
 import { buildSeedSteps } from './seed-dataset'
 
 export type ReseedSummary = { tables: number; rows: number }
 
-// On-device twin of scripts/seed/index.ts: wipe with FKs off
-// (order-independent), insert with FKs on so a broken reference in the
-// dataset fails loudly. Migrations are not run here — the boot hook already
-// migrated the live connection.
+// Twin of scripts/seed's static rows (the caller then forks br_hero_fork). FKs off: wipe in any
+// order; on for the insert, so a broken dataset ref fails loudly. The boot hook already migrated.
 export async function reseedDevDatabase(): Promise<ReseedSummary> {
   // Hard floor on the destructive wipe: every app/** route ships in the
   // production bundle, so gating only the Settings entry link isn't enough.
@@ -22,6 +21,11 @@ export async function reseedDevDatabase(): Promise<ReseedSummary> {
   try {
     for (const table of Object.values(dbSchema)) {
       expoDb.execSync(`DELETE FROM "${getTableName(table)}";`)
+    }
+    // vec0 tables sit outside dbSchema, and the seed carries no vector: a kept one would outlive
+    // its rows and collide with the vectors the seed's fork copies.
+    for (const table of await listVecFamilyTables(db)) {
+      expoDb.execSync(`DELETE FROM "${table}";`)
     }
     expoDb.execSync('COMMIT;')
   } catch (err) {

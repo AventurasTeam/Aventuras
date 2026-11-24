@@ -553,6 +553,14 @@ invalidation, and, if the E2E has a survivor, its registration check.
 
 ## Open questions
 
+- **The fork's no-eviction check, if Slice 6.3 lands first.**
+  [Slice 6.3's Acceptance criteria](./03-fork-core.md#acceptance-criteria)
+  9 asserts that a fork leaves the loaded parent's stores, patchers and
+  redo stack alone "and, once 6.7's post-commit hook is on main, no
+  eviction fired" (C9: a fork's commit is its own batch). The milestone's
+  dependency graph lists no 6.3 ┄ 6.7 pair, so whichever of the two
+  lands second adds that clause to `lib/actions/stories/fork-branch.test.ts`'s
+  AC 9 test. Found by Slice 6.3's slice review (2026-11-24).
 - **The read's mechanism.** Neither platform sets WAL or has a read
   transaction; the desktop bridge has `query`, `exec` and a write-only
   `transaction(ops)` (`electron/preload.ts:34-38`). Options:
