@@ -1309,6 +1309,7 @@ describe('branch scope', () => {
       expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
       expect(await db.select().from(entities)).toHaveLength(4)
       expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
+      expect(await childrenOn(db, 'br_2')).toEqual(writtenChildren)
       expect(await loggedBy(db, 'act_payload')).toEqual([])
     },
   )
