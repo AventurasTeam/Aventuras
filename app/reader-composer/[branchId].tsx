@@ -129,6 +129,7 @@ import { readerUndoRedoGates } from '@/components/reader/undo-redo-gates'
 import { useAliveRef } from '@/components/reader/use-alive-ref'
 import { useEmptyAfterRowsSignal } from '@/components/reader/use-empty-after-rows-signal'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
+import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useReaderSlice } from '@/components/reader/use-reader-slice'
 import { useReaderUndo } from '@/components/reader/use-reader-undo'
@@ -806,25 +807,16 @@ function ReaderComposerBody({
     [branchId],
   )
 
-  // `editBlocked` rises a queue hop and several awaits after the tap; only Send survives the gap
-  // (the composer clears), so each dispatch marks it: ref is the sync guard, state disables.
-  const dispatchInFlightRef = useRef(false)
-  const [dispatchInFlight, setDispatchInFlight] = useState(false)
   // A switch holds the reader from its press to its navigation (branch-navigator.md → Per-row
   // anatomy): no write on this branch may land between its gate check and its publish.
-  const readerHeld = readerHoldStore.useHeld(branchId)
-  // A hold whose switch never reached its navigation ends with the reader.
-  useEffect(() => () => readerHoldStore.clear(branchId), [branchId])
-  const beginDispatch = useCallback((): boolean => {
-    if (dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return false
-    dispatchInFlightRef.current = true
-    setDispatchInFlight(true)
-    return true
-  }, [branchId])
-  const endDispatch = useCallback(() => {
-    dispatchInFlightRef.current = false
-    setDispatchInFlight(false)
-  }, [])
+  const {
+    begin: beginDispatch,
+    end: endDispatch,
+    isBlocked: isDispatchBlocked,
+    isHeld: isReaderHeld,
+    inFlight: dispatchInFlight,
+    held: readerHeld,
+  } = useReaderDispatch(branchId)
   // What every user-edit affordance gates on: the generation gate alone leaves
   // the pre-registration window open, and the hold a switch's.
   const actionsBlocked = editBlocked || dispatchInFlight || readerHeld
@@ -905,15 +897,15 @@ function ReaderComposerBody({
   // A held reader drops every guarded leave: its switch is on the way to its own navigation.
   const guardEdit = useCallback(
     (proceed: () => void) => {
-      if (!readerHoldStore.isHeld(branchId)) guardRef.current(proceed)
+      if (!isReaderHeld()) guardRef.current(proceed)
     },
-    [branchId],
+    [isReaderHeld],
   )
   const navigateGuarded = useCallback(
     (path: string) => {
-      if (!readerHoldStore.isHeld(branchId)) navigateUnheld(path)
+      if (!isReaderHeld()) navigateUnheld(path)
     },
-    [branchId, navigateUnheld],
+    [isReaderHeld, navigateUnheld],
   )
   // C7: review-row presses and the close modal run it first, so the hold covers them too.
   useOverlaySurface(guardEdit)
@@ -1382,7 +1374,7 @@ function ReaderComposerBody({
   const openRollback = useCallback(
     async (targetId: string) => {
       // As ↻'s: the dispatch's streaming card says why the tap opened nothing.
-      if (dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
+      if (isDispatchBlocked()) return
       // A tapped delete silently doing nothing reads as broken — and the count
       // read is a DB round trip that can reject as well as refuse.
       let counts: RollbackCounts | StoryEntryRejection | null
@@ -1394,7 +1386,7 @@ function ReaderComposerBody({
             startedBranchId: branchId,
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
-            dispatchInFlight: dispatchInFlightRef.current || readerHoldStore.isHeld(branchId),
+            dispatchInFlight: isDispatchBlocked(),
           }),
         )
       } catch (err) {
@@ -1425,7 +1417,7 @@ function ReaderComposerBody({
         countedAtSettle,
       })
     },
-    [branchId],
+    [branchId, isDispatchBlocked],
   )
 
   const showLiveCounts = useCallback(
@@ -1477,7 +1469,7 @@ function ReaderComposerBody({
     async (entryId: string) => {
       // Opening a confirm whose dispatch the in-flight guard will drop leaves
       // the user watching the modal close on nothing.
-      if (dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
+      if (isDispatchBlocked()) return
       const startedBranchId = branchId
       let counts: RollbackCounts | StoryEntryRejection | null
       const countedAtSettle = generationStore.getSettleCount()
@@ -1488,7 +1480,7 @@ function ReaderComposerBody({
             startedBranchId,
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
-            dispatchInFlight: dispatchInFlightRef.current || readerHoldStore.isHeld(branchId),
+            dispatchInFlight: isDispatchBlocked(),
             headReversalBlocked: generationStore.isHeadReversalBlocked(startedBranchId),
           }),
         )
@@ -1539,7 +1531,7 @@ function ReaderComposerBody({
       // Both confirm kinds open as a regenerate confirm; the modal derives copy from the counts.
       setRollback({ mode: 'regenerate', targetId: entryId, targetNumber, counts, countedAtSettle })
     },
-    [branchId, runRegenerate, branchUnchanged],
+    [branchId, runRegenerate, branchUnchanged, isDispatchBlocked],
   )
 
   // Chips are finished prose, so the draft is replaced outright and the mode
@@ -1575,13 +1567,7 @@ function ReaderComposerBody({
   }, [terminalEntry?.id])
 
   const handleRefreshSuggestions = useCallback(() => {
-    if (
-      suggestionRefreshBlocked(
-        generationStore.getTxState(),
-        branchId,
-        dispatchInFlightRef.current || readerHoldStore.isHeld(branchId),
-      )
-    )
+    if (suggestionRefreshBlocked(generationStore.getTxState(), branchId, isDispatchBlocked()))
       return
     const anchor = terminalEntry
     const story = openForBranch
@@ -1615,7 +1601,7 @@ function ReaderComposerBody({
         })
         fail({ kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) })
       })
-  }, [terminalEntry, openForBranch, branchId])
+  }, [terminalEntry, openForBranch, branchId, isDispatchBlocked])
 
   const documentPaintedRef = useRef(false)
   const { resetToTail: resetSliceToTail } = slice
@@ -1675,11 +1661,11 @@ function ReaderComposerBody({
   const handleUndoRedoShortcut = useCallback(
     (ev: KeyboardEvent) => {
       // undoLastAction and redoLastAction don't read the reader hold, so the shortcut does.
-      if (editorOpen || readerHoldStore.isHeld(branchId)) return
+      if (editorOpen || isReaderHeld()) return
       if (ev.shiftKey) redoAction('keyboard')
       else undoAction('keyboard')
     },
-    [branchId, editorOpen, redoAction, undoAction],
+    [editorOpen, isReaderHeld, redoAction, undoAction],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
@@ -1712,11 +1698,10 @@ function ReaderComposerBody({
   // reader-composer.md → Inline edit session: a switch is a guarded leave, so the hold follows it.
   const handleSwitch = useCallback(
     (toBranchId: string) => {
-      if (storyId == null || dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
+      if (storyId == null || isDispatchBlocked()) return
       guardEdit(() => {
         // The guard can answer after its dialog or a bridge query; the reader may have moved on.
-        if (!aliveRef.current || dispatchInFlightRef.current || readerHoldStore.isHeld(branchId))
-          return
+        if (!aliveRef.current || isDispatchBlocked()) return
         logger.debug('reader.branch_switch_started', { branchId, toBranchId })
         const hold = readerHoldStore.take(branchId)
         void switchBranch(
@@ -1742,7 +1727,7 @@ function ReaderComposerBody({
         )
       })
     },
-    [storyId, branchId, guardEdit, aliveRef, replaceStack],
+    [storyId, branchId, guardEdit, aliveRef, replaceStack, isDispatchBlocked],
   )
   // Resolves whatever the write did: the input collapses, and the row shows the stored name.
   const handleRename = useCallback(
