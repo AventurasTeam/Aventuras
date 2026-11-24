@@ -1544,3 +1544,59 @@ describe('finishWizard — embedder hard gate', () => {
     expect(mockedEmbed.mock.calls[0][3]).toBe(provider)
   })
 })
+
+describe('finishWizard → the lead', () => {
+  const BRAN_ID = 'char_66666666-6666-6666-6666-666666666666'
+
+  it('flags its active lead on the committed cast row and stamps the opening', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Aria Rising',
+        leadEntityId: LEAD_ID,
+        cast: [leadCast(), leadCast('Bran', BRAN_ID)],
+        opening: { content: 'You wake at dawn.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2050,
+    )
+
+    expect(result.status).toBe('ok')
+    const rows = await db.select().from(entities)
+    expect(Object.fromEntries(rows.map((row) => [row.id, row.isLead]))).toEqual({
+      [LEAD_ID]: 1,
+      [BRAN_ID]: 0,
+    })
+    const [opening] = await db.select().from(storyEntries)
+    expect(opening.metadata?.leadId).toBe(LEAD_ID)
+  })
+
+  it('flags no row when the starred character is staged on a story that needs no lead', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Ensemble',
+        leadEntityId: LEAD_ID,
+        cast: [{ ...leadCast(), status: 'staged' }],
+        opening: { content: 'Once.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2060,
+    )
+
+    expect(result.status).toBe('ok')
+    expect((await db.select().from(entities)).map((row) => row.isLead)).toEqual([0])
+    const [opening] = await db.select().from(storyEntries)
+    expect(opening.metadata).not.toHaveProperty('leadId')
+  })
+})

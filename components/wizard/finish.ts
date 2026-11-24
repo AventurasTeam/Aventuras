@@ -345,6 +345,7 @@ export async function finishWizard(
         settings,
         openingContent: s.opening.content,
         openingMetadata,
+        leadId: lead?.id,
         cast: castRows,
         lore: s.lore,
         embed: {
