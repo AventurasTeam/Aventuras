@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { watchDownloads } from '@/components/compounds/download-probe'
 import { HistoryLoaderProvider } from '@/components/history/history-loader'
@@ -715,7 +715,7 @@ const expectGateReason = (control: HTMLElement) =>
 /** Every control disables with the principle-owned tooltip while a turn is in flight. */
 export const EveryControlBlocked: Story = {
   args: { blocked: true },
-  play: async () => {
+  play: async ({ args }) => {
     const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
     await expect(name.getByText('Kael')).toBeVisible()
     await expect(name.queryByRole('button')).toBeNull()
@@ -770,6 +770,11 @@ export const EveryControlBlocked: Story = {
     await expect(
       await screen.findByRole('menuitem', { name: /Set as lead/ }, WAIT),
     ).toHaveAttribute('aria-disabled', 'true')
+    const remove = screen.getByRole('menuitem', { name: `Delete entity, ${BLOCKED_REASON}` })
+    await expect(remove).toHaveAttribute('aria-disabled', 'true')
+    // rn-primitives don't gate a disabled press on web, so a forced click proves nothing is handed up.
+    fireEvent.click(remove)
+    await expect(args.onDelete).not.toHaveBeenCalled()
   },
 }
 

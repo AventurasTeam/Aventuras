@@ -431,7 +431,7 @@ describe('overflow menu', () => {
     expect(lore.filter((e) => e.opensSheet === true).map((e) => e.key)).toEqual(['json'])
   })
 
-  it('disables delete with its reason while the generation gate is closed', () => {
+  it("passes the remove entry's disabled reason through to the delete entry", () => {
     const entries = entityMenuEntries('character', {
       onViewJson: noop,
       onExport: noop,
