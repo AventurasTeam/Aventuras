@@ -4,16 +4,26 @@ import {
   describePassFailure,
   retryRefusalText,
 } from '@/components/reader/system-entry-actions'
+import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import {
+  checkCloseRerunParent,
   CLOSE_RERUN_REFUSAL,
   describeDeltaReplayError,
+  FORK_REFUSAL,
+  forkBranch,
   loadOpenStory,
   MANUAL_CLOSE_REFUSAL,
+  showBranch,
   startCloseRerun,
+  startCloseRerunOnFork,
   STORY_ENTRY_REJECTION,
   type CloseRerunExpected,
+  type CloseRerunParentCheck,
   type CloseRerunPreview,
   type CloseRerunStart,
+  type ForkRefusal,
+  type ForkResult,
+  type ShowBranchResult,
 } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -24,7 +34,13 @@ import {
   pipelineErrorDetail,
   type ChainEnd,
 } from '@/lib/pipeline'
-import { currentStoryStore, RERUN_HELD } from '@/lib/stores'
+import {
+  currentStoryStore,
+  readerHoldStore,
+  refreshBranches,
+  RERUN_HELD,
+  type ReaderHoldToken,
+} from '@/lib/stores'
 import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
@@ -147,6 +163,19 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
   return startFailed(start.code)
 }
 
+type At = { branchId: string; chapterId: string }
+
+// Logs a refusal's code under `kind` and toasts its notice.
+function speak(
+  outcome: Outcome,
+  kind: 'app.close_rerun_start_refused' | 'app.close_rerun_fork_refused',
+  at: At,
+): RerunStartStep {
+  if (outcome.logCode != null) logger.warn(kind, { ...at, code: outcome.logCode })
+  if (outcome.notice != null) toast[outcome.notice.severity](outcome.notice.message)
+  return outcome.step
+}
+
 // As a cold open does; the start outlives the confirm, so it never re-publishes a branch left since.
 async function resyncBranch(branchId: string, chapterId: string): Promise<boolean> {
   try {
@@ -191,9 +220,203 @@ export async function runCloseRerun(args: {
     toast.error(t('chapters:rerunNotice.startFailed'))
     return { step: 'refused' }
   }
-  const { step, notice, logCode } = rerunStartOutcome(start, preview.chapterNumber)
-  if (logCode != null)
-    logger.warn('app.close_rerun_start_refused', { branchId, chapterId, code: logCode })
+  return speak(rerunStartOutcome(start, preview.chapterNumber), 'app.close_rerun_start_refused', {
+    branchId,
+    chapterId,
+  })
+}
+
+/** A step before the fork commits, or `forked` once the sequence past it has run. */
+export type RerunOnBranchStep = RerunStartStep | { step: 'forked' }
+
+type RerunOnBranchArgs = Parameters<typeof runCloseRerunOnBranch>[0]
+
+/** The new branch, and the name, position and chapter number every fork toast reads. */
+type Forked = { newBranchId: string; name: string; position: number; number: number }
+
+type ParentClear = Extract<CloseRerunParentCheck, { status: 'clear' }>
+
+const isClear = (check: CloseRerunParentCheck): check is ParentClear =>
+  'status' in check && check.status === 'clear'
+
+// chapter-timeline.md → Re-run a close: the fork refuses before any write, onto the mounted confirm.
+function forkRefusalOutcome(refusal: ForkRefusal): Outcome {
+  switch (refusal.code) {
+    case FORK_REFUSAL.gated:
+      return keepOpen()
+    case FORK_REFUSAL.swapPending:
+      return refusedWith(
+        retryRefusalText(MANUAL_CLOSE_REFUSAL.swapPending, 'reader:systemEntry.closeRetryBlocked'),
+        null,
+      )
+    case FORK_REFUSAL.unfinishedRun:
+      return refusedWith(t('chapters:rerunNotice.forkUnfinishedRun'), refusal.code)
+    default:
+      return startFailed(refusal.code)
+  }
+}
+
+function forkThrew(at: At, step: 'check' | 'fork', error: unknown): RerunStartStep {
+  logger.error('app.close_rerun_fork_threw', { ...at, step, error: messageOf(error) })
+  toast.error(t('chapters:rerunNotice.startFailed'))
+  return { step: 'refused' }
+}
+
+// No pending mark spans the check and the fork: forkBranch's gate counts every pending turn.
+async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunStartStep | Forked> {
+  const { branchId, chapterId, preview } = args
+  const at = { branchId, chapterId }
+  let check: CloseRerunParentCheck
+  try {
+    check = await checkCloseRerunParent(branchId, chapterId, expectedOf(preview), ctx)
+  } catch (error) {
+    return forkThrew(at, 'check', error)
+  }
+  if (!isClear(check))
+    return speak(
+      rerunStartOutcome(check, preview.chapterNumber),
+      'app.close_rerun_start_refused',
+      at,
+    )
+  const { forkPoint } = check.preview.shortcut
+  const number = preview.chapterNumber
+  const name = t('chapters:rerunConfirm.autoName', { number })
+  let result: ForkResult
+  try {
+    result = await forkBranch(
+      { parentBranchId: branchId, forkEntryId: forkPoint.entryId, name, makeCurrent: true },
+      ctx,
+    )
+  } catch (error) {
+    return forkThrew(at, 'fork', error)
+  }
+  if (result.status === 'rejected')
+    return speak(forkRefusalOutcome(result), 'app.close_rerun_fork_refused', at)
+  return { newBranchId: result.branchId, name, position: forkPoint.position, number }
+}
+
+// C8: the new reader re-reads the list on mount too, so a failure here is only logged. The store
+// holds one story's rows: a refresh for a story no longer open would replace another story's.
+function refreshAfterFork(storyId: string): void {
+  if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
+  void refreshBranches(db, storyId).catch((error: unknown) =>
+    logger.warn('app.branches_refresh_failed', { storyId, error: messageOf(error) }),
+  )
+}
+
+function forkStartFailed(
+  args: RerunOnBranchArgs,
+  forked: Forked,
+  cause: string,
+): RerunOnBranchStep {
+  logger.warn('app.close_rerun_fork_start_failed', {
+    branchId: args.branchId,
+    newBranchId: forked.newBranchId,
+    chapterId: args.chapterId,
+    cause,
+  })
+  toast.warning(
+    t('chapters:rerunNotice.forkStartFailed', { name: forked.name, position: forked.position }),
+  )
+  return { step: 'forked' }
+}
+
+// Nothing published, so the request still holds over the parent: no prune will close it.
+function notShown(args: RerunOnBranchArgs, forked: Forked, cause: string): RerunOnBranchStep {
+  refreshAfterFork(args.storyId)
+  args.closeRequest()
+  return forkStartFailed(args, forked, cause)
+}
+
+function refusalCause(start: Exclude<CloseRerunStart, ChainEnd>): string {
+  if ('outcome' in start)
+    return start.outcome === 'preflight-failed' ? start.outcome : start.blockedBy
+  return start.code
+}
+
+async function startOnChild(args: RerunOnBranchArgs, forked: Forked): Promise<RerunOnBranchStep> {
+  const { newBranchId, name, position, number } = forked
+  let start: CloseRerunStart
+  try {
+    start = await startCloseRerunOnFork(newBranchId, args.chapterId, ctx, {
+      onStarted: () => {
+        toast.info(t('chapters:rerunNotice.forkStarted', { name, position, number }))
+      },
+    })
+  } catch (error) {
+    return forkStartFailed(args, forked, messageOf(error))
+  }
+  if (!('result' in start)) return forkStartFailed(args, forked, refusalCause(start))
+  const notice = rerunEndNotice(start, number)
   if (notice != null) toast[notice.severity](notice.message)
-  return step
+  return { step: 'forked' }
+}
+
+async function showThenStart(
+  args: RerunOnBranchArgs,
+  hold: ReaderHoldToken,
+  forked: Forked,
+): Promise<RerunOnBranchStep> {
+  const { storyId, branchId, chapterId, replaceStack } = args
+  const open = currentStoryStore.getCurrentStory()
+  // Left or switched since: the pointer already names the new branch, so its next open lands there.
+  if (open == null || open.storyId !== storyId || open.branchId !== branchId) {
+    readerHoldStore.release(hold)
+    return notShown(args, forked, 'story-left')
+  }
+  let shown: ShowBranchResult
+  try {
+    shown = await showBranch(
+      { storyId, branchId: forked.newBranchId, fromBranchId: branchId, hold, replaceStack },
+      ctx,
+    )
+  } catch (error) {
+    readerHoldStore.release(hold)
+    return notShown(args, forked, messageOf(error))
+  }
+  // Idempotent: showBranch releases it on every path too.
+  readerHoldStore.release(hold)
+  if (shown.status === 'navigation-blocked') {
+    // showBranch put the pointer back on the parent; the new branch stays, and the chip lists it.
+    refreshAfterFork(storyId)
+    args.closeRequest()
+    logger.warn('app.close_rerun_fork_not_opened', {
+      branchId,
+      newBranchId: forked.newBranchId,
+      chapterId,
+    })
+    toast.warning(
+      t('chapters:rerunNotice.forkNotOpened', { name: forked.name, position: forked.position }),
+    )
+    return { step: 'forked' }
+  }
+  // Nothing published: the new branch isn't the open one, so a start would only refuse it.
+  if (shown.status === 'shown-unloaded') return notShown(args, forked, shown.status)
+  refreshAfterFork(storyId)
+  return startOnChild(args, forked)
+}
+
+/**
+ * chapter-timeline.md → Re-run a close, Re-run on new branch: the check on the parent, the fork,
+ * the tail, the refresh and the start on the new branch. Holds the reader from its call to the
+ * navigation. Never rejects.
+ */
+export async function runCloseRerunOnBranch(args: {
+  storyId: string
+  /** The parent: the branch the confirm opened on. */
+  branchId: string
+  chapterId: string
+  preview: CloseRerunPreview
+  replaceStack: ReplaceStoryStack
+  /** Closes this confirm's request with `reopen: false`, if it is still the held one. */
+  closeRequest: () => void
+}): Promise<RerunOnBranchStep> {
+  // Before the first await: a Send in the reader refuses from the press on (C8).
+  const hold = readerHoldStore.take(args.branchId)
+  const forked = await checkAndFork(args)
+  if ('step' in forked) {
+    readerHoldStore.release(hold)
+    return forked
+  }
+  return showThenStart(args, hold, forked)
 }

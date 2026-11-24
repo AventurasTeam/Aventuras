@@ -127,6 +127,7 @@
     "rerun": "Re-run close",
     "rollbackAndRerun": "Roll back & re-run",
     "rerunOnBranch": "Re-run on new branch",
+    "autoName": "Ch. {{number}} re-run",
     "rerunOnBranchLater": "Re-running on a new branch lands in a later milestone",
     "notLatest": "This is no longer the latest chapter.",
     "closeOwed": "Close the open chapter first.",
@@ -140,6 +141,10 @@
     "unreversed": "The re-run couldn't be undone. Restart the app to restore chapter {{number}}'s close; until then, this branch can't be changed.",
     "countsChanged": "The counts changed while this was open. Check them before confirming.",
     "startFailed": "Couldn't start the re-run.",
+    "forkStarted": "Branched \"{{name}}\" from entry {{position}} — re-running chapter {{number}}'s close.",
+    "forkStartFailed": "Branched \"{{name}}\" from entry {{position}}, but couldn't start the re-run. Retry from Chapter Timeline.",
+    "forkNotOpened": "Branched \"{{name}}\" from entry {{position}}, but couldn't open it. Switch to it, then retry from Chapter Timeline.",
+    "forkUnfinishedRun": "Memory work on this branch never finished, so it can't branch here yet. Restart the app, then try again.",
     "resyncFailed": "The turns were rolled back, but the re-run couldn't start and the story couldn't refresh. Reopen the story."
   },
   "review": {
