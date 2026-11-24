@@ -17,7 +17,7 @@ import {
   HERO_FORK as WEB_HERO_FORK,
   heroForkTurns as webHeroForkTurns,
 } from '../../lib/db/devtools/hero-fork.web'
-import { HERO_FORK } from '../../lib/db/devtools/seed-dataset'
+import { buildSeedSteps, HERO_FORK } from '../../lib/db/devtools/seed-dataset'
 
 type Entry = { id: string; position: number; kind: string; content: string }
 type Create = {
@@ -193,6 +193,20 @@ describe('the seeded br_hero_fork (C7)', () => {
       lastError: null,
       processedThrough: 45,
     })
+  })
+
+  it("leaves every other branch's watermark where the static seed parks it", () => {
+    const staticRows = buildSeedSteps().find((step) => step.name === 'branches')!.rows as {
+      id: string
+      classifierStatus: unknown
+    }[]
+    const seededRows = seeded()
+      .prepare('SELECT id, classifier_status AS status FROM branches WHERE id <> ?')
+      .all(FORK) as { id: string; status: string }[]
+    expect(staticRows.length).toBeGreaterThan(1)
+    expect(Object.fromEntries(seededRows.map((row) => [row.id, JSON.parse(row.status)]))).toEqual(
+      Object.fromEntries(staticRows.map((row) => [row.id, row.classifierStatus])),
+    )
   })
 
   it('seeds the same br_hero_fork rows, byte for byte, on every run', () => {
