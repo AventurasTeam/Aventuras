@@ -69,12 +69,19 @@ describe('branchChipOf', () => {
     expect(branchChipOf([MAIN, FORK, TRAP], 'br_main')).toEqual({ count: 3, currentName: 'Main' })
   })
 
-  it('names nothing and counts nothing while the rows lack the branch', () => {
-    expect(branchChipOf([MAIN, FORK], 'br_new')).toEqual({ count: 0, currentName: null })
+  it("names the reader's branch wherever it sits in the rows", () => {
+    expect(branchChipOf([MAIN, FORK, TRAP], 'br_fork')).toEqual({
+      count: 3,
+      currentName: 'The road not taken',
+    })
   })
 
-  it('names nothing and counts nothing with no rows', () => {
-    expect(branchChipOf([], 'br_main')).toEqual({ count: 0, currentName: null })
+  it('gives no chip while the rows lack the branch', () => {
+    expect(branchChipOf([MAIN, FORK], 'br_new')).toBeNull()
+  })
+
+  it('gives no chip with no rows', () => {
+    expect(branchChipOf([], 'br_main')).toBeNull()
   })
 })
 
@@ -110,12 +117,12 @@ describe('ReaderBranchNavigator', () => {
     branchesStore.hydrate('story_other', [MAIN, FORK])
     render(connected())
     expect(stubs.navigator?.rows).toEqual([])
-    expect(stubs.navigator?.chip).toEqual({ count: 0, currentName: null })
+    expect(stubs.navigator?.chip).toBeNull()
   })
 
   it('follows the store when a refresh lands', () => {
     render(connected())
-    expect(stubs.navigator?.chip).toEqual({ count: 0, currentName: null })
+    expect(stubs.navigator?.chip).toBeNull()
     act(() => branchesStore.hydrate('story_1', [MAIN, FORK, TRAP]))
     expect(stubs.navigator?.chip).toEqual({ count: 3, currentName: 'Main' })
   })

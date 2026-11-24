@@ -3,20 +3,19 @@ import { useEffect, useImperativeHandle, useMemo, useRef, type ReactElement, typ
 import { db } from '@/lib/db'
 import { branchesStore, refreshBranches, type BranchRow } from '@/lib/stores'
 
-import { BranchNavigator, type BranchNavigatorHandle } from './branch-navigator'
+import {
+  BranchNavigator,
+  type BranchChipView,
+  type BranchNavigatorHandle,
+} from './branch-navigator'
 
 /**
- * The chip's two props, derived in one place. Rows that lack the reader's branch (a refresh still
- * landing after a fork) give no name and no count, so the chip stays hidden rather than flashing.
+ * Rows that lack the reader's branch (a refresh still landing after a fork) give no chip, so it
+ * stays hidden rather than flashing.
  */
-export function branchChipOf(
-  rows: readonly BranchRow[],
-  branchId: string,
-): { count: number; currentName: string | null } {
+export function branchChipOf(rows: readonly BranchRow[], branchId: string): BranchChipView | null {
   const current = rows.find((row) => row.id === branchId)
-  return current == null
-    ? { count: 0, currentName: null }
-    : { count: rows.length, currentName: current.name }
+  return current == null ? null : { count: rows.length, currentName: current.name }
 }
 
 export type ReaderBranchNavigatorHandle = { open: () => void }

@@ -27,12 +27,14 @@ export type BranchNavigatorRow = { id: string; name: string }
 
 export type BranchNavigatorHandle = { open: () => void; close: () => void }
 
+export type BranchChipView = { readonly count: number; readonly currentName: string }
+
 export type BranchNavigatorProps = {
   /** In `created_at` order; the view puts the current branch first. */
   rows: readonly BranchNavigatorRow[]
   currentBranchId: string
-  /** The trigger's view: the chip above one branch, the anchor otherwise. */
-  chip: { count: number; currentName: string | null }
+  /** Null while the rows lack the current branch. The chip shows above one branch. */
+  chip: BranchChipView | null
   paused: boolean
   /** Never called for the current row; on phone, after the Sheet's exit. */
   onSwitch: (branchId: string) => void
@@ -83,9 +85,8 @@ export function BranchNavigator(props: BranchNavigatorProps): ReactElement {
   return isPhone ? <SheetArm {...props} afterDismiss={afterDismiss} /> : <PopoverArm {...props} />
 }
 
-/** The chip shows above one branch, once the current branch's name is known. */
-function shownChip({ count, currentName }: BranchNavigatorProps['chip']) {
-  return count > 1 && currentName != null ? { count, currentName } : null
+function shownChip(chip: BranchChipView | null): BranchChipView | null {
+  return chip != null && chip.count > 1 ? chip : null
 }
 
 function currentFirst(

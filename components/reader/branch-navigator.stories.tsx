@@ -525,7 +525,7 @@ export const TypingInRenameNeverSwitches: Story = {
 
 /** Rows that lack the reader's branch (a late refresh): the given order, no ✓. */
 export const CurrentBranchNotInRows: Story = {
-  args: { currentBranchId: 'br_gone', chip: { count: 0, currentName: null } },
+  args: { currentBranchId: 'br_gone', chip: null },
   render: (args) => <HandleHarness {...args} />,
   play: async () => {
     await waitForTier('desktop')
