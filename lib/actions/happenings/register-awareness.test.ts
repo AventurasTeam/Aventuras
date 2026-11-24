@@ -1743,7 +1743,10 @@ describe("upsertHappeningAwareness copying a row's pin owner", () => {
 
 // Awareness ids repeat across branches (key: branch and id), so every read and write is scoped.
 describe('branch scope', () => {
-  const SIBLING: HappeningAwareness = {
+  type BranchId = typeof BRANCH | typeof OTHER_BRANCH
+  type RowOn<B extends BranchId> = HappeningAwareness & { branchId: B }
+
+  const SIBLING: RowOn<typeof BRANCH> = {
     id: 'haw_1',
     branchId: BRANCH,
     happeningId: 'hap_1',
@@ -1753,7 +1756,7 @@ describe('branch scope', () => {
     retrievalCount: 9,
     source: 'a letter',
   }
-  const WRITTEN: HappeningAwareness = {
+  const WRITTEN: RowOn<typeof OTHER_BRANCH> = {
     id: 'haw_1',
     branchId: OTHER_BRANCH,
     happeningId: 'hap_1',
@@ -1763,7 +1766,7 @@ describe('branch scope', () => {
     retrievalCount: 4,
     source: 'overheard',
   }
-  const SIBLING_KEPT: HappeningAwareness = {
+  const SIBLING_KEPT: RowOn<typeof BRANCH> = {
     id: 'haw_kept',
     branchId: BRANCH,
     happeningId: 'hap_1',
@@ -1773,7 +1776,7 @@ describe('branch scope', () => {
     retrievalCount: 2,
     source: 'a dream',
   }
-  const WRITTEN_KEPT: HappeningAwareness = {
+  const WRITTEN_KEPT: RowOn<typeof OTHER_BRANCH> = {
     id: 'haw_kept',
     branchId: OTHER_BRANCH,
     happeningId: 'hap_1',
@@ -1784,19 +1787,30 @@ describe('branch scope', () => {
     source: 'smelled the smoke',
   }
 
-  // An id-only read scans in insertion order, so callers pass the sibling's rows first.
-  async function twoBranches(rows: HappeningAwareness[]) {
-    const harness = await setup(rows)
-    await harness.db.insert(entities).values({
-      id: 'char_a',
-      branchId: OTHER_BRANCH,
-      kind: 'character',
-      name: 'Aria',
-      status: 'active',
-      injectionMode: 'auto',
-      createdAt: 1,
-      updatedAt: 1,
-    })
+  const character = (id: string, name: string, branchId: BranchId) => ({
+    id,
+    branchId,
+    kind: 'character' as const,
+    name,
+    status: 'active' as const,
+    injectionMode: 'auto' as const,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+
+  // Sibling rows go in first: an id-only read scans in insertion order and would find them.
+  async function twoBranches(
+    sibling: RowOn<typeof BRANCH>[],
+    written: RowOn<typeof OTHER_BRANCH>[],
+  ) {
+    const harness = await setup([...sibling, ...written])
+    await harness.db
+      .insert(entities)
+      .values([
+        character('char_b', 'Bren', BRANCH),
+        character('char_a', 'Aria', OTHER_BRANCH),
+        character('char_b', 'Bren', OTHER_BRANCH),
+      ])
     await harness.db.insert(happenings).values({
       id: 'hap_1',
       branchId: OTHER_BRANCH,
@@ -1866,7 +1880,7 @@ describe('branch scope', () => {
   })
 
   it('upsertHappeningAwareness pair: update path, from its own row, and reverses', async () => {
-    const { db, ctx } = await twoBranches([SIBLING, WRITTEN])
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
 
     expect(await onWritten(ctx, learn(OTHER_BRANCH), 'act_up')).toMatchObject({ status: 'ok' })
     expect(await awarenessOn(db, OTHER_BRANCH, 'haw_1')).toEqual({
@@ -1884,7 +1898,7 @@ describe('branch scope', () => {
   })
 
   it("upsertHappeningAwareness pair: create path, beside the sibling's row, and reverses", async () => {
-    const { db, ctx } = await twoBranches([SIBLING])
+    const { db, ctx } = await twoBranches([SIBLING], [])
 
     expect(await onWritten(ctx, learn(OTHER_BRANCH), 'act_up')).toMatchObject({ status: 'ok' })
     expect(await pairOn(db, OTHER_BRANCH)).toEqual([
@@ -1908,7 +1922,7 @@ describe('branch scope', () => {
   })
 
   it('carryAwarenessPin pair: carries within its branch and reverses', async () => {
-    const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT, WRITTEN, WRITTEN_KEPT])
+    const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT], [WRITTEN, WRITTEN_KEPT])
     expect((await onWritten(ctx, pin(OTHER_BRANCH, 0.2), 'act_pin')).status).toBe('ok')
     const pinned = { ...WRITTEN, decayResistance: 0.2 }
     const carryPin: PipelineAction = {
@@ -1936,7 +1950,7 @@ describe('branch scope', () => {
   })
 
   it('deleteHappeningAwareness pair: deletes its own row and restores it', async () => {
-    const { db, ctx } = await twoBranches([SIBLING, WRITTEN])
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
     const remove: PipelineAction = {
       kind: 'deleteHappeningAwareness',
       source: 'user_edit',
@@ -1955,7 +1969,7 @@ describe('branch scope', () => {
   })
 
   it('bumpAwarenessRetrieval pair: counts its own row and reverses', async () => {
-    const { db, ctx } = await twoBranches([SIBLING, WRITTEN])
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
     const bumpWritten: PipelineAction = {
       kind: 'bumpAwarenessRetrieval',
       source: 'ai_classifier',
@@ -1972,7 +1986,7 @@ describe('branch scope', () => {
   })
 
   it('resetAwarenessRetrieval pair: zeroes its own row and reverses', async () => {
-    const { db, ctx } = await twoBranches([SIBLING, WRITTEN])
+    const { db, ctx } = await twoBranches([SIBLING], [WRITTEN])
     const resetWritten: PipelineAction = {
       kind: 'resetAwarenessRetrieval',
       source: 'chapter_close',
@@ -2017,7 +2031,7 @@ describe('branch scope', () => {
   it.each(PAYLOAD_CASES.map((a) => [a.kind, a] as const))(
     '%s payload: refuses a payload naming the sibling branch',
     async (_kind, action) => {
-      const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT, WRITTEN, WRITTEN_KEPT])
+      const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT], [WRITTEN, WRITTEN_KEPT])
       expect(
         (
           await applyDeltaAction(
