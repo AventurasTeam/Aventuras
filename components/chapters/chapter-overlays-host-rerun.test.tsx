@@ -928,6 +928,31 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(actions.fork).not.toHaveBeenCalled()
   })
 
+  // A regenerate's follow-up sweep: a turn body with no run and no mark, which the check refuses on.
+  it("a check refused on the parent's turn body holds the actions until the body settles", async () => {
+    vi.spyOn(toast, 'error').mockReturnValue('')
+    actions.check.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })
+    const body = deferred<void>()
+    act(() => {
+      void generationStore.bracketPendingTurn('br_1', (endEarly) => {
+        endEarly()
+        return body.promise
+      })
+    })
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    expect(props.blockedReason).toBeUndefined()
+    act(() => props.onConfirmOnBranch())
+    await waitFor(() => expect(confirmView.props?.pending).toBe(false))
+    await flush()
+    expect(confirmView.props?.blockedReason).toBe(t('reader:actions.blockedWhileGenerating'))
+    expect(actions.fork).not.toHaveBeenCalled()
+
+    await act(async () => body.resolve())
+    expect(confirmView.props?.blockedReason).toBeUndefined()
+  })
+
   it('a check that finds the counts moved shows the fresh preview, ends the hold and forks nothing', async () => {
     const error = vi.spyOn(toast, 'error').mockReturnValue('')
     const fresh: CloseRerunPreview = {

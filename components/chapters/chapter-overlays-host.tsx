@@ -372,8 +372,11 @@ function RerunConfirmHost({
   const { branchId, chapterId } = request
   const storyId = currentStoryStore.useCurrentStory((open) => open?.storyId)
   const rerunReason = useRerunDisabledReason(storyId, branchId)
-  const storyBusy = generationStore.useGeneration(
-    (s) => storyId != null && isStoryBusy(s.txState, storyId, branchId),
+  // The turn body too: the fork's check refuses on it, and it outlives its mark with no run.
+  const generating = generationStore.useGeneration(
+    (s) =>
+      storyId != null &&
+      (isStoryBusy(s.txState, storyId, branchId) || generationStore.isTurnBodyActive(branchId)),
   )
   const replaceStack = useReplaceStoryStack()
   // Read synchronously, so a second press returns before it reaches the start or the fork.
@@ -415,7 +418,7 @@ function RerunConfirmHost({
   // An in-flight refusal holds the confirm actions while the story is busy: a pending turn's mark
   // can end with no run, and so with no settle.
   const [heldInFlight, setHeldInFlight] = useState(false)
-  if (heldInFlight && !storyBusy) setHeldInFlight(false)
+  if (heldInFlight && !generating) setHeldInFlight(false)
 
   if (target == null) return null
   const { preview } = target
