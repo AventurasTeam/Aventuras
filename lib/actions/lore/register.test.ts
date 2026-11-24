@@ -463,7 +463,7 @@ describe('branch scope', () => {
     createdAt: 2,
     updatedAt: 2,
   }
-  // Stale already: the update and any reversal of it stamp embedding_stale 1.
+  // Stale already: an update and any reversal stamp embedding_stale 1.
   const WRITTEN: Lore = {
     id: 'lore_1',
     branchId: 'br_2',

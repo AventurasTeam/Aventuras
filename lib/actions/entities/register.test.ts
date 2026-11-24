@@ -1048,7 +1048,7 @@ describe('branch scope', () => {
     createdAt: 1,
     updatedAt: 1,
   }
-  // Stale already: the update and any reversal of it stamp embedding_stale 1.
+  // Stale already: an update and any reversal stamp embedding_stale 1.
   const WRITTEN: Entity = {
     id: 'char_1',
     branchId: 'br_2',
