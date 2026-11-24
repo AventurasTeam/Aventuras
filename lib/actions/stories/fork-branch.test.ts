@@ -800,6 +800,22 @@ describe('forkBranchCore and the branch write lock (AC 8)', () => {
     expect(withoutBranchId(branchSnapshot(f.sqlite, 'br_fork_a'))).toEqual(reference)
     expect(withoutBranchId(branchSnapshot(f.sqlite, 'br_fork_b'))).toEqual(reference)
   })
+
+  it("keeps a fork's hold when another call under the same new id releases first", async () => {
+    const order: string[] = []
+    // The refusing call releases at once; the forking call's batch waits inside its own hold.
+    const [refused, forked] = await Promise.all([
+      forkBranchCore(input({ forkEntryId: 'ent_fork_nowhere' }), f.ctx),
+      forkBranchCore(input(), labelled('fork', order, 30)),
+      applyDeltaAction(lateWrite(), labelled('write', order)),
+    ])
+
+    expect(refused).toMatchObject({ status: 'rejected', code: FORK_REFUSAL.entryMissing })
+    expect(forked).toEqual(ok(CHILD))
+    expect(order).toEqual(['fork', 'write'])
+    expect(entityIdsOf(CHILD)).toEqual([])
+    expect(await lockIsFree(f.branchId)).toBe(true)
+  })
 })
 
 describe('forkBranchCore and a swap admitted mid-fork', () => {

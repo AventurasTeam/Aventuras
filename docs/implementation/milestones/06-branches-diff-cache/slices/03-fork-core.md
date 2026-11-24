@@ -893,7 +893,8 @@ real scale has yet bound them.
 - The refusals are one union, `FORK_REFUSAL`: `gated`, `swap-pending`,
   `entry-missing`, `entry-system`, `unfinished-run`, and the sweep's
   `rollback-floor` and `integrity` passed through. The hold's id is
-  `fork:<newBranchId>`.
+  `fork:<newBranchId>:<n>`, `n` a per-call counter, so two calls under
+  one explicit `newBranchId` still hold apart.
 - `/dev/fork-cost` reads the fork's plan through `planFork`, which the
   actions barrel exports beside `forkBranch`; the planner itself stays
   internal to `lib/actions`.

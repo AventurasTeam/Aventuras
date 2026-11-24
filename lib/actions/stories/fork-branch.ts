@@ -78,6 +78,8 @@ export function forkBranch(input: ForkBranchInput, ctx: DbCtx): Promise<ForkResu
   return forkBranchCore({ ...input, newBranchId: generateId('br'), createdAt: Date.now() }, ctx)
 }
 
+let holdSequence = 0
+
 /** The fork with its id and time given, for the seed (C7); refuses and locks as forkBranch does. */
 export async function forkBranchCore(input: ForkBranchCoreInput, ctx: DbCtx): Promise<ForkResult> {
   // No branch: the parent's own hold doesn't refuse; what its open run would carry decides.
@@ -87,7 +89,7 @@ export async function forkBranchCore(input: ForkBranchCoreInput, ctx: DbCtx): Pr
   const request = { ...input }
   const { parentBranchId, newBranchId } = request
   // Holds are idempotent per id: under a shared id one fork's release would free another's.
-  const holdId = `fork:${newBranchId}`
+  const holdId = `fork:${newBranchId}:${++holdSequence}`
   await holdBranchWriteExclusive(parentBranchId, holdId)
   try {
     return await forkHeld(request, ctx)
