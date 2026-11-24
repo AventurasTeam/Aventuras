@@ -355,6 +355,66 @@ describe('a fork rewrites the log it keeps on the child alone', () => {
     expect(rowOn(w, 'entities', w.parentId, WREN)).toMatchObject({ name: 'Wrenna' })
   })
 
+  it('prunes, as rollback does where CTRL-Z refuses, the writes stranded on a pair the window empties', async () => {
+    const w = await kaelAndMira()
+    // KAEL < MIRA, so `kind` is Kael's view and `inverse_kind` Mira's.
+    await landWrites(w, { actionId: 'act_fork_user_pair', entryId: entryAt(1) }, [
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'user_edit',
+        payload: {
+          branchId: w.parentId,
+          subjectId: KAEL,
+          objectId: MIRA,
+          kind: null,
+          inverseKind: 'mentor',
+        },
+      },
+    ])
+    await landWrites(w, { actionId: 'act_fork_pass_pair', entryId: entryAt(5) }, [
+      passPair(w, 'rival'),
+    ])
+    await landWrites(w, { actionId: 'act_fork_pass_clear', entryId: entryAt(3) }, [
+      {
+        kind: 'upsertCharacterRelationship',
+        source: 'periodic_classifier',
+        payload: {
+          branchId: w.parentId,
+          subjectId: MIRA,
+          objectId: KAEL,
+          kind: null,
+          proseEntryId: null,
+        },
+      },
+    ])
+    const pairs = rowsOn(w, 'character_relationships', w.parentId)
+    expect(pairs).toMatchObject([{ kind: 'rival', inverse_kind: null }])
+    const pairId = String(pairs[0].id)
+    await seedVectorsWithWindowLore(w, entryAt(5), { kind: 'entity', id: MIRA })
+    const strandedIds = [
+      ...deltaRowsOf(w, w.parentId, 'act_fork_user_pair'),
+      ...deltaRowsOf(w, w.parentId, 'act_fork_pass_clear'),
+    ]
+      .map((d) => String(d.id))
+      .sort()
+    expect(strandedIds).toHaveLength(2)
+    // Pruned though outside the set, so stranded, not swept: the writes CTRL-Z's plan refuses on.
+    const planned = await forkPlan(w, entryAt(3), FORK_CHILD_ID)
+    const setIds = new Set(planned?.swept.set.rows.map((d) => d.id))
+    expect(
+      planned?.plan.prunedDeltas
+        .filter((d) => !setIds.has(d.id))
+        .map((d) => d.id)
+        .sort(),
+    ).toEqual(strandedIds)
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    expect(rowOn(w, 'character_relationships', childId, pairId)).toBeUndefined()
+    for (const id of strandedIds) expect(rowOn(w, 'deltas', childId, id), id).toBeUndefined()
+    expect(rowOn(w, 'character_relationships', w.parentId, pairId)).toEqual(pairs[0])
+  })
+
   it("clears on the child a place's parent and a member's faction the window removes", async () => {
     const PIER = 'loc_fork_pier'
     const QUAY = 'loc_fork_quay'
