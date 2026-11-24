@@ -546,6 +546,36 @@ describe('useBranchCreate — Create', () => {
     expect(modal(hook).pending).toBe(true)
   })
 
+  it('reopens with no line after a refusal and a Cancel', async () => {
+    actions.fork.mockResolvedValue({
+      status: 'rejected',
+      code: FORK_REFUSAL.unfinishedRun,
+      reason: 'x',
+    })
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(modal(hook).message).toBe(COPY.unfinishedRun)
+    act(() => modal(hook).onCancel())
+    await openModal(hook)
+    expect(modal(hook)).toMatchObject({ pending: false, message: null })
+  })
+
+  it("reopens idle after a tail that can't navigate, and its Create forks again", async () => {
+    actions.show.mockResolvedValue({ status: 'navigation-blocked' })
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(hook.result.current.create.modal).toBeNull()
+    await openModal(hook)
+    expect(modal(hook)).toMatchObject({ pending: false, message: null })
+    press(hook, 'Side quest')
+    await settle()
+    expect(actions.fork).toHaveBeenCalledTimes(2)
+  })
+
   it('a retry clears the earlier line on its press, and its own refusal replaces it', async () => {
     actions.fork.mockResolvedValueOnce({
       status: 'rejected',
