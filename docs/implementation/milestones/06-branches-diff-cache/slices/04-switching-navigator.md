@@ -791,13 +791,18 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   reader sliding in from the right while fading over the old one (one
   mid-transition frame, settled within 60 ms); no empty-state frame of
   the old reader was seen (`2fbb430b9`, AVD, Android 16). The new
-  reader showed `Loading story…` for about a second, the probe having
-  filled no store.
-- A real switch shows `Loading story…` too: every reader mount starts
-  loading, and the fill before the publish doesn't remove that commit.
-  At 10 frames a second the old reader fades out, the placeholder shows
-  for six to seven frames (about 0.6 s), then the fork's entries paint;
-  the reader's empty state never showed (`69f73e320`, AVD).
+  reader showed `Loading story…` for about a second: inferred to be
+  the reader's own load, since the probe filled no store, plus its
+  document's boot.
+- A real switch shows `Loading story…` for about 0.6 s after the
+  mount: the new reader instance boots its own document and covers it
+  until first paint, with the composer and the chapter and time chips
+  already hydrated. At 10 frames a second the old reader fades out,
+  the placeholder shows for six to seven frames, then the fork's
+  entries paint; the reader's empty state never showed (`69f73e320`,
+  AVD). The one-commit hydration placeholder before it isn't what is
+  seen. `reader.mounted` fires from the mount effect, so the veil
+  rule's press-to-mount hold doesn't include the document boot.
 - A switch from the phone chip and one from `Browse branches…` each
   mount one fresh reader, `reader.mounted` once, with no
   `reader.empty_after_rows`; the screen shows the new branch's tail.
@@ -809,12 +814,21 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   `action_layer.branch_switch_navigation_blocked`. With the editor
   dirty the unsaved-changes guard asks; Cancel leaves the pointer and
   mounts nothing, Discard switches and mounts once (`69f73e320`, AVD).
+  Rerun with logcat kept running, each switch is one
+  `reader.branch_switch_started` and one `reader.mounted`; opening the
+  story from the Story List logs one `reader.mounted` with no
+  `reader.branch_switch_started`; Back from the new reader lands on the
+  Story List, so no second instance sits under it (`09f786926`, AVD).
 - The rename input keeps its caret through a mid-string edit (`X` typed
   six characters from the end lands as `The road notX taken`) and sits
   above the on-screen keyboard (`69f73e320`, AVD).
 - With the inline editor's keyboard up, the phone Sheet doesn't lift:
   its rows sit under the keyboard and a tap lands on a key. Back hides
-  the keyboard and leaves the Sheet open (`69f73e320`, AVD).
+  the keyboard and leaves the Sheet open (`69f73e320`, AVD). The
+  composer's keyboard doesn't do this: opening the Sheet from the chip
+  with a draft typed dismisses that keyboard and the rows show
+  (`09f786926`, AVD). The inline editor lives in the reader's WebView,
+  which keeps its own keyboard.
 - A Sheet that presents while another dismisses: B presents, and after B
   closes A stays closed, on web (`97b013990`, Storybook, Chromium) and on
   Android (`97b013990`, AVD, two runs).
@@ -824,6 +838,11 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   single-branch story there is no chip, and `Browse branches…` opens
   `Branches · 1` with one row and no delete button (`69f73e320`,
   desktop, slot 4, Electron 41).
+- One switch from the desktop chip mounts the new reader once: each of
+  two switches logged one `reader.branch_switch_started` and one
+  `reader.mounted`, no `reader.empty_after_rows`, and Back from the new
+  reader lands on the Story List (`09f786926`, desktop, slot 4,
+  Electron 41, diagnostics debug on).
 
 **Decisions** (developer, 2026-11-23, unless marked).
 
@@ -863,8 +882,10 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   returns, and a failed one toasts `Couldn't rename the branch.` On the
   seeded two-branch story, `The Veilstone Courier`, the slot AVD held a
   switch for a median of 171 ms from the press to the new reader's
-  mount, so no veil shipped. The dataset's played story, _Treasure
-  Island_, has one branch, so a long story's hold wasn't measured.
+  mount, so no veil shipped. That hold ends at the mount effect and
+  doesn't see the new document's boot, which keeps `Loading story…` up
+  for about 0.6 s more. The dataset's played story, _Treasure Island_,
+  has one branch, so a long story's hold wasn't measured.
 - Undo and redo across a switch. `useReaderUndo` keeps a mounted flag
   whose cleanup dismisses its notice; after unmount nothing posts but a
   `closeUndone` warning, and the route's `branchUnchanged` and the
