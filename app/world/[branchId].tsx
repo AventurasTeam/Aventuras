@@ -157,8 +157,8 @@ export default function WorldRoute() {
   const signals = useRowSignals(branchId)
   const collisions = useMemo(() => deriveCollisions(entities), [entities])
   const leadId = useMemo(
-    () => resolveLead(open?.definition.leadEntityId, entityRows, branchId)?.id ?? null,
-    [open, entityRows, branchId],
+    () => resolveLead(entityRows, branchId)?.id ?? null,
+    [entityRows, branchId],
   )
   const leadLabel = open == null ? null : leadLabelFor(open.definition.mode)
 

@@ -1,4 +1,5 @@
 import type { StoryDefinition } from '@/lib/db'
+import { needsLead } from '@/lib/world'
 
 import type { QueryAll } from './types'
 
@@ -27,8 +28,7 @@ export function awarenessScope(
   leadId: string | null,
   definition: Pick<StoryDefinition, 'mode' | 'narration'>,
 ): string[] {
-  const toldFromLead = definition.mode === 'adventure' || definition.narration !== 'third'
-  return leadId != null && toldFromLead
+  return leadId != null && needsLead(definition.mode, definition.narration)
     ? [...new Set([...sceneCharacterIds, leadId])]
     : [...sceneCharacterIds]
 }

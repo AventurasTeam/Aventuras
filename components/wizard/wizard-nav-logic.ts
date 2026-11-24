@@ -1,8 +1,9 @@
 import type { CalendarSystem } from '@/lib/calendar'
 import type { WizardCastDraft, WizardLoreDraft, WizardWorkingState } from '@/lib/db'
+import { needsLead } from '@/lib/world'
 
 import { castStepValid } from './step-cast-logic'
-import { needsLead, type Mode, type Narration } from './step-frame-logic'
+import type { Mode, Narration } from './step-frame-logic'
 import { worldStepValid } from './step-world-logic'
 import { validateOriginTuple } from './tier-tuple-input-logic'
 

@@ -3,10 +3,10 @@ import { View } from 'react-native'
 import { Heading } from '@/components/ui/heading'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
+import { needsLead } from '@/lib/world'
 
 import { CastList, type CastAssistSeams } from './cast-list'
 import { activeLead } from './step-cast-logic'
-import { needsLead } from './step-frame-logic'
 import { StepNotice } from './step-notice'
 
 // Re-exported so a route wires the step's seam from the step's own module

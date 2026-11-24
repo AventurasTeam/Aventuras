@@ -17,7 +17,7 @@ import {
   type RetrievalType,
 } from '@/lib/retrieval'
 import { appSettingsStore } from '@/lib/stores'
-import { resolveLead } from '@/lib/world'
+import { resolveLeadLogged } from '@/lib/world'
 
 import { EMBED_TIMEOUT_MS, resolveStoryEmbedder } from './blocking-embed'
 import { readSceneSource } from './entry-reads'
@@ -51,7 +51,7 @@ export async function* retrievalPhase(
   // sceneEntities itself is kind-mixed (data-model.md → Entry metadata shape).
   const sceneCharacterIds = awarenessScope(
     scene.sceneEntities.filter((id) => characterIds.has(id)),
-    resolveLead(open.definition.leadEntityId, new Map(entities.map((e) => [e.id, e])), branchId)
+    resolveLeadLogged(new Map(entities.map((e) => [e.id, e])), branchId, 'per-turn-retrieval')
       ?.id ?? null,
     open.definition,
   )

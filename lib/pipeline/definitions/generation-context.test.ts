@@ -9,6 +9,7 @@ import {
   type StoryEntry,
   type StorySettings,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, VARIABLES, type TemplateId } from '@/lib/prompts'
 import type {
@@ -289,28 +290,41 @@ describe('buildGenerationContext', () => {
       description: null,
       status: 'active',
       injectionMode: 'auto',
+      isLead: 0,
       ...over,
     })
 
-    it('names the lead by its placeholder and its name on one line', async () => {
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('names the flagged lead by its placeholder and its name on one line', async () => {
       const ctx = await buildContext({
-        entities: [character(OTHER, 'Jorin'), character(LEAD, 'Mara\nthe Bold')],
+        entities: [character(OTHER, 'Jorin'), character(LEAD, 'Mara\nthe Bold', { isLead: 1 })],
       })
       expect(ctx.lead).toEqual({ id: 'c2', name: 'Mara the Bold' })
       expect((ctx.entities as { id: string; name: string }[])[1]).toMatchObject({ id: 'c2' })
     })
 
-    it('is null when the story has no lead', async () => {
-      const ctx = await buildContext({
-        definition: { ...definition, leadEntityId: undefined },
-        entities: [character(LEAD, 'Mara')],
-      })
+    it('is null when no row on the branch carries the flag', async () => {
+      const ctx = await buildContext({ entities: [character(LEAD, 'Mara')] })
       expect(ctx.lead).toBeNull()
     })
 
-    it('is null when the lead dangles on this branch', async () => {
-      const gone = await buildContext({ entities: [character(OTHER, 'Jorin')] })
-      expect(gone.lead).toBeNull()
+    it('is null with two flagged rows, and logs the double from its site', async () => {
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+      const ctx = await buildContext({
+        entities: [
+          character(OTHER, 'Jorin', { isLead: 1 }),
+          character(LEAD, 'Mara', { isLead: 1 }),
+        ],
+      })
+      expect(ctx.lead).toBeNull()
+      expect(error).toHaveBeenCalledWith('pipeline.lead_double', {
+        site: 'generation-context',
+        branchId: 'b1',
+        ids: [OTHER, LEAD],
+      })
     })
   })
 

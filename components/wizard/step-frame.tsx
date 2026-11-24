@@ -7,8 +7,8 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 import { cn } from '@/lib/utils'
+import { needsLead } from '@/lib/world'
 
-import { needsLead } from './step-frame-logic'
 import { StepNotice } from './step-notice'
 
 type FrameOption = { value: string; label: string; description: string }

@@ -11,6 +11,7 @@ import {
   type Lore,
   type Thread,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import {
   chaptersStore,
   currentStoryStore,
@@ -127,13 +128,13 @@ function chapter(id: string, branchId: string): StoreChapter {
   }
 }
 
-function openStory(over: { branchId?: string; mode?: 'adventure' | 'creative'; lead?: string }) {
+function openStory(over: { branchId?: string; mode?: 'adventure' | 'creative' }) {
   currentStoryStore.set({
     storyId: 's1',
     branchId: over.branchId ?? 'br_1',
     definition: storyDefinitionSchema.parse({
       mode: over.mode ?? 'adventure',
-      leadEntityId: over.lead ?? 'char_kael',
+      leadEntityId: 'char_kael',
       narration: 'second',
       genre: { label: 'Fantasy', promptBody: '' },
       tone: { label: 'Wry', promptBody: '' },
@@ -146,7 +147,7 @@ function openStory(over: { branchId?: string; mode?: 'adventure' | 'creative'; l
 }
 
 const ENTITIES = [
-  entity('char_kael', 'character'),
+  entity('char_kael', 'character', { isLead: 1 }),
   entity('char_mira', 'character', {
     nameCollisionFlag: 1,
     nameCollisionPartnerId: 'char_kael',
@@ -225,17 +226,35 @@ describe('useRailData', () => {
     expect(creative.result.current.rowSignals('char_kael').lead).toBe('protagonist')
   })
 
-  it('reads no lead from a story open on another branch', () => {
+  it("reads the lead off its branch's rows, labelled only once the story is open there", () => {
     openStory({ branchId: 'br_2' })
+    const { result } = renderHook(() => useRailData('br_1'))
+    expect(result.current.entityListSignals.leadId).toBe('char_kael')
+    expect(result.current.rowSignals('char_kael').lead).toBeNull()
+  })
+
+  it('reads no lead when no row on the branch carries the flag', () => {
+    entitiesStore.hydrate('br_1', [
+      entity('char_kael', 'character'),
+      entity('char_mira', 'character'),
+    ])
+    openStory({})
     const { result } = renderHook(() => useRailData('br_1'))
     expect(result.current.entityListSignals.leadId).toBeNull()
     expect(result.current.rowSignals('char_kael').lead).toBeNull()
   })
 
-  it('treats a lead that is not a character on the branch as absent', () => {
-    openStory({ lead: 'item_blade' })
+  it('reads no lead with two flagged rows, and logs nothing from the render path', () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    entitiesStore.hydrate('br_1', [
+      entity('char_kael', 'character', { isLead: 1 }),
+      entity('char_mira', 'character', { isLead: 1 }),
+    ])
+    openStory({})
     const { result } = renderHook(() => useRailData('br_1'))
     expect(result.current.entityListSignals.leadId).toBeNull()
+    expect(error).not.toHaveBeenCalled()
+    error.mockRestore()
   })
 
   it('carries lead, in-scene and recently-classified, never a collision', () => {

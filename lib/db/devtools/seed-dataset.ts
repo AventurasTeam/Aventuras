@@ -510,6 +510,7 @@ const heroEntities: NewEntity[] = [
       },
     }),
     embeddingStale: 1,
+    isLead: 1,
     createdAt: BASE,
     updatedAt: BASE + 12 * DAY,
   },
@@ -1472,6 +1473,7 @@ const fillerLead: NewEntity = {
     lastSeenAt: null,
   }),
   embeddingStale: 1,
+  isLead: 1,
   createdAt: BASE + 2 * DAY,
   updatedAt: BASE + 2 * DAY,
 }

@@ -98,8 +98,6 @@ function makeProxy(sqlite: DatabaseSync) {
 type Branch = {
   /** stories.settings.classifierMentionedPlaces, which picks the pass's prompt and reply schema. */
   mentionedPlaces: boolean
-  /** stories.definition.leadEntityId, which may dangle on this branch. */
-  leadEntityId: string | null
   mode: StoryMode
   entities: Entity[]
   /** The Known happenings the pass would list for this window. */
@@ -136,7 +134,6 @@ async function readBranch(dbPath: string, maxEntries: number): Promise<Branch> {
     const definition = storyDefinitionSchema.parse(story.definition)
     return {
       mentionedPlaces: settings.classifierMentionedPlaces,
-      leadEntityId: definition.leadEntityId ?? null,
       mode: definition.mode,
       entities: (await db
         .select()
@@ -406,9 +403,7 @@ async function probeBranch(config: ResolveModelConfig, maxEntries: number): Prom
       relationships: branch.relationships,
       threads: branch.threads,
       mentionedPlaces: branch.mentionedPlaces,
-      leadId:
-        resolveLead(branch.leadEntityId, new Map(branch.entities.map((e) => [e.id, e])), BRANCH_ID)
-          ?.id ?? null,
+      leadId: resolveLead(new Map(branch.entities.map((e) => [e.id, e])), BRANCH_ID)?.id ?? null,
       mode: branch.mode,
       idMap: new IdBiMap(),
     }),
