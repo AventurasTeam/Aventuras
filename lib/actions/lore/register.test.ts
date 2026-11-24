@@ -508,28 +508,25 @@ describe('branch scope', () => {
     payload: { entry: WRITTEN },
   }
 
-  it.each<[string, PipelineAction, string]>([
-    [
-      'createLore',
-      {
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
         kind: 'createLore',
         source: 'lore_agent',
         payload: { entry: { ...WRITTEN, id: 'lore_9', branchId: 'br_1' } },
       },
-      'branch mismatch: delta br_2 vs entry br_1',
-    ],
-    [
-      'updateLore',
-      {
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
         kind: 'updateLore',
         source: 'user_edit',
         payload: { branchId: 'br_1', id: 'lore_1', patch: { priority: 50 }, proseEntryId: null },
       },
-      TARGET_MISMATCH,
-    ],
-    [
-      'setLoreKeywords',
-      {
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
         kind: 'setLoreKeywords',
         source: 'chapter_close',
         payload: {
@@ -540,16 +537,21 @@ describe('branch scope', () => {
           proseEntryId: null,
         },
       },
-      TARGET_MISMATCH,
-    ],
-    [
-      'deleteLore',
-      { kind: 'deleteLore', source: 'user_edit', payload: { branchId: 'br_1', id: 'lore_1' } },
-      TARGET_MISMATCH,
-    ],
-  ])(
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
+        kind: 'deleteLore',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'lore_1' },
+      },
+      reason: TARGET_MISMATCH,
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
     '%s payload: names the sibling branch and is refused, both rows unchanged',
-    async (_kind, action, reason) => {
+    async (_kind, { action, reason }) => {
       const { db, ctx } = await twoBranches({ written: true })
       expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
       expect(await allLore(db)).toEqual([SIBLING, WRITTEN])

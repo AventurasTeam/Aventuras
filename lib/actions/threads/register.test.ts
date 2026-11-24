@@ -1094,19 +1094,17 @@ describe('branch scope', () => {
   const onFork = (ctx: Ctx, action: PipelineAction, actionId: string) =>
     applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
 
-  it.each<[string, PipelineAction, string]>([
-    [
-      'createThread',
-      {
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
         kind: 'createThread',
         source: 'chapter_close',
         payload: { entry: { ...WRITTEN, id: 'thr_9', branchId: 'br_1' } },
       },
-      'branch mismatch: delta br_2 vs entry br_1',
-    ],
-    [
-      'updateThread',
-      {
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
         kind: 'updateThread',
         source: 'user_edit',
         payload: {
@@ -1116,25 +1114,29 @@ describe('branch scope', () => {
           proseEntryId: null,
         },
       },
-      TARGET_MISMATCH,
-    ],
-    [
-      'setThreadStatus',
-      {
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
         kind: 'setThreadStatus',
         source: 'periodic_classifier',
         payload: { branchId: 'br_1', id: 'thr_1', status: 'active', proseEntryId: null },
       },
-      TARGET_MISMATCH,
-    ],
-    [
-      'deleteThread',
-      { kind: 'deleteThread', source: 'user_edit', payload: { branchId: 'br_1', id: 'thr_1' } },
-      TARGET_MISMATCH,
-    ],
-  ])(
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
+        kind: 'deleteThread',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'thr_1' },
+      },
+      reason: TARGET_MISMATCH,
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
     '%s payload: names the sibling branch and is refused, both rows unchanged',
-    async (_kind, action, reason) => {
+    async (_kind, { action, reason }) => {
       const { db, ctx } = await twoBranches({ written: true })
       expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
       expect(await allThreads(db)).toEqual([SIBLING, WRITTEN])

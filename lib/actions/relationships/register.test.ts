@@ -712,17 +712,16 @@ describe('branch scope', () => {
     payload: { branchId, subjectId: 'char_aria', objectId: 'char_kael', kind, proseEntryId: null },
   })
 
-  it.each<[string, PipelineAction]>([
-    ['upsertCharacterRelationship', classify('br_1', 'ally')],
-    [
-      'deleteCharacterRelationship',
-      {
-        kind: 'deleteCharacterRelationship',
-        source: 'user_edit',
-        payload: { branchId: 'br_1', id: 'rel_1' },
-      },
-    ],
-  ])(
+  const PAYLOAD_ACTIONS: PipelineAction[] = [
+    classify('br_1', 'ally'),
+    {
+      kind: 'deleteCharacterRelationship',
+      source: 'user_edit',
+      payload: { branchId: 'br_1', id: 'rel_1' },
+    },
+  ]
+
+  it.each(PAYLOAD_ACTIONS.map((a) => [a.kind, a] as const))(
     '%s payload: names the sibling branch and is refused, both rows unchanged',
     async (_kind, action) => {
       const { db, ctx } = await twoBranches(WRITTEN)
