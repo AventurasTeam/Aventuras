@@ -129,6 +129,7 @@ describe('readBranchWorkingSet', () => {
 
     if (read.status !== 'ok') throw new Error(`expected an ok read, got ${read.status}`)
     expect(read.set.storyId).toBe('story_1')
+    expect(read.set.branchId).toBe('br_2')
     expect(read.set.definition).toEqual(DEFINITION)
     expect(read.set.settings).toEqual(storySettingsSchema.parse(STORY_SETTINGS_DEFAULTS))
     expect(read.set.entries.map((r) => r.id)).toEqual(['e_2'])
@@ -146,7 +147,7 @@ describe('fillWorkingSet', () => {
     const read = await readBranchWorkingSet('br_2', ctx, () => true)
     if (read.status !== 'ok') throw new Error(`expected an ok read, got ${read.status}`)
 
-    fillWorkingSet('br_2', read.set)
+    fillWorkingSet(read.set)
 
     expect({
       entries: entriesStore.getLoadedBranch(),

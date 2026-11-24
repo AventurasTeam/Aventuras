@@ -113,6 +113,7 @@ type Rows<S extends { hydrate: (branchId: string, rows: never) => void }> = Para
 
 export type BranchWorkingSet = {
   storyId: string
+  branchId: string
   definition: StoryDefinition
   settings: StorySettings
   entries: Rows<typeof entriesStore>
@@ -231,6 +232,7 @@ export async function readBranchWorkingSet(
     status: 'ok',
     set: {
       storyId: row.storyId,
+      branchId,
       definition,
       settings,
       entries: entryRows,
@@ -249,7 +251,8 @@ export async function readBranchWorkingSet(
 }
 
 /** The eleven working-set hydrates, synchronous, in the load's order. */
-export function fillWorkingSet(branchId: string, set: BranchWorkingSet): void {
+export function fillWorkingSet(set: BranchWorkingSet): void {
+  const { branchId } = set
   entriesStore.hydrate(branchId, set.entries)
   entitiesStore.hydrate(branchId, set.entities)
   loreStore.hydrate(branchId, set.lore)
@@ -288,10 +291,15 @@ async function loadAndPublish(
   if (!isCurrentRequest()) return { status: 'cancelled' }
   const { set } = read
   storiesStore.clearOpenFailure(set.storyId)
-  fillWorkingSet(branchId, set)
-  publish({ storyId: set.storyId, branchId, definition: set.definition, settings: set.settings })
+  fillWorkingSet(set)
+  publish({
+    storyId: set.storyId,
+    branchId: set.branchId,
+    definition: set.definition,
+    settings: set.settings,
+  })
   afterBranchPublished(set.storyId)
-  return { status: 'ok', storyId: set.storyId, branchId }
+  return { status: 'ok', storyId: set.storyId, branchId: set.branchId }
 }
 
 // Route hydration (reload, deep link, branch switch): re-publishes without marking an open.

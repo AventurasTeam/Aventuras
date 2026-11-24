@@ -124,10 +124,10 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
     })
     return restoreThen(input, ctx, { status: 'failed', code: 'navigation-blocked' })
   }
-  fillAndPublish(storyId, toBranchId, read.set)
+  fillAndPublish(read.set)
   chapterOverlaysStore.clearCloseResult()
   readerHoldStore.release(input.hold)
-  afterBranchPublished(storyId)
+  afterBranchPublished(read.set.storyId)
   return { status: 'ok' }
 }
 
@@ -190,9 +190,10 @@ function failAndRestore(
 }
 
 // The live story's fields, not the read's: a settings write that landed during the read stays.
-function fillAndPublish(storyId: string, branchId: string, set: BranchWorkingSet): void {
+function fillAndPublish(set: BranchWorkingSet): void {
+  const { storyId, branchId } = set
   storiesStore.clearOpenFailure(storyId)
-  fillWorkingSet(branchId, set)
+  fillWorkingSet(set)
   const live = currentStoryStore.getCurrentStory()
   currentStoryStore.set(
     live?.storyId === storyId
@@ -231,11 +232,11 @@ export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<Sh
       logger.warn('action_layer.branch_show_navigation_blocked', { storyId, branchId })
       return { status: 'navigation-blocked' }
     }
-    if (set != null) fillAndPublish(storyId, branchId, set)
+    if (set != null) fillAndPublish(set)
     chapterOverlaysStore.clearCloseResult()
     readerHoldStore.release(hold)
     if (set == null) return { status: 'shown-unloaded' }
-    afterBranchPublished(storyId)
+    afterBranchPublished(set.storyId)
     return { status: 'ok' }
   } finally {
     readerHoldStore.release(hold)
