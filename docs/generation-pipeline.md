@@ -2984,7 +2984,10 @@ orchestrator holds under the run's `actionId` through the action port
 (`holdBranchWriteExclusive` / `releaseBranchWriteExclusive`); and a
 close's re-run's `reversal` phase around its journaled reversal, held
 the same way, which checks the run's abort signal once the hold is
-granted, so a Cancel that landed while it queued costs no reversal. Boot
+granted, so a Cancel that landed while it queued costs no reversal. A
+fork takes its parent's lock exclusive too, from before its first plan
+read until its batch commits
+([`data-model.md → Branch model`](./data-model.md#branch-model)). Boot
 recovery runs before any branch loads. The rollback preview writes
 nothing but takes the lock shared around its set selection and the
 counts it reads from that set, so no reversal can land between those
@@ -2995,8 +2998,8 @@ reverses them before the sweep; the set keeps them, so a run that
 commits as the interrupt lands changes the counts. A pass's burst
 takes no hold across its writes, so a preview may see part of one; the
 confirm-time count check (`counts-changed`) keeps the confirm exact. A
-write arriving meanwhile waits a few milliseconds; nothing is disabled
-or refused.
+write arriving meanwhile waits, a few milliseconds behind a reversal
+and through a fork's plan and batch; nothing is disabled or refused.
 
 The writers of story state otherwise never meet: every kind holds the
 gate, chains start a successor only after the predecessor commits, and

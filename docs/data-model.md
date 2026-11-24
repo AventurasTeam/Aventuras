@@ -590,7 +590,7 @@ cases are the common shapes of the drop rule every sweep shares
 which decides. A case-3 fork drops the journal too when its plan
 removes one of the re-run's own deltas outside `chapters` and
 `story_entries`, removes or rewrites a delta at or below the floor
-other than the chapter row's and the close's stamps (one the closure
+other than the chapter row's and a close's stamps (one the closure
 reaches, a held delete's payload, a survivor's prior value), or
 removes the group's last delta.
 
@@ -617,7 +617,7 @@ story as it stands, with no rewind; the Notes describe the fork:
 | `*_vec` (embeddings)      | Copy post-rewind        | Copy all rows      | Copied last inside the same transaction with synthesized `pk = <newBranchId>:<id>:<model_id>`, filtered to surviving rows on the new branch so removed rows' vectors are never written or scanned. Storage-optimization followup parked.                                                                                     |
 | `probe_captures`          | **Not copied**          | **Not copied**     | Skipped by both copies, like `pipeline_runs`. A capture is meaningful only against the candidate pool that existed when it was written, and a fork immediately diverges that pool; the new branch starts empty. See [probe.md → Branch fork and capture portability](./memory/probe.md#branch-fork-and-capture-portability). |
 | `deltas`                  | Copy survivors          | Copy all rows      | Surviving deltas only (source-blind survival-anchor predicate minus the reversal plan's full prune set), then surviving-delta updates (prior-value rewrites, held-delete payload patches, re-owned creates) apply on the new branch. Composite PK `(branch_id, id)` keeps delta IDs verbatim.                                |
-| `reversal_journals`       | Copy survivors          | Copy all rows      | Copied only when the re-run's group survives and no rewind sweeps from below its first `log_position` (four-case table above).                                                                                                                                                                                               |
+| `reversal_journals`       | Copy survivors          | Copy all rows      | Copied only when the re-run's group survives and no rewind sweeps from at or below its floor (four-case table above).                                                                                                                                                                                                        |
 | `pipeline_runs`           | **Not copied**          | **Not copied**     | Run bookkeeping, not story state: a copy starts with no run history. An unfinished run's writes never copy either: fork and duplicate refuse a copy that would carry them.                                                                                                                                                   |
 
 If a branch-scoped table is added to the schema later, it MUST get a

@@ -355,11 +355,15 @@ watermark lower.
 
 The seed's second hero branch, `br_hero_fork`, is a real fork: every
 `pnpm db:seed` mode and the on-device reseed route run the fork's core
-(`seedHeroFork`, `lib/actions/stories/seed-hero-fork.ts`) on
+through `seedHeroFork` (`lib/actions/stories/seed-hero-fork.ts`) on
 `br_hero_main` after the static rows, with a fixed id and time, then
 append five turns of the fork's own and park its watermark. It holds
-main's rows through its fork entry under main's ids, so a spec reading
-a seeded id scopes the read to the branch it opened.
+main's entries through its fork entry and main's other rows as a
+rollback to that entry leaves them, all under main's ids, so a spec
+reading a seeded id scopes the read to the branch it opened. The hero
+seed logs no delta for most world rows, so those stay as main holds
+them, including some tied to entries after the fork entry (a thread
+resolved at `entry_hero_0047`).
 
 ### Substitutable IDs must be real UUIDs
 
