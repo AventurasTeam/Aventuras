@@ -1,14 +1,6 @@
 import type { TriggerRef } from '@rn-primitives/popover'
 import { Check, Circle, Pencil, Trash2, X } from 'lucide-react-native'
-import {
-  useImperativeHandle,
-  useRef,
-  useState,
-  type Dispatch,
-  type ReactElement,
-  type Ref,
-  type SetStateAction,
-} from 'react'
+import { useImperativeHandle, useRef, useState, type ReactElement, type Ref } from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler'
 
@@ -65,7 +57,24 @@ const POPOVER_ARM: Arm = {
 const POPOVER_SCROLL = GestureScrollView as ScrollComponent
 const SHEET_ARM: Arm = { root: 'flex-1 gap-2', row: 'min-h-control-lg', list: { flex: 1 } }
 
-type SetRenaming = Dispatch<SetStateAction<string | null>>
+type RenameEdit = { id: string; session: number }
+
+/** At most one row's editor is open. Each opening is its own session, so a save that settles after
+ * its editor was replaced closes nothing: the same row's newer editor has another session. */
+function useRenaming() {
+  const [edit, setEdit] = useState<RenameEdit | null>(null)
+  const sessions = useRef(0)
+  return {
+    editingId: edit?.id ?? null,
+    session: edit?.session ?? null,
+    start: (id: string) => setEdit({ id, session: ++sessions.current }),
+    stop: () => setEdit(null),
+    finish: (session: number | null) =>
+      setEdit((current) => (current?.session === session ? null : current)),
+  }
+}
+
+type Renaming = ReturnType<typeof useRenaming>
 
 /** Popover on desktop and tablet, a short bottom Sheet on phone; the handle opens either arm. */
 export function BranchNavigator(props: BranchNavigatorProps): ReactElement {
@@ -89,10 +98,10 @@ function currentFirst(
 
 function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProps) {
   const trigger = useRef<TriggerRef>(null)
-  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const renaming = useRenaming()
   const [open, reportOpen] = useReportedOpen(onOpenChange)
   const change = (next: boolean) => {
-    if (!next) setRenamingId(null)
+    if (!next) renaming.stop()
     reportOpen(next)
   }
   const close = () => trigger.current?.close()
@@ -149,7 +158,8 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
         className="w-[360px] p-0"
         // Radix hears Esc first, on the document; Esc aimed at the rename input is its cancel.
         onEscapeKeyDown={(event) => {
-          if (renamingId != null && event.target instanceof HTMLInputElement) event.preventDefault()
+          if (renaming.editingId != null && event.target instanceof HTMLInputElement)
+            event.preventDefault()
         }}
         onInteractOutside={() => {
           interactedOutside.current = true
@@ -159,8 +169,7 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
           <NavigatorBody
             {...content}
             arm={POPOVER_ARM}
-            renamingId={renamingId}
-            setRenamingId={setRenamingId}
+            renaming={renaming}
             close={close}
             closeThen={closeThen}
             onClose={close}
@@ -178,12 +187,12 @@ function SheetArm({
   afterDismiss,
   ...content
 }: BranchNavigatorProps & { afterDismiss: HeldUntilDismissed }) {
-  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const renaming = useRenaming()
   const [open, reportOpen] = useReportedOpen(onOpenChange)
   // layout.md → Stacking: the Sheet dismisses before the reader it leads to takes over.
   const change = (next: boolean) => {
     if (next) afterDismiss.clear()
-    else setRenamingId(null)
+    else renaming.stop()
     reportOpen(next)
   }
   const close = () => change(false)
@@ -210,8 +219,7 @@ function SheetArm({
         <NavigatorBody
           {...content}
           arm={SHEET_ARM}
-          renamingId={renamingId}
-          setRenamingId={setRenamingId}
+          renaming={renaming}
           close={close}
           closeThen={closeThen}
         />
@@ -225,8 +233,7 @@ type NavigatorBodyProps = Pick<
   'rows' | 'currentBranchId' | 'paused' | 'onSwitch' | 'onRename' | 'onDelete'
 > & {
   arm: Arm
-  renamingId: string | null
-  setRenamingId: SetRenaming
+  renaming: Renaming
   close: () => void
   /** Closes the overlay, then runs `run`: at once on the Popover, after its exit on the Sheet. */
   closeThen: (run: () => void) => void
@@ -242,8 +249,7 @@ function NavigatorBody({
   onRename,
   onDelete,
   arm,
-  renamingId,
-  setRenamingId,
+  renaming,
   close,
   closeThen,
   onClose,
@@ -280,12 +286,12 @@ function NavigatorBody({
             row={row}
             current={row.id === currentBranchId}
             paused={paused}
-            renaming={row.id === renamingId}
+            renaming={row.id === renaming.editingId}
             className={arm.row}
             onPress={() => press(row.id)}
-            onStartRename={() => setRenamingId(row.id)}
+            onStartRename={() => renaming.start(row.id)}
             onRename={(name) => onRename(row.id, name)}
-            onRenameDone={() => setRenamingId((id) => (id === row.id ? null : id))}
+            onRenameDone={() => renaming.finish(renaming.session)}
             onDelete={onDelete != null ? () => onDelete(row.id) : undefined}
           />
         ))}

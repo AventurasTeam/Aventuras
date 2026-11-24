@@ -537,6 +537,39 @@ export const CurrentBranchNotInRows: Story = {
   },
 }
 
+/** A save settling after its editor was replaced closes only the editor that started it. */
+export const LateSaveLeavesANewerEditorOpen: Story = {
+  args: { onRename: fn() },
+  play: async ({ args }) => {
+    const pending: (() => void)[] = []
+    ;(args.onRename as ReturnType<typeof fn>).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          pending.push(resolve)
+        }),
+    )
+    await waitForTier('desktop')
+    await openFromChip()
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Main' }))
+    await renameField()
+    await userEvent.keyboard('First{Enter}')
+    await waitFor(() => expect(args.onRename).toHaveBeenCalledTimes(1))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rename The road not taken' }))
+    await renameField()
+    await userEvent.click(screen.getByRole('button', { name: 'Rename Main' }))
+    await renameField()
+    await userEvent.keyboard('Second')
+
+    pending[0]()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    const field = screen.getByRole('textbox', { name: 'Branch name' })
+    await expect(field).toHaveValue('Second')
+    await expect(args.onRename).toHaveBeenCalledTimes(1)
+  },
+}
+
 export const CloseMidRenameSaves: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')
