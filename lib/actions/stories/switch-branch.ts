@@ -244,7 +244,7 @@ export type ShowBranchResult =
 
 /**
  * C8: shows a branch its caller's own transaction made current, as a fork does: the switch's read,
- * re-read and block, with no gate, no pointer write and no abandon. It never moves the pointer.
+ * re-read and block, with no gate, no pointer write and no abandon.
  */
 export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
   const { storyId, branchId, hold, replaceStack } = input

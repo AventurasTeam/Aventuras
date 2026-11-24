@@ -302,7 +302,7 @@ async function loadAndPublish(
   return { status: 'ok', storyId: set.storyId, branchId: set.branchId }
 }
 
-// Route hydration (reload, deep link, branch switch): re-publishes without marking an open.
+// Route hydration (reload, deep link, a fork shown unloaded): re-publishes without marking an open.
 export function loadOpenStory(
   branchId: string,
   ctx: DbCtx,
