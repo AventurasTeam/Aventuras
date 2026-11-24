@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react'
  * An overlay's open state that reports changes only: a Popover's `TriggerRef.close()` calls
  * `onOpenChange` on a closed popover too.
  */
-export function useReportedOpen(onOpenChange: ((open: boolean) => void) | undefined) {
+export function useReportedOpen(
+  onOpenChange: ((open: boolean) => void) | undefined,
+): readonly [open: boolean, change: (next: boolean) => void] {
   const [open, setOpen] = useState(false)
   const change = (next: boolean) => {
     if (next === open) return

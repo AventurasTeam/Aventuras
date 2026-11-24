@@ -14,6 +14,7 @@ import {
   storiesStore,
   type ReaderHoldToken,
 } from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 
 import type { DbCtx } from '../types'
 import {
@@ -48,8 +49,6 @@ type RefusalCode = Extract<SwitchBranchResult, { status: 'refused' }>['code']
 type FailureCode = Extract<SwitchBranchResult, { status: 'failed' }>['code']
 type FailureDetail = { error?: string; readStatus?: ReadBranchResult['status'] }
 type BlockedCause = 'busy' | 'turn-body' | 'reset-refused'
-
-const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 /**
  * C8: writes the pointer, reads the branch and re-reads the stories, then in one synchronous block
@@ -104,7 +103,7 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
   try {
     read = await readBranchWorkingSet(toBranchId, ctx, isCurrentRequest)
   } catch (err) {
-    return failAndRestore(input, ctx, 'load', { error: errorText(err) })
+    return failAndRestore(input, ctx, 'load', { error: messageOf(err) })
   }
   if (read.status === 'cancelled') return restoreThen(input, ctx, { status: 'abandoned' })
   if (read.status !== 'ok') return failAndRestore(input, ctx, 'load', { readStatus: read.status })
@@ -117,7 +116,7 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
   try {
     blocked = resetUnlessBlocked(input)
   } catch (err) {
-    return failAndRestore(input, ctx, 'navigation-blocked', { error: errorText(err) })
+    return failAndRestore(input, ctx, 'navigation-blocked', { error: messageOf(err) })
   }
   if (blocked != null) {
     logger.warn('action_layer.branch_switch_navigation_blocked', {
@@ -164,7 +163,7 @@ async function writeRestoreWithRetry(input: SwitchBranchInput, ctx: DbCtx): Prom
       storyId,
       fromBranchId,
       toBranchId,
-      error: errorText(err),
+      error: messageOf(err),
     })
     await writePointer(ctx, storyId, fromBranchId)
   }
@@ -184,7 +183,7 @@ async function restoreThen(
       storyId,
       fromBranchId,
       toBranchId,
-      error: errorText(err),
+      error: messageOf(err),
     })
   }
   // One more try keeps a transient failure off the story list.
@@ -261,7 +260,7 @@ export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<Sh
       logger.warn('action_layer.branch_show_navigation_blocked', {
         storyId,
         branchId,
-        error: errorText(err),
+        error: messageOf(err),
       })
       return { status: 'navigation-blocked' }
     }
@@ -293,7 +292,7 @@ async function readForShow(
     logger.error('action_layer.branch_show_load_failed', {
       storyId,
       branchId,
-      error: errorText(err),
+      error: messageOf(err),
     })
     return null
   }

@@ -27,16 +27,13 @@ export function useReaderDispatch(branchId: string): ReaderDispatch {
   // A hold whose switch never reached its navigation ends with the reader.
   useEffect(() => () => readerHoldStore.clear(branchId), [branchId])
   const isHeld = useCallback(() => readerHoldStore.isHeld(branchId), [branchId])
-  const isBlocked = useCallback(
-    () => inFlightRef.current || readerHoldStore.isHeld(branchId),
-    [branchId],
-  )
+  const isBlocked = useCallback(() => inFlightRef.current || isHeld(), [isHeld])
   const begin = useCallback((): boolean => {
-    if (inFlightRef.current || readerHoldStore.isHeld(branchId)) return false
+    if (isBlocked()) return false
     inFlightRef.current = true
     setInFlight(true)
     return true
-  }, [branchId])
+  }, [isBlocked])
   const end = useCallback(() => {
     inFlightRef.current = false
     setInFlight(false)

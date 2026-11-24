@@ -3,8 +3,6 @@ import { t } from '@/lib/i18n'
 
 import { undoHold } from './row-reversal-flags'
 
-type Control = HeldControl
-
 /**
  * The menu's Undo and Redo gates; a loading branch refuses both, naming the load first. Undo of
  * the turn is a head reversal, live through a pass (the action `gated`-refuses other targets, and
@@ -17,9 +15,9 @@ export function readerUndoRedoGates(input: {
   actionsBlocked: boolean
   editorOpen: boolean
   reasons: { gate: string | undefined; headReversal: string | undefined }
-}): { undo: Control; redo: Control } {
+}): { undo: HeldControl; redo: HeldControl } {
   if (!input.hydrated) {
-    const loading: Control = { disabled: true, reason: t('reader:hydrationLoading') }
+    const loading: HeldControl = { disabled: true, reason: t('reader:hydrationLoading') }
     return { undo: loading, redo: loading }
   }
   const held = t('reader:editFocus.held')
