@@ -568,6 +568,56 @@ describe('store refresh on every engine exit', () => {
     const settings = storiesStore.getStories().rows.find((row) => row.id === 's1')?.settings
     expect(settings?.embedding_swap_target).toBe(MINILM)
   })
+
+  // A branch switch publishes with currentStoryStore.set; a refresh spreading the story it read
+  // before its settings read would put the branch left back.
+  it('keeps a branch published during its settings read, carrying the new settings', async () => {
+    const settings = storySettings({ embeddingBackend: 'local' }, MINILM, null)
+    const { ctx } = await seedStores(settings)
+    const definition = storyDefinitionSchema.parse({
+      mode: 'adventure',
+      leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
+      narration: 'first',
+      genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+      tone: { label: 'Wry', promptBody: 'wry' },
+      setting: 'A keep on a hill.',
+      calendarSystemId: 'gregorian',
+      worldTimeOrigin: { year: 0 },
+    })
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
+    let engineDone = false
+    vi.mocked(startSwap).mockImplementation(async () => {
+      await ctx.runInTransaction([
+        setSwapTargetOp('s1', { modelId: MINILM, backend: 'local' }, 2000),
+      ])
+      engineDone = true
+      return 'completed'
+    })
+    const select = ctx.db.select.bind(ctx.db)
+    vi.spyOn(ctx.db, 'select').mockImplementation(((...args: Parameters<typeof select>) => {
+      const fields: unknown = args[0]
+      // The first settings-only read past the engine is the refresh's own.
+      if (
+        engineDone &&
+        typeof fields === 'object' &&
+        fields !== null &&
+        Object.keys(fields).join() === 'settings'
+      ) {
+        engineDone = false
+        const open = currentStoryStore.getCurrentStory()
+        if (open != null) currentStoryStore.set({ ...open, branchId: 'b2' })
+      }
+      return select(...args)
+    }) as unknown as typeof ctx.db.select)
+
+    await expect(startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx)).resolves.toBe(
+      'completed',
+    )
+
+    const open = currentStoryStore.getCurrentStory()
+    expect(open?.branchId).toBe('b2')
+    expect(open?.settings.embedding_swap_target).toBe(MINILM)
+  })
 })
 
 describe('cancelStorySwap outcome', () => {
