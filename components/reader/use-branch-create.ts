@@ -1,0 +1,225 @@
+import { useCallback, useRef, useState } from 'react'
+
+import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
+import {
+  FORK_REFUSAL,
+  forkBranch,
+  showBranch,
+  type ForkRefusal,
+  type ForkResult,
+  type ShowBranchResult,
+} from '@/lib/actions'
+import { db, runInTransaction } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { t } from '@/lib/i18n'
+import {
+  currentStoryStore,
+  entriesStore,
+  generationStore,
+  isStoryBusy,
+  readerHoldStore,
+  refreshBranches,
+} from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
+import { toast } from '@/lib/toast'
+
+import type { BranchCreateModalProps } from './branch-create-modal'
+import { switchGateReason } from './switch-result-notice'
+
+const ctx = { db, runInTransaction }
+
+export type UseBranchCreateArgs = {
+  storyId: string | null
+  /** The reader's branch: the fork's parent. */
+  branchId: string
+  /** The reader's dispatch guard (a dispatch in flight or the reader held), read live. */
+  isDispatchBlocked: () => boolean
+  replaceStack: ReplaceStoryStack
+  /** A pending embedder swap: the modal opens refused. */
+  swapPending: boolean
+}
+
+export type BranchCreate = {
+  /** ReaderSurfaceProps['onBranch']: settles, never rejects. */
+  onBranch: (entryId: string) => Promise<void>
+  /** The open modal's props, or null with none open. */
+  modal: BranchCreateModalProps | null
+}
+
+type ForkAt = { entryId: string; position: number }
+
+// C8: the new reader re-reads the list on mount too, so a failure here is only logged. The store
+// holds one story's rows: a refresh for a story no longer open would replace another story's.
+function refreshAfterFork(storyId: string): void {
+  if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
+  void refreshBranches(db, storyId).catch((error: unknown) =>
+    logger.warn('app.branches_refresh_failed', { storyId, error: messageOf(error) }),
+  )
+}
+
+// branch-navigator.md → Branch creation — modal: forkBranch decides the refusal; this words it.
+function refusalLine(
+  refusal: ForkRefusal,
+  storyId: string,
+  at: { branchId: string; entryId: string },
+): string {
+  switch (refusal.code) {
+    case FORK_REFUSAL.gated:
+      return switchGateReason(generationStore.getTxState(), storyId)
+    case FORK_REFUSAL.swapPending:
+      return t('reader:actions.blockedWhileSwapping')
+    case FORK_REFUSAL.unfinishedRun:
+      return t('reader:branches.create.unfinishedRun')
+    case FORK_REFUSAL.entryMissing:
+    case FORK_REFUSAL.entrySystem:
+      return t('reader:branches.create.entryGone')
+    default:
+      logger.warn('reader.branch_create_refused', { ...at, code: refusal.code })
+      return t('reader:branches.create.failed')
+  }
+}
+
+/**
+ * reader-composer.md → Per-entry actions, `⎇`: opens the creation modal on an entry and runs its
+ * Create: the fork, the tail onto the new branch and the branch list's refresh (C8).
+ */
+export function useBranchCreate({
+  storyId,
+  branchId,
+  isDispatchBlocked,
+  replaceStack,
+  swapPending,
+}: UseBranchCreateArgs): BranchCreate {
+  const [request, setRequest] = useState<ForkAt | null>(null)
+  const [pending, setPending] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  // Read synchronously, so a second press returns before it reaches forkBranch.
+  const pendingRef = useRef(false)
+
+  // On native a rejection would re-reject inside the WebView, unlogged.
+  const onBranch = useCallback(
+    async (entryId: string): Promise<void> => {
+      if (storyId == null) return
+      try {
+        if (isDispatchBlocked()) return
+        const entry = entriesStore.getById(branchId, entryId)
+        if (entry == null) {
+          logger.warn('reader.branch_create_entry_missing', { branchId, entryId })
+          return
+        }
+        setRequest({ entryId, position: entry.position })
+      } catch (error) {
+        logger.error('reader.branch_create_open_failed', {
+          branchId,
+          entryId,
+          error: messageOf(error),
+        })
+        toast.error(t('reader:branches.create.failed'))
+      }
+    },
+    [storyId, branchId, isDispatchBlocked],
+  )
+
+  const endPending = (line: string | null) => {
+    pendingRef.current = false
+    setPending(false)
+    setMessage(line)
+  }
+
+  const close = () => {
+    endPending(null)
+    setRequest(null)
+  }
+
+  const create = async (sid: string, at: ForkAt, name: string): Promise<void> => {
+    const logAt = { branchId, entryId: at.entryId }
+    pendingRef.current = true
+    setPending(true)
+    setMessage(null)
+    // C8: from the press to the navigation, a Send in the reader refuses as during a dispatch.
+    const hold = readerHoldStore.take(branchId)
+    const refuse = (line: string) => {
+      readerHoldStore.release(hold)
+      endPending(line)
+    }
+    // switchBranch refuses both before its reset, and forkBranch's gate leaves both out.
+    const txState = generationStore.getTxState()
+    if (isStoryBusy(txState, sid, branchId) || generationStore.isTurnBodyActive(branchId)) {
+      refuse(switchGateReason(txState, sid))
+      return
+    }
+    let forked: ForkResult
+    try {
+      forked = await forkBranch(
+        { parentBranchId: branchId, forkEntryId: at.entryId, name, makeCurrent: true },
+        ctx,
+      )
+    } catch (error) {
+      logger.error('reader.branch_create_failed', { ...logAt, error: messageOf(error) })
+      refuse(t('reader:branches.create.failed'))
+      return
+    }
+    if (forked.status === 'rejected') {
+      refuse(refusalLine(forked, sid, logAt))
+      return
+    }
+    const newBranchId = forked.branchId
+    const open = currentStoryStore.getCurrentStory()
+    // Left or switched since: the pointer already names the new branch, so its next open lands there.
+    if (open == null || open.storyId !== sid || open.branchId !== branchId) {
+      readerHoldStore.release(hold)
+      refreshAfterFork(sid)
+      close()
+      return
+    }
+    let shown: ShowBranchResult
+    try {
+      shown = await showBranch(
+        { storyId: sid, branchId: newBranchId, fromBranchId: branchId, hold, replaceStack },
+        ctx,
+      )
+    } catch (error) {
+      // Its throws all come after its reset: the reader navigated, and the new one's load reports.
+      logger.error('reader.branch_create_show_threw', {
+        branchId,
+        newBranchId,
+        error: messageOf(error),
+      })
+      readerHoldStore.release(hold)
+      refreshAfterFork(sid)
+      close()
+      return
+    }
+    // Idempotent: showBranch releases it on every path too.
+    readerHoldStore.release(hold)
+    refreshAfterFork(sid)
+    if (shown.status !== 'navigation-blocked') return
+    // showBranch put the pointer back on this branch; the new one stays, and the chip lists it.
+    logger.warn('reader.branch_create_not_opened', { branchId, newBranchId })
+    close()
+    toast.warning(t('reader:branches.create.notOpened', { name: name.trim() }))
+  }
+
+  const onCreate = (name: string): void => {
+    if (storyId == null || request == null || pendingRef.current || swapPending) return
+    void create(storyId, request, name)
+  }
+
+  const onCancel = (): void => {
+    if (!pendingRef.current) close()
+  }
+
+  const modal: BranchCreateModalProps | null =
+    request == null
+      ? null
+      : {
+          open: true,
+          entryPosition: request.position,
+          pending,
+          message,
+          createBlockedReason: swapPending ? t('reader:actions.blockedWhileSwapping') : undefined,
+          onCreate,
+          onCancel,
+        }
+  return { onBranch, modal }
+}
