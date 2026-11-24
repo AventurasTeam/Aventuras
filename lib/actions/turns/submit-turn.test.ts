@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
@@ -50,6 +50,24 @@ vi.mock('@/lib/retrieval', async (importOriginal) => {
 vi.mock('../embedder-swap/engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
+})
+
+// Lets a test observe the turn reaching the settle boundary; the real settle still runs.
+const settleProbe = vi.hoisted(() => ({ onEnter: null as (() => void) | null }))
+
+vi.mock('../delta/apply-delta-action', async (importOriginal) => {
+  const actual = await importOriginal<
+    Record<string, unknown> & { settleUserWrites: () => Promise<void> }
+  >()
+  return {
+    ...actual,
+    settleUserWrites: () => {
+      const enter = settleProbe.onEnter
+      settleProbe.onEnter = null
+      enter?.()
+      return actual.settleUserWrites()
+    },
+  }
 })
 
 const OK_RETRIEVAL = retrievalSuccess()
@@ -378,8 +396,8 @@ describe('submitTurn', () => {
       entriesStore.hydrate('b1', [])
       await hydrateAppSettings(async () => WORKING_CONFIG)
 
-      // The set passed its gate before Send and its transaction hasn't opened. It opens at the
-      // turn's first transaction, or after a pause if the turn waits on it instead.
+      // The set passed its gate before Send and its transaction hasn't opened; the test opens it
+      // once Send is blocked on the settle, which is the only thing holding the user_action's read.
       let dispatched!: () => void
       const hasDispatched = new Promise<void>((resolve) => {
         dispatched = resolve
@@ -388,7 +406,11 @@ describe('submitTurn', () => {
       const released = new Promise<void>((resolve) => {
         release = resolve
       })
-      const pause = setTimeout(release, 100)
+      // A failed or timed-out test still frees the gated write, or its row lock outlives the test.
+      onTestFinished(() => {
+        settleProbe.onEnter = null
+        release()
+      })
       const setCtx: typeof ctx = {
         ...ctx,
         runInTransaction: async (fn) => {
@@ -397,25 +419,33 @@ describe('submitTurn', () => {
           return ctx.runInTransaction(fn)
         },
       }
-      const turnCtx: typeof ctx = {
-        ...ctx,
-        runInTransaction: (fn) => {
-          release()
-          return ctx.runInTransaction(fn)
-        },
-      }
-      const setting = setBranchLead('b1', MIRA, setCtx)
+      let written = false
+      const setting = setBranchLead('b1', MIRA, setCtx).then((result) => {
+        written = true
+        return result
+      })
       await hasDispatched
+      let atSettle = false
+      const reachedSettle = new Promise<void>((resolve) => {
+        settleProbe.onEnter = () => {
+          atSettle = true
+          resolve()
+        }
+      })
 
-      const outcome = await submitTurn(
+      const turning = submitTurn(
         { storyId: 's1', branchId: 'b1' },
         { content: 'I look around.', composerMode: 'do' },
-        turnCtx,
+        ctx,
       )
-      clearTimeout(pause)
+      // Raced with the turn so a dropped settle fails the assertions below instead of hanging.
+      await Promise.race([reachedSettle, turning])
+      expect(atSettle).toBe(true)
+      expect(written).toBe(false)
+      release()
 
       expect(await setting).toEqual({ status: 'ok' })
-      expectRan(outcome)
+      expectRan(await turning)
       expect((await entryOfKind(db, 'user_action'))?.metadata?.leadId).toBe(MIRA)
       expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
     })
