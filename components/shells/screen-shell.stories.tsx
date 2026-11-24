@@ -164,6 +164,31 @@ export const InStoryStorySettings: Story = {
   ),
 }
 
+const STORY_SETTINGS_HELD = 'Generation is in flight. Cancel to edit.'
+
+// The reader passes the gate's reason while a switch holds it: ⛭ stays, disabled, saying why.
+export const StorySettingsDisabled: Story = {
+  render: () => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      storySettingsDisabledReason={STORY_SETTINGS_HELD}
+      onBack={noop}
+      onOpenStorySettings={noop}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story — ⛭ disabled with the reader's reason" />
+    </ScreenShell>
+  ),
+  play: async () => {
+    const settings = await screen.findByRole('button', { name: STORY_SETTINGS_HELD })
+    await expect(settings).toHaveAttribute('aria-disabled', 'true')
+    await expect(settings.parentElement).toHaveAttribute('title', STORY_SETTINGS_HELD)
+    expect(screen.queryByRole('button', { name: 'Story Settings' })).toBeNull()
+  },
+}
+
 export const InStoryReader: Story = {
   render: () => (
     <View className="gap-2">

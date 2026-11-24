@@ -32,6 +32,7 @@ import { useContentEditing } from '@/components/reader/content-editing'
 import { createEditRequests, type EditBridgeAnswer } from '@/components/reader/edit-bridge-requests'
 import { EntryJumpVeil } from '@/components/reader/entry-jump-veil'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { inlineEditGuardArmed } from '@/components/reader/inline-edit-guard-armed'
 import { nativeEditPort, webEditPort } from '@/components/reader/inline-edit-port'
 import { routeJumpToBottom } from '@/components/reader/jump-to-bottom'
 import {
@@ -198,6 +199,7 @@ import {
   isBranchHeld,
   isHeadReversalBlocked,
   isUserEditBlocked,
+  readerHoldStore,
   readerRailStore,
   RERUN_HELD,
   rehydrateStories,
@@ -793,21 +795,26 @@ function ReaderComposerBody({
   // (the composer clears), so each dispatch marks it: ref is the sync guard, state disables.
   const dispatchInFlightRef = useRef(false)
   const [dispatchInFlight, setDispatchInFlight] = useState(false)
+  // A switch holds the reader from its press to its navigation (branch-navigator.md → Per-row
+  // anatomy): no write on this branch may land between its gate check and its publish.
+  const readerHeld = readerHoldStore.useHeld(branchId)
+  // A hold whose switch never reached its navigation ends with the reader.
+  useEffect(() => () => readerHoldStore.clear(branchId), [branchId])
   const beginDispatch = useCallback((): boolean => {
-    if (dispatchInFlightRef.current) return false
+    if (dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return false
     dispatchInFlightRef.current = true
     setDispatchInFlight(true)
     return true
-  }, [])
+  }, [branchId])
   const endDispatch = useCallback(() => {
     dispatchInFlightRef.current = false
     setDispatchInFlight(false)
   }, [])
   // What every user-edit affordance gates on: the generation gate alone leaves
-  // the pre-registration window open.
-  const actionsBlocked = editBlocked || dispatchInFlight
+  // the pre-registration window open, and the hold a switch's.
+  const actionsBlocked = editBlocked || dispatchInFlight || readerHeld
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
-  const headReversalBlocked = headReversalGateHeld || dispatchInFlight
+  const headReversalBlocked = headReversalGateHeld || dispatchInFlight || readerHeld
   const editGate = editGateOf({ editBlocked: actionsBlocked, headReversalBlocked })
   // A branch held until restart has no run to name; its controls name the hold.
   const gateRunKind = generationStore.useGeneration((s) =>
@@ -825,8 +832,7 @@ function ReaderComposerBody({
     pill: gateRunKind,
   })
 
-  // reader-composer.md → Inline edit session: every leave runs this guard. Armed on dirty on web;
-  // on native on an open editor, since a dirty report can still be crossing the bridge.
+  // reader-composer.md → Inline edit session: every leave runs this guard.
   const editRequests = useMemo(
     () =>
       createEditRequests({
@@ -857,11 +863,15 @@ function ReaderComposerBody({
       : undefined
   const {
     guard,
-    navigateGuarded,
+    navigateGuarded: navigateUnheld,
     dialog: editGuardDialog,
   } = useInlineEditGuard({
     port: editPort,
-    armed: Platform.OS === 'web' ? editSession?.dirty === true : editSession != null,
+    armed: inlineEditGuardArmed({
+      platform: Platform.OS === 'web' ? 'web' : 'native',
+      session: editSession,
+      held: readerHeld,
+    }),
     saveGate: inlineEditSaveGate({
       entryId: editSession?.entryId ?? null,
       headTurnIds: editHeadTurnIds,
@@ -869,14 +879,26 @@ function ReaderComposerBody({
       reasons: { gate: gateReason, headReversal: headReversalReason },
     }),
   })
-  // C7: review-row presses and the close modal run it first.
-  useOverlaySurface(guard)
   // Stable for every row's handlers: the guard's own identity follows each session transition.
   const guardRef = useRef(guard)
   useLayoutEffect(() => {
     guardRef.current = guard
   })
-  const guardEdit = useCallback((proceed: () => void) => guardRef.current(proceed), [])
+  // A held reader drops every guarded leave: its switch is on the way to its own navigation.
+  const guardEdit = useCallback(
+    (proceed: () => void) => {
+      if (!readerHoldStore.isHeld(branchId)) guardRef.current(proceed)
+    },
+    [branchId],
+  )
+  const navigateGuarded = useCallback(
+    (path: string) => {
+      if (!readerHoldStore.isHeld(branchId)) navigateUnheld(path)
+    },
+    [branchId, navigateUnheld],
+  )
+  // C7: review-row presses and the close modal run it first, so the hold covers them too.
+  useOverlaySurface(guardEdit)
   const guardedStripFix = useMemo(
     () =>
       stripErrorFix == null
@@ -1342,7 +1364,7 @@ function ReaderComposerBody({
   const openRollback = useCallback(
     async (targetId: string) => {
       // As ↻'s: the dispatch's streaming card says why the tap opened nothing.
-      if (dispatchInFlightRef.current) return
+      if (dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
       // A tapped delete silently doing nothing reads as broken — and the count
       // read is a DB round trip that can reject as well as refuse.
       let counts: RollbackCounts | StoryEntryRejection | null
@@ -1354,7 +1376,7 @@ function ReaderComposerBody({
             startedBranchId: branchId,
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
-            dispatchInFlight: dispatchInFlightRef.current,
+            dispatchInFlight: dispatchInFlightRef.current || readerHoldStore.isHeld(branchId),
           }),
         )
       } catch (err) {
@@ -1437,7 +1459,7 @@ function ReaderComposerBody({
     async (entryId: string) => {
       // Opening a confirm whose dispatch the in-flight guard will drop leaves
       // the user watching the modal close on nothing.
-      if (dispatchInFlightRef.current) return
+      if (dispatchInFlightRef.current || readerHoldStore.isHeld(branchId)) return
       const startedBranchId = branchId
       let counts: RollbackCounts | StoryEntryRejection | null
       const countedAtSettle = generationStore.getSettleCount()
@@ -1448,7 +1470,7 @@ function ReaderComposerBody({
             startedBranchId,
             currentBranchId: branchIdRef.current,
             loadedBranchId: entriesStore.getLoadedBranch(),
-            dispatchInFlight: dispatchInFlightRef.current,
+            dispatchInFlight: dispatchInFlightRef.current || readerHoldStore.isHeld(branchId),
             headReversalBlocked: generationStore.isHeadReversalBlocked(startedBranchId),
           }),
         )
@@ -1536,7 +1558,11 @@ function ReaderComposerBody({
 
   const handleRefreshSuggestions = useCallback(() => {
     if (
-      suggestionRefreshBlocked(generationStore.getTxState(), branchId, dispatchInFlightRef.current)
+      suggestionRefreshBlocked(
+        generationStore.getTxState(),
+        branchId,
+        dispatchInFlightRef.current || readerHoldStore.isHeld(branchId),
+      )
     )
       return
     const anchor = terminalEntry
@@ -1631,11 +1657,12 @@ function ReaderComposerBody({
   const editorOpen = editSession != null
   const handleUndoRedoShortcut = useCallback(
     (ev: KeyboardEvent) => {
-      if (editorOpen) return
+      // undoLastAction and redoLastAction don't read the reader hold, so the shortcut does.
+      if (editorOpen || readerHoldStore.isHeld(branchId)) return
       if (ev.shiftKey) redoAction('keyboard')
       else undoAction('keyboard')
     },
-    [editorOpen, redoAction, undoAction],
+    [branchId, editorOpen, redoAction, undoAction],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
@@ -1910,6 +1937,7 @@ function ReaderComposerBody({
       onOpenStorySettings={() => {
         if (storyId != null) navigateGuarded(`/story-settings/${storyId}`)
       }}
+      storySettingsDisabledReason={readerHeld ? gateReason : undefined}
       actions={
         <AppActionsMenu
           contextual={contextualActions}
@@ -1917,7 +1945,7 @@ function ReaderComposerBody({
           closeChapter={{ branchId, canClose: chapterProgress.canClose, gateReason }}
           beforeNavigate={guardEdit}
           beforeLeaveStory={guardLeave}
-          blocked={rollback != null || timeEdit != null || undoConfirmOpen}
+          blocked={rollback != null || timeEdit != null || undoConfirmOpen || readerHeld}
           onOpenChange={onMenuOpenChange}
         />
       }
