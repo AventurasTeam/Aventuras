@@ -420,6 +420,38 @@ describe('submitTurn', () => {
       expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
     })
 
+    it("authors the stamp: a branch with no lead doesn't carry the stamped tail's", async () => {
+      const { ctx, db } = await makeHarness()
+      const tail: StoryEntry = {
+        id: 'seed-stamped',
+        branchId: 'b1',
+        position: 1,
+        kind: 'opening',
+        content: 'The keep looms over the valley.',
+        contentTokens: null,
+        chapterId: null,
+        metadata: { sceneEntities: [KAEL], currentLocationId: null, worldTime: 5, leadId: KAEL },
+        createdAt: 1,
+      }
+      await ctx.db.insert(storyEntries).values(tail)
+      await openStory(db, 's1', 'b1')
+      await seedCast(db, null)
+      entriesStore.hydrate('b1', [tail])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'I look around.', composerMode: 'do' },
+          ctx,
+        ),
+      )
+
+      expect((await entryOfKind(db, 'user_action'))?.metadata).toMatchObject({ worldTime: 5 })
+      expect((await entryOfKind(db, 'user_action'))?.metadata).not.toHaveProperty('leadId')
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata).not.toHaveProperty('leadId')
+    })
+
     it('leaves the stamp absent on a creative third-person branch with no lead', async () => {
       const { ctx, db } = await makeHarness()
       await openStory(db, 's1', 'b1')

@@ -1953,6 +1953,30 @@ describe('narrative fold — creates', () => {
       expect(replyOf(events).metadata).not.toHaveProperty('leadId')
     })
 
+    // After an unset or a deleted lead: the stamp is authored per entry, never carried from the tail.
+    it.each([
+      ['on', CREATE_REPLY],
+      ['off', 'The tide turns, and the gulls scatter.'],
+    ] as const)(
+      'stamps no lead on a branch with none, whose tail is stamped, with piggyback %s',
+      async (piggybackMode, text) => {
+        await seedTurn(baseWorld(), { ...SCENE, leadId: HERO })
+        currentStoryStore.set({
+          storyId: 's1',
+          branchId: 'b1',
+          definition,
+          settings: baseSettings({
+            partialChapterBuffer: 3,
+            piggybackMode,
+            suggestionsEnabled: false,
+          }),
+        })
+        const { events } = await foldTurn(text)
+
+        expect(replyOf(events).metadata).not.toHaveProperty('leadId')
+      },
+    )
+
     it("keeps the stamp through the fallback classifier's partial merge", async () => {
       await seedTurn(leadWorld())
       const failing = CREATE_REPLY.replace(

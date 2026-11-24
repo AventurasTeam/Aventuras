@@ -308,6 +308,39 @@ describe('regenerateTurn', () => {
     expect(action.metadata?.leadId).toBe(VORNE)
   })
 
+  it('stamps no lead on the new reply when the sweep leaves none, whatever the action carries', async () => {
+    const VORNE = 'char_00000000-0000-4000-8000-000000000003'
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0, leadId: VORNE },
+      })
+      .where(eq(storyEntries.id, 'e_u2'))
+    // The run reads the store's tail, so the stamp goes there too.
+    entriesStore.hydrate('b1', (await db.select().from(storyEntries)) as never)
+    await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    const [reply] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.position, 5)))
+    expect(reply.kind).toBe('ai_reply')
+    expect(reply.metadata).not.toHaveProperty('leadId')
+    const [action] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_u2'))
+    expect(action.metadata?.leadId).toBe(VORNE)
+  })
+
   it('older reply: deeper cascade through the same sweep, regenerating from that action', async () => {
     const { ctx, db } = await makeHarness()
     await seedTwoTurnsWithCatchUp(ctx)
