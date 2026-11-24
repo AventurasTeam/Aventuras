@@ -245,11 +245,12 @@ describe('branch scope', () => {
     createdAt: 2,
   }
 
-  async function twoBranches(seeded: readonly StoryEntry[] = [main, fork]) {
+  // An id-only read scans in insertion order, so the sibling's row goes in first.
+  async function twoBranches({ written = true }: { written?: boolean } = {}) {
     const { db, runInTransaction } = await createTestDb()
     await seed(db)
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 2 })
-    await db.insert(storyEntries).values([...seeded])
+    await db.insert(storyEntries).values([main, ...(written ? [fork] : [])])
     const read = async (branchId: string) =>
       (
         await db
@@ -268,7 +269,7 @@ describe('branch scope', () => {
     applyDeltaAction({ action, actionId, branchId: 'b2', entryId: null }, ctx)
 
   it("createStoryEntry pair: creates the row on its own branch beside another branch's same id, and its reversal removes only that row", async () => {
-    const { ctx, read } = await twoBranches([main])
+    const { ctx, read } = await twoBranches({ written: false })
     const { contentTokens: _counted, ...entry } = fork
     expect(
       await onFork(

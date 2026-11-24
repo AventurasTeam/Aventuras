@@ -322,7 +322,8 @@ describe('branch scope', () => {
 
   type Fixture = Awaited<ReturnType<typeof setup>>
 
-  async function forked(seeded: readonly NewTranslation[]) {
+  // An id-only read scans in insertion order, so the sibling's row goes in first.
+  async function forked({ written }: { written: boolean }) {
     const fixture = await setup()
     await fixture.db
       .insert(branches)
@@ -331,7 +332,7 @@ describe('branch scope', () => {
       { ...character('char_1'), branchId: 'br_2' },
       { ...character('char_2'), branchId: 'br_2' },
     ])
-    await fixture.db.insert(translations).values([...seeded])
+    await fixture.db.insert(translations).values([MAIN, ...(written ? [FORK] : [])])
     return fixture
   }
 
@@ -352,7 +353,7 @@ describe('branch scope', () => {
     applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
 
   it("createTranslation pair: creates the row on its own branch beside another branch's same id, and its reversal removes only that row", async () => {
-    const { db, ctx } = await forked([MAIN])
+    const { db, ctx } = await forked({ written: false })
     const create: PipelineAction = {
       kind: 'createTranslation',
       source: 'ai_classifier',
@@ -368,7 +369,7 @@ describe('branch scope', () => {
   })
 
   it("updateTranslation pair: updates only its own branch's row, recording that row's priors, and its reversal restores it", async () => {
-    const { db, ctx } = await forked([MAIN, FORK])
+    const { db, ctx } = await forked({ written: true })
     const update: PipelineAction = {
       kind: 'updateTranslation',
       source: 'ai_classifier',
@@ -385,7 +386,7 @@ describe('branch scope', () => {
   })
 
   it("deleteTranslation pair: deletes only its own branch's row, and its reversal restores that row", async () => {
-    const { db, ctx } = await forked([MAIN, FORK])
+    const { db, ctx } = await forked({ written: true })
     const remove: PipelineAction = {
       kind: 'deleteTranslation',
       source: 'ai_classifier',
@@ -438,7 +439,7 @@ describe('branch scope', () => {
   it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
     '%s payload: refuses a payload naming another branch and writes neither branch',
     async (_kind, { action, reason }) => {
-      const { db, ctx } = await forked([MAIN, FORK])
+      const { db, ctx } = await forked({ written: true })
       expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
       expect(await translationOn(db, 'br_1')).toEqual(MAIN)
       expect(await translationOn(db, 'br_2')).toEqual(FORK)
