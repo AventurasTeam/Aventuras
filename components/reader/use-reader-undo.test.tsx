@@ -136,6 +136,22 @@ function undoLands(read: UndoTargetRead, rowBeforeUndo: Record<string, unknown> 
   })
 }
 
+function turnGroup(branchId = 'b1') {
+  return __redoGroupForTest(
+    branchId,
+    [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+    'act_turn',
+  )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
 type Props = { isFocused: boolean; held: boolean; branchId: string }
 
 function render(initial: Partial<Props> = {}) {
@@ -400,13 +416,6 @@ describe('useReaderUndo — refusals', () => {
 })
 
 describe('useReaderUndo — one redo stack per branch', () => {
-  const turnGroup = (branchId: string) =>
-    __redoGroupForTest(
-      branchId,
-      [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
-      'act_turn',
-    )
-
   it("shows no Redo on a branch whose stack is empty, though another branch's holds a group", async () => {
     undoRedoStore.pushRedoGroup(turnGroup('b1'))
     const r = render({ branchId: 'b2' })
@@ -517,14 +526,6 @@ describe('useReaderUndo — the Redo label reads the rows as the menu opens', ()
 })
 
 describe('useReaderUndo — review fixes', () => {
-  function deferred<T>() {
-    let resolve!: (value: T) => void
-    const promise = new Promise<T>((res) => {
-      resolve = res
-    })
-    return { promise, resolve }
-  }
-
   it("holds the notice's Redo while an editor is open", async () => {
     actions.readUndoTarget.mockResolvedValue(TURN)
     undoLands(TURN, { id: 'e2', position: 2 })
@@ -1053,21 +1054,6 @@ describe('useReaderUndo — a re-run undone, then its store sync fails', () => {
 // reader-composer.md → Undo and redo: the notice and every late result belong to the reader that
 // started them, and a switch unmounts that reader.
 describe('useReaderUndo — a reader that unmounted', () => {
-  function deferred<T>() {
-    let resolve!: (value: T) => void
-    const promise = new Promise<T>((res) => {
-      resolve = res
-    })
-    return { promise, resolve }
-  }
-
-  const turnGroup = (branchId = 'b1') =>
-    __redoGroupForTest(
-      branchId,
-      [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
-      'act_turn',
-    )
-
   const NOT_LOADED: UndoResult = {
     status: 'rejected',
     code: 'branch-not-loaded',

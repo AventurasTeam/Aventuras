@@ -145,17 +145,7 @@ describe('ReaderBranchNavigator', () => {
 
   it('opens the view through its own handle', () => {
     const ref = createRef<ReaderBranchNavigatorHandle>()
-    render(
-      <ReaderBranchNavigator
-        ref={ref}
-        storyId="story_1"
-        branchId="br_main"
-        isFocused
-        paused={false}
-        onSwitch={onSwitch}
-        onRename={onRename}
-      />,
-    )
+    render(connected({ ref }))
     ref.current?.open()
     expect(stubs.handle.open).toHaveBeenCalledTimes(1)
   })
