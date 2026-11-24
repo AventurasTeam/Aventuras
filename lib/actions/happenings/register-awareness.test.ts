@@ -1741,7 +1741,7 @@ describe("upsertHappeningAwareness copying a row's pin owner", () => {
   })
 })
 
-// Awareness ids repeat across branches (the key is branch and id), so every read and write is scoped.
+// Awareness ids repeat across branches (key: branch and id), so every read and write is scoped.
 describe('branch scope', () => {
   const SIBLING: HappeningAwareness = {
     id: 'haw_1',

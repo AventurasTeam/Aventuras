@@ -640,8 +640,8 @@ describe('single-perspective upsert against a user edit newer than the prose', (
   })
 })
 
-// Pair ids repeat across branches (the key is branch and id). The sibling br_1 is seeded first,
-// so a read that drops its branch finds the sibling's row.
+// Relationship ids repeat across branches (the key is branch and id). The sibling br_1 is seeded
+// first, so a read that drops its branch finds the sibling's row.
 describe('branch scope', () => {
   type Harness = Awaited<ReturnType<typeof setup>>
 

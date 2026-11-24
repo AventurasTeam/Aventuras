@@ -204,7 +204,7 @@ describe('branch_era_flips CRUD arms', () => {
   })
 })
 
-// Era flip ids repeat across branches (the key is branch and id), so every read and write is scoped.
+// Era flip ids repeat across branches (key: branch and id), so every read and write is scoped.
 describe('branch scope', () => {
   const MAIN: NewBranchEraFlip = {
     id: 'ef_1',

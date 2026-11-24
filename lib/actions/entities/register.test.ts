@@ -1267,7 +1267,7 @@ describe('branch scope', () => {
     expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
   })
 
-  // The payload names the sibling, a valid target there: with the check gone, the write lands on it.
+  // The payload names the sibling, a valid target there: without the check the write lands on it.
   it.each<[string, PipelineAction, string]>([
     [
       'createEntity',
