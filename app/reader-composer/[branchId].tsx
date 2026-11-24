@@ -319,7 +319,7 @@ function ReaderComposerBody({
   useEffect(() => {
     logger.debug('reader.mounted', { branchId: branchIdRef.current })
   }, [])
-  // Settle-time recovery returns the user's text only to a reader still on its starting branch;
+  // Settle-time recovery returns the user's text only to a reader still mounted;
   // the persisted failure entry is branch-bound and unconditional.
   const branchUnchanged = useCallback(
     (started: string) => aliveRef.current && branchIdRef.current === started,
@@ -807,8 +807,9 @@ function ReaderComposerBody({
     [branchId],
   )
 
-  // A switch holds the reader from its press to its navigation (branch-navigator.md → Per-row
-  // anatomy): no write on this branch may land between its gate check and its publish.
+  // A switch holds the reader from its guard's go-ahead (on phone, after the navigator Sheet's
+  // exit) to its navigation (branch-navigator.md → Per-row anatomy): no write on this branch may
+  // land between its gate check and its publish.
   const {
     begin: beginDispatch,
     end: endDispatch,
@@ -817,8 +818,8 @@ function ReaderComposerBody({
     inFlight: dispatchInFlight,
     held: readerHeld,
   } = useReaderDispatch(branchId)
-  // What every user-edit affordance gates on: the generation gate alone leaves
-  // the pre-registration window open, and the hold a switch's.
+  // What every user-edit affordance gates on: the generation gate alone misses the
+  // pre-registration window and a switch's hold.
   const actionsBlocked = editBlocked || dispatchInFlight || readerHeld
   // Same pre-registration guard as actionsBlocked, over the head reversals' own gate.
   const headReversalBlocked = headReversalGateHeld || dispatchInFlight || readerHeld
@@ -842,7 +843,6 @@ function ReaderComposerBody({
     pill: gateRunKind,
   })
 
-  // reader-composer.md → Inline edit session: every leave runs this guard.
   const editRequests = useMemo(
     () =>
       createEditRequests({
@@ -871,6 +871,7 @@ function ReaderComposerBody({
     }).reversalDisabled
       ? rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason })
       : undefined
+  // reader-composer.md → Inline edit session: every leave runs this guard.
   const {
     guard,
     navigateGuarded: navigateUnheld,
@@ -1557,8 +1558,7 @@ function ReaderComposerBody({
   }, [branchId, sendPending, handleCancelComposer])
 
   // Read at settle time, not from the closure: the error belongs to the strip that fired it, and
-  // by then the tail may have moved. The guard needs both refs: a fork's copy keeps the tail's
-  // entry id, so the entry ref alone can match another branch's tail.
+  // by then the tail may have moved. branchIdRef backstops the per-branch remount.
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   // Published from the commit, like branchIdRef: the guard below reads both, and
   // an anchor from a render that never landed would fail it against live state.
@@ -1689,7 +1689,7 @@ function ReaderComposerBody({
   const handleJumpToBottom = useCallback(async () => jumpToBottom(), [jumpToBottom])
   const openChapterPopover = useCallback(() => chapterChipsRef.current?.openPopover(), [])
   const openBranchNavigator = useCallback(() => branchNavigatorRef.current?.open(), [])
-  // Post-commit, as branchIdRef was: a switch whose reader lost focus is abandoned.
+  // Post-commit, as branchIdRef is: a switch whose reader lost focus is abandoned.
   const isFocusedRef = useRef(isFocused)
   useLayoutEffect(() => {
     isFocusedRef.current = isFocused
@@ -1724,7 +1724,7 @@ function ReaderComposerBody({
     },
     [storyId, branchId, guardEdit, aliveRef, replaceStack, isDispatchBlocked],
   )
-  // Resolves whatever the write did: the input collapses, and the row shows the stored name.
+  // Owns the failure's toast and log, so it resolves whatever the write did.
   const handleRename = useCallback(
     async (id: string, name: string): Promise<void> => {
       if (storyId == null) return
@@ -1851,8 +1851,7 @@ function ReaderComposerBody({
         ...(entries.length > 0
           ? [{ id: 'jump-to-bottom', label: t('reader:jumpToBottom'), onActivate: jumpToBottom }]
           : []),
-        // Never run-gated: the navigator pauses its own rows. The open waits for the phone
-        // Actions Sheet's exit, since gorhom restores a Sheet another one covered.
+        // Never run-gated: the navigator pauses its own rows.
         {
           id: 'browse-branches',
           label: t('reader:actions.browseBranches'),
