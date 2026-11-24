@@ -259,6 +259,8 @@
       "newer": "{{name}} · Newer · {{when}}"
     },
     "canonicalSuffix": "{{label}} · Canonical",
+    "heldOne": "{{name}} is or was this branch's lead, so this row stays.",
+    "heldBoth": "Both have been this branch's lead, so they can't merge. Rename one or keep them distinct.",
     "olderSide": "Older · {{when}}",
     "newerSide": "Newer · {{when}}",
     "choiceLabel": "{{caption}}: {{value}}",

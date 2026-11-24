@@ -71,6 +71,8 @@ type CollisionResolveDialogProps = {
   blockedReason?: string
   /** Whether a row outside the pair already has `name`; Rename warns under that field. */
   isNameTaken?: (name: string) => boolean
+  /** Rows the branch's entries name, by the lead flag or a lead stamp: one held row is the fixed canonical; with both held, Merge is unavailable and the dialog opens on Rename. */
+  heldIds?: readonly string[]
 }
 ```
 
@@ -308,9 +310,10 @@ Transition rules:
   The chips are derived in the view, not stored: `mergedTerms` of
   the two rows with nothing dropped, so they show in the order the
   merge writes ([Resolution shape](#resolution-shape)).
-- **`reset`** — re-initializes on entity-input change. Defensive;
-  in practice the dialog is keyed by entity ids so unmount handles
-  most cases.
+- **`reset`** — re-initializes on entity-input change, and when the
+  held row changes, to the new `defaultCanonicalId`. Defensive; in
+  practice the dialog is keyed by entity ids so unmount handles most
+  cases.
 
 Initial state: `canonicalId` = `defaultCanonicalId` (the held row
 when one row is held, else A), `fromOther` empty, and

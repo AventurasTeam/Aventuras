@@ -193,6 +193,11 @@ type CollisionResolveDialogProps = {
   blockedReason?: string
   /** Whether a row outside the pair already has `name`; Rename warns under that field. */
   isNameTaken?: (name: string) => boolean
+  /**
+   * Rows the branch's entries name, by the lead flag or a lead stamp: one held row is the fixed
+   * canonical; with both held, Merge is unavailable and the dialog opens on Rename.
+   */
+  heldIds?: readonly string[]
 }
 
 type FooterProps = {
@@ -236,6 +241,22 @@ function fieldValue(field: ScalarField, entity: EntitySummary): string {
   }
 }
 
+type Held = {
+  /** The one held row, which survives whatever its age; undefined with none or both held. */
+  fixedId: string | undefined
+  both: boolean
+}
+
+function heldOf(
+  entityA: EntitySummary,
+  entityB: EntitySummary,
+  heldIds: readonly string[] | undefined,
+): Held {
+  const a = heldIds?.includes(entityA.id) === true
+  const b = heldIds?.includes(entityB.id) === true
+  return { fixedId: a === b ? undefined : a ? entityA.id : entityB.id, both: a && b }
+}
+
 export function CollisionResolveDialog({
   open,
   onOpenChange,
@@ -247,8 +268,12 @@ export function CollisionResolveDialog({
   onResolve,
   blockedReason,
   isNameTaken,
+  heldIds,
 }: CollisionResolveDialogProps) {
-  const [mode, setMode] = useState<Mode>('merge')
+  const held = heldOf(entityA, entityB, heldIds)
+  const [mode, setMode] = useState<Mode>(held.both ? 'rename' : 'merge')
+  // A pair held on both sides never shows Merge, even when its rows turn held while open.
+  const shownMode: Mode = held.both && mode === 'merge' ? 'rename' : mode
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // One clock per mounted dialog, so the side captions don't drift between renders.
@@ -279,13 +304,14 @@ export function CollisionResolveDialog({
   }
 
   function handleModeChange(value: string) {
-    if (submitting) return
+    // A disabled option still takes a click on web (rn-primitives), so this refuses it too.
+    if (submitting || (held.both && value === 'merge')) return
     setMode(value as Mode)
     setError(null)
   }
 
   const modeOptions: SelectOption[] = [
-    { value: 'merge', label: t('collisionDialog.mode.merge') },
+    { value: 'merge', label: t('collisionDialog.mode.merge'), disabled: held.both },
     { value: 'rename', label: t('collisionDialog.mode.rename') },
     { value: 'keep', label: t('collisionDialog.mode.keep') },
   ]
@@ -301,18 +327,24 @@ export function CollisionResolveDialog({
 
         <Select
           options={modeOptions}
-          value={mode}
+          value={shownMode}
           onValueChange={handleModeChange}
           mode="segment"
           label={t('collisionDialog.modeLabel')}
           disabled={submitting}
         />
+        {held.both ? (
+          <Text size="sm" variant="muted">
+            {t('collisionDialog.heldBoth')}
+          </Text>
+        ) : null}
 
         <LeadContext.Provider value={phone ? explanation : null}>
-          {mode === 'merge' && (
+          {shownMode === 'merge' && (
             <MergeBody
               entityA={entityA}
               entityB={entityB}
+              fixedId={held.fixedId}
               diff={diff}
               nowMs={nowMs}
               onSubmit={handleSubmit}
@@ -323,7 +355,7 @@ export function CollisionResolveDialog({
               onChoice={() => setError(null)}
             />
           )}
-          {mode === 'rename' && (
+          {shownMode === 'rename' && (
             <RenameBody
               entityA={entityA}
               entityB={entityB}
@@ -336,7 +368,7 @@ export function CollisionResolveDialog({
               error={error}
             />
           )}
-          {mode === 'keep' && (
+          {shownMode === 'keep' && (
             <KeepBody
               sameName={header.sameName}
               olderName={entityA.name}
@@ -420,6 +452,8 @@ function ModeBody({
 type MergeBodyProps = BodyProps & {
   entityA: EntitySummary
   entityB: EntitySummary
+  /** The held row: the canonical, which the picker can't change. */
+  fixedId?: string
   diff: DiffPayload
   nowMs: number
   /** The user changed a merge choice, which answers a refusal shown for the last one. */
@@ -429,6 +463,7 @@ type MergeBodyProps = BodyProps & {
 function MergeBody({
   entityA,
   entityB,
+  fixedId,
   diff,
   nowMs,
   onSubmit,
@@ -440,23 +475,30 @@ function MergeBody({
 }: MergeBodyProps) {
   const phone = useTier() === 'phone'
   const stacked = phone || Platform.OS !== 'web'
-  const [state, dispatch] = useReducer(mergeReducer, entityA.id, initMergeState)
+  const defaultCanonicalId = fixedId ?? entityA.id
+  const [state, dispatch] = useReducer(mergeReducer, defaultCanonicalId, initMergeState)
   const choose = (action: MergeAction) => {
     onChoice()
     dispatch(action)
   }
 
-  // Reset reducer state when entities change. Same render-cycle
+  // Reset reducer state when the entities or the held row change. Same render-cycle
   // ref-check pattern as embedder-download-dialog.tsx.
-  const pairKey = `${entityA.id}::${entityB.id}`
+  const pairKey = `${entityA.id}::${entityB.id}::${defaultCanonicalId}`
   const lastPairRef = useRef(pairKey)
   if (lastPairRef.current !== pairKey) {
     lastPairRef.current = pairKey
-    dispatch({ type: 'reset', defaultCanonicalId: entityA.id })
+    dispatch({ type: 'reset', defaultCanonicalId })
   }
 
   const canonical = state.canonicalId === entityA.id ? entityA : entityB
   const nonCanonical = state.canonicalId === entityA.id ? entityB : entityA
+  const fixedLine =
+    fixedId == null
+      ? undefined
+      : t('collisionDialog.heldOne', {
+          name: fixedId === entityA.id ? entityA.name : entityB.name,
+        })
 
   const canonicalOptions: SelectOption[] = (['A', 'B'] as const).map((side) => {
     const entity = side === 'A' ? entityA : entityB
@@ -500,12 +542,21 @@ function MergeBody({
         <Select
           options={canonicalOptions}
           value={state.canonicalId}
-          onValueChange={(id) => choose({ type: 'pick-canonical', id })}
+          onValueChange={(id) => {
+            // A disabled radio still takes a click on web (rn-primitives); a fixed pick ignores it.
+            if (fixedId == null) choose({ type: 'pick-canonical', id })
+          }}
           // Segment options are one fixed-height row; a phone's half-width label wraps and clips.
           mode={phone ? 'radio' : 'segment'}
           label={t('collisionDialog.canonicalLabel')}
-          disabled={submitting}
+          disabled={submitting || fixedId != null}
+          disabledReason={fixedLine}
         />
+        {fixedLine != null ? (
+          <Text size="sm" variant="muted">
+            {fixedLine}
+          </Text>
+        ) : null}
       </View>
 
       {diff.divergentScalars.length > 0 && (
