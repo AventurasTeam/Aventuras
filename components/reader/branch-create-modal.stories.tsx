@@ -45,6 +45,16 @@ async function findModal(): Promise<HTMLElement> {
 const nameField = (dialog: HTMLElement) =>
   within(dialog).getByRole('textbox', { name: COPY.name }) as HTMLInputElement
 const button = (dialog: HTMLElement, name: string) => within(dialog).getByRole('button', { name })
+/** The styled panel inside Radix's own role=dialog wrapper, which shrinks to its content. */
+function panelWidth(dialog: HTMLElement): number {
+  const panel = dialog.firstElementChild
+  if (panel == null) throw new Error("the modal's panel is not rendered")
+  return panel.getBoundingClientRect().width
+}
+
+/** About 360 px, less the dialog's 16 px gutter each side where the viewport is narrower. */
+const expectedPanelWidth = () => Math.min(360, window.innerWidth - 32)
+
 const isDisabled = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true'
 
 /** The host as it presses: pending from the press on. */
@@ -132,6 +142,7 @@ type PlayContext = Parameters<NonNullable<Story['play']>>[0]
 async function shapePlay({ args }: PlayContext) {
   const dialog = await findModal()
   await expect(dialog).toHaveAccessibleDescription(COPY.context)
+  expect(Math.abs(panelWidth(dialog) - expectedPanelWidth())).toBeLessThan(2)
   const field = nameField(dialog)
   await waitFor(() => expect(field).toHaveFocus(), WAIT)
   const create = button(dialog, COPY.create)
@@ -169,6 +180,7 @@ function refusedPlay(line: string) {
   return async ({ args }: PlayContext) => {
     const dialog = await findModal()
     const field = nameField(dialog)
+    const openWidth = panelWidth(dialog)
     await userEvent.type(field, 'Side quest')
     await userEvent.click(button(dialog, COPY.create))
     const alert = await within(dialog).findByRole('alert', {}, WAIT)
@@ -178,6 +190,7 @@ function refusedPlay(line: string) {
       create.getBoundingClientRect().top,
     )
     expect(field).toHaveValue('Side quest')
+    expect(panelWidth(dialog)).toBeCloseTo(openWidth, 0)
     expect(isDisabled(create)).toBe(false)
     expect(args.onCreate).toHaveBeenCalledTimes(1)
     expect(args.onCreate).toHaveBeenCalledWith('Side quest')
@@ -197,10 +210,9 @@ export const Empty: Story = {
     const create = button(dialog, COPY.create)
     expect(isDisabled(create)).toBe(true)
     expect(within(dialog).queryByRole('alert')).toBeNull()
-    // The title spans the panel less its padding and the ×'s gutter; uncapped, the panel is 512 px.
-    const title = document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')
-    if (title == null) throw new Error("the modal's title is not rendered")
-    expect(title.getBoundingClientRect().width).toBeLessThanOrEqual(360)
+    // Content-sized, the panel opens near 257 px and widens when a longer line appears.
+    expect(panelWidth(dialog)).toBeGreaterThan(340)
+    expect(panelWidth(dialog)).toBeLessThanOrEqual(360.5)
     await userEvent.click(create, { pointerEventsCheck: 0 })
     expect(args.onCreate).not.toHaveBeenCalled()
   },

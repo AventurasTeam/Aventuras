@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react'
-import { View } from 'react-native'
+import { Platform, View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,15 @@ import {
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
+
+// Radix's role=dialog wrapper shrinks to its content, so `w-full` leaves the panel content-sized
+// and a cap alone never reaches 360; web needs a definite width, against the viewport because a
+// percentage cap would resolve against that wrapper.
+const PANEL_CLASS = cn(
+  'sm:max-w-[360px]',
+  Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
+)
 
 export type BranchCreateModalProps = {
   open: boolean
@@ -61,7 +70,7 @@ export function BranchCreateModal({
         if (!next) cancel()
       }}
     >
-      <DialogContent className="sm:max-w-[360px]" busy={pending} closeDisabled={pending}>
+      <DialogContent className={PANEL_CLASS} busy={pending} closeDisabled={pending}>
         <DialogHeader>
           <DialogTitle>{t('reader:branches.create.title')}</DialogTitle>
           <DialogDescription>
