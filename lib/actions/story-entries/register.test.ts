@@ -251,7 +251,7 @@ describe('branch scope', () => {
     await seed(db)
     await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'fork', createdAt: 2 })
     await db.insert(storyEntries).values([main, ...(written ? [fork] : [])])
-    const read = async (branchId: string) =>
+    const read = async (branchId: 'b1' | 'b2') =>
       (
         await db
           .select()

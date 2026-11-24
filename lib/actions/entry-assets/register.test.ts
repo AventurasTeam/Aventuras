@@ -218,7 +218,7 @@ describe('branch scope', () => {
     return fixture
   }
 
-  const linkOn = async (db: Fixture['db'], branchId: string) =>
+  const linkOn = async (db: Fixture['db'], branchId: 'br_1' | 'br_2') =>
     (
       await db
         .select()

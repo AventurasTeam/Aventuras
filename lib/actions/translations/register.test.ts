@@ -336,7 +336,7 @@ describe('branch scope', () => {
     return fixture
   }
 
-  const translationOn = async (db: Fixture['db'], branchId: string) =>
+  const translationOn = async (db: Fixture['db'], branchId: 'br_1' | 'br_2') =>
     (
       await db
         .select()
