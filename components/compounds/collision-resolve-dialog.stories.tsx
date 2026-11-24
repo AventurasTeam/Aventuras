@@ -661,8 +661,8 @@ export const HeldNewerRowSurvives: Story = {
       expect(canonicalRadio(side)).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText(HELD_ONE_LINE)).toBeInTheDocument()
 
-    // A disabled radio blocks pointer events, which userEvent honours; fireEvent forces the press
-    // the dialog must still refuse. The submit below would name the older row had it moved.
+    // userEvent honours the disabled radio's blocked pointer events; fireEvent forces the press,
+    // which the disabled radio drops. The submit below would name the older row had it moved.
     fireEvent.click(canonicalRadio('Older'))
     await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
 
@@ -694,7 +694,8 @@ export const BothHeldOpensOnRename: Story = {
     expect(screen.getByText(HELD_BOTH_LINE)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Merge into / })).toBeNull()
 
-    // Forced past the disabled option: the rename below would find no inputs had Merge opened.
+    // The disabled option drops the forced press: the rename below would find no inputs had
+    // Merge opened.
     fireEvent.click(merge)
     const inputs = await screen.findAllByRole('textbox')
     await userEvent.clear(inputs[1])

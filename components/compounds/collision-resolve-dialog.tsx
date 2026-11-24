@@ -304,7 +304,7 @@ export function CollisionResolveDialog({
   }
 
   function handleModeChange(value: string) {
-    // A disabled option still takes a click on web (rn-primitives), so this refuses it too.
+    // Select's disabled items already drop a press; this holds if the primitive stops doing so.
     if (submitting || (held.both && value === 'merge')) return
     setMode(value as Mode)
     setError(null)
@@ -543,7 +543,7 @@ function MergeBody({
           options={canonicalOptions}
           value={state.canonicalId}
           onValueChange={(id) => {
-            // A disabled radio still takes a click on web (rn-primitives); a fixed pick ignores it.
+            // Select's disabled items already drop a press; this holds if the primitive stops doing so.
             if (fixedId == null) choose({ type: 'pick-canonical', id })
           }}
           // Segment options are one fixed-height row; a phone's half-width label wraps and clips.
