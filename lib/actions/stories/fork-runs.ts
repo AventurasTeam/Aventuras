@@ -58,12 +58,12 @@ export async function unfinishedRunCarried(
 
 // No plan (the fork entry is the narrative tail): nothing leaves, so every write copies.
 function leavesOf(plan: ReversePlan | null): ForkLeaves {
-  const pruned = plan?.prunedDeltas ?? []
+  if (plan === null) return { deltas: new Set(), journals: new Set(), chapters: new Set() }
   return {
-    deltas: new Set([...pruned, ...(plan?.reownedDeltas ?? [])].map((d) => d.id)),
-    journals: new Set((plan?.droppedJournals ?? []).map((journal) => journal.actionId)),
+    deltas: new Set([...plan.prunedDeltas, ...plan.reownedDeltas].map((d) => d.id)),
+    journals: new Set(plan.droppedJournals.map((journal) => journal.actionId)),
     chapters: new Set(
-      pruned
+      plan.prunedDeltas
         .filter((d) => d.targetTable === 'chapters' && d.op === 'create')
         .map((d) => d.targetId),
     ),

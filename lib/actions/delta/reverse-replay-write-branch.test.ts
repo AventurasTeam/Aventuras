@@ -160,12 +160,10 @@ function vectorIdsOn(branchId: string): string[] {
   return rows.map((row) => row.id).sort()
 }
 
-const parentVectorIds = (): string[] => vectorIdsOn(PARENT)
-
 type ParentState = { rows: BranchSnapshot; vectorIds: string[] }
 
 function parentState(): ParentState {
-  return { rows: branchSnapshot(t.sqlite, PARENT), vectorIds: parentVectorIds() }
+  return { rows: branchSnapshot(t.sqlite, PARENT), vectorIds: vectorIdsOn(PARENT) }
 }
 
 type Planned = { set: ReversalSet; plan: ReversePlan }
@@ -200,7 +198,7 @@ function expectChildIsSelf(before: ParentState): void {
     withoutBranch(branchSnapshot(t.sqlite, SELF)),
   )
   expect(branchSnapshot(t.sqlite, PARENT)).toEqual(before.rows)
-  expect(parentVectorIds()).toEqual(before.vectorIds)
+  expect(vectorIdsOn(PARENT)).toEqual(before.vectorIds)
 }
 
 // C1: no op the plan emits binds the parent, so none can write it.
@@ -380,7 +378,7 @@ describe('a plan with a write branch reads the parent and writes the child', () 
     expect((await entityOn(CHILD, 'loc_wb_docks'))?.state).toEqual(UNPLACED)
     expect(await entityOn(PARENT, 'loc_wb_varn')).toBeDefined()
     expect(vectorIdsOn(CHILD)).toEqual([])
-    expect(parentVectorIds()).toEqual(['loc_wb_varn'])
+    expect(vectorIdsOn(PARENT)).toEqual(['loc_wb_varn'])
   })
 })
 
