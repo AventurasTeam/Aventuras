@@ -1016,6 +1016,8 @@ describe('collision flag columns', () => {
 
 // Entity ids repeat across branches (the key is branch and id), so every read and write is scoped.
 describe('branch scope', () => {
+  type BranchId = 'br_1' | 'br_2'
+
   const SIBLING: Entity = {
     id: 'char_1',
     branchId: 'br_1',
@@ -1131,7 +1133,7 @@ describe('branch scope', () => {
     awareness: [WRITTEN_AW],
     relationships: [WRITTEN_REL],
   }
-  const partner = (branchId: string): NewEntity => ({
+  const partner = (branchId: BranchId): NewEntity => ({
     id: 'char_2',
     branchId,
     kind: 'character',
@@ -1141,7 +1143,7 @@ describe('branch scope', () => {
     createdAt: 1,
     updatedAt: 1,
   })
-  const fire = (branchId: string): NewHappening => ({
+  const fire = (branchId: BranchId): NewHappening => ({
     id: 'hap_1',
     branchId,
     title: 'The fire',
@@ -1174,7 +1176,7 @@ describe('branch scope', () => {
   const onWritten = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
     applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
 
-  const entityOn = async (db: Harness['db'], branchId: string, id: string) =>
+  const entityOn = async (db: Harness['db'], branchId: BranchId, id: string) =>
     (
       await db
         .select()
@@ -1182,7 +1184,7 @@ describe('branch scope', () => {
         .where(and(eq(entities.branchId, branchId), eq(entities.id, id)))
     )[0]
 
-  const childrenOn = async (db: Harness['db'], branchId: string) => ({
+  const childrenOn = async (db: Harness['db'], branchId: BranchId) => ({
     involvements: await db
       .select()
       .from(happeningInvolvements)

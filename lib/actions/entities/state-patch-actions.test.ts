@@ -3294,6 +3294,8 @@ describe('setEntityKeywords', () => {
 // After a fork both branches hold the same ids. br_1's rows go in first, so a read that drops its
 // branch term, scanning by id, finds br_1's row before br_2's.
 describe('branch scope', () => {
+  type BranchId = 'br_1' | 'br_2'
+
   const KAEL: CharacterState = {
     visual: { attire: 'travel cloak', hair: 'cropped' },
     traits: ['brave'],
@@ -3354,7 +3356,7 @@ describe('branch scope', () => {
     updatedAt: 1,
   }
 
-  const on = (branchId: string, row: NewEntity): NewEntity => ({ ...row, branchId })
+  const on = (branchId: BranchId, row: NewEntity): NewEntity => ({ ...row, branchId })
 
   async function seedPair(sibling: NewEntity[], written: NewEntity[]) {
     const seeded = await setup()
@@ -3369,12 +3371,12 @@ describe('branch scope', () => {
 
   const applyOn = (
     ctx: DbCtx,
-    branchId: string,
+    branchId: BranchId,
     action: PipelineAction,
     actionId: string,
   ): Promise<MutationResult> => applyDeltaAction({ action, actionId, branchId }, ctx)
 
-  async function rowOn(db: StateDb, branchId: string, id: string): Promise<Entity | undefined> {
+  async function rowOn(db: StateDb, branchId: BranchId, id: string): Promise<Entity | undefined> {
     const [row] = await db
       .select()
       .from(entities)
@@ -3382,7 +3384,7 @@ describe('branch scope', () => {
     return row
   }
 
-  const branchRows = (db: StateDb, branchId: string) =>
+  const branchRows = (db: StateDb, branchId: BranchId) =>
     db.select().from(entities).where(eq(entities.branchId, branchId)).orderBy(entities.id)
 
   async function expectPair(
@@ -3404,11 +3406,11 @@ describe('branch scope', () => {
   type PayloadCase = [
     kind: PipelineAction['kind'],
     rows: NewEntity[],
-    actionOn: (branchId: string) => PipelineAction,
+    actionOn: (branchId: BranchId) => PipelineAction,
   ]
   const payloadCase = (
     rows: NewEntity[],
-    actionOn: (branchId: string) => PipelineAction,
+    actionOn: (branchId: BranchId) => PipelineAction,
   ): PayloadCase => [actionOn('br_1').kind, rows, actionOn]
   const ACTIVE_KAEL = character(KAEL, { status: 'active' })
 
@@ -3758,7 +3760,7 @@ describe('branch scope', () => {
       ],
     )
     const told = (
-      branchId: string,
+      branchId: BranchId,
       id: string,
       position: number,
       kind: 'ai_reply' | 'user_action',
