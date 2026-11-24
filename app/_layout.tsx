@@ -9,7 +9,6 @@ import { KeyboardProvider, useResizeMode } from 'react-native-keyboard-controlle
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
 import { ChapterOverlaysHost } from '@/components/chapters/chapter-overlays-host'
-import { StackProbeHost } from '@/components/dev/stack-probe-host'
 import { EmbeddingUpgradeHost } from '@/components/embedder/embedding-upgrade-host'
 import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
 import { RailViewportWatcher } from '@/components/reader/rail/rail-viewport-watcher'
@@ -116,7 +115,6 @@ export default function RootLayout() {
                     <Toaster />
                     <MemoryRunToasts />
                     <ChapterOverlaysHost />
-                    {__DEV__ ? <StackProbeHost /> : null}
                     <PortalHost />
                     <DrizzleStudioDevTools />
                   </BottomSheetModalProvider>
