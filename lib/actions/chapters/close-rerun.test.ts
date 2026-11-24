@@ -971,6 +971,40 @@ describe("getCloseRerunPreview's fork point and branch name (AC 11)", () => {
     expect(await preview(h, chapterId)).toMatchObject({ branchName: 'The long road' })
   })
 
+  it("reads the fork point from its own branch's entries, not a sibling's", async () => {
+    const { h, chapterId } = await closedStandIn()
+    const last = h.fx.entries.at(-1)!
+    await systemEntry(h, last.position + 1)
+    await turnSince(h, last.position + 2)
+    // Sibling positions overlap: its non-system entry at last+1 would win if the read crossed over.
+    await h.fx.ctx.db
+      .insert(branches)
+      .values({ id: 'branch_sibling', storyId: 'story_close', name: 'Sibling', createdAt: 1 })
+    await h.fx.ctx.db.insert(storyEntries).values({
+      id: 'entry_sibling',
+      branchId: 'branch_sibling',
+      position: last.position + 1,
+      kind: 'ai_reply',
+      content: 'The sibling goes its own way.',
+      createdAt: 1,
+    })
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      shortcut: { forkPoint: { entryId: last.id, position: last.position } },
+    })
+  })
+
+  it("reads its own branch's name, not a sibling's", async () => {
+    const { h, chapterId } = await closedStandIn()
+    await h.fx.ctx.db
+      .insert(branches)
+      .values({ id: 'branch_sibling', storyId: 'story_close', name: 'Sibling', createdAt: 1 })
+    // An unfiltered read takes the table's first row; put the sibling there.
+    h.fx.sqlite.prepare('UPDATE branches SET rowid = -1 WHERE id = ?').run('branch_sibling')
+
+    expect(await preview(h, chapterId)).toMatchObject({ branchName: 'main' })
+  })
+
   it('refuses not-found when the branch row is gone, its chapter still there', async () => {
     const { h, chapterId } = await closedStandIn()
     // No path deletes a branch under its chapters; the foreign keys are lifted to stage one.
