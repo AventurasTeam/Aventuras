@@ -326,7 +326,8 @@ export const EscCancels: Story = {
   },
 }
 
-/** A capture listener on the document holds the event past the field; its verdict comes after. */
+/** Esc marks its keydown handled, which the Sheet's document listener skips. The capture listener
+ * keeps the event to read once its dispatch ends. */
 export const EscMarksTheKeyHandled: Story = {
   play: async () => {
     await waitForTier('desktop')

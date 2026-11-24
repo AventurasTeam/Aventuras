@@ -52,7 +52,7 @@ export function BranchRenameInput({
   })
   const blurCheck = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  // An unmount mid-edit, as when the navigator closes, saves a valid change and drops the rest.
+  // An unmount mid-edit saves a valid change and drops the rest.
   useEffect(
     () => () => {
       clearTimeout(blurCheck.current)

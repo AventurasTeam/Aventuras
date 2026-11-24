@@ -24,7 +24,7 @@ export type ReaderBranchNavigatorProps = {
   storyId: string
   branchId: string
   isFocused: boolean
-  /** The gate without this branch's hold, the reader's dispatch, or the reader hold. */
+  /** The generation gate less any restart hold, a dispatch in flight, or the reader hold. */
   paused: boolean
   onSwitch: (branchId: string) => void
   onRename: (branchId: string, name: string) => Promise<unknown>

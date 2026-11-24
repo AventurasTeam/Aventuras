@@ -40,7 +40,7 @@ export type BranchNavigatorProps = {
   /** Never called for the current row; on phone, after the Sheet's exit. */
   onSwitch: (branchId: string) => void
   onRename: (branchId: string, name: string) => Promise<unknown>
-  /** Renders `×` on every row but the current one. */
+  /** Renders a delete control on every row but the current one. */
   onDelete?: (branchId: string) => void
   onOpenChange?: (open: boolean) => void
   ref?: Ref<BranchNavigatorHandle>
@@ -196,13 +196,13 @@ function SheetArm({
 }: BranchNavigatorProps & { afterDismiss: HeldUntilDismissed }) {
   const renaming = useRenaming()
   const [open, reportOpen] = useReportedOpen(onOpenChange)
-  // layout.md → Stacking: the Sheet dismisses before the reader it leads to takes over.
   const change = (next: boolean) => {
     if (next) afterDismiss.clear()
     else renaming.stop()
     reportOpen(next)
   }
   const close = () => change(false)
+  // layout.md → Stacking: the Sheet dismisses before the reader it leads to takes over.
   const closeThen = (run: () => void) => {
     afterDismiss.hold(run)
     change(false)
