@@ -118,7 +118,7 @@ async function expectNoEmptyPaint(page: Page): Promise<void> {
     watch?.observer.disconnect()
     return { seen: watch?.seen ?? false, insertions: watch?.insertions ?? 0 }
   })
-  // Insertions prove the observer was live while the new reader mounted.
+  // Insertions read back prove the watch attached and outlived the switch (a reload drops it).
   expect(paint.insertions, 'nodes the observer saw inserted').toBeGreaterThan(0)
   expect(paint.seen, 'the reader left painted its empty state').toBe(false)
 }
@@ -222,7 +222,7 @@ test.describe.serial('branch navigator — switching, rename and the pointer', (
     await reader.composer(page).fill(COMPOSER_DRAFT)
     await switchTo(page, main, fork)
     await expect(reader.composer(page)).toHaveValue('')
-    await expect(page.getByRole('alertdialog')).toHaveCount(0)
+    await expect(chrome.anyAlertDialog(page)).toHaveCount(0)
 
     await branchNavigator.chip(page, fork.name, 2).click()
     await expect(branchNavigator.title(page, 2)).toBeVisible()
@@ -248,6 +248,8 @@ test.describe.serial('branch navigator — switching, rename and the pointer', (
     await branchNavigator.chip(page, fork.name, 2).click()
     await branchNavigator.row(page, main.name).click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
+    // The switch waits on the guard's answer: nothing is written while it asks.
+    expect(await currentBranchId(page, HERO_STORY)).toBe(fork.id)
     await saveSession.unsavedCancel(page).click()
     await expect(saveSession.unsavedDialog(page)).toHaveCount(0)
     expect(await currentBranchId(page, HERO_STORY)).toBe(fork.id)
@@ -257,6 +259,7 @@ test.describe.serial('branch navigator — switching, rename and the pointer', (
     await branchNavigator.chip(page, fork.name, 2).click()
     await branchNavigator.row(page, main.name).click()
     await expect(saveSession.unsavedDialog(page)).toBeVisible()
+    expect(await currentBranchId(page, HERO_STORY)).toBe(fork.id)
     await saveSession.unsavedDiscard(page).click()
     await expectOnBranch(page, main)
     await expectNoEmptyPaint(page)

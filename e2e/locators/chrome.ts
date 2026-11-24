@@ -31,4 +31,7 @@ export const chrome = {
   // The menu's jump out of the story, present only with the diagnostics gate seeded on.
   diagnosticsHubRow: (page: Page): Locator =>
     page.getByText(t('settings:diagnosticsHub.actionLabel'), { exact: true }),
+
+  // Any guard or confirm on any screen, for a flow that must prompt nothing.
+  anyAlertDialog: (page: Page): Locator => page.getByRole('alertdialog'),
 }
