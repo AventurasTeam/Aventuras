@@ -61,7 +61,7 @@ shape every suite follows: a `branch scope` block over a second branch.
 
 **Register two-branch tests (C5).** All 55 registered handlers: the 39
 the 12 register files define, and the 16 the entities register takes
-from `lib/actions/entities/state-patch-actions.ts:273-852`
+from `lib/actions/entities/state-patch-actions.ts:273-872`
 (`lib/actions/entities/register.ts:409-429`). Thirteen suites carry
 them:
 
@@ -89,8 +89,8 @@ suite asserts the database alone: 6.2 removed its store mirror.
   the same ids as the first branch's. The two rows of an id differ in
   every column the handler reads or writes, so a read from the wrong
   row shows in the result, not only a write to it. Where a delta-log
-  read is under test, the second branch holds deltas too: 6.1's
-  composite key lets a delta id repeat ([Implementation notes → The
+  read is under test, the other branch holds deltas on the same row
+  too, from its own actions ([Implementation notes → The
   fixture](#implementation-notes)).
 - **The pair.** Per handler: its write on one branch lands on that
   branch's row as computed from that row, and leaves the other
@@ -175,49 +175,50 @@ answers are in [Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
-**The fixture (developer, 2026-11-24).** Each `branch scope` block
-hand-seeds its second branch, and the pair writes on the branch seeded
-second. A read that drops its branch term scans in insertion order and
-returns the first row, so a pair written on the first-seeded branch
-can't tell; a read built as a map keeps the last row, so it gets an id
-only the sibling holds. The sibling's rows differ from the written
-branch's in every column the handler reads or writes, and from the
-write's new value; for a state patch, also in a state key the patch
-leaves alone. This reverses the brief's "no deltas on the second
-branch": where a delta-log read is under test, the sibling holds
-deltas on the same row, landed by real actions under their own action
-ids at a log position above the written branch's, since positions
-count per branch. `cloneBranch` serves one case, the chapter delete's
-preview, whose close-group read needs the sibling to hold the same
-close action ids.
+**The fixture (developer, 2026-11-24).** Each register suite's
+`branch scope` block hand-seeds its second branch, and the pair writes
+on the branch seeded second. A read that drops its branch term scans in
+insertion order and returns the first row, so a pair written on the
+first-seeded branch can't tell; a read built as a map keeps the last
+row, so it gets an id only the sibling holds. The sibling's rows differ
+from the written branch's in every column the handler reads or writes,
+and from the write's new value; for a state patch, also in a state key
+the patch leaves alone. The brief seeded no deltas on the second branch;
+instead, where a delta-log read is under test, the sibling holds deltas
+on the same row, landed by real actions at a log position above the
+written branch's, since positions count per branch. Those actions run
+under their own action ids: `reverseReplayDeltas` selects a group by
+action id alone and refuses one that spans branches. `cloneBranch`
+serves one case, the chapter delete's preview, whose close-group read
+needs the sibling to hold the same close action ids.
 
 **What a row proves (developer, 2026-11-24).** A condition in a
 handler's own code (its payload check, its reads and writes, a helper
 only its register file calls, its cascade) names a red test of that
 handler. A line several handlers reach was mutated once, and each
-handler reaching it has a row marked `shared` that names a red test
-from that run: the delta-log helpers, `live-refs.ts`, the translation
-cascade, the vector sweep, `parent-chain-check.ts`, each
-registration's descriptor `branchCol`, and the state-patch module's
-`loadCurrent` and write. The descriptor and the state-patch
-`loadCurrent` and write ran once in each task that tested them; the
-others ran once, in Task 1. A delete's descriptor row names its
-registration's create or update pair: undoing a delete only inserts,
-so its own pair never reads through the descriptor. Accepted risk: a
-handler that passes the wrong branch variable to a shared helper
-isn't caught by removing a condition.
+handler reaching it has a row marked `shared` that names a red test from
+that run: the delta-log helpers, `live-refs.ts`, the translation
+cascade, the vector sweep, `parent-chain-check.ts`, each registration's
+descriptor `branchCol`, and the state-patch module's `loadCurrent` and
+write. The descriptor and the state-patch `loadCurrent` and write ran
+once in each task that tested them; the others ran once, in Task 1. A
+delete's descriptor row names its registration's create or update pair:
+undoing a delete re-inserts its payload without reading the row back, so
+its own pair can't show the descriptor's branch term. Accepted risk: a
+handler that passes the wrong branch variable to a shared helper isn't
+caught by removing a condition.
 
 **One PR (developer, 2026-11-24).** Fifteen tasks shipped as one PR
 rather than a split: the tasks share no interface, and the PR stays
 far under the review cap.
 
-**Two lines the table treats apart.** `close-groups.ts:22`, the
-close-group read's action-id term, survives its removal while `:34`
-holds: a copied close's action ids are the parent's own, and an action
-id with no deltas on the read branch adds nothing. A note under the
-PR's table records it. `isStoryLead`'s `eq(branches.id)` in the entity
-delete scopes by story, not branch; its row names the cross-story case
-in `delete-entity-arm.test.ts`.
+**Two lines the table treats apart.** `close-groups.ts:22`, the branch
+term of the read that collects the close's action ids, survives its
+removal while `:34` holds: a copied close's action ids are the parent's
+own, and an action id with no deltas on the read branch adds nothing. A
+note under the PR's table records it. `isStoryLead`'s `eq(branches.id)`
+in the entity delete scopes by story, not branch; its row names the
+cross-story case in `delete-entity-arm.test.ts`.
 
 **Handler bugs.** None: every pair passed against shipped code.
 

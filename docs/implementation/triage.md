@@ -401,13 +401,3 @@ slice-planning gate forces its resolution before that slice is planned.
   deltas (changes main's undo grouping, which E2E drives), or record
   the shape as the seed's contract. Found by Slice 6.3's slice review
   (2026-11-24).
-
-- **A relationship's delete leaves its translations behind.**
-  `deleteCharacterRelationship`
-  (`lib/actions/relationships/register.ts:277-304`) and the upsert's
-  arm that deletes a pair whose last point of view it nulls (`:235-255`)
-  delete the `character_relationships` row alone, so its
-  `character_relationship` translations stay with nothing to translate.
-  An entity delete removes them through its cascade
-  (`lib/actions/entities/entity-cascade.ts:49`). Not branch-related.
-  Found by Slice 6.10's planning research (2026-11-24).

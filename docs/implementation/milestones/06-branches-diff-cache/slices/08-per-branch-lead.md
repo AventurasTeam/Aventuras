@@ -982,6 +982,18 @@ role and name through the app's i18n keys):
    every entry is stamped, R4 and its extension to every stamped
    character, and C10's rule for where the two-flags error is logged.
    Read them against the code at slice planning.
+9. **Criterion 43 against 6.10's table.** Criterion 43 wants 6.10's
+   `createEntity` and `deleteEntity` pairs red when any one branch
+   condition 6.10's table lists for their handler is removed alone.
+   That table doesn't name a pair on every row: the delete's
+   descriptor row names the `updateEntity` pair, `isStoryLead`'s row a
+   cross-story case in `delete-entity-arm.test.ts`, payload rows the
+   payload cases, and shared helper rows the helpers' own tests
+   ([Slice 6.10 → Implementation notes](./10-register-branch-pairs.md#implementation-notes)).
+   Default: each condition 6.10's table lists for those handlers,
+   removed alone, still turns its row's red test red, and the `isLead`
+   pair turns red with its own branch condition removed. Found by Slice
+   6.10's slice review (2026-11-24).
 
 ## Implementation notes
 
