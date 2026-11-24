@@ -263,3 +263,13 @@ slice-planning gate forces its resolution before that slice is planned.
   write
   ([`branch-navigator.md`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)).
   Found by Slice 6.4's Task 21 review (2026-11-24).
+
+- **A second `beforeRemove` preventer replays its action and the arm
+  registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
+  keeps `data.action` and replays it on "Cancel & leave", and
+  `isUnsavedPopArmed` doesn't cover it. A switch's stack reset could be
+  swallowed by it only if a run started on the story between the
+  switch's gate check and its reset: unreachable today, since every
+  pipeline is `hard-gate` and `switchBranch` also refuses on
+  `isStoryBusy`. Pre-existing. Found by Slice 6.4's reviews
+  (2026-11-24).

@@ -641,6 +641,20 @@ Pointers, canon and hygiene:
   on desktop and the JS thread on Android, so the modal's pending spinner
   may not animate on Android while it runs. 6.3's measure decides whether
   that matters.
+- **A tail whose caller's reader is gone.** `showBranch` takes no abandon
+  check, by design: the fork has committed, so canon keeps the new branch.
+  A caller whose reader is already gone, as the re-run path's root host
+  can be, still gets the stack reset and the story published over
+  whatever is open, which can be another story the user has since
+  opened. Planning decides whether the create and re-run callers accept
+  that or check the open story before calling the tail.
+- **The root-host hold and the reader's unmount.** The reader's unmount
+  calls `readerHoldStore.clear(branchId)`, which ends every token on its
+  branch, the re-run path's root-host take included
+  ([Slice 6.4](./04-switching-navigator.md#implementation-notes)).
+  Planning decides whether that hold should survive the reader's unmount,
+  which `clear` doesn't allow today, or whether ending it there is right
+  once the reader is gone.
 
 ## Implementation notes
 
