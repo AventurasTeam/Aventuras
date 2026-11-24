@@ -90,7 +90,8 @@ export async function settleCommittedPassRetry(deps: {
 
 /**
  * A pass-entry Retry's rewrite: a held entry with no text takes the composer's draft, since it
- * advises a restart the draft wouldn't survive. Off the branch, the draft is another branch's.
+ * advises a restart the draft wouldn't survive. Off the branch, the reader that held the draft is
+ * gone.
  */
 export function planPassRetryCustody(args: {
   held: boolean

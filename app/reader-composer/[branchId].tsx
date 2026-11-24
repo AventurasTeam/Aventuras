@@ -119,6 +119,8 @@ import {
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { readerUndoRedoGates } from '@/components/reader/undo-redo-gates'
+import { useAliveRef } from '@/components/reader/use-alive-ref'
+import { useEmptyAfterRowsSignal } from '@/components/reader/use-empty-after-rows-signal'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useReaderSlice } from '@/components/reader/use-reader-slice'
@@ -293,15 +295,7 @@ function ReaderComposerBody({
   useLayoutEffect(() => {
     branchIdRef.current = branchId
   }, [branchId])
-  // Layout, not passive: the commit that unmounts the reader (a switch, a leave) runs to
-  // completion before any promise continuation, so no settling callback reads it still mounted.
-  const aliveRef = useRef(false)
-  useLayoutEffect(() => {
-    aliveRef.current = true
-    return () => {
-      aliveRef.current = false
-    }
-  }, [])
+  const aliveRef = useAliveRef()
   // One line per reader instance: a switch that mounts the reader twice shows in the log.
   useEffect(() => {
     logger.debug('reader.mounted', { branchId: branchIdRef.current })
@@ -311,7 +305,7 @@ function ReaderComposerBody({
   // unconditional.
   const branchUnchanged = useCallback(
     (started: string) => aliveRef.current && branchIdRef.current === started,
-    [],
+    [aliveRef],
   )
 
   const [rollback, setRollback] = useState<ConfirmState | null>(null)
@@ -1826,15 +1820,7 @@ function ReaderComposerBody({
     hydrationSucceeded,
     isEmpty: entries.length === 0,
   })
-  // A switch's empty-paint signal on device: the empty placeholder after rows, which
-  // otherwise only a rollback of every entry shows.
-  const hadRowsRef = useRef(false)
-  const rowCount = entries.length
-  useEffect(() => {
-    if (!hydrationSucceeded) return
-    if (rowCount > 0) hadRowsRef.current = true
-    else if (hadRowsRef.current) logger.debug('reader.empty_after_rows', { branchId })
-  }, [branchId, hydrationSucceeded, rowCount])
+  useEmptyAfterRowsSignal(branchId, hydrationSucceeded, entries.length)
 
   const surfaceProps = {
     rows: slice.rows,
