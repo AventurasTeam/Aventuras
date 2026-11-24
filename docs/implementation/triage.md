@@ -211,6 +211,35 @@ slice-planning gate forces its resolution before that slice is planned.
   a small compiled-hook layer for hooks that read stores outside a
   subscription. Found by Slice 6.2's slice review (2026-11-23).
 
+- **The M6 milestone doc names the fork planner by its old canon
+  name.** `milestones/06-branches-diff-cache/milestone.md:32` still
+  says canon calls the rewind's planner `planReversal` with a target
+  branch. Slice 6.3's canon edits renamed both: canon now names
+  `buildReverseAndPrunePlan`, given a `PlanTarget` whose
+  `writeBranchId` is the new branch. The sentence is planning
+  narrative, so the fix is a reword there. Found by Slice 6.3's final
+  review (2026-11-24).
+
+- **Unscoped delta reads in E2E can't catch a delta on the wrong
+  branch.** `e2e/tests/plot.spec.ts:517` reads
+  `deltas WHERE target_id = ?` with no branch scope, so a delete delta
+  written to the wrong branch would still pass the exact-equality
+  check. The shape predates Slice 6.3, and every unscoped delta read in
+  the specs shares it. Found by Slice 6.3's final review (2026-11-24).
+
+- **The seed's fork carries world rows tied to entries it lacks.**
+  `br_hero_fork` is `br_hero_main` rolled back to `entry_hero_0040`,
+  but the hero seed logs no delta for most world rows, so the rollback
+  leaves them as main holds them: the fork keeps "Escape the River
+  Keep" failed at `entry_hero_0047`, "Earn Mira's trust" resolved at
+  `entry_hero_0050`, and "Vorne's pact" with the two awareness rows
+  learned at `entry_hero_0059`, all entries it doesn't hold. A rollback
+  on seeded main to the same entry gives the same rows. Slices 6.4, 6.6
+  and 6.8 read the fork (C7); a screen resolving such an entry id on
+  the fork finds no entry. Options: log the seed's world rows as
+  deltas (changes main's undo grouping, which E2E drives), or record
+  the shape as the seed's contract. Found by Slice 6.3's slice review
+
 - **A successful story load's open-failure clear is untested.**
   `loadAndPublish` in `lib/actions/stories/operational.ts` calls
   `storiesStore.clearOpenFailure(storyId)` before it publishes;

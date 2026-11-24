@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { branchStaleTotal, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import {
@@ -15,21 +15,19 @@ import { storySettings } from '../locators/story-settings'
 const HERO_STORY = 'story_hero'
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
+const HERO_FORK_BRANCH = 'br_hero_fork'
 const COPY_MODEL_ID = 'e2e/minilm-copy'
-
-const STALE_TOTAL_SQL = `SELECT (SELECT count(*) FROM entities WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM lore WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM chapters WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM threads WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM happenings WHERE branch_id = ? AND embedding_stale = 1)`
 
 // Every vec0 family, not just the ones the drain populates: the swap engine and
 // relabel both sweep all five, so a family they missed has to show up here.
-const VEC_ROWS_FOR_MODEL_SQL = `SELECT (SELECT count(*) FROM entities_vec_384 WHERE model_id = ?)
-                                     + (SELECT count(*) FROM lore_vec_384 WHERE model_id = ?)
-                                     + (SELECT count(*) FROM chapter_summaries_vec_384 WHERE model_id = ?)
-                                     + (SELECT count(*) FROM threads_vec_384 WHERE model_id = ?)
-                                     + (SELECT count(*) FROM happenings_vec_384 WHERE model_id = ?)`
+const vecRowsForModelSql = (branchScoped: boolean): string => {
+  const where = branchScoped ? 'WHERE model_id = ? AND branch_id = ?' : 'WHERE model_id = ?'
+  return `SELECT (SELECT count(*) FROM entities_vec_384 ${where})
+               + (SELECT count(*) FROM lore_vec_384 ${where})
+               + (SELECT count(*) FROM chapter_summaries_vec_384 ${where})
+               + (SELECT count(*) FROM threads_vec_384 ${where})
+               + (SELECT count(*) FROM happenings_vec_384 ${where})`
+}
 
 // Drops one family's vectors without touching embedding_stale: the drain selects on
 // the flag, so only a re-index — which ignores the flag — can refill the hole.
@@ -45,9 +43,11 @@ async function driftOneLoreRow(app: LaunchedApp): Promise<{ id: string; hash: st
     `SELECT id FROM lore WHERE branch_id = ? ORDER BY id LIMIT 1`,
     [HERO_BRANCH],
   )
-  const [[hash]] = await queryApp(app.window, `SELECT source_hash FROM lore_vec_384 WHERE id = ?`, [
-    id,
-  ])
+  const [[hash]] = await queryApp(
+    app.window,
+    `SELECT source_hash FROM lore_vec_384 WHERE branch_id = ? AND id = ?`,
+    [HERO_BRANCH, id],
+  )
   await queryApp(app.window, `UPDATE lore SET body = ? WHERE branch_id = ? AND id = ?`, [
     'Rewritten behind the staleness flag, which stays clean on purpose.',
     HERO_BRANCH,
@@ -57,19 +57,22 @@ async function driftOneLoreRow(app: LaunchedApp): Promise<{ id: string; hash: st
 }
 
 async function loreHashOf(app: LaunchedApp, id: string): Promise<string> {
-  const [[hash]] = await queryApp(app.window, `SELECT source_hash FROM lore_vec_384 WHERE id = ?`, [
-    id,
-  ])
+  const [[hash]] = await queryApp(
+    app.window,
+    `SELECT source_hash FROM lore_vec_384 WHERE branch_id = ? AND id = ?`,
+    [HERO_BRANCH, id],
+  )
   return String(hash)
 }
 
-async function staleTotal(app: LaunchedApp): Promise<number> {
-  const [[n]] = await queryApp(app.window, STALE_TOTAL_SQL, Array<string>(5).fill(HERO_BRANCH))
-  return Number(n)
-}
+const staleTotal = (app: LaunchedApp): Promise<number> => branchStaleTotal(app.window, HERO_BRANCH)
 
-async function vecRowsFor(app: LaunchedApp, modelId: string): Promise<number> {
-  const [[n]] = await queryApp(app.window, VEC_ROWS_FOR_MODEL_SQL, Array<string>(5).fill(modelId))
+// The re-index re-embeds the fork's copied rows too, so counts checked against the open
+// branch's drain name that branch; relabel moves every row, so its checks span the story.
+async function vecRowsFor(app: LaunchedApp, modelId: string, branchId?: string): Promise<number> {
+  const slots = branchId === undefined ? [modelId] : [modelId, branchId]
+  const params = Array.from({ length: 5 }, () => slots).flat()
+  const [[n]] = await queryApp(app.window, vecRowsForModelSql(branchId !== undefined), params)
   return Number(n)
 }
 
@@ -119,8 +122,7 @@ test.describe('embedder — story settings swap flow', () => {
     // sum past the default budget, and a bare test timeout would cut off the
     // polls below before they can report which condition failed.
     test.setTimeout(240_000)
-    // Guards the vec0 table names in VEC_ROWS_FOR_MODEL_SQL against a catalog
-    // dim change.
+    // Guards vecRowsForModelSql's vec0 table names against a catalog dim change.
     expect(dim).toBe(384)
 
     await home.openStory(app.window, HERO_TITLE).click()
@@ -130,7 +132,7 @@ test.describe('embedder — story settings swap flow', () => {
     // with a swap marker, so a swap kicked mid-drain races it and makes the
     // row counts below non-deterministic.
     await expect.poll(async () => staleTotal(app), { timeout: 60_000 }).toBe(0)
-    const drained = await vecRowsFor(app, originalModelId)
+    const drained = await vecRowsFor(app, originalModelId, HERO_BRANCH)
     expect(drained).toBeGreaterThan(0)
 
     await storySettings.openFromReader(app.window).click()
@@ -140,10 +142,15 @@ test.describe('embedder — story settings swap flow', () => {
     // Punch a hole the drain is structurally blind to, so only the re-index can refill
     // it. Counting growth would prove nothing: the drain has already embedded every row.
     await dropEntityVectors(app, originalModelId)
-    const holed = await vecRowsFor(app, originalModelId)
+    const holed = await vecRowsFor(app, originalModelId, HERO_BRANCH)
     expect(holed, 'the drop should remove vectors the re-index must restore').toBeLessThan(drained)
     const drifted = await driftOneLoreRow(app)
     expect(await staleTotal(app), 'neither edit may flip a flag').toBe(0)
+    // The drain warms only the open branch, so the fork's copies are left for the re-index.
+    expect(
+      await branchStaleTotal(app.window, HERO_FORK_BRANCH),
+      'the fork should hold stale rows for the re-index to clear',
+    ).toBeGreaterThan(0)
 
     await storySettings.reindexNow(app.window).click()
     await storySettings.reindexConfirmStart(app.window).click()
@@ -154,10 +161,11 @@ test.describe('embedder — story settings swap flow', () => {
       .poll(
         async () => {
           const settings = await readStorySettings(app)
-          const rows = await vecRowsFor(app, originalModelId)
+          const rows = await vecRowsFor(app, originalModelId, HERO_BRANCH)
           return {
             swapPending: 'embedding_swap_target' in settings,
             stale: await staleTotal(app),
+            forkStale: await branchStaleTotal(app.window, HERO_FORK_BRANCH),
             vecRows: rows === drained ? 'refilled' : `stuck at ${rows} (want ${drained})`,
             driftedRow:
               (await loreHashOf(app, drifted.id)) === drifted.hash
@@ -167,13 +175,14 @@ test.describe('embedder — story settings swap flow', () => {
         },
         {
           message:
-            'reindex-now should clear the swap marker, leave nothing stale and re-embed rows the drain skips',
+            'reindex-now should clear the swap marker, leave nothing stale on either branch and re-embed rows the drain skips',
           timeout: 90_000,
         },
       )
       .toEqual({
         swapPending: false,
         stale: 0,
+        forkStale: 0,
         vecRows: 'refilled',
         driftedRow: 'rewritten',
       })

@@ -2012,11 +2012,15 @@ domain rows and deltas) verbatim without rewriting JSON-embedded
 reverse-replay (`undoDelete`, captured children) and journal write-back
 always overwrite `branch_id` with the target/executing branch on every
 re-inserted row and delta, and scope every `deltas` `UPDATE` / `DELETE`
-by `(branch_id, id)`. Branch fork reuses the same planner (`planReversal`
-parameterized with `targetBranchId: newBranchId`) to plan on the frozen
-parent and execute on the new branch inside one atomic transaction,
-omitting delta/journal deletes and vector sweeps that the fork's
-pre-filtered copy and post-rewind vector copy handle directly.
+by `(branch_id, id)`. Branch fork reuses the same planner
+(`buildReverseAndPrunePlan`, given a `PlanTarget` whose `writeBranchId`
+is the new branch) to plan on the frozen parent and execute on the new
+branch inside one atomic transaction. Every read stays on the parent
+and every op the plan emits names the new branch, the stamp and key of
+each restored row included; a reversal that names no target reads and
+writes its own branch. The fork omits the delta and journal deletes and
+the vector sweeps, which its pre-filtered copy and post-rewind vector
+copy handle directly.
 
 **Undoing a `create` consults no cascade.**
 A domain may register a cascade hook for its child rows, but that hook
@@ -2980,7 +2984,10 @@ orchestrator holds under the run's `actionId` through the action port
 (`holdBranchWriteExclusive` / `releaseBranchWriteExclusive`); and a
 close's re-run's `reversal` phase around its journaled reversal, held
 the same way, which checks the run's abort signal once the hold is
-granted, so a Cancel that landed while it queued costs no reversal. Boot
+granted, so a Cancel that landed while it queued costs no reversal. A
+fork takes its parent's lock exclusive too, from before its first plan
+read until its batch commits
+([`data-model.md → Branch model`](./data-model.md#branch-model)). Boot
 recovery runs before any branch loads. The rollback preview writes
 nothing but takes the lock shared around its set selection and the
 counts it reads from that set, so no reversal can land between those
@@ -2991,8 +2998,8 @@ reverses them before the sweep; the set keeps them, so a run that
 commits as the interrupt lands changes the counts. A pass's burst
 takes no hold across its writes, so a preview may see part of one; the
 confirm-time count check (`counts-changed`) keeps the confirm exact. A
-write arriving meanwhile waits a few milliseconds; nothing is disabled
-or refused.
+write arriving meanwhile waits, a few milliseconds behind a reversal
+and through a fork's plan and batch; nothing is disabled or refused.
 
 The writers of story state otherwise never meet: every kind holds the
 gate, chains start a successor only after the predecessor commits, and

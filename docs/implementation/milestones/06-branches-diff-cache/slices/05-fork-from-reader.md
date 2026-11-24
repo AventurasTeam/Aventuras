@@ -613,6 +613,10 @@ Pointers, canon and hygiene:
   So a fork that refuses a `user_action` point wouldn't refuse this path.
   Read from the code and canon, not run; the parent-side test in
   `close-rerun-start.test.ts` asserts `N`'s kind on its fixtures.
+  _Answered by Slice 6.3:_ canon makes every kind but `system` a fork
+  point, a `user_action` included
+  ([`data-model.md → Branch model`](../../../../data-model.md#branch-model)),
+  and the fork refuses only `system`.
 - **The auto-name's locale.** `Ch. <seq> re-run` rendered from an i18n key
   at fork time is stored in the locale active then and is user data from
   that moment; a later language change doesn't rename it. The default

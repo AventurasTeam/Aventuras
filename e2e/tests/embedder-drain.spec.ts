@@ -5,6 +5,7 @@ import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import {
   createSeededUserDataDir,
+  markBranchEmbeddingClean,
   markEntitiesEmbeddingStale,
   markSwapPending,
   removeUserDataDir,
@@ -17,6 +18,7 @@ import { storySettings } from '../locators/story-settings'
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
+const HERO_FORK_BRANCH = 'br_hero_fork'
 const HERO_STORY = 'story_hero'
 
 const staleTotal = (app: LaunchedApp): Promise<number> => branchStaleTotal(app.window, HERO_BRANCH)
@@ -39,6 +41,7 @@ test.describe('embedder — drain on story open', () => {
     // Redundant now that the seed leaves every entity stale — kept so this spec
     // doesn't silently stop populating entities_vec_* if the seed goes clean again.
     markEntitiesEmbeddingStale(seeded.dbPath, HERO_BRANCH)
+    markBranchEmbeddingClean(seeded.dbPath, HERO_FORK_BRANCH)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
@@ -74,17 +77,9 @@ test.describe('embedder — drain on story open', () => {
     expect(await vecRows('entities_vec_384')).toBeGreaterThan(0)
     expect(await vecRows('lore_vec_384')).toBeGreaterThan(0)
 
-    // Assert only the post-drain state — the pill's pre-drain visibility
-    // depends on how much of the drain has already run by the time the composer
-    // paints, which isn't a stable window to assert against. The describe below
-    // is this assertion's positive control.
-    //
-    // Two writers feed the count behind the pill: the reader's mount-time
-    // refresh, which counts the whole story, and the drain sink, which reports
-    // only the open branch's remaining — and by the time this runs the sink
-    // wrote last. They agree with the branch-scoped poll above only because
-    // every embeddable seeded row lives on br_hero_main; one on the fork branch
-    // would leave a story-wide count the drain never clears.
+    // Post-drain only: pre-drain visibility races the drain (the describe below is the
+    // positive control). The pill's story-wide mount count matches the branch poll only
+    // because beforeAll cleans the fork; an unopened branch's stale rows never drain.
     await expect(statusPill.memoryIncomplete(app.window)).toBeHidden()
   })
 })
