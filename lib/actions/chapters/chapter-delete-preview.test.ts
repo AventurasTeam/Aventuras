@@ -773,7 +773,7 @@ describe('getChapterDeletePreview', () => {
       ).resolves.toMatchObject({ status: 'rejected', code: CHAPTER_DELETE_REFUSAL.notLatest })
     })
 
-    it('sums its own stamped entries, not the copies on the parent', async () => {
+    it('sums its own stamped entries, not the same ids on the parent', async () => {
       const { c, copy, preview, parentRows } = await openCopy()
       const tokensOf = async (fx: CloseFixture, chapterId: string | null) =>
         (await entryRows(fx))
