@@ -34,6 +34,14 @@ describe('useEmptyAfterRowsSignal', () => {
     expect(emptyLogs()).toEqual([['reader.empty_after_rows', { branchId: 'br_a' }]])
   })
 
+  it('logs a drop once, however often the reader renders after it', () => {
+    const { rerender } = setup({ branchId: 'br_a', hydrated: true, rows: 2 })
+    rerender({ branchId: 'br_a', hydrated: true, rows: 0 })
+    rerender({ branchId: 'br_a', hydrated: true, rows: 0 })
+    rerender({ branchId: 'br_a', hydrated: true, rows: 0 })
+    expect(emptyLogs()).toHaveLength(1)
+  })
+
   it('does not log for a branch that was empty from the start', () => {
     const { rerender } = setup({ branchId: 'br_a', hydrated: true, rows: 0 })
     rerender({ branchId: 'br_a', hydrated: true, rows: 0 })
