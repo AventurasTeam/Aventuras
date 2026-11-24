@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { assets, branches, deltas, entryAssets, stories, type NewEntryAsset } from '@/lib/db'
@@ -8,6 +8,7 @@ import { registerEntryAssets } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   __resetRegistry()
@@ -181,4 +182,142 @@ describe('entry_assets CRUD arms', () => {
     expect(back.assetId).toBe('asset_1')
     expect(back.role).toBe('header')
   })
+})
+
+// Entry-asset ids repeat across branches (the key is branch and id), so every read and write is scoped.
+describe('branch scope', () => {
+  const MAIN: NewEntryAsset = {
+    id: 'ast_1',
+    branchId: 'br_1',
+    entryId: 'entry_main',
+    assetId: 'asset_1',
+    role: 'header',
+    position: 0,
+  }
+  const FORK: NewEntryAsset = {
+    id: 'ast_1',
+    branchId: 'br_2',
+    entryId: 'entry_fork',
+    assetId: 'asset_2',
+    role: 'inline',
+    position: 3,
+  }
+
+  type Fixture = Awaited<ReturnType<typeof setup>>
+
+  async function forked(seeded: readonly NewEntryAsset[]) {
+    const fixture = await setup()
+    await fixture.db
+      .insert(branches)
+      .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 2 })
+    await fixture.db
+      .insert(assets)
+      .values({ id: 'asset_2', kind: 'image', filePath: '/b', createdAt: 2 })
+    await fixture.db.insert(entryAssets).values([...seeded])
+    return fixture
+  }
+
+  const linkOn = async (db: Fixture['db'], branchId: string) =>
+    (
+      await db
+        .select()
+        .from(entryAssets)
+        .where(and(eq(entryAssets.branchId, branchId), eq(entryAssets.id, 'ast_1')))
+    )[0]
+
+  const undoPayloadsOf = async (db: Fixture['db'], actionId: string) =>
+    (await db.select().from(deltas).where(eq(deltas.actionId, actionId))).map(
+      (delta) => delta.undoPayload,
+    )
+
+  const onFork = (ctx: Fixture['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+
+  it("createEntryAsset pair: creates the row on its own branch beside another branch's same id, and its reversal removes only that row", async () => {
+    const { db, ctx } = await forked([MAIN])
+    const create: PipelineAction = {
+      kind: 'createEntryAsset',
+      source: 'user_edit',
+      payload: { entry: FORK },
+    }
+    expect(await onFork(ctx, create, 'act_c')).toMatchObject({ status: 'ok' })
+    expect(await linkOn(db, 'br_2')).toEqual(FORK)
+    expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await linkOn(db, 'br_2')).toBeUndefined()
+    expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+  })
+
+  it("updateEntryAsset pair: updates only its own branch's row, recording that row's priors, and its reversal restores it", async () => {
+    const { db, ctx } = await forked([MAIN, FORK])
+    const update: PipelineAction = {
+      kind: 'updateEntryAsset',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'ast_1', patch: { role: 'thumb', position: 5 } },
+    }
+    expect(await onFork(ctx, update, 'act_u')).toMatchObject({ status: 'ok' })
+    expect(await linkOn(db, 'br_2')).toEqual({ ...FORK, role: 'thumb', position: 5 })
+    expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+    expect(await undoPayloadsOf(db, 'act_u')).toEqual([{ role: 'inline', position: 3 }])
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await linkOn(db, 'br_2')).toEqual(FORK)
+    expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+  })
+
+  it("deleteEntryAsset pair: deletes only its own branch's row, and its reversal restores that row", async () => {
+    const { db, ctx } = await forked([MAIN, FORK])
+    const remove: PipelineAction = {
+      kind: 'deleteEntryAsset',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'ast_1' },
+    }
+    expect(await onFork(ctx, remove, 'act_d')).toMatchObject({ status: 'ok' })
+    expect(await linkOn(db, 'br_2')).toBeUndefined()
+    expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await linkOn(db, 'br_2')).toEqual(FORK)
+    expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+  })
+
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
+        kind: 'createEntryAsset',
+        source: 'user_edit',
+        payload: { entry: { ...MAIN, id: 'ast_2' } },
+      },
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
+        kind: 'updateEntryAsset',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'ast_1', patch: { role: 'thumb' } },
+      },
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+    {
+      action: {
+        kind: 'deleteEntryAsset',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'ast_1' },
+      },
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: refuses a payload naming another branch and writes neither branch',
+    async (_kind, { action, reason }) => {
+      const { db, ctx } = await forked([MAIN, FORK])
+      expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
+      expect(await linkOn(db, 'br_1')).toEqual(MAIN)
+      expect(await linkOn(db, 'br_2')).toEqual(FORK)
+      expect(await db.select().from(entryAssets).where(eq(entryAssets.id, 'ast_2'))).toEqual([])
+      expect(await undoPayloadsOf(db, 'act_p')).toEqual([])
+    },
+  )
 })
