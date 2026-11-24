@@ -15,8 +15,6 @@ export type BranchRenameInputProps = {
   className?: string
 }
 
-type Phase = 'editing' | 'saving' | 'settled'
-
 // RN-Web's own submit guard reads both signals, and runs after this handler; 229 is the key code
 // an IME's confirming Enter can carry with isComposing already false.
 const IME_KEY_CODE = 229
@@ -42,7 +40,7 @@ export function BranchRenameInput({
   const [invalid, setInvalid] = useState(false)
   const [saving, setSaving] = useState(false)
   // Enter, blur, Esc and an unmount can each end the edit; only the first one counts.
-  const phase = useRef<Phase>('editing')
+  const ended = useRef(false)
   const draftRef = useRef(name)
   // An untouched draft is the name at mount: saving it would overwrite a name changed since.
   const typed = useRef(false)
@@ -56,10 +54,9 @@ export function BranchRenameInput({
   useEffect(
     () => () => {
       clearTimeout(blurCheck.current)
-      if (phase.current !== 'editing' || !typed.current) return
+      if (ended.current || !typed.current) return
       const next = draftRef.current.trim()
       if (next === '' || next === latest.current.name.trim()) return
-      phase.current = 'saving'
       void latest.current.onSave(next).catch(logRejection)
     },
     [],
@@ -73,18 +70,17 @@ export function BranchRenameInput({
   }
 
   const commit = () => {
-    if (phase.current !== 'editing') return
+    if (ended.current) return
     const next = draftRef.current.trim()
     if (next === '') {
       setInvalid(true)
       return
     }
+    ended.current = true
     if (!typed.current || next === name.trim()) {
-      phase.current = 'settled'
       onDone()
       return
     }
-    phase.current = 'saving'
     setSaving(true)
     void onSave(next).catch(logRejection).finally(onDone)
   }
@@ -102,8 +98,8 @@ export function BranchRenameInput({
   }
 
   const cancel = () => {
-    if (phase.current !== 'editing') return
-    phase.current = 'settled'
+    if (ended.current) return
+    ended.current = true
     onDone()
   }
 
