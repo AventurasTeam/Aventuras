@@ -1,18 +1,25 @@
 let running: { readonly done: Promise<void> } | null = null
 
-/** Registers a running switch; null when one already runs. Call the returned settle on every exit. */
-export function beginSwitch(): (() => void) | null {
-  if (running != null) return null
-  let resolve!: () => void
+export type ExclusiveRun<T> = { ran: true; value: T } | { ran: false }
+
+/**
+ * Runs `body` as the one running switch, registered before this call returns; `ran: false` when
+ * one already runs. Settles on every exit of `body`, a throw included.
+ */
+export async function runExclusiveSwitch<T>(body: () => Promise<T>): Promise<ExclusiveRun<T>> {
+  if (running != null) return { ran: false }
+  let settle!: () => void
   const entry = {
-    done: new Promise<void>((res) => {
-      resolve = res
+    done: new Promise<void>((resolve) => {
+      settle = resolve
     }),
   }
   running = entry
-  return () => {
+  try {
+    return { ran: true, value: await body() }
+  } finally {
     if (running === entry) running = null
-    resolve()
+    settle()
   }
 }
 

@@ -23,7 +23,7 @@ import {
   type BranchWorkingSet,
   type ReadBranchResult,
 } from './operational'
-import { beginSwitch } from './switch-in-flight'
+import { runExclusiveSwitch } from './switch-in-flight'
 
 export type SwitchBranchInput = {
   storyId: string
@@ -64,14 +64,14 @@ export async function switchBranch(
     return refuse(input, 'gate')
   // A failed regenerate's sweep can still be writing on the branch left with the gate open.
   if (generationStore.isTurnBodyActive(input.fromBranchId)) return refuse(input, 'turn-body')
-  const settle = beginSwitch()
-  if (settle == null) return refuse(input, 'running')
-  try {
-    return await moveAndShow(input, ctx)
-  } finally {
-    readerHoldStore.release(input.hold)
-    settle()
-  }
+  const run = await runExclusiveSwitch(async () => {
+    try {
+      return await moveAndShow(input, ctx)
+    } finally {
+      readerHoldStore.release(input.hold)
+    }
+  })
+  return run.ran ? run.value : refuse(input, 'running')
 }
 
 function refuse(input: SwitchBranchInput, code: RefusalCode): SwitchBranchResult {
