@@ -505,3 +505,19 @@ slice-planning gate forces its resolution before that slice is planned.
   densities, with no floor. The branch rename input was its only
   production `size="sm"` use and now sets its own 44 px floor on phone.
   Pre-existing substrate. Found in Slice 6.4's reviews (2026-11-24).
+
+- **The reader's state chips repeat one class string.** The branch
+  chip (`components/reader/branch-chip.tsx`), the chapter chip
+  (`components/reader/chapter-chip.tsx`) and the rail's browse chip
+  (`components/reader/rail/browse-chip.tsx`) each spell the same chip classes
+  and web focus ring; a change to the chip's look has to land in all
+  three. A shared chip primitive or class helper is the fix; it needs
+  a home outside any one reader surface. Found in Slice 6.4's reviews
+  (2026-11-24).
+
+- **Storybook tier helpers are copied per story file.** `waitForTier`
+  and `TierMark` are written out in five story files (the branch chip,
+  navigator and rename input stories, the chapter popover's, and the
+  chapter-in-progress card's), two of them older than Slice 6.4. A
+  shared story helper beside the viewport lesson's pattern would hold
+  them once. Found in Slice 6.4's reviews (2026-11-24).
