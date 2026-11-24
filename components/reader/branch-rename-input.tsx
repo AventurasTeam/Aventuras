@@ -55,6 +55,7 @@ export function BranchRenameInput({
     () => () => {
       clearTimeout(blurCheck.current)
       if (ended.current || !typed.current) return
+      ended.current = true
       const next = draftRef.current.trim()
       if (next === '' || next === latest.current.name.trim()) return
       void latest.current.onSave(next).catch(logRejection)
@@ -92,6 +93,7 @@ export function BranchRenameInput({
       commit()
       return
     }
+    clearTimeout(blurCheck.current)
     blurCheck.current = setTimeout(() => {
       if (document.hasFocus()) commit()
     }, 0)

@@ -264,6 +264,37 @@ export const BlurThenUnmountCollapsesNothing: Story = {
   },
 }
 
+/** Two blurs a refocus apart, then an unmount within the tick: neither blur's check may outlive it. */
+async function blurTwiceThenUnmount(field: HTMLInputElement) {
+  field.blur()
+  field.focus()
+  field.blur()
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))
+  await screen.findByTestId('stored-name')
+  await pause(50)
+}
+
+export const BlurTwiceThenUnmountSavesOnce: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const field = await renameField()
+    await userEvent.keyboard('The trap')
+    await blurTwiceThenUnmount(field)
+    await expect(args.onSave).toHaveBeenCalledTimes(1)
+    await expect(args.onSave).toHaveBeenCalledWith('The trap')
+    await expect(args.onDone).not.toHaveBeenCalled()
+  },
+}
+
+export const UntouchedBlurTwiceThenUnmountCollapsesNothing: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await blurTwiceThenUnmount(await renameField())
+    await expect(args.onDone).not.toHaveBeenCalled()
+    await expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
 export const UntouchedDraftNeverOverwritesANewerName: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')
