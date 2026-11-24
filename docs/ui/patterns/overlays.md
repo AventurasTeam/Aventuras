@@ -427,6 +427,12 @@ focused action blurs the moment it disables, so the dialog takes focus
 and Tab stays inside
 ([a control that disables under focus drops focus on web](../../implementation/lessons-learned/rnweb-disabled-under-focus-blurs.md)).
 
+A Dialog whose action can't be abandoned once it starts, as the
+[branch creation modal](../screens/reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal)'s
+fork, also passes `closeDisabled`, which disables its `×`. `busy` doesn't
+stop Esc, a press outside or hardware back: each still calls
+`onOpenChange(false)`, which the consumer ignores while the action runs.
+
 ## Close focus
 
 A Dialog or AlertDialog returns focus, as it closes, to the first of

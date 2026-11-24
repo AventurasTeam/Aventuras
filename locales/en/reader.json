@@ -521,6 +521,17 @@
     "delete": "Delete {{name}}",
     "paused": "Generation in progress — switching paused.",
     "switchFailed": "Couldn't switch branches.",
-    "renameFailed": "Couldn't rename the branch."
+    "renameFailed": "Couldn't rename the branch.",
+    "create": {
+      "title": "New branch",
+      "context": "Branching from entry {{position}}.",
+      "name": "Name",
+      "cancel": "Cancel",
+      "confirm": "Create",
+      "unfinishedRun": "The memory work after this entry never finished, so branch from an earlier entry.",
+      "entryGone": "This entry is no longer on the branch.",
+      "failed": "Couldn't create the branch.",
+      "notOpened": "Created \"{{name}}\" but couldn't open it. Switch to it from the branch chip."
+    }
   }
 }
