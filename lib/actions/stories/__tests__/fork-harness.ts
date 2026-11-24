@@ -58,6 +58,7 @@ export type ParentSnapshot = {
   vectors: Record<string, VectorRow[]>
   branchRow: Record<string, unknown>
   redoTop: unknown
+  redoTopCopy: unknown
   hasRedo: boolean
 }
 
@@ -430,6 +431,7 @@ export function journalIdsOn(w: ForkWorld, branchId: string): string[] {
 }
 
 export function snapshotParent(w: ForkWorld): ParentSnapshot {
+  const redoTop = undoRedoStore.peekRedoGroup(w.parentId)
   return {
     rows: branchSnapshot(w.sqlite, w.parentId),
     vectors: vectorRows(w.sqlite, w.parentId),
@@ -437,7 +439,8 @@ export function snapshotParent(w: ForkWorld): ParentSnapshot {
       string,
       unknown
     >,
-    redoTop: undoRedoStore.peekRedoGroup(w.parentId),
+    redoTop,
+    redoTopCopy: structuredClone(redoTop),
     hasRedo: undoRedoStore.hasRedo(w.parentId),
   }
 }
@@ -567,6 +570,7 @@ export async function assertFork(
   expect(after.vectors, "the parent's vectors").toEqual(before.vectors)
   expect(after.branchRow, "the parent's branches row").toEqual(before.branchRow)
   expect(after.redoTop, "the parent's redo top").toBe(before.redoTop)
+  expect(after.redoTop, "the parent's redo payload").toEqual(before.redoTopCopy)
   expect(after.hasRedo, "the parent's redo").toBe(before.hasRedo)
 
   const child = branchSnapshot(w.sqlite, childId)
