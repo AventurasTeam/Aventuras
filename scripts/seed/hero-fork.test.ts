@@ -41,7 +41,8 @@ const OWN = [
 let dir: string
 const files: DatabaseSync[] = []
 
-// AC 20: through the script's own path, twice, so the two files compare byte for byte.
+// AC 20: through the script's own path, twice, so br_hero_fork's rows and its branches row
+// compare byte for byte.
 beforeAll(async () => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   dir = mkdtempSync(join(tmpdir(), 'hero-fork-'))

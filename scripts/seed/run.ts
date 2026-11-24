@@ -16,7 +16,8 @@ import { buildSeedSteps, HERO_FORK, type SeedStep } from '../../lib/db/devtools/
 import { dbSchema } from '../../lib/db/schema'
 import { slotPorts } from '../dev-slot/slot'
 
-type SeedCli = ReturnType<typeof parseCli>
+// The path is seedDatabase's own argument: a second copy here could name another file.
+type SeedModes = Omit<ReturnType<typeof parseCli>, 'path'>
 
 // The dataset's provider points at the slot-0 mock; a worker slot runs its own.
 function repointSeedProvider(steps: SeedStep[], port: number): void {
@@ -33,15 +34,14 @@ function repointSeedProvider(steps: SeedStep[], port: number): void {
 
 async function writeSeedRows(
   sqlite: DatabaseSync,
-  cli: SeedCli,
+  cli: SeedModes,
   mockPort: number | undefined,
 ): Promise<void> {
   try {
     sqlite.enableLoadExtension(true)
     sqlite.loadExtension(getLoadablePath())
   } catch (err) {
-    // Non-fatal here — migrate() below will throw its own error if a vec0
-    // statement actually needs the extension and it failed to load.
+    // Non-fatal: a vec0 statement below, in migrate() or the wipe, fails on its own without it.
     console.warn('[seed] sqlite-vec load skipped:', (err as Error).message)
   } finally {
     sqlite.enableLoadExtension(false) // re-close the surface after loading
@@ -120,7 +120,11 @@ async function applyOverlay(dbPath: string): Promise<void> {
 }
 
 /** `pnpm db:seed` on `dbPath`; a worker slot passes its mock's port for the seeded provider. */
-export async function seedDatabase(dbPath: string, cli: SeedCli, mockPort?: number): Promise<void> {
+export async function seedDatabase(
+  dbPath: string,
+  cli: SeedModes,
+  mockPort?: number,
+): Promise<void> {
   mkdirSync(dirname(dbPath), { recursive: true })
   console.log(`[seed] target DB: ${dbPath}`)
 
