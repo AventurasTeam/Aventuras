@@ -37,6 +37,7 @@ import {
   type UndoNames,
   type UnseenUndoDescription,
 } from './undo-copy'
+import { useAliveRef } from './use-alive-ref'
 
 type Op = 'undo' | 'redo'
 /** The keyboard's refusals are silent, by the native convention; every other origin's toast. */
@@ -161,22 +162,18 @@ export function useReaderUndo({
   useEffect(() => {
     liveRef.current = { branchId, isFocused, held }
   })
-  // Read after an await: a reader that unmounted, a switch's or a leave's, posts nothing more.
-  const aliveRef = useRef(false)
+  const aliveRef = useAliveRef()
 
   const showMenuTarget = useCallback((target: Target | null) => {
     menuTargetRef.current = target
     setMenuTarget(target)
   }, [])
 
-  // The notice's Redo belongs to the reader that showed it, so it goes with that reader. Layout:
-  // the flag falls in the commit that removes the reader, before any settling reversal reads it.
+  // The notice's Redo belongs to the reader that showed it, so it goes with that reader.
   useLayoutEffect(() => {
-    aliveRef.current = true
     showMenuTarget(null)
     setConfirm(null)
     return () => {
-      aliveRef.current = false
       if (noticeRef.current != null) toast.dismiss(noticeRef.current)
       noticeRef.current = null
     }
@@ -251,25 +248,30 @@ export function useReaderUndo({
       if (result.status === 'rejected') report('redo', result, origin)
       else announce(notice)
     },
-    [announce, branchId, ctx, report],
+    [aliveRef, announce, branchId, ctx, report],
   )
 
-  const guarded = useCallback((op: Op, run: () => Promise<void>) => {
-    if (busyRef.current) return
-    busyRef.current = true
-    // Not runAction: its toast can't see whether the reader is gone.
-    void run()
-      .finally(() => {
-        busyRef.current = false
-      })
-      .catch((err: unknown) => {
-        logger.error(op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed', {
-          error: err instanceof Error ? err.message : String(err),
+  const guarded = useCallback(
+    (op: Op, run: () => Promise<void>) => {
+      if (busyRef.current) return
+      busyRef.current = true
+      // Not runAction: its toast can't see whether the reader is gone.
+      void run()
+        .finally(() => {
+          busyRef.current = false
         })
-        if (aliveRef.current)
-          toast.error(t(op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed'))
-      })
-  }, [])
+        .catch((err: unknown) => {
+          logger.error(op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed', {
+            error: err instanceof Error ? err.message : String(err),
+          })
+          if (aliveRef.current)
+            toast.error(
+              t(op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed'),
+            )
+        })
+    },
+    [aliveRef],
+  )
 
   // Its Redo would be stale: the undo cleared the stack.
   const warnCloseUndone = useCallback((chapterNumber: number) => {
@@ -324,7 +326,7 @@ export function useReaderUndo({
           : undefined,
       )
     },
-    [announce, branchId, ctx, guarded, report, runRedo, showMenuTarget, warnCloseUndone],
+    [aliveRef, announce, branchId, ctx, guarded, report, runRedo, showMenuTarget, warnCloseUndone],
   )
 
   const confirmLines = useCallback(
@@ -395,7 +397,7 @@ export function useReaderUndo({
           lines,
         })
       }),
-    [branchId, confirmLines, guarded, report, resolve, runUndo],
+    [aliveRef, branchId, confirmLines, guarded, report, resolve, runUndo],
   )
 
   const redo = useCallback(

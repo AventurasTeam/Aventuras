@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, render as renderTree, renderHook, waitFor } from '@testing-library/react'
+import { useLayoutEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -1154,6 +1155,53 @@ describe('useReaderUndo — a reader that unmounted', () => {
     await settle()
 
     expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toEqual([])
+  })
+
+  it('says nothing to undo for a read that settles in the commit removing the reader', async () => {
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    let reader!: ReturnType<typeof useReaderUndo>
+    let removeReader!: () => void
+    let removed = false
+    function Reader() {
+      reader = useReaderUndo({ ctx, ...LIVE })
+      return null
+    }
+    function SettlesOnRemoval() {
+      useLayoutEffect(
+        () => () => {
+          removed = true
+          read.resolve(null)
+        },
+        [],
+      )
+      return null
+    }
+    function Screen() {
+      const [shown, setShown] = useState(true)
+      removeReader = () => setShown(false)
+      return shown ? (
+        <>
+          <Reader />
+          <SettlesOnRemoval />
+        </>
+      ) : null
+    }
+    renderTree(<Screen />)
+    act(() => reader.undo('menu'))
+
+    // Outside act, as a switch removes the reader: passive cleanups run only after the read settles.
+    env.IS_REACT_ACT_ENVIRONMENT = false
+    try {
+      removeReader()
+      await vi.waitFor(() => expect(removed).toBe(true))
+    } finally {
+      env.IS_REACT_ACT_ENVIRONMENT = true
+    }
+    await settle()
+
     expect(toasts).toEqual([])
   })
 
