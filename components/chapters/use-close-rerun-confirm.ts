@@ -28,8 +28,7 @@ function refusalCopy(
   return 'chapters:rerunConfirm.readFailed'
 }
 
-// A missing close or chapter means a broken log or a stale card; `not-latest` and `close-owed`
-// are races with copy of their own, and `integrity` logs where the set resolves.
+// A missing close, chapter or branch is a broken log or a stale card; the rest have copy or log.
 function logReadRefusal(branchId: string, chapterId: string, code: CloseRerunRefusalCode): void {
   if (code === CLOSE_RERUN_REFUSAL.noClose || code === CLOSE_RERUN_REFUSAL.notFound)
     logger.warn('app.close_rerun_preview_refused', { branchId, chapterId, code })

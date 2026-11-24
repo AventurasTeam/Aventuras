@@ -73,7 +73,7 @@ function DialogOverlay({
 // reachable. Cap the panel and scroll inside it instead.
 const MAX_HEIGHT_RATIO = 0.9
 
-// rn-primitives don't gate a disabled press on web.
+// RN-web's disabled leaves the ×'s children clickable; its sr-only label still reaches Radix's close.
 const CLOSE_GATED: ViewStyle = { pointerEvents: 'none' }
 
 function DialogContent({

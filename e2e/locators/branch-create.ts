@@ -13,8 +13,7 @@ export function branchCreate(page: Page): {
   const root = page.getByRole('dialog', { name: t('reader:branches.create.title'), exact: true })
   return {
     root,
-    // Not exact: the label may carry the required marker.
-    name: root.getByRole('textbox', { name: t('reader:branches.create.name') }),
+    name: root.getByRole('textbox', { name: t('reader:branches.create.name'), exact: true }),
     create: root.getByRole('button', { name: t('reader:branches.create.confirm'), exact: true }),
     cancel: root.getByRole('button', { name: t('reader:branches.create.cancel'), exact: true }),
   }

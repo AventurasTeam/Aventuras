@@ -186,7 +186,7 @@ export function useBranchCreate({
         committed = true
         const newBranchId = forked.branchId
         const open = currentStoryStore.getCurrentStory()
-        // Left or switched since: the pointer already names the new branch, so its next open lands there.
+        // Left or switched since: the parent's reader is gone, so the tail has no screens to replace.
         if (open == null || open.storyId !== sid || open.branchId !== branchId) {
           readerHoldStore.release(hold)
           refreshAfterFork(sid)

@@ -165,7 +165,6 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
 
 type At = { branchId: string; chapterId: string }
 
-// Logs a refusal's code under `kind` and toasts its notice.
 function speak(
   outcome: Outcome,
   kind: 'app.close_rerun_start_refused' | 'app.close_rerun_fork_refused',
@@ -321,7 +320,7 @@ function forkStartFailed(
   return { step: 'forked' }
 }
 
-// Nothing published, so the request still holds over the parent: no prune will close it.
+// The new branch may never have published, and only a publish's prune would close the request.
 function notShown(args: RerunOnBranchArgs, forked: Forked, cause: string): RerunOnBranchStep {
   refreshAfterFork(args.storyId)
   args.closeRequest()
@@ -359,7 +358,7 @@ async function showThenStart(
 ): Promise<RerunOnBranchStep> {
   const { storyId, branchId, chapterId, replaceStack } = args
   const open = currentStoryStore.getCurrentStory()
-  // Left or switched since: the pointer already names the new branch, so its next open lands there.
+  // Left or switched since: the parent's reader is gone, so the tail has no screens to replace.
   if (open == null || open.storyId !== storyId || open.branchId !== branchId) {
     readerHoldStore.release(hold)
     return notShown(args, forked, 'story-left')

@@ -210,7 +210,7 @@ export const Empty: Story = {
     const create = button(dialog, COPY.create)
     expect(isDisabled(create)).toBe(true)
     expect(within(dialog).queryByRole('alert')).toBeNull()
-    // Content-sized, the panel opens near 257 px and widens when a longer line appears.
+    // A content-sized panel would open near 257 px and widen when a longer line appears.
     expect(panelWidth(dialog)).toBeGreaterThan(340)
     expect(panelWidth(dialog)).toBeLessThanOrEqual(360.5)
     await userEvent.click(create, { pointerEventsCheck: 0 })

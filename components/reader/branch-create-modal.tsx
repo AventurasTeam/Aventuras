@@ -16,9 +16,7 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-// Radix's role=dialog wrapper shrinks to its content, so `w-full` leaves the panel content-sized
-// and a cap alone never reaches 360; web needs a definite width, against the viewport because a
-// percentage cap would resolve against that wrapper.
+// Radix's web wrapper shrinks to content, so web needs a definite width; the cap serves native.
 const PANEL_CLASS = cn(
   'sm:max-w-[360px]',
   Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
