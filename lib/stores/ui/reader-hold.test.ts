@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { resetAllStores } from '@/lib/stores'
 
@@ -40,6 +40,11 @@ describe('readerHoldStore', () => {
     expect(readerHoldStore.isHeld('br_1')).toBe(true)
     readerHoldStore.release(first)
     expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
+  it('mints a token from take alone: a literal of its shape is no token', () => {
+    expectTypeOf<{ readonly branchId: string }>().not.toExtend<ReaderHoldToken>()
+    expectTypeOf(readerHoldStore.take).returns.toEqualTypeOf<ReaderHoldToken>()
   })
 
   it('ignores a second release of one token', () => {

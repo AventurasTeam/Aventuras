@@ -1,7 +1,10 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-export type ReaderHoldToken = { readonly branchId: string }
+declare const taken: unique symbol
+
+/** Minted by `take` alone: a release ends a hold by the token's identity. */
+export type ReaderHoldToken = { readonly branchId: string; readonly [taken]: true }
 
 type ReaderHoldState = {
   /** A branch with no live token has no entry. */
@@ -20,7 +23,7 @@ function setTokens(branchId: string, tokens: ReadonlySet<ReaderHoldToken>): void
 // Each take is its own token, so one take's release never ends another's on the same branch.
 export const readerHoldStore = {
   take: (branchId: string): ReaderHoldToken => {
-    const token: ReaderHoldToken = { branchId }
+    const token = { branchId } as ReaderHoldToken
     setTokens(branchId, new Set(store.getState().held.get(branchId)).add(token))
     return token
   },
@@ -34,7 +37,7 @@ export const readerHoldStore = {
   },
   isHeld: (branchId: string): boolean => store.getState().held.has(branchId),
   useHeld: (branchId: string): boolean => useStore(store, (s) => s.held.has(branchId)),
-  /** Ends every token on the branch: the reader's unmount. */
+  /** Ends every token on the branch, other takers' included. */
   clear: (branchId: string): void => {
     if (store.getState().held.has(branchId)) setTokens(branchId, new Set())
   },
