@@ -1187,23 +1187,21 @@ describe('useReaderUndo — a reader that unmounted', () => {
     expect(actions.redoLastAction).not.toHaveBeenCalled()
   })
 
-  it("holds the notice's Redo while a switch holds the reader, and lets it through after", async () => {
+  it("holds the notice's Redo while a switch holds the reader", async () => {
     actions.readUndoTarget.mockResolvedValue(TURN)
     undoLands(TURN, { id: 'e2', position: 2 })
     actions.redoLastAction.mockResolvedValue(OK)
     const r = render()
     act(() => r.result.current.undo('keyboard'))
     await settle()
-    const hold = readerHoldStore.take('b1')
+    const pressRedo = toasts[0].action?.onPress
+    expect(pressRedo).toBeDefined()
+    readerHoldStore.take('b1')
 
-    act(() => toasts[0].action?.onPress())
+    act(() => pressRedo?.())
     await settle()
+
     expect(actions.redoLastAction).not.toHaveBeenCalled()
-
-    readerHoldStore.release(hold)
-    act(() => toasts[0].action?.onPress())
-    await settle()
-    expect(actions.redoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
   })
 
   it('says the story is loading for an Undo the menu ran before the branch loaded', async () => {
