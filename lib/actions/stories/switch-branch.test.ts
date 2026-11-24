@@ -736,3 +736,97 @@ describe('showBranch', () => {
     expect(await pointer(db)).toBe('br_b')
   })
 })
+
+// Back during a switch, then the story's card: the open reads the pointer once the abandoned
+// switch has put it back, never the one it wrote.
+describe('openStory during a switch', () => {
+  async function seedStory() {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Aria',
+      status: 'active',
+      favorite: 0,
+      createdAt: 1,
+      updatedAt: 1,
+      currentBranchId: 'br_main',
+      definition: STORY_DEFINITION,
+      settings: STORY_SETTINGS_DEFAULTS,
+    })
+    await db.insert(branches).values([
+      { id: 'br_main', storyId: 'story_1', name: 'Main', createdAt: 1 },
+      {
+        id: 'br_fork',
+        storyId: 'story_1',
+        parentBranchId: 'br_main',
+        name: 'The road not taken',
+        createdAt: 2,
+      },
+    ])
+    return { db, runInTransaction }
+  }
+
+  beforeEach(() => {
+    resetAllStores()
+  })
+
+  it('waits for an abandoned switch to put the pointer back, then opens the branch left', async () => {
+    const ctx = await seedStory()
+    const written = deferred()
+    const writeHeld = deferred()
+    let transactions = 0
+    // The switch's first transaction is its pointer write: it commits, then the switch waits here.
+    const switchCtx: typeof ctx = {
+      db: ctx.db,
+      runInTransaction: async (ops) => {
+        await ctx.runInTransaction(ops)
+        transactions += 1
+        if (transactions === 1) {
+          written.resolve()
+          await writeHeld.promise
+        }
+      },
+    }
+    let current = true
+    const replaceStack = vi.fn<(branchId: string) => boolean>(() => true)
+    const navigate = vi.fn<(branchId: string) => void>()
+
+    const switching = switchBranch(
+      {
+        storyId: 'story_1',
+        fromBranchId: 'br_main',
+        toBranchId: 'br_fork',
+        hold: readerHoldStore.take('br_main'),
+        isCurrentRequest: () => current,
+        replaceStack,
+      },
+      switchCtx,
+    )
+    let pointerDuringSwitch: string | null
+    let navigatedDuringSwitch: string[]
+    let opening: ReturnType<typeof openStory>
+    try {
+      await written.promise
+      pointerDuringSwitch = await pointer(ctx.db)
+      opening = openStory('story_1', ctx, navigate, 999)
+      // An open that doesn't wait reads the pointer, loads and navigates within this turn.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      navigatedDuringSwitch = navigate.mock.calls.map(([branchId]) => branchId)
+    } finally {
+      // Back: the reader that started the switch is gone. Released before any assertion so a
+      // failure never leaves a switch registered for a later test.
+      current = false
+      writeHeld.resolve()
+    }
+
+    expect(pointerDuringSwitch).toBe('br_fork')
+    expect(navigatedDuringSwitch).toEqual([])
+    expect(await switching).toEqual({ status: 'abandoned' })
+    expect(await opening).toEqual({ status: 'ok', branchId: 'br_main' })
+    expect(navigate.mock.calls).toEqual([['br_main']])
+    expect(await pointer(ctx.db)).toBe('br_main')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_main')
+    expect(replaceStack).not.toHaveBeenCalled()
+    expect(readerHoldStore.isHeld('br_main')).toBe(false)
+  })
+})

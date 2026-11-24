@@ -44,6 +44,7 @@ import { warmTokenEncoder } from '@/lib/tokens'
 
 import { readRecentEntries } from '../story-entries/recent-window'
 import type { DbCtx } from '../types'
+import { awaitRunningSwitch } from './switch-in-flight'
 
 const TOKEN_WARM_TIMEOUT_MS = 2_000
 
@@ -309,6 +310,8 @@ export async function openStory(
   nowMs: number = Date.now(),
   isCurrentRequest: IsCurrentRequest = alwaysCurrent,
 ): Promise<OpenStoryResult> {
+  // An abandoned or failed switch puts the pointer back before it settles.
+  await awaitRunningSwitch()
   const [row] = await ctx.db
     .select({ branchId: stories.currentBranchId })
     .from(stories)
