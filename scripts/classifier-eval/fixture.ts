@@ -28,7 +28,7 @@ export type Check = {
 export type EvalWindow = {
   name: string
   about: string
-  /** The story's lead, for a window narrated in the first or second person. */
+  /** The branch's lead: its row carries the flag, and `entries()` stamps every turn with it. */
   lead?: string
   /** The story's mode; adventure when left out. */
   mode?: StoryMode
@@ -67,7 +67,7 @@ const entityRow = (
   id: string,
   kind: Entity['kind'],
   name: string,
-  opts: { description?: string; status?: Entity['status']; keywords?: string[] },
+  opts: { description?: string; status?: Entity['status']; keywords?: string[]; isLead?: 0 | 1 },
   state: EntityState,
 ): Entity => ({
   id,
@@ -86,7 +86,7 @@ const entityRow = (
   keywords: opts.keywords ?? [],
   priority: 0,
   embeddingStale: 0,
-  isLead: 0,
+  isLead: opts.isLead ?? 0,
   createdAt: AT,
   updatedAt: AT,
 })
@@ -99,6 +99,7 @@ export const character = (
     status?: Entity['status']
     keywords?: string[]
     faction?: string
+    isLead?: 0 | 1
   } = {},
 ): Entity =>
   entityRow(id, 'character', name, opts, {
@@ -192,11 +193,15 @@ export const narration = (prose: string, scene?: Pick<Turn, 'scene' | 'location'
   ...scene,
 })
 
-/** The window's entries from position 1, each turn's scene defaulting to the window's. */
+/**
+ * The window's entries from position 1, each turn's scene defaulting to the window's, each
+ * stamped with `lead`, in the id scheme the window's rows use.
+ */
 export function entries(
   window: string,
   scene: { scene: string[]; location?: string },
   turns: readonly Turn[],
+  lead: string | undefined,
 ): StoryEntry[] {
   return turns.map((turn, i) => ({
     id: `entry_${window}_${i + 1}`,
@@ -210,6 +215,7 @@ export function entries(
       sceneEntities: turn.scene ?? scene.scene,
       currentLocationId: turn.location ?? scene.location ?? null,
       worldTime: i + 1,
+      ...(lead !== undefined ? { leadId: lead } : {}),
     }),
     createdAt: AT + i,
   }))

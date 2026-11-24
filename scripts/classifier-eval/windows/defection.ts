@@ -43,26 +43,31 @@ export const defection: EvalWindow = {
   happenings: [],
   relationships: [],
   threads: [],
-  entries: entries('defection', { scene: ['char_brann', 'char_maela'] }, [
-    action(
-      'Maela offers Brann a sergeant’s place in House Varro’s guard if he brings her the toll ledgers.',
-    ),
-    narration(
-      `Brann turned the cup in his big hands for a long time. Twelve years he'd worn the Warden badge, he said. Twelve years of other men's tolls, and the year his brother came up a crown short at the Saltgate count, the Wardens had hanged him from the toll-house crane and left him for the gulls.
+  entries: entries(
+    'defection',
+    { scene: ['char_brann', 'char_maela'] },
+    [
+      action(
+        'Maela offers Brann a sergeant’s place in House Varro’s guard if he brings her the toll ledgers.',
+      ),
+      narration(
+        `Brann turned the cup in his big hands for a long time. Twelve years he'd worn the Warden badge, he said. Twelve years of other men's tolls, and the year his brother came up a crown short at the Saltgate count, the Wardens had hanged him from the toll-house crane and left him for the gulls.
 
 "I'll want it in writing," he said at last. "And I'll want the man who signed that warrant."
 
 Maela slid the paper across the table. He read it twice, then unpinned the tarnished badge from his coat, dropped it in the dregs of his ale, and knelt on the alehouse's sawdust to put his lips to the Varro signet on her hand. "Tell your lord he's bought himself a sergeant."`,
-    ),
-    action(
-      'Maela borrows a Warden’s coat so the two of them can walk into the Saltgate toll-house unchallenged.',
-      { location: 'loc_tollhouse' },
-    ),
-    narration(
-      `The coat was too broad in the shoulders, but in the fog nobody looked twice at a Warden walking beside a Warden sergeant. The gate-boy saluted Brann out of habit. Inside, the ledger room smelled of tallow and wet paper; Brann knew which shelf, and which book on it held the second set of figures. Maela had the ledgers in her satchel before the bell rang the watch, and they were back out in the fog before anyone thought to ask why Sergeant Holt had come in on his rest day.`,
-      { location: 'loc_tollhouse' },
-    ),
-  ]),
+      ),
+      action(
+        'Maela borrows a Warden’s coat so the two of them can walk into the Saltgate toll-house unchallenged.',
+        { location: 'loc_tollhouse' },
+      ),
+      narration(
+        `The coat was too broad in the shoulders, but in the fog nobody looked twice at a Warden walking beside a Warden sergeant. The gate-boy saluted Brann out of habit. Inside, the ledger room smelled of tallow and wet paper; Brann knew which shelf, and which book on it held the second set of figures. Maela had the ledgers in her satchel before the bell rang the watch, and they were back out in the fog before anyone thought to ask why Sergeant Holt had come in on his rest day.`,
+        { location: 'loc_tollhouse' },
+      ),
+    ],
+    undefined,
+  ),
   checks: [
     {
       name: 'Brann ends the window in House Varro',

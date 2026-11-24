@@ -268,6 +268,7 @@ function heroMetadata(i: number, kind: NewStoryEntry['kind']): EntryMetadata {
     ...(kind === 'ai_reply'
       ? { model: 'seed/narrative', tokens: { prompt: 800 + i, completion: 240 + i } }
       : {}),
+    ...(kind === 'system' ? {} : { leadId: ID.kael }),
   })
 }
 
@@ -1639,6 +1640,7 @@ function fillerStoryRows(): {
           sceneEntities: f.lead ? [f.lead.id] : [],
           currentLocationId: null,
           worldTime: (i - 1) * 2,
+          ...(f.lead ? { leadId: f.lead.id } : {}),
         }),
         createdAt: t0 + i * MIN,
       })

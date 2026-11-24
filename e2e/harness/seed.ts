@@ -358,8 +358,8 @@ function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: num
 /**
  * Append `count` filler turns and park the classifier watermark at `processedThrough`,
  * so the branch carries a backlog deeper than the reader's entry window. Each filler
- * body embeds its position, so a spec can tell which turns a pass actually read.
- * Runs before launch.
+ * body embeds its position, so a spec can tell which turns a pass actually read, and
+ * each is stamped with the branch's lead, as a reply is written. Runs before launch.
  */
 export function seedClassifierBacklog(
   dbPath: string,
@@ -372,9 +372,14 @@ export function seedClassifierBacklog(
     const row = db
       .prepare(`SELECT COALESCE(MAX(position), 0) AS p FROM story_entries WHERE branch_id = ?`)
       .get(branchId) as { p: number }
+    // Two flagged rows read as no lead (data-model.md → The lead), so only one stamps.
+    const leads = db
+      .prepare(`SELECT id FROM entities WHERE branch_id = ? AND is_lead = 1`)
+      .all(branchId) as { id: string }[]
+    const metadata = leads.length === 1 ? JSON.stringify({ leadId: leads[0].id }) : '{}'
     const insert = db.prepare(
       `INSERT INTO story_entries (id, branch_id, position, kind, content, chapter_id, metadata, created_at)
-       VALUES (?, ?, ?, 'ai_reply', ?, NULL, '{}', 1)`,
+       VALUES (?, ?, ?, 'ai_reply', ?, NULL, ?, 1)`,
     )
     for (let i = 1; i <= count; i++) {
       const position = row.p + i
@@ -383,6 +388,7 @@ export function seedClassifierBacklog(
         branchId,
         position,
         `FILLER-${position} nothing happens.`,
+        metadata,
       )
     }
     parkWatermark(db, branchId, processedThrough)
