@@ -9,6 +9,7 @@ import {
   happeningAwareness,
   happeningInvolvements,
   stories,
+  type HappeningInvolvement,
   type NewHappeningInvolvement,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -522,5 +523,154 @@ describe.each(LINK_TABLES)('userDeletedHappeningLink over $name', ({ add, remove
 
     expect(await deletedOn(ctx, 'hap_1')).toBe(false)
     expect(await deletedOn(ctx, 'hap_2')).toBe(true)
+  })
+})
+
+// Involvement ids repeat across branches (the key is branch and id), so every read and write is scoped.
+describe('branch scope', () => {
+  const SIBLING: HappeningInvolvement = {
+    id: 'hinv_1',
+    branchId: 'br_1',
+    happeningId: 'hap_1',
+    entityId: 'char_1',
+    role: 'witness',
+  }
+  const WRITTEN: HappeningInvolvement = {
+    id: 'hinv_1',
+    branchId: 'br_2',
+    happeningId: 'hap_2',
+    entityId: 'char_2',
+    role: 'duelist',
+  }
+
+  // An id-only read scans in insertion order, so the sibling's row goes in first.
+  async function twoBranches({ written = true }: { written?: boolean } = {}) {
+    const harness = await setup()
+    const { db } = harness
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    await db.insert(entities).values({
+      id: 'char_2',
+      branchId: 'br_2',
+      kind: 'character',
+      name: 'Bren',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db
+      .insert(happenings)
+      .values({ id: 'hap_2', branchId: 'br_2', title: 'The flood', createdAt: 1, updatedAt: 1 })
+    await db.insert(happeningInvolvements).values(written ? [SIBLING, WRITTEN] : [SIBLING])
+    return harness
+  }
+
+  const onWritten = (ctx: Ctx, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+
+  const involvementOn = async (db: Db, branchId: string, id: string) =>
+    (
+      await db
+        .select()
+        .from(happeningInvolvements)
+        .where(and(eq(happeningInvolvements.branchId, branchId), eq(happeningInvolvements.id, id)))
+    )[0]
+
+  const loggedBy = (db: Db, actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+
+  it("createHappeningInvolvement pair: creates beside the sibling's row and reverses", async () => {
+    const { db, ctx } = await twoBranches({ written: false })
+    const create: PipelineAction = {
+      kind: 'createHappeningInvolvement',
+      source: 'ai_classifier',
+      payload: { entry: WRITTEN },
+    }
+
+    expect(await onWritten(ctx, create, 'act_c')).toMatchObject({ status: 'ok' })
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual(WRITTEN)
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toBeUndefined()
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+  })
+
+  it('updateHappeningInvolvement pair: updates from its own row and reverses', async () => {
+    const { db, ctx } = await twoBranches()
+    const update: PipelineAction = {
+      kind: 'updateHappeningInvolvement',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'hinv_1', patch: { role: 'scout' } },
+    }
+
+    expect(await onWritten(ctx, update, 'act_u')).toMatchObject({ status: 'ok' })
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual({ ...WRITTEN, role: 'scout' })
+    const [logged] = await loggedBy(db, 'act_u')
+    expect(logged.undoPayload).toEqual({ role: 'duelist' })
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual(WRITTEN)
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+  })
+
+  it('deleteHappeningInvolvement pair: deletes its own row and restores it', async () => {
+    const { db, ctx } = await twoBranches()
+    const remove: PipelineAction = {
+      kind: 'deleteHappeningInvolvement',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'hinv_1' },
+    }
+
+    expect(await onWritten(ctx, remove, 'act_d')).toMatchObject({ status: 'ok' })
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toBeUndefined()
+    const [logged] = await loggedBy(db, 'act_d')
+    expect(logged.undoPayload).toEqual(WRITTEN)
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual(WRITTEN)
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+  })
+
+  // The payload names the sibling, a valid target there: with the check gone, the write lands on it.
+  it.each<[string, PipelineAction, string]>([
+    [
+      'createHappeningInvolvement',
+      {
+        kind: 'createHappeningInvolvement',
+        source: 'ai_classifier',
+        payload: { entry: { ...WRITTEN, id: 'hinv_9', branchId: 'br_1', role: 'scout' } },
+      },
+      'branch mismatch: delta br_2 vs entry br_1',
+    ],
+    [
+      'updateHappeningInvolvement',
+      {
+        kind: 'updateHappeningInvolvement',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'hinv_1', patch: { role: 'scout' } },
+      },
+      'branch mismatch: delta br_2 vs target br_1',
+    ],
+    [
+      'deleteHappeningInvolvement',
+      {
+        kind: 'deleteHappeningInvolvement',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'hinv_1' },
+      },
+      'branch mismatch: delta br_2 vs target br_1',
+    ],
+  ])('%s payload: refuses a payload naming the sibling branch', async (_kind, action, reason) => {
+    const { db, ctx } = await twoBranches()
+
+    expect(await onWritten(ctx, action, 'act_payload')).toEqual({ status: 'rejected', reason })
+
+    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+    expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual(WRITTEN)
+    expect(await db.select().from(happeningInvolvements)).toHaveLength(2)
+    expect(await loggedBy(db, 'act_payload')).toEqual([])
   })
 })
