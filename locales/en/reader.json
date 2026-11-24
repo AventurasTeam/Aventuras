@@ -511,6 +511,7 @@
     "commonKnowledge": "Common knowledge"
   },
   "branches": {
-    "renameInput": "Branch name"
+    "renameInput": "Branch name",
+    "chipLabel": "On {{name}} · {{count}} branches"
   }
 }
