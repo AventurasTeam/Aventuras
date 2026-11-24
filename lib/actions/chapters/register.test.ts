@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { branches, chapters, deltas, stories, type CloseReport, type NewChapter } from '@/lib/db'
@@ -9,6 +9,7 @@ import { registerChapters } from './register'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   // Registration is process-global; reset so only chapters is live for this test.
@@ -470,4 +471,152 @@ describe('chapters store projection', () => {
     expect((await rowFor(db, 'chap_1')).closeReport).toBeNull()
     expect((await db.select().from(deltas)).length).toBe(1)
   })
+})
+
+// Chapter ids repeat across branches (the key is branch and id), so every read and write is scoped.
+describe('branch scope', () => {
+  const MAIN: NewChapter = {
+    id: 'chap_1',
+    branchId: 'br_1',
+    sequenceNumber: 1,
+    title: 'The Gathering Storm',
+    summary: 'Heroes assemble as war looms.',
+    theme: 'rising tension',
+    keywords: ['war', 'omen'],
+    startEntryId: 'se_1',
+    endEntryId: 'se_40',
+    tokenCount: 24000,
+    closedAt: 100,
+    embeddingStale: 0,
+    createdAt: 1,
+    updatedAt: 1,
+    closeReport: REPORT,
+  }
+  const FORK: NewChapter = {
+    id: 'chap_1',
+    branchId: 'br_2',
+    sequenceNumber: 2,
+    title: 'The Long Retreat',
+    summary: 'The fork falls back to the river.',
+    theme: 'retreat',
+    keywords: ['river', 'ash'],
+    startEntryId: 'se_2',
+    endEntryId: 'se_41',
+    tokenCount: 26000,
+    closedAt: 200,
+    embeddingStale: 1,
+    createdAt: 2,
+    updatedAt: 2,
+    closeReport: null,
+  }
+
+  type Fixture = Awaited<ReturnType<typeof setup>>
+
+  async function forked(seeded: readonly NewChapter[]) {
+    const fixture = await setup()
+    await fixture.db
+      .insert(branches)
+      .values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 2 })
+    await fixture.db.insert(chapters).values([...seeded])
+    return fixture
+  }
+
+  const chapterOn = async (db: Fixture['db'], branchId: string) =>
+    (
+      await db
+        .select()
+        .from(chapters)
+        .where(and(eq(chapters.branchId, branchId), eq(chapters.id, 'chap_1')))
+    )[0]
+
+  const undoPayloadsOf = async (db: Fixture['db'], actionId: string) =>
+    (await db.select().from(deltas).where(eq(deltas.actionId, actionId))).map(
+      (delta) => delta.undoPayload,
+    )
+
+  const onFork = (ctx: Fixture['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+
+  it("createChapter pair: creates the row on its own branch beside another branch's same id, and its reversal removes only that row", async () => {
+    const { db, ctx } = await forked([MAIN])
+    const create: PipelineAction = {
+      kind: 'createChapter',
+      source: 'chapter_close',
+      payload: { entry: FORK },
+    }
+    expect(await onFork(ctx, create, 'act_c')).toMatchObject({ status: 'ok' })
+    expect(await chapterOn(db, 'br_2')).toEqual(FORK)
+    expect(await chapterOn(db, 'br_1')).toEqual(MAIN)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await chapterOn(db, 'br_2')).toBeUndefined()
+    expect(await chapterOn(db, 'br_1')).toEqual(MAIN)
+  })
+
+  it("updateChapter pair: updates only its own branch's row, recording that row's priors, and its reversal restores it", async () => {
+    const { db, ctx } = await forked([MAIN, FORK])
+    const update: PipelineAction = {
+      kind: 'updateChapter',
+      source: 'user_edit',
+      payload: {
+        branchId: 'br_2',
+        id: 'chap_1',
+        patch: {
+          title: 'The Ford',
+          summary: 'The fork holds the ford.',
+          keywords: ['river', 'ford'],
+        },
+      },
+    }
+    expect(await onFork(ctx, update, 'act_u')).toMatchObject({ status: 'ok' })
+    expect(await chapterOn(db, 'br_2')).toEqual({
+      ...FORK,
+      title: 'The Ford',
+      summary: 'The fork holds the ford.',
+      keywords: ['river', 'ford'],
+    })
+    expect(await chapterOn(db, 'br_1')).toEqual(MAIN)
+    expect(await undoPayloadsOf(db, 'act_u')).toEqual([
+      {
+        title: 'The Long Retreat',
+        summary: 'The fork falls back to the river.',
+        keywords: ['river', 'ash'],
+      },
+    ])
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await chapterOn(db, 'br_2')).toEqual(FORK)
+    expect(await chapterOn(db, 'br_1')).toEqual(MAIN)
+  })
+
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
+        kind: 'createChapter',
+        source: 'chapter_close',
+        payload: { entry: { ...MAIN, id: 'chap_2', sequenceNumber: 2 } },
+      },
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
+        kind: 'updateChapter',
+        source: 'user_edit',
+        payload: { branchId: 'br_1', id: 'chap_1', patch: { title: 'The Ford' } },
+      },
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: refuses a payload naming another branch and writes neither branch',
+    async (_kind, { action, reason }) => {
+      const { db, ctx } = await forked([MAIN, FORK])
+      expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
+      expect(await chapterOn(db, 'br_1')).toEqual(MAIN)
+      expect(await chapterOn(db, 'br_2')).toEqual(FORK)
+      expect(await db.select().from(chapters).where(eq(chapters.id, 'chap_2'))).toEqual([])
+      expect(await undoPayloadsOf(db, 'act_p')).toEqual([])
+    },
+  )
 })
