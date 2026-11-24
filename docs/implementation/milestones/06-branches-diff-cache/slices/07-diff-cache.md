@@ -298,7 +298,7 @@ follow the default.
   a remove), so a mounted row would keep the stale prose until something
   else re-rendered it (C9). The host hears the eviction from the cache,
   not from a hook of its own. Every query key in the app so far carries
-  `settleCount` instead (`hooks/use-entry-index.ts:105`); this is the
+  `settleCount` instead (`hooks/use-entry-index.ts:108`); this is the
   first invalidation by key.
 - A loader seam beside `HistoryLoaderProvider`
   (`components/history/history-loader.tsx`), defaulting to the cache, so
@@ -750,3 +750,25 @@ invalidation, and, if the E2E has a survivor, its registration check.
   agenda) store terms with no whitespace or Unicode normalization, so
   terms differing only by spacing or NFD versus NFC are distinct values
   and read `added X, removed X`.
+- **The entry-index gate** (developer decision, slice review R1: b,
+  2026-11-24). After a failed re-read, `useEntryIndex` kept its last
+  good list and read `ready: true, failed: false`, so the host's
+  `ready && !failed` stayed open and a row naming an entry newer than
+  that list read "Unknown entry". The hook
+  (`hooks/use-entry-index.ts`, outside this slice's files) gained
+  `stale`: true until a read lands, while one runs and after one fails;
+  `ready`, `failed` and `updating` keep their meaning for their other
+  readers. The host gates per row: a row naming an entry the index
+  doesn't hold (`entryIdsOf`, which replaced `namesAnEntry`) keeps the
+  field-name summary while the index is stale, a row whose entries it
+  holds keeps its prose, and a missing entry reads "Unknown entry" once
+  the index is fresh.
+- **A wrong-typed value** (developer decision, slice review R2: b,
+  2026-11-24). `diffProse` tells a value that isn't its field's type
+  from a path with no wording, and hands the first such path to its
+  context's required `onMistyped`; it still returns null, so the row
+  keeps the field-name summary. The History tab logs
+  `history.diff_prose_mistyped` with the branch, delta id and path,
+  once per walk result (a `WeakSet` of the cache's entries): a
+  re-render or a remount doesn't repeat it, a re-walk after an eviction
+  can. A path with no wording logs nothing.
