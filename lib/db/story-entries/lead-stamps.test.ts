@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { createTestDb } from '../__tests__/test-db'
@@ -60,6 +61,16 @@ describe('readStampedLeadIds', () => {
 
     expect(await readStampedLeadIds('b1', ['char_c'], db)).toEqual(new Set())
     expect(await readStampedLeadIds('b2', ['char_c'], db)).toEqual(new Set(['char_c']))
+  })
+
+  it("reads past an entry whose metadata isn't valid JSON", async () => {
+    const db = await seed([entry('b1', 'user_action', stamped('char_a'))])
+    await db.run(
+      sql`INSERT INTO story_entries (id, branch_id, position, kind, content, metadata, created_at)
+        VALUES ('e_bad', 'b1', 99, 'ai_reply', 'Prose.', '{"leadId": ', 1)`,
+    )
+
+    expect(await readStampedLeadIds('b1', ['char_a', 'char_z'], db)).toEqual(new Set(['char_a']))
   })
 
   it('reads nothing for no ids', async () => {
