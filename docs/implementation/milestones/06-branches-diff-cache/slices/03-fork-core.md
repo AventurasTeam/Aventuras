@@ -705,11 +705,16 @@ files named are suggestions the plan may rename, with this doc amended.
 
 ## Open questions
 
+None open. Each was answered at slice planning or in the work; the
+answers are in [Implementation notes](#implementation-notes), and each
+question below ends on where.
+
 - **The split's shape.** Whether the write branch is an option on
   `buildReverseAndPrunePlan` or a field the walk carries, and what
   `ReversePlan` gains: separate re-own ops, separate vector-sweep ops,
   or a fork view over the plan. `ReversePlan` keeps its fields either
-  way.
+  way. _Resolved:_ an optional fourth argument, and three op lists
+  beside the old ones (The planner's write branch).
 - **One read still on the read branch.** [Slice 6.1](./01-copy-substrate.md)
   moved every stamp, key and patch C1 gave it off `delta.branchId`, and
   left one branch read the split must decide: `prepareUndo`'s
@@ -717,7 +722,9 @@ files named are suggestions the plan may rename, with this doc amended.
   (`lib/actions/delta/redo.ts:110`). That is the branch the undo wrote
   while the two are one; if the split reaches the survivor rewrites
   this callback takes, it must follow the write branch, and agree with
-  the group's own branch once C6 lands.
+  the group's own branch once C6 lands. _Resolved:_ it stays on
+  `set.branchId` (now `redo.ts:115`), since it serves CTRL-Z alone (The
+  planner's write branch).
 - **The seed's create deltas.** `entryCreateDeltas`
   (`lib/db/devtools/seed-dataset.ts:1364-1386`) logs every entry create
   with a null anchor and an action of its own, and
@@ -730,6 +737,7 @@ files named are suggestions the plan may rename, with this doc amended.
   action. Nothing on screen differs today; whether the seed's creates,
   main's and the fork's, follow the production shape is this slice's
   call when it rebuilds the seed (C11 gives 6.3 the fork's rows).
+  _Resolved:_ the seed's shape, for main and the fork alike (Decisions).
 - **How short the survivor copy's two lists stay.** The predicate is
   the default (C7). Whether the deltas the plan prunes outside the
   window, or the creates it re-owns, can pass the bind cap on a real
@@ -737,7 +745,11 @@ files named are suggestions the plan may rename, with this doc amended.
   are writes to rows reached by reference from removed rows, so a fork
   that removes a long stretch of a richly linked world adds the most.
   Planning reads it from the code and measures it on the dataset story.
-- **The fork's details canon leaves open.**
+  _Resolved:_ the predicate, with no fallback and a guard before any
+  write; the lists are still unmeasured at real scale (The survivor
+  copy, Cost).
+- **The fork's details canon leaves open.** _Resolved_ by the
+  developer, now in canon (Decisions).
   - `processedThrough` when the parent's is null (never processed, or
     a NULL column read as idle), and whether `lastSuccessAt` copies or
     resets.
@@ -772,24 +784,28 @@ files named are suggestions the plan may rename, with this doc amended.
   it. A journal survives unless `plan.droppedJournals` holds it. A
   re-run marker with `rerun_chapter_id` set carries its chapter's state
   even with no delta and no journal, so its chapter surviving the plan
-  refuses.
+  refuses. _Resolved:_ built as read here, in `fork-runs.ts`.
 - **How the seed runs an action.** How `scripts/seed` and the on-device
   reseed run the fork's core. `scripts/seed/index.ts`'s `--overlay` path already loads the
   action layer, but every E2E spec runs `pnpm db:seed`, so its load
   time lands on every spec. `reseedDevDatabase` sits in `lib/db`, which
   can't import `lib/actions` without a cycle, so its caller
   (`app/dev/reseed.tsx`) or an injected step runs the fork.
+  _Resolved_ by the developer: every seed mode, and the route after
+  the reseed (Decisions).
 - **Whether main forks at the seed's `N`.** Seed rows with no create
   delta that the closure reaches by reference refuse as `no-create`
   (`lib/actions/delta/row-closure.ts:329-330`). Whether the planner
   reaches one from `entry_hero_0040` is read at planning; a refusal
-  moves the fork entry, not the approach.
+  moves the fork entry, not the approach. _Resolved:_ it doesn't, so the
+  fork entry stays `entry_hero_0040`.
 - **The appended turns' lead stamps.** With
   [Slice 6.8](./08-per-branch-lead.md) on main, the appended turns
   carry `metadata.leadId` as main's entries do. C10 pins who stamps
   them: the second of 6.3 and 6.8 to land, as with the harness's lead
   switch. What is open is only how the stamp is written at seed time,
-  beside the other appended fields.
+  beside the other appended fields. _Resolved:_ 6.8 wasn't on main
+  here, so it writes them as the second to land (Second to land).
 - **Unaudited contract text.** Not rechecked by any audit round: C1's
   pin of the row target's branch, the two harness fixtures, the
   tombstone construction (two readings of the code, the auditor's and
@@ -798,12 +814,15 @@ files named are suggestions the plan may rename, with this doc amended.
   survivor copy, C8's hold from a fork's start to its navigation, and
   the "second to land" criteria. Read them against the code at planning
   ([milestone → Open questions](../milestone.md#open-questions)).
+  _Resolved:_ read at planning; the two fixtures reached their arms as
+  built (The two unrun fixtures).
 - **6.3 beside 6.1.** If the plan can't test anything before the op
   list splits, the edge becomes blocking and the planner starts after
-  6.1 merges.
+  6.1 merges. _Resolved:_ moot, since 6.1 merged before this slice
+  started, and the tests before 6.1's merge were never needed.
 - **Size.** Planned at 15 tasks, priced by analogy with no close
   precedent. M5's plans held 3 to 7 more than their estimates; check at
-  the plan skeleton.
+  the plan skeleton. _Resolved:_ it shipped in the 15 tasks, as one PR.
 
 ## Implementation notes
 
