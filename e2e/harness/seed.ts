@@ -175,10 +175,10 @@ export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): vo
   }
 }
 
-// Every embeddable table at once. A no-op today for the same reason as
-// markEntitiesEmbeddingStale above. Runs before launch.
 const EMBEDDABLE_TABLES = Object.values(SOURCE_TABLES)
 
+// Every embeddable table at once. A no-op today for the same reason as
+// markEntitiesEmbeddingStale above. Runs before launch.
 export function markBranchEmbeddingStale(dbPath: string, branchId: string): void {
   const db = new DatabaseSync(dbPath)
   try {
@@ -393,8 +393,8 @@ export function seedClassifierBacklog(
 
 /**
  * Park the classifier watermark at the last `ai_reply` and return it, so a pass covers only turns
- * committed after launch (the seed parks at the last non-system row). Not MAX(position): the
- * first Send's user_action takes a trailing `system` row's position. Runs before launch.
+ * committed after launch. Not MAX(position): the first Send's user_action takes a trailing
+ * `system` row's position. Runs before launch.
  */
 export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
   const db = new DatabaseSync(dbPath)
