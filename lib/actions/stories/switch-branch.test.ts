@@ -485,14 +485,18 @@ describe('switchBranch', () => {
     const stack = fakeStack()
 
     const running = switchBranch(input({ replaceStack: stack.replaceStack }), ctx)
-    await reached.promise
-    expect(await pointer(db)).toBe('br_b')
-    expect(entriesStore.getLoadedBranch()).toBe('br_a')
-    expect(eraFlipsStore.getLoadedBranch()).toBe('br_a')
-    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
-    expect(stack.replaceStack).not.toHaveBeenCalled()
-
-    release.resolve()
+    try {
+      await reached.promise
+      expect(await pointer(db)).toBe('br_b')
+      expect(entriesStore.getLoadedBranch()).toBe('br_a')
+      expect(eraFlipsStore.getLoadedBranch()).toBe('br_a')
+      expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+      expect(stack.replaceStack).not.toHaveBeenCalled()
+    } finally {
+      // A failed assertion must not leave the switch parked, registered for every later test.
+      release.resolve()
+      await running
+    }
     expect(await running).toEqual({ status: 'ok' })
     expect(entriesStore.getLoadedBranch()).toBe('br_b')
   })
@@ -919,13 +923,16 @@ describe('showBranch', () => {
     const stack = fakeStack()
 
     const running = showBranch(show({ replaceStack: stack.replaceStack }), ctx)
-    await reached.promise
-    expect(entriesStore.getLoadedBranch()).toBe('br_a')
-    expect(eraFlipsStore.getLoadedBranch()).toBe('br_a')
-    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
-    expect(stack.replaceStack).not.toHaveBeenCalled()
-
-    release.resolve()
+    try {
+      await reached.promise
+      expect(entriesStore.getLoadedBranch()).toBe('br_a')
+      expect(eraFlipsStore.getLoadedBranch()).toBe('br_a')
+      expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+      expect(stack.replaceStack).not.toHaveBeenCalled()
+    } finally {
+      release.resolve()
+      await running
+    }
     expect(await running).toEqual({ status: 'ok' })
     expect(entriesStore.getLoadedBranch()).toBe('br_b')
   })
