@@ -2,7 +2,6 @@ import { and, eq } from 'drizzle-orm'
 
 import type { CollisionReason, Entity, EntityState, NewEntity } from '@/lib/db'
 import {
-  branches,
   COLLISION_REASONS,
   emptyEntityState,
   entities,
@@ -10,7 +9,6 @@ import {
   entityStateSchemaForKind,
   entityWriteSchema,
   KIND_FIELDS,
-  stories,
 } from '@/lib/db'
 import { deepEqual } from '@/lib/deep-equal'
 import { entitiesStore } from '@/lib/stores'
@@ -360,17 +358,6 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
-export const ENTITY_DELETE_REJECTION = { leadEntity: 'lead-entity' } as const
-
-async function isStoryLead(ctx: DbCtx, branchId: string, id: string): Promise<boolean> {
-  const [owner] = await ctx.db
-    .select({ definition: stories.definition })
-    .from(branches)
-    .innerJoin(stories, eq(stories.id, branches.storyId))
-    .where(eq(branches.id, branchId))
-  return owner?.definition?.leadEntityId === id
-}
-
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteEntity')
     throw new Error(`handler/kind mismatch: expected 'deleteEntity', got '${action.kind}'`)
@@ -386,13 +373,6 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: `delete target entities ${bid}:${id} not found`,
       code: TARGET_NOT_FOUND,
-    }
-  // Interim: lead isn't per-branch/delta-logged yet (M6) — deleting it would dangle the pointer.
-  if (await isStoryLead(ctx, bid, id))
-    return {
-      status: 'rejected',
-      reason: 'the story lead cannot be deleted',
-      code: ENTITY_DELETE_REJECTION.leadEntity,
     }
   return cascadedDelete(ctx, entityCascade, {
     table: 'entities',

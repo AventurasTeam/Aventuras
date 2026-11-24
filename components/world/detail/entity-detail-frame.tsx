@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Control, FieldPathByValue } from 'react-hook-form'
 
+import { gateDisabledReason } from '@/components/compounds/generation-gate-copy'
 import { RowDetailFrame } from '@/components/compounds/row-detail-frame'
 import { useCreateResetTab } from '@/hooks/use-create-reset-tab'
 import type { RowSaveSession } from '@/hooks/use-row-save-session'
@@ -10,7 +11,6 @@ import { t } from '@/lib/i18n'
 import type { RecentlyClassified } from '@/lib/row-signals'
 import { nameTakenByOther, type EntityBaseDraft } from '@/lib/world'
 
-import { deleteDisabledReason } from '../delete-copy'
 import { entityMenuEntries } from '../world-copy'
 import { entityTabs, type EntityTab } from './entity-tabs'
 
@@ -61,8 +61,7 @@ type EntityDetailFrameProps<Draft extends EntityBaseDraft> = {
   recentlyClassified?: RecentlyClassified
   /** Characters only; absent in create mode. */
   lead?: { onSetLead: () => void; disabledReason?: string }
-  leadId: string | null
-  /** `⋯ → Delete entity`; the frame computes the entry's disabled reason from `row`/`leadId`. */
+  /** `⋯ → Delete entity`; the entry is disabled only while the generation gate is closed. */
   onDelete: (row: Entity) => void
   blocked: boolean
   blockedReason?: string
@@ -83,7 +82,6 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
   tabCounts,
   recentlyClassified,
   lead,
-  leadId,
   onDelete,
   blocked,
   blockedReason,
@@ -95,7 +93,7 @@ export function EntityDetailFrame<Draft extends EntityBaseDraft>({
       ? undefined
       : {
           onDelete: () => onDelete(row),
-          disabledReason: deleteDisabledReason(row, leadId, blocked, blockedReason),
+          disabledReason: gateDisabledReason(blocked, blockedReason),
         }
   return (
     <RowDetailFrame

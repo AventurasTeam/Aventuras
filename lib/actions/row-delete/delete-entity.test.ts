@@ -25,7 +25,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
-import { entitiesStore, generationStore } from '@/lib/stores'
+import { entitiesStore, entriesStore, generationStore } from '@/lib/stores'
 
 import { deleteEntityRow } from './delete-entity'
 import { ROW_DELETE_REJECTION } from './delete-row'
@@ -36,6 +36,7 @@ import { selectReversalSet } from '../delta/row-closure'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import { updateEntrySceneFields } from '../story-entries/scene-fields'
+import { undoLastAction } from '../story-entries/undo'
 import type { DbCtx } from '../types'
 
 // Fires `onSecond` from inside the SECOND `loadHeadTurn` call of a test — the in-lock re-read —
@@ -275,12 +276,19 @@ describe('deleteEntityRow — C3 acceptance', () => {
     expect(vectorCount()).toBe(0)
   })
 
-  it('refuses the lead with lead-entity and writes nothing', async () => {
-    expect(await deleteEntityRow('b1', 'char_lead', ctx)).toMatchObject({
-      status: 'rejected',
-      code: 'lead-entity',
-    })
-    expect(await ctx.db.select().from(deltas)).toEqual([])
+  it('deletes the lead, and CTRL-Z restores the row with its flag', async () => {
+    await ctx.db.update(entities).set({ isLead: 1 }).where(eq(entities.id, 'char_lead'))
+    entitiesStore.hydrate('b1', (await ctx.db.select().from(entities)) as never)
+    entriesStore.hydrate('b1', await ctx.db.select().from(storyEntries))
+
+    expect(await deleteEntityRow('b1', 'char_lead', ctx)).toEqual({ status: 'ok' })
+    expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_lead'))).toEqual([])
+
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    const [restored] = await ctx.db.select().from(entities).where(eq(entities.id, 'char_lead'))
+    expect(restored?.isLead).toBe(1)
+    expect(entitiesStore.getEntities('b1').get('char_lead')?.isLead).toBe(1)
   })
 
   it('refuses not-found and writes nothing while the entities store holds another branch', async () => {

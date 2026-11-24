@@ -2,47 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import { deleteUndoHint } from '@/components/compounds/delete-confirm-copy'
 import { ROW_DELETE_REJECTION } from '@/lib/actions'
-import { emptyEntityState, type Entity, type Lore } from '@/lib/db'
+import type { Lore } from '@/lib/db'
 
-import { deleteDisabledReason, deleteRejectionText, loreDeleteCopy } from './delete-copy'
-
-const kael = {
-  id: 'char_kael',
-  branchId: 'b1',
-  kind: 'character',
-  name: 'Kael',
-  state: emptyEntityState('character'),
-} as Entity
-
-describe('deleteDisabledReason', () => {
-  it('returns the blocked reason for a blocked row, whether or not it is also the lead', () => {
-    expect(deleteDisabledReason(kael, null, true, 'blocked')).toBe('blocked')
-    expect(deleteDisabledReason(kael, 'char_kael', true, 'blocked')).toBe('blocked')
-  })
-
-  it('falls back to the generation-gate text when blocked with no reason given', () => {
-    expect(deleteDisabledReason(kael, null, true)).toBe('Generation is in flight. Cancel to edit.')
-  })
-
-  it("names the lead reason for the story's lead when not blocked", () => {
-    expect(deleteDisabledReason(kael, 'char_kael', false)).toBe(
-      "The story's lead can't be deleted — set another character as lead first.",
-    )
-  })
-
-  it('is available for a row that is neither blocked nor the lead', () => {
-    expect(deleteDisabledReason(kael, null, false)).toBeUndefined()
-    expect(deleteDisabledReason(kael, 'char_other', false)).toBeUndefined()
-  })
-})
+import { deleteRejectionText, loreDeleteCopy } from './delete-copy'
 
 describe('deleteRejectionText', () => {
-  it('names the in-flight and lead refusals, and gives every other code the generic failure', () => {
+  it('names the in-flight refusal, and gives every other code the generic failure', () => {
     expect(deleteRejectionText(ROW_DELETE_REJECTION.inFlight)).toBe(
       "Couldn't delete while generation is in flight.",
-    )
-    expect(deleteRejectionText(ROW_DELETE_REJECTION.leadEntity)).toBe(
-      "The story's lead can't be deleted — set another character as lead first.",
     )
     expect(deleteRejectionText(ROW_DELETE_REJECTION.notFound)).toBe("Couldn't delete that.")
     expect(deleteRejectionText(ROW_DELETE_REJECTION.failed)).toBe("Couldn't delete that.")

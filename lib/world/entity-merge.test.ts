@@ -324,6 +324,26 @@ describe('entityMergeActions — the canonical', () => {
   })
 })
 
+// data-model.md → The lead: no merge moves the flag, so no merge group writes it.
+describe('entityMergeActions — the lead flag', () => {
+  it.each([
+    ['the canonical is the lead', 1],
+    ['neither row is the lead', 0],
+  ] as const)('writes no isLead when %s', (_name, isLead) => {
+    const canonical = entity('char_a', 'character', { isLead, description: 'old' })
+    const loser = entity('char_b', 'character', { description: 'a guardsman' })
+
+    const { actions } = merge({ canonical, loser, fromLoser: ['description'] })
+
+    // The canonical's own patch is there, so a flag written into it would show.
+    expect(ofKind(actions, 'updateEntity').map((a) => a.payload.id)).toContain('char_a')
+    expect(
+      ofKind(actions, 'updateEntity').filter((a) => Object.hasOwn(a.payload.patch, 'isLead')),
+    ).toEqual([])
+    expect(actions).toContainEqual(deleteLoser)
+  })
+})
+
 describe('entityMergeActions — collision flags', () => {
   const updateOf = (id: string, patch: Record<string, unknown>) => ({
     kind: 'updateEntity',

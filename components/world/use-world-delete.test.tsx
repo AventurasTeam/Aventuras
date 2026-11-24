@@ -244,22 +244,6 @@ describe('useWorldDelete → confirm', () => {
     )
   })
 
-  it('toasts the lead-entity refusal', async () => {
-    deleteEntityRow.mockResolvedValue({
-      status: 'rejected',
-      reason: 'lead entity',
-      code: ROW_DELETE_REJECTION.leadEntity,
-    })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
-    act(() => result.current.request({ kind: 'entity', row: MIRA }))
-    act(() => result.current.confirm())
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        "The story's lead can't be deleted — set another character as lead first.",
-      ),
-    )
-  })
-
   it('toasts the generic failure for any other refusal code', async () => {
     deleteRow.mockResolvedValue({ status: 'rejected', reason: 'gone', code: 'not-found' })
     const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))

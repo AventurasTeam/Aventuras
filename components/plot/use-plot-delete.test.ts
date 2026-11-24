@@ -135,7 +135,6 @@ describe('plotDeleteRejectionText', () => {
       "Couldn't delete while generation is in flight.",
     )
     expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.notFound)).toBe("Couldn't delete that.")
-    expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.leadEntity)).toBe("Couldn't delete that.")
     expect(plotDeleteRejectionText(ROW_DELETE_REJECTION.failed)).toBe("Couldn't delete that.")
   })
 })
