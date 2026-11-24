@@ -51,8 +51,8 @@ function turnsLines(shortcut: Shortcut): string[] {
 
 /**
  * chapter-timeline.md → Re-run a close. With turns since, the three-button footer departs from
- * alert-dialog.md as the delete's does; the fork needs branch creation (M6.3) and renders held
- * until it lands (C16).
+ * alert-dialog.md as the delete's does; the fork renders held until Re-run on new branch is
+ * wired (C16, M6.5).
  */
 export function CloseRerunConfirm({
   open,
