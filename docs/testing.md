@@ -353,6 +353,14 @@ user_action at that position. A spec that wants a backlog seeds one
 (`seedClassifierBacklog` in `e2e/harness/seed.ts`) or parks the
 watermark lower.
 
+The seed's second hero branch, `br_hero_fork`, is a real fork: every
+`pnpm db:seed` mode and the on-device reseed route run the fork's core
+(`seedHeroFork`, `lib/actions/stories/seed-hero-fork.ts`) on
+`br_hero_main` after the static rows, with a fixed id and time, then
+append five turns of the fork's own and park its watermark. It holds
+main's rows through its fork entry under main's ids, so a spec reading
+a seeded id scopes the read to the branch it opened.
+
 ### Substitutable IDs must be real UUIDs
 
 Why the fixture can't use mnemonic IDs. During a turn, `substituteIds`
@@ -388,14 +396,6 @@ A harness helper that adds a row before launch derives its id by
 another hash: `seedUnplacedPlace` (`e2e/harness/seed.ts`) builds a
 mnemonic from the row's name and mints the id as a UUIDv5 of it, so a
 spec's ids stay stable across runs.
-
-The seed's second hero branch, `br_hero_fork`, is a real fork: every
-`pnpm db:seed` mode and the on-device reseed route run the fork's core
-(`seedHeroFork`, `lib/actions/stories/seed-hero-fork.ts`) on
-`br_hero_main` after the static rows, with a fixed id and time, then
-append five turns of the fork's own and park its watermark. It holds
-main's rows through its fork entry under main's ids, so a spec reading
-a seeded id scopes the read to the branch it opened.
 
 ### The dataset seed
 

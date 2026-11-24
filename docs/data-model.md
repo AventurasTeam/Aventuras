@@ -488,8 +488,9 @@ exists on `parent` with `N.kind !== 'system'`. Any other kind is a
 fork point, a `user_action` included; the UI exposes fork on `opening`
 and `ai_reply`. An unfinished run refuses once the plan exists
 (step 1). Fork runs under `parent`'s exclusive branch write lock, held
-from before its first plan read until its commit, and reads its
-refusals once the lock is granted.
+from before its first plan read until its commit. It checks the gate
+before taking the lock and reads its other refusals once the lock is
+granted.
 
 **Single-transaction execution (plan-on-parent, execute-on-child).**
 Let `B` be the earliest non-system entry on `parent` with

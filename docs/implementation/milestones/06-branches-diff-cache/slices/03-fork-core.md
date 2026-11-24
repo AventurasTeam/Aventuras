@@ -270,7 +270,8 @@ typed refusal. It lives in `lib/actions` (suggested:
 - **The lock.** The parent's branch write lock, held exclusive
   (`lib/actions/delta/branch-write-lock.ts:86-101`) from before the
   first plan read until the commit, and released in a `finally`. The
-  refusal reads run once the hold is granted: a delta-logged write
+  gate is checked before the hold, in the tick that requests it; the
+  other refusal reads run once the hold is granted: a delta-logged write
   queued ahead of the hold commits before the plan reads, and a run
   admitted while the fork holds it can write only after the commit, on
   the parent. The hold's id is unique per call:
@@ -818,7 +819,7 @@ vector sweeps), `sweepOps` and `reownOps` (the re-owns apart from the
 prune deletes); the fork passes `[...writeOps, ...reownOps]` as the
 copier's `between`. Redo's survivor restore, carried here from
 [Slice 6.1](./01-copy-substrate.md), keeps `set.branchId`
-(`redo.ts:110`): it serves CTRL-Z alone, whose write branch is its
+(`redo.ts:115`): it serves CTRL-Z alone, whose write branch is its
 set's and its group's.
 
 **The survivor copy.** `resolveSweep` returns the predicate it read
@@ -830,8 +831,9 @@ list is empty. `IS NOT TRUE`, not `NOT`: a delta anchored on an entry
 the parent doesn't hold makes the window NULL, which `resolveSweep`
 reads as kept. A journal copies unless the plan drops it. No temp
 table is built, so Acceptance criteria 12 doesn't apply: a guard
-throws before any write if the three lists would pass the bind cap,
-and the lists stay short (Cost, below).
+throws before any write if the three lists would pass the bind cap.
+On the dataset story the lists were empty (Cost, below), so no fork at
+real scale has yet bound them.
 
 **Decisions.**
 
@@ -880,7 +882,7 @@ and the lists stay short (Cost, below).
   `reseedDevDatabase`) clear every vector family. A fork seeded onto a
   database the app had embedded copied main's leftover vectors and
   collided on the third seed; the seed carries no vector
-  ([`testing.md → Fixture + seed contract`](../../../../testing.md#fixture--seed-contract)),
+  ([`testing.md → Embedder in E2E`](../../../../testing.md#embedder-in-e2e)),
   so the wipe leaves none behind.
 
 **The two unrun fixtures.** The tombstone re-insert and the delete
@@ -894,7 +896,7 @@ two agree on every reachable log: under the gate a re-run's writes
 start at the floor plus one. The fixtures match canon's summary in all
 four cases: case 2 drops its journal under all three of the rule's
 clauses at once, and case 4 under `sweepsBelow` alone. No fork fixture
-reaches the rewritten-holder clause, and none isolates `emptiesGroup`,
+rewrites a delta at or below the floor, and none isolates `emptiesGroup`,
 which `journal-drop.test.ts` covers.
 
 **Cost (Acceptance criteria 25).** `/dev/fork-cost` forks the dataset
@@ -921,18 +923,20 @@ a real fork, read from the device's database through run-as as
 Acceptance criteria 20 reads a seeded file. The device database held
 no vectors, so the reseed's vector wipe wasn't exercised there.
 
-**E2E.** `pnpm test:e2e` passed whole on 2026-11-23.
-`embedder-drain.spec.ts` marks the fork's rows clean before launch
-(`markBranchEmbeddingClean` in `e2e/harness/seed.ts`) and keeps its
-absence assertion. Three other specs now read the open branch, since
-the fork holds same-id copies of main's rows, and no assertion was
-dropped. `embedder-swap.spec.ts` counts the drained, holed and refill
-vectors, and hashes the lore, on `br_hero_main`; its relabel counts
-stay story-wide, so they still check that relabel moves the fork's
-vectors. `periodic-classifier.spec.ts` scopes its `threads` read and
-`entityOf` to the branch. `plot.spec.ts` scopes two `happenings` and
-three `happening_awareness` reads, because the fork's same-id copies
-had made an undo assertion unable to fail.
+**E2E.** `pnpm test:e2e` passed whole on 2026-11-24 at `d6b8d4356`:
+225 passed, 2 skipped, none flaky. `embedder-drain.spec.ts` marks the
+fork's rows clean before launch (`markBranchEmbeddingClean` in
+`e2e/harness/seed.ts`) and keeps its absence assertion. Four other
+specs now read the open branch, since the fork holds same-id copies of
+main's rows, and no assertion was dropped. `embedder-swap.spec.ts`
+counts the drained, holed and refill vectors, and hashes the lore, on
+`br_hero_main`; its relabel counts stay story-wide, so they still check
+that relabel moves the fork's vectors. `periodic-classifier.spec.ts`
+scopes its `threads` read and `entityOf` to the branch. `plot.spec.ts`
+scopes two `happenings` and three `happening_awareness` reads, because
+the fork's same-id copies had made an undo assertion unable to fail.
+`world.spec.ts` scopes `entitySnapshot`, which passed by row order
+alone.
 
 **Second to land.** Neither [Slice 6.7](./07-diff-cache.md) nor
 [Slice 6.8](./08-per-branch-lead.md) had landed at this slice's final
