@@ -30,7 +30,7 @@ const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
   ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
   ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
-/** A branch row's name as an input: Enter or blur saves a trimmed name, Esc cancels. */
+/** A branch row's name as an input: Enter or a click outside saves a trimmed name, Esc cancels. */
 export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputProps): ReactElement {
   const [draft, setDraft] = useState(name)
   const [invalid, setInvalid] = useState(false)
@@ -44,10 +44,12 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
   useEffect(() => {
     latest.current = { name, onSave }
   })
+  const blurCheck = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   // An unmount mid-edit, as when the navigator closes, saves a valid change and drops the rest.
   useEffect(
     () => () => {
+      clearTimeout(blurCheck.current)
       if (phase.current !== 'editing' || !typed.current) return
       const next = draftRef.current.trim()
       if (next === '' || next === latest.current.name.trim()) return
@@ -81,6 +83,18 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
     void onSave(next).catch(logRejection).finally(onDone)
   }
 
+  // A window switch blurs the field with nothing in the app clicked, so it doesn't save. A document
+  // losing focus can still report it during the blur: the check waits a tick.
+  const blur = () => {
+    if (Platform.OS !== 'web') {
+      commit()
+      return
+    }
+    blurCheck.current = setTimeout(() => {
+      if (document.hasFocus()) commit()
+    }, 0)
+  }
+
   const cancel = () => {
     if (phase.current !== 'editing') return
     phase.current = 'settled'
@@ -107,7 +121,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
       onChangeText={change}
       onSubmitEditing={commit}
       submitBehavior="submit"
-      onBlur={commit}
+      onBlur={blur}
       onKeyPress={handleKeyPress}
       editable={!saving}
       aria-invalid={invalid}

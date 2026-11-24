@@ -222,6 +222,48 @@ export const BlurSaves: Story = {
   },
 }
 
+/** A window switch blurs the field with nothing in the app clicked: no save, the rename stays. */
+export const WindowBlurKeepsTheRename: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const field = await renameField()
+    await userEvent.keyboard('Hal')
+    // Focus moving out to the parent document leaves this one without focus, as a window switch.
+    const away = window.parent.document.createElement('input')
+    window.parent.document.body.appendChild(away)
+    try {
+      away.focus()
+      await waitFor(() => expect(document.hasFocus()).toBe(false))
+      await pause(50)
+      await expect(args.onSave).not.toHaveBeenCalled()
+      await expect(args.onDone).not.toHaveBeenCalled()
+      await expect(field).toBeInTheDocument()
+      await expect(field).toHaveValue('Hal')
+    } finally {
+      away.remove()
+    }
+    window.focus()
+    field.focus()
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(args.onDone).toHaveBeenCalledTimes(1))
+    await expect(args.onSave).toHaveBeenCalledWith('Hal')
+  },
+}
+
+/** A blur the field unmounts on in the same tick leaves the unmount the last word. */
+export const BlurThenUnmountCollapsesNothing: Story = {
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    const field = await renameField()
+    field.blur()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))
+    await screen.findByTestId('stored-name')
+    await pause(50)
+    await expect(args.onDone).not.toHaveBeenCalled()
+    await expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
 export const UntouchedDraftNeverOverwritesANewerName: Story = {
   play: async ({ args }) => {
     await waitForTier('desktop')
