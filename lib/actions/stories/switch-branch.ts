@@ -6,6 +6,7 @@ import {
   chapterOverlaysStore,
   currentStoryStore,
   generationStore,
+  isStoryBusy,
   isUserEditBlocked,
   navigationStore,
   readerHoldStore,
@@ -56,8 +57,11 @@ export async function switchBranch(
   input: SwitchBranchInput,
   ctx: DbCtx,
 ): Promise<SwitchBranchResult> {
-  // No branch: a branch held until a restart blocks neither leaving it nor entering it.
-  if (isUserEditBlocked(generationStore.getTxState())) return refuse(input, 'gate')
+  // No branch: a branch held until a restart blocks neither leaving it nor entering it. Busy too:
+  // a run that holds no gate would leave the story-leave guard swallowing the reset.
+  const txState = generationStore.getTxState()
+  if (isUserEditBlocked(txState) || isStoryBusy(txState, input.storyId, input.fromBranchId))
+    return refuse(input, 'gate')
   // A failed regenerate's sweep can still be writing on the branch left with the gate open.
   if (generationStore.isTurnBodyActive(input.fromBranchId)) return refuse(input, 'turn-body')
   const settle = beginSwitch()
@@ -101,7 +105,13 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
   // Nothing awaited from the reset to the publish, so one commit takes all three; the reset goes
   // first because a route guard can swallow it, and a fill can't be taken back.
   if (!isCurrentRequest()) return restoreThen(input, ctx, { status: 'abandoned' })
-  if (!input.replaceStack(toBranchId)) {
+  let reset: boolean
+  try {
+    reset = input.replaceStack(toBranchId)
+  } catch (err) {
+    return failAndRestore(input, ctx, 'navigation-blocked', err)
+  }
+  if (!reset) {
     logger.warn('action_layer.branch_switch_navigation_blocked', {
       storyId,
       fromBranchId,

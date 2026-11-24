@@ -377,6 +377,15 @@ describe('switchBranch', () => {
     generationStore.setReversalInProgress(false)
   })
 
+  it('refuses while a run that holds no gate still leaves the story busy', async () => {
+    const { ctx } = await setup()
+
+    generationStore.startRun(hardGateRun('run_quiet', { gateBehavior: 'no-gate' }))
+    expect(isUserEditBlocked(generationStore.getTxState())).toBe(false)
+
+    await expectRefused(ctx, 'gate')
+  })
+
   it.each(['br_a', 'br_b'])(
     'refuses nothing for a branch held until a restart (%s)',
     async (held) => {
@@ -590,6 +599,27 @@ describe('switchBranch', () => {
     })
   })
 
+  it('puts the pointer back when the stack reset throws', async () => {
+    const { db, ctx } = await setup()
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const replaceStack = vi.fn((_branchId: string): boolean => {
+      throw new Error('dispatch exploded')
+    })
+
+    const result = await switchBranch(input({ replaceStack }), ctx)
+
+    expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    await expectStillOnLeft(db)
+    expect(kicks).toEqual([])
+    expect(error).toHaveBeenCalledWith('action_layer.branch_switch_failed', {
+      storyId: 'story_1',
+      fromBranchId: 'br_a',
+      toBranchId: 'br_b',
+      code: 'navigation-blocked',
+      error: 'dispatch exploded',
+    })
+  })
+
   it('leaves nothing a guard could replay when an armed buried route refuses the reset', async () => {
     const { db, ctx } = await setup()
     vi.spyOn(logger, 'warn').mockImplementation(() => {})
@@ -659,6 +689,36 @@ describe('switchBranch', () => {
     await expectStillOnLeft(db)
     expect(stack.replaceStack).not.toHaveBeenCalled()
     expect(kicks).toEqual([])
+  })
+
+  it('resets the stack before a Back taken after the last abandon check can land', async () => {
+    const { ctx } = await setup()
+    let current = true
+    let armed = false
+    vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
+      const read = await readStories(database)
+      armed = true
+      return read
+    })
+    const currentAtReset: boolean[] = []
+    const replaceStack = vi.fn((_branchId: string) => {
+      currentAtReset.push(current)
+      return true
+    })
+
+    const result = await switchBranch(
+      input({
+        replaceStack,
+        isCurrentRequest: () => {
+          if (armed) queueMicrotask(() => (current = false))
+          return current
+        },
+      }),
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'ok' })
+    expect(currentAtReset).toEqual([true])
   })
 
   it('abandons with nothing to restore when the reader goes away before the pointer write', async () => {
