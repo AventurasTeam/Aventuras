@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 import type { EntryIndexSnapshot } from '@/hooks/use-entry-index'
 import { createQueryClient } from '@/lib/cache'
 import type { CharacterRelationship, Delta, Happening, HappeningAwareness } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import {
   createDiffCache,
   type DiffCache,
@@ -1016,6 +1017,76 @@ describe('HistoryTab change prose', () => {
     showIndex(CURRENT, 12)
     tab.rerenderTab()
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Learned at: none → entry #12'))
+  })
+
+  describe('a value of the wrong type', () => {
+    const NAMED = update('delta_named', 'entities', 'char_aria', {
+      description: 'old',
+      name: 'Kael',
+    })
+
+    async function renderWalked(delta: Delta, walkedEntry: DiffCacheEntry, diffs: DiffCache) {
+      const client = createQueryClient()
+      const tab = renderTab(
+        loader(() => [own(delta)]),
+        'char_aria',
+        'entities',
+        { diffs, client },
+      )
+      await waitFor(() =>
+        expect(client.getQueryData(['diff', BRANCH, delta.id])).toEqual({
+          kind: 'entry',
+          entry: walkedEntry,
+        }),
+      )
+      await settle()
+      return tab
+    }
+
+    let warn: MockInstance<typeof logger.warn>
+    beforeEach(() => {
+      warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    })
+    afterEach(() => {
+      warn.mockRestore()
+    })
+
+    const mistypedWarns = () =>
+      warn.mock.calls.filter(([kind]) => kind === 'history.diff_prose_mistyped')
+
+    it('keeps the summary and warns once for the row, through a re-render and a remount', async () => {
+      const named = entry({ description: 'old', name: 'Kael' }, { description: 'new', name: 7 })
+      const diffs = createDiffCache({ walk: async () => walked({ [NAMED.id]: named }) })
+      const tab = await renderWalked(NAMED, named, diffs)
+      expect(view.props?.rows[0]?.summary).toBe('Modified Description, Name')
+      expect(mistypedWarns()).toEqual([
+        ['history.diff_prose_mistyped', { branchId: BRANCH, deltaId: NAMED.id, path: 'name' }],
+      ])
+
+      // A fresh index re-derives every row.
+      showIndex(CURRENT, 3)
+      const renders = view.renders
+      tab.rerenderTab()
+      await settle()
+      expect(view.renders).toBeGreaterThan(renders)
+      expect(mistypedWarns()).toHaveLength(1)
+      cleanup()
+      await renderWalked(NAMED, named, diffs)
+      expect(view.props?.rows[0]?.summary).toBe('Modified Description, Name')
+      expect(mistypedWarns()).toHaveLength(1)
+    })
+
+    it('warns for nothing on a row whose path has no wording', async () => {
+      const bogus = update('delta_bogus', 'entities', 'char_aria', { bogus: 'x' })
+      const unworded = entry({ bogus: 'x' }, { bogus: 'y' })
+      await renderWalked(
+        bogus,
+        unworded,
+        createDiffCache({ walk: async () => walked({ [bogus.id]: unworded }) }),
+      )
+      expect(view.props?.rows[0]?.summary).toBe('Modified bogus')
+      expect(mistypedWarns()).toEqual([])
+    })
   })
 
   it("reads a relationship row's prose by the tab's side", async () => {

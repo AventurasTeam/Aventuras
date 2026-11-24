@@ -97,6 +97,7 @@ describe('diffProse — fed by the walk', () => {
         side: null,
         liveName: (id) => (id === 'char_kael' ? 'Kael' : null),
         entryLabel: () => null,
+        onMistyped: () => {},
       }),
     ).toBe('Collision flag: Kael (deleted) → Kael')
   })

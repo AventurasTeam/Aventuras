@@ -10,9 +10,9 @@ const entryOf = (
   names: Record<string, string> = {},
 ): DiffCacheEntry => ({ old, new: next, names })
 
-type Lookups = Pick<ProseContext, 'liveName' | 'entryLabel'>
+type Lookups = Pick<ProseContext, 'liveName' | 'entryLabel' | 'onMistyped'>
 
-const NO_LOOKUPS: Lookups = { liveName: () => null, entryLabel: () => null }
+const NO_LOOKUPS: Lookups = { liveName: () => null, entryLabel: () => null, onMistyped: () => {} }
 
 const contextOf = (
   table: Exclude<DiffTable, 'character_relationships'>,
@@ -397,6 +397,78 @@ describe('diffProse — no wording falls back to the field-name summary', () => 
   it('returns null for a value no wording covers', () => {
     expect(diffProse(entryOf({ status: 'bogus' }, { status: 'active' }), ENTITIES)).toBeNull()
     expect(diffProse(entryOf({ name: 7 }, { name: 'Kael' }), ENTITIES)).toBeNull()
+  })
+})
+
+describe('diffProse — a value of the wrong type', () => {
+  function reporting(table: Exclude<DiffTable, 'character_relationships'>) {
+    const reported: string[] = []
+    return { reported, context: contextOf(table, { onMistyped: (path) => reported.push(path) }) }
+  }
+
+  it('returns null and reports its path, though a clause beside it renders', () => {
+    const { reported, context } = reporting('entities')
+    expect(
+      diffProse(
+        entryOf({ description: 'old', name: 'Kael' }, { description: 'new', name: 7 }),
+        context,
+      ),
+    ).toBeNull()
+    expect(reported).toEqual(['name'])
+  })
+
+  it('reports it past a path with no wording', () => {
+    const { reported, context } = reporting('entities')
+    expect(
+      diffProse(entryOf({ bogus: 'x', name: 'Kael' }, { bogus: 'y', name: 7 }), context),
+    ).toBeNull()
+    expect(reported).toEqual(['name'])
+  })
+
+  it('reports nothing for a path with no wording, nor for prose that renders', () => {
+    const { reported, context } = reporting('entities')
+    expect(diffProse(entryOf({ bogus: 'x' }, { bogus: 'y' }), context)).toBeNull()
+    expect(diffProse(entryOf({ state: null }, { state: KAEL_STATE }), context)).toBeNull()
+    expect(diffProse(entryOf({ description: 'old' }, { description: 'new' }), context)).toBe(
+      'Description: "old" → "new"',
+    )
+    expect(reported).toEqual([])
+  })
+
+  // One wrong-typed new value per field kind.
+  it.each<[Exclude<DiffTable, 'character_relationships'>, Record<string, unknown>, string]>([
+    ['entities', { name: 7 }, 'name'],
+    ['entities', { status: 'bogus' }, 'status'],
+    ['lore', { priority: 'high' }, 'priority'],
+    ['happenings', { commonKnowledge: 2 }, 'commonKnowledge'],
+    ['entities', { tags: 'brave' }, 'tags'],
+    ['entities', { state: { stackables: { gold: 'many' } } }, 'state.stackables'],
+    ['entities', { state: { stackables: 7 } }, 'state.stackables'],
+    ['entities', { state: { faction_id: 7 } }, 'state.faction_id'],
+    ['entities', { state: { inventory: [7] } }, 'state.inventory'],
+    ['happenings', { occurredAtEntryId: 7 }, 'occurredAtEntryId'],
+    ['entities', { state: { lastSeenAt: 'yesterday' } }, 'state.lastSeenAt'],
+    ['entities', { state: { parent_location_id: 7 } }, 'state.parent_location_id'],
+    ['entities', { nameCollisionFlag: 'yes' }, 'nameCollisionFlag'],
+  ])('reports %s %j at %s', (table, next, path) => {
+    const { reported, context } = reporting(table)
+    const old = path.startsWith('state.')
+      ? { state: { [path.slice('state.'.length)]: null } }
+      : { [path]: null }
+    expect(diffProse(entryOf(old, next), context)).toBeNull()
+    expect(reported).toEqual([path])
+  })
+
+  it('reports a wrong-typed old value', () => {
+    const { reported, context } = reporting('entities')
+    expect(diffProse(entryOf({ name: 7 }, { name: 'Kael' }), context)).toBeNull()
+    expect(
+      diffProse(
+        entryOf({ state: { stackables: 'lots' } }, { state: { stackables: { gold: 1 } } }),
+        context,
+      ),
+    ).toBeNull()
+    expect(reported).toEqual(['name', 'state.stackables'])
   })
 })
 

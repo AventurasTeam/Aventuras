@@ -340,14 +340,20 @@ convention, and the expectation that subsystems route through
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or
   renders empty, which silently drops every world-time footer in the
   window), `pad_width_invalid`
-- `history.*` — the diff cache (`lib/history/diff-cache.ts`):
+- `history.*` — the diff cache (`lib/history/diff-cache.ts`) and the
+  History tab (`components/history/history-tab.tsx`):
   `diff_walk_failed` (warn: a walk rejected, on a DB error or a target
   with no row, no head delete and no held copy, logged once for each
   delta it was asked for, with `branchId`, `deltaId` and `reason`; the
   row keeps its field-name summary, and the failure is remembered until
-  its branch's next eviction) and `evict_listener_failed` (error: an
-  eviction listener threw, with `branchId` and `error`; the other
-  listeners still run)
+  its branch's next eviction), `diff_prose_mistyped` (warn, from the
+  History tab: a walked entry holds a value that isn't its field's type,
+  so the row keeps its field-name summary; logged once for each walk
+  result, with `branchId`, `deltaId` and the first such `path`, so users
+  investigating why a row is less detailed than the others can find the
+  cause; a path with no wording logs nothing) and
+  `evict_listener_failed` (error: an eviction listener threw, with
+  `branchId` and `error`; the other listeners still run)
 - `app.*` — cross-cutting runtime events not owned by a single
   subsystem. The global rejection handler's backstop
   (`lib/boot/rejection-handler.ts`) emits four kinds, all always

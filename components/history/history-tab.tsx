@@ -2,12 +2,15 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useEntryIndex } from '@/hooks/use-entry-index'
+import type { Delta } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { formatEntryRef } from '@/lib/entry-refs'
 import {
   diffProse,
   entryIdsOf,
   humanizeDelta,
   refIdsOf,
+  type DiffCacheEntry,
   type DiffOutcome,
   type HistoryOp,
   type HistoryRow,
@@ -118,9 +121,13 @@ function refIdsOfRows(
   return [...ids]
 }
 
+/** An update row whose walked entry holds a value of the wrong type at `path`. */
+type MistypedRow = { entry: DiffCacheEntry; delta: Delta; path: string }
+
 type ProseLookups = Pick<ProseContext, 'liveName' | 'entryLabel'> & {
   /** The entry index hasn't read, re-reads, or failed its last read. */
   entryIndexStale: boolean
+  onMistyped: (row: MistypedRow) => void
 }
 
 // world.md → Change prose: null keeps the field-name summary (pending, failed, gone, no wording).
@@ -128,14 +135,37 @@ function changeProse(
   row: HistoryRow,
   outcome: DiffOutcome | undefined,
   targetTable: HistoryTable,
-  { liveName, entryLabel, entryIndexStale }: ProseLookups,
+  { liveName, entryLabel, entryIndexStale, onMistyped }: ProseLookups,
 ): string | null {
   const target = proseTarget(row, targetTable)
   if (outcome?.kind !== 'entry' || target == null) return null
+  const { entry } = outcome
   // An entry a stale index lacks may be new, not gone: "Unknown entry" waits for a fresh read.
-  const unheld = entryIdsOf(target.table, outcome.entry).some((id) => entryLabel(id) === null)
+  const unheld = entryIdsOf(target.table, entry).some((id) => entryLabel(id) === null)
   if (unheld && entryIndexStale) return null
-  return diffProse(outcome.entry, { ...target, liveName, entryLabel })
+  return diffProse(entry, {
+    ...target,
+    liveName,
+    entryLabel,
+    onMistyped: (path) => onMistyped({ entry, delta: row.delta, path }),
+  })
+}
+
+// Once per walk result, as a failed walk warns: rows re-render and remount on the cache's entry.
+const warnedMistyped = new WeakSet<DiffCacheEntry>()
+
+function useMistypedWarnings(found: readonly MistypedRow[]): void {
+  useEffect(() => {
+    for (const { entry, delta, path } of found) {
+      if (warnedMistyped.has(entry)) continue
+      warnedMistyped.add(entry)
+      logger.warn('history.diff_prose_mistyped', {
+        branchId: delta.branchId,
+        deltaId: delta.id,
+        path,
+      })
+    }
+  }, [found])
 }
 
 function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: HistoryTabProps) {
@@ -174,7 +204,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
   // Read as the other ends are, so a ref the store holds on another branch reads (deleted).
   const refNames = useStoreNames(branchId, refIds)
   const name = historyTargetName(row) ?? t('history:unknownTarget')
-  const rows = useMemo(() => {
+  const { rows, mistyped } = useMemo(() => {
     const nowMs = Date.now()
     const entryLabel = (entryId: string) => {
       const ref = entryIndex.index.get(entryId)
@@ -182,12 +212,14 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
     }
     // The working set first, so a renamed other end reads its new name.
     const otherName = (id: string) => storeNames.get(id) ?? chunks.names[id] ?? null
+    const found: MistypedRow[] = []
     const lookups: ProseLookups = {
       liveName: (id) => refNames.get(id) ?? null,
       entryLabel,
       entryIndexStale: entryIndex.stale,
+      onMistyped: (row) => found.push(row),
     }
-    return chunks.rows.map((historyRow) => {
+    const shown = chunks.rows.map((historyRow) => {
       const view = humanizeDelta(historyRow, {
         targetTable,
         targetName: name,
@@ -198,6 +230,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
       const prose = changeProse(historyRow, outcomes.get(historyRow.delta.id), targetTable, lookups)
       return prose == null ? view : { ...view, summary: prose }
     })
+    return { rows: shown, mistyped: found }
   }, [
     chunks.rows,
     chunks.names,
@@ -209,6 +242,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
     refNames,
     outcomes,
   ])
+  useMistypedWarnings(mistyped)
 
   return (
     <HistoryTabView

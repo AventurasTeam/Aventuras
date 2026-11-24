@@ -25,11 +25,16 @@ export type ProseContext = ProseTarget & {
   liveName: (id: string) => string | null
   /** `entry #n` for an entry the branch's index holds, else null. */
   entryLabel: (entryId: string) => string | null
+  /** Hears the first path whose value isn't its field's type; `diffProse` then returns null. */
+  onMistyped: (path: string) => void
 }
 
-// One path's verdict: its change, SAME when its two sides are equal, or null when it has no wording.
+// One path's verdict: its change, SAME when its two sides are equal, UNWORDED when it has no
+// wording, or MISTYPED when a side isn't its field's type.
 const SAME = Symbol('same')
-type Change = string | typeof SAME | null
+const UNWORDED = Symbol('unworded')
+const MISTYPED = Symbol('mistyped')
+type Change = string | typeof SAME | typeof UNWORDED | typeof MISTYPED
 
 type At = {
   readonly path: string
@@ -132,7 +137,7 @@ function cutLongText(before: string, after: string): [string, string] {
 }
 
 function textChange({ old, new: next }: At): Change {
-  if (!isNullableString(old) || !isNullableString(next)) return null
+  if (!isNullableString(old) || !isNullableString(next)) return MISTYPED
   const before = oneLine(old ?? '')
   const after = oneLine(next ?? '')
   if (before === after) return SAME
@@ -169,15 +174,15 @@ function enumWords(table: DiffTable, path: string): EnumWords | undefined {
 
 function enumChange({ path, old, new: next }: At, context: ProseContext): Change {
   const words = enumWords(context.table, path)
-  if (words === undefined) return null
+  if (words === undefined) return UNWORDED
   if (sameScalar(old, next)) return SAME
   const before = isEmpty(old) ? none() : words(old)
   const after = isEmpty(next) ? none() : words(next)
-  return before === undefined || after === undefined ? null : changed(before, after)
+  return before === undefined || after === undefined ? MISTYPED : changed(before, after)
 }
 
 function numberChange({ old, new: next }: At): Change {
-  if (!isNullableNumber(old) || !isNullableNumber(next)) return null
+  if (!isNullableNumber(old) || !isNullableNumber(next)) return MISTYPED
   if (sameScalar(old, next)) return SAME
   return changed(old == null ? none() : String(old), next == null ? none() : String(next))
 }
@@ -198,7 +203,7 @@ function flagText(flag: boolean | null): string {
 function flagChange({ old, new: next }: At): Change {
   const before = flagOf(old)
   const after = flagOf(next)
-  if (before === undefined || after === undefined) return null
+  if (before === undefined || after === undefined) return MISTYPED
   if (before === after) return SAME
   return changed(flagText(before), flagText(after))
 }
@@ -270,10 +275,10 @@ function listParts(
 function termListChange({ path, old, new: next }: At, context: ProseContext): Change {
   const before = listOf(old)
   const after = listOf(next)
-  if (before === undefined || after === undefined) return null
+  if (before === undefined || after === undefined) return MISTYPED
   const [column, ...inner] = path.split('.')
   const match = termMatchOf(context.table, column, inner.length > 0 ? inner : undefined)
-  if (match === undefined) return null
+  if (match === undefined) return UNWORDED
   return listParts(before, after, match, (term) => quoted(cutTerm(term)))
 }
 
@@ -282,16 +287,16 @@ const countText = (count: number | null | undefined) => (count == null ? none() 
 // A key's null in the old partial is a key absent before; a null partial is a record absent before.
 function recordChange({ old, new: next }: At): Change {
   const after = next ?? {}
-  if (!isJsonObject(after)) return null
+  if (!isJsonObject(after)) return MISTYPED
   let before: Readonly<Record<string, unknown>> | null
   if (old == null) before = null
   else if (isJsonObject(old)) before = old
-  else return null
+  else return MISTYPED
   const parts: string[] = []
   for (const key of Object.keys(before ?? after)) {
     const was = before !== null && Object.hasOwn(before, key) ? before[key] : null
     const now = Object.hasOwn(after, key) ? after[key] : null
-    if (!isNullableNumber(was) || !isNullableNumber(now)) return null
+    if (!isNullableNumber(was) || !isNullableNumber(now)) return MISTYPED
     if ((was ?? null) === (now ?? null)) continue
     parts.push(
       fill('history:prose.quantity', {
@@ -321,7 +326,7 @@ function entryText(id: string | null | undefined, context: ProseContext): string
 }
 
 function rowRefChange({ old, new: next, entry }: At, context: ProseContext): Change {
-  if (!isNullableString(old) || !isNullableString(next)) return null
+  if (!isNullableString(old) || !isNullableString(next)) return MISTYPED
   if (sameScalar(old, next)) return SAME
   return changed(refText(old, entry, context), refText(next, entry, context))
 }
@@ -329,12 +334,12 @@ function rowRefChange({ old, new: next, entry }: At, context: ProseContext): Cha
 function refListChange({ old, new: next, entry }: At, context: ProseContext): Change {
   const before = listOf(old)
   const after = listOf(next)
-  if (before === undefined || after === undefined) return null
+  if (before === undefined || after === undefined) return MISTYPED
   return listParts(before, after, 'exact', (id) => refName(id, entry, context))
 }
 
 function entryRefChange({ old, new: next }: At, context: ProseContext): Change {
-  if (!isNullableString(old) || !isNullableString(next)) return null
+  if (!isNullableString(old) || !isNullableString(next)) return MISTYPED
   if (sameScalar(old, next)) return SAME
   return changed(entryText(old, context), entryText(next, context))
 }
@@ -366,7 +371,7 @@ function seenText(seen: Seen | null, entry: DiffCacheEntry, context: ProseContex
 function lastSeenChange({ old, new: next, entry }: At, context: ProseContext): Change {
   const before = seenOf(isJsonObject(old) && isJsonObject(next) ? { ...next, ...old } : old)
   const after = seenOf(next)
-  if (before === undefined || after === undefined) return null
+  if (before === undefined || after === undefined) return MISTYPED
   if (sameSeen(before, after)) return SAME
   return changed(seenText(before, entry, context), seenText(after, entry, context))
 }
@@ -417,7 +422,7 @@ function placementChange({ entry }: At, context: ProseContext): Change {
     memberOf(oldState, newState, UNPLACED),
   )
   const after = placementOf(newState[PARENT], newState[UNPLACED])
-  if (before === undefined || after === undefined) return null
+  if (before === undefined || after === undefined) return MISTYPED
   if (placementKey(before) === placementKey(after)) return SAME
   return changed(placementText(before, entry, context), placementText(after, entry, context))
 }
@@ -436,7 +441,7 @@ function collisionChange({ entry }: At, context: ProseContext): Change {
     memberOf(old, next, COLLISION_PARTNER),
   )
   const after = collisionPartner(next[COLLISION_FLAG], next[COLLISION_PARTNER])
-  if (before === undefined || after === undefined) return null
+  if (before === undefined || after === undefined) return MISTYPED
   if (before === after) return SAME
   return changed(refText(before, entry, context), refText(after, entry, context))
 }
@@ -470,22 +475,33 @@ function changeOf(kind: ProseFieldKind, at: At, context: ProseContext): Change {
   }
 }
 
-/** world.md → Change prose for one update; null when no clause renders or a path has no wording. */
+/**
+ * world.md → Change prose for one update; null when no clause renders, a path has no wording, or a
+ * value isn't its field's type.
+ */
 export function diffProse(entry: DiffCacheEntry, context: ProseContext): string | null {
   const clauses: string[] = []
   const groupsDone = new Set<ProseFieldKind>()
+  let unworded = false
   for (const path of diffPaths(entry)) {
     const kind = proseFieldOf(context.table, path)
-    if (kind === undefined) return null
+    if (kind === undefined) {
+      unworded = true
+      continue
+    }
     if (GROUP_KINDS.has(kind)) {
       if (groupsDone.has(kind)) continue
       groupsDone.add(kind)
     }
     const at: At = { path, old: valueAt(entry.old, path), new: valueAt(entry.new, path), entry }
     const change = changeOf(kind, at, context)
-    if (change === null) return null
-    if (change !== SAME)
+    if (change === MISTYPED) {
+      context.onMistyped(path)
+      return null
+    }
+    if (change === UNWORDED) unworded = true
+    else if (change !== SAME)
       clauses.push(fill('history:prose.clause', { field: labelOf(path, context), change }))
   }
-  return clauses.length === 0 ? null : clauses.join(t('history:prose.separator'))
+  return unworded || clauses.length === 0 ? null : clauses.join(t('history:prose.separator'))
 }
