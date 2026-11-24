@@ -35,14 +35,9 @@ import { undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction, applyDeltaActionGroup } from '../../delta/apply-delta-action'
 import { reverseCloseForRerun } from '../../delta/rerun-journal'
-import type { ReversePlan } from '../../delta/reverse-replay'
-import {
-  getRollbackCounts,
-  sweepToEntry,
-  type ResolvedSweep,
-} from '../../story-entries/operational'
+import { getRollbackCounts, sweepToEntry } from '../../story-entries/operational'
 import type { DeltaSource, PipelineAction } from '../../types'
-import { forkBranchCore, planFork } from '../fork-branch'
+import { forkBranchCore, planFork, type ForkPlan } from '../fork-branch'
 
 export type ForkWorld = {
   readonly ctx: DbCtx
@@ -430,10 +425,20 @@ export function journalIdsOn(w: ForkWorld, branchId: string): string[] {
   return rows.map(({ id }) => id)
 }
 
+// branchSnapshot leaves out pipeline_runs; without it a fork writing the parent's runs would pass.
+function parentRows(w: ForkWorld): BranchSnapshot {
+  return {
+    ...branchSnapshot(w.sqlite, w.parentId),
+    pipeline_runs: w.sqlite
+      .prepare('SELECT * FROM pipeline_runs WHERE branch_id = ? ORDER BY run_id')
+      .all(w.parentId) as Record<string, unknown>[],
+  }
+}
+
 export function snapshotParent(w: ForkWorld): ParentSnapshot {
   const redoTop = undoRedoStore.peekRedoGroup(w.parentId)
   return {
-    rows: branchSnapshot(w.sqlite, w.parentId),
+    rows: parentRows(w),
     vectors: vectorRows(w.sqlite, w.parentId),
     branchRow: w.sqlite.prepare('SELECT * FROM branches WHERE id = ?').get(w.parentId) as Record<
       string,
@@ -468,7 +473,7 @@ export async function forkPlan(
   w: ForkWorld,
   forkEntryId: string,
   childId: string,
-): Promise<{ swept: ResolvedSweep; plan: ReversePlan } | null> {
+): Promise<ForkPlan> {
   const planned = await planFork(w.parentId, positionOf(w, forkEntryId), childId, w.ctx)
   if (planned.status === 'rejected')
     throw new Error(`fork harness: the fork's plan refused: ${planned.code} ${planned.reason}`)
