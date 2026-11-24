@@ -190,7 +190,8 @@ It sits in the reader's zone, not `STORY TOOLS`, since branch
 navigation is the reader's alone
 ([`principles.md → Top-bar design rule`](../principles.md#top-bar-design-rule)).
 Never in-flight-gated: it only opens the navigator, which pauses
-switching and hides delete itself.
+switching and hides delete itself. It disables, with the
+`Loading story…` reason, only while the reader route hydrates.
 
 ## Surface coverage
 

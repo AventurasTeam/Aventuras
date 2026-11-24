@@ -935,13 +935,13 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
 
 - `useReportedOpen` is one hook, `hooks/use-reported-open.ts`, shared
   by the branch navigator and the chapter popover, where the plan
-  copied it into the navigator (the coordinator's answer: lift it, note
-  the deviation).
+  copied it into the navigator.
 - The navigator's Esc guard prevents the Popover's close only when Esc
   targets the rename input: Esc cancels the rename there and closes the
   navigator anywhere else, as the rename's canon says.
 - The invalid rename input shows `Input`'s danger border through
   `aria-invalid`; canon and the wireframe now name the invalid state,
-  resolving the earlier warn/danger mismatch (provisional answer).
+  resolving the earlier warn/danger mismatch (provisional: the developer
+  hasn't confirmed it).
 - The probe stays out of the tree (removed with this note); git history
   keeps it.

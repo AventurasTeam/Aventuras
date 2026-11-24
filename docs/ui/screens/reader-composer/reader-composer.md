@@ -91,7 +91,7 @@ again.
 
 Lean breadcrumb:
 
-`<story-title ✎>  ·  <chapter-chip ▾>  ·  <time chip>`
+`<story-title ✎>  ·  <chapter-chip ▾>  ·  <time chip>  ·  ⎇N`
 
 **Progress strip** — thin 3px full-width bar along the bottom edge of
 the top-bar. Fill width = current chapter's tokens / threshold.
