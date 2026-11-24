@@ -2,18 +2,28 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { useEntryIndex } from '@/hooks/use-entry-index'
+import type { Delta } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { formatEntryRef } from '@/lib/entry-refs'
 import {
+  diffProse,
+  entryIdsOf,
   humanizeDelta,
+  refIdsOf,
+  type DiffCacheEntry,
+  type DiffOutcome,
   type HistoryOp,
   type HistoryRow,
   type HistorySort,
   type HistoryTable,
+  type ProseContext,
+  type ProseTarget,
 } from '@/lib/history'
 import { t } from '@/lib/i18n'
 import { entitiesStore, generationStore, happeningsStore } from '@/lib/stores'
 
 import { HistoryTabView } from './history-tab-view'
+import { useDiffOutcomes } from './use-diff-outcomes'
 import { useHistoryChunks } from './use-history-chunks'
 import { historyTargetName, useHistoryTarget } from './use-history-target'
 import { useLinkVersion } from './use-link-version'
@@ -39,8 +49,8 @@ function otherEndIds(rows: readonly HistoryRow[]): string[] {
   return [...new Set(rows.flatMap((row) => (row.via.kind === 'own' ? [] : [row.via.otherId])))]
 }
 
-// Working-set names for the rows' other ends. Selectors return a string, so a patch to any
-// other row leaves the tab alone.
+// Working-set names for the given ids (other ends, prose refs). Selectors return a string, so a
+// patch to any other row leaves the tab alone.
 function useStoreNames(branchId: string, ids: readonly string[]): ReadonlyMap<string, string> {
   const entityNames = entitiesStore.useEntities(branchId, (m) =>
     JSON.stringify(ids.map((id) => m.get(id)?.name ?? null)),
@@ -82,6 +92,82 @@ function useOtherEndChanges(
   }, [names, ids, searching, onChange])
 }
 
+// The labels an update row's prose reads: its own table's, or the link's by the tab's side.
+function proseTarget(row: HistoryRow, targetTable: HistoryTable): ProseTarget | null {
+  switch (row.via.kind) {
+    case 'own':
+      return { table: targetTable, side: null }
+    case 'link':
+      if (row.via.table === 'character_relationships')
+        return { table: row.via.table, side: row.via.side }
+      return { table: row.via.table, side: null }
+    case 'removed':
+      return null
+  }
+}
+
+function refIdsOfRows(
+  rows: readonly HistoryRow[],
+  outcomes: ReadonlyMap<string, DiffOutcome>,
+  targetTable: HistoryTable,
+): string[] {
+  const ids = new Set<string>()
+  for (const row of rows) {
+    const outcome = outcomes.get(row.delta.id)
+    const target = proseTarget(row, targetTable)
+    if (outcome?.kind !== 'entry' || target == null) continue
+    for (const id of refIdsOf(target.table, outcome.entry)) ids.add(id)
+  }
+  return [...ids]
+}
+
+/** An update row whose walked entry holds a value of the wrong type at `path`. */
+type MistypedRow = { entry: DiffCacheEntry; delta: Delta; path: string }
+
+type ProseLookups = Pick<ProseContext, 'liveName' | 'entryLabel'> & {
+  /** The entry index hasn't read, re-reads, or failed its last read. */
+  entryIndexStale: boolean
+  onMistyped: (row: MistypedRow) => void
+}
+
+// world.md → Change prose: null keeps the field-name summary (pending, failed, gone, no wording).
+function changeProse(
+  row: HistoryRow,
+  outcome: DiffOutcome | undefined,
+  targetTable: HistoryTable,
+  { liveName, entryLabel, entryIndexStale, onMistyped }: ProseLookups,
+): string | null {
+  const target = proseTarget(row, targetTable)
+  if (outcome?.kind !== 'entry' || target == null) return null
+  const { entry } = outcome
+  // An entry a stale index lacks may be new, not gone: "Unknown entry" waits for a fresh read.
+  const unheld = entryIdsOf(target.table, entry).some((id) => entryLabel(id) === null)
+  if (unheld && entryIndexStale) return null
+  return diffProse(entry, {
+    ...target,
+    liveName,
+    entryLabel,
+    onMistyped: (path) => onMistyped({ entry, delta: row.delta, path }),
+  })
+}
+
+// Keyed on the cache's own entry: one warn per walk result, through re-renders and remounts.
+const warnedMistyped = new WeakSet<DiffCacheEntry>()
+
+function useMistypedWarnings(found: readonly MistypedRow[]): void {
+  useEffect(() => {
+    for (const { entry, delta, path } of found) {
+      if (warnedMistyped.has(entry)) continue
+      warnedMistyped.add(entry)
+      logger.warn('history.diff_prose_mistyped', {
+        branchId: delta.branchId,
+        deltaId: delta.id,
+        path,
+      })
+    }
+  }, [found])
+}
+
 function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: HistoryTabProps) {
   const [searchInput, setSearchInput] = useState('')
   const search = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS)
@@ -110,8 +196,15 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
   )
   const storeNames = useStoreNames(branchId, otherIds)
   useOtherEndChanges(storeNames, otherIds, search !== '', otherEndChanged)
+  const outcomes = useDiffOutcomes(chunks.rows)
+  const refIds = useMemo(
+    () => refIdsOfRows(chunks.rows, outcomes, targetTable),
+    [chunks.rows, outcomes, targetTable],
+  )
+  // Read as the other ends are, so a ref the store holds on another branch reads (deleted).
+  const refNames = useStoreNames(branchId, refIds)
   const name = historyTargetName(row) ?? t('history:unknownTarget')
-  const rows = useMemo(() => {
+  const { rows, mistyped } = useMemo(() => {
     const nowMs = Date.now()
     const entryLabel = (entryId: string) => {
       const ref = entryIndex.index.get(entryId)
@@ -119,10 +212,37 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
     }
     // The working set first, so a renamed other end reads its new name.
     const otherName = (id: string) => storeNames.get(id) ?? chunks.names[id] ?? null
-    return chunks.rows.map((historyRow) =>
-      humanizeDelta(historyRow, { targetTable, targetName: name, otherName, entryLabel, nowMs }),
-    )
-  }, [chunks.rows, chunks.names, entryIndex.index, targetTable, name, storeNames])
+    const found: MistypedRow[] = []
+    const lookups: ProseLookups = {
+      liveName: (id) => refNames.get(id) ?? null,
+      entryLabel,
+      entryIndexStale: entryIndex.stale,
+      onMistyped: (row) => found.push(row),
+    }
+    const shown = chunks.rows.map((historyRow) => {
+      const view = humanizeDelta(historyRow, {
+        targetTable,
+        targetName: name,
+        otherName,
+        entryLabel,
+        nowMs,
+      })
+      const prose = changeProse(historyRow, outcomes.get(historyRow.delta.id), targetTable, lookups)
+      return prose == null ? view : { ...view, summary: prose }
+    })
+    return { rows: shown, mistyped: found }
+  }, [
+    chunks.rows,
+    chunks.names,
+    entryIndex.index,
+    entryIndex.stale,
+    targetTable,
+    name,
+    storeNames,
+    refNames,
+    outcomes,
+  ])
+  useMistypedWarnings(mistyped)
 
   return (
     <HistoryTabView

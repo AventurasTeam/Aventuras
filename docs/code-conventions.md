@@ -39,6 +39,10 @@ public entry. Everything else in the module is internal.
   it may deep-import `@/lib/actions/types` instead, the one internal
   file it may name, and reaches the action layer's functions through
   the delta action port boot wires.
+- **`lib/actions` imports nothing from `lib/history`.** `lib/history`
+  imports the actions barrel, so the reverse import would make a cycle;
+  the diff cache registers with the action layer's `onLogRewritten` hook
+  instead.
 - **Tests and their fixtures are exempt.** A test file, or a fixture
   under a `__tests__/` folder, may import any module's internals: a
   test stages state the public API has no reason to expose. A helper

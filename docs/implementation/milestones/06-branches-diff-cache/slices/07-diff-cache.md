@@ -186,13 +186,13 @@ follow the default.
 - Each update on the path that History lists gets an entry, so one walk
   serves every requested delta on its target. An awareness update whose
   payload holds only `retrievalCount`, the shape History leaves out
-  (a retrieval bump, or a close's reset; `lib/history/query.ts:130-134`),
+  (a retrieval bump, or a close's reset; `lib/history/query.ts:131-137`),
   is stepped back through but gets no entry: a retrieval can bump each
   aware in-scene row once a turn, so one long awareness chain would
-  otherwise fill the 2000-entry cache. The walk tests that shape with
-  the same rule as the list's query, one definition beside
-  `RETRIEVAL_COUNT` (`lib/history/link-rows.ts`), so the two can't
-  drift.
+  otherwise fill the 2000-entry cache. The walk and the list's query
+  build that shape from the same two constants, `RETRIEVAL_COUNT` and
+  `RETRIEVAL_BUMP_TABLE` (`lib/history/link-rows.ts`), and a test pins
+  that the two leave out the same deltas.
 - Every read is scoped by `branch_id`.
 
 **The cache** (`lib/history/diff-cache.ts`).
@@ -224,7 +224,9 @@ follow the default.
   A later `populate` for it rejects at once, with no walk and no second
   `warn`, whether or not TanStack has dropped its query. The memory goes
   with its branch's next eviction: under a consistent read, only a
-  rewrite of the log can change a chain the walk found corrupt.
+  rewrite of the log can change a chain the walk found corrupt. A plain
+  DB error is remembered as long, so a one-off failure keeps its rows
+  on the summary until that eviction.
 - The cache registers its eviction with the hook when its module loads,
   so no entry can exist before its listener does.
 
@@ -296,7 +298,7 @@ follow the default.
   a remove), so a mounted row would keep the stale prose until something
   else re-rendered it (C9). The host hears the eviction from the cache,
   not from a hook of its own. Every query key in the app so far carries
-  `settleCount` instead (`hooks/use-entry-index.ts:105`); this is the
+  `settleCount` instead (`hooks/use-entry-index.ts:108`); this is the
   first invalidation by key.
 - A loader seam beside `HistoryLoaderProvider`
   (`components/history/history-loader.tsx`), defaulting to the cache, so
@@ -534,8 +536,6 @@ each side, the pending miss (summary showing), and the failed walk
 
 | Level                  | Tool                                                                          | What                                                                                                                                                                                                                              |
 | ---------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Level                  | Tool                                                                          | What                                                                                                                                                                                                                              |
-| ---                    | ---                                                                           | ---                                                                                                                                                                                                                               |
 | Unit, `lib/actions`    | Vitest, `--project unit`, test database                                       | The wrapper against the reversal's own restore; the hook at its three call sites, after a store-sync failure, and with a throwing listener.                                                                                       |
 | Unit, `lib/history`    | Vitest, `--project unit`, test database                                       | The read's consistency and its index; the walk's seeds, meta keys, column group, bumps with no entry, a gone delta, and survivor rewrites across an undo and a redo; the renderer per field kind; the fallback's tests unchanged. |
 | Unit, cache            | Vitest, `--project unit`, injected walk                                       | Keying, LRU, coalescing, batching, eviction, the in-flight guard on entries and rejections, gone outcomes, remembered failures.                                                                                                   |
@@ -560,7 +560,8 @@ invalidation, and, if the E2E has a survivor, its registration check.
   eviction fired" (C9: a fork's commit is its own batch). The milestone's
   dependency graph lists no 6.3 ┄ 6.7 pair, so whichever of the two
   lands second adds that clause to `lib/actions/stories/fork-branch.test.ts`'s
-  AC 9 test. Found by Slice 6.3's slice review (2026-11-24).
+  AC 9 test. Found by Slice 6.3's slice review (2026-11-24). _Resolved:_
+  6.3 landed first, so this slice added it to that test (Second to land).
 - **The read's mechanism.** Neither platform sets WAL or has a read
   transaction; the desktop bridge has `query`, `exec` and a write-only
   `transaction(ops)` (`electron/preload.ts:34-38`). Options:
@@ -652,5 +653,139 @@ invalidation, and, if the E2E has a survivor, its registration check.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+- **The read.** `readChainSnapshot`, a function beside `DbCtx` in
+  `lib/db`, reads the chain and the row in one call: a `db:batch` IPC
+  channel whose Electron main handler runs every query in one
+  synchronous call on its one connection, two synchronous drizzle reads
+  on native, and a batch callback on the test database (developer
+  decision). Criterion 3's native half was confirmed by reading the
+  source, not by a probe: drizzle-orm 0.45.2's expo-sqlite session is
+  synchronous, native `runInTransaction` is expo-sqlite 55's
+  `withTransactionSync`, and no app code calls an async expo-sqlite API.
+  ESLint now holds that (developer decision): it bans `*Async` members of
+  `expoDb` and value imports of `expo-sqlite` outside the native client.
+  Two dev-only paths are the exceptions: the Drizzle Studio dev plugin
+  calls the async API on the app's connection, and is a no-op when
+  `NODE_ENV` is `production`; the on-device reseed
+  (`lib/db/devtools/reseed.native.ts`), which throws outside `__DEV__`,
+  holds a `BEGIN` open across `await`s between its synchronous inserts,
+  so a walk run in one of those gaps reads rows the reseed hasn't
+  committed.
+- **The read's tests.** The native read also has a unit test,
+  `lib/db/runtime/chain-snapshot.native.test.ts`, running drizzle's
+  expo-sqlite driver over a small `node:sqlite` sync adapter: it covers
+  mapping and order, not atomicity. The chain query's
+  `EXPLAIN QUERY PLAN` names `deltas_chain_idx`, so the fallback of
+  sorting in JS didn't fire; the chain read test turns on
+  `PRAGMA reverse_unordered_selects`, so a dropped `ORDER BY` fails.
+- **The vocabulary** was designed in canon before planning resumed
+  (developer decision):
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose).
+- **Ref names** (developer decision). The walk reads the names of its
+  entries' refs, stored row then latest delete payload, and records them
+  on the entry; the `(deleted)` mark is computed when the row renders.
+- **The collision group** (developer decision). The walk fills it: when a
+  delta's undo payload holds any of `nameCollisionFlag`,
+  `nameCollisionPartnerId` or `nameCollisionReason`, the entry's `new`
+  holds all three, picked from the walk's state at that step, as `new`
+  already holds the whole column for the placement group. The renderer
+  stays as planned, and `world.md`'s column-group rule holds literally.
+  Pinned in
+  `lib/history/diff-walk.test.ts` (a merge re-point, a clear by merge
+  and a raise, through the real walk) and in
+  `lib/history/diff-prose-walk.test.ts` (the walk's output rendering
+  `Collision flag: Kael (deleted) → Kael`).
+- **The survivor E2E** (developer decision, built differently). The
+  planned flow, one turn whose pass writes the edited field, leaves no
+  survivor: the pass reads only that turn, so its write is anchored on
+  it, and the turn's CTRL-Z sweeps it. The spec instead parks the
+  classifier watermark so the pass's window opens on the reply before
+  the last turn. After the World edit it rewords that reply from the
+  reader: an edit below the head turn, which records no invalidation
+  scope but moves the reply's prose position past the World edit. It
+  then takes one turn whose pass writes The City Watch's standing with
+  that reply as its source. CTRL-Z of the turn, of the rewording and of
+  the World edit leaves the pass's write standing with its prior
+  rewritten, and Redo puts it back. The spec re-selects World's row
+  after each return from the reader: GO TO Reader dismisses World
+  (`hooks/use-surface-navigate.ts`), so World comes back with nothing
+  selected.
+- **Criterion 12's** two-branch database test, and criterion 4's last
+  two cases (the abort's gone and the survivor across CTRL-Z and redo),
+  live in `lib/history/diff-walk-reversals.test.ts`, not
+  `diff-walk.test.ts`, and criterion 2's `EXPLAIN QUERY PLAN` case lives in
+  `lib/db/runtime/chain-snapshot.test.ts`, beside the read it plans.
+- **Deviations from the brief.**
+  - `populate` resolves a typed `DiffOutcome`, whose `gone` is no
+    failure, in place of canon's `Promise<DiffCacheEntry>`.
+  - A walk its branch's eviction overtook rejects its callers with
+    `DiffEvictedError`. TanStack joins an invalidation's refetch onto a
+    first fetch that has no data yet instead of cancelling it, so the
+    History host's query function populates again on that error.
+  - History's diff queries set `gcTime: 0`, so the diff cache alone
+    retains entries and a tab remounted after an eviction it didn't hear
+    reads again.
+  - Batching N rows into M walks lives inside `populate`, a batch per
+    tick, so each row's query calls `populate` alone.
+  - The warn's subsystem is a new `history` member of `LogSubsystem`.
+  - Writes with no delta are accepted, and canon's Walk algorithm says
+    so.
+  - The post-commit hook fires only on a commit that rewrites the log
+    (a review ruling): `reverseAndPruneDeltaRows` when its set holds
+    rows or its commit writes a journal back (the caller passes the
+    write-back's patches as `patchesAfter`), `reverseReplayGroup`
+    when its set holds rows, a redo when its commit is non-empty. A
+    forward write routed through the reversal path with an empty set
+    evicts nothing. This replaces the plan's op-count guard.
+- **C5.** 6.2 had landed; the host's ref names go through
+  `useStoreNames`, which reads its branch accessor. It was merged in,
+  not rebased onto, and the redo hook's branch reads the redo group's
+  (`group.branchId`).
+- **Criterion 13.** Did not apply: 6.8 had not landed when this PR
+  opened.
+- **Second to land.** [Slice 6.3](./03-fork-core.md) landed first
+  (`7c6202fbb`) and was merged in, so this slice adds its Acceptance
+  criteria 9's no-eviction check: the AC 9 test in
+  `lib/actions/stories/fork-branch.test.ts` hears `onLogRewritten`
+  around the fork and expects no call. The fork commits one batch of its
+  own and reaches none of the commits that fire the hook, so it evicts
+  nothing on either branch.
+- **Device smoke** (slot AVD, non-blocking): ran on `Aventuras_Slot_2`
+  with a debug x86_64 build, whose bundle carried the native read. A World
+  edit of Mira's description read as before-and-after prose in History;
+  after Undo from the reader the update row was gone, and after Redo the
+  same prose came back. Undo and Redo each evicted the branch from the
+  diff cache, checked in the running app.
+- **The term-list prose** (developer decision). It ships as
+  [`world.md → Change prose`](../../../../ui/screens/world/world.md#change-prose)
+  reads, with no renderer change and no canon edit in this slice. Two
+  gaps stay open and go to
+  [triage](../../../triage.md): a term list can show two sides that read
+  identically once the 40-character head cut or the whitespace collapse
+  hides the difference, and the exact-match text lists (traits, drives,
+  agenda) store terms with no whitespace or Unicode normalization, so
+  terms differing only by spacing or NFD versus NFC are distinct values
+  and read `added X, removed X`.
+- **The entry-index gate** (developer decision, slice review R1: b,
+  2026-11-24). After a failed re-read, `useEntryIndex` kept its last
+  good list and read `ready: true, failed: false`, so the host's
+  `ready && !failed` stayed open and a row naming an entry newer than
+  that list read "Unknown entry". The hook
+  (`hooks/use-entry-index.ts`, outside this slice's files) gained
+  `stale`: true until a read lands, while one runs and after one fails;
+  `ready`, `failed` and `updating` keep their meaning for their other
+  readers. The host gates per row: a row naming an entry the index
+  doesn't hold (`entryIdsOf`, which replaced `namesAnEntry`) keeps the
+  field-name summary while the index is stale, a row whose entries it
+  holds keeps its prose, and a missing entry reads "Unknown entry" once
+  the index is fresh. The index re-reads on every turn, so a row naming
+  a deleted entry shows the summary while each re-read runs.
+- **A wrong-typed value** (developer decision, slice review R2: b,
+  2026-11-24). `diffProse` tells a value that isn't its field's type
+  from a path with no wording, and hands the first such path to its
+  context's required `onMistyped`; it still returns null, so the row
+  keeps the field-name summary. The History tab logs
+  `history.diff_prose_mistyped` with the branch, delta id and path,
+  once per walk result (a `WeakSet` of the cache's entries): a
+  re-render or a remount doesn't repeat it, a re-walk after an eviction
+  can. A path with no wording logs nothing.

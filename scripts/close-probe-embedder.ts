@@ -1,4 +1,4 @@
-import { makeCallback, type openTestDb } from '@/lib/db/__tests__/test-db'
+import { makeBatchCallback, makeCallback, type openTestDb } from '@/lib/db/__tests__/test-db'
 import type { DbBridge } from '@/types/db-bridge'
 import type { EmbedderBridge } from '@/types/embedder-bridge'
 
@@ -23,6 +23,7 @@ export function probeEmbedderBridge(root: string): ProbeEmbedderBridge {
 function probeDbBridge({ sqlite, runInTransaction }: OpenedProbeDb): DbBridge {
   return {
     query: makeCallback(sqlite),
+    batch: makeBatchCallback(sqlite),
     async exec(sql) {
       sqlite.exec(sql)
     },

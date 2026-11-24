@@ -23,6 +23,7 @@ import {
   type ScanLinkEnds,
 } from './link-ends'
 import {
+  RETRIEVAL_BUMP_TABLE,
   RETRIEVAL_COUNT,
   type HistoryLinkTable,
   type HistoryRow,
@@ -128,7 +129,8 @@ function linkMembers(links: readonly LinkEnd[]): SQL[] {
 }
 
 // world.md → History tab: a retrieval bump is the ranker's bookkeeping, not an edit.
-const NOT_RETRIEVAL_BUMP = sql`NOT (${deltas.targetTable} = 'happening_awareness'
+// isRetrievalBump is the same shape in JS; both count every payload key.
+const NOT_RETRIEVAL_BUMP = sql`NOT (${deltas.targetTable} = ${RETRIEVAL_BUMP_TABLE}
   AND ${deltas.op} = 'update'
   AND (SELECT count(*) FROM json_each(${deltas.undoPayload})) = 1
   AND json_type(${deltas.undoPayload}, ${`$.${RETRIEVAL_COUNT}`}) IS NOT NULL)`

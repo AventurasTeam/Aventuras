@@ -116,7 +116,9 @@ code outside the module (including outside `lib/`) imports only from
 there, enforced by `boundaries/dependencies`. Intra-module imports
 are free, types are public, and `scripts/**` is exempt. `lib/pipeline`
 takes no value import of the `lib/actions` barrel and may deep-import
-`@/lib/actions/types` alone. See
+`@/lib/actions/types` alone. `lib/actions` imports nothing from
+`lib/history`, which imports its barrel; the diff cache hears the
+action layer through `onLogRewritten`. See
 [code-conventions.md → Module structure](../../docs/code-conventions.md#module-structure).
 
 ## State placement

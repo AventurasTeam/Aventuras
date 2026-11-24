@@ -819,9 +819,11 @@ the field-name summary.
   `none`: an item's null means held or unplaced
   ([ItemState shape](../../../data-model.md#itemstate-shape)).
 - **An entry ref** reads `entry #n`, as the meta line does, and
-  "Unknown entry" when the branch's entry index doesn't hold it. A row
-  whose prose names an entry shows the field-name summary until the
-  index has read, and after a failed read.
+  "Unknown entry" when the branch's entry index doesn't hold it. Until
+  the index has read, while it re-reads and after a failed read, it can
+  lack the newest entries, so a row whose prose names an entry it
+  doesn't hold shows the field-name summary instead; a row whose
+  entries it holds keeps its prose.
 
 #### Long text — change prose
 

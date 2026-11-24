@@ -26,6 +26,8 @@ export type EntryIndexSnapshot = {
   failed: boolean
   /** A read is running while `ready` shows an earlier window: the last read, or a seed. */
   updating: boolean
+  /** `index` may lack the newest entries: no read yet, one running, or the last one failed. */
+  stale: boolean
   /** Re-reads the current window; the error state's way out, since reads never retry on their own. */
   retry: () => void
 }
@@ -72,6 +74,7 @@ const EMPTY = {
   ready: false,
   failed: false,
   updating: false,
+  stale: true,
 }
 const FAILED = { ...EMPTY, failed: true }
 
@@ -131,7 +134,8 @@ export function useEntryIndex(
     // A seed only stands in while its read runs; a failed read shows as one, Retry included.
     if (good != null && !(good.seeded && error != null)) {
       const { entries, index } = good.window
-      return { entries, index, ready: true, failed: false, updating: isFetching, retry }
+      const stale = isFetching || error != null
+      return { entries, index, ready: true, failed: false, updating: isFetching, stale, retry }
     }
     return { ...(error != null ? FAILED : EMPTY), retry }
   }, [good, error, isFetching, refetch])

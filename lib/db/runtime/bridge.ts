@@ -1,4 +1,4 @@
-import { type DbProxyMethod, type DbProxyResult } from '@/types/db-bridge'
+import { type DbProxyMethod, type DbProxyQuery, type DbProxyResult } from '@/types/db-bridge'
 
 export function resolveBridge() {
   const bridge = globalThis.window?.aventurasDb
@@ -12,4 +12,8 @@ export async function bridgeQuery(
   method: DbProxyMethod,
 ): Promise<DbProxyResult> {
   return resolveBridge().query(sqlText, params, method)
+}
+
+export async function bridgeBatch(queries: DbProxyQuery[]): Promise<DbProxyResult[]> {
+  return resolveBridge().batch(queries)
 }

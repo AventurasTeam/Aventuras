@@ -1514,36 +1514,114 @@ the scopes declared in each per-screen doc.
 
 ### Walk algorithm
 
-For a target `op=update` delta D, fetch the chain of deltas on
-the same `(branch_id, target_table, target_id)` with
-`log_position >= D.log_position`, plus the current state of the
-target row, **both inside a single SQLite read transaction**
-(WAL gives a consistent snapshot, so a fresh delta committing
-mid-walk cannot produce an off-by-one between the two reads).
+A walk serves the requested deltas, the `op=update` deltas asked for on
+one target. It reads the chain of deltas on the same
+`(branch_id, target_id)` from the oldest requested delta's `log_position`
+on, every op, ordered by `log_position`, and the target row by branch and
+id, **with no write committing between the two reads**, so a fresh delta
+can't make an off-by-one between them. Neither platform has a read
+transaction to give that, so the read is one call that runs both,
+`readChainSnapshot` in `lib/db`, a function beside `DbCtx`:
 
-Walk newest-to-oldest from the live row. The seed state comes
-from the live row, unless the head of the chain is an `op=delete`
-— in which case the delete's `undo_payload` (full pre-delete
-row JSON per the
-[delta storage economy decision](./data-model.md#entry-mutability--rollback))
-seeds the walk. For each `op=update` delta on the path:
+- **Desktop:** one `db:batch` IPC message. Electron main runs every query
+  of the batch in one synchronous call on its one connection, so no
+  other handler, and so no write, runs between them.
+- **Native:** two synchronous drizzle reads on the expo-sqlite driver,
+  with no `await` between them. Every write the app makes on native runs
+  synchronously on the JS thread (`withTransactionSync`), so none lands
+  between the two. That holds only while nothing calls expo-sqlite's
+  async API on the app's connection, which `eslint.config.js` enforces:
+  it bans any `*Async` member of `expoDb`, and any value import of
+  `expo-sqlite` outside `lib/db/runtime/client.native.ts`. Two dev-only
+  paths are the exceptions. The Drizzle Studio dev plugin calls the async
+  API on the connection, and is a no-op when `NODE_ENV` is `production`,
+  so only a dev build can see a Studio query interleave with a walk. The
+  on-device reseed (`lib/db/devtools/reseed.native.ts`), which throws
+  outside `__DEV__`, holds a `BEGIN` open across `await`s between its
+  synchronous inserts, so a walk run in one of those gaps reads rows the
+  reseed hasn't committed. A third ban keeps other code off the batch
+  the desktop read runs on: in code bound for native, `db.batch` and
+  `ctx.db.batch` are errors outside `lib/db/runtime/**`, since drizzle's
+  expo-sqlite driver has no batch while the app db's sqlite-proxy type
+  declares one.
+- **The test database:** its batch callback runs every query in one
+  synchronous call, so the walk's tests run the desktop path.
 
-1. `new_partial = pick(state, keys(delta.undo_payload))`.
-2. `old_partial = delta.undo_payload`.
-3. Cache `{ new: new_partial, old: old_partial }` keyed by
-   `delta.id`.
-4. `state = applyUndoPayload(state, delta.undo_payload)` to step
-   backward one delta.
+The chain's `target_table` filter is the SQL name of the table the row
+read takes (`getTableName(row.table)`), so the two reads can't name
+different tables.
 
-`pick` is column-key-only at the top level: `keys(delta.undo_payload)`
-returns column names (`['state', 'description']`), not nested paths,
-so `new.<column>` ends up being the whole live column value while
-`old.<column>` is the partial pre-change column. The asymmetry is
-load-bearing for the renderer (see below). The `applyUndoPayload`
-function is the same primitive rollback and CTRL-Z use to apply an
-`undo_payload` to a row — the encoding contract and apply semantics
-are pinned in
+A requested delta absent from its chain is **gone**: a reversal pruned it
+after its History row loaded. It resolves without an entry; when every
+requested delta is gone, the walk looks for no seed. Otherwise the walk
+seeds its state from the first of these that exists:
+
+1. the live row;
+2. the `undo_payload` of an `op=delete` at the head of the chain, the
+   full pre-delete row (per the
+   [delta storage economy decision](./data-model.md#entry-mutability--rollback));
+3. for a link row removed with its other end, which logs no delete of
+   its own, the copy that end's delete holds: the latest `op=delete` on
+   the branch in `entities` or `happenings` whose payload holds the row
+   under its cascade key (`relationships`, `involvements` or
+   `awareness`). It is a second read, made only when the first two are
+   absent: no forward write can re-create a deleted row, and only a
+   reversal or a redo can restore one, either of which evicts the branch
+   ([Concurrency, rollback, error path](#concurrency-rollback-error-path)).
+
+With none of the three the target is corrupt, and the walk rejects.
+Then, for each `op=update` delta on the path, newest first:
+
+1. `keys = keys(delta.undo_payload)`, skipping `$`-prefixed meta keys.
+2. `old_partial = pick(delta.undo_payload, keys)`.
+3. `new_partial = pick(state, keys)`, with the collision group filled in:
+   when an `entities` payload holds any of `nameCollisionFlag`,
+   `nameCollisionPartnerId` or `nameCollisionReason`
+   (`COLLISION_COLUMNS` in `lib/history/prose-fields.ts`), `new` holds
+   all three, picked from the state after the delta (`pickedKeys` in
+   `lib/history/diff-walk.ts`). The group is worded as one field, and a
+   merge's re-point of the partner writes it without the flag.
+4. Record `{ new: new_partial, old: old_partial }` for
+   `(branch_id, delta.id)`, unless the delta is a retrieval bump (below).
+5. Step `state` back one delta, key by key, through `undoneColumnOf`
+   (below).
+
+`pick` is column-key-only at the top level: `keys` are column names
+(`['state', 'description']`), not nested paths, so `new.<column>` ends
+up being the whole live column value while `old.<column>` is the partial
+pre-change column. The asymmetry is load-bearing for the renderer (see
+below). `undoneColumnOf`, on the `lib/actions` barrel, is the
+column-by-column apply a reversal restores a field with, so a place's
+parent and its `unplaced` mark step back as one field, as they do in a
+reversal. The encoding contract is pinned in
 [`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback).
+
+An awareness update whose payload holds only `retrievalCount` (a
+retrieval's bump, or a close's reset) is stepped back through but
+recorded nowhere. History leaves that shape out
+([`world.md → History tab`](./ui/screens/world/world.md#history-tab)),
+and a retrieval can bump each aware in-scene row once a turn, so one
+long awareness chain would otherwise fill the cache. The walk and
+History's query build the shape from the same two constants,
+`RETRIEVAL_COUNT` and `RETRIEVAL_BUMP_TABLE` (`lib/history/link-rows.ts`),
+and a test in `lib/history/diff-walk.test.ts` pins that the two leave
+out the same deltas.
+
+Last, the walk reads the names of the rows its entries reference (a row
+ref, a ref list's items, a place's parent, the collision partner,
+`lastSeenAt`'s place), each the stored row's name, else the one in its
+latest delete payload, on the walk's branch, and records them on every
+entry. With no ref there is no read, and a failed one fails the walk.
+The renderer names a ref from the working set first, and marks one the
+working set lacks `(deleted)` when the row renders
+([`world.md → Change prose`](./ui/screens/world/world.md#change-prose)).
+
+Some writes change a row and log no delta: a reversal's ref clear (a
+place's parent, a character's faction), the views a reversal nulls on a
+relationship it keeps, and a redo's ref restore. A walk seeded from such
+a row shows the newest delta on that path as having written the cleared
+or restored value. Each rides a reversal or a redo, so no cached entry
+outlives one.
 
 **Renderer iteration rule.** Consumers rendering rich diff prose
 from a cache entry must iterate `keys(old.<column>)` and look up
@@ -1572,21 +1650,40 @@ them as one-liners directly.
 
 ### Cache shape and lifecycle
 
-A process-wide singleton (proposed home `lib/deltas/diff-cache.ts`,
-exact path is implementation-time):
+A process-wide singleton. `createDiffCache` in
+`lib/history/diff-cache.ts` builds it, and the app's instance,
+`diffCache` in `lib/history/app-diff-cache.ts`, registers its eviction
+with the action layer's post-commit hook as the module loads, so no entry
+can exist before its listener does. Both come from the `lib/history`
+barrel.
 
 ```ts
+type UpdateDelta = Delta & { op: 'update' }
 type DiffCacheEntry = {
   old: Record<string, unknown>
   new: Record<string, unknown>
+  /** Walk-time names of the rows the entry references, by id. */
+  names: Record<string, string>
 }
+type DiffOutcome = { kind: 'entry'; entry: DiffCacheEntry } | { kind: 'gone' }
 
 peek(branchId: string, deltaId: string): DiffCacheEntry | undefined  // sync, render-safe
-populate(delta: Delta): Promise<DiffCacheEntry>    // async; runs the walk; keys on delta.branchId
-populateBatch(deltas: Delta[]): Promise<void>      // groups by branch and target
+populate(delta: UpdateDelta): Promise<DiffOutcome>            // async; runs the walk; keys on delta.branchId
+populateBatch(deltas: readonly UpdateDelta[]): Promise<void>  // groups by branch and target
+evictBranch(branchId: string): void              // the post-commit hook's listener
+onEvict(listener: (branchId: string) => void): () => void  // a host hears each evicted branch
+isCurrent(branchId: string, entry: DiffCacheEntry): boolean  // no eviction since entry's walk, LRU drop or not
 ```
 
-LRU eviction, hard cap **2000 entries**. Conservative estimate
+`populate` resolves `gone` for any requested delta its walk gave no
+entry: one pruned from its chain ([Walk algorithm](#walk-algorithm)), or
+a retrieval bump, which the walk steps through but never lists (History
+never requests one). Nothing is cached, remembered or logged for it. The
+walk records no retrieval bump, so one long awareness chain can't fill
+the cap below.
+
+LRU eviction, hard cap **2000 entries**; a `peek` hit and a `populate`
+both refresh recency. Conservative estimate
 ~500 bytes per entry, ~1 MB at cap. Process lifetime; no
 persistence. Cold every launch by design, and cleared otherwise only
 by a reversal, a redo or a journal write-back, each evicting every
@@ -1632,31 +1729,56 @@ Each row's host (per-screen page) renders via:
      summary derived from `undo_payload` keys alone (e.g.,
      `Modified Traits, Drives`). On populate resolution, the
      host's normal re-render path picks up the new entry and
-     the row upgrades to the rich form.
+     the row upgrades to the rich form. A `gone` outcome or a
+     rejection leaves the keys-only summary.
 
 The fallback keeps `DeltaLogRow`'s `summary: string` contract
 unchanged. Pre-walk and post-walk are both real strings; the
 post-walk version is richer.
 
-Re-render trigger mechanism is host-determined and not
-load-bearing for the cache contract (TanStack Query keyed on
-`['diff', branchId, delta.id]` is the natural fit given the existing
-stack).
+A host re-renders through TanStack Query, and the cache leaves it
+duties that History's host (`useDiffOutcomes(rows)`,
+`components/history/use-diff-outcomes.ts`) meets and a second host,
+such as the Diagnostics Hub's Delta log, owes too:
+
+- One query per update row, keyed `['diff', branchId, delta.id]` on the
+  delta's own branch, its initial data seeded from `peek`.
+- `staleTime: Infinity` and `gcTime: 0`. Only an invalidation makes a
+  diff stale, and the cache alone retains entries, so a host remounted
+  after an eviction it didn't hear reads again instead of showing what
+  TanStack kept.
+- On `onEvict(b)`, invalidate the `['diff', b]` queries, never remove
+  them: a removal notifies no mounted row. An invalidated outcome shows
+  the field-name summary until its re-read lands.
+- A query function that meets `DiffEvictedError` populates again:
+  TanStack joins an invalidation's refetch onto a first fetch that has
+  no data yet instead of starting a new one, so the rejected fetch is
+  the read the row waits on.
+- The queries hold the cache's own entry objects, with structural
+  sharing off: `isCurrent` knows an entry by identity, and sharing
+  rebuilds a re-read from the data it replaces.
+- An entry the cache says isn't current shows the field-name summary,
+  and its branch re-reads. The host checks each read that lands, and
+  every held entry once subscribed to `onEvict`. That covers a seed
+  taken before the subscription, and a first read an eviction overtook
+  after the cache resolved it, which lands unstale since TanStack
+  joined the invalidation's refetch onto it.
 
 `populate` coalesces concurrent calls for the same branch and
-`delta.id`
-via an internal in-flight promise map; `populateBatch` groups
-by branch and target so a visible window of N deltas across M targets
-runs M walks, not N. Cross-delta-within-target coalescing is
-deliberately not implemented — its worst case is one redundant
-SQL query.
+`delta.id` via an internal in-flight promise map; `populateBatch`
+groups by branch and target so a visible window of N deltas across M
+targets runs M walks, not N, and `populate` calls made in one tick are
+batched the same way, so a host that calls it once per row runs M too.
+A walk already in flight for a target serves no later call for another
+delta on it, deliberately: its worst case is one redundant SQL query.
 
 ### Concurrency, rollback, error path
 
-Reads happen concurrently with writes under WAL; the single-txn
-read snapshot is the entire concurrency contract. New deltas
-committing after a walk completes don't affect cached entries: a
-forward write never changes an earlier delta's `(old, new)`.
+A walk's read is one snapshot of the chain and the row
+([Walk algorithm](#walk-algorithm)); that and the eviction below are
+the whole concurrency contract. New deltas committing after the read
+don't affect its entries: a forward write never changes an earlier
+delta's `(old, new)`.
 
 Three writes invalidate, each on one branch: a reversal, which
 deletes the deltas it replays and rewrites the prior values of
@@ -1669,28 +1791,51 @@ on the rows it touched, so the cache needs no list of what a write
 reached. The eviction is a post-commit hook the action layer owns
 and the cache registers with, so the delta layer never imports the
 cache. It fires after the transaction commits and before the store
-sync, which can throw; a transaction that rolls back evicts nothing.
+sync, which can throw; a transaction that rolls back evicts nothing,
+and a listener that throws is logged
+(`action_layer.log_rewritten_listener_failed`) without stopping the
+others, the store sync or the caller's result. It fires only on a commit
+that rewrites the log: a reversal fires when its set holds rows or its
+commit writes a journal back (the caller passes the write-back's patches
+as `patchesAfter`), a redo when its commit is non-empty, on the redo
+group's branch. A forward write routed through the reversal
+path with nothing reversed (a head-turn content edit, a regenerate's
+clamp ops, a re-run start that reversed nothing) evicts nothing.
 A fork, a story duplicate and a branch delete evict nothing
 ([Cache shape and lifecycle](#cache-shape-and-lifecycle)). An entry
 for a deleted delta needs nothing more: nothing reads it, since the
 delta renders on no surface anymore.
 
+An eviction detaches its branch's walks in flight without cancelling
+them. A walk that started before it runs on and writes nothing when it
+settles, since its read can see a half-reversed row: no entry, no
+remembered failure, no `warn`. Its waiting `populate` calls reject with
+`DiffEvictedError`, and a `populate` after the eviction starts a new
+walk rather than joining it. The cache tells them apart by a generation
+per branch, which an eviction bumps and a settling walk checks.
+
 Single renderer process at v1; cross-window coordination would
 require IPC and is out of scope until multi-window support
 ships.
 
-On walk failure (DB error, corrupt state with target row missing
-and no `op=delete` in the chain), `populate` rejects; the host
-falls back permanently to the `undo_payload`-keys summary for
-that row and emits a `warn`-level log (delta id + error reason)
-per
+On walk failure (a DB error, or a target with no row, no head delete and
+no held copy), `populate` rejects, the cache remembers the failure by
+branch and delta id, and it logs one `warn`, `history.diff_walk_failed`,
+with the delta id and the reason, per
 [`observability.md → Logger contract`](./observability.md#logger-contract).
-The row stays usable. The warn level keeps the entry visible in
+A later `populate` of that delta rejects at once, with no walk and no
+second `warn`. The memory goes with its branch's next eviction: under a
+snapshot read, only a rewrite of the log can change a chain the walk
+found corrupt. A plain DB error is remembered as long, so a one-off
+failure keeps its rows on the summary until that eviction. The host
+keeps the `undo_payload`-keys summary for that row. The row stays
+usable. The warn level keeps the entry visible in
 Diagnostics Hub Logs without requiring the debug-level master
 toggle, so users investigating "why is this delta log row less
 detailed than the others" can find the cause. No UI signal on the
 fallback row itself in v1 — adding a small `⚠` marker is
-overdesign until the failure mode proves common.
+overdesign until the failure mode proves common. A gone delta is no
+failure.
 
 ### Search is orthogonal
 

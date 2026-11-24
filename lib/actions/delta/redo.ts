@@ -9,6 +9,7 @@ import { cascadePatches } from './delete-cascade'
 import { heldKey, type HeldKey } from './held-rows'
 import { withKeyLocks } from './key-lock'
 import { absentRefs, pathRefIds, type LiveRef, type RefPath } from './live-refs'
+import { logRewritten } from './post-commit-hook'
 import { resolveByTable, whereForDelta } from './registry'
 import {
   DeltaReplayError,
@@ -230,7 +231,7 @@ export function applyRedo(
     })),
   ])
   return withKeyLocks(keys, () =>
-    applyRedoLocked(snapshots, refRestores, survivorPayloads, ctx, extraOps),
+    applyRedoLocked(group.branchId, snapshots, refRestores, survivorPayloads, ctx, extraOps),
   )
 }
 
@@ -293,6 +294,7 @@ function withoutDeadRefs(
 }
 
 async function applyRedoLocked(
+  groupBranch: string,
   snapshots: readonly RedoSnapshot[],
   refRestores: readonly RefRestore[],
   survivorPayloads: readonly SurvivorPayload[],
@@ -373,7 +375,9 @@ async function applyRedoLocked(
     )
     refPatches.push({ row, branchId, columns })
   }
-  await ctx.runInTransaction([...ops, ...deltaOps, ...extraOps])
+  const committed = [...ops, ...deltaOps, ...extraOps]
+  await ctx.runInTransaction(committed)
+  if (committed.length > 0) logRewritten(groupBranch)
   // Past this point the redo is committed, so a patcher throw is a store-sync failure:
   // redoLastAction still pops the (now-applied) snapshot instead of leaving it for a doomed retry.
   try {

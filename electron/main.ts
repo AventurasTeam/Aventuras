@@ -8,13 +8,14 @@ import { appMenuTemplate } from './app-menu'
 import { reportBootFailure } from './boot-failure'
 import { resolveBundlePath } from './bundle-path'
 import {
+  batch as dbBatch,
   exec as dbExec,
   query as dbQuery,
   transaction as dbTransaction,
   getDbFilePath,
   initDb,
 } from './db/service'
-import type { DbProxyMethod } from './db/types'
+import type { DbProxyMethod, DbProxyQuery } from './db/types'
 import { deletePartial, downloadFile, persistInstall } from './embedder/downloads'
 import { embedderCallHandlers } from './embedder/handlers'
 import {
@@ -321,6 +322,7 @@ async function boot(): Promise<void> {
   ipcMain.handle('db:transaction', (_e, ops: { sql: string; params: unknown[] }[]) =>
     dbTransaction(ops),
   )
+  ipcMain.handle('db:batch', (_e, queries: DbProxyQuery[]) => dbBatch(queries))
 
   ipcMain.handle(
     'embedder:embed',

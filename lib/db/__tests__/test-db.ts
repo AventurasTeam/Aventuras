@@ -24,27 +24,46 @@ export function applyMigration(sqlite: DatabaseSync, tag: string): void {
   }
 }
 
+type ProxyMethod = 'run' | 'all' | 'get' | 'values'
+
 // drizzle-orm 0.45.2 ships no node-sqlite driver; sqlite-proxy wraps any
 // SQLite backend via a callback, making node:sqlite usable without a native dep.
 // The proxy's mapResultRow indexes rows by column position, so all methods
 // must return rows as arrays-of-values, not as objects. Mirrors the desktop
 // (Electron main) adapter: 'get' returns the single row directly so drizzle
 // decodes it as a row rather than an array-of-rows.
+function rowsOf(
+  sqlite: DatabaseSync,
+  sql: string,
+  params: unknown[],
+  method: ProxyMethod,
+): { rows: unknown[] } {
+  const stmt = sqlite.prepare(sql)
+  if (method === 'run') {
+    stmt.run(...(params as Parameters<typeof stmt.run>))
+    return { rows: [] }
+  }
+  const raw = stmt.all(...(params as Parameters<typeof stmt.all>)) as Record<string, unknown>[]
+  const asArrays = raw.map((r) => Object.values(r))
+  return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
+}
+
 export function makeCallback(sqlite: DatabaseSync) {
   return async (
     sql: string,
     params: unknown[],
-    method: 'run' | 'all' | 'get' | 'values',
-  ): Promise<{ rows: unknown[] }> => {
-    const stmt = sqlite.prepare(sql)
-    if (method === 'run') {
-      stmt.run(...(params as Parameters<typeof stmt.run>))
-      return { rows: [] }
-    }
-    const raw = stmt.all(...(params as Parameters<typeof stmt.all>)) as Record<string, unknown>[]
-    const asArrays = raw.map((r) => Object.values(r))
-    return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
-  }
+    method: ProxyMethod,
+  ): Promise<{ rows: unknown[] }> => rowsOf(sqlite, sql, params, method)
+}
+
+// Every query runs before the callback returns, as main's batch handler runs them.
+export function makeBatchCallback(
+  sqlite: DatabaseSync,
+): (
+  queries: { sql: string; params: unknown[]; method: ProxyMethod }[],
+) => Promise<{ rows: unknown[] }[]> {
+  return async (queries) =>
+    queries.map(({ sql, params, method }) => rowsOf(sqlite, sql, params, method))
 }
 
 // Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement. Async because
@@ -55,7 +74,7 @@ async function openMigrated(location: string) {
   try {
     sqlite.loadExtension(getLoadablePath())
     sqlite.exec('PRAGMA foreign_keys = ON;')
-    db = drizzle(makeCallback(sqlite), { schema: dbSchema })
+    db = drizzle(makeCallback(sqlite), makeBatchCallback(sqlite), { schema: dbSchema })
     await migrate(db, (queries) => Promise.resolve(queries.forEach((q) => sqlite.exec(q))), {
       migrationsFolder: MIGRATIONS_DIR,
     })
