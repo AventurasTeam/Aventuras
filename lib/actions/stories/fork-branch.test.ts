@@ -58,6 +58,7 @@ import {
   releaseBranchWriteExclusive,
   withBranchWriteShared,
 } from '../delta/branch-write-lock'
+import { onLogRewritten } from '../delta/post-commit-hook'
 import { __redoGroupForTest } from '../delta/redo'
 import { resolveByTable } from '../delta/registry'
 import { reverseCloseForRerun } from '../delta/rerun-journal'
@@ -957,7 +958,7 @@ describe('forkBranchCore and a swap admitted mid-fork', () => {
 })
 
 describe('forkBranchCore leaves the loaded parent alone (AC 9)', () => {
-  it("changes no store row, runs no patcher and keeps the parent's redo top", async () => {
+  it("changes no store row, runs no patcher, keeps the parent's redo top and evicts nothing", async () => {
     await land('act_fork_pass', entryAt(3), {
       kind: 'createEntity',
       source: 'periodic_classifier',
@@ -980,14 +981,21 @@ describe('forkBranchCore leaves the loaded parent alone (AC 9)', () => {
       'The ferryman, drinking since noon.',
     )
     const patched = recordPatchers()
+    const rewritten: string[] = []
+    const off = onLogRewritten((branchId) => rewritten.push(branchId))
 
-    expect(await forkBranchCore(input(), f.ctx)).toEqual(ok(CHILD))
+    try {
+      expect(await forkBranchCore(input(), f.ctx)).toEqual(ok(CHILD))
+    } finally {
+      off()
+    }
 
     const after = storeRows(f.branchId)
     for (const key of Object.keys(before) as (keyof typeof before)[])
       expect(after[key]).toBe(before[key])
     expect(patched).toEqual([])
     expect(undoRedoStore.peekRedoGroup(f.branchId)).toBe(redoTop)
+    expect(rewritten).toEqual([])
 
     // The recorders are live: a parent write after the fork shows in both.
     await land('act_fork_user_after', null, {
