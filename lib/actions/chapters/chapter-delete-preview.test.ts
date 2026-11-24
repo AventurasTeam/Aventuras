@@ -709,8 +709,8 @@ describe('getChapterDeletePreview', () => {
 
   describe('branch scope', () => {
     const COPY = 'br_copy'
-    // A bare close writes only its divider; three replies follow its end, and the region sits far
-    // under the default threshold with auto-close on.
+    // With no close tasks, the close writes only its divider; three replies follow its end, and the
+    // region sits far under the default threshold with auto-close on.
     const COPY_PREVIEW = {
       chapterNumber: 1,
       createdLore: { count: 0, userEdited: false },

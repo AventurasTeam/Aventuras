@@ -184,7 +184,7 @@ describe('entry_assets CRUD arms', () => {
   })
 })
 
-// Ids repeat across branches (the key is branch and id), so every read and write is scoped.
+// Entry-asset ids repeat across branches (key: branch and id), so every read and write is scoped.
 describe('branch scope', () => {
   const MAIN: NewEntryAsset = {
     id: 'ast_1',

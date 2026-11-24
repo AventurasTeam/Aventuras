@@ -295,7 +295,7 @@ describe('translations CRUD arms', () => {
   })
 })
 
-// Translation ids repeat across branches (the key is branch and id), so reads and writes scope.
+// Translation ids repeat across branches (key: branch and id), so every read and write is scoped.
 describe('branch scope', () => {
   const MAIN: NewTranslation = {
     id: 'tr_1',
