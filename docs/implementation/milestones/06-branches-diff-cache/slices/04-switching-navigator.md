@@ -860,6 +860,13 @@ Android 16, x86_64) with a debug build and diagnostics debug on.
   inline-edit guard is disarmed, since the press already asked.
   `showBranch` makes the same check and leaves the pointer on the new
   branch.
+- The stack reset doesn't dispatch into an armed guard (developer,
+  2026-11-24, extending the decision above): `replaceStoryStack`
+  refuses and answers `false` while any route in the app Stack has an
+  armed unsaved-changes guard (`isUnsavedPopArmed`), so no guard holds
+  the prevented reset to replay after the switch has failed. A dirty
+  buried route fails the switch without opening a guard on a hidden
+  screen. The post-dispatch read-back stays the backstop.
 - The chip sits beside the title on every tier: it rides
   `centerExtras` after the chapter and time chips, inline on desktop
   and tablet and last in the phone chip strip.
