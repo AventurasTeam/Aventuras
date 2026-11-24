@@ -1421,4 +1421,17 @@ describe('useReaderUndo — a refusal that settles after the reader unmounted', 
     ])
     expect(toasts).toEqual([])
   })
+
+  it('logs a lesser redo refusal once at debug and posts no toast', async () => {
+    await redoRefusedAfterUnmount(MOVED)
+
+    expect(logged('reader.redo_failed', 'reader.redo_rejected')).toEqual([
+      {
+        kind: 'reader.redo_rejected',
+        level: 'debug',
+        fields: { branchId: 'b1', code: 'target-moved', reason: 'moved' },
+      },
+    ])
+    expect(toasts).toEqual([])
+  })
 })
