@@ -210,3 +210,56 @@ slice-planning gate forces its resolution before that slice is planned.
   transform that runs the compiler over `components/` and `hooks/`, or
   a small compiled-hook layer for hooks that read stores outside a
   subscription. Found by Slice 6.2's slice review (2026-11-23).
+
+- **A successful story load's open-failure clear is untested.**
+  `loadAndPublish` in `lib/actions/stories/operational.ts` calls
+  `storiesStore.clearOpenFailure(storyId)` before it publishes;
+  deleting the line leaves the three load suites green (28 tests). The
+  line predates Slice 6.4, which only moved it. Found by Slice 6.4's
+  Task 3 review (2026-11-24).
+
+- **Diagnostics settings show capture off in a dev build that forces it
+  on.** The debug switch in
+  `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
+  on the stored flag, while a dev build forces capture on
+  (`lib/boot/bootstrap.ts:39-42`). So the panel reads capture off and
+  debug disabled while capture runs, and turning debug on needs capture
+  toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
+  passes (2026-11-24).
+
+- **Older overlay-list stories log a `ResizeObserver` loop error.** The
+  story run of `components/ui/searchable-overlay-list.stories.tsx`
+  logs an unhandled "ResizeObserver loop completed with undelivered
+  notifications" and still passes; the stories Slice 6.4 added don't
+  log it when run alone. Found by Slice 6.4's Task 6 review
+  (2026-11-24).
+
+- **A phone Sheet opened over the reader's inline editor lands under
+  its keyboard.** Canon says a sheet opened over an open keyboard
+  dismisses it first
+  ([`overlays.md`](../ui/patterns/overlays.md#sheet--keyboard-handling)),
+  and `components/ui/sheet.tsx:390-399` does so through
+  `dismissKeyboard()` before `present()`. On the slot AVD (Android 16),
+  with an entry's inline editor holding the keyboard, tapping the
+  branch chip opened the navigator Sheet under it: its rows sat under
+  the keyboard and a tap landed on a key, until Back hid it. With the
+  composer's keyboard up the same tap dismissed it as canon says.
+  Inferred, not probed: the dismiss doesn't reach the input method of
+  the reader's WebView document, so any phone Sheet opened from the
+  reader during an inline edit (the chapter chip's too) would do the
+  same. Found in Slice 6.4's device pass (2026-11-24).
+
+- **Two reader wireframes drift from the shipped phone chip strip.**
+  `branch-navigator.html` draws the phone chip in the top bar (it has
+  no chip strip) and overflows at 390 px; in `reader-composer.html`
+  (around line 951) the phone strip's branch chip never hides at one
+  branch, since `setBranchCount` toggles only `#branch-chip` and its
+  separator. Both predate Slice 6.4's edit. Found by Slice 6.4's
+  Task 21 review (2026-11-24).
+
+- **`data-model.md` calls the stories row the only user-authored
+  content outside the log.** `docs/data-model.md:3274-3276`; a branch
+  name is a counterexample, and canon now says rename is an unlogged
+  write
+  ([`branch-navigator.md`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)).
+  Found by Slice 6.4's Task 21 review (2026-11-24).
