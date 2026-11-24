@@ -124,6 +124,8 @@ export type ReaderSurfaceProps = {
   onRegenerate: (entryId: string) => Promise<void>
   /** Opens the close modal with this entry picked. */
   onCloseChapterHere: (entryId: string) => Promise<void>
+  /** ⎇ on a reply or the opening: opens the creation modal. Must settle, never reject. */
+  onBranch: (entryId: string) => Promise<void>
   /** Undefined when the system entry offers no Retry (a branch held `running`). */
   onRetrySystemEntry: (() => Promise<void>) | undefined
   onDismissSystemEntry: () => Promise<void>
