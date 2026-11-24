@@ -24,6 +24,7 @@ import {
   entitiesStore,
   generationStore,
   loreStore,
+  readerHoldStore,
   undoRedoStore,
   type RunState,
 } from '@/lib/stores'
@@ -159,6 +160,7 @@ beforeEach(() => {
   undoRedoStore.__reset()
   entitiesStore.__reset()
   loreStore.__reset()
+  readerHoldStore.__reset()
   for (const fn of Object.values(actions)) fn.mockReset()
   actions.readUndoImpact.mockResolvedValue(null)
 })
@@ -1004,5 +1006,205 @@ describe('useReaderUndo — a re-run undone, then its store sync fails', () => {
     await undoRerunThrowing(error)
 
     expect(shown()).toEqual([{ severity: 'error', message: "Couldn't undo. Please try again." }])
+  })
+})
+
+// reader-composer.md → Undo and redo: the notice and every late result belong to the reader that
+// started them, and a switch unmounts that reader.
+describe('useReaderUndo — a reader that unmounted', () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((res) => {
+      resolve = res
+    })
+    return { promise, resolve }
+  }
+
+  const turnGroup = (branchId = 'b1') =>
+    __redoGroupForTest(
+      branchId,
+      [{ delta: TURN.deltas[0], rowBeforeUndo: { id: 'e2', position: 2 } }],
+      'act_turn',
+    )
+
+  const NOT_LOADED: UndoResult = {
+    status: 'rejected',
+    code: 'branch-not-loaded',
+    reason: 'branch not loaded',
+  }
+
+  it('dismisses the notice when the reader unmounts', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Undid the turn at entry #2'])
+
+    r.unmount()
+
+    expect(toasts).toEqual([])
+  })
+
+  it('posts no notice for an undo that settles after the reader unmounted', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    const pending = deferred<UndoResult>()
+    actions.undoLastAction.mockReturnValue(pending.promise)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(actions.undoLastAction).toHaveBeenCalledTimes(1)
+
+    r.unmount()
+    await act(async () => pending.resolve(OK))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it.each([
+    ['a redo that lands', OK],
+    ['a redo the menu would report', { status: 'rejected', code: 'nothing-to-apply', reason: 'x' }],
+  ] as const)('posts nothing for %s after the reader unmounted', async (_label, result) => {
+    undoRedoStore.pushRedoGroup(turnGroup())
+    const pending = deferred<UndoResult>()
+    actions.redoLastAction.mockReturnValue(pending.promise)
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledTimes(1)
+
+    r.unmount()
+    await act(async () => pending.resolve(result))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it("still warns that a re-run's undo took its close, settling after the reader unmounted", async () => {
+    actions.readUndoTarget.mockResolvedValue(RERUN)
+    const pending = deferred<UndoResult>()
+    actions.undoLastAction.mockReturnValue(pending.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    act(() => r.result.current.confirm?.props.onConfirm())
+    await settle()
+
+    r.unmount()
+    await act(async () => pending.resolve(CLOSE_UNDONE))
+    await settle()
+
+    expect(toasts.map(({ severity, message }) => ({ severity, message }))).toEqual([
+      {
+        severity: 'warning',
+        message: "Chapter 3's earlier close couldn't be restored, so its close was undone.",
+      },
+    ])
+  })
+
+  it('starts no undo whose target resolves after the reader unmounted', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+
+    r.unmount()
+    await act(async () => read.resolve(TURN))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toEqual([])
+  })
+
+  it('says nothing to undo from no reader once it unmounted', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+
+    r.unmount()
+    await act(async () => read.resolve(null))
+    await settle()
+
+    expect(toasts).toEqual([])
+  })
+
+  it("ignores the notice's Redo pressed after the reader unmounted", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    actions.redoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    const pressRedo = toasts[0].action?.onPress
+    expect(pressRedo).toBeDefined()
+
+    r.unmount()
+    act(() => pressRedo?.())
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+  })
+
+  it("holds the notice's Redo while a switch holds the reader, and lets it through after", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    actions.redoLastAction.mockResolvedValue(OK)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    const hold = readerHoldStore.take('b1')
+
+    act(() => toasts[0].action?.onPress())
+    await settle()
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+
+    readerHoldStore.release(hold)
+    act(() => toasts[0].action?.onPress())
+    await settle()
+    expect(actions.redoLastAction).toHaveBeenCalledWith('b1', ctx, { expectedActionId: 'act_turn' })
+  })
+
+  it('says the story is loading for an Undo the menu ran before the branch loaded', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockResolvedValue(NOT_LOADED)
+    const r = render()
+    act(() => r.result.current.undo('menu'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Loading story…'])
+  })
+
+  it('stays silent for the same refusal on the keyboard', async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    actions.undoLastAction.mockResolvedValue(NOT_LOADED)
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    expect(toasts).toEqual([])
+  })
+
+  it('says the story is loading for a Redo the menu ran before the branch loaded', async () => {
+    undoRedoStore.pushRedoGroup(turnGroup())
+    actions.redoLastAction.mockResolvedValue(NOT_LOADED)
+    const r = render()
+    act(() => r.result.current.redo('menu'))
+    await settle()
+    expect(toasts.map((toast) => toast.message)).toEqual(['Loading story…'])
+  })
+
+  it("leaves the old branch's Redo on its own stack across a keyed remount", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const first = render()
+    act(() => first.result.current.undo('keyboard'))
+    await settle()
+
+    first.unmount()
+    const second = render({ branchId: 'b2' })
+
+    expect(toasts).toEqual([])
+    expect(second.result.current.redoLabel).toBeNull()
+    expect(undoRedoStore.peekRedoGroup('b1')?.actionId).toBe('act_turn')
   })
 })

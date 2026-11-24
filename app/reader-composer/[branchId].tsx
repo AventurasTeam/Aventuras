@@ -13,7 +13,6 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { heldControl } from '@/components/compounds/entry-card-hold'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
@@ -76,7 +75,6 @@ import {
   inlineEditSaveGate,
   rowGateReason,
   rowReversalFlags,
-  undoHold,
 } from '@/components/reader/row-reversal-flags'
 import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
 import { useSceneEditing } from '@/components/reader/scene-editing'
@@ -120,6 +118,7 @@ import {
   useProfileFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
+import { readerUndoRedoGates } from '@/components/reader/undo-redo-gates'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useReaderEntryJump } from '@/components/reader/use-reader-entry-jump'
 import { useReaderSlice } from '@/components/reader/use-reader-slice'
@@ -1738,17 +1737,14 @@ function ReaderComposerBody({
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
-    // Undo of the turn is a head reversal, live through a pass; the action refuses any other target
-    // with `gated`, and every target while a re-run runs. Redo never is one: whole gate. An open
-    // editor holds both, the gate's reason outranking its own.
-    const held = t('reader:editFocus.held')
-    const undoGate = undoHold({
+    const { undo, redo } = readerUndoRedoGates({
+      hydrated: hydrationSucceeded,
       headReversalBlocked,
       rerunRunning,
+      actionsBlocked,
+      editorOpen,
       reasons: { gate: gateReason, headReversal: headReversalReason },
     })
-    const undo = heldControl(undoGate.blocked, editorOpen, { gate: undoGate.reason, held })
-    const redo = heldControl(actionsBlocked, editorOpen, { gate: gateReason, held })
     return {
       id: 'reader',
       header: t('chrome.onThisScreen'),
@@ -1790,6 +1786,7 @@ function ReaderComposerBody({
     rerunRunning,
     gateReason,
     editorOpen,
+    hydrationSucceeded,
     entries.length,
     jumpToBottom,
   ])
