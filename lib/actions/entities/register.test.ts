@@ -1163,7 +1163,7 @@ describe('branch scope', () => {
     await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
     await db
       .insert(entities)
-      .values([SIBLING, partner('br_1'), ...(written ? [WRITTEN, partner('br_2')] : [])])
+      .values([SIBLING, partner('br_1'), ...(written ? [WRITTEN] : []), partner('br_2')])
     await db.insert(happenings).values([fire('br_1'), ...(written ? [fire('br_2')] : [])])
     await db.insert(happeningInvolvements).values([SIBLING_INV, ...(written ? [WRITTEN_INV] : [])])
     await db.insert(happeningAwareness).values([SIBLING_AW, ...(written ? [WRITTEN_AW] : [])])

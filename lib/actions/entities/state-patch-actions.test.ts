@@ -3727,7 +3727,7 @@ describe('branch scope', () => {
     await expectPair(
       await seedPair(
         [
-          { ...CIRCLE, state: { standing: 'outlawed', agenda: [] } },
+          { ...CIRCLE, kind: 'location', state: { parent_location_id: null } },
           character(BARD, { status: 'active' }),
         ],
         [CIRCLE, character(KAEL, { status: 'active' })],
