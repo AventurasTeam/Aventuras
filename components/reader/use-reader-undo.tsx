@@ -206,7 +206,7 @@ export function useReaderUndo({
       if (refusal.code === 'integrity')
         logger.error(isUndo ? 'reader.undo_failed' : 'reader.redo_failed', fields)
       else logger.debug(isUndo ? 'reader.undo_rejected' : 'reader.redo_rejected', fields)
-      if (origin === 'keyboard') return
+      if (origin === 'keyboard' || !aliveRef.current) return
       if (refusal.code === 'integrity')
         toast.error(t(isUndo ? 'reader:actions.undoFailed' : 'reader:actions.redoFailed'))
       else if (refusal.code === 'target-moved' && isUndo) toast.info(t('reader:undo.targetMoved'))
@@ -215,7 +215,7 @@ export function useReaderUndo({
       else if (refusal.code === 'gated') toast.info(t('reader:actions.blockedWhileGenerating'))
       else if (refusal.code === 'branch-not-loaded') toast.info(t('reader:hydrationLoading'))
     },
-    [branchId],
+    [aliveRef, branchId],
   )
 
   // A newer notice replaces the older, so a notice's Redo is always the redo stack's top.
@@ -240,13 +240,8 @@ export function useReaderUndo({
       const result = await timedReversal('reader.redo_measured', actionId, () =>
         redoLastAction(branchId, ctx, { expectedActionId: actionId }),
       )
-      // The keyboard origin logs a refusal and never toasts: a gone reader still owes the log.
-      if (!aliveRef.current) {
-        if (result.status === 'rejected') report('redo', result, 'keyboard')
-        return
-      }
       if (result.status === 'rejected') report('redo', result, origin)
-      else announce(notice)
+      else if (aliveRef.current) announce(notice)
     },
     [aliveRef, announce, branchId, ctx, report],
   )
@@ -296,22 +291,17 @@ export function useReaderUndo({
         })
         return undone
       })
-      // A reader gone under the await posts no notice and no refusal toast, though the refusal is
-      // still logged; the close-undone warning reports a state change and offers no action.
-      if (!aliveRef.current) {
-        if (result.status === 'rejected') report('undo', result, 'keyboard')
-        else if (result.closeUndone != null) warnCloseUndone(result.closeUndone.chapterNumber)
-        return
-      }
       showMenuTarget(null)
       if (result.status === 'rejected') {
         report('undo', result, origin)
         return
       }
+      // It reports a state change and offers no action, so it posts though the reader is gone.
       if (result.closeUndone != null) {
         warnCloseUndone(result.closeUndone.chapterNumber)
         return
       }
+      if (!aliveRef.current) return
       // A re-run's undo can't be redone and clears the stack, so its notice offers no Redo.
       const redoable = undoRedoStore.peekRedoGroup(branchId)?.actionId === target.actionId
       announce(
