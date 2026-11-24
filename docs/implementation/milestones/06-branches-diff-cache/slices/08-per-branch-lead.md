@@ -500,7 +500,7 @@ Seeds.
   metadata line (`:157`) and its refusal.
 - **6.2 and 6.10 (C5, C10).** The `isLead` update's two-branch pair
   goes in `lib/actions/entities/register.test.ts`, in the shape of
-  `lib/actions/story-entries/register.test.ts:224-300`, shown red by
+  `lib/actions/story-entries/register.test.ts:224-397`, shown red by
   removing the handler's branch condition.
   [Slice 6.10](./10-register-branch-pairs.md) took the register pairs
   from 6.2; if it landed first, its pairs for `createEntity` and
