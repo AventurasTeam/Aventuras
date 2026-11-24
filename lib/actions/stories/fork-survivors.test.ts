@@ -283,7 +283,8 @@ describe('forkSurvivorPredicates', () => {
     const fakeDeltas = (template: Delta, count: number): Delta[] =>
       Array.from({ length: count }, (_, i) => ({ ...template, id: `dlt_fork_fake${i}` }))
 
-    const fakeJournals = (template: RerunJournal, count: number): RerunJournal[] =>
+    type DroppedJournal = ReversePlan['droppedJournals'][number]
+    const fakeJournals = (template: DroppedJournal, count: number): DroppedJournal[] =>
       Array.from({ length: count }, (_, i) => ({ ...template, actionId: `act_j${i}` }))
 
     it("throws when the delta statement's lists pass the limit, naming them", async () => {
