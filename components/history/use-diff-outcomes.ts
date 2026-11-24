@@ -36,6 +36,9 @@ function peeked(loader: DiffLoader, delta: Delta): DiffOutcome | undefined {
   return entry === undefined ? undefined : { kind: 'entry', entry }
 }
 
+const outdated = (loader: DiffLoader, delta: Delta, outcome: DiffOutcome | undefined): boolean =>
+  outcome?.kind === 'entry' && !loader.isCurrent(delta.branchId, outcome.entry)
+
 /** Each update row's diff outcome, by delta id; absent while pending, re-reading or failed. */
 export function useDiffOutcomes(rows: readonly HistoryRow[]): ReadonlyMap<string, DiffOutcome> {
   const loader = useDiffLoader()
@@ -54,18 +57,25 @@ export function useDiffOutcomes(rows: readonly HistoryRow[]): ReadonlyMap<string
       gcTime: 0,
       // Only an invalidation makes a diff stale, so `isStale` marks a re-read after an eviction.
       staleTime: Infinity,
+      // `isCurrent` knows only the cache's own objects, which sharing rebuilds from the old data.
+      structuralSharing: false,
     }),
   )
-  // A plain record, so TanStack's structural sharing keeps it stable while no outcome changes.
-  const byId = useQueries({
+  // Plain values, so TanStack's structural sharing keeps them stable while no outcome changes.
+  const { outcomes, staleBranches } = useQueries({
     queries,
     combine: (results) => {
-      const outcomes: Record<string, DiffOutcome> = {}
+      const shown: Record<string, DiffOutcome> = {}
+      const stale = new Set<string>()
       results.forEach((result, i) => {
         // An evicted row's old outcome is stale prose; canon wants the summary until the re-read.
-        if (result.status === 'success' && !result.isStale) outcomes[updates[i].id] = result.data
+        if (result.status !== 'success' || result.isStale) return
+        const delta = updates[i]
+        // A first read an eviction overtook after the cache resolved it lands unstale to TanStack.
+        if (outdated(loader, delta, result.data)) stale.add(delta.branchId)
+        else shown[delta.id] = result.data
       })
-      return outcomes
+      return { outcomes: shown, staleBranches: [...stale].sort() }
     },
   })
   useEffect(() => {
@@ -74,16 +84,13 @@ export function useDiffOutcomes(rows: readonly HistoryRow[]): ReadonlyMap<string
       void client.invalidateQueries({ queryKey: ['diff', branchId] })
     }
     const unsubscribe = loader.onEvict(rereadBranch)
-    // A row seeded at render, before this subscription, can miss an eviction; a seed the cache no
-    // longer returns as the same entry marks one, so its branch re-reads as the listener would.
-    const missed = new Set<string>()
-    for (const delta of updates) {
-      const held = client.getQueryData<DiffOutcome>(diffKey(delta))
-      if (held?.kind === 'entry' && loader.peek(delta.branchId, delta.id) !== held.entry)
-        missed.add(delta.branchId)
-    }
-    for (const branchId of missed) rereadBranch(branchId)
+    // Plus seeds taken at render, which can predate an eviction this subscription missed.
+    const stale = new Set(staleBranches)
+    for (const delta of updates)
+      if (outdated(loader, delta, client.getQueryData<DiffOutcome>(diffKey(delta))))
+        stale.add(delta.branchId)
+    for (const branchId of stale) rereadBranch(branchId)
     return unsubscribe
-  }, [loader, client, updates])
-  return useMemo(() => new Map(Object.entries(byId)), [byId])
+  }, [loader, client, updates, staleBranches])
+  return useMemo(() => new Map(Object.entries(outcomes)), [outcomes])
 }

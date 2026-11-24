@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 
 import { diffCache, type DiffCache } from '@/lib/history'
 
-export type DiffLoader = Pick<DiffCache, 'peek' | 'populate' | 'onEvict'>
+export type DiffLoader = Pick<DiffCache, 'peek' | 'populate' | 'onEvict' | 'isCurrent'>
 
 const DiffLoaderContext = createContext<DiffLoader>(diffCache)
 

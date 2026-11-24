@@ -1754,9 +1754,15 @@ such as the Diagnostics Hub's Delta log, owes too:
   TanStack joins an invalidation's refetch onto a first fetch that has
   no data yet instead of starting a new one, so the rejected fetch is
   the read the row waits on.
-- Once subscribed to `onEvict`, re-check the seeds against `peek`: an
-  eviction between the first `peek` and the subscription would
-  otherwise leave a row on an entry the cache dropped.
+- The queries hold the cache's own entry objects, with structural
+  sharing off: `isCurrent` knows an entry by identity, and sharing
+  rebuilds a re-read from the data it replaces.
+- An entry the cache says isn't current shows the field-name summary,
+  and its branch re-reads. The host checks each read that lands, and
+  every held entry once subscribed to `onEvict`. That covers a seed
+  taken before the subscription, and a first read an eviction overtook
+  after the cache resolved it, which lands unstale since TanStack
+  joined the invalidation's refetch onto it.
 
 `populate` coalesces concurrent calls for the same branch and
 `delta.id` via an internal in-flight promise map; `populateBatch`

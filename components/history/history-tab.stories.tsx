@@ -129,6 +129,7 @@ const PENDING_DIFFS: DiffLoader = {
   peek: () => undefined,
   populate: () => new Promise<DiffOutcome>(() => {}),
   onEvict: NO_EVICTIONS,
+  isCurrent: () => true,
 }
 
 const meta: Meta<typeof HistoryTab> = {
@@ -392,6 +393,7 @@ function resolvingDiffs(entry: DiffCacheEntry): DiffLoader {
     peek: () => undefined,
     populate: async () => ({ kind: 'entry', entry }),
     onEvict: NO_EVICTIONS,
+    isCurrent: () => true,
   }
 }
 
@@ -666,6 +668,7 @@ const PENDING_SPY: DiffLoader = {
   peek: () => undefined,
   populate: pendingPopulate,
   onEvict: NO_EVICTIONS,
+  isCurrent: () => true,
 }
 
 /** A miss whose walk is still running shows the field-name summary. */
@@ -697,6 +700,7 @@ const FAILING_SPY: DiffLoader = {
   peek: () => undefined,
   populate: failingPopulate,
   onEvict: NO_EVICTIONS,
+  isCurrent: () => true,
 }
 
 /** A failed walk keeps the field-name summary. */
