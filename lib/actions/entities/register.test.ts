@@ -1014,6 +1014,168 @@ describe('collision flag columns', () => {
   })
 })
 
+describe('the lead flag', () => {
+  type Harness = Awaited<ReturnType<typeof setup>>
+  type Source = PipelineActionMap['updateEntity']['source']
+
+  const setLead = (isLead: 0 | 1, source: Source, actionId: string) => ({
+    action: {
+      kind: 'updateEntity' as const,
+      source,
+      payload: { branchId: 'br_1', id: 'char_1', patch: { isLead } },
+    },
+    actionId,
+    branchId: 'br_1',
+  })
+
+  async function seedChar(ctx: Harness['ctx'], entry: NewEntity = CHAR) {
+    return applyDeltaAction(
+      {
+        action: { kind: 'createEntity', source: 'user_edit', payload: { entry } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+  }
+
+  const deltasOf = (db: Harness['db'], actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+
+  it('creates a row unflagged, in the DB and the store', async () => {
+    const { db, ctx } = await setup()
+
+    await seedChar(ctx)
+
+    expect((await rowFor(db, 'char_1')).isLead).toBe(0)
+    expect(entitiesStore.getById('br_1', 'char_1')?.isLead).toBe(0)
+  })
+
+  it('takes the flag from a user edit, its undo the prior value, the vector left alone', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx, { ...CHAR, embeddingStale: 0 })
+
+    expect(await applyDeltaAction(setLead(1, 'user_edit', 'act_set'), ctx)).toMatchObject({
+      status: 'ok',
+    })
+
+    const row = await rowFor(db, 'char_1')
+    expect([row.isLead, row.embeddingStale]).toEqual([1, 0])
+    expect(entitiesStore.getById('br_1', 'char_1')?.isLead).toBe(1)
+    expect((await deltasOf(db, 'act_set')).map((d) => [d.source, d.op, d.undoPayload])).toEqual([
+      ['user_edit', 'update', { isLead: 0 }],
+    ])
+
+    expect(await reverseReplayDeltas('act_set', ctx)).toBe(1)
+    expect((await rowFor(db, 'char_1')).isLead).toBe(0)
+    expect(entitiesStore.getById('br_1', 'char_1')?.isLead).toBe(0)
+  })
+
+  // data-model.md → The lead: no machine writer touches the flag, not even to restate it.
+  it.each([
+    ['periodic_classifier', 1],
+    ['per_turn_classifier', 1],
+    ['chapter_close', 1],
+    ['periodic_classifier', 0],
+  ] as const)('refuses isLead from %s (isLead %i), writing nothing', async (source, isLead) => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx)
+    const before = await rowFor(db, 'char_1')
+
+    expect(await applyDeltaAction(setLead(isLead, source, 'act_machine'), ctx)).toEqual({
+      status: 'rejected',
+      reason: 'invalid entity patch: only a user edit writes isLead',
+    })
+
+    expect(await rowFor(db, 'char_1')).toEqual(before)
+    expect(entitiesStore.getById('br_1', 'char_1')?.isLead).toBe(0)
+    expect(await deltasOf(db, 'act_machine')).toEqual([])
+  })
+
+  it.each(['user_edit', 'periodic_classifier'] as const)(
+    'refuses a %s create that carries the flag, writing nothing',
+    async (source) => {
+      const { db, ctx } = await setup()
+
+      const result = await applyDeltaAction(
+        {
+          action: { kind: 'createEntity', source, payload: { entry: { ...CHAR, isLead: 1 } } },
+          actionId: 'act_c',
+          branchId: 'br_1',
+        },
+        ctx,
+      )
+
+      expect(result).toEqual({
+        status: 'rejected',
+        reason: 'invalid entity: a create never sets isLead',
+      })
+      expect(await rowFor(db, 'char_1')).toBeUndefined()
+      expect(await db.select().from(deltas)).toHaveLength(0)
+      expect(entitiesStore.getById('br_1', 'char_1')).toBeUndefined()
+    },
+  )
+
+  it('refuses a flag other than 0 or 1 at parse, writing nothing', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx)
+    const before = await rowFor(db, 'char_1')
+
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: 'char_1',
+            patch: { isLead: 2 } as unknown as { isLead: 0 | 1 },
+          },
+        },
+        actionId: 'act_two',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    expect(result).toMatchObject({
+      status: 'rejected',
+      reason: expect.stringMatching(/^invalid entity patch: /),
+    })
+    expect(await rowFor(db, 'char_1')).toEqual(before)
+    expect(await deltasOf(db, 'act_two')).toEqual([])
+  })
+
+  it('deletes a flagged row with the flag in its undo payload, and the reversal restores it', async () => {
+    const { db, ctx } = await setup()
+    await seedChar(ctx)
+    await applyDeltaAction(setLead(1, 'user_edit', 'act_set'), ctx)
+
+    expect(
+      await applyDeltaAction(
+        {
+          action: {
+            kind: 'deleteEntity',
+            source: 'user_edit',
+            payload: { branchId: 'br_1', id: 'char_1' },
+          },
+          actionId: 'act_d',
+          branchId: 'br_1',
+        },
+        ctx,
+      ),
+    ).toMatchObject({ status: 'ok' })
+
+    expect(await rowFor(db, 'char_1')).toBeUndefined()
+    const [deleted] = await deltasOf(db, 'act_d')
+    expect(deleted?.undoPayload).toMatchObject({ id: 'char_1', isLead: 1 })
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect((await rowFor(db, 'char_1')).isLead).toBe(1)
+    expect(entitiesStore.getById('br_1', 'char_1')?.isLead).toBe(1)
+  })
+})
+
 // Entity ids repeat across branches (the key is branch and id), so every read and write is scoped.
 describe('branch scope', () => {
   type BranchId = 'br_1' | 'br_2'
@@ -1315,4 +1477,47 @@ describe('branch scope', () => {
       expect(await loggedBy(db, 'act_payload')).toEqual([])
     },
   )
+
+  // Both branches' rows carry the flag, differing from each other and from the write's value.
+  async function twoBranchesLeading(sibling: 0 | 1, written: 0 | 1) {
+    const harness = await twoBranches()
+    const { db } = harness
+    await db.update(entities).set({ isLead: sibling }).where(eq(entities.branchId, 'br_1'))
+    await db.update(entities).set({ isLead: written }).where(eq(entities.branchId, 'br_2'))
+    return harness
+  }
+
+  const leadFlag = (isLead: 0 | 1): PipelineAction => ({
+    kind: 'updateEntity',
+    source: 'user_edit',
+    payload: { branchId: 'br_2', id: 'char_1', patch: { isLead } },
+  })
+
+  it("updateEntity isLead pair: sets the flag from its own branch's row, and the reversal clears only that row", async () => {
+    const { db, ctx } = await twoBranchesLeading(1, 0)
+
+    expect(await onWritten(ctx, leadFlag(1), 'act_set')).toMatchObject({ status: 'ok' })
+    const [logged] = await loggedBy(db, 'act_set')
+    expect(logged.undoPayload).toEqual({ isLead: 0 })
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual({ ...WRITTEN, isLead: 1 })
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual({ ...SIBLING, isLead: 1 })
+
+    expect(await reverseReplayDeltas('act_set', ctx)).toBe(1)
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual({ ...WRITTEN, isLead: 0 })
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual({ ...SIBLING, isLead: 1 })
+  })
+
+  it("updateEntity isLead pair: clears the flag on its own branch's row only, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranchesLeading(1, 1)
+
+    expect(await onWritten(ctx, leadFlag(0), 'act_clear')).toMatchObject({ status: 'ok' })
+    const [logged] = await loggedBy(db, 'act_clear')
+    expect(logged.undoPayload).toEqual({ isLead: 1 })
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual({ ...WRITTEN, isLead: 0 })
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual({ ...SIBLING, isLead: 1 })
+
+    expect(await reverseReplayDeltas('act_clear', ctx)).toBe(1)
+    expect(await entityOn(db, 'br_2', 'char_1')).toEqual({ ...WRITTEN, isLead: 1 })
+    expect(await entityOn(db, 'br_1', 'char_1')).toEqual({ ...SIBLING, isLead: 1 })
+  })
 })

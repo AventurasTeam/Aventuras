@@ -60,6 +60,7 @@ type EntityColumnPatch = Partial<{
   keywords: string[]
   priority: number
   state: EntityState
+  isLead: 0 | 1
 }>
 
 /** Clears a collision flag with its partner and reason, all three in one write. */
@@ -114,6 +115,7 @@ export const UPDATABLE = [
   'nameCollisionFlag',
   'nameCollisionPartnerId',
   'nameCollisionReason',
+  'isLead',
 ] as const
 void (true satisfies PatchMatchesColumns<EntityUpdatePatch, typeof UPDATABLE>)
 
@@ -223,6 +225,9 @@ const createHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.safeParse(row)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity: ${scalars.error.message}` }
+  // data-model.md → The lead: story creation flags its lead outside the log; no logged create does.
+  if (row.isLead !== 0)
+    return { status: 'rejected', reason: 'invalid entity: a create never sets isLead' }
   const flagIssue = flagTripleIssue(row)
   if (flagIssue != null) return { status: 'rejected', reason: `invalid entity: ${flagIssue}` }
   const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
@@ -251,6 +256,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   const { branchId: bid, id, patch } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  // data-model.md → The lead: no machine writer touches the flag.
+  if ('isLead' in patch && !isUserOriginatedSource(action.source))
+    return { status: 'rejected', reason: 'invalid entity patch: only a user edit writes isLead' }
   const [current] = await ctx.db
     .select()
     .from(entities)

@@ -50,6 +50,7 @@ const ENTITY: Kinds = {
   status: 'enum',
   injectionMode: 'enum',
   priority: 'number',
+  isLead: 'flag',
   tags: 'termList',
   keywords: 'termList',
   'state.traits': 'termList',

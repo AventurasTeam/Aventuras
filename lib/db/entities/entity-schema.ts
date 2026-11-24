@@ -7,6 +7,8 @@ import { entities } from './entities.table'
 export const entityWriteSchema = createInsertSchema(entities, {
   tags: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
+  // drizzle-zod reads a $type<0 | 1> column as any integer.
+  isLead: z.union([z.literal(0), z.literal(1)]).optional(),
 }).omit({
   id: true,
   branchId: true,
