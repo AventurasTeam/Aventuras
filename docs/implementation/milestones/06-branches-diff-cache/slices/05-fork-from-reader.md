@@ -659,6 +659,28 @@ Pointers, canon and hygiene:
   Planning decides whether that hold should survive the reader's unmount,
   which `clear` doesn't allow today, or whether ending it there is right
   once the reader is gone.
+- **The undo confirm reads no hold.** `confirmUndo`
+  (`components/reader/use-reader-undo.tsx:434-438`) runs the reversal
+  with no hold, mounted or staleness check, and `UndoConfirm` takes no
+  blocked prop. Unreachable in
+  [Slice 6.4](./04-switching-navigator.md#implementation-notes): the
+  confirm is modal, the Actions menu is blocked while it is open, and
+  the reader's own switch is the only hold-taker. Reachable if this
+  slice's root host can take a hold while the confirm is open. Planning
+  decides whether the confirm reads the hold.
+- **The tail after a failed stories re-read, with a native inline editor
+  open.** On native, a switch's stack reset goes through with an entry's
+  inline editor open only because the switch's stories re-read writes
+  `storiesStore` just before the reset, and that write's render commits
+  the edit guard's pending disarm (React 19 renders the pending lanes
+  together). `showBranch` carries on after a failed re-read
+  (`lib/actions/stories/switch-branch.ts:226-228`), so with a native
+  editor open `useReplaceStoryStack` still sees the guard armed and
+  refuses the reset: `navigation-blocked`, the fork committed, the
+  reader left on the parent. Reachable only
+  through this slice's callers; the mechanism is probe-verified, not
+  device-verified. Planning decides whether the tail's caller disarms
+  the guard first or the reset skips the held reader's own route.
 
 ## Implementation notes
 

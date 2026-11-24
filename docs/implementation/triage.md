@@ -479,3 +479,26 @@ slice-planning gate forces its resolution before that slice is planned.
   the dismissing one doesn't come back, on web and the AVD. Scoping
   `onDismissed` to the presentation that started the close is a
   Sheet-primitive change. Found in Slice 6.4's PR review (2026-11-24).
+
+- **The reader's undo shortcut and the notice's Redo don't wait out a
+  Send's dispatch.** The menu's Undo and Redo disable while the
+  reader's dispatch flag is up, but the Ctrl+Z / Ctrl+Shift+Z handler
+  (`app/reader-composer/[branchId].tsx:1678`) checks only an open
+  editor and the reader hold, and the undo notice's Redo
+  (`components/reader/use-reader-undo.tsx:320`) only the mounted flag
+  and the hold. So an undo can land in a Send's pre-registration
+  window: `runSubmit` awaits the system tail's drop before it calls
+  `submitTurn`. Read from `lib/actions/story-entries/undo.ts:127-161`,
+  the undo's own bracket then reorders or refuses the Send rather than
+  corrupting anything; the Send's refusal surface isn't traced.
+  Pre-existing: before Slice 6.4 the shortcut checked only
+  `if (editorOpen) return`. Found in Slice 6.4's reviews (2026-11-24).
+
+- **`Input` has no 44 px phone floor at `size="sm"`.**
+  [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
+  floors phone form inputs at 44 px, through `--control-h-md` and a
+  defensive floor at the input wrapper; `components/ui/input.tsx` maps
+  `sm` to `h-control-sm`, under 44 px at the compact and regular
+  densities, with no floor. The branch rename input was its only
+  production `size="sm"` use and now sets its own size on phone.
+  Pre-existing substrate. Found in Slice 6.4's reviews (2026-11-24).
