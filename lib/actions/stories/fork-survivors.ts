@@ -25,11 +25,15 @@ export function forkSurvivorPredicates(
   const prunedOutside = plan.prunedDeltas.filter((d) => !inWindow.has(d.id)).map((d) => d.id)
   const reownedInside = plan.reownedDeltas.filter((d) => inWindow.has(d.id)).map((d) => d.id)
   const dropped = plan.droppedJournals.map((j) => j.actionId)
-  if (prunedOutside.length + reownedInside.length + dropped.length > BIND_CHUNK)
+  // BIND_CHUNK budgets one statement: the delta lists bind together, the journal list apart.
+  if (prunedOutside.length + reownedInside.length > BIND_CHUNK)
     throw new Error(
-      `forkSurvivorPredicates: ${prunedOutside.length} pruned outside the window, ` +
-        `${reownedInside.length} re-owned in it and ${dropped.length} dropped journals ` +
-        `pass ${BIND_CHUNK} binds`,
+      `forkSurvivorPredicates: ${prunedOutside.length} pruned outside the window and ` +
+        `${reownedInside.length} re-owned in it pass ${BIND_CHUNK} binds`,
+    )
+  if (dropped.length > BIND_CHUNK)
+    throw new Error(
+      `forkSurvivorPredicates: ${dropped.length} dropped journals pass ${BIND_CHUNK} binds`,
     )
   // IS NOT TRUE, not NOT: an anchor the parent lacks reads NULL, which resolveSweep keeps.
   const outside: SQL[] = [sql`(${swept.windowWhere}) is not true`]

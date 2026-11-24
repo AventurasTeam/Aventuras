@@ -279,16 +279,39 @@ describe('forkSurvivorPredicates', () => {
     ).toThrow(`window delta ${DANGLING} is not in the reversal set`)
   })
 
-  it('throws past the bind limit rather than binding the lists', async () => {
-    const { swept, plan } = await planFork()
-    const [dropped] = plan.droppedJournals
-    const droppedJournals = Array.from({ length: BIND_CHUNK }, (_, i) => ({
-      ...dropped,
-      actionId: `act_j${i}`,
-    }))
+  describe('the bind budget, one statement at a time', () => {
+    const fakeDeltas = (template: Delta, count: number): Delta[] =>
+      Array.from({ length: count }, (_, i) => ({ ...template, id: `dlt_fork_fake${i}` }))
 
-    expect(() => forkSurvivorPredicates({ swept, plan: { ...plan, droppedJournals } })).toThrow(
-      `1 pruned outside the window, 1 re-owned in it and ${BIND_CHUNK} dropped journals`,
-    )
+    const fakeJournals = (template: RerunJournal, count: number): RerunJournal[] =>
+      Array.from({ length: count }, (_, i) => ({ ...template, actionId: `act_j${i}` }))
+
+    it("throws when the delta statement's lists pass the limit, naming them", async () => {
+      const { swept, plan } = await planFork()
+      const prunedDeltas = fakeDeltas(plan.prunedDeltas[0], BIND_CHUNK)
+
+      expect(() => forkSurvivorPredicates({ swept, plan: { ...plan, prunedDeltas } })).toThrow(
+        `${BIND_CHUNK} pruned outside the window and 1 re-owned in it pass ${BIND_CHUNK} binds`,
+      )
+    })
+
+    it("throws when the journal statement's list passes the limit, naming it", async () => {
+      const { swept, plan } = await planFork()
+      const droppedJournals = fakeJournals(plan.droppedJournals[0], BIND_CHUNK + 1)
+
+      expect(() => forkSurvivorPredicates({ swept, plan: { ...plan, droppedJournals } })).toThrow(
+        `${BIND_CHUNK + 1} dropped journals pass ${BIND_CHUNK} binds`,
+      )
+    })
+
+    it('binds lists that pass the limit together while each statement fits', async () => {
+      const { swept, plan } = await planFork()
+      const prunedDeltas = fakeDeltas(plan.prunedDeltas[0], BIND_CHUNK - 1)
+      const droppedJournals = fakeJournals(plan.droppedJournals[0], BIND_CHUNK)
+
+      expect(() =>
+        forkSurvivorPredicates({ swept, plan: { ...plan, prunedDeltas, droppedJournals } }),
+      ).not.toThrow()
+    })
   })
 })

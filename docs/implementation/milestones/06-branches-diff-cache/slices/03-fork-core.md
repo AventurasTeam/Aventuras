@@ -850,7 +850,10 @@ list is empty. `IS NOT TRUE`, not `NOT`: a delta anchored on an entry
 the parent doesn't hold makes the window NULL, which `resolveSweep`
 reads as kept. A journal copies unless the plan drops it. No temp
 table is built, so Acceptance criteria 12 doesn't apply: a guard
-throws before any write if the three lists would pass the bind cap.
+throws before any write if a statement's lists would pass the bind cap,
+the delta lists together and the journal list apart. That departs from
+the plan's one summed guard, provisionally (the coordinator's call, for
+the developer's review in the PR).
 On the dataset story the lists were empty (Cost, below), so no fork at
 real scale has yet bound them.
 
