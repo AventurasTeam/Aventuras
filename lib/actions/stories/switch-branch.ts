@@ -155,11 +155,18 @@ function writePointer(ctx: DbCtx, storyId: string, branchId: string): Promise<vo
 }
 
 // One retry: a transient failure here would leave the pointer on a branch the reader doesn't show.
-async function writeRestoreWithRetry(ctx: DbCtx, storyId: string, branchId: string): Promise<void> {
+async function writeRestoreWithRetry(input: SwitchBranchInput, ctx: DbCtx): Promise<void> {
+  const { storyId, fromBranchId, toBranchId } = input
   try {
-    await writePointer(ctx, storyId, branchId)
-  } catch {
-    await writePointer(ctx, storyId, branchId)
+    await writePointer(ctx, storyId, fromBranchId)
+  } catch (err) {
+    logger.warn('action_layer.branch_switch_restore_retried', {
+      storyId,
+      fromBranchId,
+      toBranchId,
+      error: errorText(err),
+    })
+    await writePointer(ctx, storyId, fromBranchId)
   }
 }
 
@@ -171,7 +178,7 @@ async function restoreThen(
 ): Promise<SwitchBranchResult> {
   const { storyId, fromBranchId, toBranchId } = input
   try {
-    await writeRestoreWithRetry(ctx, storyId, fromBranchId)
+    await writeRestoreWithRetry(input, ctx)
   } catch (err) {
     logger.error('action_layer.branch_switch_restore_failed', {
       storyId,
@@ -180,8 +187,14 @@ async function restoreThen(
       error: errorText(err),
     })
   }
-  // A failed re-read logs itself; one more try keeps a transient failure off the story list.
-  if (!(await rehydrateStories(ctx.db))) await rehydrateStories(ctx.db)
+  // One more try keeps a transient failure off the story list.
+  if (!(await rehydrateStories(ctx.db)) && !(await rehydrateStories(ctx.db))) {
+    logger.error('action_layer.branch_switch_restore_reread_failed', {
+      storyId,
+      fromBranchId,
+      toBranchId,
+    })
+  }
   return result
 }
 

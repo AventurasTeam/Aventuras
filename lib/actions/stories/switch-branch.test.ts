@@ -701,10 +701,10 @@ describe('switchBranch', () => {
     }
   }
 
-  it('retries a restore write that fails once, and logs nothing', async () => {
+  it('retries a restore write that fails once, and warns of the retry with no error', async () => {
     const { db, ctx } = await setup()
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
-    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const flaky = failingRestores(ctx, 1)
 
     const result = await switchBranch(input({ replaceStack: fakeStack(false).replaceStack }), flaky)
@@ -712,10 +712,13 @@ describe('switchBranch', () => {
     expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
     expect(flaky.runInTransaction).toHaveBeenCalledTimes(3)
     await expectStillOnLeft(db)
-    expect(error).not.toHaveBeenCalledWith(
-      'action_layer.branch_switch_restore_failed',
-      expect.anything(),
-    )
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_switch_restore_retried', {
+      storyId: 'story_1',
+      fromBranchId: 'br_a',
+      toBranchId: 'br_b',
+      error: 'disk busy',
+    })
+    expect(error).not.toHaveBeenCalled()
   })
 
   it('logs a restore write that fails twice, once, and returns the same result', async () => {
@@ -745,6 +748,7 @@ describe('switchBranch', () => {
   it('reads the stories again when the re-read after the restore fails once', async () => {
     const { ctx } = await setup()
     vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
     // The switch's own re-read lands br_b in the store; the restore's first re-read fails.
     vi.mocked(rehydrateStories)
       .mockImplementationOnce((database) => readStories(database))
@@ -756,6 +760,29 @@ describe('switchBranch', () => {
     expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
     expect(vi.mocked(rehydrateStories)).toHaveBeenCalledTimes(3)
     expect(storiesRowBranch()).toBe('br_a')
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('logs a re-read after the restore that fails twice, once, and returns the same result', async () => {
+    const { ctx } = await setup()
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    // The switch's own re-read lands br_b in the store; both of the restore's re-reads fail.
+    vi.mocked(rehydrateStories)
+      .mockImplementationOnce((database) => readStories(database))
+      .mockResolvedValue(false)
+
+    const result = await switchBranch(input({ replaceStack: fakeStack(false).replaceStack }), ctx)
+
+    expect(result).toEqual({ status: 'failed', code: 'navigation-blocked' })
+    expect(vi.mocked(rehydrateStories)).toHaveBeenCalledTimes(3)
+    expect(error.mock.calls).toEqual([
+      [
+        'action_layer.branch_switch_restore_reread_failed',
+        { storyId: 'story_1', fromBranchId: 'br_a', toBranchId: 'br_b' },
+      ],
+    ])
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
   })
 
   it('puts the pointer back when the stack reset throws', async () => {
