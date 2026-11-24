@@ -550,6 +550,7 @@ describe('switchBranch', () => {
       fromBranchId: 'br_a',
       toBranchId: 'br_b',
       code: 'load',
+      readStatus: 'failed',
     })
   })
 
@@ -607,6 +608,7 @@ describe('switchBranch', () => {
       storyId: 'story_1',
       fromBranchId: 'br_a',
       toBranchId: 'br_b',
+      cause: 'reset-refused',
     })
   })
 
@@ -639,12 +641,13 @@ describe('switchBranch', () => {
       storyId: 'story_1',
       fromBranchId: 'br_a',
       toBranchId: 'br_b',
+      cause: 'busy',
     })
   })
 
   it('puts the pointer back when a turn body starts on the branch left during the stories re-read', async () => {
     const { db, ctx } = await setup()
-    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const reached = deferred()
     const release = deferred()
     vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
@@ -677,6 +680,12 @@ describe('switchBranch', () => {
     expect(stack.replaceStack).not.toHaveBeenCalled()
     await expectStillOnLeft(db)
     expect(kicks).toEqual([])
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_switch_navigation_blocked', {
+      storyId: 'story_1',
+      fromBranchId: 'br_a',
+      toBranchId: 'br_b',
+      cause: 'turn-body',
+    })
   })
 
   // The switch's own pointer write is the first transaction; the restore is the second.

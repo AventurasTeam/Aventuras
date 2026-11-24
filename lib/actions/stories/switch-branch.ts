@@ -46,6 +46,8 @@ export type SwitchBranchResult =
 
 type RefusalCode = Extract<SwitchBranchResult, { status: 'refused' }>['code']
 type FailureCode = Extract<SwitchBranchResult, { status: 'failed' }>['code']
+type FailureDetail = { error?: string; readStatus?: ReadBranchResult['status'] }
+type BlockedCause = 'busy' | 'turn-body' | 'reset-refused'
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
@@ -102,31 +104,27 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
   try {
     read = await readBranchWorkingSet(toBranchId, ctx, isCurrentRequest)
   } catch (err) {
-    return failAndRestore(input, ctx, 'load', err)
+    return failAndRestore(input, ctx, 'load', { error: errorText(err) })
   }
   if (read.status === 'cancelled') return restoreThen(input, ctx, { status: 'abandoned' })
-  if (read.status !== 'ok') return failAndRestore(input, ctx, 'load')
+  if (read.status !== 'ok') return failAndRestore(input, ctx, 'load', { readStatus: read.status })
   if (!(await rehydrateStories(ctx.db))) return failAndRestore(input, ctx, 'stories-reread')
 
   // Nothing awaited from the reset to the publish, so one commit takes all three; the reset goes
   // first because a route guard can swallow it, and a fill can't be taken back.
   if (!isCurrentRequest()) return restoreThen(input, ctx, { status: 'abandoned' })
-  // A run that started during the reads leaves the story-leave guard swallowing the reset, and a
-  // turn body's sweep can still write on the branch left once its mark has ended.
-  let reset = false
+  let blocked: BlockedCause | null
   try {
-    reset =
-      !isStoryBusy(generationStore.getTxState(), storyId, fromBranchId) &&
-      !generationStore.isTurnBodyActive(fromBranchId) &&
-      input.replaceStack(toBranchId)
+    blocked = resetUnlessBlocked(input)
   } catch (err) {
-    return failAndRestore(input, ctx, 'navigation-blocked', err)
+    return failAndRestore(input, ctx, 'navigation-blocked', { error: errorText(err) })
   }
-  if (!reset) {
+  if (blocked != null) {
     logger.warn('action_layer.branch_switch_navigation_blocked', {
       storyId,
       fromBranchId,
       toBranchId,
+      cause: blocked,
     })
     return restoreThen(input, ctx, { status: 'failed', code: 'navigation-blocked' })
   }
@@ -135,6 +133,15 @@ async function moveAndShow(input: SwitchBranchInput, ctx: DbCtx): Promise<Switch
   readerHoldStore.release(input.hold)
   afterBranchPublished(read.set.storyId)
   return { status: 'ok' }
+}
+
+// A run that started during the reads leaves the story-leave guard swallowing the reset, and a
+// turn body's sweep can still write on the branch left once its mark has ended.
+function resetUnlessBlocked(input: SwitchBranchInput): BlockedCause | null {
+  const { storyId, fromBranchId, toBranchId } = input
+  if (isStoryBusy(generationStore.getTxState(), storyId, fromBranchId)) return 'busy'
+  if (generationStore.isTurnBodyActive(fromBranchId)) return 'turn-body'
+  return input.replaceStack(toBranchId) ? null : 'reset-refused'
 }
 
 function writePointer(ctx: DbCtx, storyId: string, branchId: string): Promise<void> {
@@ -182,7 +189,7 @@ function failAndRestore(
   input: SwitchBranchInput,
   ctx: DbCtx,
   code: FailureCode,
-  err?: unknown,
+  detail: FailureDetail = {},
 ): Promise<SwitchBranchResult> {
   const { storyId, fromBranchId, toBranchId } = input
   logger.error('action_layer.branch_switch_failed', {
@@ -190,7 +197,7 @@ function failAndRestore(
     fromBranchId,
     toBranchId,
     code,
-    ...(err === undefined ? {} : { error: errorText(err) }),
+    ...detail,
   })
   return restoreThen(input, ctx, { status: 'failed', code })
 }
