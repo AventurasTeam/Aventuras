@@ -601,6 +601,12 @@ build on it.
   failure: canon keeps the route and the pointer on the new branch once
   a fork has committed
   ([`chapter-close.md → Re-running a close`](../../../memory/chapter-close.md#re-running-a-close)).
+  As shipped, a stack reset that doesn't take is the one case it moves
+  the pointer back: to the branch the reader shows, through the
+  switch's restore, returning `navigation-blocked`, so route and
+  pointer still agree; the caller keeps the new branch, refreshes the
+  list and warns
+  ([6.5's Implementation notes](./slices/05-fork-from-reader.md#implementation-notes)).
 - **A switch replaces the in-story stack.** Not the reader alone: a
   story's Settings opened from its card, then World, then the reader
   leaves the old branch's World beneath, and a `replace` of the top

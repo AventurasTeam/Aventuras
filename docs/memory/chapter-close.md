@@ -1217,6 +1217,9 @@ the re-run starts:
   step 2 (re-hydrating or starting the re-run) then fails unexpectedly,
   the UI still routes onto the new branch's reader so route and
   `stories.current_branch_id` stay in sync, and toasts a retry prompt.
+  If the story's screens can't be replaced at all, the pointer goes back
+  to `parent` instead, so the two still agree: the new branch stays,
+  nothing starts, and the toast says to switch to it before retrying.
 - **Roll back & re-run (in place, destructive).** Rolls the post-close
   turns back first: every turn from `B` onward, using the reader's
   rollback with its counts. That rollback can't be undone, so the turns

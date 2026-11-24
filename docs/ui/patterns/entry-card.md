@@ -606,8 +606,10 @@ the facts derived from the old, and its
 entry processed, so nothing re-reads it
 ([data-model → Branch model](../../data-model.md#branch-model)). The
 notice does not spell the order out — it is offered mid-edit, where
-"branch" reads as "not here" — but the fork surface owns making the tail
-obvious when it lands.
+"branch" reads as "not here" — but the fork makes the tail obvious when
+it lands: the new branch's reader opens at its bottom, on entry N, its
+last entry
+([`branch-navigator.md → After confirm`](../screens/reader-composer/branch-navigator/branch-navigator.md#after-confirm)).
 
 **The two branches of this notice are the behavioural boundary, not
 commentary on it.** `resolveContentEditNotice` derives them from
@@ -638,7 +640,7 @@ have.
 the action layer rejects a rollback that targets it, and the card
 renders no delete ([Per-kind structure](#per-kind-structure)) — so that
 half of the remedy can never become true for it, unlike the branch
-clause, which the fork surface will make good. Branching is the only
+clause, which the opening's `⎇` makes good. Branching is the only
 honest answer there:
 
 > Only the newest entry's scene details can be updated. Rewording is

@@ -282,6 +282,10 @@ conditional visibility:
   rows a chapter can end on. The host decides, so the rule keeps one
   copy, and it is disabled while a run holds the gate, as branch is.
 
+Branch stays live under a pending embedder swap: the
+[creation modal](./branch-navigator/branch-navigator.md#branch-creation--modal)
+opens saying why, with `Create` disabled until the swap ends.
+
 ### Regenerate confirmation
 
 Regenerating an AI reply rolls its turn back — the same delta

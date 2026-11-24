@@ -189,6 +189,10 @@ convention, and the expectation that subsystems route through
   for the boundary to refuse),
   `close_rerun_on_started_threw` (warn: a re-run start's host callback
   threw as the chain reserved; the re-run runs on),
+  `close_rerun_fork_point_missing` (error: a re-run preview with turns
+  since found no entry before the first of them, which a closed chapter
+  always has, with `branchId` and `targetEntryId`; the preview refuses
+  `integrity`),
   `rerun_journal_written` (debug,
   `lib/actions/delta/rerun-journal.ts`: a close's re-run's `reversal`
   phase committed its journal, with `branchId`, `chapterId`, the `floor`
@@ -422,6 +426,21 @@ convention, and the expectation that subsystems route through
   that re-hydration threw, or read no story or a corrupt one, with
   `branchId`, `chapterId` and `error`; the confirm closes with the
   `resyncFailed` copy, which asks to reopen the story),
+  and for `Re-run on new branch` (the same file,
+  `runCloseRerunOnBranch`) `close_rerun_fork_threw` (error: the check
+  on the parent or the fork threw, with the `step`; no branch exists,
+  and the confirm closes with the start-failed copy),
+  `close_rerun_fork_refused` (warn: the fork refused as an unfinished
+  run or for a reason the confirm has no copy of its own for, with the
+  refusal `code`; the confirm closes with the unfinished-run or the
+  start-failed copy),
+  `close_rerun_fork_not_opened` (warn: the fork committed but the
+  story's screens couldn't be replaced, so the pointer went back to the
+  parent and nothing started) and `close_rerun_fork_start_failed`
+  (warn: the fork committed, but the start refused or threw, the story
+  had been left, showing the new branch threw, or the new reader opened
+  with nothing loaded, with the `cause`; the warning toast says to retry
+  from the Timeline),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
@@ -536,7 +555,20 @@ convention, and the expectation that subsystems route through
   `undo_failed` / `redo_failed` for a reversal that threw or a refusal
   that means the delta log cannot produce the reversal it should, and
   `undo_rejected` / `redo_rejected` at debug for the refusals that are
-  routine (gated, nothing to apply, branch mid-switch). The
+  routine (gated, nothing to apply, branch mid-switch). The `⎇` host
+  (`components/reader/use-branch-create.ts`) logs its own too:
+  `branch_create_open_failed` (error: opening the creation modal threw;
+  the user sees `Couldn't create the branch.`),
+  `branch_create_entry_missing` (warn: the pressed entry is no longer in
+  the reader's store, so nothing opens), `branch_create_failed` (error:
+  the fork threw and wrote nothing; the modal shows the failed line),
+  `branch_create_refused` (warn: the fork refused for a reason the modal
+  has no line of its own for, with the `code`),
+  `branch_create_not_opened` (warn: the fork committed but the story's
+  screens couldn't be replaced, so the pointer went back to the parent
+  and a warning toast says so) and `branch_create_show_threw` (error:
+  showing the new branch threw after its navigation; the new reader's
+  own load reports the failure). The
   rail and the peek add two outside `runAction`:
   `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
   — a rail collapse-preference write that rejected) and
