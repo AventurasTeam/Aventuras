@@ -1,3 +1,4 @@
+import { skipToken, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { type EntitySummary, type Resolution } from '@/components/compounds/collision-resolve-diff'
@@ -9,7 +10,7 @@ import {
   type CollisionResolveResult,
   type DbCtx,
 } from '@/lib/actions'
-import type { CollisionReason, Entity } from '@/lib/db'
+import { readStampedLeadIds, type CollisionReason, type Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import {
@@ -43,6 +44,35 @@ export type CollisionDialogPair = {
 }
 
 type Sides = CollisionDialogPair['sides']
+
+/** Which of the pair's rows the branch's entries name: the lead flag, or a lead stamp. */
+export type CollisionHeld =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; ids: readonly string[] }
+  | { status: 'failed' }
+
+const HELD_IDLE: CollisionHeld = { status: 'idle' }
+const HELD_LOADING: CollisionHeld = { status: 'loading' }
+const HELD_FAILED: CollisionHeld = { status: 'failed' }
+
+// Logged from the fetch, so one failure logs once however many renders see it.
+async function readStamped(
+  branchId: string,
+  ids: readonly string[],
+  db: DbCtx['db'],
+): Promise<ReadonlySet<string>> {
+  try {
+    return await readStampedLeadIds(branchId, ids, db)
+  } catch (error) {
+    logger.error('app.world_collision_held_read_failed', {
+      branchId,
+      ids,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
 
 // A toast lands after the dialog closed, so it can't tell the user to close it or pick a row in it.
 const CLOSED_REJECTION_TEXT: Record<CollisionRejectionCode, () => string> = {
@@ -115,7 +145,8 @@ function resolvedText(resolution: CollisionResolution, sides: Sides): string {
 
 /**
  * world.md → Resolve dialog. Pair read live under the resolve action's pair rule; closes for good
- * once a row is gone or no flag names the other, so an undo can't reopen it.
+ * once a row is gone or no flag names the other, so an undo can't reopen it. `held` names the
+ * pair's held rows once this open's stamp read lands; the flag half reads live.
  */
 export function useCollisionResolve(
   branchId: string,
@@ -124,12 +155,15 @@ export function useCollisionResolve(
   story: StoryPlace,
 ): {
   pair: CollisionDialogPair | null
+  held: CollisionHeld
   request: (flaggedId: string, otherId: string) => void
   close: () => void
   resolve: (resolution: Resolution) => Promise<void>
 } {
   const [requested, setRequestedState] = useState<readonly [string, string] | null>(null)
   // Read after the action settles: a request closed meanwhile has no dialog left to show an error.
+  // Bumped per request, so a reopen never shows the last open's read: the dialog's mode is set at mount.
+  const [openSeq, setOpenSeq] = useState(0)
   const requestedRef = useRef(requested)
   const setRequested = useCallback((next: readonly [string, string] | null) => {
     requestedRef.current = next
@@ -201,8 +235,36 @@ export function useCollisionResolve(
     if (requested != null && pair == null) setRequested(null)
   }, [requested, pair, setRequested])
 
+  const { status: stampStatus, data: stampedIds } = useQuery({
+    queryKey: ['collision-held', branchId, requested?.[0] ?? null, requested?.[1] ?? null, openSeq],
+    queryFn: requested == null ? skipToken : () => readStamped(branchId, requested, ctx.db),
+    gcTime: 0,
+    retry: false,
+  })
+
+  const held = useMemo((): CollisionHeld => {
+    if (pair == null || entityRows == null) return HELD_IDLE
+    if (stampStatus === 'error') return HELD_FAILED
+    if (stampedIds == null) return HELD_LOADING
+    const ids = pair.sides
+      .map((side) => side.id)
+      .filter((id) => entityRows.get(id)?.isLead === 1 || stampedIds.has(id))
+    return { status: 'ready', ids }
+  }, [pair, entityRows, stampStatus, stampedIds])
+
+  // Without its held rows the dialog's picker would be free, so a failed read never opens it.
+  useEffect(() => {
+    if (requested == null || stampStatus !== 'error') return
+    toast.error(t('world:collision.heldFailed'))
+    setRequested(null)
+  }, [requested, stampStatus, setRequested])
+
   const request = useCallback(
-    (flaggedId: string, otherId: string) => guard(() => setRequested([flaggedId, otherId])),
+    (flaggedId: string, otherId: string) =>
+      guard(() => {
+        setOpenSeq((seq) => seq + 1)
+        setRequested([flaggedId, otherId])
+      }),
     [guard, setRequested],
   )
   const close = useCallback(() => setRequested(null), [setRequested])
@@ -234,7 +296,7 @@ export function useCollisionResolve(
     [pair, branchId, ctx],
   )
 
-  return { pair, request, close, resolve }
+  return { pair, held, request, close, resolve }
 }
 
 /** WorldListPane's `resolveCollision`: Resolve acts, or stays inert with the gate's reason. */

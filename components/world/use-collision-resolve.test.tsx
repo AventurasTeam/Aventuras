@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import type { ReactElement, ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type Resolution } from '@/components/compounds/collision-resolve-diff'
 import { COLLISION_REJECTION, type DbCtx } from '@/lib/actions'
+import { createQueryClient } from '@/lib/cache'
 import {
   emptyEntityState,
   type CharacterRelationship,
@@ -31,18 +34,25 @@ import {
   collisionResolveProp,
   useCollisionResolve,
   type CollisionDialogPair,
+  type CollisionHeld,
 } from './use-collision-resolve'
 
 const resolveCollision = vi.hoisted(() => vi.fn())
+const readStampedLeadIds = vi.hoisted(() => vi.fn())
 const NOWHERE = storyPlaceOf({ tail: null, sceneSource: null })
 
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   resolveCollision,
 }))
+vi.mock('@/lib/db', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  readStampedLeadIds,
+}))
 vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-const ctx = {} as DbCtx
+const DB = {} as DbCtx['db']
+const ctx = { db: DB } as DbCtx
 const BRANCH = 'br_1'
 const OLDER = makeEntity({
   id: 'char_brannoc',
@@ -82,13 +92,25 @@ const OLDER_NAMING_NEWER: Entity = {
   nameCollisionReason: 'alike',
 }
 const LEAD_TEXT =
-  "The story's lead can't be the row a merge removes. Pick it as the row that survives, or use Set as lead on another character first."
+  "The row this merge would remove is or was this branch's lead, so it stays. Close this and open the pair again to see which row survives."
+const HELD_FAILED_TEXT =
+  "Couldn't open this collision: checking whether either row is or was this branch's lead failed."
 const IN_FLIGHT_TEXT = "Couldn't resolve while generation is in flight."
 const FAILED_TEXT = "Couldn't resolve the collision."
 const NOT_FOUND_TEXT =
   'These rows changed or no longer collide. Close this and check the list again.'
 
 const run = (proceed: () => void) => proceed()
+
+// A client per hook, so no test sees another's cached read.
+function queries(): { wrapper: (props: { children: ReactNode }) => ReactElement } {
+  const client = createQueryClient()
+  return {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  }
+}
 
 function awareness(id: string, characterId: string): HappeningAwareness {
   return {
@@ -136,7 +158,7 @@ function translation(id: string, targetId: string): Translation {
 
 // The flagged (newer) row asks, as the strip does; the pair must still come back older first.
 function openPair(guard: (proceed: () => void) => void = run) {
-  const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, guard, NOWHERE))
+  const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, guard, NOWHERE), queries())
   act(() => result.current.request(NEWER.id, OLDER.id))
   return result
 }
@@ -172,6 +194,9 @@ beforeEach(() => {
   characterRelationshipsStore.hydrate(BRANCH, [])
   translationsStore.hydrate(BRANCH, [])
   resolveCollision.mockReset()
+  readStampedLeadIds.mockReset()
+  // Pending by default: the tests that read held rows settle their own.
+  readStampedLeadIds.mockReturnValue(new Promise<never>(() => {}))
   vi.mocked(toast.success).mockClear()
   vi.mocked(toast.error).mockClear()
   vi.spyOn(logger, 'error').mockImplementation(() => {})
@@ -216,7 +241,7 @@ describe('useCollisionResolve → opening', () => {
     renderHook(() => {
       renders += 1
       return useCollisionResolve(BRANCH, ctx, run, NOWHERE)
-    })
+    }, queries())
     const settled = renders
 
     act(() => {
@@ -248,7 +273,7 @@ describe('useCollisionResolve → opening', () => {
   it('re-derives the open pair once the story moves', () => {
     const { result, rerender } = renderHook(
       ({ story }: { story: StoryPlace }) => useCollisionResolve(BRANCH, ctx, run, story),
-      { initialProps: { story: NOWHERE } },
+      { initialProps: { story: NOWHERE }, ...queries() },
     )
     act(() => result.current.request(NEWER.id, OLDER.id))
     const opened = openedPair(result)
@@ -289,7 +314,7 @@ describe('useCollisionResolve → opening', () => {
     })
     act(() => entitiesStore.hydrate(BRANCH, [harbor, dark, twin]))
     const placementWith = (story: StoryPlace) => {
-      const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, story))
+      const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, story), queries())
       act(() => result.current.request(twin.id, harbor.id))
       return openedPair(result).sides[1].relationCounts.overlap.canonicalPlacement
     }
@@ -359,7 +384,7 @@ describe('useCollisionResolve → opening', () => {
       createdAt: 500,
     })
     entitiesStore.hydrate(BRANCH, [OLDER, harbor, { ...NEWER, nameCollisionPartnerId: harbor.id }])
-    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE))
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), queries())
 
     act(() => result.current.request(NEWER.id, harbor.id))
 
@@ -390,7 +415,7 @@ describe('useCollisionResolve → the shared parent', () => {
   // The strip asks from the flagged (newer) row.
   function openPlaces(rows: Entity[]): CollisionDialogPair {
     entitiesStore.hydrate(BRANCH, rows)
-    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE))
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), queries())
     act(() => result.current.request('loc_stalls', 'loc_market'))
     return openedPair(result)
   }
@@ -569,7 +594,7 @@ describe('useCollisionResolve → outcomes', () => {
     expect(toast.success).toHaveBeenCalledWith('Kept as distinct.')
   })
 
-  it('rejects with the lead text when the merge would remove the lead, and toasts nothing', async () => {
+  it('rejects with the held-row text when the merge would remove a held row, and toasts nothing', async () => {
     resolveCollision.mockResolvedValue({
       status: 'rejected',
       reason: 'lead entity',
@@ -667,7 +692,7 @@ describe('useCollisionResolve → outcomes', () => {
     [
       COLLISION_REJECTION.leadEntity,
       LEAD_TEXT,
-      "Couldn't merge: the story's lead can't be the row a merge removes.",
+      "Couldn't merge: the row it would remove is or was this branch's lead.",
     ],
     [
       COLLISION_REJECTION.parentCycle,
@@ -729,6 +754,113 @@ describe('useCollisionResolve → outcomes', () => {
 
     await expect(result.current.resolve({ mode: 'keep' })).rejects.toThrow(NOT_FOUND_TEXT)
     expect(resolveCollision).not.toHaveBeenCalled()
+  })
+})
+
+describe('useCollisionResolve → held rows', () => {
+  it('reads nothing and holds nothing while no pair is requested', async () => {
+    const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), queries())
+    await act(async () => {})
+
+    expect(result.current.held).toEqual({ status: 'idle' })
+    expect(readStampedLeadIds).not.toHaveBeenCalled()
+  })
+
+  it('keeps the pair open while the stamp read runs, held loading', async () => {
+    const result = openPair()
+
+    expect(result.current.pair).not.toBeNull()
+    expect(result.current.held).toEqual({ status: 'loading' })
+    await waitFor(() =>
+      expect(readStampedLeadIds).toHaveBeenCalledWith(BRANCH, [NEWER.id, OLDER.id], DB),
+    )
+    expect(result.current.pair).not.toBeNull()
+  })
+
+  it.each<[string, Entity[], ReadonlySet<string>, string[]]>([
+    ['the older row by its flag', [{ ...OLDER, isLead: 1 }, NEWER], new Set(), [OLDER.id]],
+    ['the newer row by its flag', [OLDER, { ...NEWER, isLead: 1 }], new Set(), [NEWER.id]],
+    ['the newer row by a stamp', [OLDER, NEWER], new Set([NEWER.id]), [NEWER.id]],
+    ['the older row by a stamp', [OLDER, NEWER], new Set([OLDER.id]), [OLDER.id]],
+    [
+      'both rows, one flagged and one stamped',
+      [{ ...OLDER, isLead: 1 }, NEWER],
+      new Set([NEWER.id]),
+      [OLDER.id, NEWER.id],
+    ],
+    [
+      'a row flagged and stamped, once',
+      [{ ...OLDER, isLead: 1 }, NEWER],
+      new Set([OLDER.id]),
+      [OLDER.id],
+    ],
+    ['neither row', [OLDER, NEWER], new Set(), []],
+  ])('marks %s as held', async (_, rows, stamped, held) => {
+    entitiesStore.hydrate(BRANCH, rows)
+    readStampedLeadIds.mockResolvedValueOnce(stamped)
+    const result = openPair()
+
+    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: held }))
+  })
+
+  it('takes a flag set while open into held without reading again', async () => {
+    readStampedLeadIds.mockResolvedValueOnce(new Set())
+    const result = openPair()
+    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [] }))
+
+    act(() => entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, isLead: 1 }]))
+
+    expect(result.current.held).toEqual({ status: 'ready', ids: [NEWER.id] })
+    expect(readStampedLeadIds).toHaveBeenCalledTimes(1)
+  })
+
+  it("reads again on a reopen of the same pair, never showing the last open's held rows", async () => {
+    readStampedLeadIds.mockResolvedValueOnce(new Set())
+    const result = openPair()
+    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [] }))
+    act(() => result.current.close())
+
+    let settle: (ids: ReadonlySet<string>) => void = () => {}
+    readStampedLeadIds.mockReturnValueOnce(new Promise((resolve) => (settle = resolve)))
+    act(() => result.current.request(NEWER.id, OLDER.id))
+
+    expect(result.current.held).toEqual({ status: 'loading' })
+    settle(new Set([NEWER.id]))
+    // React Query notifies on its own scheduler tick, so wait rather than read once.
+    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [NEWER.id] }))
+    expect(readStampedLeadIds).toHaveBeenCalledTimes(2)
+  })
+
+  it('closes the request and toasts when the stamp read fails, never marking held ready', async () => {
+    readStampedLeadIds.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'))
+    const statuses: CollisionHeld['status'][] = []
+    const { result } = renderHook(() => {
+      const hook = useCollisionResolve(BRANCH, ctx, run, NOWHERE)
+      statuses.push(hook.held.status)
+      return hook
+    }, queries())
+    act(() => result.current.request(NEWER.id, OLDER.id))
+
+    await waitFor(() => expect(result.current.pair).toBeNull())
+    expect(result.current.held).toEqual({ status: 'idle' })
+    expect(statuses).not.toContain('ready')
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith(HELD_FAILED_TEXT)
+    expect(logger.error).toHaveBeenCalledWith(
+      'app.world_collision_held_read_failed',
+      expect.objectContaining({
+        branchId: BRANCH,
+        ids: [NEWER.id, OLDER.id],
+        error: 'SQLITE_BUSY: database is locked',
+      }),
+    )
+
+    // A reopen starts from its own read, not the failed one.
+    readStampedLeadIds.mockResolvedValueOnce(new Set([NEWER.id]))
+    act(() => result.current.request(NEWER.id, OLDER.id))
+    expect(result.current.held).toEqual({ status: 'loading' })
+    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [NEWER.id] }))
+    expect(toast.error).toHaveBeenCalledTimes(1)
   })
 })
 

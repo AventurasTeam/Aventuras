@@ -678,7 +678,7 @@ export default function WorldRoute() {
           onConfirm={worldDelete.confirm}
         />
       ) : null}
-      {collision.pair != null ? (
+      {collision.pair != null && collision.held.status === 'ready' ? (
         <CollisionResolveDialog
           open={focused}
           onOpenChange={(next) => {
@@ -692,6 +692,7 @@ export default function WorldRoute() {
           onResolve={collision.resolve}
           blockedReason={collisionBlocked}
           isNameTaken={collisionNameTaken}
+          heldIds={collision.held.ids}
         />
       ) : null}
       {isEntityCategory(category) ? (
