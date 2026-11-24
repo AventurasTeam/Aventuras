@@ -195,6 +195,25 @@ function fakeStack(took = true) {
   return { replaceStack, calls }
 }
 
+type BlockSeen = {
+  loaded: string | null
+  published: string | undefined
+  replaced: number
+  closeResult: CloseResult | null
+  held: boolean
+}
+
+// What a microtask queued inside the reset-to-release block sees once that block has run.
+function blockSeen(replaceStack: { mock: { calls: unknown[] } }): BlockSeen {
+  return {
+    loaded: entriesStore.getLoadedBranch(),
+    published: currentStoryStore.getCurrentStory()?.branchId,
+    replaced: replaceStack.mock.calls.length,
+    closeResult: chapterOverlaysStore.getState().closeResult,
+    held: readerHoldStore.isHeld('br_a'),
+  }
+}
+
 async function pointer(db: TestDb): Promise<string | null> {
   const [row] = await db
     .select({ branchId: stories.currentBranchId })
@@ -407,26 +426,29 @@ describe('switchBranch', () => {
     expect(entriesStore.getLoadedBranch()).toBe('br_b')
   })
 
-  it('lets a microtask queued from the fill find the publish done and the stack replaced', async () => {
+  it('lets a microtask queued from the reset or the fill find the fill, the publish and the release done', async () => {
     const { ctx } = await setup()
+    chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
     const stack = fakeStack()
-    let seen: { published: string | undefined; replaced: number } | null = null
+    const atReset: BlockSeen[] = []
+    const atFill: BlockSeen[] = []
     let queued = false
+    const replaceStack = vi.fn((branchId: string) => {
+      queueMicrotask(() => atReset.push(blockSeen(stack.replaceStack)))
+      return stack.replaceStack(branchId)
+    })
     const off = entriesStore.subscribe(() => {
       if (queued || entriesStore.getLoadedBranch() !== 'br_b') return
       queued = true
-      queueMicrotask(() => {
-        seen = {
-          published: currentStoryStore.getCurrentStory()?.branchId,
-          replaced: stack.replaceStack.mock.calls.length,
-        }
-      })
+      queueMicrotask(() => atFill.push(blockSeen(stack.replaceStack)))
     })
 
-    await switchBranch(input({ replaceStack: stack.replaceStack }), ctx)
+    expect(await switchBranch(input({ replaceStack }), ctx)).toEqual({ status: 'ok' })
     off()
 
-    expect(seen).toEqual({ published: 'br_b', replaced: 1 })
+    const done = { loaded: 'br_b', published: 'br_b', replaced: 1, closeResult: null, held: false }
+    expect(atReset).toEqual([done])
+    expect(atFill).toEqual([done])
   })
 
   it('puts the pointer back and shows nothing new when the read fails', async () => {
@@ -760,38 +782,30 @@ describe('showBranch', () => {
     expect(entriesStore.getLoadedBranch()).toBe('br_b')
   })
 
-  it('lets a microtask queued from the reset or the fill find the fill and the publish done', async () => {
+  it('lets a microtask queued from the reset or the fill find the fill, the publish and the release done', async () => {
     const { db, ctx } = await setup()
     await pointerMovedTo(db, 'br_b')
-    type Seen = { loaded: string | null; published: string | undefined; replaced: number }
-    let atReset: Seen | null = null
-    let atFill: Seen | null = null
+    chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
+    const atReset: BlockSeen[] = []
+    const atFill: BlockSeen[] = []
     let queued = false
     const stack = fakeStack()
-    const seen = (): Seen => ({
-      loaded: entriesStore.getLoadedBranch(),
-      published: currentStoryStore.getCurrentStory()?.branchId,
-      replaced: stack.replaceStack.mock.calls.length,
-    })
     const replaceStack = vi.fn((branchId: string) => {
-      queueMicrotask(() => {
-        atReset = seen()
-      })
+      queueMicrotask(() => atReset.push(blockSeen(stack.replaceStack)))
       return stack.replaceStack(branchId)
     })
     const off = entriesStore.subscribe(() => {
       if (queued || entriesStore.getLoadedBranch() !== 'br_b') return
       queued = true
-      queueMicrotask(() => {
-        atFill = seen()
-      })
+      queueMicrotask(() => atFill.push(blockSeen(stack.replaceStack)))
     })
 
     await showBranch(show({ replaceStack }), ctx)
     off()
 
-    expect(atReset).toEqual({ loaded: 'br_b', published: 'br_b', replaced: 1 })
-    expect(atFill).toEqual({ loaded: 'br_b', published: 'br_b', replaced: 1 })
+    const done = { loaded: 'br_b', published: 'br_b', replaced: 1, closeResult: null, held: false }
+    expect(atReset).toEqual([done])
+    expect(atFill).toEqual([done])
   })
 })
 
