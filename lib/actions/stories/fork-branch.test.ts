@@ -53,7 +53,11 @@ import {
   type ForkResult,
 } from './fork-branch'
 import { applyDeltaAction } from '../delta/apply-delta-action'
-import { holdBranchWriteExclusive, releaseBranchWriteExclusive } from '../delta/branch-write-lock'
+import {
+  holdBranchWriteExclusive,
+  releaseBranchWriteExclusive,
+  withBranchWriteShared,
+} from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
 import { resolveByTable } from '../delta/registry'
 import { reverseCloseForRerun } from '../delta/rerun-journal'
@@ -63,7 +67,7 @@ import { writeSystemEntry } from '../story-entries/system-entry'
 import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
 import type { PipelineAction } from '../types'
 
-// A refusal the planner raises itself, past the closure; null plans as shipped.
+// What the planner throws itself, past the closure; null plans as shipped.
 const planner = vi.hoisted(() => ({ refusal: null as Error | null }))
 
 vi.mock('../delta/reverse-replay', async (importOriginal) => {
@@ -200,6 +204,29 @@ async function lockIsFree(branchId: string): Promise<boolean> {
   releaseBranchWriteExclusive(branchId, 'probe:lock-free')
   return granted
 }
+
+// A shared holder on the parent: the fork's exclusive hold waits until `release`.
+function holdShared(): { release: () => Promise<void> } {
+  let open!: () => void
+  const held = withBranchWriteShared(
+    f.branchId,
+    'act_fork_holder',
+    () => new Promise<void>((resolve) => (open = resolve)),
+  )
+  return {
+    release: () => {
+      open()
+      return held
+    },
+  }
+}
+
+const descriptionOn = (branchId: string, id: string): unknown =>
+  (
+    f.sqlite
+      .prepare('SELECT description FROM entities WHERE branch_id = ? AND id = ?')
+      .get(branchId, id) as { description: unknown } | undefined
+  )?.description
 
 async function expectRefused(
   code: ForkRefusalCode,
@@ -764,6 +791,27 @@ describe('forkBranchCore refusals (AC 4)', () => {
       expect.objectContaining({ branchId: f.branchId, refusal: 'write-back' }),
     )
   })
+
+  it('throws a planner error that is no refusal, writing nothing and logging no refusal', async () => {
+    planner.refusal = new Error('boom')
+    const error = vi.spyOn(logger, 'error')
+    const before = dbSnapshot()
+
+    await expect(forkBranchCore(input(), f.ctx)).rejects.toThrow('boom')
+
+    expect(dbSnapshot()).toEqual(before)
+    expect(await lockIsFree(f.branchId)).toBe(true)
+    expect(error).not.toHaveBeenCalledWith('action_layer.reversal_refused', expect.anything())
+  })
+
+  it('reads the gate when called: a reversal begun while its hold waits does not refuse it', async () => {
+    const holder = holdShared()
+    const fork = forkBranchCore(input(), f.ctx)
+    generationStore.setReversalInProgress(true)
+    await holder.release()
+
+    expect(await fork).toEqual(ok(CHILD))
+  })
 })
 
 describe('forkBranchCore and the branch write lock (AC 8)', () => {
@@ -815,6 +863,63 @@ describe('forkBranchCore and the branch write lock (AC 8)', () => {
     expect(order).toEqual(['fork', 'write'])
     expect(entityIdsOf(CHILD)).toEqual([])
     expect(await lockIsFree(f.branchId)).toBe(true)
+  })
+
+  it('plans only once a write in flight when it was called commits, and takes it off the child', async () => {
+    await land('act_fork_cast', entryAt(3), {
+      kind: 'createEntity',
+      source: 'user_edit',
+      payload: {
+        entry: { ...character('char_fork_tobin', 'Tobin'), description: 'The ferryman.' },
+      },
+    })
+    const order: string[] = []
+    // Anchored on 7, in the window; the fork's batch commits after it, so a plan read before
+    // the edit's commit would copy the edit unreversed.
+    const write = applyDeltaAction(
+      {
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: {
+            branchId: f.branchId,
+            id: 'char_fork_tobin',
+            patch: { description: 'The ferryman, drinking since noon.' },
+          },
+        },
+        actionId: 'act_fork_edit',
+        branchId: f.branchId,
+        entryId: entryAt(7),
+      },
+      labelled('write', order, 30),
+    )
+    const fork = forkBranchCore(input(), labelled('fork', order, 60))
+
+    const [written, forked] = await Promise.all([write, fork])
+
+    expect(written.status).toBe('ok')
+    expect(forked).toEqual(ok(CHILD))
+    expect(order).toEqual(['write', 'fork'])
+    expect(descriptionOn(f.branchId, 'char_fork_tobin')).toBe('The ferryman, drinking since noon.')
+    expect(descriptionOn(CHILD, 'char_fork_tobin')).toBe('The ferryman.')
+    expect(actionIdsOf(CHILD)).not.toContain('act_fork_edit')
+  })
+
+  it('forks the parent and entry it was called with when the caller changes the input mid-wait', async () => {
+    const holder = holdShared()
+    const request: { -readonly [K in keyof ForkBranchCoreInput]: ForkBranchCoreInput[K] } = input()
+    const fork = forkBranchCore(request, f.ctx)
+    request.parentBranchId = 'br_fork_elsewhere'
+    request.forkEntryId = entryAt(7)
+    await holder.release()
+
+    expect(await fork).toEqual(ok(CHILD))
+    expect(await lockIsFree(f.branchId)).toBe(true)
+    expect(await branchRow(CHILD)).toMatchObject({
+      parentBranchId: f.branchId,
+      forkEntryId: entryAt(5),
+    })
+    expect(entryIdsOf(CHILD)).toEqual([1, 2, 3, 4, 5].map(entryAt))
   })
 })
 
@@ -966,6 +1071,17 @@ describe('forkBranchCore refuses a fork that would carry an unfinished run (AC 4
     expect(refusal.reason).toBe(
       'run run_fork_rerun (act_fork_rerun) is unfinished; the fork would carry its chapter',
     )
+  })
+
+  it("forks at the chapter's end once the parent no longer holds the re-run's chapter", async () => {
+    await seedUnfinishedRerun()
+    // A sibling keeps the chapter: a read not scoped to the parent would find it there.
+    cloneBranch(f.sqlite, f.branchId, 'br_fork_sibling')
+    f.sqlite
+      .prepare('DELETE FROM chapters WHERE branch_id = ? AND id = ?')
+      .run(f.branchId, CLOSE_CHAPTER)
+
+    expect(await forkBranchCore(input({ forkEntryId: entryAt(5) }), f.ctx)).toEqual(ok(CHILD))
   })
 
   it("refuses at the chapter's end when the plan prunes only a later edit of the re-run's chapter", async () => {
