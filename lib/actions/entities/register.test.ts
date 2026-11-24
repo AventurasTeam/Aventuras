@@ -16,6 +16,7 @@ import {
   type HappeningAwareness,
   type HappeningInvolvement,
   type NewEntity,
+  type NewHappening,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
@@ -1140,7 +1141,7 @@ describe('branch scope', () => {
     createdAt: 1,
     updatedAt: 1,
   })
-  const fire = (branchId: string) => ({
+  const fire = (branchId: string): NewHappening => ({
     id: 'hap_1',
     branchId,
     title: 'The fire',
@@ -1268,43 +1269,45 @@ describe('branch scope', () => {
   })
 
   // The payload names the sibling, a valid target there: without the check the write lands on it.
-  it.each<[string, PipelineAction, string]>([
-    [
-      'createEntity',
-      {
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
         kind: 'createEntity',
         source: 'user_edit',
         payload: { entry: { ...SIBLING, id: 'char_9' } },
       },
-      'branch mismatch: delta br_2 vs entry br_1',
-    ],
-    [
-      'updateEntity',
-      {
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
         kind: 'updateEntity',
         source: 'user_edit',
         payload: { branchId: 'br_1', id: 'char_1', patch: { name: 'Kael the Returned' } },
       },
-      'branch mismatch: delta br_2 vs target br_1',
-    ],
-    [
-      'deleteEntity',
-      {
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+    {
+      action: {
         kind: 'deleteEntity',
         source: 'user_edit',
         payload: { branchId: 'br_1', id: 'char_1' },
       },
-      'branch mismatch: delta br_2 vs target br_1',
-    ],
-  ])('%s payload: refuses a payload naming the sibling branch', async (_kind, action, reason) => {
-    const { db, ctx } = await twoBranches()
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+  ]
 
-    expect(await onWritten(ctx, action, 'act_payload')).toEqual({ status: 'rejected', reason })
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: refuses a payload naming the sibling branch',
+    async (_kind, { action, reason }) => {
+      const { db, ctx } = await twoBranches()
 
-    expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
-    expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
-    expect(await db.select().from(entities)).toHaveLength(4)
-    expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
-    expect(await loggedBy(db, 'act_payload')).toEqual([])
-  })
+      expect(await onWritten(ctx, action, 'act_payload')).toEqual({ status: 'rejected', reason })
+
+      expect(await entityOn(db, 'br_1', 'char_1')).toEqual(SIBLING)
+      expect(await entityOn(db, 'br_2', 'char_1')).toEqual(WRITTEN)
+      expect(await db.select().from(entities)).toHaveLength(4)
+      expect(await childrenOn(db, 'br_1')).toEqual(siblingChildren)
+      expect(await loggedBy(db, 'act_payload')).toEqual([])
+    },
+  )
 })

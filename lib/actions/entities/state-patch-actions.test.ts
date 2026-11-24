@@ -14,6 +14,7 @@ import {
   type Entity,
   type LocationState,
   type NewEntity,
+  type NewStoryEntry,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
@@ -3762,7 +3763,7 @@ describe('branch scope', () => {
       position: number,
       kind: 'ai_reply' | 'user_action',
       at: string,
-    ) => ({
+    ): NewStoryEntry => ({
       id,
       branchId,
       position,
