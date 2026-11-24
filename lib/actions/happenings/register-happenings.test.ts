@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -9,6 +9,9 @@ import {
   happeningInvolvements,
   happeningAwareness,
   stories,
+  type Happening,
+  type HappeningAwareness,
+  type HappeningInvolvement,
   type NewHappening,
   type NewHappeningInvolvement,
   type NewHappeningAwareness,
@@ -914,5 +917,259 @@ describe('updateHappening — columns that already stand, and the user edits a m
         .status,
     ).toBe('ok')
     expect((await rowFor(db, 'hap_1')).title).toBe('The last duel')
+  })
+})
+
+// Happening ids repeat across branches (the key is branch and id), and so do their children's.
+// The sibling br_1 is seeded first, so a read that drops its branch finds the sibling's rows.
+describe('branch scope', () => {
+  type Harness = Awaited<ReturnType<typeof setup>>
+
+  const SIBLING: Happening = {
+    id: 'hap_1',
+    branchId: 'br_1',
+    title: 'The ambush',
+    description: 'Raiders at the ford',
+    category: 'battle',
+    icon: 'axe',
+    temporal: null,
+    occurredAtEntryId: 'e_ford',
+    commonKnowledge: 1,
+    embeddingStale: 0,
+    createdAt: 2,
+    updatedAt: 2,
+  }
+  // Stale already: a reversal that restores the row stamps embedding_stale 1.
+  const WRITTEN: Happening = {
+    id: 'hap_1',
+    branchId: 'br_2',
+    title: 'The duel',
+    description: 'Kael vs Aria',
+    category: 'combat',
+    icon: 'sword',
+    temporal: 'at dawn',
+    occurredAtEntryId: null,
+    commonKnowledge: 0,
+    embeddingStale: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const SIBLING_INV: HappeningInvolvement = {
+    id: 'inv_1',
+    branchId: 'br_1',
+    happeningId: 'hap_1',
+    entityId: 'char_1',
+    role: 'witness',
+  }
+  const WRITTEN_INV: HappeningInvolvement = {
+    id: 'inv_1',
+    branchId: 'br_2',
+    happeningId: 'hap_1',
+    entityId: 'char_1',
+    role: 'protagonist',
+  }
+  const SIBLING_HAW: HappeningAwareness = {
+    id: 'haw_1',
+    branchId: 'br_1',
+    happeningId: 'hap_1',
+    characterId: 'char_1',
+    learnedAtEntryId: 'e_rumor',
+    decayResistance: 0.2,
+    retrievalCount: 3,
+    source: 'told',
+  }
+  const WRITTEN_HAW: HappeningAwareness = {
+    id: 'haw_1',
+    branchId: 'br_2',
+    happeningId: 'hap_1',
+    characterId: 'char_1',
+    learnedAtEntryId: null,
+    decayResistance: 0.5,
+    retrievalCount: 0,
+    source: 'direct',
+  }
+  const TARGET_MISMATCH = 'branch mismatch: delta br_2 vs target br_1'
+
+  async function twoBranches({
+    written,
+    children,
+  }: {
+    written: boolean
+    children: boolean
+  }): Promise<Harness> {
+    const harness = await setup()
+    const { db } = harness
+    await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
+    // Both branches hold char_1, so the live-link filter keeps every child a delete captured.
+    await db.insert(entities).values({
+      id: 'char_1',
+      branchId: 'br_2',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await db.insert(happenings).values(SIBLING)
+    if (children) {
+      await db.insert(happeningInvolvements).values(SIBLING_INV)
+      await db.insert(happeningAwareness).values(SIBLING_HAW)
+    }
+    if (written) await db.insert(happenings).values(WRITTEN)
+    if (written && children) {
+      await db.insert(happeningInvolvements).values(WRITTEN_INV)
+      await db.insert(happeningAwareness).values(WRITTEN_HAW)
+    }
+    return harness
+  }
+
+  const hapOn = async (db: Harness['db'], branchId: string) =>
+    (
+      await db
+        .select()
+        .from(happenings)
+        .where(and(eq(happenings.branchId, branchId), eq(happenings.id, 'hap_1')))
+    )[0]
+  const invOn = async (db: Harness['db'], branchId: string) =>
+    (
+      await db
+        .select()
+        .from(happeningInvolvements)
+        .where(
+          and(eq(happeningInvolvements.branchId, branchId), eq(happeningInvolvements.id, 'inv_1')),
+        )
+    )[0]
+  const hawOn = async (db: Harness['db'], branchId: string) =>
+    (
+      await db
+        .select()
+        .from(happeningAwareness)
+        .where(and(eq(happeningAwareness.branchId, branchId), eq(happeningAwareness.id, 'haw_1')))
+    )[0]
+  const allHappenings = (db: Harness['db']) =>
+    db.select().from(happenings).orderBy(happenings.branchId, happenings.id)
+  const deltasOf = (db: Harness['db'], actionId: string) =>
+    db.select().from(deltas).where(eq(deltas.actionId, actionId))
+  const undoOf = async (db: Harness['db'], actionId: string) =>
+    (await deltasOf(db, actionId))[0]?.undoPayload
+  const onFork = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
+
+  it.each<[string, PipelineAction, string]>([
+    [
+      'createHappening',
+      {
+        kind: 'createHappening',
+        source: 'ai_classifier',
+        payload: { entry: { ...WRITTEN, id: 'hap_9', branchId: 'br_1' } },
+      },
+      'branch mismatch: delta br_2 vs entry br_1',
+    ],
+    [
+      'updateHappening',
+      {
+        kind: 'updateHappening',
+        source: 'user_edit',
+        payload: {
+          branchId: 'br_1',
+          id: 'hap_1',
+          patch: { title: 'The rout' },
+          proseEntryId: null,
+        },
+      },
+      TARGET_MISMATCH,
+    ],
+    [
+      'deleteHappening',
+      {
+        kind: 'deleteHappening',
+        source: 'periodic_classifier',
+        payload: { branchId: 'br_1', id: 'hap_1' },
+      },
+      TARGET_MISMATCH,
+    ],
+  ])(
+    '%s payload: names the sibling branch and is refused, both rows unchanged',
+    async (_kind, action, reason) => {
+      const { db, ctx } = await twoBranches({ written: true, children: false })
+      expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
+      expect(await allHappenings(db)).toEqual([SIBLING, WRITTEN])
+      expect(await deltasOf(db, 'act_p')).toEqual([])
+    },
+  )
+
+  it('createHappening pair: creates the row on its own branch, and the reversal removes only that row', async () => {
+    const { db, ctx } = await twoBranches({ written: false, children: false })
+    const create: PipelineAction = {
+      kind: 'createHappening',
+      source: 'ai_classifier',
+      payload: { entry: WRITTEN },
+    }
+    expect(await onFork(ctx, create, 'act_c')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await hapOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await hapOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_c', ctx)).toBe(1)
+    expect(await hapOn(db, 'br_2')).toBeUndefined()
+    expect(await hapOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("updateHappening pair: patches its own branch's row from that row, and the reversal restores it", async () => {
+    const { db, ctx } = await twoBranches({ written: true, children: false })
+    const patch = {
+      title: 'The last duel',
+      description: 'Both fall.',
+      category: 'feud',
+      icon: 'skull',
+    }
+    const update: PipelineAction = {
+      kind: 'updateHappening',
+      source: 'user_edit',
+      payload: { branchId: 'br_2', id: 'hap_1', patch, proseEntryId: null },
+    }
+    expect(await onFork(ctx, update, 'act_u')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_u')).toEqual({
+      title: 'The duel',
+      description: 'Kael vs Aria',
+      category: 'combat',
+      icon: 'sword',
+    })
+    expect(await hapOn(db, 'br_2')).toEqual({ ...WRITTEN, ...patch })
+    expect(await hapOn(db, 'br_1')).toEqual(SIBLING)
+
+    expect(await reverseReplayDeltas('act_u', ctx)).toBe(1)
+    expect(await hapOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await hapOn(db, 'br_1')).toEqual(SIBLING)
+  })
+
+  it("deleteHappening pair: deletes its own branch's row and children, and the reversal restores only those", async () => {
+    const { db, ctx } = await twoBranches({ written: true, children: true })
+    const remove: PipelineAction = {
+      kind: 'deleteHappening',
+      source: 'periodic_classifier',
+      payload: { branchId: 'br_2', id: 'hap_1' },
+    }
+    expect(await onFork(ctx, remove, 'act_d')).toEqual({ status: 'ok', logPosition: 1 })
+    expect(await undoOf(db, 'act_d')).toEqual({
+      ...WRITTEN,
+      involvements: [WRITTEN_INV],
+      awareness: [WRITTEN_HAW],
+      translations: [],
+    })
+    expect(await hapOn(db, 'br_2')).toBeUndefined()
+    expect(await invOn(db, 'br_2')).toBeUndefined()
+    expect(await hawOn(db, 'br_2')).toBeUndefined()
+    expect(await hapOn(db, 'br_1')).toEqual(SIBLING)
+    expect(await invOn(db, 'br_1')).toEqual(SIBLING_INV)
+    expect(await hawOn(db, 'br_1')).toEqual(SIBLING_HAW)
+
+    expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
+    expect(await hapOn(db, 'br_2')).toEqual(WRITTEN)
+    expect(await invOn(db, 'br_2')).toEqual(WRITTEN_INV)
+    expect(await hawOn(db, 'br_2')).toEqual(WRITTEN_HAW)
+    expect(await hapOn(db, 'br_1')).toEqual(SIBLING)
+    expect(await invOn(db, 'br_1')).toEqual(SIBLING_INV)
+    expect(await hawOn(db, 'br_1')).toEqual(SIBLING_HAW)
   })
 })
