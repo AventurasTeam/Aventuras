@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DIFF_TABLES,
   diffPaths,
-  namesAnEntry,
+  entryIdsOf,
   proseFieldOf,
   refIdsOf,
   type DiffTable,
@@ -279,58 +279,58 @@ describe('refIdsOf', () => {
   })
 })
 
-describe('namesAnEntry', () => {
-  it('is true for an entry-ref path on any table that has one', () => {
+describe('entryIdsOf', () => {
+  it('lists the ids an entry-ref path holds on either side, on any table that has one', () => {
     expect(
-      namesAnEntry('threads', {
+      entryIdsOf('threads', {
         old: { resolvedAtEntryId: null },
         new: { resolvedAtEntryId: 'ent_31' },
       }),
-    ).toBe(true)
+    ).toEqual(['ent_31'])
     expect(
-      namesAnEntry('happenings', {
+      entryIdsOf('happenings', {
         old: { occurredAtEntryId: 'ent_9' },
         new: { occurredAtEntryId: 'ent_12' },
       }),
-    ).toBe(true)
+    ).toEqual(['ent_9', 'ent_12'])
     expect(
-      namesAnEntry('happening_awareness', {
-        old: { learnedAtEntryId: null },
-        new: { learnedAtEntryId: 'ent_4' },
+      entryIdsOf('happening_awareness', {
+        old: { learnedAtEntryId: 'ent_4' },
+        new: { learnedAtEntryId: '' },
       }),
-    ).toBe(true)
+    ).toEqual(['ent_4'])
   })
 
-  it('is true for lastSeenAt with an entry on either side, false with none', () => {
+  it("lists lastSeenAt's entry on either side, never its place", () => {
     expect(
-      namesAnEntry('entities', {
-        old: { state: { lastSeenAt: null } },
-        new: { state: { lastSeenAt: { entryId: 'ent_3', locationId: null, worldTime: 1 } } },
+      entryIdsOf('entities', {
+        old: { state: { lastSeenAt: { entryId: 'ent_2', locationId: 'loc_dock', worldTime: 1 } } },
+        new: { state: { lastSeenAt: { entryId: 'ent_3', locationId: 'loc_gate', worldTime: 2 } } },
       }),
-    ).toBe(true)
+    ).toEqual(['ent_2', 'ent_3'])
     expect(
-      namesAnEntry('entities', {
+      entryIdsOf('entities', {
         old: { state: { lastSeenAt: { entryId: 'ent_3', locationId: null, worldTime: 1 } } },
         new: { state: { lastSeenAt: null } },
       }),
-    ).toBe(true)
+    ).toEqual(['ent_3'])
     expect(
-      namesAnEntry('entities', {
+      entryIdsOf('entities', {
         old: { state: { lastSeenAt: null } },
         new: { state: { lastSeenAt: null } },
       }),
-    ).toBe(false)
+    ).toEqual([])
   })
 
-  it('is false for an entry with no entry ref', () => {
+  it('lists nothing for an entry with no entry ref', () => {
     expect(
-      namesAnEntry('threads', { old: { title: 'Get the herd across' }, new: { title: 'Cross' } }),
-    ).toBe(false)
+      entryIdsOf('threads', { old: { title: 'Get the herd across' }, new: { title: 'Cross' } }),
+    ).toEqual([])
     expect(
-      namesAnEntry('entities', {
+      entryIdsOf('entities', {
         old: { state: { faction_id: null } },
         new: { state: { faction_id: 'fac_iron' } },
       }),
-    ).toBe(false)
+    ).toEqual([])
   })
 })

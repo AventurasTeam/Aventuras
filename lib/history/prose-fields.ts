@@ -186,14 +186,19 @@ export function refIdsOf(table: DiffTable, entry: DiffValues): string[] {
   return [...ids]
 }
 
-/** Whether the entry's prose names an entry: an entry ref, or lastSeenAt with an entry. */
-export function namesAnEntry(table: DiffTable, entry: DiffValues): boolean {
-  return diffPaths(entry).some((path) => {
+/** Every entry id the entry's prose names, either side: its entry refs and lastSeenAt's entry. */
+export function entryIdsOf(table: DiffTable, entry: DiffValues): string[] {
+  const ids = new Set<string>()
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value !== '') ids.add(value)
+  }
+  for (const path of diffPaths(entry)) {
     const kind = proseFieldOf(table, path)
-    if (kind === 'entryRef') return true
-    if (kind !== 'lastSeen') return false
-    return [valueAt(entry.old, path), valueAt(entry.new, path)].some(
-      (side) => isJsonObject(side) && typeof side.entryId === 'string',
-    )
-  })
+    for (const side of [entry.old, entry.new]) {
+      const value = valueAt(side, path)
+      if (kind === 'entryRef') add(value)
+      else if (kind === 'lastSeen' && isJsonObject(value)) add(value.entryId)
+    }
+  }
+  return [...ids]
 }

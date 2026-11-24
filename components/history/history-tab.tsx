@@ -5,8 +5,8 @@ import { useEntryIndex } from '@/hooks/use-entry-index'
 import { formatEntryRef } from '@/lib/entry-refs'
 import {
   diffProse,
+  entryIdsOf,
   humanizeDelta,
-  namesAnEntry,
   refIdsOf,
   type DiffOutcome,
   type HistoryOp,
@@ -119,8 +119,8 @@ function refIdsOfRows(
 }
 
 type ProseLookups = Pick<ProseContext, 'liveName' | 'entryLabel'> & {
-  /** The branch's entry index has read; until then a row naming an entry keeps its summary. */
-  entryIndexRead: boolean
+  /** The entry index hasn't read, re-reads, or failed its last read. */
+  entryIndexStale: boolean
 }
 
 // world.md → Change prose: null keeps the field-name summary (pending, failed, gone, no wording).
@@ -128,11 +128,13 @@ function changeProse(
   row: HistoryRow,
   outcome: DiffOutcome | undefined,
   targetTable: HistoryTable,
-  { liveName, entryLabel, entryIndexRead }: ProseLookups,
+  { liveName, entryLabel, entryIndexStale }: ProseLookups,
 ): string | null {
   const target = proseTarget(row, targetTable)
   if (outcome?.kind !== 'entry' || target == null) return null
-  if (!entryIndexRead && namesAnEntry(target.table, outcome.entry)) return null
+  // An entry a stale index lacks may be new, not gone: "Unknown entry" waits for a fresh read.
+  const unheld = entryIdsOf(target.table, outcome.entry).some((id) => entryLabel(id) === null)
+  if (unheld && entryIndexStale) return null
   return diffProse(outcome.entry, { ...target, liveName, entryLabel })
 }
 
@@ -172,7 +174,6 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
   // Read as the other ends are, so a ref the store holds on another branch reads (deleted).
   const refNames = useStoreNames(branchId, refIds)
   const name = historyTargetName(row) ?? t('history:unknownTarget')
-  const entryIndexRead = entryIndex.ready && !entryIndex.failed
   const rows = useMemo(() => {
     const nowMs = Date.now()
     const entryLabel = (entryId: string) => {
@@ -184,7 +185,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
     const lookups: ProseLookups = {
       liveName: (id) => refNames.get(id) ?? null,
       entryLabel,
-      entryIndexRead,
+      entryIndexStale: entryIndex.stale,
     }
     return chunks.rows.map((historyRow) => {
       const view = humanizeDelta(historyRow, {
@@ -201,7 +202,7 @@ function HistoryTabForTarget({ branchId, targetTable, targetId, onOpenEntry }: H
     chunks.rows,
     chunks.names,
     entryIndex.index,
-    entryIndexRead,
+    entryIndex.stale,
     targetTable,
     name,
     storeNames,

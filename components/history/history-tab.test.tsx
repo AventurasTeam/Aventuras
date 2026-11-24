@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { EntryIndexSnapshot } from '@/hooks/use-entry-index'
 import { createQueryClient } from '@/lib/cache'
 import type { CharacterRelationship, Delta, Happening, HappeningAwareness } from '@/lib/db'
 import {
@@ -51,6 +52,8 @@ const entryIndex = vi.hoisted(() => ({
   index: new Map(),
   ready: true,
   failed: false,
+  updating: false,
+  stale: false,
   retry: () => {},
 }))
 vi.mock('@/hooks/use-entry-index', () => ({ useEntryIndex: () => entryIndex }))
@@ -633,11 +636,47 @@ const FACTION_ENTRY = entry(
 const OCCURRED = update('delta_occurred', 'happenings', 'hap_fire', { occurredAtEntryId: null })
 const OCCURRED_ENTRY = entry({ occurredAtEntryId: null }, { occurredAtEntryId: 'entry_12' })
 
+type IndexState = Pick<EntryIndexSnapshot, 'ready' | 'failed' | 'updating' | 'stale'>
+// The states `useEntryIndex` reports, its index empty until it has read.
+const UNREAD: IndexState = { ready: false, failed: false, updating: false, stale: true }
+const REREADING: IndexState = { ready: true, failed: false, updating: true, stale: true }
+const REREAD_FAILED: IndexState = { ready: true, failed: false, updating: false, stale: true }
+const CURRENT: IndexState = { ready: true, failed: false, updating: false, stale: false }
+
+// A fresh map, so the tab sees a changed index as the hook hands one over.
+function showIndex(state: IndexState, ...positions: number[]) {
+  Object.assign(entryIndex, state)
+  entryIndex.index = new Map(
+    positions.map((position) => [
+      `entry_${position}`,
+      { id: `entry_${position}`, position, kind: 'ai_reply', chapterId: null, excerpt: '' },
+    ]),
+  )
+}
+
+// Occurred at: none → entry_12, its walk landed.
+async function renderOccurred() {
+  const client = createQueryClient()
+  const walk = vi.fn<DiffWalk>().mockResolvedValue(walked({ [OCCURRED.id]: OCCURRED_ENTRY }))
+  const tab = renderTab(
+    loader(() => [own(OCCURRED)]),
+    'hap_fire',
+    'happenings',
+    { diffs: createDiffCache({ walk }), client },
+  )
+  await waitFor(() =>
+    expect(client.getQueryData(['diff', BRANCH, OCCURRED.id])).toEqual({
+      kind: 'entry',
+      entry: OCCURRED_ENTRY,
+    }),
+  )
+  await settle()
+  return tab
+}
+
 describe('HistoryTab change prose', () => {
   afterEach(() => {
-    entryIndex.ready = true
-    entryIndex.failed = false
-    entryIndex.index.clear()
+    showIndex(CURRENT)
   })
 
   it('shows the field-name summary first, then the prose once the walk resolves', async () => {
@@ -904,51 +943,44 @@ describe('HistoryTab change prose', () => {
     )
   })
 
-  it('holds an entry-ref row on its summary until the entry index has read', async () => {
-    entryIndex.index.set('entry_12', {
-      id: 'entry_12',
-      position: 12,
-      kind: 'ai_reply',
-      chapterId: null,
-      excerpt: '',
-    })
-    entryIndex.ready = false
-    const client = createQueryClient()
-    const walk = vi.fn<DiffWalk>().mockResolvedValue(walked({ [OCCURRED.id]: OCCURRED_ENTRY }))
-    const tab = renderTab(
-      loader(() => [own(OCCURRED)]),
-      'hap_fire',
-      'happenings',
-      { diffs: createDiffCache({ walk }), client },
-    )
-    await waitFor(() =>
-      expect(client.getQueryData(['diff', BRANCH, OCCURRED.id])).toEqual({
-        kind: 'entry',
-        entry: OCCURRED_ENTRY,
-      }),
-    )
+  it('holds an entry-ref row on its summary until the entry index has read, and after a failed re-read that lacks its entry', async () => {
+    showIndex(UNREAD)
+    const tab = await renderOccurred()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Occurred at')
+
+    showIndex(REREAD_FAILED, 11)
+    tab.rerenderTab()
     await settle()
     expect(view.props?.rows[0]?.summary).toBe('Modified Occurred at')
 
-    entryIndex.failed = true
-    tab.rerenderTab()
-    expect(view.props?.rows[0]?.summary).toBe('Modified Occurred at')
-
-    entryIndex.ready = true
-    entryIndex.failed = false
+    showIndex(CURRENT, 12, 11)
     tab.rerenderTab()
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Occurred at: none → entry #12'))
   })
 
+  it('keeps the prose of a row whose entry the index holds while the index re-reads', async () => {
+    showIndex(REREADING, 12, 11)
+    await renderOccurred()
+    await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Occurred at: none → entry #12'))
+  })
+
+  it('holds a row naming an entry the index lacks on its summary while the index re-reads', async () => {
+    showIndex(REREADING, 11)
+    await renderOccurred()
+    expect(view.props?.rows[0]?.summary).toBe('Modified Occurred at')
+    expect([...view.summaries]).toEqual(['Modified Occurred at'])
+  })
+
+  it('reads Unknown entry for an entry the index lacks once the index is current', async () => {
+    showIndex(CURRENT, 11)
+    await renderOccurred()
+    await waitFor(() =>
+      expect(view.props?.rows[0]?.summary).toBe('Occurred at: none → Unknown entry'),
+    )
+  })
+
   it("holds a link row's entry ref on its summary until the entry index has read", async () => {
-    entryIndex.index.set('entry_12', {
-      id: 'entry_12',
-      position: 12,
-      kind: 'ai_reply',
-      chapterId: null,
-      excerpt: '',
-    })
-    entryIndex.ready = false
+    showIndex(UNREAD)
     const learned = update('delta_learned', 'happening_awareness', 'haw_1', {
       learnedAtEntryId: null,
     })
@@ -981,7 +1013,7 @@ describe('HistoryTab change prose', () => {
     await settle()
     expect(view.props?.rows[0]?.summary).toBe('Modified Learned at')
 
-    entryIndex.ready = true
+    showIndex(CURRENT, 12)
     tab.rerenderTab()
     await waitFor(() => expect(view.props?.rows[0]?.summary).toBe('Learned at: none → entry #12'))
   })
