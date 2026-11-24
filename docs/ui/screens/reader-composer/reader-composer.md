@@ -570,6 +570,14 @@ raises its own warning, such as a re-run undone with no journal to
 write back, shows that warning instead; it stays for a re-run whose
 close turned unrestorable after its confirm read.
 
+The notice goes with the reader that posted it: a
+[branch switch](./branch-navigator/branch-navigator.md#per-row-anatomy)
+or Back out of the reader dismisses it, so its Redo never acts on a
+reader that is gone. An undo or redo that settles after its reader has
+gone shows nothing, its refusal logged only, except a re-run's undo
+whose earlier close couldn't be restored: that warning still shows,
+since it reports a change the user didn't name.
+
 A redo shows `Redid <target>`, with no action. Redo never confirms,
 since it restores what the user just undid and the undo's notice named
 it. Refusals are otherwise unchanged: the menu toasts them, and the

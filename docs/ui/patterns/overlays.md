@@ -53,12 +53,17 @@ Used by:
 - [App Settings · Context window](../screens/app-settings/app-settings.md#context-window):
   a Popover anchored on a text model row's window chip, a bottom
   Sheet on phone, holding the figure's number input.
+- [Branch navigator](../screens/reader-composer/branch-navigator/branch-navigator.md#navigator--popover-desktop):
+  a Popover anchored on the reader's branch chip, or where it would
+  sit on a single-branch story, on desktop and tablet; a short bottom
+  Sheet on phone. It holds the branch rows and their inline rename
+  input
+  ([Mobile expression](../screens/reader-composer/branch-navigator/branch-navigator.md#mobile-expression)).
 
 The Used-by list grows as primitives and patterns adopt the
-overlays. Future consumers will include the Branch chip popover,
-the Time chip popover, the Chapter chip popover, the Calendar
-picker, the Raw JSON viewer, and the generation-in-flight pill
-expansion.
+overlays. Future consumers will include the Time chip popover, the
+Chapter chip popover, the Calendar picker, the Raw JSON viewer, and
+the generation-in-flight pill expansion.
 
 ---
 

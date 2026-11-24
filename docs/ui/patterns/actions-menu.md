@@ -191,7 +191,10 @@ navigation is the reader's alone
 ([`principles.md → Top-bar design rule`](../principles.md#top-bar-design-rule)).
 Never in-flight-gated: it only opens the navigator, which pauses
 switching and hides delete itself. It disables, with the
-`Loading story…` reason, only while the reader route hydrates.
+`Loading story…` reason, only while the reader route hydrates. On
+phone the navigator's Sheet opens once the menu's Sheet has finished
+leaving, as a row flagged `opensSheet` waits
+([`searchable-overlay-list.md → Filter, keyboard, focus & lifecycle`](./searchable-overlay-list.md#filter-keyboard-focus--lifecycle)).
 
 ## Surface coverage
 

@@ -92,7 +92,8 @@ navigator open again meanwhile, its paused rows. A press that races
 past the paused rows into a closed gate leaves the reader where it was
 and toasts the gate's reason, the copy its disabled controls show. A
 switch that fails, because the branch is gone, its load or the story
-list's re-read fails, or the screens it would replace refuse to close,
+list's re-read fails, the screens it would replace refuse to close, or
+the branch pointer's write or the check that the branch exists throws,
 toasts `Couldn't switch branches.` and leaves the reader where it was.
 An abandoned switch shows nothing: the user left. A press while a
 switch runs does nothing.
@@ -203,9 +204,10 @@ fixes or cancels). Same uniqueness behavior as creation
 The saved name is trimmed at both ends; spacing inside it stays. While
 the write runs the input holds: no further typing and no second save.
 A failed write toasts `Couldn't rename the branch.` and the row shows
-the stored name. Closing the navigator while a rename is open counts
-as a click outside: a valid changed name saves, an empty one is
-dropped.
+the stored name. Closing the navigator while a rename is open saves a
+valid changed name. An empty one is dropped with the rename rather
+than held as a click outside holds it, since the input closes with the
+navigator.
 
 Rename is an unlogged write. `branches` sits above the
 [delta log](../../../../data-model.md#entry-mutability--rollback), so a
