@@ -1056,19 +1056,17 @@ describe('branch scope', () => {
   const onFork = (ctx: Harness['ctx'], action: PipelineAction, actionId: string) =>
     applyDeltaAction({ action, actionId, branchId: 'br_2' }, ctx)
 
-  it.each<[string, PipelineAction, string]>([
-    [
-      'createHappening',
-      {
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
         kind: 'createHappening',
         source: 'ai_classifier',
         payload: { entry: { ...WRITTEN, id: 'hap_9', branchId: 'br_1' } },
       },
-      'branch mismatch: delta br_2 vs entry br_1',
-    ],
-    [
-      'updateHappening',
-      {
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
         kind: 'updateHappening',
         source: 'user_edit',
         payload: {
@@ -1078,20 +1076,21 @@ describe('branch scope', () => {
           proseEntryId: null,
         },
       },
-      TARGET_MISMATCH,
-    ],
-    [
-      'deleteHappening',
-      {
+      reason: TARGET_MISMATCH,
+    },
+    {
+      action: {
         kind: 'deleteHappening',
         source: 'periodic_classifier',
         payload: { branchId: 'br_1', id: 'hap_1' },
       },
-      TARGET_MISMATCH,
-    ],
-  ])(
+      reason: TARGET_MISMATCH,
+    },
+  ]
+
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
     '%s payload: names the sibling branch and is refused, both rows unchanged',
-    async (_kind, action, reason) => {
+    async (_kind, { action, reason }) => {
       const { db, ctx } = await twoBranches({ written: true, children: false })
       expect(await onFork(ctx, action, 'act_p')).toEqual({ status: 'rejected', reason })
       expect(await allHappenings(db)).toEqual([SIBLING, WRITTEN])

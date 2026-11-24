@@ -635,42 +635,44 @@ describe('branch scope', () => {
   })
 
   // With the check gone, the write lands on the sibling branch.
-  it.each<[string, PipelineAction, string]>([
-    [
-      'createHappeningInvolvement',
-      {
+  const PAYLOAD_CASES: { action: PipelineAction; reason: string }[] = [
+    {
+      action: {
         kind: 'createHappeningInvolvement',
         source: 'ai_classifier',
         payload: { entry: { ...WRITTEN, id: 'hinv_9', branchId: 'br_1', role: 'scout' } },
       },
-      'branch mismatch: delta br_2 vs entry br_1',
-    ],
-    [
-      'updateHappeningInvolvement',
-      {
+      reason: 'branch mismatch: delta br_2 vs entry br_1',
+    },
+    {
+      action: {
         kind: 'updateHappeningInvolvement',
         source: 'user_edit',
         payload: { branchId: 'br_1', id: 'hinv_1', patch: { role: 'scout' } },
       },
-      'branch mismatch: delta br_2 vs target br_1',
-    ],
-    [
-      'deleteHappeningInvolvement',
-      {
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+    {
+      action: {
         kind: 'deleteHappeningInvolvement',
         source: 'user_edit',
         payload: { branchId: 'br_1', id: 'hinv_1' },
       },
-      'branch mismatch: delta br_2 vs target br_1',
-    ],
-  ])('%s payload: refuses a payload naming the sibling branch', async (_kind, action, reason) => {
-    const { db, ctx } = await twoBranches()
+      reason: 'branch mismatch: delta br_2 vs target br_1',
+    },
+  ]
 
-    expect(await onWritten(ctx, action, 'act_payload')).toEqual({ status: 'rejected', reason })
+  it.each(PAYLOAD_CASES.map((c) => [c.action.kind, c] as const))(
+    '%s payload: refuses a payload naming the sibling branch',
+    async (_kind, { action, reason }) => {
+      const { db, ctx } = await twoBranches()
 
-    expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
-    expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual(WRITTEN)
-    expect(await db.select().from(happeningInvolvements)).toHaveLength(2)
-    expect(await loggedBy(db, 'act_payload')).toEqual([])
-  })
+      expect(await onWritten(ctx, action, 'act_payload')).toEqual({ status: 'rejected', reason })
+
+      expect(await involvementOn(db, 'br_1', 'hinv_1')).toEqual(SIBLING)
+      expect(await involvementOn(db, 'br_2', 'hinv_1')).toEqual(WRITTEN)
+      expect(await db.select().from(happeningInvolvements)).toHaveLength(2)
+      expect(await loggedBy(db, 'act_payload')).toEqual([])
+    },
+  )
 })

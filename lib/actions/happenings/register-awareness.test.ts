@@ -1990,58 +1990,51 @@ describe('branch scope', () => {
 
   // The payload names the sibling, a valid target there (its pin is the user's, so a carry lands):
   // with the check gone, the write lands on it.
-  it.each<[string, PipelineAction]>([
-    ['upsertHappeningAwareness', learn(BRANCH)],
-    [
-      'carryAwarenessPin',
-      {
-        kind: 'carryAwarenessPin',
-        source: 'user_edit',
-        payload: { branchId: BRANCH, id: 'haw_kept', pinFrom: 'haw_1' },
-      },
-    ],
-    [
-      'deleteHappeningAwareness',
-      {
-        kind: 'deleteHappeningAwareness',
-        source: 'user_edit',
-        payload: { branchId: BRANCH, id: 'haw_1' },
-      },
-    ],
-    [
-      'bumpAwarenessRetrieval',
-      {
-        kind: 'bumpAwarenessRetrieval',
-        source: 'ai_classifier',
-        payload: { branchId: BRANCH, id: 'haw_1', priorCount: 9 },
-      },
-    ],
-    [
-      'resetAwarenessRetrieval',
-      {
-        kind: 'resetAwarenessRetrieval',
-        source: 'chapter_close',
-        payload: { branchId: BRANCH, id: 'haw_1', priorCount: 9 },
-      },
-    ],
-  ])('%s payload: refuses a payload naming the sibling branch', async (_kind, action) => {
-    const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT, WRITTEN, WRITTEN_KEPT])
-    expect(
-      (
-        await applyDeltaAction(
-          { action: pin(BRANCH, 0.6), actionId: 'act_pin', branchId: BRANCH },
-          ctx,
-        )
-      ).status,
-    ).toBe('ok')
-    const before = await allRows(db)
+  const PAYLOAD_CASES: PipelineAction[] = [
+    learn(BRANCH),
+    {
+      kind: 'carryAwarenessPin',
+      source: 'user_edit',
+      payload: { branchId: BRANCH, id: 'haw_kept', pinFrom: 'haw_1' },
+    },
+    {
+      kind: 'deleteHappeningAwareness',
+      source: 'user_edit',
+      payload: { branchId: BRANCH, id: 'haw_1' },
+    },
+    {
+      kind: 'bumpAwarenessRetrieval',
+      source: 'ai_classifier',
+      payload: { branchId: BRANCH, id: 'haw_1', priorCount: 9 },
+    },
+    {
+      kind: 'resetAwarenessRetrieval',
+      source: 'chapter_close',
+      payload: { branchId: BRANCH, id: 'haw_1', priorCount: 9 },
+    },
+  ]
 
-    expect(await onWritten(ctx, action, 'act_payload')).toEqual({
-      status: 'rejected',
-      reason: 'branch mismatch: delta br_2 vs target br_1',
-    })
+  it.each(PAYLOAD_CASES.map((a) => [a.kind, a] as const))(
+    '%s payload: refuses a payload naming the sibling branch',
+    async (_kind, action) => {
+      const { db, ctx } = await twoBranches([SIBLING, SIBLING_KEPT, WRITTEN, WRITTEN_KEPT])
+      expect(
+        (
+          await applyDeltaAction(
+            { action: pin(BRANCH, 0.6), actionId: 'act_pin', branchId: BRANCH },
+            ctx,
+          )
+        ).status,
+      ).toBe('ok')
+      const before = await allRows(db)
 
-    expect(await allRows(db)).toEqual(before)
-    expect(await loggedBy(db, 'act_payload')).toEqual([])
-  })
+      expect(await onWritten(ctx, action, 'act_payload')).toEqual({
+        status: 'rejected',
+        reason: 'branch mismatch: delta br_2 vs target br_1',
+      })
+
+      expect(await allRows(db)).toEqual(before)
+      expect(await loggedBy(db, 'act_payload')).toEqual([])
+    },
+  )
 })
