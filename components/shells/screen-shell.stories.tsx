@@ -189,6 +189,28 @@ export const StorySettingsDisabled: Story = {
   },
 }
 
+export const StorySettingsEnabled: Story = {
+  args: { onOpenStorySettings: fn() },
+  render: ({ onOpenStorySettings }) => (
+    <ScreenShell
+      variant="in-story"
+      title={<Text size="base">Aria&apos;s Descent</Text>}
+      chapterProgress={progressAt(35)}
+      onBack={noop}
+      onOpenStorySettings={onOpenStorySettings}
+      onOpenActions={noop}
+    >
+      <BodyPlaceholder label="in-story — ⛭ live with no reason" />
+    </ScreenShell>
+  ),
+  play: async ({ args }) => {
+    const settings = await screen.findByRole('button', { name: t('chrome.storySettings') })
+    await expect(settings).not.toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(settings)
+    await expect(args.onOpenStorySettings).toHaveBeenCalledTimes(1)
+  },
+}
+
 export const InStoryReader: Story = {
   render: () => (
     <View className="gap-2">
