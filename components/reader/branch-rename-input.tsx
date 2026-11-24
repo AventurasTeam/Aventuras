@@ -12,6 +12,7 @@ export type BranchRenameInputProps = {
   onSave: (name: string) => Promise<unknown>
   /** Collapse back to the row: after a save settles, a cancel, or an unchanged commit. */
   onDone: () => void
+  className?: string
 }
 
 type Phase = 'editing' | 'saving' | 'settled'
@@ -31,7 +32,12 @@ const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
   ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
 /** A branch row's name as an input: Enter or a click outside saves a trimmed name, Esc cancels. */
-export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputProps): ReactElement {
+export function BranchRenameInput({
+  name,
+  onSave,
+  onDone,
+  className,
+}: BranchRenameInputProps): ReactElement {
   const [draft, setDraft] = useState(name)
   const [invalid, setInvalid] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -117,6 +123,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
   return (
     <Input
       size="sm"
+      className={className}
       value={draft}
       onChangeText={change}
       onSubmitEditing={commit}

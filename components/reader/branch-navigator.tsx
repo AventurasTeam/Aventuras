@@ -45,7 +45,7 @@ export type BranchNavigatorProps = {
   ref?: Ref<BranchNavigatorHandle>
 }
 
-type Arm = { root: string; row: string; list: ViewStyle }
+type Arm = { root: string; row: string; list: ViewStyle; renameInput?: string }
 
 // A list needs a bound to scroll: 320 on the Popover, which shrinks it in a short window; the
 // Sheet's list takes what its detent leaves over.
@@ -57,7 +57,13 @@ const POPOVER_ARM: Arm = {
 // rn-primitives' Popover content claims the touch responder, which stalls a plain ScrollView on
 // Android; gesture-handler's doesn't use the responder system.
 const POPOVER_SCROLL = GestureScrollView as ScrollComponent
-const SHEET_ARM: Arm = { root: 'flex-1 gap-2', row: 'min-h-control-lg', list: { flex: 1 } }
+// touch.md: the rename field keeps the phone tap floor whatever the density.
+const SHEET_ARM: Arm = {
+  root: 'flex-1 gap-2',
+  row: 'min-h-control-lg',
+  list: { flex: 1 },
+  renameInput: 'min-h-touch',
+}
 
 type RenameEdit = { id: string; session: number }
 
@@ -289,6 +295,7 @@ function NavigatorBody({
             paused={paused}
             renaming={row.id === renaming.editingId}
             className={arm.row}
+            renameInputClassName={arm.renameInput}
             onPress={() => press(row.id)}
             onStartRename={() => renaming.start(row.id)}
             onRename={(name) => onRename(row.id, name)}
@@ -307,6 +314,7 @@ type NavigatorRowProps = {
   paused: boolean
   renaming: boolean
   className: string
+  renameInputClassName?: string
   onPress: () => void
   onStartRename: () => void
   onRename: (name: string) => Promise<unknown>
@@ -320,6 +328,7 @@ function NavigatorRow({
   paused,
   renaming,
   className,
+  renameInputClassName,
   onPress,
   onStartRename,
   onRename,
@@ -335,7 +344,12 @@ function NavigatorRow({
       >
         <BranchMarker current={current} />
         <View className="min-w-0 flex-1">
-          <BranchRenameInput name={row.name} onSave={onRename} onDone={onRenameDone} />
+          <BranchRenameInput
+            name={row.name}
+            onSave={onRename}
+            onDone={onRenameDone}
+            className={renameInputClassName}
+          />
         </View>
       </View>
     )
