@@ -56,6 +56,8 @@ const SENTENCES = {
     deleted: 'reader:undo.menu.deleted',
     edited: 'reader:undo.menu.edited',
     rows: 'reader:undo.menu.rows',
+    leadSet: 'reader:undo.menu.leadSet',
+    leadUnset: 'reader:undo.menu.leadUnset',
     latest: 'reader:undo.menu.latest',
   },
   title: {
@@ -66,6 +68,8 @@ const SENTENCES = {
     deleted: 'reader:undo.title.deleted',
     edited: 'reader:undo.title.edited',
     rows: 'reader:undo.title.rows',
+    leadSet: 'reader:undo.title.leadSet',
+    leadUnset: 'reader:undo.title.leadUnset',
     latest: 'reader:undo.title.latest',
   },
   notice: {
@@ -81,6 +85,8 @@ const SENTENCES = {
     deleted: 'reader:undo.notice.deleted',
     edited: 'reader:undo.notice.edited',
     rows: 'reader:undo.notice.rows',
+    leadSet: 'reader:undo.notice.leadSet',
+    leadUnset: 'reader:undo.notice.leadUnset',
     latest: 'reader:undo.notice.latest',
   },
   redoMenu: {
@@ -95,6 +101,8 @@ const SENTENCES = {
     deleted: 'reader:undo.redoMenu.deleted',
     edited: 'reader:undo.redoMenu.edited',
     rows: 'reader:undo.redoMenu.rows',
+    leadSet: 'reader:undo.redoMenu.leadSet',
+    leadUnset: 'reader:undo.redoMenu.leadUnset',
     latest: 'reader:undo.redoMenu.latest',
   },
   redoNotice: {
@@ -109,6 +117,8 @@ const SENTENCES = {
     deleted: 'reader:undo.redoNotice.deleted',
     edited: 'reader:undo.redoNotice.edited',
     rows: 'reader:undo.redoNotice.rows',
+    leadSet: 'reader:undo.redoNotice.leadSet',
+    leadUnset: 'reader:undo.redoNotice.leadUnset',
     latest: 'reader:undo.redoNotice.latest',
   },
 } as const
@@ -149,6 +159,11 @@ function phraseOf(description: UndoDescription, names: UndoNames): Phrase {
     case 'rows': {
       const name = names.rowName(description.first)
       return name == null ? null : { key: 'rows', params: { name, count: description.more } }
+    }
+    case 'leadSet':
+    case 'leadUnset': {
+      const name = names.rowName(description.row)
+      return name == null ? null : { key: description.kind, params: { name } }
     }
     case 'latest':
       return { key: 'latest', params: {} }

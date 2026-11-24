@@ -384,6 +384,8 @@
       "deleted": "Undo deleting {{name}}…",
       "edited": "Undo your edit to {{name}}…",
       "rows": "Undo your changes to {{name}} and {{count}} more…",
+      "leadSet": "Undo making {{name}} the lead…",
+      "leadUnset": "Undo removing {{name}} as lead…",
       "latest": "Undo the latest change…"
     },
     "title": {
@@ -394,6 +396,8 @@
       "deleted": "Undo deleting {{name}}?",
       "edited": "Undo your edit to {{name}}?",
       "rows": "Undo your changes to {{name}} and {{count}} more?",
+      "leadSet": "Undo making {{name}} the lead?",
+      "leadUnset": "Undo removing {{name}} as lead?",
       "latest": "Undo the latest change?"
     },
     "notice": {
@@ -409,6 +413,8 @@
       "deleted": "Undid deleting {{name}}",
       "edited": "Undid your edit to {{name}}",
       "rows": "Undid your changes to {{name}} and {{count}} more",
+      "leadSet": "Undid making {{name}} the lead",
+      "leadUnset": "Undid removing {{name}} as lead",
       "latest": "Undid the latest change"
     },
     "redoMenu": {
@@ -423,6 +429,8 @@
       "deleted": "Redo deleting {{name}}",
       "edited": "Redo your edit to {{name}}",
       "rows": "Redo your changes to {{name}} and {{count}} more",
+      "leadSet": "Redo making {{name}} the lead",
+      "leadUnset": "Redo removing {{name}} as lead",
       "latest": "Redo the latest change"
     },
     "redoNotice": {
@@ -437,6 +445,8 @@
       "deleted": "Redid deleting {{name}}",
       "edited": "Redid your edit to {{name}}",
       "rows": "Redid your changes to {{name}} and {{count}} more",
+      "leadSet": "Redid making {{name}} the lead",
+      "leadUnset": "Redid removing {{name}} as lead",
       "latest": "Redid the latest change"
     },
     "chapterName": "chapter {{number}}",
