@@ -3,7 +3,6 @@ import { sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  branches,
   deltas,
   entities,
   sourceHash,
@@ -171,15 +170,8 @@ function parentState(): ParentState {
 
 type Planned = { set: ReversalSet; plan: ReversePlan }
 
-// As a fork plans: the child's branches row alone, then the plan read on the parent.
+// As a fork plans: before the child exists, so the plan can read nothing but the parent.
 async function planOnParent(actionIds: readonly string[]): Promise<Planned> {
-  await ctx.db.insert(branches).values({
-    id: CHILD,
-    storyId: fx.storyId,
-    parentBranchId: PARENT,
-    name: CHILD,
-    createdAt: 2,
-  })
   const set = await selectReversalSet(ctx, {
     branchId: PARENT,
     target: await groupOn(PARENT, actionIds),
@@ -211,7 +203,7 @@ function expectChildIsSelf(before: ParentState): void {
   expect(parentVectorIds()).toEqual(before.vectorIds)
 }
 
-// D1: no op the plan emits binds the parent, so none can write it.
+// C1: no op the plan emits binds the parent, so none can write it.
 const boundValues = (plan: ReversePlan): unknown[] =>
   [...plan.ops, ...plan.pruneOps, ...plan.journalOps].flatMap((op) => op.params)
 

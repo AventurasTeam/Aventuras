@@ -166,7 +166,7 @@ describe('a fork reaches every restore path', () => {
     await landWrites(w, { actionId: 'act_fork_set_kind', entryId: entryAt(7) }, [
       view(KAEL, MIRA, 'b'),
     ])
-    // Anchored before the fork entry, so the window spares it; an unanchored write would go.
+    // Anchored on the fork entry, before B, so the window spares it; an unanchored write would go.
     await landWrites(w, { actionId: 'act_fork_clear_inverse', entryId: entryAt(3) }, [
       view(MIRA, KAEL, null),
     ])
@@ -468,7 +468,7 @@ describe('a fork across a close, its assets and its re-run', () => {
     expect(rowOn(w, 'chapters', w.parentId, CHAPTER)).toBeDefined()
   })
 
-  it('keeps the entry_assets row on a kept entry and drops the one on a removed entry', async () => {
+  it('drops the entry_assets row the window created and keeps the one created before B', async () => {
     const w = await openForkWorld(1)
     await w.ctx.db.insert(assets).values({
       id: 'asset_fork_map',
@@ -495,6 +495,7 @@ describe('a fork across a close, its assets and its re-run', () => {
       assetOn(entryAt(3), 'ea_fork_kept'),
     ])
     await appendTurns(w, 2)
+    // Unanchored and logged after B, so the window takes it whichever entry its row is on.
     await landWrites(w, { actionId: 'act_fork_asset', entryId: null }, [
       assetOn(entryAt(5), 'ea_fork_gone'),
     ])

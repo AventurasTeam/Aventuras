@@ -483,7 +483,7 @@ function keepsNothing(entry: TableEntry, row: Record<string, unknown>): boolean 
 type UndoWalk = {
   readonly ctx: DbCtx
   readonly set: ReversalSet
-  /** The set's branch: every row, chain and payload the walk reads. */
+  /** The set's branch, where `rowTargetOf` reads each row; the other reads take `set.branchId`. */
   readonly readBranchId: string
   /** Every op's branch: the set's own, or a fork's new branch (C1). */
   readonly writeBranchId: string
