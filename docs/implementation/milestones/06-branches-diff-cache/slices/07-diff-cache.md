@@ -762,7 +762,8 @@ invalidation, and, if the E2E has a survivor, its registration check.
   doesn't hold (`entryIdsOf`, which replaced `namesAnEntry`) keeps the
   field-name summary while the index is stale, a row whose entries it
   holds keeps its prose, and a missing entry reads "Unknown entry" once
-  the index is fresh.
+  the index is fresh. The index re-reads on every turn, so a row naming
+  a deleted entry shows the summary while each re-read runs.
 - **A wrong-typed value** (developer decision, slice review R2: b,
   2026-11-24). `diffProse` tells a value that isn't its field's type
   from a path with no wording, and hands the first such path to its

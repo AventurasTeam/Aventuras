@@ -151,7 +151,7 @@ function changeProse(
   })
 }
 
-// Once per walk result, as a failed walk warns: rows re-render and remount on the cache's entry.
+// Keyed on the cache's own entry: one warn per walk result, through re-renders and remounts.
 const warnedMistyped = new WeakSet<DiffCacheEntry>()
 
 function useMistypedWarnings(found: readonly MistypedRow[]): void {
