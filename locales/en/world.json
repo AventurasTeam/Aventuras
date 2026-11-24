@@ -181,7 +181,9 @@
     },
     "done": "Deleted {{name}}.",
     "failed": "Couldn't delete that.",
-    "inFlight": "Couldn't delete while generation is in flight."
+    "inFlight": "Couldn't delete while generation is in flight.",
+    "leadNeeded": "{{name}} is this branch's lead. The story can't continue here until you set another.",
+    "leadNone": "This branch will have no lead."
   },
   "fields": {
     "name": "Name",

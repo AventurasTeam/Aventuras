@@ -89,6 +89,7 @@ import { toast } from '@/lib/toast'
 import {
   leadLabelFor,
   nameTakenByOther,
+  needsLead,
   resolveLead,
   type EntitySaveInput,
   type LoreDraft,
@@ -218,7 +219,8 @@ export default function WorldRoute() {
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
   useOverlaySurface(guard)
-  const worldDelete = useWorldDelete(branchId, ctx, guard)
+  const leadNeeded = open != null && needsLead(open.definition.mode, open.definition.narration)
+  const worldDelete = useWorldDelete(branchId, ctx, guard, leadNeeded)
   const cancelDelete = worldDelete.cancel
   // A pending confirm's counts go stale off-screen (another surface can delete/rename the row).
   useEffect(() => {
