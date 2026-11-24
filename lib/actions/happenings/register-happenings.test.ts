@@ -991,13 +991,7 @@ describe('branch scope', () => {
   }
   const TARGET_MISMATCH = 'branch mismatch: delta br_2 vs target br_1'
 
-  async function twoBranches({
-    written,
-    children,
-  }: {
-    written: boolean
-    children: boolean
-  }): Promise<Harness> {
+  async function twoBranches({ written, children }: { written: boolean; children: boolean }) {
     const harness = await setup()
     const { db } = harness
     await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })

@@ -44,7 +44,7 @@ import { reverseReplayDeltas } from '../delta/reverse-replay'
 import { USER_EDITED_SINCE_PROSE } from '../delta/user-precedence'
 import { updateStoryEntryContent } from '../story-entries/operational'
 import { registerStoryEntries } from '../story-entries/register'
-import type { DbCtx, MutationResult, PipelineAction } from '../types'
+import type { PipelineAction } from '../types'
 
 async function setup() {
   __resetRegistry()
@@ -3369,12 +3369,8 @@ describe('branch scope', () => {
     return seeded
   }
 
-  const applyOn = (
-    ctx: DbCtx,
-    branchId: BranchId,
-    action: PipelineAction,
-    actionId: string,
-  ): Promise<MutationResult> => applyDeltaAction({ action, actionId, branchId }, ctx)
+  const applyOn = (ctx: Ctx, branchId: BranchId, action: PipelineAction, actionId: string) =>
+    applyDeltaAction({ action, actionId, branchId }, ctx)
 
   async function rowOn(db: StateDb, branchId: BranchId, id: string): Promise<Entity | undefined> {
     const [row] = await db

@@ -668,7 +668,7 @@ describe('branch scope', () => {
     updatedAt: 1,
   }
 
-  async function twoBranches(written: CharacterRelationship | null): Promise<Harness> {
+  async function twoBranches(written: CharacterRelationship | null) {
     const harness = await setup()
     const { db } = harness
     await db.insert(branches).values({ id: 'br_2', storyId: 'story_1', name: 'fork', createdAt: 1 })
