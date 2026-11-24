@@ -11,7 +11,7 @@ type FakeStack = {
   routeNames: string[]
   routes: StackRoute[]
   type: 'stack'
-  stale: false
+  stale?: boolean
 }
 
 // Stubbed: the real package reaches react-native's Flow source, which the unit bundler can't parse.
@@ -85,6 +85,7 @@ const timelineA: StackRoute = {
   params: { branchId: 'br_a' },
 }
 const freshReaderB = { name: 'reader-composer/[branchId]', params: { branchId: 'br_b' } }
+const freshReaderC = { name: 'reader-composer/[branchId]', params: { branchId: 'br_c' } }
 
 const stackOf = (routes: StackRoute[]): FakeStack => ({
   key: 'stack-k',
@@ -133,6 +134,10 @@ describe('storyStackRoutes', () => {
 
   it('starts a keyless List under the reader, from a cold [Reader(A)]', () => {
     expect(storyStackRoutes([readerA], 'br_b')).toStrictEqual([{ name: 'index' }, freshReaderB])
+  })
+
+  it('puts the branch it is given in the reader, from [List, Reader(B)] to C', () => {
+    expect(storyStackRoutes([list, readerB], 'br_c')).toStrictEqual([list, freshReaderC])
   })
 })
 
@@ -211,6 +216,30 @@ describe('useReplaceStoryStack', () => {
     const { result } = renderHook(() => useReplaceStoryStack())
     nav.state.stack = stackOf([list, readerA])
     nav.state.ready = false
+
+    expect(result.current('br_b')).toBe(false)
+
+    expect(nav.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('lands on the branch it is given, from [List, Reader(B)] to C', () => {
+    const { result } = renderHook(() => useReplaceStoryStack())
+    nav.state.stack = stackOf([list, readerB])
+
+    expect(result.current('br_c')).toBe(true)
+
+    expect(nav.state.stack?.routes).toEqual([
+      list,
+      { ...freshReaderC, key: 'reader-composer/[branchId]-fresh' },
+    ])
+  })
+
+  it.each([
+    ['stale', true],
+    ['partial, with no stale flag', undefined],
+  ])('answers false and dispatches nothing while the app Stack state is %s', (_label, stale) => {
+    const { result } = renderHook(() => useReplaceStoryStack())
+    nav.state.stack = { ...stackOf([list, readerA]), stale }
 
     expect(result.current('br_b')).toBe(false)
 
