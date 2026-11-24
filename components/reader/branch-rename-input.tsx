@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Platform, type TextInputKeyPressEvent } from 'react-native'
 
 import { Input } from '@/components/ui/input'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 
 export type BranchRenameInputProps = {
   /** The stored name, prefilled. */
   name: string
-  /** The trimmed, non-empty, changed name; resolves once the write settles. */
+  /** The trimmed, non-empty, changed name; resolves once the write settles. A rejection is logged. */
   onSave: (name: string) => Promise<unknown>
   /** Collapse back to the row: after a save settles, a cancel, or an unchanged commit. */
   onDone: () => void
@@ -18,6 +19,12 @@ type Phase = 'editing' | 'saving' | 'settled'
 // RN-Web's own submit guard reads both signals, and runs after this handler; 229 is the key code
 // an IME's confirming Enter can carry with isComposing already false.
 const IME_KEY_CODE = 229
+
+// The caller's save may reject; the edit is over either way, so the failure is only logged.
+const logRejection = (err: unknown) =>
+  logger.error('reader.branch_rename_failed', {
+    error: err instanceof Error ? err.message : String(err),
+  })
 
 const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
   ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
@@ -45,7 +52,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
       const next = draftRef.current.trim()
       if (next === '' || next === latest.current.name.trim()) return
       phase.current = 'saving'
-      void latest.current.onSave(next)
+      void latest.current.onSave(next).catch(logRejection)
     },
     [],
   )
@@ -71,7 +78,7 @@ export function BranchRenameInput({ name, onSave, onDone }: BranchRenameInputPro
     }
     phase.current = 'saving'
     setSaving(true)
-    void onSave(next).finally(onDone)
+    void onSave(next).catch(logRejection).finally(onDone)
   }
 
   const cancel = () => {

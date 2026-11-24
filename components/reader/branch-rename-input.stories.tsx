@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { Pressable, useWindowDimensions, View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { logger } from '@/lib/diagnostics'
 
 import { BranchRenameInput, type BranchRenameInputProps } from './branch-rename-input'
 
@@ -298,6 +299,66 @@ export const EscMarksTheKeyHandled: Story = {
     }
     expect(seen).toHaveLength(1)
     expect(seen[0].defaultPrevented).toBe(true)
+  },
+}
+
+const failingSave = () => fn(() => Promise.reject(new Error('disk busy')))
+
+/** Counts rejections nothing handled while `run` and a settle pause go by. */
+async function unhandledRejectionsDuring(run: () => Promise<void>): Promise<number> {
+  let count = 0
+  const onRejection = (event: PromiseRejectionEvent) => {
+    event.preventDefault()
+    count += 1
+  }
+  window.addEventListener('unhandledrejection', onRejection)
+  try {
+    await run()
+    await pause(100)
+  } finally {
+    window.removeEventListener('unhandledrejection', onRejection)
+  }
+  return count
+}
+
+export const RejectedSaveStillCollapsesAndLogs: Story = {
+  args: { onSave: failingSave() },
+  beforeEach: () => {
+    const log = spyOn(logger, 'error').mockImplementation(() => {})
+    return () => log.mockRestore()
+  },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await renameField()
+    const unhandled = await unhandledRejectionsDuring(async () => {
+      await userEvent.keyboard('The trap{Enter}')
+      await waitFor(() => expect(args.onDone).toHaveBeenCalledTimes(1))
+    })
+    await expect(unhandled).toBe(0)
+    await expect(logger.error).toHaveBeenCalledWith('reader.branch_rename_failed', {
+      error: 'disk busy',
+    })
+  },
+}
+
+export const RejectedSaveOnUnmountLogs: Story = {
+  args: { onSave: failingSave() },
+  beforeEach: () => {
+    const log = spyOn(logger, 'error').mockImplementation(() => {})
+    return () => log.mockRestore()
+  },
+  play: async ({ args }) => {
+    await waitForTier('desktop')
+    await renameField()
+    const unhandled = await unhandledRejectionsDuring(async () => {
+      await userEvent.keyboard('The trap{F2}')
+      await screen.findByTestId('stored-name')
+    })
+    await expect(unhandled).toBe(0)
+    await expect(logger.error).toHaveBeenCalledWith('reader.branch_rename_failed', {
+      error: 'disk busy',
+    })
+    await expect(args.onDone).not.toHaveBeenCalled()
   },
 }
 
