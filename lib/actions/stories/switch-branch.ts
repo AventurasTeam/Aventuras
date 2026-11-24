@@ -57,6 +57,12 @@ export async function switchBranch(
   input: SwitchBranchInput,
   ctx: DbCtx,
 ): Promise<SwitchBranchResult> {
+  const result = await attemptSwitch(input, ctx)
+  // Whatever stopped it, a switch whose reader has gone shows nothing: the user left.
+  return result.status === 'ok' || input.isCurrentRequest() ? result : { status: 'abandoned' }
+}
+
+async function attemptSwitch(input: SwitchBranchInput, ctx: DbCtx): Promise<SwitchBranchResult> {
   // No branch: a branch held until a restart blocks neither leaving it nor entering it. Busy too:
   // a run that holds no gate would leave the story-leave guard swallowing the reset.
   const txState = generationStore.getTxState()

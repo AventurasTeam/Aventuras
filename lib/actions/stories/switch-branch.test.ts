@@ -324,6 +324,12 @@ async function expectRefused(
   expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
 }
 
+// The reader answers current for its first `checks` abandon checks, then has gone.
+function currentFor(checks: number): () => boolean {
+  let left = checks
+  return () => left-- > 0
+}
+
 function hardGateRun(runId: string, fields: Partial<RunState> = {}): RunState {
   return {
     runId,
@@ -874,6 +880,84 @@ describe('switchBranch', () => {
     expect(ctx.runInTransaction).not.toHaveBeenCalled()
     expect(vi.mocked(rehydrateStories)).not.toHaveBeenCalled()
     await expectStillOnLeft(db)
+  })
+
+  it('abandons a missing branch once the reader has gone', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await switchBranch(
+      input({ toBranchId: 'br_nope', isCurrentRequest: () => false }),
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'abandoned' })
+    expect(ctx.runInTransaction).not.toHaveBeenCalled()
+    await expectStillOnLeft(db)
+  })
+
+  it('abandons a read that throws after the reader has gone, logged, with the pointer put back', async () => {
+    const { db, sqlite, ctx } = await setup()
+    sqlite.exec('DROP TABLE lore')
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const stack = fakeStack()
+
+    // Two checks before the read and three inside it pass; lore's read then throws.
+    const result = await switchBranch(
+      input({ replaceStack: stack.replaceStack, isCurrentRequest: currentFor(5) }),
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'abandoned' })
+    await expectStillOnLeft(db)
+    expect(stack.replaceStack).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledWith(
+      'action_layer.branch_switch_failed',
+      expect.objectContaining({ storyId: 'story_1', code: 'load', error: expect.any(String) }),
+    )
+  })
+
+  it('abandons a failed stories re-read after the reader has gone, logged, with the pointer put back', async () => {
+    const { db, ctx } = await setup()
+    let current = true
+    vi.mocked(rehydrateStories).mockImplementationOnce(async () => {
+      current = false
+      return false
+    })
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const stack = fakeStack()
+
+    const result = await switchBranch(
+      input({ replaceStack: stack.replaceStack, isCurrentRequest: () => current }),
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'abandoned' })
+    await expectStillOnLeft(db)
+    expect(stack.replaceStack).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalledWith('action_layer.branch_switch_failed', {
+      storyId: 'story_1',
+      fromBranchId: 'br_a',
+      toBranchId: 'br_b',
+      code: 'stories-reread',
+    })
+  })
+
+  it('abandons with no failure logged when the reader goes away during the read', async () => {
+    const { db, ctx } = await setup()
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const stack = fakeStack()
+
+    // Two checks before the read and its first pass; its second finds the reader gone.
+    const result = await switchBranch(
+      input({ replaceStack: stack.replaceStack, isCurrentRequest: currentFor(3) }),
+      ctx,
+    )
+
+    expect(result).toEqual({ status: 'abandoned' })
+    expect(ctx.runInTransaction).toHaveBeenCalledTimes(2)
+    await expectStillOnLeft(db)
+    expect(stack.replaceStack).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalledWith('action_layer.branch_switch_failed', expect.anything())
   })
 
   it("writes no delta and leaves every branch's redo stack", async () => {
