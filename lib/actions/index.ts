@@ -129,6 +129,7 @@ export {
   type ForkRefusalCode,
   type ForkResult,
 } from './stories/fork-branch'
+export { forkSurvivorLists, type ForkSurvivorLists } from './stories/fork-survivors'
 export { resetStorySettings } from './stories/reset-settings'
 export { seedHeroFork } from './stories/seed-hero-fork'
 export {

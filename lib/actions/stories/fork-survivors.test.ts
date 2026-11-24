@@ -22,7 +22,11 @@ import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { buildReverseAndPrunePlan, type ReversePlan } from '../delta/reverse-replay'
 import { resolveSweep, type ResolvedSweep } from '../story-entries/operational'
 import type { PipelineAction } from '../types'
-import { forkSurvivorPredicates, type SurvivorPredicates } from './fork-survivors'
+import {
+  forkSurvivorLists,
+  forkSurvivorPredicates,
+  type SurvivorPredicates,
+} from './fork-survivors'
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
@@ -220,6 +224,36 @@ function journalIdsOn(branchId: string): string[] {
     .all(branchId) as { action_id: string }[]
   return rows.map((row) => row.action_id)
 }
+
+function deltaIdOf(actionId: string, targetTable: string): string {
+  const row = t.sqlite
+    .prepare('SELECT id FROM deltas WHERE branch_id = ? AND action_id = ? AND target_table = ?')
+    .get(PARENT, actionId, targetTable) as { id: string }
+  return row.id
+}
+
+describe('forkSurvivorLists', () => {
+  it('lists only the pruned outside the window and the re-owned in it, with every dropped journal', async () => {
+    const { swept, plan } = await planFork()
+    const touch = deltaIdOf('act_touch', 'entities')
+    const windowIds = new Set(swept.window.map((d) => d.id))
+    // Each filter has a row to leave out: pruned rows in the window, a re-owned row outside it.
+    expect(plan.prunedDeltas.filter((d) => windowIds.has(d.id))).not.toEqual([])
+    const outside = plan.prunedDeltas.find((d) => d.id === touch)!
+    expect(windowIds.has(outside.id)).toBe(false)
+
+    const lists = forkSurvivorLists({
+      swept,
+      plan: { ...plan, reownedDeltas: [...plan.reownedDeltas, outside] },
+    })
+
+    expect(lists).toEqual({
+      prunedOutside: [touch],
+      reownedInside: [deltaIdOf('act_pass', 'character_relationships')],
+      droppedJournals: ['act_pass'],
+    })
+  })
+})
 
 describe('forkSurvivorPredicates', () => {
   it('copies everything when the fork entry is the tail', () => {

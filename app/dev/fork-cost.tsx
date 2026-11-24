@@ -4,7 +4,7 @@ import { Platform, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { forkBranch, planFork, type ForkResult } from '@/lib/actions'
+import { forkBranch, forkSurvivorLists, planFork, type ForkResult } from '@/lib/actions'
 import {
   BIND_CHUNK,
   db,
@@ -134,15 +134,15 @@ async function planSizeOf(branchId: string, point: ForkPoint): Promise<PlanSize 
   if (planned.fork === null) return null
   const { swept, plan } = planned.fork
   const planMs = msSince(start)
-  const inWindow = new Set(swept.window.map((d) => d.id))
+  const lists = forkSurvivorLists(planned.fork)
   return {
     nextEntryId,
     window: swept.window.length,
     set: swept.set.rows.length,
     pruned: plan.prunedDeltas.length,
-    prunedOutsideWindow: plan.prunedDeltas.filter((d) => !inWindow.has(d.id)).length,
-    reownedInWindow: plan.reownedDeltas.filter((d) => inWindow.has(d.id)).length,
-    droppedJournals: plan.droppedJournals.length,
+    prunedOutsideWindow: lists.prunedOutside.length,
+    reownedInWindow: lists.reownedInside.length,
+    droppedJournals: lists.droppedJournals.length,
     planMs,
   }
 }
@@ -201,12 +201,12 @@ function linesOf(cost: ForkCost, parent: Counts): string[] {
   } else if (plan === null) {
     lines.push('no B: the plan is empty')
   } else {
-    const binds = plan.prunedOutsideWindow + plan.reownedInWindow + plan.droppedJournals
+    const deltaBinds = plan.prunedOutsideWindow + plan.reownedInWindow
     lines.push(
       `B ${plan.nextEntryId}: window ${plan.window}, set ${plan.set}, pruned ${plan.pruned} ` +
         `(${plan.prunedOutsideWindow} outside the window), ${plan.reownedInWindow} re-owned in it, ` +
-        `${plan.droppedJournals} journals dropped; ${binds} of ${BIND_CHUNK} binds; ` +
-        `planned in ${plan.planMs} ms`,
+        `${plan.droppedJournals} journals dropped; binds ${deltaBinds} of ${BIND_CHUNK} (deltas), ` +
+        `${plan.droppedJournals} of ${BIND_CHUNK} (journals); planned in ${plan.planMs} ms`,
     )
   }
   if (result.status !== 'ok') {
