@@ -511,7 +511,7 @@ describe('forkBranchCore', () => {
     expect(await lockIsFree(f.branchId)).toBe(true)
   })
 
-  it('writes the branch row it was given, idle at min(watermark, N), from a failed parent', async () => {
+  it('writes the branch row it was given, its name trimmed, idle at min(watermark, N), from a failed parent', async () => {
     const failed: ClassifierStatus = {
       state: 'failed',
       lastSuccessAt: AT - 5,
@@ -529,7 +529,7 @@ describe('forkBranchCore', () => {
       storyId: f.storyId,
       parentBranchId: f.branchId,
       forkEntryId: entryAt(5),
-      name: '  The ferry not taken ',
+      name: 'The ferry not taken',
       createdAt: AT,
       classifierStatus: {
         state: 'idle',
@@ -602,6 +602,21 @@ describe('forkBranchCore', () => {
       parentBranchId: f.branchId,
       forkEntryId: entryAt(5),
     })
+  })
+
+  it('stores the name trimmed at its ends through forkBranch, inner spacing kept', async () => {
+    const forkNamed = (name: string) =>
+      forkBranch(
+        { parentBranchId: f.branchId, forkEntryId: entryAt(5), name, makeCurrent: false },
+        f.ctx,
+      )
+
+    const sideQuest = await forkNamed('  Side quest  ')
+    const longRoad = await forkNamed('\tThe  long road\n')
+
+    if (sideQuest.status !== 'ok' || longRoad.status !== 'ok') throw new Error('forkBranch refused')
+    expect((await branchRow(sideQuest.branchId))?.name).toBe('Side quest')
+    expect((await branchRow(longRoad.branchId))?.name).toBe('The  long road')
   })
 
   it('points the story at the child with makeCurrent, in the batch that copies its rows and vectors', async () => {

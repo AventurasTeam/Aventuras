@@ -153,9 +153,12 @@ function writePointer(ctx: DbCtx, storyId: string, branchId: string): Promise<vo
   ])
 }
 
+// The pointer went from `fromBranchId` to `toBranchId`; a restore puts it back.
+type PointerMove = { storyId: string; fromBranchId: string; toBranchId: string }
+
 // One retry: a transient failure here would leave the pointer on a branch the reader doesn't show.
-async function writeRestoreWithRetry(input: SwitchBranchInput, ctx: DbCtx): Promise<void> {
-  const { storyId, fromBranchId, toBranchId } = input
+async function writeRestoreWithRetry(move: PointerMove, ctx: DbCtx): Promise<void> {
+  const { storyId, fromBranchId, toBranchId } = move
   try {
     await writePointer(ctx, storyId, fromBranchId)
   } catch (err) {
@@ -170,14 +173,10 @@ async function writeRestoreWithRetry(input: SwitchBranchInput, ctx: DbCtx): Prom
 }
 
 // A pointer left on a branch the reader doesn't show would open that branch from the story list.
-async function restoreThen(
-  input: SwitchBranchInput,
-  ctx: DbCtx,
-  result: SwitchBranchResult,
-): Promise<SwitchBranchResult> {
-  const { storyId, fromBranchId, toBranchId } = input
+async function restorePointer(move: PointerMove, ctx: DbCtx): Promise<void> {
+  const { storyId, fromBranchId, toBranchId } = move
   try {
-    await writeRestoreWithRetry(input, ctx)
+    await writeRestoreWithRetry(move, ctx)
   } catch (err) {
     logger.error('action_layer.branch_switch_restore_failed', {
       storyId,
@@ -194,6 +193,14 @@ async function restoreThen(
       toBranchId,
     })
   }
+}
+
+async function restoreThen(
+  move: PointerMove,
+  ctx: DbCtx,
+  result: SwitchBranchResult,
+): Promise<SwitchBranchResult> {
+  await restorePointer(move, ctx)
   return result
 }
 
@@ -231,6 +238,8 @@ function fillAndPublish(set: BranchWorkingSet): void {
 export type ShowBranchInput = {
   storyId: string
   branchId: string
+  /** The branch the reader shows: where the pointer goes back when the reset doesn't take. */
+  fromBranchId: string
   hold: ReaderHoldToken
   replaceStack: (branchId: string) => boolean
 }
@@ -239,11 +248,15 @@ export type ShowBranchResult =
   | { status: 'ok' }
   /** Navigated with nothing filled: the new reader's own load takes over. */
   | { status: 'shown-unloaded' }
+  /**
+   * Nothing navigated or published; the pointer is back on `fromBranchId` (logged if that failed).
+   */
   | { status: 'navigation-blocked' }
 
 /**
  * C8: shows a branch its caller's own transaction made current, as a fork does: the switch's read,
- * re-read and block, with no gate, no pointer write and no abandon.
+ * re-read and block, with no gate and no abandon. It writes no pointer unless the reset doesn't
+ * take; then the pointer goes back to `fromBranchId`, as the switch's does.
  */
 export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
   const { storyId, branchId, hold, replaceStack } = input
@@ -262,11 +275,11 @@ export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<Sh
         branchId,
         error: messageOf(err),
       })
-      return { status: 'navigation-blocked' }
+      return await blockedShow(input, ctx)
     }
     if (!took) {
       logger.warn('action_layer.branch_show_navigation_blocked', { storyId, branchId })
-      return { status: 'navigation-blocked' }
+      return await blockedShow(input, ctx)
     }
     if (set != null) fillAndPublish(set)
     chapterOverlaysStore.clearCloseResult()
@@ -277,6 +290,13 @@ export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<Sh
   } finally {
     readerHoldStore.release(hold)
   }
+}
+
+// Awaited inside the hold: the reader takes no input until the pointer names what it shows again.
+async function blockedShow(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
+  const { storyId, fromBranchId, branchId } = input
+  await restorePointer({ storyId, fromBranchId, toBranchId: branchId }, ctx)
+  return { status: 'navigation-blocked' }
 }
 
 // Null when the branch doesn't load here; the new reader's own load meets the failure and reports it.

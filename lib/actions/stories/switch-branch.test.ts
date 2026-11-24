@@ -1055,9 +1055,23 @@ describe('showBranch', () => {
     return {
       storyId: 'story_1',
       branchId: 'br_b',
+      fromBranchId: 'br_a',
       replaceStack: () => true,
       ...overrides,
       hold: overrides.hold ?? readerHoldStore.take('br_a'),
+    }
+  }
+
+  // showBranch writes no pointer of its own, so its restore is the first transaction.
+  function failingWrites(ctx: TestCtx, failures: number): TestCtx {
+    let writes = 0
+    return {
+      ...ctx,
+      runInTransaction: vi.fn(async (ops: Parameters<TestCtx['runInTransaction']>[0]) => {
+        writes += 1
+        if (writes <= failures) throw new Error('disk busy')
+        return ctx.runInTransaction(ops)
+      }),
     }
   }
 
@@ -1160,14 +1174,23 @@ describe('showBranch', () => {
     expect(await pointer(db)).toBe('br_b')
   })
 
-  it('fills nothing and leaves the pointer when the stack reset does not take', async () => {
+  it('fills nothing and puts the pointer back on the branch shown when the stack reset does not take', async () => {
     const { db, ctx } = await setup()
     await pointerMovedTo(db, 'br_b')
     chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const heldAtWrite: boolean[] = []
+    const watched: TestCtx = {
+      ...ctx,
+      runInTransaction: vi.fn(async (ops: Parameters<TestCtx['runInTransaction']>[0]) => {
+        heldAtWrite.push(readerHoldStore.isHeld('br_a'))
+        return ctx.runInTransaction(ops)
+      }),
+    }
     const stack = fakeStack(false)
 
-    expect(await showBranch(show({ replaceStack: stack.replaceStack }), ctx)).toEqual({
+    expect(await showBranch(show({ replaceStack: stack.replaceStack }), watched)).toEqual({
       status: 'navigation-blocked',
     })
 
@@ -1175,16 +1198,23 @@ describe('showBranch', () => {
       storyId: 'story_1',
       branchId: 'br_b',
     })
+    expect(error).not.toHaveBeenCalled()
+    // The reader stays held until the pointer names the branch it shows again.
+    expect(heldAtWrite).toEqual([true])
+    expect(await pointer(db)).toBe('br_a')
+    expect(await pointer(db, 'story_2')).toBe('br_other')
+    // The tail's own re-read, then the restore's.
+    expect(vi.mocked(rehydrateStories)).toHaveBeenCalledTimes(2)
+    expect(storiesRowBranch()).toBe('br_a')
     expect(entriesStore.getLoadedBranch()).toBe('br_a')
     expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(navigationStore.getNavigation().currentBranchId).toBe('br_a')
     expect(chapterOverlaysStore.getState().closeResult).toEqual(CLOSE_RESULT)
     expect(readerHoldStore.isHeld('br_a')).toBe(false)
     expect(kicks).toEqual([])
-    expect(ctx.runInTransaction).not.toHaveBeenCalled()
-    expect(await pointer(db)).toBe('br_b')
   })
 
-  it('fills nothing, logs the throw and answers navigation-blocked when the stack reset throws', async () => {
+  it('fills nothing, logs the throw and puts the pointer back when the stack reset throws', async () => {
     const { db, ctx } = await setup()
     await pointerMovedTo(db, 'br_b')
     chapterOverlaysStore.showCloseResult(CLOSE_RESULT)
@@ -1202,12 +1232,63 @@ describe('showBranch', () => {
       branchId: 'br_b',
       error: 'dispatch exploded',
     })
+    expect(ctx.runInTransaction).toHaveBeenCalledTimes(1)
+    expect(await pointer(db)).toBe('br_a')
+    expect(storiesRowBranch()).toBe('br_a')
     expect(entriesStore.getLoadedBranch()).toBe('br_a')
     expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
     expect(chapterOverlaysStore.getState().closeResult).toEqual(CLOSE_RESULT)
     expect(readerHoldStore.isHeld('br_a')).toBe(false)
     expect(kicks).toEqual([])
+  })
+
+  it('retries a restore write that fails once, and puts the pointer back', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const flaky = failingWrites(ctx, 1)
+
+    expect(await showBranch(show({ replaceStack: fakeStack(false).replaceStack }), flaky)).toEqual({
+      status: 'navigation-blocked',
+    })
+
+    expect(flaky.runInTransaction).toHaveBeenCalledTimes(2)
+    expect(await pointer(db)).toBe('br_a')
+    expect(storiesRowBranch()).toBe('br_a')
+    expect(warn).toHaveBeenCalledWith('action_layer.branch_switch_restore_retried', {
+      storyId: 'story_1',
+      fromBranchId: 'br_a',
+      toBranchId: 'br_b',
+      error: 'disk busy',
+    })
+    expect(error).not.toHaveBeenCalled()
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
+  })
+
+  it('logs a restore write that fails twice, once, and still answers navigation-blocked', async () => {
+    const { db, ctx } = await setup()
+    await pointerMovedTo(db, 'br_b')
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    const broken = failingWrites(ctx, 2)
+
+    expect(await showBranch(show({ replaceStack: fakeStack(false).replaceStack }), broken)).toEqual(
+      { status: 'navigation-blocked' },
+    )
+
+    expect(broken.runInTransaction).toHaveBeenCalledTimes(2)
+    expect(
+      error.mock.calls.filter(([kind]) => kind === 'action_layer.branch_switch_restore_failed'),
+    ).toEqual([
+      [
+        'action_layer.branch_switch_restore_failed',
+        { storyId: 'story_1', fromBranchId: 'br_a', toBranchId: 'br_b', error: 'disk busy' },
+      ],
+    ])
     expect(await pointer(db)).toBe('br_b')
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('br_a')
+    expect(readerHoldStore.isHeld('br_a')).toBe(false)
   })
 
   it('keeps the stores and the published story on the branch left while the stories re-read runs', async () => {
