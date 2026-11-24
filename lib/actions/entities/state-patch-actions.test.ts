@@ -3412,7 +3412,7 @@ describe('branch scope', () => {
   ): PayloadCase => [actionOn('br_1').kind, rows, actionOn]
   const ACTIVE_KAEL = character(KAEL, { status: 'active' })
 
-  // Each br_1 row is one its handler would write, so a dropped check shows as a write there.
+  // Each case's br_1 rows let its handler land, so a dropped check writes there.
   const PAYLOAD_CASES: PayloadCase[] = [
     payloadCase([character(KAEL)], (branchId) => ({
       kind: 'updateEntityVisualState',

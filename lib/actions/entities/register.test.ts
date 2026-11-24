@@ -1046,7 +1046,7 @@ describe('branch scope', () => {
     createdAt: 1,
     updatedAt: 1,
   }
-  // Dirty: a reversal that restores an embedded field marks the row dirty.
+  // Stale already: the update and any reversal of it stamp embedding_stale 1.
   const WRITTEN: Entity = {
     id: 'char_1',
     branchId: 'br_2',
@@ -1151,8 +1151,8 @@ describe('branch scope', () => {
 
   type Harness = Awaited<ReturnType<typeof setup>>
 
-  // An id-only read scans in insertion order, so every sibling row goes in first. The child
-  // domains are registered for the delete's reversal, which restores them.
+  // An id-only read scans in insertion order, so sibling rows go in first. The delete's reversal
+  // restores the involvement, awareness and relationship rows, checking the happenings they name.
   async function twoBranches({ written = true }: { written?: boolean } = {}) {
     const harness = await setup()
     registerHappenings()
