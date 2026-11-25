@@ -248,6 +248,17 @@ describe('templateContextMap', () => {
     }
   })
 
+  // The editor's autocomplete offers these after `entry.`: the whole turn, not its mark alone.
+  it('lists the fields of a turn on every variable that carries lead marks', () => {
+    const turn = ['position', 'kind', 'content', 'leadMark']
+    const names = (group: 'generationContext' | 'chapter', name: string) =>
+      VARIABLES[group].find((v) => v.name === name)?.infoFields?.map((f) => f.name)
+
+    expect(names('generationContext', 'entries')).toEqual(turn)
+    expect(names('generationContext', 'lastTurns')).toEqual(turn)
+    expect(names('chapter', 'entries')).toEqual(turn)
+  })
+
   it('gives every infoFields entry a name, a type and a description', () => {
     const blanks = ALL_VARIABLES.flatMap((v) =>
       (v.infoFields ?? [])

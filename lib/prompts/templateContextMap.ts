@@ -88,8 +88,19 @@ const FLOOR_ENTITY_INFO: readonly InfoField[] = ENTITY_FIELDS_INFO.filter(
   (f) => f.name !== 'injectionMode',
 )
 
+const TURN_INFO: readonly InfoField[] = [
+  field('position', 'number', "The entry's position on the branch."),
+  field(
+    'kind',
+    "'user_action' | 'ai_reply' | 'opening'",
+    "Who wrote the entry; a 'user_action' is the user's turn.",
+  ),
+  field('content', 'string', "The entry's prose."),
+]
+
 // architecture.md → System and user halves: every history marks where the lead changes.
 const GENERATION_LEAD_MARK_INFO: readonly InfoField[] = [
+  ...TURN_INFO,
   field(
     'leadMark',
     '{ id, name } | { gone: true } | { none: true }',
@@ -592,6 +603,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       category: 'Story',
       description:
         "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead, and the merge after them has none: it reads `partSummaries`. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget. `leadMark` is set only where the lead changes: on the first entry of each run written under another lead than the entry before it, the first entry compared with `lead`. It is `{ name }`, by name with no id since the call has no id map; `{ gone: true }` for a character no longer on the branch; or `{ none: true }` for a run written with no lead. Absent on every other entry. A part's entries are walked on their own.",
+      infoFields: [
+        ...TURN_INFO,
+        field(
+          'leadMark',
+          '{ name } | { gone: true } | { none: true }',
+          'Set only on the first entry of a run written under another lead than the entry before it, the first entry compared with `lead`; absent on every other entry. `{ name }` is that character, by name with no id since the call has no id map; `{ gone }` a character no longer on the branch; `{ none }` a run written with no lead. macro_story_entry prints it on a line before the turn.',
+        ),
+      ],
       required: true,
     },
     {

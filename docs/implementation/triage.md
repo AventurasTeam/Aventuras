@@ -729,9 +729,9 @@ slice-planning gate forces its resolution before that slice is planned.
   set `"narration": "first"` in
   `scripts/dataset-chapter/treasure-island.seed.json`, so the close
   probe tests a first-person story whose summary must still be told in
-  the third person; rebuilding the seed with `pnpm dataset:chapter`
-  reverts it. The drive should pick first person in the wizard. Found
-  by Slice 6.9's planning (2026-11-25).
+  the third person; a fresh build, once exported
+  (`dataset:export-seed`), reverts it. The drive should pick first
+  person in the wizard. Found by Slice 6.9's planning (2026-11-25).
 
 - **A stranded comment above `leadOf`.**
   `lib/pipeline/definitions/classifier-context.ts` opens `leadOf` with

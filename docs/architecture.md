@@ -368,8 +368,8 @@ who "I" and "you" are from that turn to the next note, over the
 instructions, and the turns before the first note were written under
 the lead the prompt names, or with none when it names none. The line
 never says the last run is today's lead's: after a switch with no turn
-since, every turn is the former lead's, and the only mark is on the
-first. Unmarked, it doesn't render, and neither system half changes.
+since, the latest run is a former lead's, not today's. Unmarked, it
+doesn't render, and neither system half changes.
 
 ### Prompt sections
 
