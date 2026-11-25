@@ -356,7 +356,7 @@ describe('deleteBranch', () => {
   it('removes its rows in every branch table, its run rows, its vectors and its row', async () => {
     expect(rowCountOn(pipelineRuns, B)).toBe(2)
     expect(Object.values(vectorsOn(B)).flat()).toHaveLength(4)
-    const before = { a: stateOf(A), assets: assetIds() }
+    const before = { a: stateOf(A), aRow: branchRow(A), assets: assetIds() }
 
     expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
 
@@ -365,6 +365,7 @@ describe('deleteBranch', () => {
     expect(branchRow(B)).toBeUndefined()
     expect(branchRow(C)).toEqual({ parent: A, forkEntry: tree.forkEntryId })
     expect(stateOf(A)).toEqual(before.a)
+    expect(branchRow(A)).toEqual(before.aRow)
     expect(assetIds()).toEqual(before.assets)
   })
 
