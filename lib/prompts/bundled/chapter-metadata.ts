@@ -48,6 +48,6 @@ ${CHAPTER_CONTINUITY_SECTIONS}
 # The chapter
 {%- for entry in entries %}
 
-{% include 'macro_story_entry', entry: entry %}
+{% include 'macro_story_entry', entry: entry, ids: false %}
 {%- endfor %}`,
 }

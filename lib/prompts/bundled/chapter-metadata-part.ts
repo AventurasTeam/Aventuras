@@ -21,6 +21,6 @@ ${CHAPTER_CONTINUITY_SECTIONS}
 # This part of the chapter
 {%- for entry in entries %}
 
-{% include 'macro_story_entry', entry: entry %}
+{% include 'macro_story_entry', entry: entry, ids: false %}
 {%- endfor %}`,
 }

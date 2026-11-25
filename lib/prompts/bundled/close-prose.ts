@@ -5,5 +5,5 @@ export const CLOSE_PROSE = `# The turns
 {%- for turn in closeTurns %}
 
 ## {{ turn.handle }} ({% if turn.kind == 'user_action' %}the user's turn{% elsif turn.kind == 'opening' %}the opening{% else %}narration{% endif %})
-{% include 'macro_story_entry', entry: turn %}
+{% include 'macro_story_entry', entry: turn, ids: false %}
 {%- endfor %}`

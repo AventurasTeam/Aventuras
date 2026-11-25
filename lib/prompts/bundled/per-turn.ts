@@ -1,4 +1,5 @@
 import type { TemplateSources } from '../types'
+import { LEAD_MARK_EXPLAINER } from './story-entry'
 
 export const PER_TURN_NARRATIVE: TemplateSources = {
   // architecture.md → System and user halves: the same bytes every call, so nothing per call goes
@@ -30,6 +31,8 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVo
 {% endsection %}{% section 'output' %}{% include 'macro_output_format_narrative' %}{% endsection %}`,
   // The scene loop ignores injectionMode on purpose (structural-floor invariant: active +
   // in-scene always inject), reading `entities`, not the floor, so it holds without retrieval.
+  // Story so far explains the lead marks only when a turn carries one, so a story whose lead never
+  // changed renders as before (architecture.md → System and user halves).
   user: `{%- comment -%}
 LiquidJS drops a filter on a for tag's collection, so the list is assigned first. The second
 half of the scene test de-dupes the row the classifier named as both in-scene and the location;
@@ -86,8 +89,9 @@ Use an ID from Places for <current_location>, or declare a new one with <new_loc
 {% endif -%}
 {% endif -%}
 {% endsection %}{% section 'history' %}# Story so far
-{% for entry in entries %}
-{% include 'macro_story_entry', entry: entry %}
+{% assign markedEntries = entries | where: 'leadMark' %}{% if markedEntries.size > 0 %}${LEAD_MARK_EXPLAINER}
+{% endif %}{% for entry in entries %}
+{% include 'macro_story_entry', entry: entry, ids: false %}
 {% endfor %}{% endsection %}
 {%- comment -%}
 Each emission block opens with one newline: a blank line after the story's last

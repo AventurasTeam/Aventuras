@@ -1,0 +1,100 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the fallback classifier > matches the recorded switched render 1`] = `
+"Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+- [c1] Jorin (character)
+- [c2] Mara (character)
+
+The story's lead is [c1] Jorin. Outside quoted speech, "I" and "you" in the turns are the lead, except where a turn names another.
+
+Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.
+Take the changes from the turn below; nothing above it happened this turn.
+
+# Earlier turns — how the scene got here, not the turn you report on
+
+(From this turn on, "I" and "you" are [c2] Mara.)
+The gate stood open. I crossed the yard to the well.
+
+<user_turn>
+I lower the bucket and listen.
+</user_turn>
+
+# This turn
+
+(From this turn on, "I" and "you" are [c1] Jorin.)
+<user_turn>
+I take the tower stairs two at a time.
+</user_turn>
+
+You reach the top as the bell starts to ring.
+
+Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
+Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
+For the time delta, give seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative).
+
+Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id or, when it is in the scene, in sceneEntities.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then.
+
+Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.
+
+Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose.
+"
+`;
+
+exports[`the narrator > matches the recorded switched render 1`] = `
+"# Story so far
+In the story so far, a line "(From this turn on, …)" before a turn says who "I" and "you" are from that turn until the next such line, whatever the instructions say; before the first such line, they are who the instructions say. What you write now follows the instructions.
+
+(From this turn on, "I" and "you" are Mara.)
+The gate stood open. I crossed the yard to the well.
+
+<user_turn>
+I lower the bucket and listen.
+</user_turn>
+
+(From this turn on, "I" and "you" are Jorin.)
+<user_turn>
+I take the tower stairs two at a time.
+</user_turn>
+
+You reach the top as the bell starts to ring.
+"
+`;
+
+exports[`the suggestion refresh > matches the recorded switched render 1`] = `
+"# Story so far
+In the story so far, a line "(From this turn on, …)" before a turn says who "I" and "you" are from that turn until the next such line, whatever the instructions say; before the first such line, they are who the instructions say. What you write now follows the instructions.
+
+(From this turn on, "I" and "you" are Mara.)
+The gate stood open. I crossed the yard to the well.
+
+<user_turn>
+I lower the bucket and listen.
+</user_turn>
+
+(From this turn on, "I" and "you" are Jorin.)
+<user_turn>
+I take the tower stairs two at a time.
+</user_turn>
+
+You reach the top as the bell starts to ring.
+
+# Next-turn options
+Populate the "suggestions" field of your JSON response with exactly 2 distinct entries, one per option for the user's next turn.
+
+Each entry has exactly two fields:
+- "categoryRef" — an opaque id copied EXACTLY from the id column below (e.g. "cat1"). Never the category's name, never its description.
+- "text" — a finished turn the user could send as it is, not a description of an option and not a question.
+
+Write each option as Jorin's next turn: what Jorin does, says or attempts next, never how the world or anyone else responds. Write it in the first person, as "I". Draw only on what Jorin knows.
+
+Categories you may reference:
+- id "cat1" = Action — use it for: A decisive move.
+
+You may reuse a category or skip one; vary the categories across entries rather than repeating the same one. Keep each entry's text to one or two sentences."
+`;
