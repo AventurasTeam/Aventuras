@@ -214,8 +214,7 @@ test.describe.serial('Per-branch lead', () => {
   })
 })
 
-// A launch of its own: the newer Brannoc is flagged before launch, so the merge is the only write
-// under test.
+// Own launch: the newer Brannoc is flagged pre-launch, so the merge is the only write under test.
 test.describe('Per-branch lead — a merge keeps the lead row', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined

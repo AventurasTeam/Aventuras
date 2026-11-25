@@ -193,10 +193,8 @@ export async function regenerateTurn(
         )
           return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
-          // Before the sweep, on the lead the branch has now, as the reader's gate reads it: a lead
-          // set after this reply passes here, the sweep reverses it, and the run goes without one.
-          // The mark keeps new user writes out; a dispatched one lands first, so the check reads
-          // the flag it leaves.
+          // Pre-sweep, like the reader's gate: a lead first set after this reply passes, and the
+          // sweep leaves the run leadless. The mark bars new writes; settling lands in-flight ones.
           await settleUserWrites()
           if ((await turnLeadOf(ids, ctx)).missing) return LEAD_MISSING_REJECTION
           let swept: Swept

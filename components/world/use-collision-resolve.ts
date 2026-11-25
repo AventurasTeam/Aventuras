@@ -47,7 +47,7 @@ type Sides = CollisionDialogPair['sides']
 
 export type CollisionDialog = {
   pair: CollisionDialogPair
-  /** The pair's rows the branch's entries name, by the lead flag or a lead stamp. */
+  /** The pair's rows that are or were the branch's lead, by the flag or an entry's lead stamp. */
   heldIds: readonly string[]
 }
 
@@ -142,8 +142,8 @@ function resolvedText(resolution: CollisionResolution, sides: Sides): string {
 
 /**
  * world.md → Resolve dialog. Pair read live under the resolve action's pair rule; closes for good
- * once a row is gone or no flag names the other, so an undo can't reopen it. `dialog` stays null
- * until this open's stamp read lands, so no picker shows free; the flag half reads live.
+ * once a row is gone or no flag names the other, so an undo can't reopen it. A character pair's
+ * `dialog` waits on this open's stamp read, so no picker shows free; the flag half reads live.
  */
 export function useCollisionResolve(
   branchId: string,

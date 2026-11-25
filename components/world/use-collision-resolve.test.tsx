@@ -164,7 +164,6 @@ function openPair(guard: (proceed: () => void) => void = run) {
   return result
 }
 
-// Opens the pair once its stamp read lands with `stamped`.
 async function openReady(stamped: ReadonlySet<string> = new Set()) {
   readStampedLeadIds.mockResolvedValueOnce(stamped)
   const result = openPair()

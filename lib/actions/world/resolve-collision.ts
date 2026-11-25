@@ -225,8 +225,7 @@ async function commitMerge(
           'an entry on the branch is stamped with the losing row as its lead',
         )
       const story = storyPlaceOf({ tail: head?.tail, sceneSource })
-      // The build reads the flag off the store, which a set patches as it commits: the lead lock
-      // runs a set wholly before this build or after this group's commit.
+      // The build reads isLead off the store; the lock keeps a set out from build to commit.
       return withBranchLeadLock(branchId, () =>
         commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx),
       )
