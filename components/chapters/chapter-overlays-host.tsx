@@ -359,8 +359,8 @@ function ReviewHost({
 
 /**
  * chapter-timeline.md → Re-run a close, mounted while its request holds. The confirm closes once
- * the chain holds the branch and `runCloseRerun` speaks for its end; the fork keeps it pending
- * until the new branch publishes and the prune closes it.
+ * the chain holds the branch and `runCloseRerun` speaks for its end; past the fork's commit it
+ * stays pending to the publish's prune or the sequence's close.
  */
 function RerunConfirmHost({
   request,
@@ -424,7 +424,7 @@ function RerunConfirmHost({
   if (target == null) return null
   const { preview } = target
 
-  // A request opened since, or already closed when the chain started, is not this one's.
+  // Late callers (the chain's reserve, its end, the fork's tail) may find another request, or none.
   const closeOwn = () => {
     if (chapterOverlaysStore.getState().rerunConfirm === request)
       chapterOverlaysStore.closeRerunConfirm({ reopen: false })

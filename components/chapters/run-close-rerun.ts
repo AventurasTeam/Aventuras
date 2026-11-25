@@ -249,7 +249,7 @@ export type RerunOnBranchStep = RerunRefusalStep | { step: 'forked' }
 
 type RerunOnBranchArgs = Parameters<typeof runCloseRerunOnBranch>[0]
 
-/** The new branch, and the name, position and chapter number every fork toast reads. */
+/** The new branch, and the name, N and chapter number the toasts past the commit read. */
 type Forked = { newBranchId: string; name: string; position: number; number: number }
 
 type ParentClear = Extract<CloseRerunParentCheck, { status: 'clear' }>
@@ -308,7 +308,7 @@ async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunRefusalStep |
   return { newBranchId: result.branchId, name, position: forkPoint.position, number }
 }
 
-// C8: the new reader re-reads the list on mount too, so a failure here is only logged. The store
+// C8: a failure here is logged, never surfaced; a reader that mounts re-reads the list. The store
 // holds one story's rows: a refresh for a story no longer open would replace another story's.
 function refreshAfterFork(storyId: string): void {
   if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
@@ -421,7 +421,7 @@ async function showThenStart(
   }
   // Idempotent: showBranch releases it on every path too.
   readerHoldStore.release(hold)
-  // showBranch put the pointer back on the parent; the new branch stays, and the chip lists it.
+  // showBranch put the pointer back on the parent, or logged why not; the new branch stays.
   if (shown.status === 'navigation-blocked') return notOpened(args, forked)
   // Nothing published: the new branch isn't the open one, so a start would only refuse it.
   if (shown.status === 'shown-unloaded') {

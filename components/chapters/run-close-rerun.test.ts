@@ -988,7 +988,7 @@ describe('runCloseRerunOnBranch', () => {
       expect(warning).toHaveBeenCalledExactlyOnceWith(START_FAILED)
       expectLoggedOnce(logged)
       expect(info).not.toHaveBeenCalled()
-      // The tail ran once and nothing writes the pointer after it.
+      // The tail ran once and published, so its prune, not the sequence, closes the confirm.
       expect(actions.show).toHaveBeenCalledTimes(1)
       expect(closeRequest).not.toHaveBeenCalled()
     },

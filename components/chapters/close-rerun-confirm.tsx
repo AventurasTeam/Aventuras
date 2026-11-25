@@ -49,7 +49,7 @@ function turnsLines(shortcut: CloseRerunShortcut): string[] {
   ]
 }
 
-// The name comes from the one key the stored name and both of the fork's toasts read.
+// The name comes from the one key the stored name and the fork's toasts read.
 function forkSentence(preview: CloseRerunPreview, shortcut: CloseRerunShortcut): string {
   return t('chapters:rerunConfirm.forkSentence', {
     branch: preview.branchName,

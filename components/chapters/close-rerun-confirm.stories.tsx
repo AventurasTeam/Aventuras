@@ -126,7 +126,7 @@ export const TurnsFollowed: Story = {
     const text = document.getElementById(describedBy ?? '')?.textContent ?? ''
     const order = lines.map((line) => text.indexOf(line))
     expect(order).toEqual([...order].sort((a, b) => a - b))
-    // The sentence names the branch by the one key the stored name and both toasts read.
+    // The sentence names the branch by the one key the stored name and the fork's toasts read.
     expect(COPY.forkSentence).toContain(`"${t('chapters:rerunConfirm.autoName', { number: 5 })}"`)
 
     expect(button(COPY.cancel)).not.toHaveAttribute('aria-disabled', 'true')

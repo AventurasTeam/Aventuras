@@ -891,7 +891,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     renderHost()
     openRerun()
     const props = await confirmShown()
-    // A background run the gate lets through: the hold alone disables the actions.
+    // A background run the gate lets through: the in-flight refusal's hold alone disables them.
     const pass = { ...gateRun(), runId: 'run_pass', gateBehavior: 'no-gate' as const }
     act(() => generationStore.startRun(pass))
     act(() => props.onConfirmOnBranch(WITH_TURNS))

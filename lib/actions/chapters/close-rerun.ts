@@ -458,9 +458,10 @@ export type CloseRerunParentCheck =
   | CloseRerunCountsChanged
 
 /**
- * chapter-close.md → Re-running a close, Re-run on new branch: every start refusal, checked on the
- * parent before the fork commits. No pending mark (forkBranch's gate counts every pending turn);
- * writes nothing. A clear preview's fork point is the fork's N. Rejects when a read throws.
+ * chapter-close.md → Re-running a close, Re-run on new branch: the start's refusals, checked on the
+ * parent before the fork commits, but for the classifier-held read and a settle during it. No
+ * pending mark (forkBranch's gate counts every pending turn); writes nothing. A clear preview's
+ * fork point is the fork's N. Rejects when a read throws.
  */
 export async function checkCloseRerunParent(
   branchId: string,
@@ -518,9 +519,10 @@ async function checkedStart<R>(
 }
 
 /**
- * chapter-close.md → Re-running a close, Roll back & re-run: refusals all precede the turns going.
- * A pending mark spans preview, shortcut and the chain's reserve. Rejects when a read, the sweep or
- * the chain's origin throws. Settings come from the store's open story.
+ * chapter-close.md → Re-running a close, Roll back & re-run: its refusals precede the turns going;
+ * the chain's own re-check follows the sweep. A pending mark spans preview, shortcut and the
+ * chain's reserve. Rejects when a read, the sweep or the chain's origin throws. Settings come from
+ * the store's open story.
  */
 export async function startCloseRerun(
   branchId: string,
