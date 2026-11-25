@@ -231,3 +231,50 @@ export const AboveAnOpenPopover: Story = {
     expect(dialog.contains(own)).toBe(true)
   },
 }
+
+// The owner flips one state on the press: the gate closing (`blockedReason`) or the delete
+// starting (`pending`), the two ways `Delete branch` disables under the focus it holds.
+function FlipOnDelete({
+  flip,
+  ...props
+}: BranchDeleteConfirmProps & { flip: 'blocked' | 'pending' }) {
+  const [flipped, setFlipped] = useState(false)
+  return (
+    <BranchDeleteConfirm
+      {...props}
+      blockedReason={flip === 'blocked' && flipped ? BLOCKED_REASON : props.blockedReason}
+      pending={flip === 'pending' && flipped}
+      onDelete={() => {
+        props.onDelete()
+        setFlipped(true)
+      }}
+    />
+  )
+}
+
+async function expectFocusKeptWhenDeleteDisables(args: BranchDeleteConfirmProps) {
+  const dialog = await findDialog()
+  const confirm = within(dialog).getByRole('button', { name: COPY.confirm })
+  confirm.focus()
+  await expect(confirm).toHaveFocus()
+  await userEvent.keyboard('{Enter}')
+  await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1), WAIT)
+  await waitFor(() => expect(confirm).toHaveAttribute('aria-disabled', 'true'), WAIT)
+  // Chromium blurs the button as it disables; the dialog takes focus back.
+  await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true), WAIT)
+  expect(document.activeElement).not.toBe(document.body)
+  await userEvent.tab()
+  expect(dialog.contains(document.activeElement)).toBe(true)
+}
+
+/** The gate closes, or a swap goes pending, after the confirm opened: focus doesn't fall to the page. */
+export const FocusStaysWhenBlocked: Story = {
+  render: (args) => <FlipOnDelete {...args} flip="blocked" />,
+  play: async ({ args }) => expectFocusKeptWhenDeleteDisables(args),
+}
+
+/** The press starts the delete and both buttons disable: nothing left in the dialog can hold focus. */
+export const FocusStaysWhenPending: Story = {
+  render: (args) => <FlipOnDelete {...args} flip="pending" />,
+  play: async ({ args }) => expectFocusKeptWhenDeleteDisables(args),
+}
