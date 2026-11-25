@@ -485,13 +485,23 @@ describe('submitTurn', () => {
         }
       })
 
+      // A dropped settle reaches the turn's run, whose own settle waits on the set: the run's start
+      // ends the race, so the assertions below fail instead of the test hanging.
+      const runStarted = new Promise<void>((resolve) => {
+        const off = generationStore.subscribe(() => {
+          if (generationStore.getTxState().runs.size === 0) return
+          off()
+          resolve()
+        })
+        onTestFinished(off)
+      })
+
       const turning = submitTurn(
         { storyId: 's1', branchId: 'b1' },
         { content: 'I look around.', composerMode: 'do' },
         ctx,
       )
-      // Raced with the turn so a dropped settle fails the assertions below instead of hanging.
-      await Promise.race([reachedSettle, turning])
+      await Promise.race([reachedSettle, turning, runStarted])
       expect(atSettle).toBe(true)
       expect(written).toBe(false)
       release()
