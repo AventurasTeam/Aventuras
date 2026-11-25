@@ -702,6 +702,35 @@ describe('runCloseRerunOnBranch', () => {
     )
   })
 
+  it.each([
+    [
+      'the start on it refuses',
+      () =>
+        actions.startOnFork.mockResolvedValue({
+          outcome: 'rejected',
+          blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+        }),
+      'Branched "Ch. 2 re-run" from entry 56, but couldn\'t start the re-run. Retry from Chapter Timeline.',
+    ],
+    [
+      "the tail can't navigate to it",
+      () => actions.show.mockResolvedValue({ status: 'navigation-blocked' }),
+      'Branched "Ch. 2 re-run" from entry 56, but couldn\'t open it. Switch to it, then retry from Chapter Timeline.',
+    ],
+  ] as const)(
+    "warns at the check's fresh N, not the confirm's, when %s",
+    async (_name, fail, message) => {
+      const fresh = { ...SHORTCUT, forkPoint: { entryId: 'entry_56', position: 56 } }
+      actions.check.mockResolvedValue({
+        status: 'clear',
+        preview: { ...ON_PARENT, shortcut: fresh },
+      })
+      fail()
+      expect(await onBranch()).toStrictEqual({ step: 'forked' })
+      expect(warning).toHaveBeenCalledExactlyOnceWith(message)
+    },
+  )
+
   it('holds no pending turn at the fork', async () => {
     await onBranch()
     expect(pendingAtFork).toStrictEqual([0])
