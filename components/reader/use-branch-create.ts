@@ -193,6 +193,11 @@ export function useBranchCreate({
         // Left or switched since: the parent's reader is gone, so no screens to replace.
         if (open == null || open.storyId !== sid || open.branchId !== branchId) {
           readerHoldStore.release(hold)
+          logger.warn('reader.branch_create_not_opened', {
+            branchId,
+            newBranchId,
+            cause: 'story-left',
+          })
           refreshAfterFork(sid)
           close()
           return

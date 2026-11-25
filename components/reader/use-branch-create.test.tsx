@@ -574,7 +574,7 @@ describe('useBranchCreate — Create', () => {
       false,
     ],
   ] as const)(
-    'with the story %s by the commit, skips the tail and closes the modal',
+    'with the story %s by the commit, skips the tail, closes the modal and logs it',
     async (_name, leave, refreshes) => {
       actions.fork.mockImplementation(async () => {
         leave()
@@ -590,6 +590,11 @@ describe('useBranchCreate — Create', () => {
       else expect(branchList.refresh).not.toHaveBeenCalled()
       expect(hook.result.current.create.modal).toBeNull()
       expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
+      expect(logWarn).toHaveBeenCalledExactlyOnceWith('reader.branch_create_not_opened', {
+        branchId: BRANCH,
+        newBranchId: CHILD,
+        cause: 'story-left',
+      })
       expectNoToast()
     },
   )
