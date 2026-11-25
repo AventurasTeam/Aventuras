@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { branches, entities, stories, type StoryDefinition } from '@/lib/db'
+import { branches, entities, stories, type Entity, type StoryDefinition } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 
@@ -89,5 +89,10 @@ describe('turnLeadOf', () => {
   it('needs no lead of a story with no definition', async () => {
     const ctx = await storyOn(null)
     expect(await turnLeadOf(IDS, ctx)).toEqual({ lead: null, missing: false })
+  })
+
+  it('types a read that found the lead as missing nothing', () => {
+    type Read = Awaited<ReturnType<typeof turnLeadOf>>
+    expectTypeOf<Extract<Read, { lead: Entity }>['missing']>().toEqualTypeOf<false>()
   })
 })
