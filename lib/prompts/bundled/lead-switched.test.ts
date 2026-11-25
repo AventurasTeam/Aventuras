@@ -596,3 +596,59 @@ describe('the chapter metadata and part calls, switched', () => {
     expect(user).toMatch(/Aefre[^\n]*\n+The gate groans open\./)
   })
 })
+
+// memory/chapter-close.md → Conversations: a close's turns carry each mark with its close handle,
+// bare as the close writes every id.
+describe('close prose: lead marks', () => {
+  const MARKED_CLOSE_TURNS = [
+    {
+      handle: 't1',
+      kind: 'opening',
+      content: 'Rain on the river.',
+      leadMark: { id: 'c2', name: 'Aria' },
+    },
+    { handle: 't2', kind: 'user_action', content: 'I wait for the ferry.' },
+    { handle: 't3', kind: 'ai_reply', content: 'Tobin poles across.', leadMark: { gone: true } },
+    { handle: 't4', kind: 'ai_reply', content: 'The far bank is dark.', leadMark: { none: true } },
+    {
+      handle: 't5',
+      kind: 'user_action',
+      content: 'I step onto the jetty.',
+      leadMark: { id: 'c1', name: 'Wren' },
+    },
+  ]
+  const closeSystem = (): string =>
+    renderTemplate(TEMPLATE_IDS.closeLore, {
+      mode: 'adventure',
+      closeTurns: MARKED_CLOSE_TURNS,
+      closeWritesSoFar: '',
+    }).system
+
+  it('prints a mark with its bare handle and name, after the turn heading and before its prose', () => {
+    const system = closeSystem()
+
+    expect(system).not.toContain('[c1]')
+    expect(system).not.toContain('[c2]')
+    const heading = system.indexOf('## t1 (the opening)')
+    const mark = system.indexOf('Aria (c2)')
+    expect(heading).toBeGreaterThan(-1)
+    expect(mark).toBeGreaterThan(heading)
+    expect(system.indexOf('Rain on the river.')).toBeGreaterThan(mark)
+    // A user's turn: the mark sits before its <user_turn> tag.
+    const userMark = system.indexOf('Wren (c1)')
+    expect(userMark).toBeGreaterThan(system.indexOf("## t5 (the user's turn)"))
+    expect(system.indexOf('<user_turn>\nI step onto the jetty.')).toBeGreaterThan(userMark)
+    // Last, so it is first written once the handles print: the gone and none lines' wording.
+    expect(system).toMatchSnapshot()
+  })
+
+  it('prints a line for a gone and a none mark, and nothing before an unmarked turn', () => {
+    const system = closeSystem()
+
+    expect(system).not.toContain('## t3 (narration)\nTobin poles across.')
+    expect(system).not.toContain('## t4 (narration)\nThe far bank is dark.')
+    expect(system).toContain(
+      "## t2 (the user's turn)\n<user_turn>\nI wait for the ferry.\n</user_turn>",
+    )
+  })
+})

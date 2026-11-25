@@ -524,9 +524,18 @@ const HANDLES: Readonly<Record<string, string>> = {
 }
 const handleOf = (entryId: string): string | undefined => HANDLES[entryId]
 
+// ENTRIES carry no lead stamp (`metadata: null`), so walked from no lead they get no mark.
+const CLOSE_UNMARKED = {
+  namedLeadId: null,
+  nameOf: (): string | undefined => undefined,
+  show: (): string => {
+    throw new Error('no turn of ENTRIES is marked')
+  },
+}
+
 describe('buildCloseTurns', () => {
   it("puts each entry's prose under its turn handle, in order", () => {
-    expect(buildCloseTurns(ENTRIES, handleOf)).toEqual([
+    expect(buildCloseTurns(ENTRIES, handleOf, CLOSE_UNMARKED)).toEqual([
       {
         handle: 't1',
         kind: 'opening',
@@ -543,7 +552,11 @@ describe('buildCloseTurns', () => {
 
   it('refuses an entry with no turn handle', () => {
     expect(() =>
-      buildCloseTurns(ENTRIES, (id) => (id === 'entry_close_3' ? undefined : handleOf(id))),
+      buildCloseTurns(
+        ENTRIES,
+        (id) => (id === 'entry_close_3' ? undefined : handleOf(id)),
+        CLOSE_UNMARKED,
+      ),
     ).toThrow('entry_close_3')
   })
 
@@ -563,7 +576,9 @@ describe('buildCloseTurns', () => {
     })
     const [key] = CLOSE_ONLY_CHAPTER_VARIABLES
 
-    const { system } = renderWith(engine, probe, { [key]: buildCloseTurns(ENTRIES, handleOf) })
+    const { system } = renderWith(engine, probe, {
+      [key]: buildCloseTurns(ENTRIES, handleOf, CLOSE_UNMARKED),
+    })
 
     expect(system).toBe(
       [
@@ -581,5 +596,125 @@ describe('buildCloseTurns', () => {
         'The cold takes your breath. On the far bank Mora raises a shuttered lantern.',
       ].join('\n'),
     )
+  })
+})
+
+// architecture.md → System and user halves: a close's turns mark where the lead changes; the
+// marked character takes the handle `show` gives it as the turns are built.
+describe('buildCloseTurns → lead marks', () => {
+  const ARIA = 'char_00000000-0000-4000-8000-0000000000a1'
+  const WREN = 'char_00000000-0000-4000-8000-0000000000b1'
+  const GONE = 'char_00000000-0000-4000-8000-0000000000f1'
+  const NAMES: Readonly<Record<string, string>> = { [ARIA]: 'Aria', [WREN]: 'Wren' }
+  const nameOf = (id: string): string | undefined => NAMES[id]
+
+  // ENTRIES, each stamped with its lead; undefined leaves one unstamped.
+  const stampedAs = (stamps: readonly (string | undefined)[]): CloseRangeEntry[] =>
+    ENTRIES.map((entry, i) => {
+      const leadId = stamps[i]
+      return {
+        ...entry,
+        metadata: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          ...(leadId === undefined ? {} : { leadId }),
+        },
+      }
+    })
+
+  // Hands c1, c2… in first-call order, as a close's id map does, and records each call.
+  function recordingShow() {
+    const calls: [string, string][] = []
+    const handles = new Map<string, string>()
+    const show = (id: string, name: string): string => {
+      calls.push([id, name])
+      const handle = handles.get(id) ?? `c${handles.size + 1}`
+      handles.set(id, handle)
+      return handle
+    }
+    return { calls, show }
+  }
+
+  it("marks no turn when every stamp is the named lead's, and shows no character", () => {
+    const { calls, show } = recordingShow()
+
+    const turns = buildCloseTurns(stampedAs([WREN, WREN, WREN]), handleOf, {
+      namedLeadId: WREN,
+      nameOf,
+      show,
+    })
+
+    expect(turns.map((turn) => 'leadMark' in turn)).toEqual([false, false, false])
+    expect(calls).toEqual([])
+  })
+
+  it('marks the first turn of each run, its character under the handle show gives it', () => {
+    const { calls, show } = recordingShow()
+
+    const turns = buildCloseTurns(stampedAs([ARIA, WREN, WREN]), handleOf, {
+      namedLeadId: WREN,
+      nameOf,
+      show,
+    })
+
+    expect(turns).toEqual([
+      {
+        handle: 't1',
+        kind: 'opening',
+        content: 'The marsh road ended at a wall of black water, and the keep stood beyond it.',
+        leadMark: { id: 'c1', name: 'Aria' },
+      },
+      {
+        handle: 't2',
+        kind: 'user_action',
+        content: 'I wade in, holding the sigil above my head.',
+        leadMark: { id: 'c2', name: 'Wren' },
+      },
+      {
+        handle: 't3',
+        kind: 'ai_reply',
+        content: 'The cold takes your breath. On the far bank Mora raises a shuttered lantern.',
+      },
+    ])
+    expect('leadMark' in turns[2]!).toBe(false)
+    expect(calls).toEqual([
+      [ARIA, 'Aria'],
+      [WREN, 'Wren'],
+    ])
+  })
+
+  it('marks a run under a character the branch no longer holds as gone, and shows it no handle', () => {
+    const { calls, show } = recordingShow()
+
+    const turns = buildCloseTurns(stampedAs([GONE, GONE, WREN]), handleOf, {
+      namedLeadId: WREN,
+      nameOf,
+      show,
+    })
+
+    expect(turns.map((turn) => turn.leadMark)).toEqual([
+      { gone: true },
+      undefined,
+      { id: 'c1', name: 'Wren' },
+    ])
+    expect(calls).toEqual([[WREN, 'Wren']])
+  })
+
+  it('marks a run with no stamp as having no lead', () => {
+    const { calls, show } = recordingShow()
+
+    const turns = buildCloseTurns(stampedAs([undefined, WREN, WREN]), handleOf, {
+      namedLeadId: WREN,
+      nameOf,
+      show,
+    })
+
+    expect(turns.map((turn) => turn.leadMark)).toEqual([
+      { none: true },
+      { id: 'c1', name: 'Wren' },
+      undefined,
+    ])
+    expect(calls).toEqual([[WREN, 'Wren']])
   })
 })

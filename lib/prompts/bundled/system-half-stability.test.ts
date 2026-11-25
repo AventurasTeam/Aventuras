@@ -777,6 +777,26 @@ describe("a close's task templates share one system half", () => {
     expect(new Set(systems).size).toBe(1)
   })
 
+  // A mark's handle is fixed before the part's first render; a gone mark takes none.
+  it('renders the same system half for each task of a part whose turns carry lead marks', () => {
+    const markedTurns = [
+      { ...CLOSE_TASK_TURNS[0]!, leadMark: { gone: true } },
+      CLOSE_TASK_TURNS[1]!,
+      { ...CLOSE_TASK_TURNS[2]!, leadMark: { id: 'c1', name: 'Kael' } },
+    ]
+    const systems = CLOSE_TASK_TEMPLATES.map(
+      (id) =>
+        renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id], closeTurns: markedTurns }).system,
+    )
+
+    expect(CLOSE_TASK_TEMPLATES).toHaveLength(5)
+    expect(new Set(systems).size).toBe(1)
+    // Positive control: the marks reach the half.
+    const lore = TEMPLATE_IDS.closeLore
+    expect(systems[0]).not.toBe(renderTemplate(lore, { ...SHARED, ...TASK_CONTEXTS[lore] }).system)
+    expect(systems[0]).toContain('Kael (c1)')
+  })
+
   // Control: the half isn't equal by being empty of the chapter; other turns change it.
   it('changes with the turns', () => {
     const id = TEMPLATE_IDS.closeIdentity

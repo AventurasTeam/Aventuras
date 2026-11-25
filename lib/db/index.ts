@@ -26,6 +26,7 @@ export type { CharacterRelationshipWrite } from './entities/character-relationsh
 export { entityWriteSchema } from './entities/entity-schema'
 export type { EntityWrite } from './entities/entity-schema'
 export { readBranchLead } from './entities/branch-lead'
+export { readEntityNames } from './entities/entity-names'
 export { happeningAwarenessWriteSchema } from './happenings/happening-awareness-schema'
 export type { HappeningAwarenessWrite } from './happenings/happening-awareness-schema'
 export { happeningInvolvementWriteSchema } from './happenings/happening-involvement-schema'

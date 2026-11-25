@@ -106,18 +106,46 @@ export function buildChapterMergeContext(input: {
   }
 }
 
-/** A turn as a close task shows it (VARIABLES.chapter → closeTurns). */
-export type CloseTurn = { handle: string; kind: CloseRangeEntry['kind']; content: string }
+/** A close's mark: the id is the close handle. */
+export type CloseLeadMark = { id: string; name: string } | { gone: true } | { none: true }
 
-/** A close task's turns: each entry's prose under the turn handle the run registered for it. */
+/** A turn as a close task shows it (VARIABLES.chapter → closeTurns). */
+export type CloseTurn = {
+  handle: string
+  kind: CloseRangeEntry['kind']
+  content: string
+  leadMark?: CloseLeadMark
+}
+
+/**
+ * A close task's turns: each entry's prose under the turn handle the run registered for it, and a
+ * mark where its lead changes, walked from `namedLeadId`; a marked character takes `show`'s handle.
+ */
 export function buildCloseTurns(
   entries: readonly CloseRangeEntry[],
   handleOf: (entryId: string) => string | undefined,
+  marks: {
+    namedLeadId: string | null
+    nameOf: (id: string) => string | undefined
+    show: (id: string, name: string) => string
+  },
 ): CloseTurn[] {
-  return entries.map((entry) => {
+  const leadMarkOf = leadMarks(
+    entries.map((entry) => leadStampOf(entry)),
+    marks.namedLeadId,
+    marks.nameOf,
+  )
+  return entries.map((entry, i) => {
     const handle = handleOf(entry.id)
     // A turn shown without its handle is one no write can cite.
     if (handle === undefined) throw new Error(`close turns: entry ${entry.id} has no turn handle`)
-    return { handle, kind: entry.kind, content: promptProse(entry) }
+    const turn: CloseTurn = { handle, kind: entry.kind, content: promptProse(entry) }
+    const mark = leadMarkOf[i]
+    if (mark === undefined) return turn
+    // Shown as the turns are built, before the part's first render, so its tasks share the handle.
+    return {
+      ...turn,
+      leadMark: 'id' in mark ? { id: marks.show(mark.id, mark.name), name: mark.name } : mark,
+    }
   })
 }

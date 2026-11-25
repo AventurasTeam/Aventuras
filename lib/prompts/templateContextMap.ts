@@ -644,10 +644,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'closeTurns',
-      type: '{ handle: string; kind: string; content: string }[]',
+      type: '{ handle: string; kind: string; content: string; leadMark?: { id: string; name: string } | { gone: true } | { none: true } }[]',
       category: 'Story',
       description:
-        "A close task's turns: the chapter, or the part the task runs over, each entry in order under its turn id (`t1`, `t2`…, the ids its writes cite), with its `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks. Only a close task's render sets it; the metadata call leaves it unset.",
+        "A close task's turns: the chapter, or the part the task runs over, each entry in order under its turn id (`t1`, `t2`…, the ids its writes cite), with its `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks. A turn written under a different lead from the turn before it (the first turn: from the branch's lead) carries `leadMark`, which the bundled templates print before it: `{ id, name }`, the character's short id (c1, c2…) and name; `{ gone: true }`, a character no longer on the branch, with no id; or `{ none: true }`, a turn written with no lead. It is absent on every other turn, and each part's turns are walked on their own. Only a close task's render sets it; the metadata call leaves it unset.",
       required: false,
     },
     {
