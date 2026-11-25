@@ -398,7 +398,7 @@ async function showThenStart(
 /**
  * chapter-timeline.md → Re-run a close, Re-run on new branch: the check on the parent, the fork,
  * the tail, the refresh and the start on the new branch. Holds the reader from its call to the
- * navigation. Never rejects.
+ * navigation. Settles every refusal and failure itself; only a throw past its catches rejects.
  */
 export async function runCloseRerunOnBranch(args: {
   storyId: string

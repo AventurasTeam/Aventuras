@@ -928,7 +928,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(actions.fork).not.toHaveBeenCalled()
   })
 
-  // A regenerate's follow-up sweep: a turn body with no run and no mark, which the check refuses on.
+  // A regenerate's follow-up sweep: a turn body with no run or mark, which the check refuses on.
   it("a check refused on the parent's turn body holds the actions until the body settles", async () => {
     vi.spyOn(toast, 'error').mockReturnValue('')
     actions.check.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })

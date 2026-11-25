@@ -87,7 +87,7 @@ function RefusesOnCreate({ line, ...props }: BranchCreateModalProps & { line: st
   )
 }
 
-/** F2 starts or ends a swap, as the hook recomputes the props each render; a press meets the gate. */
+/** F2 starts or ends a swap, as the hook recomputes props each render; a press meets the gate. */
 function SwapToggles(props: BranchCreateModalProps) {
   const [swapping, setSwapping] = useState(true)
   const [message, setMessage] = useState<string | null>(null)
@@ -292,7 +292,7 @@ export const Phone390Cancels: Story = {
   },
 }
 
-/** From the press to the navigation: every control disabled, nothing closes, a second Enter sends nothing. */
+/** From press to navigation: every control disabled, nothing closes, a second Enter is inert. */
 export const Pending: Story = {
   render: (args) => <PendsOnCreate {...args} />,
   play: async ({ args }) => {

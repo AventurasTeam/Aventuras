@@ -293,9 +293,8 @@ function loreModelOf(settings: StorySettings): string | null {
 }
 
 /**
- * The re-run confirm's lines (chapter-timeline.md → Re-run a close): the branch's name, reversal
- * counts, the shortcut's and its fork point when turns followed, and the cost. Writes nothing;
- * held shared across its reads.
+ * The re-run confirm's lines (chapter-timeline.md → Re-run a close); the shortcut's only when turns
+ * followed. Writes nothing; held shared across its reads.
  */
 export async function getCloseRerunPreview(
   branchId: string,
@@ -451,10 +450,9 @@ export type CloseRerunParentCheck =
   | CloseRerunCountsChanged
 
 /**
- * chapter-close.md → Re-running a close, Re-run on new branch: every start refusal checked on the
- * parent before the fork commits. No pending mark, since forkBranch's gate counts every pending
- * turn; writes nothing. A clear preview's fork point is the N the fork takes. Rejects when a read
- * throws.
+ * chapter-close.md → Re-running a close, Re-run on new branch: every start refusal, checked on the
+ * parent before the fork commits. No pending mark (forkBranch's gate counts every pending turn);
+ * writes nothing. A clear preview's fork point is the fork's N. Rejects when a read throws.
  */
 export async function checkCloseRerunParent(
   branchId: string,
@@ -521,10 +519,7 @@ export async function startCloseRerun(
   chapterId: string,
   expected: CloseRerunExpected,
   ctx: DbCtx,
-  /**
-   * onStarted fires once, when the chain's first run reserves (after the mark ends); never on a
-   * refusal.
-   */
+  /** Fires once, when the chain's first run reserves (after the mark ends); never on a refusal. */
   opts?: { onStarted?: () => void },
 ): Promise<CloseRerunStart> {
   return checkedStart(branchId, ctx, (story, own) =>
@@ -534,8 +529,8 @@ export async function startCloseRerun(
 
 /**
  * chapter-close.md → Re-running a close, on the branch a fork just made current: the in-place
- * start's refusals there, then the re-run with no shortcut, its expectations read under its mark.
- * A turn after the close refuses `turns-followed`. Rejects as startCloseRerun does.
+ * start's refusals, then the re-run with no shortcut. A turn after the close refuses
+ * `turns-followed`. Rejects as startCloseRerun does.
  */
 export async function startCloseRerunOnFork(
   branchId: string,

@@ -58,7 +58,7 @@ function refreshAfterFork(storyId: string): void {
   )
 }
 
-// Outside the hook: the React Compiler can't lower a `finally`, nor a condition inside a `try`.
+// Outside the hook: the React Compiler bails on `finally`, and on `&&`/`?:`/`?.` inside a `try`.
 async function holdingReader(
   branchId: string,
   run: (hold: ReaderHoldToken) => Promise<void>,
@@ -186,7 +186,7 @@ export function useBranchCreate({
         committed = true
         const newBranchId = forked.branchId
         const open = currentStoryStore.getCurrentStory()
-        // Left or switched since: the parent's reader is gone, so the tail has no screens to replace.
+        // Left or switched since: the parent's reader is gone, so no screens to replace.
         if (open == null || open.storyId !== sid || open.branchId !== branchId) {
           readerHoldStore.release(hold)
           refreshAfterFork(sid)
@@ -200,7 +200,7 @@ export function useBranchCreate({
             ctx,
           )
         } catch (error) {
-          // Its throws all come after its reset: the reader navigated, and the new one's load reports.
+          // Its throws come after its reset: the reader navigated, and the new one's load reports.
           logger.error('reader.branch_create_show_threw', {
             branchId,
             newBranchId,

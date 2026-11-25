@@ -248,15 +248,12 @@ export type ShowBranchResult =
   | { status: 'ok' }
   /** Navigated with nothing filled: the new reader's own load takes over. */
   | { status: 'shown-unloaded' }
-  /**
-   * Nothing navigated or published; the pointer is back on `fromBranchId` (logged if that failed).
-   */
+  /** Nothing navigated or published; the pointer is back on `fromBranchId` (logged on failure). */
   | { status: 'navigation-blocked' }
 
 /**
- * C8: shows a branch its caller's own transaction made current, as a fork does: the switch's read,
- * re-read and block, with no gate and no abandon. It writes no pointer unless the reset doesn't
- * take; then the pointer goes back to `fromBranchId`, as the switch's does.
+ * C8: shows a branch the caller's transaction made current (a fork): the switch's read, re-read
+ * and block, no gate or abandon. Writes the pointer only to restore `fromBranchId` if reset fails.
  */
 export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
   const { storyId, branchId, hold, replaceStack } = input

@@ -3390,7 +3390,7 @@ export const EditFocusGateReasonOutranks: Story = {
     const gate = t('generationGate.updatingMemory')
 
     const p3 = entryRow('p3')
-    // The pencil and ⎇ wait on the gate, which cancelling the edit wouldn't free; ↻ and × on the edit.
+    // Pencil and ⎇ wait on the gate, which cancelling the edit wouldn't free; ↻ and × on the edit.
     const gated = within(p3).getAllByRole('button', { name: gate })
     expect(gated).toHaveLength(2)
     for (const button of gated) expect(button).toBeDisabled()

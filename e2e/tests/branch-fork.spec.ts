@@ -29,10 +29,8 @@ import { memoryBanner } from '../locators/memory-banner'
 import { reader, undoText } from '../locators/reader'
 import { rerunConfirm } from '../locators/rerun-confirm'
 
-// Creating a branch from the reader (branch-navigator.md → Branch creation — modal), UI-driven and
-// DB-asserted on the hero seed (lib/db/devtools/seed-dataset.ts): two closed chapters, turns after
-// the second, and a fork of its own. Entries, positions and names come from the DB, and every entry
-// read names its branch: under a fork two branches share entry ids.
+// branch-navigator.md → Branch creation — modal, on the hero seed (lib/db/devtools/seed-dataset.ts).
+// Every entry read names its branch: under a fork two branches share entry ids.
 const HERO_STORY = 'story_hero'
 const TYPED_NAME = '  Side quest  '
 const STORED_NAME = 'Side quest'

@@ -29,7 +29,10 @@ export async function closeRunsOf(page: Page, storyId: string): Promise<[string,
   return rows.map(([actionId, outcome]) => [actionId as string, outcome as string | null])
 }
 
-/** Polls until the one run started after `before` finishes; asserts it committed and isn't `closeAction`; returns its action. */
+/**
+ * Polls until the one run after `before` finishes; asserts it committed and isn't `closeAction`;
+ * returns its action.
+ */
 export async function committedRerunAfter(
   page: Page,
   storyId: string,
