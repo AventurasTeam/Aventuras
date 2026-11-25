@@ -1,7 +1,14 @@
 import { eq } from 'drizzle-orm'
 import { vi } from 'vitest'
 
-import { stories, storyDefinitionSchema, storySettingsSchema } from '@/lib/db'
+import {
+  entities,
+  stories,
+  storyDefinitionSchema,
+  storySettingsSchema,
+  type Entity,
+} from '@/lib/db'
+import { makeEntity } from '@/lib/list-modules/__tests__/fixtures'
 import { currentStoryStore, entitiesStore, entriesStore, rehydrateStories } from '@/lib/stores'
 
 import type { makeHarness } from '../../../pipeline/__tests__/harness'
@@ -116,19 +123,29 @@ export const STORY_SETTINGS = storySettingsSchema.parse({
   packVariables: {},
 })
 
-// narrativePhase (per-turn.ts) reads the open story from currentStoryStore, not
-// from the run's own storyId/branchId — mirrors the real app opening a story
-// before the composer can submit a turn. storiesStore is populated from the same
-// committed row because the retrieval phase resolves the embedder config there.
+// The lead `openStory` flags: the fixture story is adventure, so it needs one. Its own id, apart
+// from the cast the turn tests seed, so a test's rows never collide with it.
+const TURN_LEAD_ID = 'char_00000000-0000-4000-8000-00000000a1ea'
+
+function turnLead(branchId: string): Entity {
+  return makeEntity({ id: TURN_LEAD_ID, branchId, kind: 'character', name: 'Aria', isLead: 1 })
+}
+
+// narrativePhase reads the open story from currentStoryStore, not the run's ids; storiesStore comes
+// from the same row because retrieval resolves the embedder config there.
+// `lead: false` opens the branch with no lead, which a turn on this story refuses.
 export async function openStory(
   db: Awaited<ReturnType<typeof makeHarness>>['db'],
   storyId: string,
   branchId: string,
+  opts: { lead?: boolean } = {},
 ): Promise<void> {
   await db
     .update(stories)
     .set({ definition: STORY_DEFINITION, settings: STORY_SETTINGS })
     .where(eq(stories.id, storyId))
+  const leadRows = opts.lead === false ? [] : [turnLead(branchId)]
+  if (leadRows.length > 0) await db.insert(entities).values(leadRows)
   await rehydrateStories(db)
   currentStoryStore.set({
     storyId,
@@ -138,7 +155,7 @@ export async function openStory(
   })
   // The real open action loads both working sets in one block, and the
   // generation context guards on the entities half being loaded for the branch.
-  entitiesStore.hydrate(branchId, [])
+  entitiesStore.hydrate(branchId, leadRows)
 }
 
 export function branchEntries(branchId: string) {

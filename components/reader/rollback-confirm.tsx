@@ -21,7 +21,8 @@ type RollbackConfirmModalProps = {
   onOpenChange: (open: boolean) => void
   targetEntryNumber: number
   counts: RollbackCounts
-  /** Set while a run holds the reversal (as it holds the row's ↻ and ×); disables the confirm. */
+  /** Disables the confirm, as its reason: a run holding the reversal (as it holds the row's ↻
+   * and ×), or a regenerate's missing lead. */
   blockedReason?: string
   onConfirm: () => void
   variant?: 'rollback' | 'regenerate'

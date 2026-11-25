@@ -226,8 +226,11 @@ mechanism rather than the hover-preview.
   the press, re-opens at once on the same target, except
   `counts-changed`, which has its own toast ([Counts](#counts)).
 - **A run starting under an open modal** — the modal's confirm disables
-  when the target row's ↻ or × would: a closed gate, or a re-run on a
-  stamped entry. If a run starts between its last enabled
+  when the target row's ↻ or × would: a closed gate, a re-run on a
+  stamped entry, or, for a regenerate, a branch that needs a lead and
+  has none
+  ([`principles.md → Composer mode`](../../../principles.md#composer-mode--send-time-transform-narration-aware)).
+  If a run starts between its last enabled
   render and the press, the commit refuses as in flight: a toast says
   `Unavailable while generating.` and the modal, closed by the press,
   re-opens at once, its confirm disabled with the blocking run's tooltip

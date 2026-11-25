@@ -94,6 +94,7 @@ async function setup({
       entity('char_mira', 'br_1', { createdAt: 2 }),
       entity('char_vorne', 'br_1', { createdAt: 3 }),
       entity('char_sage', 'br_1', { status: 'staged' }),
+      entity('char_wren', 'br_1', { status: 'retired' }),
       entity('loc_hollow', 'br_1', { kind: 'location' }),
       entity('char_kael', 'br_2', { isLead: 1 }),
       entity('char_mira', 'br_2'),
@@ -311,6 +312,29 @@ describe('setBranchLead', () => {
     ])
   })
 
+  // data-model.md → The lead: a reader outside the render path that finds two logs the error.
+  it('logs the double it reads once, with both ids, and still repairs it', async () => {
+    await setFlag('char_vorne', 1)
+    const error = vi.spyOn(logger, 'error')
+
+    expect(await setBranchLead('br_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
+
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: 'br_1',
+      ids: ['char_kael', 'char_vorne'],
+    })
+    expect(await flagged('br_1')).toEqual(['char_mira'])
+  })
+
+  it('logs nothing on a branch with one flagged row', async () => {
+    const error = vi.spyOn(logger, 'error')
+
+    expect(await setBranchLead('br_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
+
+    expect(error).not.toHaveBeenCalled()
+  })
+
   it('clears the other flagged rows oldest first', async () => {
     await ctx.db.insert(entities).values(entity('char_ash', 'br_1', { isLead: 1, createdAt: 5 }))
     await hydrateMain()
@@ -347,6 +371,7 @@ describe('setBranchLead', () => {
   it.each([
     ['a location', 'loc_hollow', 'not-character'],
     ['a staged character', 'char_sage', 'not-active'],
+    ['a retired character', 'char_wren', 'not-active'],
     ['a row only on another branch', 'char_other', 'wrong-branch'],
     ['a row on no branch', 'char_ghost', 'wrong-branch'],
   ])('refuses %s with %s and writes nothing', async (_name, id, code) => {
@@ -381,6 +406,15 @@ describe('setBranchLead', () => {
 
     expect(await deltaRows()).toEqual([])
     expect(await flagged('br_1')).toEqual(['char_kael'])
+  })
+
+  it('refuses in-flight under the gate even when the target is already the only lead', async () => {
+    startHardGateRun()
+
+    expect(await setBranchLead('br_1', 'char_kael', ctx)).toEqual({
+      status: 'rejected',
+      code: 'in-flight',
+    })
   })
 
   // The gate is the named branch's: its hold counts, another branch's doesn't.
@@ -513,6 +547,20 @@ describe('unsetBranchLead', () => {
     expect(await flagged('br_1')).toEqual(['char_kael', 'char_vorne'])
   })
 
+  it('logs the double it reads once, with both ids, and still clears both', async () => {
+    await setFlag('char_vorne', 1)
+    const error = vi.spyOn(logger, 'error')
+
+    expect(await unsetBranchLead('br_1', ctx)).toEqual({ status: 'ok' })
+
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: 'br_1',
+      ids: ['char_kael', 'char_vorne'],
+    })
+    expect(await flagged('br_1')).toEqual([])
+  })
+
   it('writes nothing and keeps redo when the branch has no lead', async () => {
     await setFlag('char_kael', 0)
     undoRedoStore.pushRedoGroup(__redoGroupForTest('br_1'))
@@ -553,6 +601,17 @@ describe('unsetBranchLead', () => {
     expect(await flagged('br_1')).toEqual(['char_kael'])
   })
 
+  it('queues behind a set fired with it on one branch: the unset clears the set’s new lead', async () => {
+    const [set, unset] = await Promise.all([
+      setBranchLead('br_1', 'char_mira', ctx),
+      unsetBranchLead('br_1', ctx),
+    ])
+
+    expect(set).toEqual({ status: 'ok' })
+    expect(unset).toEqual({ status: 'ok' })
+    expect(await flagged('br_1')).toEqual([])
+  })
+
   it('refuses in-flight while a hard-gate run holds the gate', async () => {
     startHardGateRun()
 
@@ -561,6 +620,16 @@ describe('unsetBranchLead', () => {
       code: 'in-flight',
     })
     expect(await flagged('br_1')).toEqual(['char_kael'])
+  })
+
+  it('refuses in-flight under the gate even when the branch has no lead', async () => {
+    await setFlag('char_kael', 0)
+    startHardGateRun()
+
+    expect(await unsetBranchLead('br_1', ctx)).toEqual({
+      status: 'rejected',
+      code: 'in-flight',
+    })
   })
 
   it('throws for a branch that does not exist', async () => {

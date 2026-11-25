@@ -16,6 +16,7 @@ import {
   undoTargetText,
   type UndoNames,
   type UndoRowSource,
+  type UnseenUndoDescription,
 } from './undo-copy'
 
 afterEach(() => {
@@ -63,6 +64,14 @@ describe('undoTargetText', () => {
       { kind: 'rows', seen: false, first: { table: 'entities', id: 'ent' }, more: 2 },
       'Undo your changes to Tobin and 2 more…',
     ],
+    [
+      { kind: 'leadSet', seen: false, row: { table: 'entities', id: 'ent' } },
+      'Undo making Tobin the lead…',
+    ],
+    [
+      { kind: 'leadUnset', seen: false, row: { table: 'entities', id: 'ent' } },
+      'Undo removing Tobin as lead…',
+    ],
     [{ kind: 'latest', seen: false }, 'Undo the latest change…'],
   ])('labels %o in the menu', (description, label) => {
     expect(undoTargetText(description, NAMES, 'menu')).toBe(label)
@@ -85,11 +94,31 @@ describe('undoTargetText', () => {
     expect(undoTargetText(rerun, NAMES, 'redoNotice')).toBe('Redid the latest change')
   })
 
+  it('words a lead change in the notice and both redo places, with no ellipsis', () => {
+    const set: UndoDescription = {
+      kind: 'leadSet',
+      seen: false,
+      row: { table: 'entities', id: 'ent' },
+    }
+    const unset: UndoDescription = {
+      kind: 'leadUnset',
+      seen: false,
+      row: { table: 'entities', id: 'ent' },
+    }
+    expect(undoTargetText(set, NAMES, 'notice')).toBe('Undid making Tobin the lead')
+    expect(undoTargetText(set, NAMES, 'redoMenu')).toBe('Redo making Tobin the lead')
+    expect(undoTargetText(set, NAMES, 'redoNotice')).toBe('Redid making Tobin the lead')
+    expect(undoTargetText(unset, NAMES, 'notice')).toBe('Undid removing Tobin as lead')
+    expect(undoTargetText(unset, NAMES, 'redoMenu')).toBe('Redo removing Tobin as lead')
+    expect(undoTargetText(unset, NAMES, 'redoNotice')).toBe('Redid removing Tobin as lead')
+  })
+
   it.each<UndoDescription>([
     { kind: 'turn', seen: true, entryId: 'e_unknown' },
     { kind: 'close', seen: false, chapterId: 'ch_unknown' },
     { kind: 'row', seen: false, op: 'update', row: { table: 'lore', id: 'unnamed' } },
     { kind: 'keptClose', seen: false, entryId: null },
+    { kind: 'leadSet', seen: false, row: { table: 'entities', id: 'unnamed' } },
   ])('falls to the latest change when %o names nothing it can read', (description) => {
     expect(undoTargetText(description, NAMES, 'menu')).toBe('Undo the latest change…')
     expect(undoTargetText(description, NAMES, 'notice')).toBe('Undid the latest change')
@@ -97,6 +126,21 @@ describe('undoTargetText', () => {
 })
 
 describe('undoConfirmTitle', () => {
+  it('asks a lead change as a question', () => {
+    const set: UnseenUndoDescription = {
+      kind: 'leadSet',
+      seen: false,
+      row: { table: 'entities', id: 'ent' },
+    }
+    const unset: UnseenUndoDescription = {
+      kind: 'leadUnset',
+      seen: false,
+      row: { table: 'entities', id: 'ent' },
+    }
+    expect(undoConfirmTitle(set, NAMES)).toBe('Undo making Tobin the lead?')
+    expect(undoConfirmTitle(unset, NAMES)).toBe('Undo removing Tobin as lead?')
+  })
+
   it('asks the undo as a question', () => {
     expect(undoConfirmTitle({ kind: 'close', seen: false, chapterId: 'ch3' }, NAMES)).toBe(
       "Undo chapter 3's close?",

@@ -652,6 +652,37 @@ export function retireSeededCharacter(
   }
 }
 
+/** Before launch: unflags every row on `branchId`, then flags the one named `pick.name` (the
+ * newest by `created_at` when `pick.newest`, else asserts exactly one match). */
+export function flagSeededLead(
+  dbPath: string,
+  branchId: string,
+  pick: { name: string; newest?: boolean },
+): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const named = db
+      .prepare(
+        `SELECT id FROM entities WHERE branch_id = ? AND kind = 'character' AND name = ?
+         ORDER BY created_at DESC`,
+      )
+      .all(branchId, pick.name) as { id: string }[]
+    const target = pick.newest === true || named.length === 1 ? named[0] : undefined
+    if (target == null)
+      throw new Error(
+        `expected one character named ${pick.name} on ${branchId}, found ${named.length}`,
+      )
+    db.prepare(`UPDATE entities SET is_lead = 0 WHERE branch_id = ? AND is_lead = 1`).run(branchId)
+    db.prepare(`UPDATE entities SET is_lead = 1 WHERE branch_id = ? AND id = ?`).run(
+      branchId,
+      target.id,
+    )
+  } finally {
+    db.close()
+  }
+}
+
 /** Strip the `classifier` agent assignment so the pass fails pre-flight. Runs before launch. */
 export function unassignClassifierAgent(dbPath: string): void {
   const db = new DatabaseSync(dbPath)

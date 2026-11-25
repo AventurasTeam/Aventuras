@@ -13,11 +13,13 @@ import {
 } from '@/lib/pipeline'
 import { entriesStore, generationStore, rerunHoldsReversal, undoRedoStore } from '@/lib/stores'
 
+import { settleUserWrites } from '../delta/apply-delta-action'
 import {
   DeltaReplayError,
   ReversalIntegrityError,
   reverseAndPruneDeltaRows,
 } from '../delta/reverse-replay'
+import { LEAD_MISSING } from '../refusal-codes'
 import {
   resolveSweep,
   reversalRefused,
@@ -31,6 +33,7 @@ import { bracketProseReversal } from '../story-entries/prose-reversal'
 import { STORY_ENTRY_REJECTION } from '../story-entries/register'
 import type { DbCtx } from '../types'
 import { withBranchQueue, withPendingTurn } from './branch-queue'
+import { turnLeadOf } from './turn-lead'
 
 /**
  * Why a regenerate refused. Distinct from `reason` (a diagnostic string): the
@@ -45,6 +48,7 @@ export type RegenerateRejectionCode =
   | 'not-an-ai-reply'
   | 'no-origin'
   | 'sweep-refused'
+  | typeof LEAD_MISSING
   | typeof STORY_ENTRY_REJECTION.countsChanged
 
 export type RegenerateTurnResult =
@@ -85,6 +89,12 @@ const IN_FLIGHT_REJECTION = {
   status: 'rejected',
   code: 'generation-in-flight',
   reason: 'generation in flight',
+} as const
+
+const LEAD_MISSING_REJECTION = {
+  status: 'rejected',
+  code: LEAD_MISSING,
+  reason: 'branch needs a lead and has none',
 } as const
 
 type Swept =
@@ -183,6 +193,10 @@ export async function regenerateTurn(
         )
           return IN_FLIGHT_REJECTION
         return withPendingTurn(ids.branchId, async (startTurn) => {
+          // Pre-sweep, like the reader's gate: a lead first set after this reply passes, and the
+          // sweep leaves the run leadless. The mark bars new writes; settling lands in-flight ones.
+          await settleUserWrites()
+          if ((await turnLeadOf(ids, ctx)).missing) return LEAD_MISSING_REJECTION
           let swept: Swept
           try {
             swept = await bracketProseReversal<Swept>(

@@ -817,7 +817,7 @@ describe('the seeded lead', () => {
     expect(rows.length).toBeGreaterThan(1)
     expect(
       rows
-        .filter((row) => row.definition == null || 'leadEntityId' in row.definition)
+        .filter((row) => row.definition != null && 'leadEntityId' in row.definition)
         .map((row) => row.id),
     ).toEqual([])
   })

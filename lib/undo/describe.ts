@@ -23,6 +23,8 @@ export type UndoDescription =
   | { kind: 'close'; seen: false; chapterId: string }
   | { kind: 'rerun'; seen: false; chapterId: string }
   | { kind: 'keptClose'; seen: false; entryId: string | null }
+  | { kind: 'leadSet'; seen: false; row: UndoRowRef & { table: 'entities' } }
+  | { kind: 'leadUnset'; seen: false; row: UndoRowRef & { table: 'entities' } }
   | { kind: 'row'; seen: false; op: UndoGroupDelta['op']; row: UndoRowRef }
   | { kind: 'rows'; seen: false; first: UndoRowRef; more: number }
   | { kind: 'latest'; seen: false }
@@ -80,7 +82,35 @@ function closeDescription(deltas: readonly UndoGroupDelta[]): UndoDescription {
   return { kind: 'keptClose', seen: false, entryId: anchor }
 }
 
+const LEAD_FLAG = 'isLead'
+
+/**
+ * A user group writing the lead flag, besides a delete: the row it sets (its undo payload holds
+ * the flag off), else the oldest row it clears.
+ */
+function leadDescription(deltas: readonly UndoGroupDelta[]): UndoDescription | null {
+  if (deltas.some((d) => d.op === 'delete')) return null
+  const flagWrites = deltas.filter(
+    (d) =>
+      d.targetTable === 'entities' &&
+      d.op === 'update' &&
+      d.undoPayload != null &&
+      Object.hasOwn(d.undoPayload, LEAD_FLAG),
+  )
+  if (flagWrites.length === 0) return null
+  const set = flagWrites.find((d) => d.undoPayload?.[LEAD_FLAG] === 0)
+  if (set != null)
+    return { kind: 'leadSet', seen: false, row: { table: 'entities', id: set.targetId } }
+  return {
+    kind: 'leadUnset',
+    seen: false,
+    row: { table: 'entities', id: rowsWritten(flagWrites)[0].id },
+  }
+}
+
 function userGroupDescription(deltas: readonly UndoGroupDelta[]): UndoDescription {
+  const lead = leadDescription(deltas)
+  if (lead != null) return lead
   const rows = rowsWritten(deltas)
   const named = rows.filter((row) => UNDO_NAMED_TABLES.has(row.table))
   if (named.length === 0) return { kind: 'latest', seen: false }

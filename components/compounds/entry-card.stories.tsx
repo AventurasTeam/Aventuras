@@ -793,6 +793,155 @@ export const EditDuringRunNamesTheGate: StoryT = {
   },
 }
 
+const LEAD_REASON = t('reader:composerLeadMissing')
+const EDIT_FOCUS_REASON = t('reader:editFocus.held')
+
+/** The branch can't start a turn: ↻ waits with the reason; × and the non-turn actions stay live. */
+export const TurnStartRefusedHoldsRegenerate: StoryT = {
+  ...wrap,
+  args: { ...baseProps, ...aiEntry, turnStartReason: LEAD_REASON },
+  play: async ({ args }) => {
+    // A gated IconAction is named by its reason.
+    const regenerate = await screen.findByRole('button', { name: LEAD_REASON })
+    expect(regenerate).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: t('reader:entryCard.regenerate') }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: t('reader:entryCard.editEntry') })).not.toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('reader:entryCard.branchFromHere') }),
+    ).not.toBeDisabled()
+    const remove = screen.getByRole('button', { name: t('reader:entryCard.deleteEntry') })
+    expect(remove).not.toBeDisabled()
+    await userEvent.click(remove)
+    await waitFor(() => expect(args.onDelete).toHaveBeenCalledTimes(1))
+    expect(args.onRegen).not.toHaveBeenCalled()
+  },
+}
+
+/** The gate outranks the turn-start reason: a ↻ the gate holds names the gate's run. */
+export const GateReasonWinsOverTurnStart: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: true,
+    reversalDisabled: true,
+    turnStartReason: LEAD_REASON,
+  },
+  play: async () => {
+    // Pencil, regenerate, branch, flip era and delete, each renamed by the gate's reason.
+    const gated = await screen.findAllByRole('button', { name: PASS_REASON })
+    expect(gated).toHaveLength(5)
+    expect(screen.queryByRole('button', { name: LEAD_REASON })).not.toBeInTheDocument()
+  },
+}
+
+/** Edit focus elsewhere yields to the turn-start reason; cancelling the edit wouldn't clear it. */
+export const TurnStartOutranksEditFocus: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    held: true,
+    heldReason: EDIT_FOCUS_REASON,
+    turnStartReason: LEAD_REASON,
+  },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: LEAD_REASON })).toBeDisabled()
+    // Pencil, branch, flip era and delete wait on the edit.
+    expect(screen.getAllByRole('button', { name: EDIT_FOCUS_REASON })).toHaveLength(4)
+  },
+}
+
+/** Save & regenerate starts a turn, so it waits on the reason before saving; Save stays live. */
+export const TurnStartRefusedHoldsSaveAndRegenerate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    turnStartReason: LEAD_REASON,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async ({ args }) => {
+    const saveAndRegen = await screen.findByRole('button', {
+      name: t('reader:entryCard.saveAndRegenerate'),
+    })
+    expect(saveAndRegen).toBeDisabled()
+    const tooltips = screen.getAllByTitle(LEAD_REASON)
+    expect(tooltips).toHaveLength(1)
+    expect(tooltips[0]).toContainElement(saveAndRegen)
+    const save = screen.getByRole('button', { name: t('save') })
+    expect(save).not.toBeDisabled()
+    await userEvent.click(save)
+    await waitFor(() => expect(args.onCommitEdit).toHaveBeenCalledTimes(1))
+    expect(args.onCommitEditAndRegen).not.toHaveBeenCalled()
+  },
+}
+
+/** The gate outranks the turn-start reason on Save & regenerate too: it names the gate's run. */
+export const GateReasonWinsOverTurnStartOnSaveAndRegenerate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: false,
+    reversalDisabled: true,
+    turnStartReason: LEAD_REASON,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    const saveAndRegen = await screen.findByRole('button', {
+      name: t('reader:entryCard.saveAndRegenerate'),
+    })
+    expect(saveAndRegen).toBeDisabled()
+    const tooltips = screen.getAllByTitle(PASS_REASON)
+    expect(tooltips).toHaveLength(1)
+    expect(tooltips[0]).toContainElement(saveAndRegen)
+    expect(screen.queryByTitle(LEAD_REASON)).toBeNull()
+    expect(screen.queryByRole('button', { name: LEAD_REASON })).not.toBeInTheDocument()
+  },
+}
+
+/** A turn failure's Retry resubmits a turn, so it waits on the reason; Dismiss stays live. */
+export const TurnStartRefusedHoldsRetry: StoryT = {
+  ...wrap,
+  args: {
+    kind: 'system',
+    tier: 'desktop',
+    content: 'Generation failed.',
+    onRetry: fn(),
+    onDismiss: fn(),
+    turnStartReason: LEAD_REASON,
+  },
+  play: async ({ args }) => {
+    const retry = await screen.findByRole('button', { name: /Retry/ })
+    expect(retry).toBeDisabled()
+    const tooltips = screen.getAllByTitle(LEAD_REASON)
+    expect(tooltips).toHaveLength(1)
+    expect(tooltips[0]).toContainElement(retry)
+    const dismiss = screen.getByRole('button', { name: /Dismiss/ })
+    expect(dismiss).not.toBeDisabled()
+    await userEvent.click(dismiss)
+    await waitFor(() => expect(args.onDismiss).toHaveBeenCalledTimes(1))
+    expect(args.onRetry).not.toHaveBeenCalled()
+  },
+}
+
 export const NoWorldTime: StoryT = {
   ...wrap,
   args: {

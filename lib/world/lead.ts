@@ -41,7 +41,7 @@ export function resolveLead(
   return flagged.length === 1 ? flagged[0] : null
 }
 
-/** As resolveLead, logging a double: for the actions and the pipelines. */
+/** As resolveLead, logging a double: for a reader outside the render path. */
 export function resolveLeadLogged(
   entities: ReadonlyMap<string, Entity>,
   branchId: string,

@@ -1808,6 +1808,90 @@ export const PassFailureRetry: Story = {
   },
 }
 
+const LEAD_REASON = t('reader:composerLeadMissing')
+
+const TURN_FAILURE_ROWS: StoryEntry[] = [
+  ...ROWS,
+  entry({
+    id: 'e6',
+    kind: 'system',
+    content: PROVIDER_FAILURE.content,
+    position: 6,
+    metadata: {
+      ...BASE_META,
+      systemFailure: { kind: 'provider', detail: PROVIDER_FAILURE.detail },
+    },
+  }),
+]
+
+/**
+ * The branch can't start a turn (principles.md → Composer mode): ↻ and a turn failure's Retry wait
+ * on the reason; × rolls back, which starts no turn, so it stays live.
+ */
+export const TurnStartRefusedHoldsTheTurnControls: Story = {
+  args: {
+    rows: TURN_FAILURE_ROWS,
+    turnStartReason: LEAD_REASON,
+    onRequestRollback: fn(async () => {}),
+    onRetrySystemEntry: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    const regenerate = await waitFor(() =>
+      within(entryRow('e3')).getByRole('button', { name: LEAD_REASON }),
+    )
+    expect(regenerate).toBeDisabled()
+    const retry = within(entryRow('e6')).getByRole('button', { name: /Retry/ })
+    expect(retry).toBeDisabled()
+    expect(retry.closest('[title]')?.getAttribute('title')).toBe(LEAD_REASON)
+    await userEvent.click(rowButton('e3', t('reader:entryCard.deleteEntry')))
+    await waitFor(() => expect(args.onRequestRollback).toHaveBeenCalledWith('e3'))
+    expect(args.onRetrySystemEntry).not.toHaveBeenCalled()
+  },
+}
+
+/** A pass's Retry reruns the pass, which runs whatever the lead: it stays live while ↻ waits. */
+export const TurnStartRefusedLeavesAPassRetry: Story = {
+  args: {
+    rows: passFailureRows(
+      FAILED_PASS.content,
+      toPassFailureMeta({ held: false, error: FAILED_PASS_ERROR }, undefined),
+    ),
+    turnStartReason: LEAD_REASON,
+    onRetrySystemEntry: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    await waitFor(() =>
+      expect(within(entryRow('e3')).getByRole('button', { name: LEAD_REASON })).toBeDisabled(),
+    )
+    const retry = within(entryRow('e6')).getByRole('button', { name: /Retry/ })
+    expect(retry).not.toBeDisabled()
+    await userEvent.click(retry)
+    await waitFor(() => expect(args.onRetrySystemEntry).toHaveBeenCalledTimes(1))
+  },
+}
+
+/** Save & regenerate starts a turn: it waits on the reason, so no edit is saved and then refused. */
+export const TurnStartRefusedHoldsSaveAndRegenerate: Story = {
+  args: {
+    rows: HEAD_TURN_ROWS,
+    tailEntryId: 'e3',
+    turnStartReason: LEAD_REASON,
+    onCommitEdit: fn(async () => ({ ok: true })),
+    onRegenerate: fn(async () => {}),
+  },
+  play: async ({ args }) => {
+    await startEditingHeadAction()
+    const saveAndRegen = screen.getByRole('button', {
+      name: t('reader:entryCard.saveAndRegenerate'),
+    })
+    expect(saveAndRegen).toBeDisabled()
+    expect(saveAndRegen.closest('[title]')?.getAttribute('title')).toBe(LEAD_REASON)
+    await userEvent.click(screen.getByRole('button', { name: t('save') }))
+    await waitFor(() => expect(args.onCommitEdit).toHaveBeenCalledWith('e2', EDITED_ACTION))
+    expect(args.onRegenerate).not.toHaveBeenCalled()
+  },
+}
+
 const FAILED_PASS_KEPT = toPassFailureMeta(
   { held: false, error: FAILED_PASS_ERROR },
   KEPT_SUBMISSION,

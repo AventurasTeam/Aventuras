@@ -992,7 +992,7 @@ describe('createStoryWithBranch — the lead flag', () => {
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
 
-  it('flags no row and stamps nothing with no lead, dropping a stamp the caller carried', async () => {
+  it('flags no row and stamps nothing with no lead', async () => {
     const { db, ctx } = await setup()
 
     const { branchId } = await createStoryWithBranch(
@@ -1001,7 +1001,7 @@ describe('createStoryWithBranch — the lead flag', () => {
         definition: makeDefinition(),
         settings: buildStorySettings('creative', NO_APP_DEFAULTS),
         openingContent: 'Once.',
-        openingMetadata: { ...metadata, leadId: LEAD_ID },
+        openingMetadata: metadata,
         cast: [characterRow()],
       },
       ctx,
@@ -1015,30 +1015,6 @@ describe('createStoryWithBranch — the lead flag', () => {
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchId))
     expect(opening.metadata).not.toHaveProperty('leadId')
-  })
-
-  it('stamps the lead it flags over a stamp the caller carried', async () => {
-    const { db, ctx } = await setup()
-
-    const { branchId } = await createStoryWithBranch(
-      {
-        title: 'Aria Rising',
-        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
-        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-        openingContent: 'You wake at dawn.',
-        openingMetadata: { ...metadata, leadId: MIRA_ID },
-        cast: [characterRow(), characterRow({ id: MIRA_ID, name: 'Mira' })],
-        leadId: LEAD_ID,
-      },
-      ctx,
-      6200,
-    )
-
-    const [opening] = await db
-      .select()
-      .from(storyEntries)
-      .where(eq(storyEntries.branchId, branchId))
-    expect(opening.metadata?.leadId).toBe(LEAD_ID)
   })
 
   it.each<[string, WizardCastEntityInput[], string]>([

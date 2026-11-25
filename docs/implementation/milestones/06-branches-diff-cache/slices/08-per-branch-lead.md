@@ -305,9 +305,10 @@ change, or a merge could remove the lead.
   unavailable with a line saying so, and Rename and Keep as distinct
   stay. A double, both rows flagged, is the same case until a set
   repairs it. `useCollisionResolve` reads the flag off the pair's own
-  rows and runs the stamp read when it opens the pair. A pair with
-  neither row held keeps today's picker. The wording follows the design
-  pass's `world.md → Merge` where it gives one.
+  rows and runs the stamp read when it opens a pair of characters, the
+  only kind a stamp names. A pair with neither row held keeps today's
+  picker. The wording follows the design pass's `world.md → Merge`
+  where it gives one.
 - **The merge writes no flag.** `entityMergeActions`
   (`lib/world/entity-merge.ts:263-338`) is unchanged: `MERGE_SCALARS` is
   a fixed list without `isLead`, so a lead kept as the canonical keeps
@@ -899,6 +900,10 @@ role and name through the app's i18n keys):
 
 ## Open questions
 
+Each had a default this doc built on. Slice planning (2026-11-24)
+resolved 1 to 8, and the run of criterion 43 resolved 9;
+[Implementation notes](#implementation-notes) carries the reasons.
+
 1. **What the migration leaves open.** C10 pins the stamp.
    Confirm these defaults at planning, and record the answers in
    Implementation notes:
@@ -910,6 +915,11 @@ role and name through the app's i18n keys):
      included. Story open would strip it anyway; removing it keeps
      dumps and exports free of a field canon no longer has. A draft's
      lead lives in its wizard working state.
+
+   _Resolved:_ both defaults held (decision I1). The data step removes
+   the key from every readable definition, drafts included, and NULL
+   or unreadable metadata stays unstamped.
+
 2. **The refused turn's details.**
    - The order: the defaults refuse before the owed pass or close and
      before the regenerate's sweep, so nothing runs and nothing is
@@ -927,11 +937,30 @@ role and name through the app's i18n keys):
      checks before the sweep, and the run takes whatever lead the sweep
      leaves, which can be none on a branch that needs one. Canon doesn't
      say which side of the sweep "has none" is judged on.
+
+   _Resolved:_ the turn refuses before the owed pass or close and
+   before the regenerate's sweep (I15). `↻`, a failed turn's Retry and
+   Save & regenerate disable with the lead reason, while × and a
+   pass's or close's Retry stay live (D1, now in
+   [`principles.md → Composer mode`](../../../../ui/principles.md#composer-mode--send-time-transform-narration-aware)).
+   The reader's backstop puts the tail and the draft back, writes no
+   failure entry and toasts the reason (I14). "Has none" is judged
+   before the sweep (D2).
+
 3. **Where "no machine writer" is enforced.** The handler
    checks above are the floor. Whether `entityWriteSchema` also omits
    `isLead`, so a create's parse can't carry it, is planning's.
+
+   _Resolved:_ the schema keeps the column, refined to `0 | 1`; the
+   create refuses a flag, and the update refuses an `isLead` key from a
+   source the user didn't originate (I3). A review added a refusal of
+   `isLead: 1` on a row that is no character, ahead of the `CHECK`.
+
 4. **The width.** About 107 `Entity` literals: edit each, or
    give the test fixtures a shared row factory first.
+
+   _Resolved:_ each literal or local factory took `isLead: 0` (I4).
+
 5. **Smaller points.**
    - The History label's wording for `isLead`: canon gives none.
    - How a lead read says whether it is on the render path: an option
@@ -945,11 +974,23 @@ role and name through the app's i18n keys):
    - The stamp read scans a branch's entries with no index, once when
      the dialog opens a pair and once per merge. Unmeasured on a long
      story; an expression index is the remedy if it shows.
+
+   _Resolved:_ the label is "Lead", worded "Lead: no → yes" (I5). Two
+   functions: `resolveLead` is silent and `resolveLeadLogged` logs
+   (I6). Unset refuses when the story needs a lead (I8). The DB reads
+   live in `lib/db`, the predicate in `lib/world` (I6, I7). The held
+   lines are `world.md → Merge`'s. The stamp read stays unindexed: no
+   lag showed on the seeded stories.
+
 6. **Two sets at once.** A set reads the branch's flagged rows before
    its group commits. Two sets committing between each other's read and
    commit leave two flagged rows, which canon reads as no lead and the
    next set repairs. The peek guards a second press; World's menu closes
    on press. Check at planning whether any path reaches it.
+
+   _Resolved:_ World reaches it, with no press guard, so set and unset
+   share a per-branch promise chain in the action (D3).
+
 7. **Pre-M6 payloads.** An undo payload or a journal before-image
    written before the migration holds an entity row with no `isLead` or
    an entry with no `leadId`, and restores it so. C10 makes an
@@ -976,12 +1017,19 @@ role and name through the app's i18n keys):
      written back after it overwrites that entry's stamp, and the data
      step also stamps the entry rows journals hold. Dev databases only:
      no users until MVP.
+
+   _Resolved:_ a dev-database caveat, with no journal rewrite (I17).
+
 8. **Unaudited contract text.** This slice builds on wording the
    milestone lists as unaudited
    ([Open questions](../milestone.md#open-questions)): C10's rule that
    every entry is stamped, R4 and its extension to every stamped
    character, and C10's rule for where the two-flags error is logged.
    Read them against the code at slice planning.
+
+   _Resolved:_ read against the code at slice planning; all three held,
+   and the slice built on them as written.
+
 9. **Criterion 43 against 6.10's table.** Criterion 43 wants 6.10's
    `createEntity` and `deleteEntity` pairs red when any one branch
    condition 6.10's table lists for their handler is removed alone.
@@ -995,7 +1043,79 @@ role and name through the app's i18n keys):
    pair turns red with its own branch condition removed. Found by Slice
    6.10's slice review (2026-11-24).
 
+   _Resolved:_ its Default, run twice. Over the register body of #793:
+   6.10's 3 `createEntity` and 16 `deleteEntity` rows, each condition
+   removed alone, each red on its row's test. Over the delete body of
+   #796: the 13 remaining `deleteEntity` rows and the descriptor row,
+   red on the `updateEntity` pair; `isStoryLead`'s row went with the
+   function and its cross-story test. The `isLead` pair in
+   `lib/actions/entities/register.test.ts` ("updateEntity isLead pair:
+   sets the flag…" and "…clears the flag…") goes red with each of its
+   two branch conditions removed. The tables are in #793's and #796's
+   descriptions.
+
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+**Four stacked PRs.** The plan's first PR (Tasks 1 to 6 and 12) came to
+112 non-docs files, over CodeRabbit's cap, so it split at Task 3:
+#793 (Tasks 1 to 3), #794 (Tasks 4 to 6 and 12), #796 (Tasks 7 and 13
+to 16) and the stack's last PR (Tasks 8 to 11 and 17 to 21). Task 4
+stays with Task 12: once reads go by the flag, a wizard-made story has
+a lead only if Finish flags it. Between the merges a migrated dev
+database reads no lead until #794, and `isStoryLead` reads a stripped
+key until #796; the stack merges together.
+
+**Slice 6.10 landed mid-run.** The branch was replayed onto it before
+any push. Task 3's `isLead` pair folded into 6.10's `branch scope`
+block, and 6.10's two typed fixtures took the width.
+
+**Developer decisions (slice planning, 2026-11-24).**
+
+- **D1.** `↻`, a failed turn's Retry and Save & regenerate disable
+  through a turn-start reason threaded to the entry card; × and a
+  pass's or close's Retry stay live, and the regenerate confirm takes
+  the reason as its blocked reason.
+- **D2.** "Has none" is judged before the regenerate's sweep, on the
+  branch's current lead, and the run takes whatever lead the sweep
+  leaves. Two consequences follow. A reply on a branch with no lead
+  can't be regenerated, even when the sweep would restore one. A set
+  made after the reply passes the check and is swept, and the run goes
+  without a lead; `regenerate-turn.test.ts` pins it.
+- **D3.** Set and unset share a per-branch promise chain in the action.
+- **D4.** One plan of 21 tasks, reader tasks last, stacked PRs.
+
+**What a later slice builds on.**
+
+- `resolveLead` (silent, for render paths) and `resolveLeadLogged`
+  (logs `pipeline.lead_double`) in `lib/world`, with `needsLead`.
+  `readBranchLead` (logs `action_layer.branch_lead_double`) and
+  `readStampedLeadIds` in `lib/db`. The stamp read guards
+  `json_extract` with `json_valid`, since a branch may hold metadata
+  the backfill left as it was.
+- `submitTurn` awaits `settleUserWrites()` before its lead read
+  (`turnLeadOf`), so a set already writing at Send lands before the
+  stamp; without it a turn's two entries could carry different leads.
+- `LEAD_MISSING` (`lead-missing`) is the refusal both turn actions
+  return. The lead mutator's warn event is `action_layer.lead_rejected`,
+  logged with `branchId`.
+
+**Pre-M6 journal images (I17).** An undo payload or a re-run journal
+written before the migration holds rows without the flag or the stamp,
+and restores them so. It stays a dev-database caveat, with no journal
+rewrite.
+
+**Criteria corrected against the code (I21).** Criterion 16's
+disabled-reason half moved to 17, since `deleteDisabledReason` went
+and the frame shows the gate's reason. Criteria 21 and 22 also pin that
+a pair with both rows held opens on Rename. Criterion 36's re-export
+through the exporter is required, since the column changes the seed's
+bytes. Criterion 41's seeded-fork check lives in
+`scripts/seed/hero-fork.test.ts` (I19). Criterion 46's regenerate is
+disabled, per D1.
+
+**Review findings left in the code** are listed in each PR's Decisions
+pending.
+
+**Device check.** The optional run, a pre-6.8 dev database updated on
+the slot AVD and on desktop, wasn't done. `migrate-m6-lead.test.ts`
+runs the migration in both migrators' shapes.

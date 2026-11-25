@@ -22,14 +22,24 @@ export const LEAD_REJECTION = {
 
 export type LeadRejectionCode = (typeof LEAD_REJECTION)[keyof typeof LEAD_REJECTION]
 
-export type SetLeadResult = { status: 'ok' } | { status: 'rejected'; code: LeadRejectionCode }
+type LeadCode<K extends keyof typeof LEAD_REJECTION> = (typeof LEAD_REJECTION)[K]
+type SharedCode = LeadCode<'inFlight' | 'failed' | 'draftStory'>
 
-function refuse(
+type SetLeadRejectionCode = SharedCode | LeadCode<'wrongBranch' | 'notCharacter' | 'notActive'>
+type UnsetLeadRejectionCode = SharedCode | LeadCode<'needsLead'>
+
+type LeadRejected<Code extends LeadRejectionCode> = { status: 'rejected'; code: Code }
+type LeadResult<Code extends LeadRejectionCode> = { status: 'ok' } | LeadRejected<Code>
+
+export type SetLeadResult = LeadResult<SetLeadRejectionCode>
+export type UnsetLeadResult = LeadResult<UnsetLeadRejectionCode>
+
+function refuse<Code extends LeadRejectionCode>(
   branchId: string,
   entityId: string | null,
-  code: LeadRejectionCode,
+  code: Code,
   reason?: string,
-): SetLeadResult {
+): LeadRejected<Code> {
   logger.warn('action_layer.lead_rejected', {
     branchId,
     entityId,
@@ -39,9 +49,14 @@ function refuse(
   return { status: 'rejected', code }
 }
 
-// Each reads the flagged rows before its group takes their row locks, so two at once on one
-// branch would each clear only what the other hadn't flagged yet: they run one at a time.
-function queued(branchId: string, run: () => Promise<SetLeadResult>): Promise<SetLeadResult> {
+/**
+ * Runs a branch's lead writers one at a time: each reads the flag before its group takes the row
+ * locks. Not reentrant; taken after a tail's metadata lock and before any branch or row lock.
+ */
+export function withBranchLeadLock<Result>(
+  branchId: string,
+  run: () => Promise<Result>,
+): Promise<Result> {
   return withKeyLock(`lead:${branchId}`, run)
 }
 
@@ -61,7 +76,10 @@ async function flaggedIds(branchId: string, ctx: DbCtx): Promise<string[]> {
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.isLead, 1)))
     .orderBy(asc(entities.createdAt), asc(entities.id))
-  return rows.map((row) => row.id)
+  const ids = rows.map((row) => row.id)
+  // C10: logged here too: a story that needs a lead refuses the turn whose read would log it.
+  if (ids.length > 1) logger.error('action_layer.branch_lead_double', { branchId, ids })
+  return ids
 }
 
 function leadWrite(branchId: string, id: string, isLead: 0 | 1): PipelineAction {
@@ -75,7 +93,7 @@ async function dispatch(
   entityId: string | null,
   actions: readonly PipelineAction[],
   ctx: DbCtx,
-): Promise<SetLeadResult> {
+): Promise<LeadResult<LeadCode<'inFlight' | 'failed'>>> {
   if (isUserEditBlocked(generationStore.getTxState(), branchId))
     return refuse(branchId, entityId, LEAD_REJECTION.inFlight)
   if (actions.length === 0) return { status: 'ok' }
@@ -98,7 +116,7 @@ export function setBranchLead(
   entityId: string,
   ctx: DbCtx,
 ): Promise<SetLeadResult> {
-  return queued(branchId, async () => {
+  return withBranchLeadLock(branchId, async () => {
     const story = await storyOf(branchId, ctx)
     if (story.status === 'draft') return refuse(branchId, entityId, LEAD_REJECTION.draftStory)
     const [target] = await ctx.db
@@ -117,9 +135,9 @@ export function setBranchLead(
   })
 }
 
-/** Clears every flagged row on the branch; offered only on a story that needs no lead. */
-export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<SetLeadResult> {
-  return queued(branchId, async () => {
+/** Clears every flagged row on the branch; refused on a story that needs a lead. */
+export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<UnsetLeadResult> {
+  return withBranchLeadLock(branchId, async () => {
     const story = await storyOf(branchId, ctx)
     if (story.status === 'draft') return refuse(branchId, null, LEAD_REJECTION.draftStory)
     // A story with no stored definition can't say it needs none, so the lead stays.

@@ -48,7 +48,7 @@ describe('entityDeleteImpact', () => {
       unplacedPlaces: 0,
       tailScene: true,
     })
-    expect(entityDeleteCopy(mira, impact)).toEqual({
+    expect(entityDeleteCopy(mira, impact, false)).toEqual({
       title: 'Delete Mira?',
       description: deleteUndoHint(),
       impacts: [
@@ -118,7 +118,7 @@ describe('entityDeleteImpact', () => {
     // it loses its link (a reference, like the two characters) and ends up unplaced too.
     expect(impact.references).toBe(3)
     expect(impact.unplacedItems).toBe(1)
-    expect(entityDeleteCopy(hollow, impact).impacts).toEqual([
+    expect(entityDeleteCopy(hollow, impact, false).impacts).toEqual([
       '3 other entities lose their link to it',
       '1 item will have no position',
     ])
@@ -149,7 +149,7 @@ describe('entityDeleteImpact', () => {
       branchRelationships: [],
     })
     expect(impact.unplacedPlaces).toBe(1)
-    expect(entityDeleteCopy(hollow, impact).impacts).toEqual([
+    expect(entityDeleteCopy(hollow, impact, false).impacts).toEqual([
       '1 other entity loses its link to it',
       '1 place will have no known location',
     ])

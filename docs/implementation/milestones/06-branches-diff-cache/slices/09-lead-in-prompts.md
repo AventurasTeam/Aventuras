@@ -563,6 +563,22 @@ Unit tests run with `pnpm vitest run --project unit <path>`.
   model only through the unit renders. An overlay that re-stamps the
   chapter's second half with another character would probe them; it is
   optional, at planning.
+- **The pipelines' read is `resolveLeadLogged`, not `resolveLead`.**
+  The scope names `resolveLead` as the pipelines' read: the helper's
+  caller names the lead through it, with the double "logged by the
+  pipeline", and `readMetadataInputs` reads the chapter context's lead
+  through it. Slice 6.8 split the read to keep C10's render-path rule:
+  `resolveLead` is silent, for render paths, and `resolveLeadLogged`
+  (`lib/world/lead.ts`) logs a double as `pipeline.lead_double`, with a
+  `site`, as the generation and classifier contexts already read it.
+  Read through `resolveLead`, the chapter context would take a double
+  as no lead and log nothing. The DB read, `readBranchLead` (`lib/db`),
+  logs its double as `action_layer.branch_lead_double`, whose
+  [observability entry](../../../../observability.md#subsystem-emission-inventory)
+  doesn't name the close. Default: the store-backed pipeline reads
+  go through `resolveLeadLogged`, and the close through `readBranchLead`
+  as shipped, with that entry gaining the close. Found by Slice 6.8's
+  slice review (2026-11-25).
 
 ## Implementation notes
 

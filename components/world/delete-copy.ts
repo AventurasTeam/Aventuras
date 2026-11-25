@@ -6,8 +6,16 @@ import { t } from '@/lib/i18n'
 import type { EntityDeleteImpact } from './delete-impact'
 
 /** world.md → Delete: what goes with an entity, before the user confirms. */
-export function entityDeleteCopy(row: Entity, impact: EntityDeleteImpact): DeleteConfirmCopy {
+export function entityDeleteCopy(
+  row: Entity,
+  impact: EntityDeleteImpact,
+  needsLead: boolean,
+): DeleteConfirmCopy {
   const impacts: string[] = []
+  if (row.isLead === 1)
+    impacts.push(
+      needsLead ? t('world:delete.leadNeeded', { name: row.name }) : t('world:delete.leadNone'),
+    )
   if (impact.awareness > 0) impacts.push(t('world:delete.awareness', { count: impact.awareness }))
   if (impact.involvements > 0)
     impacts.push(t('world:delete.involvements', { count: impact.involvements }))

@@ -22,6 +22,7 @@ import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty, planSubmissionHandback } from '@/components/reader/composer-draft'
 import {
   confirmAfterImmediateRefusal,
+  confirmBlockedReason,
   regenerateRefusalToast,
   reopenAfterRefusal,
   rollbackRefusalCopy,
@@ -74,6 +75,7 @@ import {
   settleRegenerateArm,
   settleWithDroppedHandback,
 } from '@/components/reader/regenerate-outcome'
+import { retryStartsTurn } from '@/components/reader/retry-starts-turn'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import {
   editGateOf,
@@ -90,11 +92,13 @@ import {
   cancelPillRun,
   closeRefusalOf,
   composerShowsCancel,
+  leadRefusalOf,
   passRefusalOf,
   pillRunOf,
   reportSendThrow,
   sendGapOpen,
   sendRunStreams,
+  settleLeadRefusal,
   type PassRefusal,
 } from '@/components/reader/send-run'
 import {
@@ -178,7 +182,7 @@ import {
   type SwitchBranchResult,
 } from '@/lib/actions'
 import { copyText } from '@/lib/clipboard'
-import { wrapComposerText, wrapHasSubject, type ComposerMode } from '@/lib/composer-wrap'
+import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { db, runInTransaction, type SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { refreshEmbeddingStatus } from '@/lib/embedder-swap'
@@ -219,7 +223,7 @@ import {
 import { useTheme } from '@/lib/themes'
 import { toast } from '@/lib/toast'
 import { runAction } from '@/lib/utils'
-import { resolveLead } from '@/lib/world'
+import { needsLead, resolveLead } from '@/lib/world'
 
 const ctx = { db, runInTransaction }
 
@@ -403,8 +407,13 @@ function ReaderComposerBody({
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
-  const modesUnavailableReason =
-    modesEnabled && !wrapHasSubject(wrapPov, leadName) ? t('reader:composerLeadMissing') : undefined
+  // principles.md → Composer mode: a branch without the lead it needs takes no turn, whatever the
+  // composer mode or the wrap.
+  const leadMissing =
+    openForBranch != null &&
+    needsLead(openForBranch.definition.mode, openForBranch.definition.narration) &&
+    leadName == null
+  const leadMissingReason = leadMissing ? t('reader:composerLeadMissing') : undefined
 
   const {
     worldTimeFrame,
@@ -863,17 +872,21 @@ function ReaderComposerBody({
   )
   const editHeadTurnIds = useMemo(() => headTurnIdsOf(entries, tailEntryId), [entries, tailEntryId])
   // An open confirm's reversal is held as its row's ↻ or × is, so a confirm a refusal re-opened
-  // can't press into the run that refused it.
+  // can't press into the run that refused it; a regenerate confirm also waits on the lead, as ↻ does.
   const rollbackBlockedReason =
-    rollback != null &&
-    rowReversalFlags({
-      rowId: rollback.targetId,
-      headTurnIds: editHeadTurnIds,
-      editGate,
-      reversalHeld: rerunRunning && rows.get(rollback.targetId)?.chapterId != null,
-    }).reversalDisabled
-      ? rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason })
-      : undefined
+    rollback == null
+      ? undefined
+      : confirmBlockedReason(rollback.mode, {
+          gate: rowReversalFlags({
+            rowId: rollback.targetId,
+            headTurnIds: editHeadTurnIds,
+            editGate,
+            reversalHeld: rerunRunning && rows.get(rollback.targetId)?.chapterId != null,
+          }).reversalDisabled
+            ? rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason })
+            : undefined,
+          turnStart: leadMissingReason,
+        })
   // reader-composer.md → Inline edit session: every leave runs this guard.
   const {
     guard,
@@ -987,6 +1000,19 @@ function ReaderComposerBody({
               error: err instanceof Error ? err.message : String(err),
             }),
           )
+        } else if (leadRefusalOf(result)) {
+          logger.warn('pipeline.submit_lead_refused', { branchId })
+          await settleLeadRefusal({
+            dropped,
+            restoreTail: restoreSystemTail,
+            stillOnBranch: () => branchUnchanged(branchId),
+            draftEmpty: () => isDraftEmpty(composerRef.current?.getDraft()),
+            keepSubmission: setLastSubmission,
+            restoreSent,
+            notifyDraftKept: () => toast.info(t('reader:leadRefusedDraftKept')),
+            // The action's read and this reader's store disagree, so the reason line may not show.
+            notifyRefused: () => toast.error(t('reader:composerLeadMissing')),
+          })
         } else if (result.outcome === 'rejected')
           await showTurnFailure(
             {
@@ -1264,7 +1290,7 @@ function ReaderComposerBody({
         draft: () => composerRef.current?.getDraft(),
         toSubmission: (draft) =>
           draftSubmission(draft, {
-            modesUsable: modesEnabled && modesUnavailableReason == null,
+            modesUsable: modesEnabled && !leadMissing,
             pov: wrapPov,
             leadName,
           }),
@@ -1274,7 +1300,7 @@ function ReaderComposerBody({
           composer?.restoreDraft('', composer.getDraft().mode)
         },
       }),
-    [branchId, branchUnchanged, modesEnabled, modesUnavailableReason, wrapPov, leadName],
+    [branchId, branchUnchanged, modesEnabled, leadMissing, wrapPov, leadName],
   )
 
   // Held until the pass ends: no double tap or Send slips in, head reversals wait;
@@ -1352,23 +1378,22 @@ function ReaderComposerBody({
   const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
     systemFailure,
     () => {
+      if (retryStartsTurn(systemFailure)) {
+        const submission = lastSubmission ?? systemFailure?.submission
+        if (submission) void runSubmit(submission.content, submission.composerMode)
+        return
+      }
       // A pass-failure entry's Retry runs the pass alone (classifier.md → Failure policy).
-      if (systemFailure?.pass === 'failed') {
+      if (systemFailure?.pass === 'failed')
         runAction(retryPass(), {
           event: 'reader.pass_retry_failed',
           toastMessage: t('reader:passRetryFinishFailed'),
         })
-        return
-      }
-      if (systemFailure?.close === 'failed') {
+      else
         runAction(retryClose(), {
           event: 'reader.close_retry_failed',
           toastMessage: t('reader:closeRetryFinishFailed'),
         })
-        return
-      }
-      const submission = lastSubmission ?? systemFailure?.submission
-      if (submission) void runSubmit(submission.content, submission.composerMode)
     },
     storyId,
     guardLeave,
@@ -1936,6 +1961,7 @@ function ReaderComposerBody({
     editGate,
     gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
     stampedReversalsHeld: rerunRunning,
+    turnStartReason: leadMissingReason,
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     cutOffFixLabel: cutOffFix?.label,
@@ -2114,7 +2140,7 @@ function ReaderComposerBody({
                   swapPending,
                   gateReason,
                 })}
-                modesUnavailableReason={modesUnavailableReason}
+                leadMissingReason={leadMissingReason}
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })

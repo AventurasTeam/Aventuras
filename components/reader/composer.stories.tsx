@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { createRef, useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 
 import { Composer, type ComposerHandle } from './composer'
 
@@ -102,37 +103,84 @@ export const EmptyDraftDoesNotSend: Story = {
   },
 }
 
-const LEAD_MISSING_REASON =
-  "The story's lead isn't on this branch, so actions can't be written for them. Set a new lead in World."
+// Canon's copy (principles.md → Composer mode), hand-written: the stories render the locale's.
+const CANON_LEAD_LINE =
+  'This story needs a lead on this branch before it can continue. Set one in World.'
+const LEAD_MISSING_REASON = t('reader:composerLeadMissing')
 
 const leadMissingRef = createRef<ComposerHandle>()
 
-/** A dangling lead leaves the third-person wrap with no subject: modes disable, sends go free. */
+/**
+ * The branch needs a lead and has none: Send refuses with the draft kept, the picker disables on
+ * Free, the mode resets, and the reason line says why.
+ */
 export const LeadMissing: Story = {
   args: {
     modesEnabled: true,
     isGenerating: false,
-    modesUnavailableReason: LEAD_MISSING_REASON,
+    leadMissingReason: LEAD_MISSING_REASON,
   },
   render: (args) => <Composer ref={leadMissingRef} {...args} />,
   play: async ({ args, canvasElement }) => {
-    // renderTrigger's label + selected-option compose with no separator ('Mode'+'Free' → 'Mode Free');
-    // value stays gated to 'free' regardless of draft mode, so the name never becomes 'Mode Do'.
+    // renderTrigger's label + selected-option compose with no separator ('Mode'+'Free' → 'Mode Free').
     const mode = await screen.findByRole('button', { name: 'Mode Free' })
     expect(mode).toHaveAttribute('aria-disabled', 'true')
     const input = canvasElement.querySelector('textarea')
     if (input == null) throw new Error('composer input not found')
-    // Seeds a non-free mode directly (picker is inert while unavailable, UI can't do this) — proves
-    // both gates hold against the real draft state, not just the picker's own default value.
+    // A non-free mode seeded past the inert picker: the reset must hold against the draft itself.
     leadMissingRef.current?.restoreDraft('draw my blade', 'do')
     await waitFor(() => expect(input.value).toBe('draw my blade'))
     expect(screen.getByRole('button', { name: 'Mode Free' })).toHaveAttribute(
       'aria-disabled',
       'true',
     )
-    expect(screen.getByText(args.modesUnavailableReason as string)).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Send' }))
-    await waitFor(() => expect(args.onSend).toHaveBeenCalledWith('draw my blade', 'free'))
+    expect(leadMissingRef.current?.getDraft().mode).toBe('free')
+    expect(screen.getByText(CANON_LEAD_LINE)).toBeVisible()
+
+    const send = screen.getByRole('button', { name: t('reader:send') })
+    expect(send).toBeDisabled()
+    expect(send.parentElement?.getAttribute('title')).toBe(LEAD_MISSING_REASON)
+    // userEvent won't press through pointer-events: none; fireEvent does, and Send must still drop
+    // it (the disabled control or handleSubmit's backstop).
+    fireEvent.click(send)
+    expect(args.onSend).not.toHaveBeenCalled()
+    expect(input.value).toBe('draw my blade')
+  },
+}
+
+/** Modes hidden (creative, or the story's toggle off): the line shows and Send still refuses. */
+export const LeadMissingModesHidden: Story = {
+  args: {
+    modesEnabled: false,
+    isGenerating: false,
+    leadMissingReason: LEAD_MISSING_REASON,
+  },
+  play: async ({ args, canvasElement }) => {
+    const input = canvasElement.querySelector('textarea')
+    if (input == null) throw new Error('composer input not found')
+    await userEvent.type(input, 'I knock.')
+    await waitFor(() => expect(input.value).toBe('I knock.'))
+    expect(screen.getByText(CANON_LEAD_LINE)).toBeVisible()
+    expect(screen.queryByRole('button', { name: /^Mode/ })).not.toBeInTheDocument()
+
+    const send = screen.getByRole('button', { name: t('reader:send') })
+    expect(send).toBeDisabled()
+    fireEvent.click(send)
+    expect(args.onSend).not.toHaveBeenCalled()
+    expect(input.value).toBe('I knock.')
+  },
+}
+
+/** A turn generating doesn't take the line: the lead's reason stays under Cancel. */
+export const LeadMissingWhileGenerating: Story = {
+  args: {
+    modesEnabled: true,
+    isGenerating: true,
+    leadMissingReason: LEAD_MISSING_REASON,
+  },
+  play: async () => {
+    expect(await screen.findByRole('button', { name: t('cancel') })).toBeVisible()
+    expect(screen.getByText(CANON_LEAD_LINE)).toBeVisible()
   },
 }
 
@@ -148,7 +196,7 @@ function LeadToggleHarness(props: ComponentProps<typeof Composer>) {
       <Composer
         ref={leadReturnsRef}
         {...props}
-        modesUnavailableReason={leadMissing ? LEAD_MISSING_REASON : undefined}
+        leadMissingReason={leadMissing ? LEAD_MISSING_REASON : undefined}
       />
     </View>
   )
@@ -179,8 +227,8 @@ export const LeadReturnsKeepsFree: Story = {
 }
 
 /**
- * A pending embedder swap on a third-person story with no lead sets both reasons — e.g. the
- * reader route's `disabled={!hydrationSucceeded || swapPending}`. The disabled reason wins.
+ * A pending embedder swap on a branch with no lead sets both reasons — e.g. the reader route's
+ * `disabled={!hydrationSucceeded || swapPending}`. The disabled reason wins.
  */
 export const DisabledReasonWinsOverLeadMissing: Story = {
   args: {
@@ -188,12 +236,12 @@ export const DisabledReasonWinsOverLeadMissing: Story = {
     isGenerating: false,
     disabled: true,
     disabledReason: 'Switching writer models…',
-    modesUnavailableReason: LEAD_MISSING_REASON,
+    leadMissingReason: LEAD_MISSING_REASON,
   },
   play: async ({ args }) => {
     await waitFor(() => expect(screen.getByText(args.disabledReason as string)).toBeVisible(), {
       timeout: 3000,
     })
-    expect(screen.queryByText(args.modesUnavailableReason as string)).not.toBeInTheDocument()
+    expect(screen.queryByText(args.leadMissingReason as string)).not.toBeInTheDocument()
   },
 }

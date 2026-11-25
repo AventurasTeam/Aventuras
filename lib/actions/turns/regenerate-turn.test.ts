@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
@@ -75,6 +75,23 @@ vi.mock('@/lib/retrieval', async (importOriginal) => {
 vi.mock('../embedder-swap/engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
+})
+
+// Lets a test observe the regenerate reaching the settle boundary; the real settle still runs.
+const settleProbe = vi.hoisted(() => ({ onEnter: null as (() => void) | null }))
+vi.mock('../delta/apply-delta-action', async (importOriginal) => {
+  const actual = await importOriginal<
+    Record<string, unknown> & { settleUserWrites: () => Promise<void> }
+  >()
+  return {
+    ...actual,
+    settleUserWrites: () => {
+      const enter = settleProbe.onEnter
+      settleProbe.onEnter = null
+      enter?.()
+      return actual.settleUserWrites()
+    },
+  }
 })
 
 // Seam into one sweep inside the real regenerateTurn flow, to observe sweep order or fail one sweep
@@ -274,7 +291,7 @@ describe('regenerateTurn', () => {
       })
       .where(eq(storyEntries.id, 'e_u2'))
     await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
-    await openStory(db, 's1', 'b1')
+    await openStory(db, 's1', 'b1', { lead: false })
     await db
       .insert(entities)
       .values([
@@ -321,8 +338,24 @@ describe('regenerateTurn', () => {
     // The run reads the store's tail, so the stamp goes there too.
     entriesStore.hydrate('b1', (await db.select().from(storyEntries)) as never)
     await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
-    await openStory(db, 's1', 'b1')
+    await openStory(db, 's1', 'b1', { lead: false })
+    await db.insert(entities).values({
+      id: VORNE,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Vorne',
+      status: 'active',
+      injectionMode: 'auto',
+      state: emptyEntityState('character'),
+      isLead: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
     await hydrateAppSettings(async () => WORKING_CONFIG)
+    // A World edit after the reply, logged with no entry: the lead check passes on it, then the
+    // sweep reverses it and the run starts with no lead.
+    expect(await setBranchLead('b1', VORNE, ctx)).toEqual({ status: 'ok' })
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
       expectedCounts: undefined,
@@ -331,6 +364,9 @@ describe('regenerateTurn', () => {
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(
+      await db.select({ id: entities.id }).from(entities).where(eq(entities.isLead, 1)),
+    ).toEqual([])
     const [reply] = await db
       .select()
       .from(storyEntries)
@@ -395,6 +431,164 @@ describe('regenerateTurn', () => {
     expect(facts.map((f) => f.id)).toEqual(['h_a'])
     // First sweep clamps to 4 (pos(e_r2)-1); follow-up clamps to 3 (pos(e_u2)-1).
     expect(await watermark(ctx)).toBe(3)
+  })
+
+  // principles.md → Composer mode: a regenerate starts a turn, so it refuses too, destroying nothing.
+  it('refuses on a branch that needs a lead and has none, before its sweep', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1', { lead: false })
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest('b1'))
+    const entriesBefore = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, 'b1'))
+    const deltasBefore = await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+
+    expect(regen).toEqual({ status: 'rejected', code: 'lead-missing', reason: expect.any(String) })
+    expect(await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))).toEqual(
+      entriesBefore,
+    )
+    expect(await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).toEqual(deltasBefore)
+    expect((await db.select().from(happenings)).map((h) => h.id).sort()).toEqual(['h_a', 'h_b'])
+    expect(await watermark(ctx)).toBe(5)
+    expect(undoRedoStore.hasRedo('b1')).toBe(true)
+    expect(await db.select().from(pipelineRuns)).toEqual([])
+    expect(generationStore.getTxState().pendingTurns.size).toBe(0)
+  })
+
+  // The lead is judged before the sweep, on the branch as it stands: a lead set after the reply
+  // passes the check, the sweep reverses it with the reply, and the reply regenerates without one.
+  it('judges the lead before its sweep: a lead set after the reply is swept and the run goes leadless', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1', { lead: false })
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const worldEdit = async (action: PipelineAction, actionId: string) => {
+      const result = await applyDeltaAction(
+        { action, actionId, branchId: 'b1', entryId: null },
+        ctx,
+      )
+      if (result.status !== 'ok') throw new Error(`${actionId}: ${JSON.stringify(result)}`)
+    }
+    await worldEdit(
+      {
+        kind: 'createEntity',
+        source: 'user_edit',
+        payload: {
+          entry: {
+            id: 'char_kael',
+            branchId: 'b1',
+            kind: 'character',
+            name: 'Kael',
+            status: 'active',
+            injectionMode: 'auto',
+            createdAt: 7,
+            updatedAt: 7,
+          },
+        },
+      },
+      'act_world_kael',
+    )
+    await worldEdit(
+      {
+        kind: 'updateEntity',
+        source: 'user_edit',
+        payload: { branchId: 'b1', id: 'char_kael', patch: { isLead: 1 } },
+      },
+      'act_world_lead',
+    )
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(await db.select().from(entities).where(eq(entities.id, 'char_kael'))).toEqual([])
+    const reply = branchEntries('b1').sort((a, b) => a.position - b.position)[4]
+    expect(reply?.content).toBe('A new take.')
+    expect(reply?.metadata?.leadId).toBeUndefined()
+  })
+
+  it('waits for a lead set still writing before judging the lead, refusing nothing for it', async () => {
+    const MIRA = 'char_00000000-0000-4000-8000-000000000002'
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await openStory(db, 's1', 'b1', { lead: false })
+    await db.insert(entities).values({
+      id: MIRA,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Mira',
+      status: 'active',
+      injectionMode: 'auto',
+      state: emptyEntityState('character'),
+      isLead: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    // The set passed its gate before the regenerate and its transaction hasn't opened; the test
+    // opens it once the regenerate is blocked on the settle, the only thing holding its lead read.
+    let dispatched!: () => void
+    const hasDispatched = new Promise<void>((resolve) => {
+      dispatched = resolve
+    })
+    let release!: () => void
+    const released = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // A failed or timed-out test still frees the gated write, or its row lock outlives the test.
+    onTestFinished(() => {
+      settleProbe.onEnter = null
+      release()
+    })
+    const setCtx: typeof ctx = {
+      ...ctx,
+      runInTransaction: async (fn) => {
+        dispatched()
+        await released
+        return ctx.runInTransaction(fn)
+      },
+    }
+    let written = false
+    const setting = setBranchLead('b1', MIRA, setCtx).then((result) => {
+      written = true
+      return result
+    })
+    await hasDispatched
+    let atSettle = false
+    const reachedSettle = new Promise<void>((resolve) => {
+      settleProbe.onEnter = () => {
+        atSettle = true
+        resolve()
+      }
+    })
+
+    const regenerating = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+    // Raced with the regenerate so a dropped settle fails the assertions below instead of hanging.
+    await Promise.race([reachedSettle, regenerating])
+    expect(atSettle).toBe(true)
+    expect(written).toBe(false)
+    release()
+
+    expect(await setting).toEqual({ status: 'ok' })
+    const regen = await regenerating
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
   })
 
   it('cancel mid-regen: aborted outcome also unwinds the standing user action', async () => {
@@ -1196,7 +1390,10 @@ describe('regenerateTurn', () => {
     expect(regen.status).toBe('ran')
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('completed')
-    const places = await db.select({ id: entities.id, state: entities.state }).from(entities)
+    const places = await db
+      .select({ id: entities.id, state: entities.state })
+      .from(entities)
+      .where(eq(entities.kind, 'location'))
     const unplaced = { parent_location_id: null, unplaced: true }
     expect(places).toEqual([{ id: 'loc_docks', state: unplaced }])
     expect(entitiesStore.getById('b1', 'loc_docks')?.state).toEqual(unplaced)

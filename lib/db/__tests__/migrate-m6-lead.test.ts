@@ -82,7 +82,7 @@ const ENTRIES: [id: string, branchId: string, kind: string, metadata: string | n
   ['e_adv_act', 'br_adv_main', 'user_action', meta({ worldTime: 5 })],
   ['e_adv_reply', 'br_adv_main', 'ai_reply', meta({ sceneEntities: ['char_kael'] })],
   ['e_adv_sys', 'br_adv_main', 'system', null],
-  // No code writes object metadata on a system row; here the kind filter, not NULL, excludes it.
+  // writeSystemEntry gives a failure row object metadata: only the kind filter keeps it unstamped.
   ['e_adv_sys_obj', 'br_adv_main', 'system', meta()],
   ['e_adv_malformed', 'br_adv_main', 'user_action', MALFORMED],
   ['e_adv_deep', 'br_adv_main', 'user_action', OVER_DEEP],

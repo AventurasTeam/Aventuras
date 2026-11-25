@@ -217,6 +217,117 @@ describe('describeUndoGroup', () => {
   })
 })
 
+describe('describeUndoGroup → a lead change', () => {
+  // An update's undo payload holds the flag as it was before the write.
+  const flag = (id: string, prior: 0 | 1): Partial<UndoGroupDelta> => ({
+    targetTable: 'entities',
+    targetId: id,
+    op: 'update',
+    undoPayload: { isLead: prior },
+  })
+
+  it('names a switch by the row it flags, not the row it clears first', () => {
+    expect(describeUndoGroup(group(flag('char_kael', 1), flag('char_mira', 0)))).toEqual({
+      kind: 'leadSet',
+      seen: false,
+      row: { table: 'entities', id: 'char_mira' },
+    })
+  })
+
+  it('names a set on a branch with no lead by its one row, as a set', () => {
+    expect(describeUndoGroup(group(flag('char_mira', 0)))).toEqual({
+      kind: 'leadSet',
+      seen: false,
+      row: { table: 'entities', id: 'char_mira' },
+    })
+  })
+
+  it('names a set that only clears, its target already flagged, by the row it clears', () => {
+    expect(describeUndoGroup(group(flag('char_kael', 1)))).toEqual({
+      kind: 'leadUnset',
+      seen: false,
+      row: { table: 'entities', id: 'char_kael' },
+    })
+  })
+
+  it('names an unset of a double by the oldest row it cleared', () => {
+    expect(describeUndoGroup(group(flag('char_kael', 1), flag('char_mira', 1)))).toEqual({
+      kind: 'leadUnset',
+      seen: false,
+      row: { table: 'entities', id: 'char_kael' },
+    })
+  })
+
+  it('reads an entity edit whose payload holds no flag as before', () => {
+    const edit = group({
+      targetTable: 'entities',
+      targetId: 'char_kael',
+      op: 'update',
+      undoPayload: { description: 'A wanderer.' },
+    })
+    expect(describeUndoGroup(edit)).toEqual({
+      kind: 'row',
+      seen: false,
+      op: 'update',
+      row: { table: 'entities', id: 'char_kael' },
+    })
+  })
+
+  it("keeps a delete of the lead as a delete, its payload's flag included", () => {
+    const del = group({
+      targetTable: 'entities',
+      targetId: 'char_kael',
+      op: 'delete',
+      undoPayload: { id: 'char_kael', name: 'Kael', isLead: 1 },
+    })
+    expect(describeUndoGroup(del)).toEqual({
+      kind: 'row',
+      seen: false,
+      op: 'delete',
+      row: { table: 'entities', id: 'char_kael' },
+    })
+  })
+
+  it("keeps a merge's description", () => {
+    const merge = group(
+      { targetTable: 'happening_awareness', targetId: 'aw1', op: 'create' },
+      {
+        targetTable: 'entities',
+        targetId: 'char_keep',
+        op: 'update',
+        undoPayload: { description: 'Older.' },
+      },
+      {
+        targetTable: 'entities',
+        targetId: 'char_dup',
+        op: 'delete',
+        undoPayload: { id: 'char_dup', isLead: 0 },
+      },
+    )
+    expect(describeUndoGroup(merge)).toEqual({
+      kind: 'rows',
+      seen: false,
+      first: { table: 'entities', id: 'char_keep' },
+      more: 2,
+    })
+  })
+
+  it('keeps the description of a group that deletes a row beside a flag write', () => {
+    const mixed = group(flag('char_mira', 0), {
+      targetTable: 'entities',
+      targetId: 'char_gone',
+      op: 'delete',
+      undoPayload: { id: 'char_gone', isLead: 0 },
+    })
+    expect(describeUndoGroup(mixed)).toEqual({
+      kind: 'rows',
+      seen: false,
+      first: { table: 'entities', id: 'char_mira' },
+      more: 1,
+    })
+  })
+})
+
 describe('describeRedoTarget', () => {
   it('describes only the undone action, not the closure the snapshot reached', () => {
     const target = group({ actionId: 'act_save', targetTable: 'lore', targetId: 'lore_1' })
@@ -232,6 +343,29 @@ describe('describeRedoTarget', () => {
       seen: false,
       op: 'update',
       row: { table: 'lore', id: 'lore_1' },
+    })
+  })
+
+  it('describes a redone switch as the set, by the row it flags', () => {
+    const target = group(
+      {
+        actionId: 'act_set',
+        targetTable: 'entities',
+        targetId: 'char_kael',
+        undoPayload: { isLead: 1 },
+      },
+      {
+        actionId: 'act_set',
+        targetTable: 'entities',
+        targetId: 'char_mira',
+        undoPayload: { isLead: 0 },
+      },
+    )
+    const snapshots = target.map((delta) => ({ delta }))
+    expect(describeRedoTarget({ actionId: 'act_set', snapshots })).toEqual({
+      kind: 'leadSet',
+      seen: false,
+      row: { table: 'entities', id: 'char_mira' },
     })
   })
 })

@@ -37,7 +37,11 @@ export function freshDeleteTarget(
   return row == null ? null : { kind: 'entity', row }
 }
 
-function confirmCopy(branchId: string, target: WorldDeleteTarget): DeleteConfirmCopy {
+function confirmCopy(
+  branchId: string,
+  target: WorldDeleteTarget,
+  needsLead: boolean,
+): DeleteConfirmCopy {
   if (target.kind === 'lore') return loreDeleteCopy(target.row)
   const impact = entityDeleteImpact({
     branchId,
@@ -48,14 +52,19 @@ function confirmCopy(branchId: string, target: WorldDeleteTarget): DeleteConfirm
     branchInvolvements: happeningInvolvementsStore.getInvolvements(branchId).values(),
     branchRelationships: characterRelationshipsStore.getRelationshipRows(branchId).values(),
   })
-  return entityDeleteCopy(target.row, impact)
+  return entityDeleteCopy(target.row, impact, needsLead)
 }
 
 /**
  * world.md → Delete. The row leaving the store clears the selection (`useWorldSelection`);
  * CTRL-Z in the reader restores the row, never the selection.
  */
-export function useWorldDelete(branchId: string, ctx: DbCtx, guard: (proceed: () => void) => void) {
+export function useWorldDelete(
+  branchId: string,
+  ctx: DbCtx,
+  guard: (proceed: () => void) => void,
+  needsLead: boolean,
+) {
   const [pending, setPending] = useState<{
     target: WorldDeleteTarget
     copy: DeleteConfirmCopy
@@ -70,9 +79,9 @@ export function useWorldDelete(branchId: string, ctx: DbCtx, guard: (proceed: ()
           loreStore.getLore(branchId),
         )
         if (fresh == null) return
-        setPending({ target: fresh, copy: confirmCopy(branchId, fresh) })
+        setPending({ target: fresh, copy: confirmCopy(branchId, fresh, needsLead) })
       }),
-    [branchId, guard],
+    [branchId, guard, needsLead],
   )
   const cancel = useCallback(() => setPending(null), [])
   const confirm = useCallback(() => {

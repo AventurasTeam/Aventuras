@@ -57,7 +57,8 @@ export type CreateStoryInput = {
   definition: StoryDefinition
   settings: StorySettings
   openingContent: string
-  openingMetadata: EntryMetadata
+  /** Carries no lead stamp: `leadId` is the opening's one stamp source. */
+  openingMetadata: Omit<EntryMetadata, 'leadId'> & { leadId?: never }
   /** Wizard-authored cast. Each row embeds name + description. */
   cast?: readonly WizardCastEntityInput[]
   /** The wizard's active lead: a cast character, inserted flagged; the opening is stamped with it. */
@@ -83,8 +84,7 @@ export async function createStoryWithBranch(
 ): Promise<{ storyId: string; branchId: string }> {
   const definition = storyDefinitionSchema.parse(input.definition)
   const settings = storySettingsSchema.parse(input.settings)
-  // The opening's stamp is the lead this commit flags, never one the caller carried in.
-  const { leadId: _carried, ...openingFields } = entryMetadataSchema.parse(input.openingMetadata)
+  const openingFields = entryMetadataSchema.parse(input.openingMetadata)
   const metadata: EntryMetadata =
     input.leadId == null ? openingFields : { ...openingFields, leadId: input.leadId }
 

@@ -89,6 +89,7 @@ import { toast } from '@/lib/toast'
 import {
   leadLabelFor,
   nameTakenByOther,
+  needsLead,
   resolveLead,
   type EntitySaveInput,
   type LoreDraft,
@@ -218,7 +219,8 @@ export default function WorldRoute() {
 
   const { onSession, guard, navigateGuarded } = useRowSessionGuard()
   useOverlaySurface(guard)
-  const worldDelete = useWorldDelete(branchId, ctx, guard)
+  const leadNeeded = open != null && needsLead(open.definition.mode, open.definition.narration)
+  const worldDelete = useWorldDelete(branchId, ctx, guard, leadNeeded)
   const cancelDelete = worldDelete.cancel
   // A pending confirm's counts go stale off-screen (another surface can delete/rename the row).
   useEffect(() => {
@@ -270,7 +272,7 @@ export default function WorldRoute() {
   const collision = useCollisionResolve(branchId, ctx, guard, story)
   const collisionBlocked = useCollisionGate(storyId ?? undefined, branchId)
   const { close: closeCollision, request: requestCollision } = collision
-  const collisionPair = collision.pair
+  const collisionPair = collision.dialog?.pair
   // world.md → Rename: a name another row outside the pair already has earns a hint.
   const collisionNameTaken =
     collisionPair == null
@@ -676,20 +678,21 @@ export default function WorldRoute() {
           onConfirm={worldDelete.confirm}
         />
       ) : null}
-      {collision.pair != null ? (
+      {collision.dialog != null ? (
         <CollisionResolveDialog
           open={focused}
           onOpenChange={(next) => {
             if (!next) closeCollision()
           }}
-          entityA={collision.pair.sides[0]}
-          entityB={collision.pair.sides[1]}
-          flaggedId={collision.pair.flaggedId}
-          reason={collision.pair.reason}
-          parentName={collision.pair.parentName}
+          entityA={collision.dialog.pair.sides[0]}
+          entityB={collision.dialog.pair.sides[1]}
+          flaggedId={collision.dialog.pair.flaggedId}
+          reason={collision.dialog.pair.reason}
+          parentName={collision.dialog.pair.parentName}
           onResolve={collision.resolve}
           blockedReason={collisionBlocked}
           isNameTaken={collisionNameTaken}
+          heldIds={collision.dialog.heldIds}
         />
       ) : null}
       {isEntityCategory(category) ? (

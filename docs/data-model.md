@@ -1507,9 +1507,12 @@ cast row in the root branch, the floor like the rest of the cast. No
 machine writer touches the flag, and none deletes or merges a
 character. No unique index backs the rule: redo replays a group
 newest-first, so it would set the new flag while the old one is still
-on. Because a set clears every flagged row, it repairs a double; a
-reader finding two logs an error and reads the branch as having no
-lead. A lead the classifier retires, or one the user stages or retires,
+on. Because a set clears every flagged row, it repairs a double. Every
+reader finding two reads the branch as having no lead, and only the
+readers outside the render path, the actions and the pipelines, log an
+error: a redo reapplies a set one store patch at a time, so a render
+path sees both flags on between two patches of a correct redo. A lead
+the classifier retires, or one the user stages or retires,
 stays the lead; only setting one requires `active`.
 
 **A merge never removes a character the branch's entries name.** A
@@ -1552,11 +1555,16 @@ after a delete. Readers
 of past turns mark where the lead changes
 ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
 
-**Readers.** `resolveLead` (`lib/world/lead.ts`) returns the branch's
-flagged character from the entity map the caller holds. The generation,
-classifier and chapter contexts hand it to templates as `lead`, absent when the
-branch has none
+**Readers.** Three reads return the branch's flagged character, or
+null with none or two. `resolveLead` (`lib/world/lead.ts`) reads the
+entity map the caller holds and logs nothing; the render paths use it.
+`resolveLeadLogged`, beside it, logs a double as `pipeline.lead_double`;
+the generation, classifier and chapter contexts read through it and
+hand the lead to templates as `lead`, absent when the branch has none
 ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
+`readBranchLead` (`lib/db`) reads the table for a caller with no
+store, the turn actions, and logs a double as
+`action_layer.branch_lead_double`.
 A fork copies entity rows, and its rewind restores the flag as of the
 fork entry ([Branch model](#branch-model)), so the branch-copy manifest
 needs no row of its own.
