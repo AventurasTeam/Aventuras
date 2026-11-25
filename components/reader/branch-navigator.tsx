@@ -1,6 +1,13 @@
 import type { TriggerRef } from '@rn-primitives/popover'
 import { Check, Circle, Pencil, Trash2, X } from 'lucide-react-native'
-import { useImperativeHandle, useRef, useState, type ReactElement, type Ref } from 'react'
+import {
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactElement,
+  type Ref,
+  type RefObject,
+} from 'react'
 import { Platform, Pressable, View, type ViewStyle } from 'react-native'
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler'
 
@@ -43,6 +50,10 @@ export type BranchNavigatorProps = {
   /** Renders a delete control on every row but the current one. */
   onDelete?: (branchId: string) => void
   onOpenChange?: (open: boolean) => void
+  /** While a confirm sits above it, an outside focus or press doesn't close the navigator. */
+  holdOpen?: boolean
+  /** Bound to the current branch's row, where focus lands after a delete. */
+  currentRowRef?: RefObject<View | null>
   ref?: Ref<BranchNavigatorHandle>
 }
 
@@ -104,7 +115,13 @@ function currentFirst(
   return current == null ? rows : [current, ...rows.filter((row) => row.id !== currentBranchId)]
 }
 
-function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProps) {
+function PopoverArm({
+  chip,
+  onOpenChange,
+  ref,
+  holdOpen = false,
+  ...content
+}: BranchNavigatorProps) {
   const trigger = useRef<TriggerRef>(null)
   const renaming = useRenaming()
   const [open, reportOpen] = useReportedOpen(onOpenChange)
@@ -167,7 +184,13 @@ function PopoverArm({ chip, onOpenChange, ref, ...content }: BranchNavigatorProp
           if (renaming.editingId != null && event.target instanceof HTMLInputElement)
             event.preventDefault()
         }}
-        onInteractOutside={() => {
+        onInteractOutside={(event) => {
+          // A confirm above takes focus outside this tree. Unrecorded, so a later Esc or Close
+          // still hands focus back to the opener.
+          if (holdOpen) {
+            event.preventDefault()
+            return
+          }
           interactedOutside.current = true
         }}
       >
@@ -191,6 +214,8 @@ function SheetArm({
   onOpenChange,
   ref,
   afterDismiss,
+  // A bottom Sheet has no outside-focus dismissal, so a confirm above it needs no hold.
+  holdOpen: _holdOpen,
   ...content
 }: BranchNavigatorProps & { afterDismiss: HeldUntilDismissed }) {
   const renaming = useRenaming()
@@ -236,7 +261,7 @@ function SheetArm({
 
 type NavigatorBodyProps = Pick<
   BranchNavigatorProps,
-  'rows' | 'currentBranchId' | 'paused' | 'onSwitch' | 'onRename' | 'onDelete'
+  'rows' | 'currentBranchId' | 'paused' | 'onSwitch' | 'onRename' | 'onDelete' | 'currentRowRef'
 > & {
   arm: Arm
   renaming: Renaming
@@ -254,6 +279,7 @@ function NavigatorBody({
   onSwitch,
   onRename,
   onDelete,
+  currentRowRef,
   arm,
   renaming,
   close,
@@ -291,6 +317,7 @@ function NavigatorBody({
             key={row.id}
             row={row}
             current={row.id === currentBranchId}
+            rowRef={row.id === currentBranchId ? currentRowRef : undefined}
             paused={paused}
             renaming={row.id === renaming.editingId}
             className={arm.row}
@@ -310,6 +337,8 @@ function NavigatorBody({
 type NavigatorRowProps = {
   row: BranchNavigatorRow
   current: boolean
+  /** The row's pressable, while it isn't renaming. */
+  rowRef?: RefObject<View | null>
   paused: boolean
   renaming: boolean
   className: string
@@ -324,6 +353,7 @@ type NavigatorRowProps = {
 function NavigatorRow({
   row,
   current,
+  rowRef,
   paused,
   renaming,
   className,
@@ -364,6 +394,7 @@ function NavigatorRow({
       )}
     >
       <Pressable
+        ref={rowRef}
         accessibilityRole="button"
         disabled={paused}
         onPress={onPress}

@@ -1,4 +1,14 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, type ReactElement, type Ref } from 'react'
+import {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type Ref,
+  type RefObject,
+} from 'react'
+import type { View } from 'react-native'
 
 import { db } from '@/lib/db'
 import { branchesStore, refreshBranches, type BranchRow } from '@/lib/stores'
@@ -8,6 +18,7 @@ import {
   type BranchChipView,
   type BranchNavigatorHandle,
 } from './branch-navigator'
+import { useHeldChip } from './use-held-chip'
 
 /**
  * Rows that lack the reader's branch (a refresh still landing after a fork) give no chip, so it
@@ -28,6 +39,12 @@ export type ReaderBranchNavigatorProps = {
   paused: boolean
   onSwitch: (branchId: string) => void
   onRename: (branchId: string, name: string) => Promise<unknown>
+  /** Absent while lifecycle ops pause or a swap is pending: no row then shows a delete control. */
+  onDelete?: (branchId: string) => void
+  /** While a confirm sits above the navigator, an outside focus or press doesn't close it. */
+  holdOpen?: boolean
+  /** Bound to the current branch's row. */
+  currentRowRef?: RefObject<View | null>
   ref?: Ref<ReaderBranchNavigatorHandle>
 }
 
@@ -38,10 +55,17 @@ export function ReaderBranchNavigator({
   paused,
   onSwitch,
   onRename,
+  onDelete,
+  holdOpen,
+  currentRowRef,
   ref,
 }: ReaderBranchNavigatorProps): ReactElement {
   const rows = branchesStore.useBranches(storyId, (held) => held)
-  const chip = useMemo(() => branchChipOf(rows, branchId), [rows, branchId])
+  const liveChip = useMemo(() => branchChipOf(rows, branchId), [rows, branchId])
+  const [open, setOpen] = useState(false)
+  // branch-navigator.md → Delete confirm: the header's count drops at once, the chip's at close.
+  // On desktop the chip is the open Popover's anchor, so it can't swap out under it.
+  const chip = useHeldChip(liveChip, open)
 
   // A reader mounts fresh per branch, so this is the read after a switch's or a fork's navigation.
   useEffect(() => {
@@ -78,6 +102,10 @@ export function ReaderBranchNavigator({
       paused={paused}
       onSwitch={onSwitch}
       onRename={onRename}
+      onDelete={onDelete}
+      onOpenChange={setOpen}
+      holdOpen={holdOpen}
+      currentRowRef={currentRowRef}
     />
   )
 }

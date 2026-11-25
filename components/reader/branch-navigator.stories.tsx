@@ -7,6 +7,7 @@ import { ActionsMenu } from '@/components/compounds/actions-menu'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 
+import { BranchDeleteConfirm } from './branch-delete-confirm'
 import {
   BranchNavigator,
   type BranchNavigatorHandle,
@@ -164,6 +165,87 @@ function PauseLiftsHarness(props: BranchNavigatorProps) {
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
   return <BranchNavigator {...props} paused={paused} />
+}
+
+function centreOf(element: Element): { x: number; y: number } {
+  const box = element.getBoundingClientRect()
+  return { x: Math.floor(box.left + box.width / 2), y: Math.floor(box.top + box.height / 2) }
+}
+
+function hitAt({ x, y }: { x: number; y: number }): Element | null {
+  return document.elementFromPoint(x, y)
+}
+
+// An open modal turns a lower layer's pointer events off, and hit-testing skips such an element
+// whatever paints there: the layer under test takes them back for the probe alone.
+function withHitTesting<T>(layer: HTMLElement, probe: () => T): T {
+  const previous = layer.style.pointerEvents
+  layer.style.pointerEvents = 'auto'
+  try {
+    return probe()
+  } finally {
+    layer.style.pointerEvents = previous
+  }
+}
+
+// The reader's wiring in small: the confirm mounts beside the navigator, outside its tree, and a
+// landed delete names the current row for focus, as useBranchDeleteConfirm does.
+function ConfirmOverNavigatorHarness({
+  withActions = false,
+  ...props
+}: BranchNavigatorProps & { withActions?: boolean }) {
+  const handle = useRef<BranchNavigatorHandle>(null)
+  const currentRowRef = useRef<View>(null)
+  const returnFocusTo = useRef<unknown>(null)
+  const [target, setTarget] = useState<BranchNavigatorRow | null>(null)
+  return (
+    <>
+      {withActions ? (
+        <ActionsMenu
+          triggerLabel="Actions"
+          coreGroups={[
+            {
+              id: 'story-tools',
+              header: 'Story tools',
+              entries: [
+                {
+                  id: 'browse-branches',
+                  label: 'Browse branches…',
+                  opensSheet: true,
+                  onActivate: () => handle.current?.open(),
+                },
+              ],
+            },
+          ]}
+        />
+      ) : null}
+      <BranchNavigator
+        {...props}
+        ref={handle}
+        holdOpen={target != null}
+        currentRowRef={currentRowRef}
+        onDelete={(id) => {
+          returnFocusTo.current = null
+          setTarget(props.rows.find((row) => row.id === id) ?? null)
+        }}
+      />
+      {target != null ? (
+        <BranchDeleteConfirm
+          open
+          onOpenChange={(open) => {
+            if (!open) setTarget(null)
+          }}
+          name={target.name}
+          count={38}
+          returnFocusTo={returnFocusTo}
+          onDelete={() => {
+            returnFocusTo.current = currentRowRef.current
+            setTarget(null)
+          }}
+        />
+      ) : null}
+    </>
+  )
 }
 
 const meta: Meta<typeof BranchNavigator> = {
@@ -695,5 +777,116 @@ export const RenameKeepsTheMarker: Story = {
     await expect(within(main).queryAllByRole('button')).toEqual([])
     await expect(screen.queryByRole('button', { name: 'Delete Main' })).toBeNull()
     await expect(screen.getByRole('button', { name: 'Delete The road not taken' })).toBeVisible()
+  },
+}
+
+/** branch-navigator.md → Delete confirm: the confirm opens over the navigator, which stays. */
+export const HoldOpenUnderConfirm: Story = {
+  render: (args) => <ConfirmOverNavigatorHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    await openFromChip()
+    const header = screen.getByText('Branches · 3')
+    const navigatorDialog = navigator('Branches · 3')
+    // Control: before the confirm, the header's point is the navigator's own.
+    expect(navigatorDialog.contains(hitAt(centreOf(header)))).toBe(true)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Main' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Main?' }, ANIMATION)
+    // The confirm's autofocus lands outside the navigator's tree; held, the navigator stays.
+    await waitFor(() => expect(confirm.contains(document.activeElement)).toBe(true), ANIMATION)
+    await pause(300)
+    await expect(screen.getByText('Branches · 3')).toBeVisible()
+    // layout.md → Stacking: the confirm's scrim covers the held Popover, and the confirm its centre.
+    const covered = withHitTesting(navigatorDialog, () => hitAt(centreOf(header)))
+    expect(covered).not.toBeNull()
+    expect(navigatorDialog.contains(covered)).toBe(false)
+    const own = withHitTesting(navigatorDialog, () => hitAt(centreOf(confirm)))
+    expect(confirm.contains(own)).toBe(true)
+
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), ANIMATION)
+    await expect(navigator('Branches · 3')).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete Main' })).toHaveFocus())
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(queryNavigator('Branches · 3')).toBeNull())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'On The trap · 3 branches' })).toHaveFocus(),
+    )
+  },
+}
+
+/**
+ * overlays.md → Close focus: the hold records no outside interaction, so a later close still
+ * restores the opener. From the chip Radix refocuses its trigger anyway; from the Actions menu only
+ * the navigator's own restore reaches the menu's trigger.
+ */
+export const HoldOpenKeepsCloseFocus: Story = {
+  render: (args) => <ConfirmOverNavigatorHarness {...args} withActions />,
+  play: async () => {
+    await waitForTier('desktop')
+    const actions = screen.getByRole('button', { name: /^Actions/ })
+    await userEvent.click(actions)
+    await userEvent.click(await screen.findByRole('option', { name: 'Browse branches…' }))
+    await waitFor(() => expect(navigator('Branches · 3')).toBeVisible(), ANIMATION)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Main' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Main?' }, ANIMATION)
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), ANIMATION)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete Main' })).toHaveFocus())
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(queryNavigator('Branches · 3')).toBeNull())
+    await waitFor(() => expect(actions).toHaveFocus())
+  },
+}
+
+/** A landed delete: the pressed control left with its row, so focus goes to the current row. */
+export const DeleteLandsFocusOnTheCurrentRow: Story = {
+  render: (args) => <ConfirmOverNavigatorHarness {...args} />,
+  play: async () => {
+    await waitForTier('desktop')
+    await openFromChip()
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Main' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Main?' }, ANIMATION)
+    await userEvent.click(within(confirm).getByRole('button', { name: 'Delete branch' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), ANIMATION)
+    await expect(navigator('Branches · 3')).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Current branch The trap' })).toHaveFocus(),
+    )
+  },
+}
+
+/** layout.md → Stacking on phone: the confirm over the Sheet, which outlasts it and its Escape. */
+export const HoldOpenUnderConfirmPhone: Story = {
+  globals: PHONE,
+  render: (args) => <ConfirmOverNavigatorHarness {...args} />,
+  play: async ({ args }) => {
+    await waitForTier('phone')
+    await openFromChip()
+    await waitForSheetSettled('Branches · 3')
+    const sheet = navigator('Branches · 3')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Main' }))
+    const confirm = await screen.findByRole('alertdialog', { name: 'Delete Main?' }, ANIMATION)
+    await pause(300)
+    await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
+    await expect(screen.getByText('Branches · 3')).toBeVisible()
+    // The lower button sits where the short Sheet rises; the confirm paints over it.
+    for (const name of ['Delete branch', 'Cancel']) {
+      const button = within(confirm).getByRole('button', { name })
+      const hit = withHitTesting(sheet, () => hitAt(centreOf(button)))
+      expect(button.contains(hit)).toBe(true)
+    }
+
+    // Escape is the confirm's: it closes alone.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), ANIMATION)
+    await pause(300)
+    await expect(args.onOpenChange).not.toHaveBeenCalledWith(false)
+    await expect(navigator('Branches · 3')).toBeVisible()
   },
 }
