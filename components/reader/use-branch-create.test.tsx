@@ -6,7 +6,12 @@ import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { FORK_REFUSAL, type ForkResult, type ShowBranchResult } from '@/lib/actions'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type StoryEntry } from '@/lib/db'
+import {
+  STORY_SETTINGS_DEFAULTS,
+  storyDefinitionSchema,
+  type DbCtx,
+  type StoryEntry,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   currentStoryStore,
@@ -16,6 +21,7 @@ import {
   resetAllStores,
   type RunState,
 } from '@/lib/stores'
+import { refreshBranches as refreshFromDb } from '@/lib/stores/branches/branches'
 import { toast } from '@/lib/toast'
 
 import type { BranchCreateModalProps } from './branch-create-modal'
@@ -329,8 +335,15 @@ describe('useBranchCreate — Create', () => {
     expect(logWarn).not.toHaveBeenCalled()
   })
 
-  it('logs a refresh that rejects, with no line and no toast', async () => {
-    branchList.refresh.mockRejectedValue(new Error('disk'))
+  it('logs a refresh whose read fails, with no line and no toast', async () => {
+    const failingRead = {
+      select: () => {
+        throw new Error('disk')
+      },
+    } as unknown as DbCtx['db']
+    branchList.refresh.mockImplementation((_db: unknown, storyId: string) =>
+      refreshFromDb(failingRead, storyId),
+    )
     const hook = renderCreate()
     await openModal(hook)
     press(hook, 'Side quest')

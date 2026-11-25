@@ -18,13 +18,13 @@ import {
   generationStore,
   isStoryBusy,
   readerHoldStore,
-  refreshBranches,
   type ReaderHoldToken,
 } from '@/lib/stores'
 import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
 import type { BranchCreateModalProps, BranchCreatePhase } from './branch-create-modal'
+import { refreshAfterFork } from './refresh-after-fork'
 import { switchGateReason } from './switch-result-notice'
 
 const ctx = { db, runInTransaction }
@@ -51,15 +51,6 @@ type ForkRequest = { at: ForkAt; phase: BranchCreatePhase }
 
 const IDLE: BranchCreatePhase = { kind: 'idle', line: null }
 const PENDING: BranchCreatePhase = { kind: 'pending' }
-
-// C8: a failed refresh is logged, never surfaced; a reader that mounts re-reads the list. The store
-// holds one story's rows: a refresh for a story no longer open would replace another story's.
-function refreshAfterFork(storyId: string): void {
-  if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
-  void refreshBranches(db, storyId).catch((error: unknown) =>
-    logger.warn('app.branches_refresh_failed', { storyId, error: messageOf(error) }),
-  )
-}
 
 // Outside the hook: the React Compiler bails on `finally`, and on `&&`/`?:`/`?.` inside a `try`.
 async function holdingReader(
@@ -161,14 +152,10 @@ export function useBranchCreate({
     return holdingReader(
       branchId,
       async (hold) => {
-        const refuse = (line: string) => {
-          readerHoldStore.release(hold)
-          endPending(line)
-        }
         // forkBranch's gate misses a run of the story without a hard gate, and a turn body.
         const txState = generationStore.getTxState()
         if (isStoryBusy(txState, sid, branchId) || generationStore.isTurnBodyActive(branchId)) {
-          refuse(switchGateReason(txState, sid))
+          endPending(switchGateReason(txState, sid))
           return
         }
         let forked: ForkResult
@@ -179,11 +166,11 @@ export function useBranchCreate({
           )
         } catch (error) {
           logger.error('reader.branch_create_failed', { ...logAt, error: messageOf(error) })
-          refuse(t('reader:branches.create.failed'))
+          endPending(t('reader:branches.create.failed'))
           return
         }
         if (forked.status === 'rejected') {
-          refuse(refusalLine(forked, sid, logAt))
+          endPending(refusalLine(forked, sid, logAt))
           return
         }
         committed = true
@@ -191,7 +178,6 @@ export function useBranchCreate({
         const open = currentStoryStore.getCurrentStory()
         // Left or switched since: the parent's reader is gone, so no screens to replace.
         if (open == null || open.storyId !== sid || open.branchId !== branchId) {
-          readerHoldStore.release(hold)
           logger.warn('reader.branch_create_not_opened', {
             branchId,
             newBranchId,
@@ -211,13 +197,10 @@ export function useBranchCreate({
             newBranchId,
             error: messageOf(error),
           })
-          readerHoldStore.release(hold)
           refreshAfterFork(sid)
           close()
           return
         }
-        // Idempotent: showBranch releases it on every path too.
-        readerHoldStore.release(hold)
         refreshAfterFork(sid)
         if (shown.status !== 'navigation-blocked') return
         // showBranch put the pointer back here unless its restore and retry both failed (logged).

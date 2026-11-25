@@ -1,4 +1,5 @@
 import { keepsConfirmOpen } from '@/components/reader/confirm-refusal'
+import { refreshAfterFork } from '@/components/reader/refresh-after-fork'
 import {
   describeCloseFailure,
   describePassFailure,
@@ -38,13 +39,7 @@ import {
   pipelineErrorDetail,
   type ChainEnd,
 } from '@/lib/pipeline'
-import {
-  currentStoryStore,
-  readerHoldStore,
-  refreshBranches,
-  RERUN_HELD,
-  type ReaderHoldToken,
-} from '@/lib/stores'
+import { currentStoryStore, readerHoldStore, RERUN_HELD, type ReaderHoldToken } from '@/lib/stores'
 import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
@@ -308,15 +303,6 @@ async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunRefusalStep |
   return { newBranchId: result.branchId, name, position: forkPoint.position, number }
 }
 
-// C8: a failure here is logged, never surfaced; a reader that mounts re-reads the list. The store
-// holds one story's rows: a refresh for a story no longer open would replace another story's.
-function refreshAfterFork(storyId: string): void {
-  if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
-  void refreshBranches(db, storyId).catch((error: unknown) =>
-    logger.warn('app.branches_refresh_failed', { storyId, error: messageOf(error) }),
-  )
-}
-
 const forkedAt = (args: RerunOnBranchArgs, forked: Forked) => ({
   branchId: args.branchId,
   newBranchId: forked.newBranchId,
@@ -404,19 +390,16 @@ async function showThenStart(
   const { storyId, branchId, replaceStack } = args
   const open = currentStoryStore.getCurrentStory()
   // Left or switched since: the parent's reader is gone, so the tail has no screens to replace.
-  if (open == null || open.storyId !== storyId || open.branchId !== branchId) {
-    readerHoldStore.release(hold)
+  if (open == null || open.storyId !== storyId || open.branchId !== branchId)
     return notOpened(args, forked, 'story-left')
-  }
   let shown: ShowBranchResult
   try {
     shown = await showBranch({ storyId, branchId: forked.newBranchId, hold, replaceStack }, ctx)
   } catch (error) {
-    readerHoldStore.release(hold)
     closeUnshown(args)
     return threwAfterFork(args, forked, 'show', error)
   }
-  // Idempotent: showBranch releases it on every path too.
+  // Ended before the start, which runs for minutes; showBranch releases it on every path too.
   readerHoldStore.release(hold)
   // showBranch put the pointer back on the parent, or logged why not; the new branch stays.
   if (shown.status === 'navigation-blocked') return notOpened(args, forked)
@@ -448,13 +431,9 @@ export async function runCloseRerunOnBranch(args: {
   const hold = readerHoldStore.take(args.branchId)
   try {
     const forked = await checkAndFork(args)
-    if ('step' in forked) {
-      readerHoldStore.release(hold)
-      return forked
-    }
+    if ('step' in forked) return forked
     return await showThenStart(args, hold, forked)
   } finally {
-    // A throw past the steps' own catches would otherwise freeze the parent reader.
     readerHoldStore.release(hold)
   }
 }

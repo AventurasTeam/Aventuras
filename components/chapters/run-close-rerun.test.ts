@@ -28,7 +28,7 @@ import {
   type RollbackCounts,
 } from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { db, STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
+import { db, STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -46,6 +46,7 @@ import {
   resetAllStores,
   type OpenStory,
 } from '@/lib/stores'
+import { refreshBranches as refreshFromDb } from '@/lib/stores/branches/branches'
 import { toast } from '@/lib/toast'
 
 import {
@@ -778,8 +779,15 @@ describe('runCloseRerunOnBranch', () => {
     },
   )
 
-  it('logs a refresh that rejects, toasts nothing for it, and still starts', async () => {
-    branchList.refresh.mockRejectedValue(new Error('disk'))
+  it('logs a refresh whose read fails, toasts nothing for it, and still starts', async () => {
+    const failingRead = {
+      select: () => {
+        throw new Error('disk')
+      },
+    } as unknown as DbCtx['db']
+    branchList.refresh.mockImplementation((_db: unknown, storyId: string) =>
+      refreshFromDb(failingRead, storyId),
+    )
     expect(await onBranch()).toStrictEqual({ step: 'forked' })
     await vi.waitFor(() =>
       expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.branches_refresh_failed', {
