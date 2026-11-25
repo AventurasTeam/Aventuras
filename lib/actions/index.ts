@@ -26,6 +26,7 @@ export {
   startCloseRerunOnFork,
   type CloseRerunCountsChanged,
   type CloseRerunExpected,
+  type CloseRerunForkStart,
   type CloseRerunParentCheck,
   type CloseRerunPreview,
   type CloseRerunReadRefusal,

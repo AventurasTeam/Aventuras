@@ -371,15 +371,17 @@ export type CloseRerunTurnsFollowed = {
   reason: string
 }
 
+type CloseChainStart = ChainEnd | RejectedStart | PreflightFailedStart
+
 /** The chain's end, whose `kind` tells a catch-up pass's end from the re-run's, or the refusal. */
 export type CloseRerunStart =
-  | ChainEnd
-  | RejectedStart
-  | PreflightFailedStart
+  | CloseChainStart
   | CloseRerunReadRefusal
   | CloseRerunCountsChanged
   | StoryEntryRejection
-  | CloseRerunTurnsFollowed
+
+/** The start on a fork: no shortcut runs, so a turn since refuses, never a sweep or moved counts. */
+export type CloseRerunForkStart = CloseChainStart | CloseRerunReadRefusal | CloseRerunTurnsFollowed
 
 function shownStill(expected: CloseRerunExpected, preview: CloseRerunPreview): boolean {
   const { shortcut, reversal } = preview
@@ -435,8 +437,6 @@ async function catchUpPreflight(
 type RerunStartArgs = {
   branchId: string
   chapterId: string
-  /** Null on a branch a fork just made: the confirm's counts were checked on its parent. */
-  expected: CloseRerunExpected | null
   story: OpenStory
   onStarted?: () => void
 }
@@ -483,11 +483,11 @@ export async function checkCloseRerunParent(
 }
 
 // The in-place start's refusals, then `start` under the pending mark this takes.
-async function checkedStart(
+async function checkedStart<R>(
   branchId: string,
   ctx: DbCtx,
-  start: (open: OpenStory, own: PendingMark) => Promise<CloseRerunStart>,
-): Promise<CloseRerunStart> {
+  start: (open: OpenStory, own: PendingMark) => Promise<R>,
+): Promise<R | RejectedStart | PreflightFailedStart> {
   if (currentStoryStore.getCurrentStory()?.branchId !== branchId)
     return refusedStart(MANUAL_CLOSE_REFUSAL.branchNotOpen)
   // A pass ending during the held read can leave the branch held, which that read missed.
@@ -523,7 +523,12 @@ export async function startCloseRerun(
   opts?: { onStarted?: () => void },
 ): Promise<CloseRerunStart> {
   return checkedStart(branchId, ctx, (story, own) =>
-    startUnderMark({ branchId, chapterId, expected, story, onStarted: opts?.onStarted }, ctx, own),
+    rollBackAndRerun(
+      { branchId, chapterId, story, onStarted: opts?.onStarted },
+      expected,
+      ctx,
+      own,
+    ),
   )
 }
 
@@ -538,28 +543,22 @@ export async function startCloseRerunOnFork(
   ctx: DbCtx,
   /** As startCloseRerun's. */
   opts?: { onStarted?: () => void },
-): Promise<CloseRerunStart> {
+): Promise<CloseRerunForkStart> {
   return checkedStart(branchId, ctx, (story, own) =>
-    startUnderMark(
-      { branchId, chapterId, expected: null, story, onStarted: opts?.onStarted },
-      ctx,
-      own,
-    ),
+    rerunOnFork({ branchId, chapterId, story, onStarted: opts?.onStarted }, ctx, own),
   )
 }
 
-async function startUnderMark(
+async function rollBackAndRerun(
   args: RerunStartArgs,
+  expected: CloseRerunExpected,
   ctx: DbCtx,
   own: PendingMark,
 ): Promise<CloseRerunStart> {
-  const { branchId, chapterId, expected, story } = args
+  const { branchId, chapterId, story } = args
   const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
   if ('status' in fresh) return fresh
-  if (expected === null) {
-    // The confirm showed no rollback here, so a turn after the close is never swept for it.
-    if (fresh.shortcut !== null) return turnsFollowed(branchId)
-  } else if (!shownStill(expected, fresh)) return countsChanged(fresh)
+  if (!shownStill(expected, fresh)) return countsChanged(fresh)
   const passFailed = await catchUpPreflight(args, ctx)
   if (passFailed) return { outcome: 'preflight-failed', error: passFailed }
   if (fresh.shortcut !== null) {
@@ -574,6 +573,30 @@ async function startUnderMark(
       return 'status' in reread ? reread : countsChanged(reread)
     }
   }
+  return rerunChain(args, ctx, own)
+}
+
+async function rerunOnFork(
+  args: RerunStartArgs,
+  ctx: DbCtx,
+  own: PendingMark,
+): Promise<CloseRerunForkStart> {
+  const { branchId, chapterId, story } = args
+  const fresh = await getCloseRerunPreview(branchId, chapterId, story, ctx)
+  if ('status' in fresh) return fresh
+  // The confirm showed no rollback here, so a turn after the close is never swept for it.
+  if (fresh.shortcut !== null) return turnsFollowed(branchId)
+  const passFailed = await catchUpPreflight(args, ctx)
+  if (passFailed) return { outcome: 'preflight-failed', error: passFailed }
+  return rerunChain(args, ctx, own)
+}
+
+async function rerunChain(
+  args: RerunStartArgs,
+  ctx: DbCtx,
+  own: PendingMark,
+): Promise<CloseChainStart> {
+  const { branchId, chapterId } = args
   generationStore.setPendingRerun(branchId, { chapterId })
   const record = generationStore.getTxState().pendingRerun.get(branchId)
   try {

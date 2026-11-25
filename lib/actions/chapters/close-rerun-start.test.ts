@@ -56,6 +56,7 @@ import {
   startCloseRerun,
   startCloseRerunOnFork,
   type CloseRerunExpected,
+  type CloseRerunForkStart,
   type CloseRerunPreview,
   type CloseRerunStart,
 } from './close-rerun'
@@ -180,7 +181,7 @@ function start(
   })
 }
 
-function chainEnd(result: CloseRerunStart): ChainEnd {
+function chainEnd(result: CloseRerunStart | CloseRerunForkStart): ChainEnd {
   if ('result' in result) return result
   throw new Error(`the re-run did not start: ${JSON.stringify(result)}`)
 }
@@ -1159,7 +1160,7 @@ function startOnFork(
   { h, chapterId }: Closed,
   child: string,
   onStarted?: () => void,
-): Promise<CloseRerunStart> {
+): Promise<CloseRerunForkStart> {
   script(generateToolStepMock, [STAND_IN_STEP])
   return startCloseRerunOnFork(child, chapterId, h.fx.ctx, { onStarted })
 }

@@ -11,6 +11,7 @@ import {
   STORY_ENTRY_REJECTION,
   type CloseRerunParentCheck,
   type CloseRerunPreview,
+  type CloseRerunForkStart,
   type CloseRerunShortcut,
   type CloseRerunStart,
   type ForkBranchInput,
@@ -679,7 +680,7 @@ describe('runCloseRerunOnBranch', () => {
   })
 
   it('names the branch as the toast does, and toasts the start only at its reserve', async () => {
-    const started = deferred<CloseRerunStart>()
+    const started = deferred<CloseRerunForkStart>()
     actions.startOnFork.mockImplementation(() => started.promise)
     const run = onBranch()
     await vi.waitFor(() => expect(actions.startOnFork).toHaveBeenCalledTimes(1))

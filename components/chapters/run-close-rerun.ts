@@ -18,6 +18,7 @@ import {
   startCloseRerunOnFork,
   STORY_ENTRY_REJECTION,
   type CloseRerunExpected,
+  type CloseRerunForkStart,
   type CloseRerunParentCheck,
   type CloseRerunPreview,
   type CloseRerunStart,
@@ -343,7 +344,7 @@ function notOpened(args: RerunOnBranchArgs, forked: Forked, cause?: string): Rer
   return { step: 'forked' }
 }
 
-function refusalCause(start: Exclude<CloseRerunStart, ChainEnd>): string {
+function refusalCause(start: Exclude<CloseRerunForkStart, ChainEnd>): string {
   if ('outcome' in start)
     return start.outcome === 'preflight-failed' ? start.outcome : start.blockedBy
   return start.code
@@ -351,7 +352,7 @@ function refusalCause(start: Exclude<CloseRerunStart, ChainEnd>): string {
 
 async function startOnChild(args: RerunOnBranchArgs, forked: Forked): Promise<RerunOnBranchStep> {
   const { newBranchId, name, position, number } = forked
-  let start: CloseRerunStart
+  let start: CloseRerunForkStart
   try {
     start = await startCloseRerunOnFork(newBranchId, args.chapterId, ctx, {
       onStarted: () => {
