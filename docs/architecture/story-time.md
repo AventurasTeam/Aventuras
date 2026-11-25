@@ -14,13 +14,13 @@ There is no calendar. Arithmetic goes through total minutes (`toMinutes` / `from
 
 `stories.time_tracker` is the register. Every other stored time is a copy of it, taken at some moment:
 
-| Copy                                          | Taken when                            |
-| --------------------------------------------- | ------------------------------------- |
-| `metadata.timeStart` on an entry              | the entry is added (`addEntry`)       |
-| `metadata.timeEnd` on a narration             | classification has advanced the clock |
-| `chapters.start_time` / `end_time`            | the chapter is written                |
-| `checkpoints.time_tracker_snapshot`           | the checkpoint is taken               |
-| `world_state_snapshots.time_tracker_snapshot` | the world-state snapshot is taken     |
+| Copy                                          | Taken when                                |
+| --------------------------------------------- | ----------------------------------------- |
+| `metadata.timeStart` on an entry              | the entry is added (`addEntry`)           |
+| `metadata.timeEnd` on a narration             | classification has run, even a failed one |
+| `chapters.start_time` / `end_time`            | the chapter is written                    |
+| `checkpoints.time_tracker_snapshot`           | the checkpoint is taken                   |
+| `world_state_snapshots.time_tracker_snapshot` | the world-state snapshot is taken         |
 
 Classification advances the clock by one of four buckets — none, 15 minutes, 2 hours, 1 day — and a
 failed classification counts as none. A player action is an instant: its start and end are the same
@@ -77,8 +77,8 @@ stands on to suit that one. Stopping every range at the fork keeps shared entrie
 between points they all share. It also keeps the fork's own ending still, since every branch forked
 there opens on it. Forks are taken from every branch in the story, not just the one in view, and
 kept where their entry is visible. A fork point moves only deliberately: by anchoring it, or by
-restating it as the later boundary of a reconciliation, which warns how many branches open on it. A checkpoint is not a
-boundary: its clock is a copy, updated when its entry moves.
+restating it as the later boundary of a reconciliation, which warns how many branches open on it.
+A checkpoint is not a boundary: its clock is a copy, updated when its entry moves.
 
 A **range** is the stretch between two adjacent boundaries (`selectableRanges`). Adjacent only: a
 range spanning an anchor would have to either violate the assertion or promote it to a constraint.
@@ -118,8 +118,7 @@ has a weight. Reconciling again with unchanged boundaries changes nothing.
 `planReconciliation` (`reconciliation.ts`) turns the new times into every write that must accompany
 them: chapter spans covering the range, a checkpoint whose last entry moved, the clock of each
 world-state snapshot of the rewritten entries (kept, since past states are rebuilt from them), and
-the story clock — **only**
-when the range reaches the branch's last entry. An interior range makes no claim about where the
+the story clock — **only** when the range reaches the branch's last entry. An interior range makes no claim about where the
 story now stands, and writing the clock anyway would discard a clock adjustment the reader had not
 yet committed by continuing.
 
@@ -138,10 +137,11 @@ appeared inside the range.
 
 `setEntryTimes` writes one entry's own beginning and ending as a one-entry plan, so it carries the
 same guarantees. It is offered from the entry and from the reference-points list, not from the
-reconciliation screen, which restates boundaries for the repair instead. The player action before a narration moves with it, to the narration's new
-beginning. Beyond the generation guard it is never refused: on a fork point it also updates the
-checkpoint the branches open on, and the dialog tells the reader how many intervals the edit reaches. No other entry moves, so an edit
-can open a gap or an overlap that detection then reports.
+reconciliation screen, which restates boundaries for the repair instead. The player action before
+a narration moves with it, to the narration's new beginning. Beyond the generation guard it is never
+refused: on a fork point it also updates the checkpoint the branches open on, and the dialog tells
+the reader how many branches and intervals the edit reaches. No other entry moves, so an edit can
+open a gap or an overlap that detection then reports.
 
 Editing an entry from before a fork has a wider, pre-existing consequence, described in
 [overview.md](overview.md) under the branches' data model.
@@ -169,7 +169,7 @@ the story, in the order `createStory` picks an opening: generated, written, impo
 A pack whose opening template predates the variable cannot pass the guidance on.
 `templateReceivesStartingTime` resolves the template that will actually run, before generation and
 before refinement, and the guidance is then disabled and not used as a fallback. It matches a
-`{{ startingTime` output tag; the narrator settings' checks use the parser instead
+`{{ storyStartingTime` output tag; the narrator settings' checks use the parser instead
 (`templateReferences.ts`), which also sees the variable inside `{% if %}` and ignores comments.
 
 ## Persistence and transport
