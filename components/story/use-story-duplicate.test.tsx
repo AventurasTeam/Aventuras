@@ -27,7 +27,7 @@ type Duplicate = (input: DuplicateStoryInput) => Promise<DuplicateStoryResult>
 type OnDone = (copy: { storyId: string; title: string }) => void
 type Hook = ReturnType<typeof useStoryDuplicate>
 type Props = { focused: boolean; blocked: boolean }
-type Values = { title: string; branch: DuplicateBranch }
+type Values = { title: string }
 
 // The locale's lines, written out: reading them through t() would pass on any string.
 const FAILED = "Couldn't duplicate the story."
@@ -39,7 +39,8 @@ const MAIN: DuplicateBranchOption = { id: 'br_main', name: 'main' }
 const FORK: DuplicateBranchOption = { id: 'br_fork', name: 'fork' }
 const OK: DuplicateCheck = { status: 'ok' }
 const COPIED: DuplicateStoryResult = { status: 'duplicated', storyId: 'story_copy' }
-const VALUES: Values = { title: 'Copy', branch: 'all' }
+const SIDE: DuplicateBranchOption = { id: 'br_side', name: 'side' }
+const VALUES: Values = { title: 'Copy' }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -113,8 +114,8 @@ describe('useStoryDuplicate: opening', () => {
       openSeq: expect.any(Number),
       storyId: 'story_a',
       sourceTitle: 'Aria',
-      branches: [MAIN, FORK],
-      currentBranchId: FORK.id,
+      branches: { current: FORK, others: [MAIN] },
+      branch: { branchId: FORK.id },
       state: { kind: 'checking' },
     })
     expect(check).toHaveBeenCalledWith('story_a', { branchId: FORK.id })
@@ -157,9 +158,10 @@ describe('useStoryDuplicate: opening', () => {
     ['is null', null],
   ])('falls back to the first branch when the pointer %s', async (_, pointer) => {
     const { result, readBranches, check } = setup()
-    readBranches.mockResolvedValueOnce({ branches: [MAIN, FORK], currentBranchId: pointer })
+    readBranches.mockResolvedValueOnce({ branches: [MAIN, FORK, SIDE], currentBranchId: pointer })
     await openOn(result)
-    expect(result.current.dialog?.currentBranchId).toBe(MAIN.id)
+    expect(result.current.dialog?.branches).toEqual({ current: MAIN, others: [FORK, SIDE] })
+    expect(result.current.dialog?.branch).toEqual({ branchId: MAIN.id })
     expect(check).toHaveBeenCalledWith('story_a', { branchId: MAIN.id })
   })
 
@@ -182,7 +184,11 @@ describe('useStoryDuplicate: opening', () => {
       first.resolve({ branches: [MAIN, FORK], currentBranchId: FORK.id })
       await a
     })
-    expect(result.current.dialog).toMatchObject({ storyId: 'story_b', sourceTitle: 'Bran' })
+    expect(result.current.dialog).toMatchObject({
+      storyId: 'story_b',
+      sourceTitle: 'Bran',
+      branches: { current: MAIN, others: [] },
+    })
     expect(check).toHaveBeenCalledTimes(1)
     expect(check).toHaveBeenCalledWith('story_b', { branchId: MAIN.id })
   })
@@ -354,6 +360,7 @@ describe('useStoryDuplicate: submitting', () => {
     expect(check).toHaveBeenCalledTimes(1)
     expect(readBranches).toHaveBeenCalledTimes(1)
     expect(result.current.dialog?.state).toEqual({ kind: 'copying' })
+    expect(result.current.dialog?.branch).toEqual({ branchId: FORK.id })
 
     await act(async () => {
       copy.resolve(COPIED)
@@ -412,7 +419,7 @@ describe('useStoryDuplicate: submitting', () => {
   it('closes on a copy and reports it under the stored, trimmed title', async () => {
     const { result, duplicate, onDone } = setup()
     await openOn(result)
-    await submitOn(result, { title: '  Ashes  ', branch: { branchId: FORK.id } })
+    await submitOn(result, { title: '  Ashes  ' })
     expect(duplicate).toHaveBeenCalledWith({
       storyId: 'story_a',
       title: '  Ashes  ',
@@ -421,6 +428,20 @@ describe('useStoryDuplicate: submitting', () => {
     expect(result.current.dialog).toBeNull()
     expect(onDone).toHaveBeenCalledTimes(1)
     expect(onDone).toHaveBeenCalledWith({ storyId: 'story_copy', title: 'Ashes' })
+  })
+
+  it('copies the selection its check approved', async () => {
+    const { result, check, duplicate } = setup()
+    await openOn(result)
+    act(() => {
+      result.current.setBranch('all')
+    })
+    expect(result.current.dialog).toMatchObject({ branch: 'all', state: { kind: 'checking' } })
+    await flush()
+    expect(check).toHaveBeenLastCalledWith('story_a', 'all')
+    expect(result.current.dialog?.state).toEqual({ kind: 'ready' })
+    await submitOn(result)
+    expect(duplicate).toHaveBeenCalledWith({ storyId: 'story_a', title: 'Copy', branch: 'all' })
   })
 
   it('shows a refusal at the press as its line and keeps the dialog', async () => {

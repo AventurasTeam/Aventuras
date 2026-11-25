@@ -88,6 +88,21 @@ async function pickBranch(name: string) {
   await waitFor(() => expect(screen.queryByRole('option')).toBeNull(), WAIT)
 }
 
+/** The host as it holds the selection: a pick shows once the host takes it. */
+function HoldsBranch(props: DuplicateStoryDialogProps) {
+  const [branch, setBranch] = useState(props.branch)
+  return (
+    <DuplicateStoryDialog
+      {...props}
+      branch={branch}
+      onBranchChange={(next) => {
+        props.onBranchChange(next)
+        setBranch(next)
+      }}
+    />
+  )
+}
+
 /** The host as it duplicates: copying from the press on. */
 function CopiesOnDuplicate(props: DuplicateStoryDialogProps) {
   const [state, setState] = useState<DuplicateDialogState>({ kind: 'ready' })
@@ -111,8 +126,8 @@ const meta = {
     open: true,
     onOpenChange: fn(),
     sourceTitle: 'Aria’s Descent',
-    branches: [MAIN, FORK, SIDE],
-    currentBranchId: FORK.id,
+    branches: { current: FORK, others: [MAIN, SIDE] },
+    branch: { branchId: FORK.id },
     state: { kind: 'ready' },
     onBranchChange: fn(),
     onDuplicate: fn(),
@@ -124,6 +139,7 @@ type Story = StoryObj<typeof meta>
 
 /** Several branches: the name selected to type over, the current branch first and marked. */
 export const SeveralBranches: Story = {
+  render: (args) => <HoldsBranch {...args} />,
   play: async ({ args }) => {
     await findDialog()
     const field = await nameField()
@@ -149,49 +165,56 @@ export const SeveralBranches: Story = {
   },
 }
 
-/** Enter in the name duplicates the current branch under the typed name, and keeps focus. */
+/** Enter in the name duplicates under the typed name, and keeps focus. */
 export const EnterDuplicates: Story = {
   play: async ({ args }) => {
     const field = await nameField()
     await userEvent.keyboard('  Ashes of Aria  {Enter}')
     await waitFor(() => expect(args.onDuplicate).toHaveBeenCalledTimes(1), WAIT)
     // The raw name: the action trims it.
-    expect(args.onDuplicate).toHaveBeenCalledWith({
-      title: '  Ashes of Aria  ',
-      branch: { branchId: FORK.id },
-    })
+    expect(args.onDuplicate).toHaveBeenCalledWith({ title: '  Ashes of Aria  ' })
     await expect(field).toHaveFocus()
   },
 }
 
-/** `All branches (N)` copies the whole tree. */
+/** `All branches (N)` is a pick like the rest: the trigger shows it once the host takes it. */
 export const AllBranches: Story = {
+  render: (args) => <HoldsBranch {...args} />,
   play: async ({ args }) => {
     await nameField()
     await pickBranch(COPY.allBranches)
     expect(args.onBranchChange).toHaveBeenCalledWith('all')
+    await expect(button(COPY.branch)).toHaveTextContent(COPY.allBranches)
     await userEvent.click(confirm())
     await waitFor(
-      () => expect(args.onDuplicate).toHaveBeenCalledWith({ title: COPY.prefilled, branch: 'all' }),
+      () => expect(args.onDuplicate).toHaveBeenCalledWith({ title: COPY.prefilled }),
       WAIT,
     )
   },
 }
 
-/** One branch: no Select, and the copy takes that branch. */
+/** The Select shows the host's branch: a pick the host hasn't taken changes nothing on screen. */
+export const ShowsHostBranch: Story = {
+  args: { branch: 'all' },
+  play: async ({ args }) => {
+    await nameField()
+    await expect(button(COPY.branch)).toHaveTextContent(COPY.allBranches)
+    await pickBranch('main')
+    expect(args.onBranchChange).toHaveBeenCalledWith({ branchId: MAIN.id })
+    await expect(button(COPY.branch)).toHaveTextContent(COPY.allBranches)
+  },
+}
+
+/** One branch: no Select. */
 export const OneBranch: Story = {
-  args: { branches: [MAIN], currentBranchId: MAIN.id },
+  args: { branches: { current: MAIN, others: [] }, branch: { branchId: MAIN.id } },
   play: async ({ args }) => {
     await nameField()
     expect(screen.queryByRole('button', { name: COPY.branch })).toBeNull()
     expect(screen.queryByText(COPY.branch)).toBeNull()
     await userEvent.click(confirm())
     await waitFor(
-      () =>
-        expect(args.onDuplicate).toHaveBeenCalledWith({
-          title: COPY.prefilled,
-          branch: { branchId: MAIN.id },
-        }),
+      () => expect(args.onDuplicate).toHaveBeenCalledWith({ title: COPY.prefilled }),
       WAIT,
     )
   },
@@ -322,10 +345,7 @@ export const CopyingFromClick: Story = {
     await userEvent.click(confirm(), { pointerEventsCheck: 0 })
     await pause(50)
     expect(args.onDuplicate).toHaveBeenCalledTimes(1)
-    expect(args.onDuplicate).toHaveBeenCalledWith({
-      title: COPY.prefilled,
-      branch: { branchId: FORK.id },
-    })
+    expect(args.onDuplicate).toHaveBeenCalledWith({ title: COPY.prefilled })
   },
 }
 
@@ -339,11 +359,7 @@ export const Failed: Story = {
     await expect(confirm()).not.toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(confirm())
     await waitFor(
-      () =>
-        expect(args.onDuplicate).toHaveBeenCalledWith({
-          title: COPY.prefilled,
-          branch: { branchId: FORK.id },
-        }),
+      () => expect(args.onDuplicate).toHaveBeenCalledWith({ title: COPY.prefilled }),
       WAIT,
     )
     await userEvent.click(button(COPY.cancel))

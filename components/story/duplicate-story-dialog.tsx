@@ -27,20 +27,25 @@ export type DuplicateDialogState =
 
 export type DuplicateBranchOption = { readonly id: string; readonly name: string }
 
+/** The story's current branch, then the rest in `created_at` order. */
+export type DuplicateBranchOptions = {
+  readonly current: DuplicateBranchOption
+  readonly others: readonly DuplicateBranchOption[]
+}
+
 export type DuplicateStoryDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceTitle: string
-  /** `created_at` order; known at mount, never empty. */
-  branches: readonly DuplicateBranchOption[]
-  /** One of `branches`; the Select's default. */
-  currentBranchId: string
+  branches: DuplicateBranchOptions
+  /** The Select's value: the host holds it, and `state` is its check. */
+  branch: DuplicateBranch
   state: DuplicateDialogState
   onBranchChange: (branch: DuplicateBranch) => void
-  onDuplicate: (values: { title: string; branch: DuplicateBranch }) => void
+  onDuplicate: (values: { title: string }) => void
 }
 
-type DuplicateForm = { title: string; branch: string }
+type DuplicateForm = { title: string }
 
 // A definite width on every tier: a content-sized dialog resizes as a state's line comes and goes.
 // Radix's web wrapper shrinks to content, so web needs `w-*`; the cap serves native.
@@ -64,20 +69,19 @@ function branchOf(value: string): DuplicateBranch {
   return value === ALL_BRANCHES ? 'all' : { branchId: value }
 }
 
+function valueOf(branch: DuplicateBranch): string {
+  return branch === 'all' ? ALL_BRANCHES : branch.branchId
+}
+
 // The mark rides the label so the closed trigger shows it too, as the wireframe does.
-function branchOptions(
-  branches: readonly DuplicateBranchOption[],
-  currentBranchId: string,
-): SelectOption[] {
-  const current = branches.find((branch) => branch.id === currentBranchId)
+function branchOptions({ current, others }: DuplicateBranchOptions): SelectOption[] {
   return [
-    ...(current == null
-      ? []
-      : [{ value: current.id, label: `${current.name} · ${t('landing:duplicate.currentMark')}` }]),
-    ...branches
-      .filter((branch) => branch.id !== currentBranchId)
-      .map((branch) => ({ value: branch.id, label: branch.name })),
-    { value: ALL_BRANCHES, label: t('landing:duplicate.allBranches', { count: branches.length }) },
+    { value: current.id, label: `${current.name} · ${t('landing:duplicate.currentMark')}` },
+    ...others.map((branch) => ({ value: branch.id, label: branch.name })),
+    {
+      value: ALL_BRANCHES,
+      label: t('landing:duplicate.allBranches', { count: others.length + 1 }),
+    },
   ]
 }
 
@@ -87,19 +91,16 @@ export function DuplicateStoryDialog({
   onOpenChange,
   sourceTitle,
   branches,
-  currentBranchId,
+  branch,
   state,
   onBranchChange,
   onDuplicate,
 }: DuplicateStoryDialogProps): ReactElement {
   // react-hook-form mutates formState in place; compiled memos keyed on it would go stale.
   'use no memo'
-  // Read once: the host keys the dialog per open with these known, so nothing resets the form.
+  // Read once: the host keys the dialog per open with the title known, so nothing resets the form.
   const { control, handleSubmit } = useForm<DuplicateForm>({
-    defaultValues: {
-      title: t('landing:duplicate.nameDefault', { title: sourceTitle }),
-      branch: currentBranchId,
-    },
+    defaultValues: { title: t('landing:duplicate.nameDefault', { title: sourceTitle }) },
   })
   const title = useWatch({ control, name: 'title' })
   const copying = state.kind === 'copying'
@@ -108,9 +109,7 @@ export function DuplicateStoryDialog({
 
   const duplicate = () => {
     if (!canDuplicate) return
-    void handleSubmit((values) =>
-      onDuplicate({ title: values.title, branch: branchOf(values.branch) }),
-    )()
+    void handleSubmit((values) => onDuplicate({ title: values.title }))()
   }
 
   // Esc, the backdrop and the × land here too: a copy is one transaction and can't stop partway.
@@ -153,26 +152,17 @@ export function DuplicateStoryDialog({
             </FormRow>
           )}
         />
-        {branches.length > 1 ? (
-          <Controller
-            control={control}
-            name="branch"
-            render={({ field }) => (
-              <FormRow label={t('landing:duplicate.branch')} stacked>
-                <Select
-                  mode="dropdown"
-                  label={t('landing:duplicate.branch')}
-                  options={branchOptions(branches, currentBranchId)}
-                  value={field.value}
-                  onValueChange={(value) => {
-                    field.onChange(value)
-                    onBranchChange(branchOf(value))
-                  }}
-                  disabled={copying}
-                />
-              </FormRow>
-            )}
-          />
+        {branches.others.length > 0 ? (
+          <FormRow label={t('landing:duplicate.branch')} stacked>
+            <Select
+              mode="dropdown"
+              label={t('landing:duplicate.branch')}
+              options={branchOptions(branches)}
+              value={valueOf(branch)}
+              onValueChange={(value) => onBranchChange(branchOf(value))}
+              disabled={copying}
+            />
+          </FormRow>
         ) : null}
         {state.kind === 'refused' ? (
           <View role="status">
