@@ -327,6 +327,22 @@ function notShown(args: RerunOnBranchArgs, forked: Forked, cause: string): Rerun
   return forkStartFailed(args, forked, cause)
 }
 
+// The new branch was never shown: the user switches to it before retrying from its Timeline.
+function notOpened(args: RerunOnBranchArgs, forked: Forked, cause?: string): RerunOnBranchStep {
+  refreshAfterFork(args.storyId)
+  args.closeRequest()
+  logger.warn('app.close_rerun_fork_not_opened', {
+    branchId: args.branchId,
+    newBranchId: forked.newBranchId,
+    chapterId: args.chapterId,
+    ...(cause == null ? {} : { cause }),
+  })
+  toast.warning(
+    t('chapters:rerunNotice.forkNotOpened', { name: forked.name, position: forked.position }),
+  )
+  return { step: 'forked' }
+}
+
 function refusalCause(start: Exclude<CloseRerunStart, ChainEnd>): string {
   if ('outcome' in start)
     return start.outcome === 'preflight-failed' ? start.outcome : start.blockedBy
@@ -356,12 +372,12 @@ async function showThenStart(
   hold: ReaderHoldToken,
   forked: Forked,
 ): Promise<RerunOnBranchStep> {
-  const { storyId, branchId, chapterId, replaceStack } = args
+  const { storyId, branchId, replaceStack } = args
   const open = currentStoryStore.getCurrentStory()
   // Left or switched since: the parent's reader is gone, so the tail has no screens to replace.
   if (open == null || open.storyId !== storyId || open.branchId !== branchId) {
     readerHoldStore.release(hold)
-    return notShown(args, forked, 'story-left')
+    return notOpened(args, forked, 'story-left')
   }
   let shown: ShowBranchResult
   try {
@@ -375,20 +391,8 @@ async function showThenStart(
   }
   // Idempotent: showBranch releases it on every path too.
   readerHoldStore.release(hold)
-  if (shown.status === 'navigation-blocked') {
-    // showBranch put the pointer back on the parent; the new branch stays, and the chip lists it.
-    refreshAfterFork(storyId)
-    args.closeRequest()
-    logger.warn('app.close_rerun_fork_not_opened', {
-      branchId,
-      newBranchId: forked.newBranchId,
-      chapterId,
-    })
-    toast.warning(
-      t('chapters:rerunNotice.forkNotOpened', { name: forked.name, position: forked.position }),
-    )
-    return { step: 'forked' }
-  }
+  // showBranch put the pointer back on the parent; the new branch stays, and the chip lists it.
+  if (shown.status === 'navigation-blocked') return notOpened(args, forked)
   // Nothing published: the new branch isn't the open one, so a start would only refuse it.
   if (shown.status === 'shown-unloaded') return notShown(args, forked, shown.status)
   refreshAfterFork(storyId)

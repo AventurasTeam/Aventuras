@@ -551,6 +551,8 @@ describe('runCloseRerunOnBranch', () => {
   const AT = { branchId: 'br_1', chapterId: 'chap_2' }
   const START_FAILED =
     'Branched "Ch. 2 re-run" from entry 57, but couldn\'t start the re-run. Retry from Chapter Timeline.'
+  const NOT_OPENED =
+    'Branched "Ch. 2 re-run" from entry 57, but couldn\'t open it. Switch to it, then retry from Chapter Timeline.'
 
   const replaceStack = vi.fn<ReplaceStoryStack>(() => true)
   const closeRequest = vi.fn<() => void>()
@@ -858,9 +860,7 @@ describe('runCloseRerunOnBranch', () => {
     expect(await onBranch()).toStrictEqual({ step: 'forked' })
     expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
     expect(closeRequest).toHaveBeenCalledTimes(1)
-    expect(warning).toHaveBeenCalledExactlyOnceWith(
-      'Branched "Ch. 2 re-run" from entry 57, but couldn\'t open it. Switch to it, then retry from Chapter Timeline.',
-    )
+    expect(warning).toHaveBeenCalledExactlyOnceWith(NOT_OPENED)
     expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_not_opened', {
       ...AT,
       newBranchId: 'br_child',
@@ -945,7 +945,7 @@ describe('runCloseRerunOnBranch', () => {
       false,
     ],
   ] as const)(
-    'after the commit, with the story %s, skips the tail, closes the request and warns',
+    "after the commit, with the story %s, skips the tail, closes the request and warns it wasn't opened",
     async (_name, leave, refreshes) => {
       actions.fork.mockImplementation(async () => {
         leave()
@@ -957,8 +957,8 @@ describe('runCloseRerunOnBranch', () => {
       if (refreshes) expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
       else expect(branchList.refresh).not.toHaveBeenCalled()
       expect(closeRequest).toHaveBeenCalledTimes(1)
-      expect(warning).toHaveBeenCalledExactlyOnceWith(START_FAILED)
-      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_start_failed', {
+      expect(warning).toHaveBeenCalledExactlyOnceWith(NOT_OPENED)
+      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_not_opened', {
         ...AT,
         newBranchId: 'br_child',
         cause: 'story-left',

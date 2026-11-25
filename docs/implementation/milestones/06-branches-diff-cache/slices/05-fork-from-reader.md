@@ -618,7 +618,10 @@ run; the answers are under Implementation notes.
 - **A caller whose story is gone skips the tail (IC3),** refreshing the
   list only while the forked story is still the open one (the branches
   store holds one story's rows). Defence only: both surfaces are modal
-  and held.
+  and held. On the re-run path it toasts the not-opened warning, not
+  the start-failed one, since the new branch was never shown (changed
+  in review, 2026-11-25: the start-failed copy is for a reader that
+  opened on the new branch).
 - **No change to the hold or the undo confirm (IC4, IC5).** The
   reader's unmount still clears the root host's token, when the hold
   has nothing left to hold; the undo confirm stays unreachable on both

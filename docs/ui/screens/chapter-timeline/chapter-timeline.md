@@ -329,6 +329,9 @@ generation pipeline is in flight:
   and the screen still agree: the confirm closes, the new
   branch stays, nothing starts, and a warning toast reads
   `Branched "Ch. <seq> re-run" from entry <pos>, but couldn't open it. Switch to it, then retry from Chapter Timeline.`
+  The same toast shows, with the confirm closed and nothing started,
+  when the story was closed or another branch opened before the new
+  branch could be shown.
   If the re-run is cancelled or fails mid-run, the new branch stays at
   entry `N` with its copied prior close restored.
 - **Cost.** The framing names the model the re-run uses, and the line
