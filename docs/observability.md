@@ -179,7 +179,11 @@ convention, and the expectation that subsystems route through
   `submit_failed` (error, `components/reader/send-run.ts`: a Send
   threw rather than returning an outcome; its failure entry follows)
   and `submit_failure_entry_failed` (error: that entry's write threw
-  too, and the Send's text went back to the composer)
+  too, and the Send's text went back to the composer), `lead_double`
+  (error, `lib/world/lead.ts`: a store read for the lead found two
+  flagged characters on the branch, with `site`, `branchId` and the
+  `ids`; the caller reads the branch as having no lead. Only the
+  pipelines' reads log it; a render path's reads the same silently)
 - `action_layer.*` — `reversal_refused` (error: an undo, redo, rollback, prose edit or
   regenerate refused as an integrity error, logged with its refusal
   kind), `row_held_twice` (error: two deletes in the log hold one row,
@@ -228,8 +232,14 @@ convention, and the expectation that subsystems route through
   once built, then rethrown; a location Save's story read and place
   rules log the same way, without action kinds), `parent_chain_cap_hit`
   (error: a `parent_location_id` walk hit the depth cap, meaning a loop
-  already exists in the stored chain), `story_lead_rejected` (warn: the lead
-  mutator refused, logged with its code), `entity_delete_rejected` /
+  already exists in the stored chain), `lead_rejected` (warn,
+  `lib/actions/stories/set-lead.ts`: a set or an unset of a branch's
+  lead refused, with `branchId`, `entityId` (null for an unset) and
+  its `code`, plus the delta group's `reason` when the group itself
+  refused), `branch_lead_double` (error, `lib/db/entities/branch-lead.ts`:
+  the table read a turn or a regenerate takes its lead from found two
+  flagged characters, with `branchId` and the `ids`; the turn reads
+  the branch as having no lead), `entity_delete_rejected` /
   `lore_delete_rejected` / `thread_delete_rejected` /
   `happening_delete_rejected` (warn: a confirmed delete refused —
   in-flight, not-found, or (entity only) a tail race; the
@@ -478,11 +488,15 @@ convention, and the expectation that subsystems route through
   `close_rerun_recount_failed` (error: a re-read after a run settled
   threw; the confirm keeps the preview it shows).
   `world_set_lead_failed` (`app/world/[branchId].tsx`
-  — a `⋯ → Set as lead` whose `setStoryLead` threw rather than
+  — a `⋯ → Set as lead` whose `setBranchLead` threw rather than
   refused), `world_collision_resolve_failed`
   (`components/world/use-collision-resolve.ts` — a resolve dialog's
   `resolveCollision` that threw rather than refused; the dialog shows
   the generic failure inline, or as a toast when it already closed),
+  `world_collision_held_read_failed` (the same file: the read of which
+  of the pair's rows the branch's entries stamp as lead threw, with
+  `branchId`, the pair's `ids` and `error`; the dialog never opens
+  without its held rows, so the user sees a toast instead),
   `world_delete_failed`
   (`components/world/use-world-delete.ts`
   — a confirmed `⋯ → Delete entity` / `Delete` whose `deleteEntityRow` /
@@ -541,10 +555,9 @@ convention, and the expectation that subsystems route through
   `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
   — a rail collapse-preference write that rejected) and
   `peek_set_lead_failed` (`components/reader/peek/use-set-lead.ts` — a
-  peek `Set as lead` whose `setStoryLead` threw rather than refused,
-  or that had no story id to write with because the reader's hydration
-  hadn't landed; the user sees the generic lead-failure toast either
-  way). `Dismiss` adds one, with
+  peek `Set as lead` whose `setBranchLead` threw rather than refused,
+  or that was handed no branch id to write with; the user sees the
+  generic lead-failure toast either way). `Dismiss` adds one, with
   its own toast (`components/reader/system-entry-actions.tsx`):
   `system_entry_dismiss_failed` (the delete failed, the entry stands).
   A jump adds two (`components/reader/use-entry-jump.ts`):
