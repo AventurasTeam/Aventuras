@@ -1041,16 +1041,16 @@ describe('the lead, the narration and the marks', () => {
   it("reads the flagged lead, the narration and each of the branch's characters by name", () => {
     entitiesStore.hydrate('b1', [
       entityRow(AEFRE, 'character', 'Aefre\n  the Elder', 0),
-      entityRow(BAEL, 'character', 'Bael', 1),
+      entityRow(BAEL, 'character', 'Bael\n  the Bold', 1),
       entityRow(WARDENS, 'faction', 'The Wardens', 0),
     ])
 
     const inputs = readInputs()
 
-    expect(inputs.lead).toEqual({ id: BAEL, name: 'Bael' })
+    expect(inputs.lead).toEqual({ id: BAEL, name: 'Bael the Bold' })
     expect(inputs.narration).toBe('second')
     expect(inputs.nameOf(AEFRE)).toBe('Aefre the Elder')
-    expect(inputs.nameOf(BAEL)).toBe('Bael')
+    expect(inputs.nameOf(BAEL)).toBe('Bael the Bold')
     expect(inputs.nameOf(WARDENS)).toBeUndefined()
     expect(inputs.nameOf(GONE)).toBeUndefined()
   })
