@@ -36,14 +36,13 @@ export type UseBranchCreateArgs = {
   /** The reader's dispatch guard (a dispatch in flight or the reader held), read live. */
   isDispatchBlocked: () => boolean
   replaceStack: ReplaceStoryStack
-  /** A pending embedder swap: the modal opens refused. */
+  /** A pending embedder swap: Create disables while it lasts and re-enables as it ends. */
   swapPending: boolean
 }
 
 export type BranchCreate = {
   /** ReaderSurfaceProps['onBranch']: settles, never rejects. */
   onBranch: (entryId: string) => Promise<void>
-  /** The open modal's props, or null with none open. */
   modal: BranchCreateModalProps | null
 }
 
@@ -53,7 +52,7 @@ type ForkRequest = { at: ForkAt; phase: BranchCreatePhase }
 const IDLE: BranchCreatePhase = { kind: 'idle', line: null }
 const PENDING: BranchCreatePhase = { kind: 'pending' }
 
-// C8: the new reader re-reads the list on mount too, so a failure here is only logged. The store
+// C8: a failed refresh is logged, never surfaced; a reader that mounts re-reads the list. The store
 // holds one story's rows: a refresh for a story no longer open would replace another story's.
 function refreshAfterFork(storyId: string): void {
   if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
@@ -166,7 +165,7 @@ export function useBranchCreate({
           readerHoldStore.release(hold)
           endPending(line)
         }
-        // switchBranch refuses both before its reset, and forkBranch's gate leaves both out.
+        // forkBranch's gate misses a run of the story without a hard gate, and a turn body.
         const txState = generationStore.getTxState()
         if (isStoryBusy(txState, sid, branchId) || generationStore.isTurnBodyActive(branchId)) {
           refuse(switchGateReason(txState, sid))
@@ -224,7 +223,7 @@ export function useBranchCreate({
         readerHoldStore.release(hold)
         refreshAfterFork(sid)
         if (shown.status !== 'navigation-blocked') return
-        // showBranch put the pointer back on this branch; the new one stays, and the chip lists it.
+        // showBranch put the pointer back here unless its restore and retry both failed (logged).
         logger.warn('reader.branch_create_not_opened', { branchId, newBranchId })
         close()
         toast.warning(t('reader:branches.create.notOpened', { name: name.trim() }))

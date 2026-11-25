@@ -47,8 +47,8 @@ export type BranchCreateModalProps = {
 }
 
 /**
- * branch-navigator.md → Branch creation — modal. Props only: the reader's `useBranchCreate` holds
- * the request, the press in flight and the line.
+ * branch-navigator.md → Branch creation — modal. Only the name is its own: the reader's
+ * `useBranchCreate` holds the request, the press in flight and the line.
  */
 export function BranchCreateModal({
   entryPosition,
