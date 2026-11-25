@@ -296,7 +296,10 @@ export const Phone390Cancels: Story = {
   },
 }
 
-/** From press to navigation: every control disabled, nothing closes, a second Enter is inert. */
+/**
+ * From an Enter to the navigation: every control disabled, focus in the dialog, nothing closes, a
+ * second Enter is inert.
+ */
 export const Pending: Story = {
   render: (args) => <PendsOnCreate {...args} />,
   play: async ({ args }) => {
@@ -306,6 +309,8 @@ export const Pending: Story = {
     await userEvent.keyboard('{Enter}')
     const create = button(dialog, COPY.create)
     await waitFor(() => expect(create).toHaveAttribute('aria-busy', 'true'), WAIT)
+    expect(document.activeElement).not.toBe(document.body)
+    expect(dialog.contains(document.activeElement)).toBe(true)
     const controls = [create, button(dialog, COPY.cancel), button(dialog, COPY.close)]
     for (const control of controls) expect(isDisabled(control)).toBe(true)
     expect(field).toHaveAttribute('readonly')
@@ -355,6 +360,24 @@ export const RefusedEntryGone: Story = {
 export const Failed: Story = {
   render: (args) => <RefusesOnCreate {...args} line={t('reader:branches.create.failed')} />,
   play: refusedPlay(COPY.failed),
+}
+
+/** A refusal from Enter keeps the name focused, so a retry types straight on. */
+export const RefusedFromEnter: Story = {
+  render: (args) => <RefusesOnCreate {...args} line={t('reader:branches.create.entryGone')} />,
+  play: async ({ args }) => {
+    const dialog = await findModal()
+    const field = nameField(dialog)
+    await userEvent.type(field, 'Side quest')
+    await userEvent.keyboard('{Enter}')
+    const alert = await within(dialog).findByRole('alert', {}, WAIT)
+    expect(alert).toHaveTextContent(COPY.entryGone)
+    expect(field).toHaveFocus()
+    await userEvent.keyboard(' two')
+    expect(field).toHaveValue('Side quest two')
+    expect(args.onCreate).toHaveBeenCalledTimes(1)
+    expect(args.onCreate).toHaveBeenCalledWith('Side quest')
+  },
 }
 
 /** A pending swap is known before any press: its line shows on open and `Create` stays disabled. */

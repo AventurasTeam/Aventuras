@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react'
-import { Platform, View } from 'react-native'
+import { Platform, View, type TextInputKeyPressEvent } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,13 @@ const PANEL_CLASS = cn(
   'sm:max-w-[360px]',
   Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
 )
+
+// An IME's confirming Enter isn't a submit; it can carry key code 229 with isComposing false.
+const IME_KEY_CODE = 229
+
+const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
+  ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
+  ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
 /**
  * `pending` from the press of Create to the navigation: Create spins, the rest disables, nothing
@@ -58,6 +65,12 @@ export function BranchCreateModal({
   const create = () => {
     if (canCreate) onCreate(name)
   }
+  // RN-Web blurs after Enter whatever `submitBehavior` says, dropping focus out of the dialog.
+  const submitOnWeb = (event: TextInputKeyPressEvent) => {
+    if (Platform.OS !== 'web' || event.nativeEvent.key !== 'Enter' || isComposing(event)) return
+    event.preventDefault?.()
+    create()
+  }
   // Esc, a press outside, the × and hardware back all ask through onOpenChange.
   const cancel = () => {
     if (!pending) onCancel()
@@ -83,6 +96,7 @@ export function BranchCreateModal({
             value={name}
             onChangeText={setName}
             onSubmitEditing={create}
+            onKeyPress={submitOnWeb}
             submitBehavior="submit"
             returnKeyType="done"
             editable={!pending}
