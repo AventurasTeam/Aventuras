@@ -94,6 +94,7 @@ async function setup({
       entity('char_mira', 'br_1', { createdAt: 2 }),
       entity('char_vorne', 'br_1', { createdAt: 3 }),
       entity('char_sage', 'br_1', { status: 'staged' }),
+      entity('char_wren', 'br_1', { status: 'retired' }),
       entity('loc_hollow', 'br_1', { kind: 'location' }),
       entity('char_kael', 'br_2', { isLead: 1 }),
       entity('char_mira', 'br_2'),
@@ -370,6 +371,7 @@ describe('setBranchLead', () => {
   it.each([
     ['a location', 'loc_hollow', 'not-character'],
     ['a staged character', 'char_sage', 'not-active'],
+    ['a retired character', 'char_wren', 'not-active'],
     ['a row only on another branch', 'char_other', 'wrong-branch'],
     ['a row on no branch', 'char_ghost', 'wrong-branch'],
   ])('refuses %s with %s and writes nothing', async (_name, id, code) => {
