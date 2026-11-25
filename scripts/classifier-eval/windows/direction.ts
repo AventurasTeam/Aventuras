@@ -21,24 +21,29 @@ export const direction: EvalWindow = {
   happenings: [],
   relationships: [],
   threads: [],
-  entries: entries('direction', { scene: ['char_kael', 'char_aria'], location: 'loc_inn' }, [
-    action(
-      'Kael confronts Aria about the letter he found in her coat, and she lies to him about who wrote it.',
-    ),
-    narration(
-      `Kael set the letter on the table between them, its seal broken. "This was in your coat," he said. "Who's writing to you from Varn?"
+  entries: entries(
+    'direction',
+    { scene: ['char_kael', 'char_aria'], location: 'loc_inn' },
+    [
+      action(
+        'Kael confronts Aria about the letter he found in her coat, and she lies to him about who wrote it.',
+      ),
+      narration(
+        `Kael set the letter on the table between them, its seal broken. "This was in your coat," he said. "Who's writing to you from Varn?"
 
 Aria looked at it for a long moment, then sat down across from him. "No one's writing to me. I wrote it, and I never sent it." She turned the page so he could see the hand, her own, cramped and careful. "It's to our mother. I found out where she is, Kael. I've known since spring."
 
 He said nothing. Outside, the rain came harder against the shutters.`,
-    ),
-    action(
-      'The rain kept on. When Kael finally went up to bed, Aria fed the letter to the fire and watched the pages curl.',
-    ),
-    narration(
-      `She stayed by the hearth until the last of it had gone to ash. Then she took a fresh sheet from the drawer under the counter, dipped her pen, and began again: Mother.`,
-    ),
-  ]),
+      ),
+      action(
+        'The rain kept on. When Kael finally went up to bed, Aria fed the letter to the fire and watched the pages curl.',
+      ),
+      narration(
+        `She stayed by the hearth until the last of it had gone to ash. Then she took a fresh sheet from the drawer under the counter, dipped her pen, and began again: Mother.`,
+      ),
+    ],
+    undefined,
+  ),
   checks: [
     {
       name: 'no happening says Aria lied, which only the direction asked for',

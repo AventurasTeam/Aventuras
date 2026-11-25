@@ -38,27 +38,15 @@ export const suggestionCategorySchema = z.object({
   order: z.number(),
 })
 
-export const storyDefinitionSchema = z
-  .object({
-    mode: z.enum(STORY_MODES),
-    leadEntityId: z.string().nullable(),
-    narration: z.enum(['first', 'second', 'third']),
-    genre: labeledPromptSchema,
-    tone: labeledPromptSchema,
-    setting: z.string(),
-    calendarSystemId: z.string(),
-    worldTimeOrigin: tierTupleSchema,
-  })
-  .superRefine((d, ctx) => {
-    const needsLead = d.mode === 'adventure' || d.narration === 'first' || d.narration === 'second'
-    if (needsLead && d.leadEntityId == null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['leadEntityId'],
-        message: 'first/second-person or adventure mode requires a lead entity',
-      })
-    }
-  })
+export const storyDefinitionSchema = z.object({
+  mode: z.enum(STORY_MODES),
+  narration: z.enum(['first', 'second', 'third']),
+  genre: labeledPromptSchema,
+  tone: labeledPromptSchema,
+  setting: z.string(),
+  calendarSystemId: z.string(),
+  worldTimeOrigin: tierTupleSchema,
+})
 
 // Token counts, so bounded at the schema rather than downstream: migration 0007
 // had to rewrite these once already because the stored numbers meant rows, and a

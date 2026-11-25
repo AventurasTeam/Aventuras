@@ -66,17 +66,12 @@ export function useRailData(branchId: string): RailData {
   const rowTints = recentlyClassified.rows
   const byCategory = recentlyClassified.byCategory
 
-  // Another branch's open story says nothing about this branch's lead.
-  const leadEntityId = currentStoryStore.useCurrentStory((s) =>
-    s?.branchId === branchId ? s.definition.leadEntityId : null,
-  )
   const mode = currentStoryStore.useCurrentStory((s) =>
     s?.branchId === branchId ? s.definition.mode : null,
   )
-  // resolveLead: a reversal can leave the definition's lead dangling, which reads as no lead.
   const leadId = useMemo(
-    () => resolveLead(leadEntityId, entityRows, branchId)?.id ?? null,
-    [leadEntityId, entityRows, branchId],
+    () => resolveLead(entityRows, branchId)?.id ?? null,
+    [entityRows, branchId],
   )
   const leadLabel: LeadLabel | null = mode == null ? null : leadLabelFor(mode)
 

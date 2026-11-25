@@ -46,6 +46,7 @@ function makeEntity(overrides: Partial<Entity> & Pick<Entity, 'id' | 'kind' | 'n
     keywords: [],
     priority: 0,
     embeddingStale: 1,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
@@ -714,7 +715,7 @@ const expectGateReason = (control: HTMLElement) =>
 /** Every control disables with the principle-owned tooltip while a turn is in flight. */
 export const EveryControlBlocked: Story = {
   args: { blocked: true },
-  play: async () => {
+  play: async ({ args }) => {
     const name = within(await screen.findByTestId('world-detail-name', {}, WAIT))
     await expect(name.getByText('Kael')).toBeVisible()
     await expect(name.queryByRole('button')).toBeNull()
@@ -769,6 +770,11 @@ export const EveryControlBlocked: Story = {
     await expect(
       await screen.findByRole('menuitem', { name: /Set as lead/ }, WAIT),
     ).toHaveAttribute('aria-disabled', 'true')
+    const remove = screen.getByRole('menuitem', { name: `Delete entity, ${BLOCKED_REASON}` })
+    await expect(remove).toHaveAttribute('aria-disabled', 'true')
+    // aria-disabled alone blocks nothing: the forced click proves the press never reaches onDelete.
+    fireEvent.click(remove)
+    await expect(args.onDelete).not.toHaveBeenCalled()
   },
 }
 
@@ -922,23 +928,21 @@ export const ExportHandsTheCommittedRow: Story = {
   },
 }
 
-/** The story's lead can't be deleted: the entry is disabled and says why. */
-export const LeadCannotBeDeleted: Story = {
+/** The branch's lead can be deleted: its entry is enabled and hands the row up. */
+export const LeadCanBeDeleted: Story = {
   args: { row: KAEL },
   play: async ({ args }) => {
     await userEvent.click(await screen.findByRole('button', { name: 'More actions' }, WAIT))
-    const remove = await screen.findByRole(
-      'menuitem',
-      {
-        name: "Delete entity, The story's lead can't be deleted — set another character as lead first.",
-      },
-      WAIT,
-    )
-    await expect(remove).toHaveAttribute('aria-disabled', 'true')
-    // RN-Web's Pressable blocks pointer-events when disabled; userEvent respects that, fireEvent
-    // bypasses it — pins the onPress guard itself, not a CSS accident, as what blocks the entry.
-    fireEvent.click(remove)
-    await expect(args.onDelete).not.toHaveBeenCalled()
+    // The row is the harness's lead, so this is the lead's own menu.
+    await expect(
+      await screen.findByRole('menuitem', { name: /Set as lead.*Already the lead/ }, WAIT),
+    ).toHaveAttribute('aria-disabled', 'true')
+    // Exact name: a disabled entry's name would carry its reason.
+    const remove = await screen.findByRole('menuitem', { name: 'Delete entity' }, WAIT)
+    await expect(remove).not.toHaveAttribute('aria-disabled', 'true')
+    await waitFor(() => expect(remove).toBeVisible(), WAIT)
+    await userEvent.click(remove)
+    await expect(args.onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: 'char_kael' }))
   },
 }
 

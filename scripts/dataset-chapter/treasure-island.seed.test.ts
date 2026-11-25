@@ -126,6 +126,29 @@ describe('the Treasure Island seed', () => {
     ])
   })
 
+  it('flags Jim alone on its branch, stamps every turn with him, and stores no definition lead', async () => {
+    const ctx = await seededWithDataset()
+    const flagged = await ctx.db
+      .select({ id: entities.id })
+      .from(entities)
+      .where(and(eq(entities.branchId, BRANCH), eq(entities.isLead, 1)))
+    expect(flagged).toEqual([{ id: JIM }])
+
+    const rows = await ctx.db
+      .select({ id: storyEntries.id, kind: storyEntries.kind, metadata: storyEntries.metadata })
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, BRANCH))
+    const turns = rows.filter((row) => row.kind !== 'system')
+    expect(turns).toHaveLength(133)
+    expect(turns.filter((row) => row.metadata?.leadId !== JIM).map((row) => row.id)).toEqual([])
+
+    const [story] = await ctx.db
+      .select({ definition: stories.definition })
+      .from(stories)
+      .where(eq(stories.id, STORY))
+    expect(story!.definition).not.toHaveProperty('leadEntityId')
+  })
+
   it('undoes its close to an open chapter of all 133 entries, and redoes it', async () => {
     const ctx = await seededWithDataset()
     await openStory(STORY, ctx, () => {})

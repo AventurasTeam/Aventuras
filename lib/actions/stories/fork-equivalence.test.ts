@@ -50,6 +50,7 @@ import {
   vectorRows,
   type ForkWorld,
 } from './__tests__/fork-harness'
+import { setBranchLead } from './set-lead'
 
 afterEach(() => {
   resetAllStores()
@@ -1072,5 +1073,32 @@ describe('around a fork: CTRL-Z, redo and a fork of a fork', () => {
     expect(branchesHolding('happening_awareness', awareness)).toEqual([GRAND, GRAND_REF])
     expect(branchSnapshot(t.sqlite, PARENT)).toEqual(parentRows)
     expect(vectorRows(t.sqlite, PARENT)).toEqual(parentVectors)
+  })
+})
+
+describe('a fork rewinds the lead to its fork entry', () => {
+  const KAEL = 'char_fork_kael'
+  const MIRA = 'char_fork_mira'
+  const leads = (w: ForkWorld, branchId: string) => ({
+    kael: rowOn(w, 'entities', branchId, KAEL)?.is_lead,
+    mira: rowOn(w, 'entities', branchId, MIRA)?.is_lead,
+  })
+
+  // The reference rewinds through the same reversal code, so a reversal that restores the wrong
+  // flag leaves the two equal: the explicit leads are the check.
+  it('restores Kael on the child when Mira was set after the fork entry, the parent keeping Mira', async () => {
+    const w = await openForkWorld(1)
+    await landWrites(w, { actionId: 'act_fork_world', entryId: null }, [
+      createEntityAction(w, KAEL, 'Kael'),
+      createEntityAction(w, MIRA, 'Mira'),
+    ])
+    expect(await setBranchLead(w.parentId, KAEL, w.ctx)).toEqual({ status: 'ok' })
+    await appendTurns(w, 2)
+    expect(await setBranchLead(w.parentId, MIRA, w.ctx)).toEqual({ status: 'ok' })
+    expect(leads(w, w.parentId), 'the parent before the fork').toEqual({ kael: 0, mira: 1 })
+
+    const { childId } = await assertFork(w, entryAt(3))
+
+    expect(leads(w, childId), 'the child').toEqual({ kael: 1, mira: 0 })
   })
 })

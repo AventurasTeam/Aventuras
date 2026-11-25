@@ -8,14 +8,12 @@ import {
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
-import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import type { DbCtx, PipelineAction } from '../types'
 
 export const ROW_DELETE_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
   notFound: TARGET_NOT_FOUND,
-  leadEntity: ENTITY_DELETE_REJECTION.leadEntity,
   failed: 'failed',
 } as const
 

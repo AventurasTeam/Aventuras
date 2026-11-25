@@ -116,16 +116,19 @@ test.describe.serial('World delete', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('the lead’s Delete entity is disabled', async () => {
+  test('the lead’s Delete entity is enabled', async () => {
     const page = app.window
     await home.openStory(page, HERO_TITLE).click()
     await expect(reader.composer(page)).toBeVisible({ timeout: 20_000 })
     await chrome.actionsTrigger(page).click()
     await chrome.goToWorldRow(page).click()
     await page.waitForURL(/\/world\//)
+    await expect(world.leadTag(page, 'Kael')).toBeVisible()
     await world.row(page, 'Kael').click()
     await world.moreActions(page).click()
-    await expect(world.deleteEntityItem(page)).toHaveAttribute('aria-disabled', 'true')
+    // The locator matches a disabled entry too (its name carries the reason), so this can fail.
+    await expect(world.deleteEntityItem(page)).toBeVisible()
+    await expect(world.deleteEntityItem(page)).not.toHaveAttribute('aria-disabled', 'true')
     await page.keyboard.press('Escape')
   })
 

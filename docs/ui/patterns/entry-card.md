@@ -92,6 +92,7 @@ type EntryCardProps = {
   disabledReason?: string
   editDisabled?: boolean // pencil and every edit-mode control but Cancel; falls back to disabled
   reversalDisabled?: boolean // regen and delete; Save & regenerate needs both flags; falls back to disabled
+  turnStartReason?: string // the branch can't start a turn: regen, Save & regenerate and Retry disable with it, after the gate's reason and before edit focus's
 
   // Edit mode (host-controlled):
   editing?: boolean
@@ -968,6 +969,18 @@ pencil live on the head turn's entries alone: the tail and, when the
 tail answers one, its `user_action`. An edit off the head turn
 interrupts nothing, so it waits like any other edit.
 
+**When the branch can't start a turn.** A branch that needs a lead and
+has none takes no turn
+([`principles.md → Composer mode`](../principles.md#composer-mode--send-time-transform-narration-aware)),
+and the host passes the reason as `turnStartReason`. Regen,
+Save & regenerate and the system entry's `Retry` disable with it;
+delete and the rest don't, since none of them starts a turn. A gate
+that holds the control keeps the gate's reason, and the turn-start
+reason outranks edit focus elsewhere, which cancelling the edit
+wouldn't clear. One `Retry` serves every system entry, so the host
+passes the reason to a system entry only when its `Retry` resubmits a
+turn, not when it reruns a pass or a close.
+
 ## Variable-height plus virtualization compatibility
 
 EntryCard's contract for parent virtualized lists:
@@ -1002,7 +1015,9 @@ provider counts, plain token text on an entry without sections, at
 phone width), streaming kind
 (reasoning-phase, reply-phase),
 edit mode (textarea, with and without `Save & regenerate`),
-disabled state, the gate split during a pass (older entry, head turn, head-turn edit), world-time footer
+disabled state, the gate split during a pass (older entry, head turn, head-turn edit), the
+turn-start refusal (regen, `Save & regenerate` and `Retry` held by its reason, the gate's reason
+first, edit focus after it), world-time footer
 shown/hidden by kind, world-state panel (reported, fallback-layer
 badge, rejected location, clamped delta, state problems and the
 alert toggle, legacy row, unknown-entity chip), scene editor (tail entry

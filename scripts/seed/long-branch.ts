@@ -189,7 +189,6 @@ export function buildLongBranchSteps(chapters: number): SeedStep[] {
     lastOpenedAt: t0 + 3 * MIN,
     definition: storyDefinitionSchema.parse({
       mode: 'creative',
-      leadEntityId: null,
       narration: 'third',
       genre: { label: 'literary', promptBody: 'Write in the literary tradition.' },
       tone: { label: 'patient', promptBody: 'Keep a patient tone.' },

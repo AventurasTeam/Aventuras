@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   CHAPTER_CLOSE_KIND,
@@ -24,11 +25,13 @@ import {
   closeRefusalOf,
   composerShowsCancel,
   findSendRun,
+  leadRefusalOf,
   passRefusalOf,
   reportSendThrow,
   pillRunOf,
   sendGapOpen,
   sendRunStreams,
+  settleLeadRefusal,
 } from './send-run'
 
 // Spies that run the real thing, so a test can read either the call or the store it moved.
@@ -474,6 +477,103 @@ describe('passRefusalOf', () => {
     expect(
       passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, work: 'close', error }),
     ).toBeNull()
+  })
+})
+
+describe('leadRefusalOf', () => {
+  const ran = { runId: 'run_1', actionId: 'act_1' }
+
+  it("reads the missing lead's refusal", () => {
+    expect(leadRefusalOf({ outcome: 'rejected', blockedBy: 'lead-missing', converged: true })).toBe(
+      true,
+    )
+  })
+
+  it('leaves any other refusal, a failure and a landed turn alone', () => {
+    expect(
+      leadRefusalOf({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true }),
+    ).toBe(false)
+    expect(
+      leadRefusalOf({ outcome: 'rejected', blockedBy: 'embedder-swap', converged: true }),
+    ).toBe(false)
+    expect(
+      leadRefusalOf({ ...ran, outcome: 'failed', error: { kind: 'orchestrator', detail: 'x' } }),
+    ).toBe(false)
+    expect(leadRefusalOf({ ...ran, outcome: 'completed' })).toBe(false)
+  })
+})
+
+describe('settleLeadRefusal', () => {
+  const SENT_TAIL: { content: string; failure: SystemFailureMeta } = {
+    content: 'The pass failed.',
+    failure: {
+      kind: 'pass',
+      pass: 'failed',
+      submission: { content: 'I wait.', composerMode: 'free' },
+    },
+  }
+
+  function harness(over: { stillOnBranch?: boolean; draftEmpty?: boolean } = {}) {
+    const calls: unknown[][] = []
+    const deps = {
+      dropped: SENT_TAIL as typeof SENT_TAIL | null,
+      restoreTail: vi.fn(async (tail: unknown) => {
+        calls.push(['restoreTail', tail])
+      }),
+      stillOnBranch: () => over.stillOnBranch ?? true,
+      draftEmpty: () => over.draftEmpty ?? true,
+      keepSubmission: (submission: unknown) => calls.push(['keepSubmission', submission]),
+      restoreSent: () => calls.push(['restoreSent']),
+      notifyDraftKept: () => calls.push(['notifyDraftKept']),
+      notifyRefused: () => calls.push(['notifyRefused']),
+    }
+    return { calls, deps }
+  }
+
+  it("puts the dropped entry back with its own Retry and the Send's text in the empty composer", async () => {
+    const { calls, deps } = harness()
+    await settleLeadRefusal(deps)
+    expect(calls).toEqual([
+      ['restoreTail', SENT_TAIL],
+      ['keepSubmission', { content: 'I wait.', composerMode: 'free' }],
+      ['restoreSent'],
+      ['notifyRefused'],
+    ])
+  })
+
+  it("keeps a draft the composer holds and says the Send's text wasn't restored", async () => {
+    const { calls, deps } = harness({ draftEmpty: false })
+    await settleLeadRefusal(deps)
+    expect(calls).toEqual([
+      ['restoreTail', SENT_TAIL],
+      ['keepSubmission', { content: 'I wait.', composerMode: 'free' }],
+      ['notifyDraftKept'],
+      ['notifyRefused'],
+    ])
+  })
+
+  it('clears the Retry text when the Send dropped no entry', async () => {
+    const { calls, deps } = harness()
+    await settleLeadRefusal({ ...deps, dropped: null })
+    expect(calls).toEqual([
+      ['restoreTail', null],
+      ['keepSubmission', null],
+      ['restoreSent'],
+      ['notifyRefused'],
+    ])
+  })
+
+  it('puts the entry back and touches nothing else once the user left the branch', async () => {
+    const { calls, deps } = harness({ stillOnBranch: false })
+    await settleLeadRefusal(deps)
+    expect(calls).toEqual([['restoreTail', SENT_TAIL]])
+  })
+
+  it('hands keepSubmission a kept submission or null, never undefined', () => {
+    type Deps = Parameters<typeof settleLeadRefusal>[0]
+    expectTypeOf<Deps['keepSubmission']>()
+      .parameter(0)
+      .toEqualTypeOf<NonNullable<SystemFailureMeta['submission']> | null>()
   })
 })
 

@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { getRollbackCounts, readRowGuard, UNDO_KIND_KEY, undoLastAction } from '@/lib/actions'
@@ -10,6 +10,7 @@ import {
   deltas,
   entities,
   isCloseReasonKey,
+  stories,
   storyEntries,
   type Delta,
   type EntityKind,
@@ -806,6 +807,66 @@ describe('seeded classifier watermarks', () => {
     expect(
       (rowsOf('story_entries') as EntryRow[]).filter((e) => e.branchId === 'br_hero_fork'),
     ).toEqual([])
+  })
+})
+
+describe('the seeded lead', () => {
+  it('stores no definition holding leadEntityId', async () => {
+    const { db } = await seededDb()
+    const rows = await db.select({ id: stories.id, definition: stories.definition }).from(stories)
+    expect(rows.length).toBeGreaterThan(1)
+    expect(
+      rows
+        .filter((row) => row.definition != null && 'leadEntityId' in row.definition)
+        .map((row) => row.id),
+    ).toEqual([])
+  })
+
+  it('flags one character on br_hero_main, Kael, and one on the Sable story, Sable', async () => {
+    const { db } = await seededDb()
+    const flagged = await db
+      .select({ branchId: entities.branchId, name: entities.name })
+      .from(entities)
+      .where(eq(entities.isLead, 1))
+      .orderBy(entities.branchId)
+    expect(flagged).toEqual([
+      { branchId: 'br_active2_main', name: 'Sable' },
+      { branchId: HERO_MAIN, name: 'Kael' },
+    ])
+  })
+
+  it("stamps every turn on a led branch with its lead's id, and no other entry", async () => {
+    const { db } = await seededDb()
+    // By name, not by the flag: the ids are remapped, and the flag is the other test's subject.
+    const idOf = async (branchId: string, name: string): Promise<string> => {
+      const found = await db
+        .select({ id: entities.id })
+        .from(entities)
+        .where(and(eq(entities.branchId, branchId), eq(entities.name, name)))
+      expect(found, `${name} on ${branchId}`).toHaveLength(1)
+      return found[0]!.id
+    }
+    const leadOf = new Map([
+      [HERO_MAIN, await idOf(HERO_MAIN, 'Kael')],
+      ['br_active2_main', await idOf('br_active2_main', 'Sable')],
+    ])
+    const rows = await db
+      .select({
+        id: storyEntries.id,
+        branchId: storyEntries.branchId,
+        kind: storyEntries.kind,
+        metadata: storyEntries.metadata,
+      })
+      .from(storyEntries)
+    const turnsOn = (branchId: string) =>
+      rows.filter((row) => row.branchId === branchId && row.kind !== 'system')
+    expect(turnsOn(HERO_MAIN)).toHaveLength(71)
+    expect(turnsOn('br_active2_main')).toHaveLength(4)
+    const wrong = rows.filter((row) => {
+      const expected = row.kind === 'system' ? undefined : leadOf.get(row.branchId)
+      return row.metadata?.leadId !== expected
+    })
+    expect(wrong.map((row) => row.id)).toEqual([])
   })
 })
 

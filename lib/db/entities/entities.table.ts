@@ -40,6 +40,7 @@ export const entities = sqliteTable(
       .default(sql`'[]'`),
     priority: integer('priority').notNull().default(0),
     embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
+    isLead: integer('is_lead').notNull().default(0).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
@@ -52,6 +53,11 @@ export const entities = sqliteTable(
     check(
       'entities_name_collision_pair',
       sql`(${t.nameCollisionFlag} = 0 AND ${t.nameCollisionPartnerId} IS NULL AND ${t.nameCollisionReason} IS NULL) OR (${t.nameCollisionFlag} = 1 AND ${t.nameCollisionPartnerId} IS NOT NULL AND ${t.nameCollisionReason} IS NOT NULL)`,
+    ),
+    // data-model.md → The lead: the flag is 0 or 1, and 1 only on a character row.
+    check(
+      'entities_lead_character',
+      sql`${t.isLead} IN (0, 1) AND (${t.isLead} = 0 OR ${t.kind} = 'character')`,
     ),
   ],
 )

@@ -1,5 +1,6 @@
 import {
   CHAPTER_DELETE_REFUSAL,
+  LEAD_MISSING,
   MANUAL_CLOSE_REFUSAL,
   STORY_ENTRY_REJECTION,
   type CountsChangedRejection,
@@ -34,6 +35,7 @@ const REGENERATE_REJECTION_COPY = {
   'not-an-ai-reply': 'reader:regenerateUnavailable',
   'no-origin': 'reader:regenerateUnavailable',
   'sweep-refused': 'reader:regenerateUnavailable',
+  [LEAD_MISSING]: 'reader:composerLeadMissing',
 } as const satisfies Record<RegenerateRejectionCode, string>
 
 export function regenerateRefusalCopy(
@@ -112,4 +114,13 @@ export function confirmAfterImmediateRefusal(args: {
   if (!stillOnBranch || current != null) return current
   if (refusal.code !== STORY_ENTRY_REJECTION.countsChanged) return current
   return { mode: 'regenerate', ...opened, counts: refusal.counts }
+}
+
+/** The open confirm's held reason: the gate's first; a regenerate starts a turn, so it also waits
+ * on the turn-start reason, which leaves a rollback alone. */
+export function confirmBlockedReason(
+  mode: ConfirmState['mode'],
+  reasons: { gate: string | undefined; turnStart: string | undefined },
+): string | undefined {
+  return reasons.gate ?? (mode === 'regenerate' ? reasons.turnStart : undefined)
 }

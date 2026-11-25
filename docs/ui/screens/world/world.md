@@ -1262,7 +1262,10 @@ reads `<name> is or was this branch's lead, so this row stays.` When
 both rows are, the pair can't merge: `Merge into one` is unavailable,
 the dialog opens on `Rename one`, and a line under the paths reads
 `Both have been this branch's lead, so they can't merge. Rename one or
-keep them distinct.`
+keep them distinct.` When the read of which rows are held fails, the
+dialog doesn't open, since its picker would be free, and an error toast
+reads `Couldn't open this collision: checking whether either row is or
+was this branch's lead failed.`
 
 Below the picker, a **per-field resolution table** lists fields
 that diverge between the two:

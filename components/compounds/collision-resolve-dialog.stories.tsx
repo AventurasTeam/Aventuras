@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+import { expect, fireEvent, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
@@ -106,6 +106,7 @@ const resolveCapturing = async (r: Resolution) => {
   lastResolution = r
 }
 const resolveLoading = () => new Promise<void>(() => {})
+const NONE_HELD: readonly string[] = []
 // Settled by the play itself, so the dialog closes and releases the body scroll lock.
 let settleResolve: (() => void) | null = null
 const resolveDeferred = () =>
@@ -124,6 +125,7 @@ function ControlledDialog({
   onResolve,
   blockedReason,
   isNameTaken,
+  heldIds = NONE_HELD,
 }: {
   initialOpen?: boolean
   entityA: EntitySummary
@@ -135,6 +137,7 @@ function ControlledDialog({
   onResolve: (r: Resolution) => Promise<void>
   blockedReason?: string
   isNameTaken?: (name: string) => boolean
+  heldIds?: readonly string[]
 }) {
   const [open, setOpen] = useState(initialOpen)
   return (
@@ -153,6 +156,7 @@ function ControlledDialog({
         onResolve={onResolve}
         blockedReason={blockedReason}
         isNameTaken={isNameTaken}
+        heldIds={heldIds}
       />
     </View>
   )
@@ -630,6 +634,161 @@ export const MergeNamesTheSide: Story = {
     expect(screen.getByRole('radio', { name: 'Kael · Newer · just now' })).toBe(newer)
     expect(screen.getByRole('radio', { name: 'Kael · Older · just now' })).toBe(older)
     expect(screen.getByRole('button', { name: 'Merge into the newer Kael' })).toBeInTheDocument()
+  },
+}
+
+// Hand-written, never read from the locale: a reworded key must fail these.
+const HELD_ONE_LINE = "Kael is or was this branch's lead, so this row stays."
+const HELD_BOTH_LINE =
+  "Both have been this branch's lead, so they can't merge. Rename one or keep them distinct."
+const canonicalRadio = (side: 'Older' | 'Newer') =>
+  screen.getByRole('radio', { name: new RegExp(`^Kael · ${side} · `) })
+
+/** world.md → Merge: a held row survives whatever its age, and the picker can't move off it. */
+export const HeldNewerRowSurvives: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={entityB}
+      heldIds={[entityB.id]}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    await screen.findByRole('button', { name: 'Merge into the newer Kael' })
+    expect(canonicalRadio('Newer')).toHaveAttribute('aria-checked', 'true')
+    for (const side of ['Older', 'Newer'] as const)
+      expect(canonicalRadio(side)).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText(HELD_ONE_LINE)).toBeInTheDocument()
+
+    // fireEvent forces the press userEvent won't make; whether the radio or the dialog's fixed-row
+    // guard drops it, this can't tell. The submit below would name the older row had it moved.
+    fireEvent.click(canonicalRadio('Older'))
+    await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toMatchObject({ mode: 'merge', canonicalId: entityB.id })
+  },
+}
+
+/** world.md → Merge: a pair held on both sides can't merge; the dialog opens on Rename. */
+export const BothHeldOpensOnRename: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={entityB}
+      heldIds={[entityA.id, entityB.id]}
+      onResolve={resolveCapturing}
+    />
+  ),
+  play: async () => {
+    lastResolution = null
+    const rename = await screen.findByRole('radio', { name: 'Rename one' })
+    expect(rename).toHaveAttribute('aria-checked', 'true')
+    const merge = screen.getByRole('radio', { name: 'Merge into one' })
+    expect(merge).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('radio', { name: 'Keep as distinct' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    expect(screen.getByText(HELD_BOTH_LINE)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Merge into / })).toBeNull()
+
+    // Forced press on the disabled Merge: the dialog stays on Rename. shownMode maps merge to rename
+    // while both are held, so this can't tell a dropped press from an opened one.
+    fireEvent.click(merge)
+    const inputs = await screen.findAllByRole('textbox')
+    await userEvent.clear(inputs[1])
+    await userEvent.type(inputs[1], 'Jorin')
+    await userEvent.click(screen.getByRole('button', { name: 'Save renames' }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toEqual({
+      mode: 'rename',
+      renames: [{ id: entityB.id, newName: 'Jorin' }],
+    })
+  },
+}
+
+/** A held id that names neither row of the pair changes nothing. */
+export const HeldElsewhereKeepsThePicker: Story = {
+  render: () => (
+    <ControlledDialog
+      entityA={entityA}
+      entityB={entityB}
+      heldIds={['ent_someone_else']}
+      onResolve={resolveOk}
+    />
+  ),
+  play: async () => {
+    await screen.findByRole('button', { name: 'Merge into the older Kael' })
+    expect(screen.queryByText(/this branch's lead/)).toBeNull()
+    expect(screen.getByRole('radio', { name: 'Merge into one' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+
+    await userEvent.click(canonicalRadio('Newer'))
+    await waitFor(() => expect(canonicalRadio('Newer')).toHaveAttribute('aria-checked', 'true'))
+    expect(screen.getByRole('button', { name: 'Merge into the newer Kael' })).toBeInTheDocument()
+  },
+}
+
+let holdNow: ((ids: readonly string[]) => void) | null = null
+function HeldWhileOpen({ onResolve = resolveOk }: { onResolve?: typeof resolveOk }) {
+  const [heldIds, setHeldIds] = useState<readonly string[]>([])
+  useEffect(() => {
+    holdNow = setHeldIds
+    return () => {
+      holdNow = null
+    }
+  }, [])
+  return (
+    <ControlledDialog entityA={entityA} entityB={entityB} heldIds={heldIds} onResolve={onResolve} />
+  )
+}
+
+/** Held rows read live: a row turning held moves the canonical onto it; both held shows Rename. */
+export const HeldRowArrivesWhileOpen: Story = {
+  render: () => <HeldWhileOpen />,
+  play: async () => {
+    await screen.findByRole('button', { name: 'Merge into the older Kael' })
+    expect(canonicalRadio('Older')).toHaveAttribute('aria-checked', 'true')
+
+    holdNow?.([entityB.id])
+    await waitFor(() => expect(canonicalRadio('Newer')).toHaveAttribute('aria-checked', 'true'))
+    expect(canonicalRadio('Newer')).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByText(HELD_ONE_LINE)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Merge into the newer Kael' })).toBeInTheDocument()
+
+    holdNow?.([entityA.id, entityB.id])
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Rename one' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
+    expect(screen.queryByRole('button', { name: /^Merge into / })).toBeNull()
+    expect(screen.getByText(HELD_BOTH_LINE)).toBeInTheDocument()
+  },
+}
+
+/** The older row turning held takes the canonical back from the newer row the user picked. */
+export const OlderRowHeldAfterPickingNewer: Story = {
+  render: () => <HeldWhileOpen onResolve={resolveCapturing} />,
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('radio', { name: /^Kael · Newer · / }))
+    await waitFor(() => expect(canonicalRadio('Newer')).toHaveAttribute('aria-checked', 'true'))
+
+    holdNow?.([entityA.id])
+    await waitFor(() => expect(canonicalRadio('Older')).toHaveAttribute('aria-checked', 'true'))
+    expect(canonicalRadio('Older')).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge into the older Kael' }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toMatchObject({ mode: 'merge', canonicalId: entityA.id })
   },
 }
 

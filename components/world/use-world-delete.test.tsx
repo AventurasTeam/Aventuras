@@ -131,7 +131,7 @@ describe('useWorldDelete', () => {
       relationship('rel_x', 'char_kael', 'char_other'),
     ])
     const guard = (fn: () => void) => fn()
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
 
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
 
@@ -152,7 +152,7 @@ describe('useWorldDelete', () => {
       relationship('rel_y', 'char_kael', MIRA.id, { branchId: OTHER }),
     ])
     const guard = (fn: () => void) => fn()
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
 
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
 
@@ -160,12 +160,30 @@ describe('useWorldDelete', () => {
     expect(result.current.copy?.impacts).toEqual([])
   })
 
+  it.each([
+    [true, "Kael is this branch's lead. The story can't continue here until you set another."],
+    [false, 'This branch will have no lead.'],
+  ])(
+    'leads the confirm for the flagged lead, read fresh from the store, with its line (needsLead %s)',
+    (needsLead, line) => {
+      const kael = makeEntity({ id: 'char_kael', kind: 'character', name: 'Kael', isLead: 1 })
+      entitiesStore.hydrate(BRANCH, [MIRA, kael])
+      const guard = (fn: () => void) => fn()
+      const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, needsLead))
+
+      // A stale target without the flag: the confirm must build from the row the store holds.
+      act(() => result.current.request({ kind: 'entity', row: { ...kael, isLead: 0 } }))
+
+      expect(result.current.copy?.impacts).toEqual([line])
+    },
+  )
+
   it("names the row's current title when a dirty-pane Save renamed it before the guard released", () => {
     let proceed: (() => void) | undefined
     const guard = (fn: () => void) => {
       proceed = fn
     }
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
 
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
     expect(proceed).toBeDefined()
@@ -182,7 +200,7 @@ describe('useWorldDelete', () => {
     const guard = (fn: () => void) => {
       proceed = fn
     }
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
 
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
     entitiesStore.hydrate(BRANCH, [])
@@ -208,7 +226,7 @@ describe('useWorldDelete → confirm', () => {
 
   it('deletes an entity through deleteEntityRow', () => {
     deleteEntityRow.mockResolvedValue({ status: 'ok' })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
     act(() => result.current.confirm())
     expect(deleteEntityRow).toHaveBeenCalledWith(BRANCH, MIRA.id, ctx)
@@ -216,7 +234,7 @@ describe('useWorldDelete → confirm', () => {
 
   it('deletes lore through deleteRow with the lore kind', () => {
     deleteRow.mockResolvedValue({ status: 'ok' })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
     act(() => result.current.request({ kind: 'lore', row: VEIL }))
     act(() => result.current.confirm())
     expect(deleteRow).toHaveBeenCalledWith('lore', BRANCH, VEIL.id, ctx)
@@ -224,7 +242,7 @@ describe('useWorldDelete → confirm', () => {
 
   it('toasts success on an ok result', async () => {
     deleteEntityRow.mockResolvedValue({ status: 'ok' })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
     act(() => result.current.confirm())
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Deleted Mira.'))
@@ -236,7 +254,7 @@ describe('useWorldDelete → confirm', () => {
       reason: 'generation in flight',
       code: ROW_DELETE_REJECTION.inFlight,
     })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
     act(() => result.current.confirm())
     await waitFor(() =>
@@ -244,25 +262,9 @@ describe('useWorldDelete → confirm', () => {
     )
   })
 
-  it('toasts the lead-entity refusal', async () => {
-    deleteEntityRow.mockResolvedValue({
-      status: 'rejected',
-      reason: 'lead entity',
-      code: ROW_DELETE_REJECTION.leadEntity,
-    })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
-    act(() => result.current.request({ kind: 'entity', row: MIRA }))
-    act(() => result.current.confirm())
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(
-        "The story's lead can't be deleted — set another character as lead first.",
-      ),
-    )
-  })
-
   it('toasts the generic failure for any other refusal code', async () => {
     deleteRow.mockResolvedValue({ status: 'rejected', reason: 'gone', code: 'not-found' })
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
     act(() => result.current.request({ kind: 'lore', row: VEIL }))
     act(() => result.current.confirm())
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't delete that."))
@@ -270,7 +272,7 @@ describe('useWorldDelete → confirm', () => {
 
   it('logs and toasts the generic failure when the delete throws', async () => {
     deleteEntityRow.mockRejectedValue(new Error('SQLITE_BUSY: database is locked'))
-    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard))
+    const { result } = renderHook(() => useWorldDelete(BRANCH, ctx, guard, false))
     act(() => result.current.request({ kind: 'entity', row: MIRA }))
     act(() => result.current.confirm())
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't delete that."))

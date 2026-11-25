@@ -4,45 +4,52 @@ import { deleteUndoHint } from '@/components/compounds/delete-confirm-copy'
 import { ROW_DELETE_REJECTION } from '@/lib/actions'
 import { emptyEntityState, type Entity, type Lore } from '@/lib/db'
 
-import { deleteDisabledReason, deleteRejectionText, loreDeleteCopy } from './delete-copy'
+import { deleteRejectionText, entityDeleteCopy, loreDeleteCopy } from './delete-copy'
+import type { EntityDeleteImpact } from './delete-impact'
 
 const kael = {
   id: 'char_kael',
   branchId: 'b1',
   kind: 'character',
   name: 'Kael',
+  isLead: 0,
   state: emptyEntityState('character'),
 } as Entity
+const kaelLead: Entity = { ...kael, isLead: 1 }
 
-describe('deleteDisabledReason', () => {
-  it('returns the blocked reason for a blocked row, whether or not it is also the lead', () => {
-    expect(deleteDisabledReason(kael, null, true, 'blocked')).toBe('blocked')
-    expect(deleteDisabledReason(kael, 'char_kael', true, 'blocked')).toBe('blocked')
+const NO_IMPACT: EntityDeleteImpact = {
+  awareness: 0,
+  involvements: 0,
+  relationships: 0,
+  references: 0,
+  unplacedItems: 0,
+  unplacedPlaces: 0,
+  tailScene: false,
+}
+
+describe('entityDeleteCopy — the lead line', () => {
+  it("leads with the needs-a-lead line for the branch's lead when the story needs one", () => {
+    expect(entityDeleteCopy(kaelLead, { ...NO_IMPACT, awareness: 2 }, true).impacts).toEqual([
+      "Kael is this branch's lead. The story can't continue here until you set another.",
+      '2 awareness records',
+    ])
   })
 
-  it('falls back to the generation-gate text when blocked with no reason given', () => {
-    expect(deleteDisabledReason(kael, null, true)).toBe('Generation is in flight. Cancel to edit.')
+  it("says the branch will have no lead when the story doesn't need one", () => {
+    expect(entityDeleteCopy(kaelLead, NO_IMPACT, false).impacts).toEqual([
+      'This branch will have no lead.',
+    ])
   })
 
-  it("names the lead reason for the story's lead when not blocked", () => {
-    expect(deleteDisabledReason(kael, 'char_kael', false)).toBe(
-      "The story's lead can't be deleted — set another character as lead first.",
-    )
-  })
-
-  it('is available for a row that is neither blocked nor the lead', () => {
-    expect(deleteDisabledReason(kael, null, false)).toBeUndefined()
-    expect(deleteDisabledReason(kael, 'char_other', false)).toBeUndefined()
+  it.each([true, false])('adds no lead line for an unflagged row (needsLead %s)', (needsLead) => {
+    expect(entityDeleteCopy(kael, NO_IMPACT, needsLead).impacts).toEqual([])
   })
 })
 
 describe('deleteRejectionText', () => {
-  it('names the in-flight and lead refusals, and gives every other code the generic failure', () => {
+  it('names the in-flight refusal, and gives every other code the generic failure', () => {
     expect(deleteRejectionText(ROW_DELETE_REJECTION.inFlight)).toBe(
       "Couldn't delete while generation is in flight.",
-    )
-    expect(deleteRejectionText(ROW_DELETE_REJECTION.leadEntity)).toBe(
-      "The story's lead can't be deleted — set another character as lead first.",
     )
     expect(deleteRejectionText(ROW_DELETE_REJECTION.notFound)).toBe("Couldn't delete that.")
     expect(deleteRejectionText(ROW_DELETE_REJECTION.failed)).toBe("Couldn't delete that.")

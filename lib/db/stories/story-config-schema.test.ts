@@ -11,7 +11,6 @@ import {
 
 const BASE_DEFINITION = {
   mode: 'creative' as const,
-  leadEntityId: null,
   narration: 'third' as const,
   genre: { label: 'Cozy fantasy', promptBody: 'Warm, low-stakes fantasy.' },
   tone: { label: 'Gentle', promptBody: 'Kind and reassuring.' },
@@ -63,68 +62,32 @@ const VALID_SETTINGS = {
   packVariables: {},
 }
 
-describe('storyDefinitionSchema cross-field lead constraint', () => {
-  it('rejects creative + first-person + null lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'first',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(false)
-    if (!r.success) {
-      expect(r.error.issues[0].path).toEqual(['leadEntityId'])
+// The lead is a flag on a branch's character row (data-model.md → The lead), not a definition one.
+describe('storyDefinitionSchema and the lead', () => {
+  it.each([
+    ['adventure', 'first'],
+    ['adventure', 'second'],
+    ['adventure', 'third'],
+    ['creative', 'first'],
+    ['creative', 'second'],
+    ['creative', 'third'],
+  ] as const)('accepts %s + %s-person with no lead', (mode, narration) => {
+    const definition = {
+      mode,
+      narration,
+      genre: BASE_DEFINITION.genre,
+      tone: BASE_DEFINITION.tone,
+      setting: BASE_DEFINITION.setting,
+      calendarSystemId: BASE_DEFINITION.calendarSystemId,
+      worldTimeOrigin: BASE_DEFINITION.worldTimeOrigin,
     }
+    expect(storyDefinitionSchema.safeParse(definition).success).toBe(true)
   })
 
-  it('allows creative + third-person + null lead (omniscient ensemble)', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'third',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(true)
-  })
-
-  it('rejects adventure + third-person + null lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'adventure',
-      narration: 'third',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(false)
-  })
-
-  it('allows adventure + third-person + a lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'adventure',
-      narration: 'third',
-      leadEntityId: 'ent_1',
-    })
-    expect(r.success).toBe(true)
-  })
-
-  it('rejects creative + second-person + null lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'second',
-      leadEntityId: null,
-    })
-    expect(r.success).toBe(false)
-  })
-
-  it('allows creative + first-person + a lead', () => {
-    const r = storyDefinitionSchema.safeParse({
-      ...BASE_DEFINITION,
-      mode: 'creative',
-      narration: 'first',
-      leadEntityId: 'ent_1',
-    })
-    expect(r.success).toBe(true)
+  it('drops a stored leadEntityId, as story open reads an old definition', () => {
+    const parsed = storyDefinitionSchema.parse({ ...BASE_DEFINITION, leadEntityId: 'char_x' })
+    expect(parsed).not.toHaveProperty('leadEntityId')
+    expect(parsed).toEqual(BASE_DEFINITION)
   })
 })
 
@@ -309,15 +272,10 @@ describe('storySettingsPartialSchema', () => {
 })
 
 describe('isStoryMode', () => {
-  // Lead supplied because adventure mode refines on it; the point here is the
-  // enum, not that cross-field rule.
   it('accepts every mode the schema enum accepts', () => {
     for (const mode of STORY_MODES) {
       expect(isStoryMode(mode)).toBe(true)
-      expect(
-        storyDefinitionSchema.safeParse({ ...BASE_DEFINITION, mode, leadEntityId: 'ent-lead' })
-          .success,
-      ).toBe(true)
+      expect(storyDefinitionSchema.safeParse({ ...BASE_DEFINITION, mode }).success).toBe(true)
     }
   })
 

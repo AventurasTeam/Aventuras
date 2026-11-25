@@ -60,6 +60,11 @@ describe('field-labels vocabulary coverage', () => {
     }
   })
 
+  // world.md → Change prose: a set reads "Lead: no → yes", and the undo confirm's body names it.
+  it('labels the lead flag "Lead"', () => {
+    expect(fieldPathLabel('entities', 'isLead')).toBe('Lead')
+  })
+
   it("labels every path in entities' state column schema, distinctly from its parent's label", () => {
     const stateLabel = fieldPathLabel('entities', 'state')
     const visualLabel = fieldPathLabel('entities', 'state.visual')

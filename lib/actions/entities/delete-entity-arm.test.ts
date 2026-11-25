@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -17,7 +17,6 @@ import {
   translations,
   type Delta,
   type NewEntity,
-  type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
@@ -29,7 +28,6 @@ import { applyRedo, prepareUndo } from '../delta/redo'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { selectReversalSet } from '../delta/row-closure'
 import type { DbCtx } from '../types'
-import { ENTITY_DELETE_REJECTION } from './register'
 
 const character = (id: string, branchId: string, name: string): NewEntity => ({
   id,
@@ -53,7 +51,6 @@ beforeEach(async () => {
   await ctx.db.insert(stories).values({
     id: 's1',
     title: 'T',
-    definition: { leadEntityId: 'char_lead' } as StoryDefinition,
     createdAt: 1,
     updatedAt: 1,
   })
@@ -119,13 +116,23 @@ const remove = (id: string, branchId = 'b1') =>
   )
 
 describe('deleteEntity', () => {
-  it('refuses the story lead and writes nothing', async () => {
-    expect(await remove('char_lead')).toMatchObject({
-      status: 'rejected',
-      code: ENTITY_DELETE_REJECTION.leadEntity,
+  it('deletes the lead with its flag, the undo payload holding the whole row', async () => {
+    await ctx.db
+      .update(entities)
+      .set({ isLead: 1 })
+      .where(and(eq(entities.branchId, 'b1'), eq(entities.id, 'char_lead')))
+
+    expect(await remove('char_lead')).toMatchObject({ status: 'ok' })
+
+    expect(await ctx.db.select().from(entities).where(eq(entities.id, 'char_lead'))).toEqual([])
+    const [removed] = (await ctx.db
+      .select()
+      .from(deltas)
+      .where(eq(deltas.targetId, 'char_lead'))) as Delta[]
+    expect(removed).toMatchObject({
+      op: 'delete',
+      undoPayload: { id: 'char_lead', isLead: 1 },
     })
-    expect(await ctx.db.select().from(entities)).toHaveLength(2)
-    expect(await ctx.db.select().from(deltas)).toEqual([])
   })
 
   it('refuses a target that is already gone with not-found', async () => {
@@ -352,25 +359,5 @@ describe('deleteEntity', () => {
     expect(
       await ctx.db.select().from(translations).where(eq(translations.id, 'tr_3')),
     ).toHaveLength(1)
-  })
-
-  it('scopes the lead lookup to the target branch, ignoring another story that claims char_x as lead', async () => {
-    // s2/b3's lead really is char_x; b1's is char_lead — dropping the branch filter on the lead
-    // lookup would read whichever row the unfiltered join returns first, not the target's own.
-    await ctx.db.insert(stories).values({
-      id: 's2',
-      title: 'T2',
-      definition: { leadEntityId: 'char_x' } as StoryDefinition,
-      createdAt: 1,
-      updatedAt: 1,
-    })
-    await ctx.db.insert(branches).values({ id: 'b3', storyId: 's2', name: 'm3', createdAt: 1 })
-    await ctx.db.insert(entities).values(character('char_x', 'b3', 'Mira'))
-
-    expect(await remove('char_x', 'b1')).toMatchObject({ status: 'ok' })
-    expect(await remove('char_x', 'b3')).toMatchObject({
-      status: 'rejected',
-      code: ENTITY_DELETE_REJECTION.leadEntity,
-    })
   })
 })

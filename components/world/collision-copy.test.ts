@@ -13,7 +13,7 @@ describe('collisionRejectionText', () => {
       'These rows changed or no longer collide. Close this and check the list again.',
     )
     expect(collisionRejectionText(COLLISION_REJECTION.leadEntity)).toBe(
-      "The story's lead can't be the row a merge removes. Pick it as the row that survives, or use Set as lead on another character first.",
+      "The row this merge would remove is or was this branch's lead, so it stays. Close this and open the pair again to see which row survives.",
     )
     expect(collisionRejectionText(COLLISION_REJECTION.parentCycle)).toBe(
       'Merging these would make a location part of itself. Pick the other row to survive.',

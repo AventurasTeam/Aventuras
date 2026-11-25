@@ -2,6 +2,7 @@ import {
   clearLiveSession,
   createStoryWithBranch,
   openStory,
+  type CreateStoryInput,
   type DbCtx,
   type WizardCastEntityInput,
 } from '@/lib/actions'
@@ -9,7 +10,6 @@ import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/a
 import {
   buildStorySettings,
   type CharacterState,
-  type EntryMetadata,
   type FactionState,
   type ItemState,
   type LocationState,
@@ -33,11 +33,10 @@ import {
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
-import { checkParentChain, parentOfLocations, withPlacement } from '@/lib/world'
+import { checkParentChain, needsLead, parentOfLocations, withPlacement } from '@/lib/world'
 
 import { clampEffectiveDim } from './memory-cost-logic'
 import { activeLead, castPlacement, invalidCastRowIds } from './step-cast-logic'
-import { needsLead } from './step-frame-logic'
 import { invalidLoreRowIds, type LabeledPrompt } from './step-world-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
@@ -258,7 +257,6 @@ export async function finishWizard(
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,
-    leadEntityId: lead?.id ?? null,
     narration: s.definition.narration,
     genre: trimLabeledPrompt(s.definition.genre),
     tone: trimLabeledPrompt(s.definition.tone),
@@ -287,7 +285,7 @@ export async function finishWizard(
   const activeLocationIds = new Set(
     s.cast.filter((r) => r.status === 'active' && r.kind === 'location').map((r) => r.id),
   )
-  const openingMetadata: EntryMetadata = {
+  const openingMetadata: CreateStoryInput['openingMetadata'] = {
     sceneEntities: s.opening.sceneEntities.filter((id) => sceneTaggableIds.has(id)),
     currentLocationId:
       s.opening.currentLocationId != null && activeLocationIds.has(s.opening.currentLocationId)
@@ -346,6 +344,7 @@ export async function finishWizard(
         settings,
         openingContent: s.opening.content,
         openingMetadata,
+        leadId: lead?.id,
         cast: castRows,
         lore: s.lore,
         embed: {

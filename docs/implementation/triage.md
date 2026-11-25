@@ -116,29 +116,39 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **A desktop crash mid-migration can leave the database unable to
   boot.** Desktop's runner applies a migration's statements one by one
-  with no wrapping transaction (`electron/db/service.ts:97-100`).
-  Killed partway through a table rebuild (`0003`, `0009`, `0016` and
-  `0021` rebuild), the next boot re-runs the step from its start and
+  with no wrapping transaction (`electron/db/service.ts:107-110`; drizzle's
+  `sqlite-proxy/migrator.js` opens none either).
+  Killed partway through a table rebuild (`0003`, `0009`, `0016`, `0021`
+  and `0025` rebuild), the next boot re-runs the step from its start and
   fails: after the `CREATE` or the `DROP`, on "table `__new_deltas`
   already exists"; after `0021`'s closing `ALTER`, before drizzle records
-  the step, on "duplicate column name: branch_id". Android runs every
+  the step, on "duplicate column name: branch_id". Slice 6.8's
+  `0025_m6_entities_lead_check.sql` fails the same way on
+  `__new_entities` when killed after its `CREATE`, `INSERT` or `DROP`; a
+  kill after its `RENAME` re-runs cleanly. Android runs every
   pending migration in one transaction and rolls back. The relaunch that
   could cause such a kill is parked as
   [A relaunch kills a primary whose main thread stalls](../parked.md#a-relaunch-kills-a-primary-whose-main-thread-stalls);
   this is what the kill leaves behind. Found by M6.1's slice review
-  (2026-11-22), probed on `node:sqlite`.
+  (2026-11-22), probed on `node:sqlite`; `0025` added by Slice 6.8's
+  slice review (2026-11-25), probed the same way.
 
 - **Test plumbing the M6.1 simplifier left duplicated.** Three test
-  files hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
+  modules hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
   `DatabaseSync`: `lib/db/branch-copy/vec-copy.test.ts:92`
   (`runInTransaction`, "As createTestDb's"),
-  `lib/db/__tests__/migrate-m6-deltas-key.test.ts:38`
+  `lib/db/__tests__/migration-runners.ts:33`
   (`migrateLikeAndroid`, which models expo's runner and may need to stay
   apart) and `lib/db/__tests__/two-branch.ts:91` (`cloneBranch`). A
-  shared helper would live in `lib/db/__tests__/test-db.ts`, outside that
-  slice. Separately, `lib/actions/story-entries/scene-fields.test.ts:248`
+  shared helper would live beside `createTestDb`'s own in
+  `lib/db/__tests__/test-db.ts`, which `migration-runners.ts` already
+  imports. Slice 6.8 moved the migration runners out of
+  `migrate-m6-deltas-key.test.ts` into that module, shared with its lead
+  migration test; the three transactions stand. Separately,
+  `lib/actions/story-entries/scene-fields.test.ts:248`
   and `:315` spell out the call its `removeCast` helper makes (`:216`).
-  No defect either way. Found by M6.1's slice review (2026-11-22).
+  No defect either way. Found by M6.1's slice review (2026-11-22); the
+  runner's pointer moved by Slice 6.8's slice review (2026-11-25).
 
 - **No test passes a wrong branch to a scoped store read.** Every
   working-set read now names its branch, so the typecheck blocks a
@@ -542,6 +552,73 @@ slice-planning gate forces its resolution before that slice is planned.
   table-generic typing the per-suite readers don't need. Slice 6.10's
   simplifier left them, since the move needs a new home. Found by
   Slice 6.10's slice review (2026-11-24).
+
+- **An unguarded `json_extract` on entry metadata.**
+  `lib/db/story-entries/chapter-time-ranges.ts:10` runs `json_extract`
+  over `story_entries.metadata` with no `json_valid` guard. A branch
+  holding malformed metadata, which the M6 lead backfill leaves as it
+  was, makes that read throw `malformed JSON`. Slice 6.8 guarded its
+  own stamp read (`lib/db/story-entries/lead-stamps.ts`); this one is
+  older. Found in Slice 6.8's reviews (2026-11-24). A second site,
+  `lib/entry-refs/read.ts:140`, reads `metadata.worldTime` through the
+  same unguarded `json_extract` for `readOpenRegionTimes`, which the
+  close modal runs each time it opens. Found by Slice 6.8's slice review
+  (2026-11-25).
+
+- **State-patch writes take any entity column.**
+  `columnsWriteOutcome` in `lib/actions/entities/state-patch-actions.ts`
+  writes any `Partial<Entity>` with no allowlist. Every caller names
+  its columns today, but nothing stops a later state-patch handler from
+  writing `isLead`, which the register's source rule guards only in
+  `updateEntity`. Found in Slice 6.8's reviews (2026-11-24).
+
+- **The collision dialog's `GATED` comment may be over-broad.**
+  `components/compounds/collision-resolve-dialog.tsx` says rn-primitives
+  doesn't gate disabled clicks on web, and its plain radio items carry
+  an inline `pointerEvents: 'none'` for it. Slice 6.8's review showed
+  the dialog's `Select` items drop a disabled press already (an RN-Web
+  `Pressable` under the rn-primitives item), and read the same item
+  under the plain radios. Unverified for those by mutation; if it
+  holds, the inline style and the lesson behind it are narrower than
+  stated. Found in Slice 6.8's reviews (2026-11-25).
+
+- **A create's payload admits the lead flag.** `createEntity`'s
+  payload is `{ entry: NewEntity }`
+  (`lib/actions/entities/register.ts:93`), and since `entities.is_lead`
+  exists, `NewEntity` admits `isLead: 1`, which the handler refuses
+  only at runtime (`:227`, "a create never sets isLead"). The designed
+  shape is `NewEntity & { isLead?: 0 }`
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
+  Known shape). Tightened in a scratch typecheck, it breaks 39 files:
+  two in production, `lib/world/entity-actions.ts` and
+  `lib/pipeline/definitions/per-turn-creates.ts`, and 37 test files and
+  fixtures that build create entries as `NewEntity`. An exported alias
+  such as `EntityCreate` for the fixtures is the likely route. The
+  payload line is older code. Found by Slice 6.8's slice review
+  (2026-11-25).
+
+- **`RejectedStart.blockedBy` is a bare string.**
+  `lib/pipeline/types.ts:237` types it `string`, while its values are a
+  closed set: the pipeline and gate kinds a concurrency policy names
+  (`ConcurrencyPolicy.blockedBy`, `:168`, is `string[]` too),
+  `rerun-held`, `classifier-held`, `branch-not-open`, `embedder-swap`,
+  the manual close's refusals and `lead-missing`. Callers branch on it
+  by comparison (`leadRefusalOf` in `components/reader/send-run.ts`),
+  so a misspelled code compiles. A union is the designed shape
+  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
+  Known shape). Older code; Slice 6.8 added `lead-missing`. Found by
+  Slice 6.8's slice review (2026-11-25).
+
+- **The dev seed logs a create for its system entries.**
+  `entryCreateDeltas` in `lib/db/devtools/seed-dataset.ts` skips only
+  the opening, so the seeded system entries (`entry_hero_0072` on
+  `br_hero_main` among them) carry a `story_entries` create delta. The
+  app writes none for a system entry
+  (`components/reader/regenerate-gate.ts:51`), so on the seed the last
+  reply's ↻ counts two entries in range and opens the cascade confirm,
+  where in use it would regenerate at once. E2E specs that press ↻ on a
+  seeded tail test the confirm path for that reason. Found by Slice
+  6.8's slice review (2026-11-25).
 
 - **Web dialogs size to their content, not to their width class.**
   `DialogContent`'s panel takes `w-full` inside Radix's unstyled

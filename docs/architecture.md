@@ -313,7 +313,7 @@ narrator's reply, the fallback classifier's fold and the refresh call
 Each reads no context variable, only its parameters, as the memory
 blocks macro does, so each is `staticContent`, and a
 template passes the lead its context resolves: `lead`, the branch's
-lead through `resolveLead`, absent when the branch has none
+lead through `resolveLeadLogged`, absent when the branch has none
 ([`data-model.md → The lead`](./data-model.md#the-lead)), or the
 wizard draft's. Without a lead the instructions name none, and
 narration in first or second person still holds.

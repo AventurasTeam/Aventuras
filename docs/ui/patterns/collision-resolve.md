@@ -71,6 +71,8 @@ type CollisionResolveDialogProps = {
   blockedReason?: string
   /** Whether a row outside the pair already has `name`; Rename warns under that field. */
   isNameTaken?: (name: string) => boolean
+  /** Rows the branch's entries name, by the lead flag or a lead stamp: one held row is the fixed canonical; with both held, Merge is unavailable and the dialog opens on Rename. */
+  heldIds: readonly string[]
 }
 ```
 
@@ -81,7 +83,11 @@ entries name, by the lead flag or an entry's lead stamp, overrides
 that default: the caller marks which rows are held, a held row is the
 canonical and the picker can't change it, and with both rows held the
 pair can't merge
-([`world.md → Merge`](../screens/world/world.md#merge)).
+([`world.md → Merge`](../screens/world/world.md#merge)). `heldIds` is
+required. World takes it from `useCollisionResolve`, which hands over a
+dialog only once the open's held read has landed and never after a
+failed one, so the picker never shows free. Only a character can be
+held, so a pair of any other kind opens at once with none and no read.
 
 The header, the reason line and the basis line follow
 [`world.md → Resolve dialog`](../screens/world/world.md#resolve-dialog).
@@ -308,9 +314,11 @@ Transition rules:
   The chips are derived in the view, not stored: `mergedTerms` of
   the two rows with nothing dropped, so they show in the order the
   merge writes ([Resolution shape](#resolution-shape)).
-- **`reset`** — re-initializes on entity-input change. Defensive;
-  in practice the dialog is keyed by entity ids so unmount handles
-  most cases.
+- **`reset`** — re-initializes when the pair's ids change, and when
+  the held row changes, to the new `defaultCanonicalId`. Each open
+  mounts the dialog fresh, since World mounts it only once that
+  open's held rows are known, so in practice the reset fires on a held
+  change while the dialog stands: a lead set or unset under it.
 
 Initial state: `canonicalId` = `defaultCanonicalId` (the held row
 when one row is held, else A), `fromOther` empty, and

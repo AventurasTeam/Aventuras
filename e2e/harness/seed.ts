@@ -356,10 +356,9 @@ function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: num
 }
 
 /**
- * Append `count` filler turns and park the classifier watermark at `processedThrough`,
- * so the branch carries a backlog deeper than the reader's entry window. Each filler
- * body embeds its position, so a spec can tell which turns a pass actually read.
- * Runs before launch.
+ * Append `count` filler turns (body embeds its position, stamped with the branch's lead)
+ * and park the classifier watermark at `processedThrough`, leaving a backlog deeper than
+ * the reader's entry window. Runs before launch.
  */
 export function seedClassifierBacklog(
   dbPath: string,
@@ -372,9 +371,14 @@ export function seedClassifierBacklog(
     const row = db
       .prepare(`SELECT COALESCE(MAX(position), 0) AS p FROM story_entries WHERE branch_id = ?`)
       .get(branchId) as { p: number }
+    // Two flagged rows read as no lead (data-model.md → The lead), so only one stamps.
+    const leads = db
+      .prepare(`SELECT id FROM entities WHERE branch_id = ? AND is_lead = 1`)
+      .all(branchId) as { id: string }[]
+    const metadata = leads.length === 1 ? JSON.stringify({ leadId: leads[0].id }) : '{}'
     const insert = db.prepare(
       `INSERT INTO story_entries (id, branch_id, position, kind, content, chapter_id, metadata, created_at)
-       VALUES (?, ?, ?, 'ai_reply', ?, NULL, '{}', 1)`,
+       VALUES (?, ?, ?, 'ai_reply', ?, NULL, ?, 1)`,
     )
     for (let i = 1; i <= count; i++) {
       const position = row.p + i
@@ -383,6 +387,7 @@ export function seedClassifierBacklog(
         branchId,
         position,
         `FILLER-${position} nothing happens.`,
+        metadata,
       )
     }
     parkWatermark(db, branchId, processedThrough)
@@ -642,6 +647,37 @@ export function retireSeededCharacter(
       .run(reason, branchId, name)
     if (Number(changes) !== 1)
       throw new Error(`expected one character named ${name} on ${branchId}, retired ${changes}`)
+  } finally {
+    db.close()
+  }
+}
+
+/** Before launch: unflags every row on `branchId`, then flags the one named `pick.name` (the
+ * newest by `created_at` when `pick.newest`, else asserts exactly one match). */
+export function flagSeededLead(
+  dbPath: string,
+  branchId: string,
+  pick: { name: string; newest?: boolean },
+): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const named = db
+      .prepare(
+        `SELECT id FROM entities WHERE branch_id = ? AND kind = 'character' AND name = ?
+         ORDER BY created_at DESC`,
+      )
+      .all(branchId, pick.name) as { id: string }[]
+    const target = pick.newest === true || named.length === 1 ? named[0] : undefined
+    if (target == null)
+      throw new Error(
+        `expected one character named ${pick.name} on ${branchId}, found ${named.length}`,
+      )
+    db.prepare(`UPDATE entities SET is_lead = 0 WHERE branch_id = ? AND is_lead = 1`).run(branchId)
+    db.prepare(`UPDATE entities SET is_lead = 1 WHERE branch_id = ? AND id = ?`).run(
+      branchId,
+      target.id,
+    )
   } finally {
     db.close()
   }

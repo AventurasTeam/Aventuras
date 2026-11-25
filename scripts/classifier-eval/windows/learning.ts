@@ -33,24 +33,29 @@ export const learning: EvalWindow = {
     relationship('rel_idris_oriel', 'char_idris', 'char_oriel', 'apprentice', 'master'),
   ],
   threads: [],
-  entries: entries('learning', { scene: ['char_idris', 'char_oriel'], location: 'loc_workshop' }, [
-    action('Idris comes home from the coast and asks Oriel what he missed.'),
-    narration(
-      `Oriel didn't look up from the alembic at first, which was how Idris knew it was bad.
+  entries: entries(
+    'learning',
+    { scene: ['char_idris', 'char_oriel'], location: 'loc_workshop' },
+    [
+      action('Idris comes home from the coast and asks Oriel what he missed.'),
+      narration(
+        `Oriel didn't look up from the alembic at first, which was how Idris knew it was bad.
 
 "Lady Senna's dead, master. At the harvest feast, three nights after you left. They say it was the wine." He wiped his hands on his apron, slowly. "Her cupbearer ran the same night. A boy called Tam Rook. And the steward's been round twice asking which alchemists sold nightshade tincture this season. Our name's on his list."
 
 Idris set his bag down very carefully on the bench. Senna had bought her sleeping draughts from this workshop for eleven years.`,
-    ),
-    action('Idris tells Oriel to find Tam Rook before the steward does.'),
-    narration(
-      `"Before the steward does," Oriel repeated, and for a moment he looked like the boy Idris had taken in off the quay rather than the near-journeyman he'd become. Then he nodded. "Tam's got an aunt in the net-sheds. I'll start there."
+      ),
+      action('Idris tells Oriel to find Tam Rook before the steward does.'),
+      narration(
+        `"Before the steward does," Oriel repeated, and for a moment he looked like the boy Idris had taken in off the quay rather than the near-journeyman he'd become. Then he nodded. "Tam's got an aunt in the net-sheds. I'll start there."
 
 "Take the back stair," Idris said. "And Oriel." The apprentice paused in the doorway. "Thank you. You've kept this shop standing while I was gone."
 
 Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
-    ),
-  ]),
+      ),
+    ],
+    undefined,
+  ),
   checks: [
     {
       name: 'Idris learns of the listed poisoning',

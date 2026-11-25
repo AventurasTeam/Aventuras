@@ -44,7 +44,6 @@ import { loadOpenStory } from './operational'
 
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
-  leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
   narration: 'first',
   genre: { label: 'Fantasy', promptBody: 'high fantasy' },
   tone: { label: 'Wry', promptBody: 'wry' },
@@ -435,7 +434,7 @@ describe('loadOpenStory', () => {
       currentBranchId: 'br_bad',
       // Missing `mode` (and the rest of the required shape) — fails
       // storyDefinitionSchema.parse, simulating on-disk JSON corruption.
-      definition: { leadEntityId: null } as unknown as StoryDefinition,
+      definition: { narration: 'third' } as unknown as StoryDefinition,
     })
     await db
       .insert(branches)

@@ -73,7 +73,6 @@ vi.mock('@/lib/embedder-swap', async (importOriginal) => {
 
 const definition = {
   mode: 'adventure' as const,
-  leadEntityId: 'char_hero',
   narration: 'first' as const,
   genre: { label: 'Fantasy', promptBody: 'High fantasy.' },
   tone: { label: 'Wry', promptBody: 'Dry humor.' },
@@ -173,6 +172,7 @@ function entity(id: string, kind: Entity['kind'], name: string): Entity {
     state: null,
     tags: [],
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }
@@ -185,7 +185,7 @@ function seedOpenStory(
     entities?: Entity[]
     entriesBranch?: string
     storyId?: string
-    definition?: Partial<Pick<StoryDefinition, 'mode' | 'narration' | 'leadEntityId'>>
+    definition?: Partial<Pick<StoryDefinition, 'mode' | 'narration'>>
   } = {},
 ): StorySettings {
   const settings: StorySettings = { ...STORY_SETTINGS_DEFAULTS, ...opts.settings }
@@ -1220,12 +1220,12 @@ describe('retrieval phase — RetrievalParams assembly', () => {
   describe('the lead in the awareness scope', () => {
     const offScene = (
       over: Partial<Pick<StoryDefinition, 'mode' | 'narration'>>,
-      lead = 'char_hero',
+      heroFlag: Entity['isLead'] = 1,
     ) => {
       seedOpenStory({
-        definition: { leadEntityId: lead, ...over },
+        definition: over,
         entities: [
-          entity('char_hero', 'character', 'Kael'),
+          { ...entity('char_hero', 'character', 'Kael'), isLead: heroFlag },
           entity('char_mora', 'character', 'Mora'),
         ],
         entries: [entry(1, 'ai_reply', 'Mora waits.', meta({ sceneEntities: ['char_mora'] }))],
@@ -1254,15 +1254,15 @@ describe('retrieval phase — RetrievalParams assembly', () => {
 
     it('counts once when the scene already has them', async () => {
       seedOpenStory({
-        entities: [entity('char_hero', 'character', 'Kael')],
+        entities: [{ ...entity('char_hero', 'character', 'Kael'), isLead: 1 }],
         entries: [entry(1, 'ai_reply', 'Kael waits.', meta({ sceneEntities: ['char_hero'] }))],
       })
       await runRetrievalPhase()
       expect(lastParams().sceneCharacterIds).toEqual(['char_hero'])
     })
 
-    it('stays out when the lead dangles on the branch', async () => {
-      offScene({ mode: 'adventure', narration: 'second' }, 'char_gone')
+    it('stays out when no row on the branch carries the flag', async () => {
+      offScene({ mode: 'adventure', narration: 'second' }, 0)
       await runRetrievalPhase()
       expect(lastParams().sceneCharacterIds).toEqual(['char_mora'])
     })

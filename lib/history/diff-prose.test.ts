@@ -364,6 +364,11 @@ describe('diffProse — enums, numbers, flags', () => {
     ).toBe('Common knowledge: no → yes')
   })
 
+  it('reads the lead flag by its label, setting and clearing', () => {
+    expect(diffProse(entryOf({ isLead: 0 }, { isLead: 1 }), ENTITIES)).toBe('Lead: no → yes')
+    expect(diffProse(entryOf({ isLead: 1 }, { isLead: 0 }), ENTITIES)).toBe('Lead: yes → no')
+  })
+
   it('renders nothing for an enum, number or flag whose value is unchanged', () => {
     expect(diffProse(entryOf({ status: 'active' }, { status: 'active' }), ENTITIES)).toBeNull()
     expect(diffProse(entryOf({ priority: 3 }, { priority: 3 }), contextOf('lore'))).toBeNull()

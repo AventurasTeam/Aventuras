@@ -66,7 +66,6 @@ function openStory(branchId: string, calendarSystemId: string) {
     branchId,
     definition: storyDefinitionSchema.parse({
       mode: 'adventure',
-      leadEntityId: 'char_kael',
       narration: 'second',
       genre: { label: 'Fantasy', promptBody: '' },
       tone: { label: 'Wry', promptBody: '' },

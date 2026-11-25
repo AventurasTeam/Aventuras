@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
 import { goToReader, goToWorld as goToWorldFlow, openWorld } from '../flows/navigation'
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, flaggedLeads, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -31,15 +31,6 @@ async function entityId(page: Page, branchId: string, name: string): Promise<str
     name,
   ])
   return id as string
-}
-
-async function leadEntityId(page: Page): Promise<unknown> {
-  const [[id]] = await queryApp(
-    page,
-    `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE id = ?`,
-    [HERO_STORY],
-  )
-  return id
 }
 
 type EntitySnapshot = {
@@ -483,7 +474,7 @@ test.describe.serial('World panel', () => {
     await world.moreActions(page).click()
     await world.menuItem(page, 'setLead').click()
     const mira = await entityId(page, branchId, 'Mira')
-    await expect.poll(() => leadEntityId(page)).toBe(mira)
+    await expect.poll(() => flaggedLeads(page, branchId)).toEqual([mira])
     await expect(world.leadTag(page, 'Mira')).toBeVisible()
     // The row first, or the zero count could pass with Kael's row never mounted.
     await expect(world.row(page, 'Kael')).toBeVisible()

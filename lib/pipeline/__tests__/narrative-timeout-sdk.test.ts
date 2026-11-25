@@ -37,7 +37,6 @@ const provider = {
 
 const definition = {
   mode: 'adventure' as const,
-  leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
   narration: 'first' as const,
   genre: { label: 'Fantasy', promptBody: 'High fantasy.' },
   tone: { label: 'Wry', promptBody: 'Dry humor.' },

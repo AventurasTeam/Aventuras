@@ -28,7 +28,7 @@ import {
   byName,
   listedAncestorNames,
   locationMapView,
-  resolveLead,
+  resolveLeadLogged,
   type EntityViews,
   type KindedView,
 } from '@/lib/world'
@@ -490,7 +490,11 @@ export async function buildGenerationContext(
   ])
 
   const retrievedHappenings = promptRows(retrieval?.bundles.happenings.selected)
-  const lead = resolveLead(definition.leadEntityId, entitiesStore.getEntities(branchId), branchId)
+  const lead = resolveLeadLogged(
+    entitiesStore.getEntities(branchId),
+    branchId,
+    'generation-context',
+  )
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
@@ -566,6 +570,8 @@ export async function buildGenerationContext(
     stateShownIds,
     // Real ids: the reply records them (data-model.md → Entry metadata shape).
     injectedHappenings: retrievedHappenings.map((row) => row.id),
+    // Real id: `context.lead.id` is a per-call placeholder after substituteIds.
+    leadId: lead?.id ?? null,
     // Beside the context, not in it: the context is the template's variable set.
     ...(priceHistory ? { historyProse: historyProseOf(buffer) } : {}),
   }

@@ -23,7 +23,7 @@
     "think": "internal monologue",
     "free": "no wrapping"
   },
-  "composerLeadMissing": "The story's lead isn't on this branch, so actions can't be written for them. Set a new lead in World.",
+  "composerLeadMissing": "This story needs a lead on this branch before it can continue. Set one in World.",
   "suggestions": {
     "title": "Suggestions",
     "refresh": "Refresh suggestions",
@@ -80,6 +80,7 @@
   "turnCancelledDraftKept": "Turn cancelled. Your draft was kept, so the cancelled action wasn't restored.",
   "failedTurnTextRestored": "Put the failed turn's text back in the composer.",
   "failedTurnTextDropped": "Your draft was kept, so the failed turn's text wasn't restored.",
+  "leadRefusedDraftKept": "Your draft was kept, so the action you sent wasn't restored.",
   "submitUnconverged": "The turn was blocked and your action stayed in the story. Undo it before sending again.",
   "spellcheckSuggestion": "→ {{text}}",
   "rollbackConfirm": {
@@ -384,6 +385,8 @@
       "deleted": "Undo deleting {{name}}…",
       "edited": "Undo your edit to {{name}}…",
       "rows": "Undo your changes to {{name}} and {{count}} more…",
+      "leadSet": "Undo making {{name}} the lead…",
+      "leadUnset": "Undo removing {{name}} as lead…",
       "latest": "Undo the latest change…"
     },
     "title": {
@@ -394,6 +397,8 @@
       "deleted": "Undo deleting {{name}}?",
       "edited": "Undo your edit to {{name}}?",
       "rows": "Undo your changes to {{name}} and {{count}} more?",
+      "leadSet": "Undo making {{name}} the lead?",
+      "leadUnset": "Undo removing {{name}} as lead?",
       "latest": "Undo the latest change?"
     },
     "notice": {
@@ -409,6 +414,8 @@
       "deleted": "Undid deleting {{name}}",
       "edited": "Undid your edit to {{name}}",
       "rows": "Undid your changes to {{name}} and {{count}} more",
+      "leadSet": "Undid making {{name}} the lead",
+      "leadUnset": "Undid removing {{name}} as lead",
       "latest": "Undid the latest change"
     },
     "redoMenu": {
@@ -423,6 +430,8 @@
       "deleted": "Redo deleting {{name}}",
       "edited": "Redo your edit to {{name}}",
       "rows": "Redo your changes to {{name}} and {{count}} more",
+      "leadSet": "Redo making {{name}} the lead",
+      "leadUnset": "Redo removing {{name}} as lead",
       "latest": "Redo the latest change"
     },
     "redoNotice": {
@@ -437,6 +446,8 @@
       "deleted": "Redid deleting {{name}}",
       "edited": "Redid your edit to {{name}}",
       "rows": "Redid your changes to {{name}} and {{count}} more",
+      "leadSet": "Redid making {{name}} the lead",
+      "leadUnset": "Redid removing {{name}} as lead",
       "latest": "Redid the latest change"
     },
     "chapterName": "chapter {{number}}",

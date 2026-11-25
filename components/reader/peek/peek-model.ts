@@ -21,7 +21,7 @@ export type PeekModel =
       kind: 'entity'
       row: Entity
       recentlyClassified: RecentlyClassified | undefined
-      /** Set only on the story's resolved lead. */
+      /** Set only on the branch's lead. */
       leadLabel: LeadLabel | null
     }
   | { kind: 'lore'; row: Lore; recentlyClassified: RecentlyClassified | undefined }

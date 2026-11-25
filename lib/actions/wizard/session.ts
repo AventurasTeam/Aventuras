@@ -63,7 +63,6 @@ export async function saveStoryDraft(
     state.definition.description.trim().length > 0 ? state.definition.description : null
   const definition: StoryDefinition = {
     mode: state.definition.mode,
-    leadEntityId: state.leadEntityId ?? null,
     narration: state.definition.narration,
     genre: state.definition.genre,
     tone: state.definition.tone,

@@ -92,7 +92,6 @@ export function LocationDetailPane({
       onTabChange={setTab}
       tabCounts={{ involvements: data.involvements.length }}
       recentlyClassified={recentlyClassified}
-      leadId={data.leadId}
       onDelete={onDelete}
       hotkeysEnabled={hotkeysEnabled}
       {...gate}

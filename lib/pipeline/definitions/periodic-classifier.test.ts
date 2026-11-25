@@ -130,8 +130,6 @@ async function ctxWith(opts: {
   mentionedPlaces?: boolean
   /** stories.settings.protectedBuffer. Unset, no reach-back: the harness skips the 10 default. */
   protectedBuffer?: number
-  /** stories.definition.leadEntityId. */
-  leadEntityId?: string
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -181,7 +179,7 @@ async function ctxWith(opts: {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
-    definition: { leadEntityId: opts.leadEntityId ?? null } as never,
+    definition: {} as never,
     settings: {
       models: {},
       classifierMentionedPlaces: opts.mentionedPlaces ?? false,
@@ -590,7 +588,7 @@ describe('periodicClassifierPhase', () => {
             currentStoryStore.set({
               storyId: 's2',
               branchId: 'b2',
-              definition: { leadEntityId: null } as never,
+              definition: {} as never,
               settings: {
                 models: { classifier: { providerId: 'prov-1', modelId: 'other' } },
                 classifierMentionedPlaces: false,
@@ -662,9 +660,9 @@ describe('periodicClassifierPhase', () => {
 
   // classifier.md → What the classifier reads: the lead, by the placeholder its line holds.
   it.each([
-    ['names the story’s lead', CHAR_KAEL, "\nThe story's lead is [c1] Kael."],
-    ['names no lead that dangles on the branch', 'char_99999999-9999-9999-9999-999999999999', null],
-  ])('%s before the turns', async (_label, leadEntityId, line) => {
+    ["names the branch's flagged lead", 1, "\nThe story's lead is [c1] Kael."],
+    ['names no lead when no row on the branch carries the flag', 0, null],
+  ] as const)('%s before the turns', async (_label, isLead, line) => {
     const kael = {
       id: CHAR_KAEL,
       branchId: 'b1',
@@ -673,13 +671,9 @@ describe('periodicClassifierPhase', () => {
       status: 'active',
       description: 'A courier.',
       keywords: [],
+      isLead,
     } as unknown as Entity
-    const h = await ctxWith({
-      processedThrough: 0,
-      headPosition: 1,
-      entities: [kael],
-      leadEntityId,
-    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 1, entities: [kael] })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       recoverable: [],

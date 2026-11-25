@@ -23,6 +23,13 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     expect(failing('avoid', w.bad, true)).toEqual([])
   })
 
+  it('flags its lead and stamps every turn with it, or flags and stamps nothing', () => {
+    expect(w.entities.filter((e) => e.isLead === 1).map((e) => e.id)).toEqual(
+      w.lead == null ? [] : [w.lead],
+    )
+    expect(w.entries.map((e) => e.metadata?.leadId)).toEqual(w.entries.map(() => w.lead))
+  })
+
   it('fails no check on a blank-named new character, which the planner never creates', () => {
     const extra = {
       handle: 'new:extra',
@@ -64,6 +71,22 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     const { reply: back } = read(schema.parse(bracketed))
     expect(back).toEqual(w.ideal)
   })
+})
+
+it('the ambush window leads with Tobin on all four turns; the direction window has no lead', () => {
+  const ambush = EVAL_WINDOWS.find((x) => x.name === 'ambush')!
+  expect(ambush.entities.filter((e) => e.isLead === 1).map((e) => e.name)).toEqual(['Tobin Ash'])
+  expect(ambush.entries.map((e) => e.metadata?.leadId)).toEqual([
+    'char_tobin',
+    'char_tobin',
+    'char_tobin',
+    'char_tobin',
+  ])
+  const direction = EVAL_WINDOWS.find((x) => x.name === 'direction')!
+  expect(direction.entities.filter((e) => e.isLead === 1)).toEqual([])
+  expect(direction.entries.map((e) => e.metadata?.leadId)).toEqual(
+    direction.entries.map(() => undefined),
+  )
 })
 
 // A relative the prose names after a character is someone else.

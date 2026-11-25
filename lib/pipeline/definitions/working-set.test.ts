@@ -12,7 +12,6 @@ import { loadPerTurnWorkingSet } from './working-set'
 
 const DEFINITION = storyDefinitionSchema.parse({
   mode: 'creative',
-  leadEntityId: null,
   narration: 'third',
   genre: { label: 'Fantasy', promptBody: '' },
   tone: { label: 'Wry', promptBody: '' },
@@ -53,6 +52,7 @@ function entity(id: string, branchId = 'b1'): Entity {
     injectionMode: 'auto',
     state: null,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }

@@ -142,6 +142,24 @@ describe('the seeded br_hero_fork (C7)', () => {
     }
   })
 
+  it('holds Kael as its only lead, and stamps every turn with him, its own five included', () => {
+    const db = seeded()
+    const flagged = db
+      .prepare('SELECT id, name FROM entities WHERE branch_id = ? AND is_lead = 1')
+      .all(FORK) as { id: string; name: string }[]
+    expect(flagged.map((row) => row.name)).toEqual(['Kael'])
+    const turns = db
+      .prepare(
+        `SELECT id, json_extract(metadata, '$.leadId') AS leadId FROM story_entries
+         WHERE branch_id = ? AND kind IN ('user_action', 'ai_reply', 'opening') ORDER BY position`,
+      )
+      .all(FORK) as { id: string; leadId: string | null }[]
+    expect(turns).toHaveLength(45)
+    expect(turns.filter((turn) => turn.leadId !== flagged[0]!.id).map((turn) => turn.id)).toEqual(
+      [],
+    )
+  })
+
   it('logs one create per turn of its own, above every delta the fork copied', () => {
     const db = seeded()
     const creates = db

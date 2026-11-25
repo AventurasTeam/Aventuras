@@ -57,9 +57,12 @@ export type CreateStoryInput = {
   definition: StoryDefinition
   settings: StorySettings
   openingContent: string
-  openingMetadata: EntryMetadata
+  /** Carries no lead stamp: `leadId` is the opening's one stamp source. */
+  openingMetadata: Omit<EntryMetadata, 'leadId'> & { leadId?: never }
   /** Wizard-authored cast. Each row embeds name + description. */
   cast?: readonly WizardCastEntityInput[]
+  /** The wizard's active lead: a cast character, inserted flagged; the opening is stamped with it. */
+  leadId?: string
   /** Wizard-authored initial lore. Each row embeds title + body. */
   lore?: readonly WizardLoreDraft[]
   // Embed step (wizard Finish hard gate): when present, the cast's and lore rows'
@@ -81,15 +84,15 @@ export async function createStoryWithBranch(
 ): Promise<{ storyId: string; branchId: string }> {
   const definition = storyDefinitionSchema.parse(input.definition)
   const settings = storySettingsSchema.parse(input.settings)
-  const metadata = entryMetadataSchema.parse(input.openingMetadata)
+  const openingFields = entryMetadataSchema.parse(input.openingMetadata)
+  const metadata: EntryMetadata =
+    input.leadId == null ? openingFields : { ...openingFields, leadId: input.leadId }
 
-  // leadEntityId lives in JSON, so no FK guards a definition whose lead is never
-  // materialized as an entity row — reject before the write instead of committing a dangling ref.
   if (
-    definition.leadEntityId != null &&
-    !(input.cast ?? []).some((r) => r.id === definition.leadEntityId && r.kind === 'character')
+    input.leadId != null &&
+    !(input.cast ?? []).some((r) => r.id === input.leadId && r.kind === 'character')
   ) {
-    throw new Error('definition.leadEntityId requires a matching cast character')
+    throw new Error('leadId requires a matching cast character')
   }
 
   const storyId = input.storyId ?? generateId('story')
@@ -136,6 +139,7 @@ export async function createStoryWithBranch(
           name: row.name,
           description: row.description,
           status: row.status,
+          isLead: row.id === input.leadId ? 1 : 0,
           injectionMode: 'auto',
           state: row.state,
           tags: [...row.tags],

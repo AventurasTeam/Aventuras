@@ -928,7 +928,10 @@ One SQLite transaction, all or none:
    as entities.
 5. Insert `story_entries[1]` with `kind='opening'`, prose,
    metadata. `metadata.model = <wizard-assist profile model>` if
-   AI-generated; else `null`. Story entries themselves aren't
+   AI-generated; else `null`. `metadata.leadId` names the lead's cast
+   row when there is one
+   ([`data-model.md → The lead`](../../../data-model.md#the-lead)).
+   Story entries themselves aren't
    embedded; the opening is exempt from the classifier pass per
    [`architecture.md → Agent orchestration`](../../../architecture.md#agent-orchestration)
    ("Classifier does NOT run on the opening entry").

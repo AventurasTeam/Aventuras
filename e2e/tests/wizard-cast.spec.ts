@@ -101,21 +101,23 @@ test.describe('create-story wizard — mixed cast', () => {
     const [branchId, storyStatus] = storyRows[0] as [string, string]
     expect(storyStatus, 'story committed active').toBe('active')
 
-    // The two-character trap this spec sets up (one active, one staged) is
-    // pointless unless something reads which one actually became the lead.
-    // createStoryWithBranch's guard only requires leadEntityId to match SOME
-    // cast character — the staged one qualifies — so a wrong-lead commit
-    // (activeLead exists precisely to forbid this) would pass every check
-    // above and still slip through unnoticed without this assertion.
-    const definitionRows = await queryApp(
+    // createStoryWithBranch's guard accepts ANY cast character as lead, the staged one
+    // included, so a wrong-lead commit passes every check above without these assertions.
+    const leadRows = (await queryApp(
       app.window,
-      `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE title = ?`,
-      [STORY.title],
-    )
+      `SELECT id, is_lead FROM entities WHERE branch_id = ? AND kind = 'character'`,
+      [branchId],
+    )) as [string, number][]
     expect(
-      (definitionRows[0] as [string])[0],
-      'committed definition.leadEntityId points at the active lead, not the staged character',
-    ).toBe(leadId)
+      Object.fromEntries(leadRows),
+      'the active lead is flagged, the staged character is not',
+    ).toEqual({ [leadId]: 1, [stagedId]: 0 })
+    const openingRows = await queryApp(
+      app.window,
+      `SELECT json_extract(metadata, '$.leadId') FROM story_entries WHERE branch_id = ? AND kind = 'opening'`,
+      [branchId],
+    )
+    expect((openingRows[0] as [string])[0], 'the opening is stamped with the lead').toBe(leadId)
 
     const expected = [
       { ...LEAD, status: 'active' },

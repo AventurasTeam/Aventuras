@@ -61,7 +61,6 @@ const NO_APP_DEFAULTS = {
 function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefinition {
   return {
     mode: 'creative',
-    leadEntityId: null,
     narration: 'third',
     genre: { label: 'Fantasy', promptBody: 'high fantasy' },
     tone: { label: 'Epic', promptBody: 'grand and sweeping' },
@@ -237,15 +236,12 @@ describe('createStoryWithBranch', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Aria Rising',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
         cast: [characterRow()],
+        leadId: LEAD_ID,
       },
       ctx,
       2000,
@@ -267,6 +263,32 @@ describe('createStoryWithBranch', () => {
     expect(entityRows[0].state).toEqual(emptyEntityState('character'))
 
     expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('stores no lead in the definition, even one a caller still passes', async () => {
+    const { db, ctx } = await setup()
+    const stale = {
+      ...makeDefinition({ mode: 'adventure', narration: 'first' }),
+      leadEntityId: LEAD_ID,
+    }
+
+    const { storyId } = await createStoryWithBranch(
+      {
+        title: 'Stale caller',
+        definition: stale,
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake at dawn.',
+        openingMetadata: metadata,
+        cast: [characterRow()],
+        leadId: LEAD_ID,
+      },
+      ctx,
+      2050,
+    )
+
+    const [story] = await db.select().from(stories).where(eq(stories.id, storyId))
+    expect(story!.definition).not.toHaveProperty('leadEntityId')
+    expect(story!.definition).toEqual(makeDefinition({ mode: 'adventure', narration: 'first' }))
   })
 
   it('commits every cast kind with its own state, status, description, and tags', async () => {
@@ -296,11 +318,7 @@ describe('createStoryWithBranch', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Mixed Cast',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
@@ -374,62 +392,6 @@ describe('createStoryWithBranch', () => {
     expect(await db.select().from(entities)).toHaveLength(0)
   })
 
-  it('rejects a definition whose leadEntityId matches no cast row', async () => {
-    const { db, ctx } = await setup()
-
-    await expect(
-      createStoryWithBranch(
-        {
-          title: 'Orphan lead',
-          definition: makeDefinition({
-            mode: 'adventure',
-            narration: 'first',
-            leadEntityId: LEAD_ID,
-          }),
-          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-          openingContent: 'x',
-          openingMetadata: metadata,
-          // A cast that carries rows but not THIS id: the guard must resolve the
-          // pointer, not just check that some cast was supplied.
-          cast: [characterRow({ id: 'char_99999999-9999-9999-9999-999999999999', name: 'Nobody' })],
-        },
-        ctx,
-        5000,
-      ),
-    ).rejects.toThrow()
-
-    expect(await db.select().from(stories)).toHaveLength(0)
-    expect(await db.select().from(branches)).toHaveLength(0)
-    expect(await db.select().from(storyEntries)).toHaveLength(0)
-    expect(await db.select().from(entities)).toHaveLength(0)
-  })
-
-  it('rejects a leadEntityId pointing at a non-character cast row', async () => {
-    const { db, ctx } = await setup()
-
-    await expect(
-      createStoryWithBranch(
-        {
-          title: 'A place cannot lead',
-          definition: makeDefinition({
-            mode: 'adventure',
-            narration: 'first',
-            leadEntityId: LOCATION_ID,
-          }),
-          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-          openingContent: 'x',
-          openingMetadata: metadata,
-          cast: [locationRow()],
-        },
-        ctx,
-        5100,
-      ),
-    ).rejects.toThrow()
-
-    expect(await db.select().from(stories)).toHaveLength(0)
-    expect(await db.select().from(entities)).toHaveLength(0)
-  })
-
   it('accepts a cast character that is not the lead when no lead is declared', async () => {
     const { db, ctx } = await setup()
 
@@ -449,24 +411,6 @@ describe('createStoryWithBranch', () => {
     const entityRows = await db.select().from(entities).where(eq(entities.branchId, branchId))
     expect(entityRows).toHaveLength(1)
     expect(entityRows[0].id).toBe(LEAD_ID)
-  })
-
-  it('adventure with null leadEntityId is rejected by the definition schema', async () => {
-    const { ctx } = await setup()
-
-    await expect(
-      createStoryWithBranch(
-        {
-          title: 'Broken',
-          definition: makeDefinition({ mode: 'adventure', leadEntityId: null }),
-          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-          openingContent: 'x',
-          openingMetadata: metadata,
-        },
-        ctx,
-        3000,
-      ),
-    ).rejects.toThrow()
   })
 
   it('replaceExistingStoryId promotes a draft: same id becomes active, draft session row is gone', async () => {
@@ -615,11 +559,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Embedded',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -659,11 +599,7 @@ describe('createStoryWithBranch — embed step', () => {
       createStoryWithBranch(
         {
           title: 'Doomed',
-          definition: makeDefinition({
-            mode: 'adventure',
-            narration: 'first',
-            leadEntityId: LEAD_ID,
-          }),
+          definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
           settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'You wake.',
           openingMetadata: metadata,
@@ -747,11 +683,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Combined',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -792,11 +724,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Padded',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -829,11 +757,7 @@ describe('createStoryWithBranch — embed step', () => {
     const { branchId } = await createStoryWithBranch(
       {
         title: 'Blank category',
-        definition: makeDefinition({
-          mode: 'adventure',
-          narration: 'first',
-          leadEntityId: LEAD_ID,
-        }),
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
@@ -1031,5 +955,95 @@ describe('createStoryWithBranch — embed step', () => {
     )
 
     expect(mockedEmbed).not.toHaveBeenCalled()
+  })
+})
+
+describe('createStoryWithBranch — the lead flag', () => {
+  const MIRA_ID = 'char_55555555-5555-5555-5555-555555555555'
+
+  it("flags the lead's cast row, no other, and stamps the opening, writing no delta", async () => {
+    const { db, ctx } = await setup()
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Aria Rising',
+        definition: makeDefinition({ mode: 'adventure', narration: 'first' }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake at dawn.',
+        openingMetadata: metadata,
+        cast: [characterRow(), characterRow({ id: MIRA_ID, name: 'Mira' }), locationRow()],
+        leadId: LEAD_ID,
+      },
+      ctx,
+      6000,
+    )
+
+    const rows = await db.select().from(entities).where(eq(entities.branchId, branchId))
+    expect(Object.fromEntries(rows.map((row) => [row.id, row.isLead]))).toEqual({
+      [LEAD_ID]: 1,
+      [MIRA_ID]: 0,
+      [LOCATION_ID]: 0,
+    })
+    const [opening] = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchId))
+    expect(opening.metadata?.leadId).toBe(LEAD_ID)
+    expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('flags no row and stamps nothing with no lead', async () => {
+    const { db, ctx } = await setup()
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Ensemble',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+        cast: [characterRow()],
+      },
+      ctx,
+      6100,
+    )
+
+    const rows = await db.select().from(entities).where(eq(entities.branchId, branchId))
+    expect(rows.map((row) => row.isLead)).toEqual([0])
+    const [opening] = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchId))
+    expect(opening.metadata).not.toHaveProperty('leadId')
+  })
+
+  it.each<[string, WizardCastEntityInput[], string]>([
+    ['names no cast row', [characterRow({ id: MIRA_ID, name: 'Mira' })], LEAD_ID],
+    ["names a cast row that isn't a character", [locationRow()], LOCATION_ID],
+  ])('throws before any write when the lead %s', async (_, cast, leadId) => {
+    const { db, ctx } = await setup()
+
+    await expect(
+      createStoryWithBranch(
+        {
+          title: 'No such lead',
+          definition: makeDefinition(),
+          settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+          openingContent: 'x',
+          openingMetadata: metadata,
+          cast,
+          leadId,
+          embed: { config: LOCAL_CONFIG, exec: async () => {} },
+        },
+        ctx,
+        6300,
+      ),
+    ).rejects.toThrow('leadId requires a matching cast character')
+
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(branches)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
   })
 })

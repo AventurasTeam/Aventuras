@@ -10,15 +10,17 @@ import {
   type EvalWindow,
 } from '../fixture'
 
+const LEAD = 'char_tobin'
+
 // Adventure mode: second-person narration of the lead, Tobin, and first-person actions. Pell shares
 // the scene without a word in the prose, so nothing but knowing the lead tells "you" from Pell.
 export const ambush: EvalWindow = {
   name: 'ambush',
   about: 'a fight across two turns, narrated in the second person',
-  lead: 'char_tobin',
+  lead: LEAD,
   entities: [
     character('char_pell', 'Pell', { description: 'A drover hired for the salt road.' }),
-    character('char_tobin', 'Tobin Ash', { description: 'A salt carter out of Ostmark.' }),
+    character(LEAD, 'Tobin Ash', { description: 'A salt carter out of Ostmark.', isLead: 1 }),
     character('char_sefa', 'Sefa', {
       description: 'The salt cart’s guard, a crossbow across her knees.',
     }),
@@ -52,6 +54,7 @@ The scarred man drags himself onto the gravel, one hand pressed to his ribs. "Ha
 When Sefa comes down the bank leading the cart horse, there's an arrow standing in her thigh that you never saw land. She snaps the shaft off short, swears at it, and sits down hard on the cart step, grey to the lips.`,
       ),
     ],
+    LEAD,
   ),
   checks: [
     {

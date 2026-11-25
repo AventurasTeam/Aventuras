@@ -49,7 +49,6 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
 
 const DEFINITION: StoryDefinition = {
   mode: 'adventure',
-  leadEntityId: 'ent-lead',
   narration: 'third',
   genre: { label: 'Noir', promptBody: 'Rain, debt, and bad options.' },
   tone: { label: 'Bleak', promptBody: 'Nobody gets a clean win.' },
@@ -449,7 +448,7 @@ export const TypedCollisionBlocksSave: Story = {
 export const ComposerModesGatedInCreativeMode: Story = {
   args: {
     settings: settings({ composerModesEnabled: true }),
-    definition: { ...DEFINITION, mode: 'creative', leadEntityId: null },
+    definition: { ...DEFINITION, mode: 'creative' },
     onCommit: fn(async () => {}),
   },
   play: async () => {

@@ -27,7 +27,6 @@ const STORY: OpenStory = {
   branchId: 'branch-1',
   definition: storyDefinitionSchema.parse({
     mode: 'adventure',
-    leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
     narration: 'first',
     genre: { label: 'Fantasy', promptBody: 'high fantasy' },
     tone: { label: 'Wry', promptBody: 'wry' },

@@ -46,7 +46,7 @@ import {
   happeningsStore,
   threadsStore,
 } from '@/lib/stores'
-import { resolveLead } from '@/lib/world'
+import { resolveLeadLogged } from '@/lib/world'
 
 import { buildClassifierContext } from './classifier-context'
 import { classifierEmbedder } from './description-embedder'
@@ -190,7 +190,7 @@ export async function* periodicClassifierPhase(
   // The stored pairs a listed happening's awareness skips (plan.ts → knownAwareness).
   const awareness = [...happeningAwarenessStore.getAwareness(ctx.branchId).values()]
   const leadId =
-    resolveLead(open.definition.leadEntityId, entitiesStore.getEntities(ctx.branchId), ctx.branchId)
+    resolveLeadLogged(entitiesStore.getEntities(ctx.branchId), ctx.branchId, 'periodic-classifier')
       ?.id ?? null
   const cfg = appSettingsStore.getAppSettings()
   const status = await readStatus(ctx)

@@ -147,9 +147,10 @@ export { resetStorySettings } from './stories/reset-settings'
 export { seedHeroFork } from './stories/seed-hero-fork'
 export {
   LEAD_REJECTION,
-  setStoryLead,
+  setBranchLead,
+  unsetBranchLead,
   type LeadRejectionCode,
-  type SetStoryLeadResult,
+  type SetLeadResult,
 } from './stories/set-lead'
 export {
   showBranch,
@@ -212,6 +213,7 @@ export {
 } from './story-entries/scene-fields'
 export { updateEntryWorldTime, type UpdateWorldTimeResult } from './story-entries/world-time'
 export { refreshSuggestions } from './suggestions/refresh-suggestions'
+export { LEAD_MISSING } from './refusal-codes'
 export {
   regenerateTurn,
   type RegenerateRejectionCode,

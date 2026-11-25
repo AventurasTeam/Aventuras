@@ -86,7 +86,7 @@ export function buildClassifierContext(args: {
   threads: readonly Thread[]
   /** stories.settings.classifierMentionedPlaces, read once when the pass builds its prompt. */
   mentionedPlaces: boolean
-  /** The story's lead on this branch (resolveLead), or null. */
+  /** The branch's lead (resolveLeadLogged), or null. */
   leadId: string | null
   /** The story's mode, which decides how the prompt reads a user's turn. */
   mode: StoryMode

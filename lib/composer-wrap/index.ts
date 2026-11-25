@@ -27,11 +27,6 @@ function wrapSubject(pov: ComposerWrapPov, leadName: string | null): string | nu
   return pov === 'first' ? 'I' : leadName
 }
 
-/** The first-person wrap says "I" and needs no lead; any other wrap names the lead. */
-export function wrapHasSubject(pov: ComposerWrapPov, leadName: string | null): boolean {
-  return wrapSubject(pov, leadName) != null
-}
-
 export function wrapComposerText(rawText: string, opts: WrapOptions): string {
   const { mode, pov, leadName } = opts
   const subject = wrapSubject(pov, leadName)

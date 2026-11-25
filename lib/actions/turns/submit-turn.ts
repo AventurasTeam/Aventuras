@@ -19,10 +19,12 @@ import {
 } from '@/lib/pipeline'
 import { generationStore, isBranchHeld, RERUN_HELD, type DeferredWorkKind } from '@/lib/stores'
 
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, settleUserWrites } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
+import { LEAD_MISSING } from '../refusal-codes'
 import type { DbCtx } from '../types'
 import { withBranchQueue, withPendingTurn } from './branch-queue'
+import { turnLeadOf } from './turn-lead'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
 
@@ -62,6 +64,12 @@ const HELD_REJECTION = { outcome: 'rejected', blockedBy: CLASSIFIER_HELD, conver
 const RERUN_HELD_REJECTION = {
   outcome: 'rejected',
   blockedBy: RERUN_HELD,
+  converged: true,
+} as const
+
+const LEAD_MISSING_REJECTION = {
+  outcome: 'rejected',
+  blockedBy: LEAD_MISSING,
   converged: true,
 } as const
 
@@ -118,6 +126,12 @@ export async function submitTurn(
         // Before the user_action's write: its turn's run would be refused, and its reversal could
         // fail on the held branch too.
         if (isBranchHeld(generationStore.getTxState(), ids.branchId)) return RERUN_HELD_REJECTION
+        // The mark keeps new user writes out; waiting first lets a dispatched one land, so no write
+        // moves the flag between the lead read below, the stamp and the run's own read.
+        await settleUserWrites()
+        // Before the owed work, which a turn this branch can't take would run for nothing.
+        const turnLead = await turnLeadOf(ids, ctx)
+        if (turnLead.missing) return LEAD_MISSING_REJECTION
         // Under the turn's mark, so no reversal interrupts Send's own work. Only a chain that
         // committed lets the turn start: a cancel cancels the Send, a failure or refusal fails it.
         const owed = await owedWorkAtSend(ids.branchId, ctx)
@@ -154,7 +168,10 @@ export async function submitTurn(
         const position = (tail?.position ?? 0) + 1
         const entryId = generateId('entry')
         const createdAt = Date.now()
-        const metadata: EntryMetadata = inheritedEntryMetadata(sceneTail?.metadata)
+        const metadata: EntryMetadata = {
+          ...inheritedEntryMetadata(sceneTail?.metadata),
+          ...(turnLead.lead != null ? { leadId: turnLead.lead.id } : {}),
+        }
 
         const result = await applyDeltaAction(
           {

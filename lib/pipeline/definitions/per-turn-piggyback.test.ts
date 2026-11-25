@@ -46,7 +46,6 @@ const SECTIONED = { sections: { halves: { system: expect.anything(), user: expec
 
 const definition = {
   mode: 'adventure' as const,
-  leadEntityId: null,
   narration: 'first' as const,
   genre: { label: 'Fantasy', promptBody: '' },
   tone: { label: 'Wry', promptBody: '' },
@@ -2877,6 +2876,7 @@ describe('per-turn-piggyback', () => {
         keywords: [],
         priority: 0,
         embeddingStale: 0,
+        isLead: 0,
         createdAt: 1,
         updatedAt: 1,
         ...row,

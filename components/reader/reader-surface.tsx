@@ -52,6 +52,7 @@ import type {
   ReaderSurfaceProps,
 } from './reader-document-types'
 import { SLICE_CAP } from './reader-slice'
+import { retryStartsTurn } from './retry-starts-turn'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
 import type { ResolvedEntity } from './scene-editing'
@@ -165,6 +166,8 @@ type ReaderRowProps = {
   editDisabled: boolean
   reversalDisabled: boolean
   disabledReason?: string
+  /** The branch can't start a turn: this row's ↻, Save & regenerate and Retry wait on it. */
+  turnStartReason?: string
   /** Another entry's editor is open: this row's actions wait on it. */
   held: boolean
   systemFixLabel?: string
@@ -216,6 +219,7 @@ const ReaderRow = memo(function ReaderRow({
   editDisabled,
   reversalDisabled,
   disabledReason,
+  turnStartReason,
   held,
   systemFixLabel,
   cutOffFixLabel,
@@ -289,6 +293,7 @@ const ReaderRow = memo(function ReaderRow({
       disabledReason={disabledReason}
       editDisabled={editDisabled}
       reversalDisabled={reversalDisabled}
+      turnStartReason={turnStartReason}
       held={held}
       heldReason={held ? t('reader:editFocus.held') : undefined}
       editing={editing}
@@ -394,6 +399,7 @@ export function ReaderSurface({
     editGate,
     gateReason,
     stampedReversalsHeld = false,
+    turnStartReason,
     jumpButtonEnabled,
     systemFixLabel,
     cutOffFixLabel,
@@ -1330,6 +1336,11 @@ export function ReaderSurface({
               reversalHeld: stampedReversalsHeld && row.chapterId != null,
             })
             const chapterBreak = chapterBreaks[row.id]
+            // One Retry serves every system entry; only a turn failure's starts a turn.
+            const rowTurnStartReason =
+              row.kind === 'system' && !retryStartsTurn(row.metadata?.systemFailure)
+                ? undefined
+                : turnStartReason
             return (
               <Fragment key={row.id}>
                 <div
@@ -1347,6 +1358,7 @@ export function ReaderSurface({
                     editDisabled={flags.editDisabled}
                     reversalDisabled={flags.reversalDisabled}
                     disabledReason={gateReason}
+                    turnStartReason={rowTurnStartReason}
                     held={editingId != null && editingId !== row.id}
                     systemFixLabel={systemFixLabel}
                     cutOffFixLabel={cutOffFixLabel}
