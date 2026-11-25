@@ -8,7 +8,8 @@ costs. The rules for writing a request are in
 
 Remote HTTP from the WebView goes through `@tauri-apps/plugin-http`: its `fetch` runs the request
 in Rust with reqwest and hands the response back over IPC. The WebView's own `window.fetch` is not
-used for remote hosts.
+used for remote hosts. One exception remains: the OpenAI-compatible TTS requests in `TTSService.ts`
+(the voice list and the speech POST) still call the WebView's `fetch`.
 
 The endpoints are whatever the user configures: hosted APIs, and LLM, image and TTS servers on the
 LAN, often plain `http://` to a bare IP address. The WebView's `fetch` would break a share of them:
@@ -127,18 +128,17 @@ as sent (long base64 scrubbed), a file as its name, type and size, a repeated ke
 
 Bodies are read with `readLoggedBody`, which never throws: a body that fails partway is logged with
 its status, the reason, and the text that did arrive (`received`). The entry's error says how far
-it got: `(headers received, no body yet)` or `(N bytes received)`. The poll transport reads the
-same way.
+it got: `(headers received, no body yet)` or `(N bytes received)`. The poll transport
+(`createPollSdkFetch`) reads the same way, keeping the partial text as the entry's `body`.
 
 The AI SDK transports are the same dispatcher with Gemini safety metadata and stream aggregation
 (`sdk/providers/debugLog.ts`, `streamLog.ts`). A stream is parsed as SSE and summarized as the one
 body it would have been without streaming, by format: Anthropic Messages, OpenAI Responses, Chat
 Completions (and its many compatible providers) and Gemini; any other format is the list of its
 payloads, and a body with no SSE events is logged as text. `stream` records the format, the number
-of events and whether the format's final event (`message_stop`, `response.completed`, `[DONE]` or a
-finish reason, a terminal Responses event) arrived. A stream cut off before it is logged with what
-had arrived, `complete: false`, the last payload as `lastEvent`, and the error: the read failure,
-else an error event the stream carried, else `stream ended before its final event`. Every read is of
+of events and whether the format's final event arrived; a stream cut off before it is logged with
+what had arrived, `complete: false` and the last payload as `lastEvent` (`logSummary` in
+`streamLog.ts` picks the error). Every read is of
 a clone, taken only while debug mode is on. A reply the caller will cancel (a redirect under
 `followRedirects: false`, an `allowStatuses` status) is logged by status alone, because a live clone
 would keep the plugin's body open on the Rust side.
@@ -146,7 +146,7 @@ would keep the plugin's body open on the Rust side.
 The log viewer's readable view (`debug.readableView`) renders escaped newlines as line breaks and
 expands a string value that holds JSON (a structured-output reply's text) into the value it holds;
 an entry with such a string gets a "JSON text" badge either way. An entry over the display limit is
-trimmed value by value, with `… N more items` / `… [N more chars]` markers, so the text stays valid
+trimmed value by value, with `… N more items` / `N more keys` / `… [N more chars]` markers, so the text stays valid
 JSON; the readable view is for reading, not parsing. Export and the store hold the raw entries.
 
 Entries are written to `stores/debugLog.ts`, a plain module with no runes or Tauri imports, so
