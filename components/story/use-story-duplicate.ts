@@ -52,7 +52,7 @@ function refusedState(storyId: string, code: DuplicateRefusalCode): DuplicateDia
 const isCopying = (dialog: StoryDuplicateDialogModel | null): boolean =>
   dialog?.state.kind === 'copying'
 
-/** story-list.md → Duplicate a story: reads branches, checks the copy's, copies, calls `onDone`. */
+/** story-list.md → Duplicate a story. */
 export function useStoryDuplicate({
   focused,
   blocked,

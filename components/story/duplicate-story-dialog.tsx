@@ -96,7 +96,7 @@ export function DuplicateStoryDialog({
   onBranchChange,
   onDuplicate,
 }: DuplicateStoryDialogProps): ReactElement {
-  // react-hook-form mutates formState in place; compiled memos keyed on it would go stale.
+  // react-hook-form 7 keeps method references as values change, so compiled memos can go stale.
   'use no memo'
   // Read once: the host keys the dialog per open with the title known, so nothing resets the form.
   const { control, handleSubmit } = useForm<DuplicateForm>({
