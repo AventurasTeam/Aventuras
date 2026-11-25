@@ -23,8 +23,8 @@ export type UndoDescription =
   | { kind: 'close'; seen: false; chapterId: string }
   | { kind: 'rerun'; seen: false; chapterId: string }
   | { kind: 'keptClose'; seen: false; entryId: string | null }
-  | { kind: 'leadSet'; seen: false; row: UndoRowRef }
-  | { kind: 'leadUnset'; seen: false; row: UndoRowRef }
+  | { kind: 'leadSet'; seen: false; row: UndoRowRef & { table: 'entities' } }
+  | { kind: 'leadUnset'; seen: false; row: UndoRowRef & { table: 'entities' } }
   | { kind: 'row'; seen: false; op: UndoGroupDelta['op']; row: UndoRowRef }
   | { kind: 'rows'; seen: false; first: UndoRowRef; more: number }
   | { kind: 'latest'; seen: false }
@@ -101,7 +101,11 @@ function leadDescription(deltas: readonly UndoGroupDelta[]): UndoDescription | n
   const set = flagWrites.find((d) => d.undoPayload?.[LEAD_FLAG] === 0)
   if (set != null)
     return { kind: 'leadSet', seen: false, row: { table: 'entities', id: set.targetId } }
-  return { kind: 'leadUnset', seen: false, row: rowsWritten(flagWrites)[0] }
+  return {
+    kind: 'leadUnset',
+    seen: false,
+    row: { table: 'entities', id: rowsWritten(flagWrites)[0].id },
+  }
 }
 
 function userGroupDescription(deltas: readonly UndoGroupDelta[]): UndoDescription {
