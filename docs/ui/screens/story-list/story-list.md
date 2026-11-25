@@ -289,7 +289,8 @@ it copies is settled in
   backdrop cancel.
 
 **Refused.** The dialog checks on open whether the story can be
-copied: a pending embedder change, a branch being copied with an
+copied, and again when the Branch changes, since some refusals judge
+the branches it copies: a pending embedder change, a branch being copied with an
 interrupted update the app hasn't recovered, or a run still going. A refusal disables `Duplicate`
 and shows its reason as a line above the buttons. The action checks
 again when it runs, and a refusal there shows the same line.

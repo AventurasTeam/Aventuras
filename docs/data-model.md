@@ -688,7 +688,10 @@ records go with it: `generationStore`'s `deferred`, `pendingClose`,
 `pendingRerun` and `heldBranches`, and its redo stack. The delete
 refuses while the generation gate is closed, on any branch, and while
 an embedder swap is pending on the story, since the swap embeds across
-the story's branches and would write vectors for one that's gone. A
+the story's branches and would write vectors for one that's gone. Its
+batch fails, writing nothing, when the story's `current_branch_id`
+names the branch as it commits, so a switch landing after the delete's
+checks can't leave the pointer on a deleted branch. A
 held branch can be deleted, whether an unrecovered orphan holds it
 (`classifier_status.state` is `'running'`) or a re-run's failed abort
 does (`heldBranches`): the orphan's deltas, journal and run row go with
@@ -1691,8 +1694,11 @@ children, level by level, `created_at` within one), then an
 `UPDATE stories SET current_branch_id` that points the copy at its current
 branch, then each copied branch's tables, its `*_vec` after them. A source that
 vanished before the batch ran fails it, as does a full duplicate whose copied
-branches all did. A full duplicate's branches share the batch, so a failure
-writes nothing. A fork holds the parent's exclusive write lock because it
+branches all did, and so does a refusal stored after the check: a draft, a
+stored swap marker, or an unfinished run or a `running` (or unreadable)
+`classifier_status` on a copied branch. So the refusals hold at commit without
+a lock. A full duplicate's branches share the batch, so a failure writes
+nothing. A fork holds the parent's exclusive write lock because it
 plans its rewind outside its transaction; a duplicate plans nothing, and one
 batch reads one consistent snapshot of the source. The copy needs the fork's
 composite `deltas` key and the same `vec0` self-insert, or its fallback.
