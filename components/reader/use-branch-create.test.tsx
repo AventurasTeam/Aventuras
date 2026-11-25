@@ -478,7 +478,7 @@ describe('useBranchCreate — Create', () => {
     await act(async () => body.resolve())
   })
 
-  it('a throw past its own catches before the commit ends pending with the failed line, ends the hold and logs', async () => {
+  it('a throw past its own catches before the commit ends pending with the failed line, ends the hold and logs; a retry forks again', async () => {
     actions.fork.mockResolvedValue({ status: 'rejected', code: 'lock-timeout', reason: 'x' })
     logWarn.mockImplementation(() => {
       throw new Error('log broke')
@@ -494,9 +494,12 @@ describe('useBranchCreate — Create', () => {
       entryId: ENTRY,
       error: 'log broke',
     })
+    press(hook, 'Side quest')
+    await settle()
+    expect(actions.fork).toHaveBeenCalledTimes(2)
   })
 
-  it('a throw past its own catches after the commit closes the modal and ends the hold', async () => {
+  it('a throw past its own catches after the commit closes the modal and ends the hold; a reopened Create forks again', async () => {
     actions.fork.mockImplementation(async () => {
       openOn('br_other')
       return { status: 'ok', branchId: CHILD }
@@ -517,6 +520,9 @@ describe('useBranchCreate — Create', () => {
     })
     await openModal(hook)
     expect(modal(hook).phase).toStrictEqual(idle(null))
+    press(hook, 'Side quest')
+    await settle()
+    expect(actions.fork).toHaveBeenCalledTimes(2)
   })
 
   it("on a tail that can't navigate, refreshes the list, closes the modal and warns", async () => {
