@@ -770,3 +770,15 @@ slice-planning gate forces its resolution before that slice is planned.
   until then. Reword the comment to name the missing capability and its
   milestone, or route the orphan check to M9.3's slice. Found during
   Slice 6.6.
+
+- **The unfinished-run reads scan `pipeline_runs` whole.** The table
+  has no index on `branch_id` (`lib/db/system/system.table.ts`), and
+  nothing prunes finished rows short of a story delete, so it grows with
+  every turn. `readUnfinishedRuns` (`lib/actions/delta/unfinished-runs.ts`)
+  scans it per branch, the duplicate's check runs it twice per copied
+  branch, and the duplicate's in-batch guard scans it once more. On a
+  synthetic table the scan took 0.24 ms at 10k rows and 3.8 ms at 100k,
+  so it passes 1 ms around 25–30k rows. A partial index on
+  `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
+  read an index probe; it's a schema change, so it waits for an owner.
+  Found during Slice 6.6.
