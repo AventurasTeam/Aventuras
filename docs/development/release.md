@@ -15,18 +15,18 @@ Managed by [lefthook](https://github.com/evilmartians/lefthook) (`lefthook.yml`)
 - **pre-push**: runs `lint:ts` (ESLint), `check` (type-checking) and `lint:rust` (`cargo fmt
   --check` and `cargo clippy -D warnings`) via `scripts/pm.js`. Each runs only when the commits
   being pushed touch a file its `glob` matches, and then runs over the whole project, not just
-  those files.
+  those files. `docs:check` has no `glob` and runs on every push.
 
 `lint` runs `lint:ts` and `lint:rust`; `lint:fix` runs their `:fix` counterparts. Hooks, CI and
 `scripts/release.js` call the per-language scripts, so a JS-only path never needs the Rust
 toolchain and a release never rewrites Rust code.
 
-`scripts/pm.js` picks the package manager at run time: `aube` when it did the install
-(`node_modules/.aube-state` exists) and is still on `PATH`, `npm` otherwise. It also drives
-Tauri's `beforeDevCommand`/`beforeBuildCommand`, the `format`/`lint:ts:fix` steps in
-`scripts/release.js`, and the `lint`/`lint:fix` aggregates, so those work unchanged for npm users
-and route through aube wherever aube did the install. `scripts/release.js` always bumps the
-version with npm directly, so when it hands `format`/`lint:ts:fix` to aube it adds
+`scripts/pm.js` picks the package manager at run time (`detectPackageManager` in
+`scripts/package-manager.js`): `aube` when it did the install (`node_modules/.aube-state` exists)
+and is still on `PATH`, `npm` otherwise. `pm.js` drives Tauri's `beforeDevCommand`/`beforeBuildCommand`
+and the `lint`/`lint:fix` aggregates, and `scripts/release.js` uses the same detection for its
+`format`/`lint:ts:fix` steps, so those work unchanged for npm users and route through aube wherever
+aube did the install. `scripts/release.js` always bumps the version with npm directly, so when it hands `format`/`lint:ts:fix` to aube it adds
 `--no-install --frozen-lockfile`, keeping aube from re-resolving the `package-lock.json` npm just
 wrote.
 
@@ -42,6 +42,8 @@ GitHub Actions workflows in `.github/workflows/`:
   Clippy runs on a pinned toolchain, so a new stable's lints cannot fail an unrelated PR. The
   version appears in both `rust-lint.yml` and the `lint:rust`/`lint:rust:fix` scripts in
   `package.json`; bump them together and fix whatever the new lints report. Builds and rustfmt use latest stable.
+- **`docs-check.yml`** - runs `docs:check` on every pull request targeting `master`, with no path
+  filter.
 - **`release.yml`** - triggered by pushing a stable version tag (`vX.Y.Z`). Leaves a draft GitHub
   release with auto-updater metadata; publishing it by hand is the step that ships it.
 - **`pre-release.yml`** ("Pre-release") - triggered by pushing a pre-release tag (`vX.Y.Z-pre.N`).
@@ -74,14 +76,14 @@ themselves. `build-android.yml` depends on `create-release` and looks the releas
 
 **Nothing ever uploads to an already-published release.** `create-release` starts with
 `.github/actions/release-guard`, which refuses the run when the tag's release is already
-published, or when a pushed tag doesn't match the version in `tauri.conf.json`. `build-desktop.yml`
-and `build-android.yml` each run the same guard again before their own upload step, because
+published, or when a pushed tag doesn't match the version in `tauri.conf.json`. `build-desktop.yml`,
+`build-android.yml` and `build-ios.yml` each run the same guard again before their own upload step, because
 "Re-run failed jobs" skips `create-release`. The guard needs a current `gh`; the Linux desktop leg
 installs one from GitHub's own apt repository.
 
 **Only a publish step or a human makes a release public.** Both workflows create their release as
-a **draft**, and every upload step (`build-desktop.yml`'s `releaseDraft`, `build-android.yml`'s
-`draft`) sets `draft: true`, regardless of `prerelease`. In `pre-release.yml`, a `publish` job gated
+a **draft**, and every upload step (`build-desktop.yml`'s `releaseDraft`, `build-android.yml`'s and
+`build-ios.yml`'s `draft`) sets `draft: true`, regardless of `prerelease`. In `pre-release.yml`, a `publish` job gated
 on the desktop and Android builds turns the draft into a pre-release with
 `gh release edit --draft=false`; iOS is best-effort, so its failure leaves the `.ipa` missing
 without blocking the other platforms. A stable release is published by hand (see
@@ -134,7 +136,7 @@ jobs leave behind on `master` are the ones a release restores. It skips the push
 already ignores the app's own version, so that push can only rebuild for nothing.
 
 - **Rust** (`swatinem/rust-cache`) goes through the `.github/actions/rust-cache` composite action in
-  both build workflows and `rust-lint.yml`'s Clippy job, the one place that sets
+  all three build workflows and `rust-lint.yml`'s Clippy job, the one place that sets
   `save-if: ${{ github.ref == 'refs/heads/master' }}`. Only `ci.yml` (or a run of
   `release.yml`/`pre-release.yml` if one is ever dispatched from `master` directly) writes the build
   caches, and Clippy's `master` push run saves its own while PRs only restore, so a PR's ~600 MiB
@@ -144,7 +146,7 @@ already ignores the app's own version, so that push can only rebuild for nothing
   [ci-caching.md](ci-caching.md#rust-cache-growth).
 - **Gradle** is cached by `setup-gradle`'s basic provider, which saves only from `master`. See
   [ci-caching.md](ci-caching.md#gradle).
-- **npm**, across all three CI workflows, uses the `.github/actions/npm-install` composite action
+- **npm**, in every workflow that installs dependencies, uses the `.github/actions/npm-install` composite action
   instead of `actions/setup-node`'s built-in cache. The action keys on
   `scripts/ci/lockfile-hash.js`, which hashes the lockfile with the version fields removed, so a
   release's version bump keeps the cache ([why](release-evidence.md#npm-cache)). It falls back to
@@ -169,7 +171,7 @@ already off on the runner image
 ([evidence](release-evidence.md#windows-dev-drive-and-defender)).
 
 `build-android.yml` builds `--apk` only and targets `aarch64`, `armv7` and `x86_64`
-([why](release-evidence.md#android-builds)). Both build workflows pass
+([why](release-evidence.md#android-builds)). All three build workflows pass
 `--config src-tauri/tauri.release.conf.json`, which sets `build.features` to `[]` for that build:
 `tauri.conf.json`'s own `features: ["devtools"]` is only meant for `tauri dev` (the plugin is
 registered under `debug_assertions` in `src-tauri/src/lib.rs`).
@@ -182,11 +184,11 @@ compression setting in Tauri's config except NSIS, whose default is already `lzm
 ### Build version
 
 A non-publishing run (`ci.yml`) versions its build `<base>-sha<short-sha>`, so each commit's bundle
-filenames and in-app "About" text are distinct. Both build workflows call
+filenames and in-app "About" text are distinct. All three build workflows call
 `.github/actions/build-version`, which on a non-publishing run writes `ci-version.conf.json` (a
 `{"version": "<base>-sha<short-sha>"}` override, gitignored, never committed) and emits the
 `--config` list that carries it to `tauri build`/`tauri android build`, merged on top of
-`tauri.release.conf.json`. Both workflows take that list from the action's `config-args` output, so
+`tauri.release.conf.json`. Each workflow takes that list from the action's `config-args` output, so
 the rule lives in one place. `tauri-action` re-resolves the same `--config` list itself to name
 workflow artifacts and set its `appVersion` output, so the desktop and Android legs, the bundle
 filenames, and `getVersion()` inside the running app all agree on one string.
@@ -296,8 +298,9 @@ On Windows, Defender's real-time scanning can grab a freshly written archive in
 `scripts\defender-build-exclusion.ps1 -Action Add` (or `-Action Remove`), run from an administrator
 PowerShell, excludes that checkout's build output only; sources, `node_modules` and the cargo
 registry stay scanned. Each worktree has its own `target`, so run the copy in each. `-Action Scan`
-lists every exclusion that is a `src-tauri\target` or has "Aventuras" in its path, and whether its
-checkout is a live worktree of this repository, another checkout, or gone with the rule left behind.
+lists every exclusion that is a `src-tauri\target` or has "Aventuras" in its path, and the state of
+its checkout: a live worktree of this repository, another checkout, gone with the rule left behind, or
+not a checkout at all.
 
 ### Building iOS
 
@@ -341,8 +344,9 @@ Mechanics worth knowing:
   rely on the CLI's own `CODE_SIGNING_*` defaults or xcodebuild runner args for this:
   neither reaches the signing validation inside `xcodebuild archive` — the patch is what
   disables signing, and it is restored on exit.
-- The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive`, and the app
-  bundle at `Products/Applications/Aventuras.app` inside it.
+- The archive lands at `src-tauri/gen/apple/build/<target>_iOS.xcarchive` or, sometimes, in Xcode's
+  DerivedData; the script takes the newest one written during the run, and the `.app` under its
+  `Products/Applications/`.
 - The app icon comes from **`src-tauri/icons/ios/`**. `tauri ios init` fills
   `gen/apple/Assets.xcassets/AppIcon.appiconset` with Tauri's placeholder logo, so
   `scripts/sync-ios-icons.sh` copies the Aventuras set over it; the build script and the
