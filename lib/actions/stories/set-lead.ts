@@ -72,7 +72,7 @@ async function flaggedIds(branchId: string, ctx: DbCtx): Promise<string[]> {
     .where(and(eq(entities.branchId, branchId), eq(entities.isLead, 1)))
     .orderBy(asc(entities.createdAt), asc(entities.id))
   const ids = rows.map((row) => row.id)
-  // C10: logged here too, as the reader refuses a turn on a double before the turn's read logs it.
+  // C10: logged here too: a story that needs a lead refuses the turn whose read would log it.
   if (ids.length > 1) logger.error('action_layer.branch_lead_double', { branchId, ids })
   return ids
 }
