@@ -408,7 +408,7 @@ function ReaderComposerBody({
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
   // principles.md → Composer mode: a branch without the lead it needs takes no turn, whatever the
-  // mode, the narration or the wrap.
+  // composer mode or the wrap.
   const leadMissing =
     openForBranch != null &&
     needsLead(openForBranch.definition.mode, openForBranch.definition.narration) &&
