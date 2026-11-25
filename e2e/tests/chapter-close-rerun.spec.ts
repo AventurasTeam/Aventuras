@@ -4,7 +4,9 @@ import {
   closeReportAction,
   closeRunsOf,
   committedRerunAfter,
+  expandChapterCard,
   LORE_TOOLS,
+  loreCreateActions,
   scriptRerunLore,
   UNASKED_LANES,
 } from '../flows/close-rerun'
@@ -135,22 +137,9 @@ test.describe.serial('re-running a close', () => {
       title,
     ])
 
-  const loreCreateActions = (title: string) =>
-    queryApp(
-      page(),
-      `SELECT d.action_id FROM deltas d
-         JOIN lore l ON l.branch_id = d.branch_id AND l.id = d.target_id
-        WHERE d.branch_id = ? AND l.title = ? AND d.op = 'create'`,
-      [branchId, title],
-    )
-
   const scriptLore = (lore: { title: string; body: string }) => scriptRerunLore(liveMock(), lore)
 
-  async function expandCard(): Promise<void> {
-    const head = chapterTimeline.cardHead(page(), chapter.id)
-    if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
-    await expect(head).toHaveAttribute('aria-expanded', 'true')
-  }
+  const expandCard = () => expandChapterCard(page(), chapter.id)
 
   const committedRerun = (before: number) =>
     committedRerunAfter(page(), HERO_STORY, before, CLOSE_ACTION)
@@ -161,9 +150,10 @@ test.describe.serial('re-running a close', () => {
     requestsBefore: number,
   ): Promise<void> {
     expect(await reportAction(), "the report is the re-run's").toBe(actionId)
-    expect(await loreCreateActions(lore.title), "the scripted write is the re-run's").toEqual([
-      [actionId],
-    ])
+    expect(
+      await loreCreateActions(page(), branchId, lore.title),
+      "the scripted write is the re-run's",
+    ).toEqual([[actionId]])
     expect(await vorneTraits(), "the reversal took the close's change").toEqual(TRAITS_BEFORE_CLOSE)
     expect(await groupOf(CLOSE_ACTION), 'the close keeps its row, stamps and report').toEqual(
       closeGroup.filter(([, , table]) => table === 'chapters' || table === 'story_entries'),

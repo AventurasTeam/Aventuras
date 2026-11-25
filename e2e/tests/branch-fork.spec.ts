@@ -4,7 +4,9 @@ import {
   closeReportAction,
   closeRunsOf,
   committedRerunAfter,
+  expandChapterCard,
   LORE_TOOLS,
+  loreCreateActions,
   scriptRerunLore,
   UNASKED_LANES,
 } from '../flows/close-rerun'
@@ -154,15 +156,6 @@ async function idsPastEnd(page: Page, branchId: string, endPosition: number): Pr
   )
   return rows.map(([id]) => id)
 }
-
-const loreCreateActions = (page: Page, branchId: string, title: string): Promise<unknown[][]> =>
-  queryApp(
-    page,
-    `SELECT d.action_id FROM deltas d
-       JOIN lore l ON l.branch_id = d.branch_id AND l.id = d.target_id
-      WHERE d.branch_id = ? AND l.title = ? AND d.op = 'create'`,
-    [branchId, title],
-  )
 
 // Serial, one launch: the second test opens the story the first left on the new branch. A retry
 // reruns the group from its first test, in a fresh launch.
@@ -355,9 +348,7 @@ test.describe('Re-run on new branch — from the Chapter Timeline', () => {
 
     scriptRerunLore(llm, FORK_LORE)
     await goToChapterTimeline(page)
-    const head = chapterTimeline.cardHead(page, chapter.id)
-    if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
-    await expect(head).toHaveAttribute('aria-expanded', 'true')
+    await expandChapterCard(page, chapter.id)
     await expect(chapterTimeline.rerunClose(page, chapter.id)).toBeEnabled()
     await chapterTimeline.rerunClose(page, chapter.id).click()
     const confirm = rerunConfirm(page)

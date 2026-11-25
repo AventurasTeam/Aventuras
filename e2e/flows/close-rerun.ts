@@ -2,6 +2,7 @@ import { expect, type Page } from '@playwright/test'
 
 import { queryApp } from '../harness/db'
 import type { MockLlm } from '../harness/mock-llm'
+import { chapterTimeline } from '../locators/chapter-timeline'
 
 /** memory/chapter-close.md → Run order: Lore's tools key its lane; every other lane ends its task. */
 export const LORE_TOOLS = ['read_row', 'create_lore', 'update_lore'] as const
@@ -63,4 +64,26 @@ export async function closeReportAction(
     [branchId, chapterId],
   )
   return rows[0]?.[0]
+}
+
+/** The actions whose deltas created the lore titled `title` on the branch. */
+export function loreCreateActions(
+  page: Page,
+  branchId: string,
+  title: string,
+): Promise<unknown[][]> {
+  return queryApp(
+    page,
+    `SELECT d.action_id FROM deltas d
+       JOIN lore l ON l.branch_id = d.branch_id AND l.id = d.target_id
+      WHERE d.branch_id = ? AND l.title = ? AND d.op = 'create'`,
+    [branchId, title],
+  )
+}
+
+/** Expands the chapter's Timeline card; a click on an already expanded head would collapse it. */
+export async function expandChapterCard(page: Page, chapterId: string): Promise<void> {
+  const head = chapterTimeline.cardHead(page, chapterId)
+  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
+  await expect(head).toHaveAttribute('aria-expanded', 'true')
 }
