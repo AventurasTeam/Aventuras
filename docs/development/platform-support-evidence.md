@@ -6,10 +6,10 @@ source. None of it has been tested on a device at the floor version.
 
 ## What sets the floor
 
-- **Tailwind CSS v4** (installed 4.3.3) depends on Chrome 111 and Safari 16.4
+- **Tailwind CSS v4** (4.3.3 when this was checked) depends on Chrome 111 and Safari 16.4
   ([compatibility](https://tailwindcss.com/docs/compatibility)). The page states the list for v4.0
   and gives none for later 4.x releases.
-- **Vite 8.2** lowers syntax to its default `build.target`, `baseline-widely-available`. Vite 8.2.0
+- **Vite** (8.2 when this was checked) lowers syntax to its default `build.target`, `baseline-widely-available`. Vite 8.2.0
   resolves that to `chrome111`, `edge111`, `firefox114`, `safari16.4` and `ios16.4`
   ([build options](https://vite.dev/config/build-options)). Neither `vite.config.js` nor SvelteKit
   overrides it for the client bundle (SvelteKit sets a target only for SSR).
