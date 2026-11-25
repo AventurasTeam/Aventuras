@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { DeleteBranchResult } from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
@@ -231,6 +231,11 @@ describe('useBranchDeleteConfirm: the delete', () => {
     expect(result.current.returnFocusTo.current).toBe(row)
     act(() => result.current.dismiss())
     expect(result.current.returnFocusTo.current).toBeNull()
+  })
+
+  it('hands the confirm a focus target it can read but not write', () => {
+    const { result } = setup()
+    expectTypeOf(result.current.returnFocusTo).toEqualTypeOf<{ readonly current: unknown }>()
   })
 
   it.each(['missing', 'current'] as const)(

@@ -73,7 +73,7 @@ export function useBranchDeleteConfirm({
   target: BranchDeleteTarget | null
   phase: BranchDeletePhase
   /** Stable; its `.current` names the row only once a delete landed, else null. */
-  returnFocusTo: RefObject<unknown>
+  returnFocusTo: { readonly current: unknown }
   open: (branchId: string, name: string) => Promise<void>
   dismiss: () => void
   confirm: () => Promise<void>
