@@ -15,6 +15,7 @@ const turn = (over: Partial<WindowTurn> = {}): WindowTurn => ({
   content: 'prose',
   sceneEntities: [],
   currentLocationId: null,
+  leadId: undefined,
   ...over,
 })
 
@@ -763,5 +764,121 @@ describe('buildClassifierContext — happenings', () => {
       idMap: new IdBiMap(),
     })
     expect(context.happenings).toEqual([{ id: 'hp1', title: 'The ford ambush' }])
+  })
+})
+
+// architecture.md → System and user halves: a mark on the first turn of each run written under
+// another lead than the turn before it, the first turn compared with the lead the context names.
+describe('buildClassifierContext — lead marks', () => {
+  const AEFRE = 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const BAEL = 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  const GONE = 'char_99999999-9999-9999-9999-999999999999'
+
+  const character = (id: string, name: string) =>
+    ({
+      id,
+      kind: 'character',
+      name,
+      description: null,
+      status: 'active',
+      keywords: [],
+    }) as unknown as Entity
+
+  const stamped = (handle: string, leadId: string | undefined) => turn({ handle, leadId })
+
+  const build = (
+    turns: WindowTurn[],
+    entities: Entity[],
+    leadId: string | null,
+    idMap = new IdBiMap(),
+  ) =>
+    buildClassifierContext({
+      window: { turns } as never,
+      entities,
+      happenings: [],
+      relationships: [],
+      threads: [],
+      mentionedPlaces: false,
+      leadId,
+      mode: 'adventure',
+      idMap,
+    })
+
+  const marksOf = (context: Record<string, unknown>) =>
+    (context.turns as Record<string, unknown>[]).map((t) => t.leadMark)
+
+  // Absent, not null: a never-switched context is key for key what it was.
+  it('marks no turn when every stamp names the lead', () => {
+    const context = build(
+      [stamped('t1', BAEL), stamped('t2', BAEL), stamped('t3', BAEL)],
+      [character(AEFRE, 'Aefre'), character(BAEL, 'Bael')],
+      BAEL,
+    )
+    expect((context.turns as object[]).map((t) => Object.hasOwn(t, 'leadMark'))).toEqual([
+      false,
+      false,
+      false,
+    ])
+  })
+
+  it("marks each run's first turn by the roster's placeholder and its name on one line", () => {
+    const context = build(
+      [stamped('t1', AEFRE), stamped('t2', AEFRE), stamped('t3', BAEL), stamped('t4', BAEL)],
+      [character(AEFRE, 'Aefre'), character(BAEL, 'Bael\n  the Bold')],
+      BAEL,
+    )
+    expect(marksOf(context)).toEqual([
+      { id: 'c1', name: 'Aefre' },
+      undefined,
+      { id: 'c2', name: 'Bael the Bold' },
+      undefined,
+    ])
+    expect(context.lead).toEqual({ id: 'c2', name: 'Bael the Bold' })
+  })
+
+  // The roster walks before the turns, so a mark never renumbers a character.
+  it('numbers a marked character as the roster does, though its turn comes first', () => {
+    const context = build(
+      [stamped('t1', BAEL), stamped('t2', AEFRE)],
+      [character(AEFRE, 'Aefre'), character(BAEL, 'Bael')],
+      AEFRE,
+    )
+    expect(marksOf(context)).toEqual([
+      { id: 'c2', name: 'Bael' },
+      { id: 'c1', name: 'Aefre' },
+    ])
+  })
+
+  it('marks a deleted former lead as gone, allocating no placeholder for its id', () => {
+    const idMap = new IdBiMap()
+    const context = build(
+      [stamped('t1', GONE), stamped('t2', GONE), stamped('t3', BAEL)],
+      [character(BAEL, 'Bael')],
+      BAEL,
+      idMap,
+    )
+    expect(marksOf(context)).toEqual([{ gone: true }, undefined, { id: 'c1', name: 'Bael' }])
+    expect(idMap.getPlaceholderFor(GONE)).toBeUndefined()
+    expect(JSON.stringify(context)).not.toContain(GONE)
+  })
+
+  it('marks an unstamped run as written with no lead', () => {
+    const context = build(
+      [stamped('t1', undefined), stamped('t2', BAEL)],
+      [character(BAEL, 'Bael')],
+      BAEL,
+    )
+    expect(marksOf(context)).toEqual([{ none: true }, { id: 'c1', name: 'Bael' }])
+  })
+
+  // A creative story after an unset: no lead today, its older turns stamped under one.
+  it('walks a branch with no lead from none, marking the first stamped run', () => {
+    const context = build(
+      [stamped('t1', undefined), stamped('t2', AEFRE), stamped('t3', AEFRE)],
+      [character(AEFRE, 'Aefre')],
+      null,
+    )
+    expect(marksOf(context)).toEqual([undefined, { id: 'c1', name: 'Aefre' }, undefined])
+    expect(context.lead).toBeNull()
   })
 })

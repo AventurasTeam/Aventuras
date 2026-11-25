@@ -1,5 +1,6 @@
 import { inheritedEntryMetadata, type StoryEntry } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
+import { leadStampOf } from '@/lib/world'
 
 import { unbracketed } from './substitute'
 
@@ -14,6 +15,8 @@ export type WindowTurn = {
   sceneEntities: readonly string[]
   /** The entry's saved metadata.currentLocationId; null when it has none. */
   currentLocationId: string | null
+  /** The entry's metadata.leadId: the lead it was written under; undefined when unstamped. */
+  leadId: string | undefined
 }
 
 export type ClassifierWindow = {
@@ -61,6 +64,8 @@ export function buildClassifierWindow(args: {
         content: promptProse(e),
         sceneEntities,
         currentLocationId,
+        // Off the row itself: inheritedEntryMetadata leaves the stamp out.
+        leadId: leadStampOf(e),
       }
     })
   // classifier.md → Persistence: a trailing system row stays above the watermark; the reader clears

@@ -417,10 +417,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   classifierContext: [
     {
       name: 'turns',
-      type: '{ handle, kind, content, scene, location }[]',
+      type: '{ handle, kind, content, scene, location, leadMark? }[]',
       category: 'Story',
       description:
-        "Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its entry's `kind` ('user_action' for the user's turn, 'ai_reply' or 'opening'), its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.",
+        "Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its entry's `kind` ('user_action' for the user's turn, 'ai_reply' or 'opening'), its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out. `leadMark` is set only where the lead changes: on the first turn of each run written under another lead than the turn before it, the first turn compared with `lead`. It is `{ id, name }` for a character `entities` lists, by its id; `{ gone: true }` for one no longer on the branch, with no id; or `{ none: true }` for a run written with no lead. Absent on every other turn.",
       required: true,
     },
     {
@@ -484,7 +484,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, name } | null',
       category: 'Entities',
       description:
-        'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the story has no lead, or its lead dangles on this branch.',
+        'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the branch has no lead, or two rows carry the flag.',
       required: false,
     },
     {
