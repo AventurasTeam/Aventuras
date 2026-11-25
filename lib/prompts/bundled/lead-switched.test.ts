@@ -506,3 +506,93 @@ describe('the periodic classifier, switched', () => {
     )
   })
 })
+
+// memory/chapter-close.md → Phase 2: the chapter calls name the lead and the narration in their
+// user half; a mark there names a character with no id, since the calls have no id map.
+describe('the chapter metadata and part calls, switched', () => {
+  type Mark = { name: string } | { gone: true } | { none: true }
+  const entry = (
+    position: number,
+    kind: 'opening' | 'user_action' | 'ai_reply',
+    content: string,
+    leadMark?: Mark,
+  ) => ({ position, kind, content, ...(leadMark === undefined ? {} : { leadMark }) })
+  const context = (
+    entries: readonly ReturnType<typeof entry>[],
+    lead: { name: string } | null = { name: 'Bael' },
+  ) => ({
+    mode: 'adventure',
+    narration: 'first',
+    lead,
+    previousChapterSummary: null,
+    threads: [],
+    entries,
+  })
+  // Aefre's run, then Bael's, Bael the lead: as buildChapterContext emits it.
+  const SWITCHED = [
+    entry(1, 'ai_reply', 'The gate groans open.', { name: 'Aefre' }),
+    entry(2, 'user_action', 'I step into the yard.'),
+    entry(3, 'ai_reply', 'The yard is silent.', { name: 'Bael' }),
+    entry(4, 'user_action', 'I bar the gate behind me.'),
+  ]
+  const LEAD_LINE =
+    'The story\'s lead is Bael. Outside quoted speech, "I" and "you" in the turns are the lead'
+  const CLAUSE = ', except where a turn names another'
+
+  it.each([
+    [TEMPLATE_IDS.chapterMetadata, '# The chapter'],
+    [TEMPLATE_IDS.chapterMetadataPart, '# This part of the chapter'],
+  ] as const)(
+    '%s names each run before its first turn, with no id, and adds the clause',
+    (templateId, heading) => {
+      const prompt = renderTemplate(templateId, context(SWITCHED))
+      expect(prompt.user).toContain(
+        `# The narration\nThe chapter is narrated in the first person.\n${LEAD_LINE}${CLAUSE}.\n\n${heading}\n`,
+      )
+      expect(prompt.user).toMatch(/Aefre[^\n]*\n+The gate groans open\./)
+      expect(prompt.user).toMatch(/Bael[^\n]*\n+The yard is silent\./)
+      expect(prompt.user).not.toMatch(/\bc\d+\b/)
+      expect(prompt.system).not.toContain('Aefre')
+      expect(prompt).toMatchSnapshot()
+    },
+  )
+
+  it('marks no turn and adds no clause in a part with no switch inside it', () => {
+    const { user } = renderTemplate(
+      TEMPLATE_IDS.chapterMetadataPart,
+      context([
+        entry(5, 'ai_reply', 'The yard is silent.'),
+        entry(6, 'user_action', 'I bar the gate behind me.'),
+      ]),
+    )
+    expect(user).toContain(
+      `# The narration\nThe chapter is narrated in the first person.\n${LEAD_LINE}.\n\n# This part of the chapter\n\nThe yard is silent.\n\n<user_turn>\nI bar the gate behind me.\n</user_turn>`,
+    )
+    expect(user).not.toContain(CLAUSE)
+    expect(user).not.toContain('Aefre')
+  })
+
+  it('renders a gone and a none mark with no id, and the clause', () => {
+    const prompt = renderTemplate(
+      TEMPLATE_IDS.chapterMetadata,
+      context([
+        entry(1, 'ai_reply', 'A stranger speaks.', { gone: true }),
+        entry(2, 'user_action', 'I answer him.', { none: true }),
+        entry(3, 'ai_reply', 'The yard is silent.', { name: 'Bael' }),
+      ]),
+    )
+    expect(prompt.user).toContain(`${LEAD_LINE}${CLAUSE}.\n`)
+    expect(prompt.user).not.toMatch(/\bc\d+\b/)
+    expect(prompt).toMatchSnapshot()
+  })
+
+  // A creative story after an unset: the narration still stated, the marks still printed.
+  it('states the narration and no lead line on a branch with no lead', () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.chapterMetadata, context(SWITCHED, null))
+    expect(user).toContain(
+      '# The narration\nThe chapter is narrated in the first person.\n\n# The chapter\n',
+    )
+    expect(user).not.toContain("The story's lead")
+    expect(user).toMatch(/Aefre[^\n]*\n+The gate groans open\./)
+  })
+})

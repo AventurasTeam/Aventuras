@@ -591,7 +591,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead, and the merge after them has none: it reads `partSummaries`. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
+        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead, and the merge after them has none: it reads `partSummaries`. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget. `leadMark` is set only where the lead changes: on the first entry of each run written under another lead than the entry before it, the first entry compared with `lead`. It is `{ name }`, by name with no id since the call has no id map; `{ gone: true }` for a character no longer on the branch; or `{ none: true }` for a run written with no lead. Absent on every other entry. A part's entries are walked on their own.",
       required: true,
     },
     {
@@ -616,6 +616,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       category: 'Story Config',
       description:
         "The story's mode, which decides what a user's turn establishes: an adventure's is the lead's attempt, a creative story's a direction or prose. The merge of a chapter closed in parts has none: it reads `partSummaries`, not turns.",
+      required: true,
+    },
+    {
+      name: 'lead',
+      type: '{ id?, name } | null',
+      category: 'Entities',
+      description:
+        'The branch\'s lead, its name on one line, so the model knows whose "I" and "you" the turns narrate; null when the branch has no lead, or two rows carry the flag. The metadata and part calls carry it by name alone, with no `id`, since they have no id map; a close task\'s render sets `id` to the lead\'s short id (c1, c2…). The merge and boundary selection leave it unset.',
+      required: true,
+    },
+    {
+      name: 'narration',
+      type: "'first' | 'second' | 'third'",
+      category: 'Story Config',
+      description:
+        "The person the story is narrated in (the story definition's `narration`), which the metadata and part calls state beside the lead. The merge, boundary selection and the close tasks leave it unset.",
       required: true,
     },
     {
@@ -917,6 +933,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'startTime',
     'composerWrapPov',
     'mode',
+    'narration',
     'userSettings',
     'suggestionSlots',
     'suggestionCount',

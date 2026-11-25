@@ -26,6 +26,7 @@ const STABLE_SYSTEM_VARIABLES: readonly string[] = [
   'mode',
   'composerWrapPov',
   'lead',
+  'narration',
 ]
 
 // C3: a close task's template holds the chapter or part in its system half, the one per-call read
@@ -74,6 +75,7 @@ const perCallReads = (templateId: TemplateId, half?: TemplateHalf) =>
 const STORY = {
   mode: 'adventure',
   composerWrapPov: 'first',
+  narration: 'second',
   definition: {
     mode: 'adventure',
     narration: 'second',

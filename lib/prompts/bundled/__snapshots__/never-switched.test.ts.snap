@@ -21,6 +21,10 @@ Kael stole the sigil from the couriers’ guild and fled south along the marsh r
 - Deliver the sigil (active)
 - The guild’s hunters (pending)
 
+# The narration
+The chapter is narrated in the second person.
+The story's lead is Kael. Outside quoted speech, "I" and "you" in the turns are the lead.
+
 # The chapter
 
 The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
@@ -52,6 +56,9 @@ The user's turns are marked with <user_turn> tags. Each is a direction or prose.
 
 The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this chapter moves it.",
   "user": "Give this chapter its title, summary, theme and keywords.
+
+# The narration
+The chapter is narrated in the third person.
 
 # The chapter
 
@@ -140,6 +147,10 @@ Kael stole the sigil from the couriers’ guild and fled south along the marsh r
 - Deliver the sigil (active)
 - The guild’s hunters (pending)
 
+# The narration
+The chapter is narrated in the second person.
+The story's lead is Kael. Outside quoted speech, "I" and "you" in the turns are the lead.
+
 # This part of the chapter
 
 The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
@@ -165,6 +176,9 @@ The previous chapter's summary, when given, is there for continuity: don't retel
 
 # Open threads
 - Who drowned the sailor (active)
+
+# The narration
+The chapter is narrated in the third person.
 
 # This part of the chapter
 

@@ -3,9 +3,23 @@ import type { z } from 'zod'
 
 import { modelConfigOf, type PromptHalves, type ResolveModelConfig } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
-import { storyEntries, type DbCtx, type StoryMode, type Thread } from '@/lib/db'
+import {
+  storyEntries,
+  type DbCtx,
+  type StoryDefinition,
+  type StoryMode,
+  type Thread,
+} from '@/lib/db'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, chaptersStore, currentStoryStore, threadsStore } from '@/lib/stores'
+import {
+  appSettingsStore,
+  chaptersStore,
+  currentStoryStore,
+  entitiesStore,
+  threadsStore,
+} from '@/lib/stores'
+import { oneLine } from '@/lib/text'
+import { resolveLeadLogged } from '@/lib/world'
 
 import {
   buildChapterContext,
@@ -71,6 +85,11 @@ export type MetadataCallInputs = {
   threads: readonly Thread[]
   mode: StoryMode
   modelConfig: ResolveModelConfig
+  /** The branch's lead by the flag (resolveLeadLogged), its name on one line; null with none or two. */
+  lead: { id: string; name: string } | null
+  narration: StoryDefinition['narration']
+  /** A character on the branch by its name on one line, as read here; undefined for no such row. */
+  nameOf: (id: string) => string | undefined
 }
 
 /**
@@ -85,11 +104,23 @@ export function readMetadataInputs(ctx: PhaseContext): MetadataCallInputs | Phas
       error: { kind: 'orchestrator', detail: 'chapter-close: branch not loaded' },
     }
   const settings = appSettingsStore.getAppSettings()
+  const lead = resolveLeadLogged(
+    entitiesStore.getEntities(ctx.branchId),
+    ctx.branchId,
+    'chapter-close-metadata',
+  )
+  // Copied now, for the reason above: a lookup into the store would answer after the awaits.
+  const names = new Map<string, string>(
+    entitiesStore.getByKind(ctx.branchId, 'character').map((row) => [row.id, oneLine(row.name)]),
+  )
   return {
     previousChapterSummary: chaptersStore.getLatest(ctx.branchId)?.summary ?? null,
     threads: [...threadsStore.getThreads(ctx.branchId).values()],
     mode: open.definition.mode,
     modelConfig: modelConfigOf(settings, open.settings),
+    lead: lead == null ? null : { id: lead.id, name: oneLine(lead.name) },
+    narration: open.definition.narration,
+    nameOf: (id) => names.get(id),
   }
 }
 
@@ -131,12 +162,13 @@ export async function* requestChapterMetadata(
   parts: readonly ChapterPartCut[],
   inputs: MetadataCallInputs,
 ): AsyncGenerator<PhaseEmittedEvent, MetadataCallOutcome> {
-  const { previousChapterSummary, threads, mode, modelConfig } = inputs
+  const { previousChapterSummary, threads, mode, modelConfig, lead, narration, nameOf } = inputs
+  const story = { previousChapterSummary, threads, mode, lead, narration, nameOf }
   const entries = await readCloseRangeEntries(ctx.db, ctx.branchId, range)
   if (parts.length <= 1) {
     const prompt = renderTemplate(
       TEMPLATE_IDS.chapterMetadata,
-      buildChapterContext({ entries, previousChapterSummary, threads, mode }),
+      buildChapterContext({ entries, ...story }),
     )
     const call = yield* metadataCall(ctx, prompt, chapterMetadataSchema, modelConfig)
     if (call.status !== 'ok') return call
@@ -147,14 +179,10 @@ export async function* requestChapterMetadata(
   for (const part of closeParts(entries, parts)) {
     if (ctx.abortSignal.aborted) return { status: 'aborted' }
     const inPart = new Set(part.entryIds)
+    // Each part's own entries, walked on their own from the lead.
     const prompt = renderTemplate(
       TEMPLATE_IDS.chapterMetadataPart,
-      buildChapterContext({
-        entries: entries.filter((entry) => inPart.has(entry.id)),
-        previousChapterSummary,
-        threads,
-        mode,
-      }),
+      buildChapterContext({ entries: entries.filter((entry) => inPart.has(entry.id)), ...story }),
     )
     const call = yield* metadataCall(ctx, prompt, chapterPartSummarySchema, modelConfig)
     if (call.status !== 'ok') return call

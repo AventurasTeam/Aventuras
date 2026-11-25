@@ -66,6 +66,13 @@ const THREADS = [
 
 const SUMMARY = 'Kael left the keep at dawn with the stolen sigil.'
 
+// A story told in the second person with no lead and no stamps: no lead line and no mark.
+const NO_LEAD = {
+  lead: null,
+  narration: 'second',
+  nameOf: (): string | undefined => undefined,
+} as const
+
 // The close-only variables are a close task's to set, the merge-only ones the merge's and the
 // boundary-only ones boundary selection's; the whole-chapter and part calls read the rest.
 const notMetadata: readonly string[] = [
@@ -87,6 +94,7 @@ describe('buildChapterContext', () => {
       previousChapterSummary: null,
       threads: [],
       mode: 'adventure',
+      ...NO_LEAD,
     })
     expect(Object.keys(context).sort()).toEqual(metadataVariables().sort())
   })
@@ -105,6 +113,7 @@ describe('buildChapterContext', () => {
       previousChapterSummary: SUMMARY,
       threads: THREADS,
       mode: 'adventure',
+      ...NO_LEAD,
     })
     expect(CLOSE_ONLY_CHAPTER_VARIABLES).toContain('closeCharacters')
     expect(CLOSE_ONLY_CHAPTER_VARIABLES.filter((name) => Object.hasOwn(context, name))).toEqual([])
@@ -122,6 +131,7 @@ describe('buildChapterContext', () => {
       previousChapterSummary: null,
       threads: [],
       mode: 'adventure',
+      ...NO_LEAD,
     })
     expect(entries).toEqual([
       {
@@ -144,6 +154,7 @@ describe('buildChapterContext', () => {
       previousChapterSummary: null,
       threads: THREADS,
       mode: 'adventure',
+      ...NO_LEAD,
     })
     expect(threads).toEqual([
       { title: 'Find the heir', status: 'active' },
@@ -154,8 +165,13 @@ describe('buildChapterContext', () => {
   it("carries the story's mode", () => {
     for (const mode of ['adventure', 'creative'] as const) {
       expect(
-        buildChapterContext({ entries: ENTRIES, previousChapterSummary: null, threads: [], mode })
-          .mode,
+        buildChapterContext({
+          entries: ENTRIES,
+          previousChapterSummary: null,
+          threads: [],
+          mode,
+          ...NO_LEAD,
+        }).mode,
       ).toBe(mode)
     }
   })
@@ -167,6 +183,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: SUMMARY,
         threads: [],
         mode: 'adventure',
+        ...NO_LEAD,
       }).previousChapterSummary,
     ).toBe(SUMMARY)
     expect(
@@ -175,6 +192,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: null,
         threads: [],
         mode: 'adventure',
+        ...NO_LEAD,
       }).previousChapterSummary,
     ).toBeNull()
   })
@@ -187,6 +205,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: SUMMARY,
         threads: THREADS,
         mode: 'adventure',
+        ...NO_LEAD,
       }),
     )
     expect(user).toContain(`# The previous chapter\n${SUMMARY}`)
@@ -209,6 +228,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: null,
         threads: THREADS,
         mode: 'adventure',
+        ...NO_LEAD,
       }),
     )
     expect(system).toContain('an active thread is one the story is following')
@@ -224,6 +244,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: null,
         threads: [],
         mode: 'adventure',
+        ...NO_LEAD,
       }),
     )
     expect(user).not.toContain('# The previous chapter')
@@ -231,7 +252,7 @@ describe('buildChapterContext', () => {
     // The opener is the mock's marker for this call (scripts/mock-llm/shapes.ts → markerOf).
     expect(
       user.startsWith(
-        'Give this chapter its title, summary, theme and keywords.\n\n# The chapter\n',
+        'Give this chapter its title, summary, theme and keywords.\n\n# The narration\nThe chapter is narrated in the second person.\n\n# The chapter\n',
       ),
     ).toBe(true)
   })
@@ -252,6 +273,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: null,
         threads: [],
         mode: 'creative',
+        ...NO_LEAD,
       }),
     )
     expect(creative.system).toContain(CREATIVE_TURN_RULE)
@@ -269,6 +291,7 @@ describe('buildChapterContext', () => {
         previousChapterSummary: null,
         threads: [],
         mode: 'adventure',
+        ...NO_LEAD,
       }),
     )
     expect(adventure.system).toContain(ADVENTURE_TURN_RULE)
@@ -278,6 +301,125 @@ describe('buildChapterContext', () => {
     expect(adventure.system).toContain('outside quoted speech, its "I" is the lead')
     expect(adventure.system).not.toContain(CREATIVE_TURN_RULE)
     expect(adventure.user).toContain('<user_turn>\nI tell Mora the heir is dead.\n</user_turn>')
+  })
+})
+
+// memory/chapter-close.md → Phase 2: the lead by name and the narration; a mark by name alone,
+// since the call has no id map.
+describe('buildChapterContext — the lead, the narration and the marks', () => {
+  const AEFRE = 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const BAEL = 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  const GONE = 'char_99999999-9999-9999-9999-999999999999'
+  const NAMES: ReadonlyMap<string, string> = new Map([
+    [AEFRE, 'Aefre'],
+    [BAEL, 'Bael'],
+  ])
+
+  const stamped = (
+    position: number,
+    kind: CloseRangeEntry['kind'],
+    content: string,
+    leadId?: string,
+  ): CloseRangeEntry => ({
+    ...entry(position, kind, content),
+    metadata: {
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: position,
+      ...(leadId === undefined ? {} : { leadId }),
+    },
+  })
+
+  const build = (
+    entries: readonly CloseRangeEntry[],
+    lead: { id: string; name: string } | null = { id: BAEL, name: 'Bael' },
+  ) =>
+    buildChapterContext({
+      entries,
+      previousChapterSummary: null,
+      threads: [],
+      mode: 'adventure',
+      lead,
+      narration: 'first',
+      nameOf: (id) => NAMES.get(id),
+    })
+
+  // Aefre's run, then Bael's, Bael the lead.
+  const SWITCHED = [
+    stamped(1, 'opening', 'The gate groans open.', AEFRE),
+    stamped(2, 'user_action', 'I step into the yard.', AEFRE),
+    stamped(3, 'ai_reply', 'The yard is silent.', BAEL),
+    stamped(4, 'user_action', 'I bar the gate behind me.', BAEL),
+  ]
+
+  it('carries the lead by name alone, null with none, and the narration', () => {
+    expect(build(SWITCHED).lead).toEqual({ name: 'Bael' })
+    expect(build(SWITCHED, null).lead).toBeNull()
+    expect(build(SWITCHED).narration).toBe('first')
+  })
+
+  // Absent, not null: a never-switched context is key for key what it was.
+  it('marks no entry when every stamp names the lead', () => {
+    const { entries } = build([
+      stamped(1, 'ai_reply', 'The yard is silent.', BAEL),
+      stamped(2, 'user_action', 'I bar the gate behind me.', BAEL),
+    ])
+    expect(entries.map((e) => Object.hasOwn(e, 'leadMark'))).toEqual([false, false])
+  })
+
+  it("marks each run's first entry by name, with no id", () => {
+    const context = build(SWITCHED)
+    expect(context.entries.map((e) => e.leadMark)).toEqual([
+      { name: 'Aefre' },
+      undefined,
+      { name: 'Bael' },
+      undefined,
+    ])
+    expect(JSON.stringify(context)).not.toContain('char_')
+  })
+
+  // A part's call builds its own context: the walk restarts from the lead at each part, so a part
+  // opening under Aefre is marked though the part before it ended under Aefre too.
+  it('walks a part on its own, marking a part that opens under a former lead', () => {
+    expect(build(SWITCHED.slice(1)).entries.map((e) => e.leadMark)).toEqual([
+      { name: 'Aefre' },
+      { name: 'Bael' },
+      undefined,
+    ])
+  })
+
+  it('marks a deleted character as gone and an unstamped run as having no lead', () => {
+    const { entries } = build([
+      stamped(1, 'ai_reply', 'A stranger speaks.', GONE),
+      stamped(2, 'user_action', 'I answer him.'),
+      stamped(3, 'ai_reply', 'The yard is silent.', BAEL),
+    ])
+    expect(entries.map((e) => e.leadMark)).toEqual([
+      { gone: true },
+      { none: true },
+      { name: 'Bael' },
+    ])
+  })
+
+  it('renders the narration and the lead in the user half, before the turns', () => {
+    const { system, user } = renderTemplate(
+      TEMPLATE_IDS.chapterMetadata,
+      build([stamped(1, 'ai_reply', 'The yard is silent.', BAEL)]),
+    )
+    expect(user).toContain(
+      '# The narration\nThe chapter is narrated in the first person.\nThe story\'s lead is Bael. Outside quoted speech, "I" and "you" in the turns are the lead.\n\n# The chapter\n\nThe yard is silent.',
+    )
+    expect(system).not.toContain('Bael')
+    expect(system).not.toContain('narrated in the first person')
+  })
+
+  it('is read by the metadata and part templates, and not by the merge', () => {
+    for (const id of [TEMPLATE_IDS.chapterMetadata, TEMPLATE_IDS.chapterMetadataPart]) {
+      expect(templateReads(id).has('lead')).toBe(true)
+      expect(templateReads(id).has('narration')).toBe(true)
+    }
+    expect(templateReads(TEMPLATE_IDS.chapterMetadataMerge).has('lead')).toBe(false)
+    expect(templateReads(TEMPLATE_IDS.chapterMetadataMerge).has('narration')).toBe(false)
   })
 })
 
@@ -295,6 +437,7 @@ describe("a chapter in parts: a part's call and the merge", () => {
         previousChapterSummary: SUMMARY,
         threads: THREADS,
         mode: 'creative',
+        ...NO_LEAD,
       }),
     )
     expect(

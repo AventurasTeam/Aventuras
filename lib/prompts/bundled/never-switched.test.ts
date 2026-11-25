@@ -343,8 +343,12 @@ const PERIODIC_NO_LEAD: Context = {
 }
 
 // The story the chapter calls read: a later variable of the story joins these two.
-const CHAPTER_STORY_WITH_LEAD: Context = { mode: 'adventure' }
-const CHAPTER_STORY_NO_LEAD: Context = { mode: 'creative' }
+const CHAPTER_STORY_WITH_LEAD: Context = {
+  mode: 'adventure',
+  lead: { name: 'Kael' },
+  narration: 'second',
+}
+const CHAPTER_STORY_NO_LEAD: Context = { mode: 'creative', lead: null, narration: 'third' }
 
 const PREVIOUS_SUMMARY =
   'Kael stole the sigil from the couriers’ guild and fled south along the marsh road.'

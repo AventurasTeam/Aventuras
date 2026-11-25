@@ -1,7 +1,8 @@
 import type { TemplateSources } from '../types'
 
 // architecture.md → System and user halves: the mode sits in the system half; the chapter, prior
-// summary and threads are per call. Mode paragraph: classifier-mode-rule.ts's, worded for a summary.
+// summary and threads are per call, and the lead and the narration sit beside them in the user
+// half (canon's bundled table). Mode paragraph: classifier-mode-rule.ts's, worded for a summary.
 // The rules and sections below are shared with a part's template and the merge's.
 
 export const CHAPTER_TITLE_RULE = `- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.`
@@ -32,6 +33,14 @@ export const CHAPTER_CONTINUITY_SECTIONS = `{% if previousChapterSummary != blan
 
 {% endif -%}`
 
+/** The narration and the lead, before a chapter call's turns (Phase 2); reads narration, lead, entries. */
+export const CHAPTER_LEAD_SECTION = `# The narration
+The chapter is narrated in the {{ narration }} person.
+{%- if lead %}
+{%- assign leadMarked = entries | where: 'leadMark' %}
+The story's lead is {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead{% if leadMarked.size > 0 %}, except where a turn names another{% endif %}.
+{%- endif %}`
+
 export const CHAPTER_METADATA: TemplateSources = {
   system: `You are closing a chapter of an ongoing story. Read the whole chapter below and give it a title, a summary, a theme and keywords. Report only what the chapter's prose supports; never invent.
 
@@ -45,6 +54,8 @@ ${chapterContinuityRule('this chapter')}`,
   user: `Give this chapter its title, summary, theme and keywords.
 
 ${CHAPTER_CONTINUITY_SECTIONS}
+${CHAPTER_LEAD_SECTION}
+
 # The chapter
 {%- for entry in entries %}
 

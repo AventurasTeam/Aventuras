@@ -1,9 +1,15 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CallRetryError, generateStructured } from '@/lib/ai'
 import type { ChapterPartCut } from '@/lib/chapters'
-import { STORY_SETTINGS_DEFAULTS, type StoryEntry, type Thread, type ThreadStatus } from '@/lib/db'
-import { makeLogger } from '@/lib/diagnostics'
+import {
+  STORY_SETTINGS_DEFAULTS,
+  type Entity,
+  type StoryEntry,
+  type Thread,
+  type ThreadStatus,
+} from '@/lib/db'
+import { logger, makeLogger } from '@/lib/diagnostics'
 import {
   appSettingsStore,
   chaptersStore,
@@ -380,6 +386,9 @@ describe('readMetadataInputs', () => {
         assignments: settings.assignments,
         storyModels: {},
       },
+      lead: null,
+      narration: 'second',
+      nameOf: expect.any(Function),
     })
     expect(settings.assignments).toMatchObject({ 'lore-mgmt': 'prof-lore' })
   })
@@ -971,5 +980,154 @@ describe('requestChapterMetadata over parts', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// memory/chapter-close.md → Phase 2: the lead by name and the narration, with a mark where the
+// lead changed; read with the call's other store inputs, while the branch check holds.
+describe('the lead, the narration and the marks', () => {
+  const AEFRE = 'char_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const BAEL = 'char_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+  const WARDENS = 'fact_cccccccc-cccc-cccc-cccc-cccccccccccc'
+  const GONE = 'char_99999999-9999-9999-9999-999999999999'
+  const LEAD_LINE =
+    'The story\'s lead is Bael. Outside quoted speech, "I" and "you" in the turns are the lead'
+  const CLAUSE = ', except where a turn names another'
+
+  const entityRow = (
+    id: string,
+    kind: Entity['kind'],
+    name: string,
+    isLead: 0 | 1,
+    branchId = 'b1',
+  ) =>
+    ({
+      id,
+      branchId,
+      kind,
+      name,
+      status: 'active',
+      description: null,
+      keywords: [],
+      isLead,
+    }) as unknown as Entity
+
+  // e1 to e3 were written under Aefre, e5 on under Bael, the lead now; s4 is a system row.
+  const STAMPED = ENTRIES.map(
+    (e): StoryEntry =>
+      e.kind === 'system'
+        ? e
+        : {
+            ...e,
+            metadata: {
+              sceneEntities: [],
+              currentLocationId: null,
+              worldTime: e.position,
+              leadId: e.position <= 3 ? AEFRE : BAEL,
+            },
+          },
+  )
+
+  const readInputs = () => {
+    const inputs = readMetadataInputs(phaseCtx())
+    if ('status' in inputs) throw new Error(`readMetadataInputs refused: ${inputs.error.kind}`)
+    return inputs
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("reads the flagged lead, the narration and each of the branch's characters by name", () => {
+    entitiesStore.hydrate('b1', [
+      entityRow(AEFRE, 'character', 'Aefre\n  the Elder', 0),
+      entityRow(BAEL, 'character', 'Bael', 1),
+      entityRow(WARDENS, 'faction', 'The Wardens', 0),
+    ])
+
+    const inputs = readInputs()
+
+    expect(inputs.lead).toEqual({ id: BAEL, name: 'Bael' })
+    expect(inputs.narration).toBe('second')
+    expect(inputs.nameOf(AEFRE)).toBe('Aefre the Elder')
+    expect(inputs.nameOf(BAEL)).toBe('Bael')
+    expect(inputs.nameOf(WARDENS)).toBeUndefined()
+    expect(inputs.nameOf(GONE)).toBeUndefined()
+  })
+
+  it('reads two flagged rows as no lead, and logs the double from its site', () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    entitiesStore.hydrate('b1', [
+      entityRow(AEFRE, 'character', 'Aefre', 1),
+      entityRow(BAEL, 'character', 'Bael', 1),
+    ])
+
+    expect(readInputs().lead).toBeNull()
+    expect(error).toHaveBeenCalledWith('pipeline.lead_double', {
+      site: 'chapter-close-metadata',
+      branchId: 'b1',
+      ids: [AEFRE, BAEL],
+    })
+  })
+
+  // An open publishes its branch over the working-set stores; the names must be the ones read.
+  it('answers names from the read, though another branch is published after it', () => {
+    entitiesStore.hydrate('b1', [
+      entityRow(AEFRE, 'character', 'Aefre', 0),
+      entityRow(BAEL, 'character', 'Bael', 1),
+    ])
+    const inputs = readInputs()
+
+    entitiesStore.hydrate('b2', [entityRow(AEFRE, 'character', 'Someone else', 0, 'b2')])
+
+    expect(inputs.nameOf(AEFRE)).toBe('Aefre')
+    expect(inputs.lead).toEqual({ id: BAEL, name: 'Bael' })
+  })
+
+  it('prompts a chapter of one part with the narration, the lead and a mark on each run', async () => {
+    entitiesStore.hydrate('b1', [
+      entityRow(AEFRE, 'character', 'Aefre', 0),
+      entityRow(BAEL, 'character', 'Bael', 1),
+    ])
+    hydrateEntries(phaseDb, 'b1', STAMPED)
+    generateStructuredMock.mockResolvedValue({ status: 'ok', value: REPLY, recoverable: [] })
+
+    await drain(phaseCtx())
+
+    const { system, user } = generateStructuredMock.mock.calls[0]![1]
+    expect(user).toContain(
+      `# The narration\nThe chapter is narrated in the second person.\n${LEAD_LINE}${CLAUSE}.\n\n# The chapter\n`,
+    )
+    expect(user).toMatch(/Aefre[^\n]*\n+The marsh road ended/)
+    expect(user).toMatch(/Bael[^\n]*\n+<user_turn>\nI climb out on the far bank/)
+    expect(user).not.toContain('char_')
+    expect(system).not.toContain('Aefre')
+    expect(system).not.toContain('Bael')
+  })
+
+  // THREE_PARTS: e1–e2 (Aefre), e3 (Aefre), e5–e6 (Bael).
+  it('walks each part on its own, and gives the merge no lead and no narration', async () => {
+    entitiesStore.hydrate('b1', [
+      entityRow(AEFRE, 'character', 'Aefre', 0),
+      entityRow(BAEL, 'character', 'Bael', 1),
+    ])
+    hydrateEntries(phaseDb, 'b1', STAMPED)
+    answerParts()
+
+    await drain(phaseCtx(), RANGE, THREE_PARTS)
+
+    const [first, second, third, merge] = generateStructuredMock.mock.calls.map(
+      ([, prompt]) => prompt,
+    )
+    expect(first!.user).toMatch(/Aefre[^\n]*\n+The marsh road ended/)
+    expect(first!.user).toContain(`${LEAD_LINE}${CLAUSE}.`)
+    // The part before it ended under Aefre; this part's walk starts again from Bael.
+    expect(second!.user).toMatch(/Aefre[^\n]*\n+The cold takes your breath at once\./)
+    expect(second!.user).toContain(`${LEAD_LINE}${CLAUSE}.`)
+    expect(third!.user).toContain(`${LEAD_LINE}.\n\n# This part of the chapter\n`)
+    expect(third!.user).not.toContain('Aefre')
+    expect(third!.user).not.toContain(CLAUSE)
+    expect(merge!.user).not.toContain('# The narration')
+    expect(merge!.user).not.toContain("The story's lead")
   })
 })

@@ -1,6 +1,7 @@
 import type { TemplateSources } from '../types'
 import {
   CHAPTER_CONTINUITY_SECTIONS,
+  CHAPTER_LEAD_SECTION,
   CHAPTER_TURN_RULE,
   chapterContinuityRule,
 } from './chapter-metadata'
@@ -18,6 +19,8 @@ ${chapterContinuityRule('this part')}`,
   user: `Summarize this part of the chapter.
 
 ${CHAPTER_CONTINUITY_SECTIONS}
+${CHAPTER_LEAD_SECTION}
+
 # This part of the chapter
 {%- for entry in entries %}
 
