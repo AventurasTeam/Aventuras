@@ -1,4 +1,5 @@
 import type { TemplateSources } from '../types'
+import { THIRD_PERSON_RULE } from './third-person'
 
 // architecture.md → System and user halves: the mode sits in the system half; the chapter, prior
 // summary and threads are per call, and the lead and the narration sit beside them in the user
@@ -45,7 +46,7 @@ export const CHAPTER_METADATA: TemplateSources = {
   system: `You are closing a chapter of an ongoing story. Read the whole chapter below and give it a title, a summary, a theme and keywords. Report only what the chapter's prose supports; never invent.
 
 ${CHAPTER_TITLE_RULE}
-- Summary. Two to four sentences telling what happened in this chapter, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them, and tell it in the narration's own person: if the prose says "you", so does the summary. Later chapters recall this one through its summary alone, so keep what the story will need.
+- Summary. Two to four sentences telling what happened in this chapter, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them. ${THIRD_PERSON_RULE} Later chapters recall this one through its summary alone, so keep what the story will need.
 ${CHAPTER_THEME_AND_KEYWORDS_RULES}
 
 ${CHAPTER_TURN_RULE}

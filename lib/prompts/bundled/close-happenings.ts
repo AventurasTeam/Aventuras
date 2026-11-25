@@ -1,6 +1,7 @@
 import { MACRO_IDS } from '../ids'
 import type { TemplateSources } from '../types'
 import { CLOSE_LEAD_LINE } from './close-instructions'
+import { THIRD_PERSON_RULE } from './third-person'
 
 // memory/chapter-close.md → 3e. Happenings reads no prose (C3): its system half is the shared
 // instructions alone, and a turn is read through read_turns.
@@ -10,7 +11,7 @@ export const CLOSE_HAPPENINGS: TemplateSources = {
 
 Code found the clusters of happenings below. Every happening in a cluster passed three checks against each of the others: at least half of the smaller cast's characters shared, occurred within a few turns, and reads alike. Some of them may record one event more than once; a cluster may also hold more than one event, or a happening that belongs with none of the others. Decide which belong together and merge each event's happenings with merge_happenings. You don't see the chapter here: read a turn with read_turns when a happening's text leaves you unsure, and a happening's stored fields with read_row.
 
-- Merge into a composite when the happenings share their cast and their time and complete each other: phases of one event in order, one building on the other, or two sides of one event. Keep the happening whose title covers the others best and absorb the event's others; send keep's description rewritten whole to hold what each said ("X happened, then Y"), and a title when keep's no longer covers them.
+- Merge into a composite when the happenings share their cast and their time and complete each other: phases of one event in order, one building on the other, or two sides of one event. Keep the happening whose title covers the others best and absorb the event's others; send keep's description rewritten whole to hold what each said ("X happened, then Y"), and a title when keep's no longer covers them. ${THIRD_PERSON_RULE}
 - Delete a duplicate when one event was recorded twice in different words: keep the more detailed happening and absorb the other, sending no title or description, so keep's text stands.
 - Keep them apart when one reverses or contradicts the other ("Aria swore the oath" and "Aria broke it"), or when each is a beat that matters to the story on its own: make no call.
 - Keep them apart when the merge would tell someone something new: everyone who knows any merged happening comes to know all of them, and every character does if one is common knowledge. So when one is common knowledge and another is not, or someone knows one but not another, merge only when the happening fewer characters know adds nothing to the one more characters know; when neither list holds the other, merge only a duplicate that adds nothing either way.
