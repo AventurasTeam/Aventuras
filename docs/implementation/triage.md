@@ -712,3 +712,59 @@ slice-planning gate forces its resolution before that slice is planned.
   `hooks/use-inert-mouse-back.ts` is a narrow block for a pending fork
   that this fix would subsume. Found by CodeRabbit's review of Slice
   6.5 after the Slice 6.8 merge (2026-11-25).
+
+- **`abortRun`'s docblock says any pass or close end clears the pending
+  re-run, but a re-run's own abort clears it too.** The block at
+  `lib/stores/generation/generation.ts:177-179` reads "any pass or close
+  end clears the pending re-run", while
+  [`generation-pipeline.md`](../generation-pipeline.md#multi-run-txstate)
+  (`:657-661`) has the record cleared "whatever ends it: … or the
+  re-run's own end". A reader trusting the docblock would add a clear
+  the store already does, or miss that a re-run's abort drops the record.
+  Reword the docblock to the canon's list. Found during Slice 6.6.
+
+- **The mutator fences match the literal identifier `generationStore`,
+  so an aliased import bypasses all of them.** The
+  `no-restricted-properties` entries built at `eslint.config.js:19-22`
+  set `object: 'generationStore'`, which ESLint compares to the written
+  name. Probe: `import { generationStore as g }` then
+  `g.dropBranchRecords(...)` in `components/reader/` lints with 0 errors,
+  against 1 for the plain name. Any owner-only mutator (run, close
+  record, re-run record, drop, close progress) can be called through an
+  alias from a file that may not. A `no-restricted-syntax` selector on
+  the import specifier (ban the `as` rename of `generationStore`), or a
+  rule that resolves the binding, would close it.
+  Found during Slice 6.6.
+
+- **The toast doc puts the Toaster above an AlertDialog; on web it may
+  sit below one.** `docs/ui/patterns/toast.md:260-264` says the Toaster
+  renders at z-100, above AlertDialog. `<Toaster />` mounts inside the RN
+  root `View` (`app/_layout.tsx:115`), whose stacking context
+  (per [RN-Web Views are stacking contexts](./lessons-learned/rnweb-view-stacking-context.md))
+  likely caps its z-index below a body-portalled AlertDialog, so a toast
+  fired under an open confirm could paint beneath it. Inferred, not run.
+  Probe it with a toast over an open AlertDialog in a browser story; the
+  fix is either to portal the Toaster to the body or to correct the doc.
+  Found during Slice 6.6.
+
+- **`DialogContent`'s width rule doesn't hold on web, so every
+  consumer re-states it.** `components/ui/dialog.tsx:133` sets
+  `w-full max-w-[calc(100%-2rem)]`, but Radix's wrapper shrinks to
+  content, and a dialog measured 245–257 px at a 390 px window.
+  `components/reader/branch-create-modal.tsx:19-23` and
+  `components/story/duplicate-story-dialog.tsx` each add a web-only
+  `w-[360px] max-w-[calc(100vw-2rem)]`. A width option or a web fix in
+  the primitive would spare each new dialog the same workaround and its
+  story. Found during Slice 6.6.
+
+- **Radix logs "Missing `Description` or `aria-describedby`" for five
+  dialogs.** `DuplicateStoryDialog` and four existing ones open with
+  the warning: `components/chapters/review-window.tsx:124`,
+  `components/compounds/import-dialog.tsx:197`,
+  `components/compounds/embedder-download-dialog.tsx:96` and
+  `components/compounds/entry-card.tsx:297,385`. Canon
+  (`docs/ui/patterns/overlays.md:317`) calls a description rarely
+  needed, so the warning is noise on dialogs that are fine as written.
+  One decision at the `DialogContent` primitive (`aria-describedby`
+  set to `undefined` when no Description renders) would silence them
+  all. Found during Slice 6.6.
