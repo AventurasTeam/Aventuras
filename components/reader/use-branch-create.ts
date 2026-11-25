@@ -24,7 +24,7 @@ import {
 import { messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
 
-import type { BranchCreateModalProps } from './branch-create-modal'
+import type { BranchCreateModalProps, BranchCreatePhase } from './branch-create-modal'
 import { switchGateReason } from './switch-result-notice'
 
 const ctx = { db, runInTransaction }
@@ -48,6 +48,10 @@ export type BranchCreate = {
 }
 
 type ForkAt = { entryId: string; position: number }
+type ForkRequest = { at: ForkAt; phase: BranchCreatePhase }
+
+const IDLE: BranchCreatePhase = { kind: 'idle', line: null }
+const PENDING: BranchCreatePhase = { kind: 'pending' }
 
 // C8: the new reader re-reads the list on mount too, so a failure here is only logged. The store
 // holds one story's rows: a refresh for a story no longer open would replace another story's.
@@ -107,9 +111,7 @@ export function useBranchCreate({
   replaceStack,
   swapPending,
 }: UseBranchCreateArgs): BranchCreate {
-  const [request, setRequest] = useState<ForkAt | null>(null)
-  const [pending, setPending] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [request, setRequest] = useState<ForkRequest | null>(null)
   // Read synchronously, so a second press returns before it reaches forkBranch.
   const pendingRef = useRef(false)
 
@@ -124,7 +126,7 @@ export function useBranchCreate({
           logger.warn('reader.branch_create_entry_missing', { branchId, entryId })
           return
         }
-        setRequest({ entryId, position: entry.position })
+        setRequest({ at: { entryId, position: entry.position }, phase: IDLE })
       } catch (error) {
         logger.error('reader.branch_create_open_failed', {
           branchId,
@@ -139,20 +141,18 @@ export function useBranchCreate({
 
   const endPending = (line: string | null) => {
     pendingRef.current = false
-    setPending(false)
-    setMessage(line)
+    setRequest((open) => (open == null ? null : { at: open.at, phase: { kind: 'idle', line } }))
   }
 
   const close = () => {
-    endPending(null)
+    pendingRef.current = false
     setRequest(null)
   }
 
   const create = (sid: string, at: ForkAt, name: string): Promise<void> => {
     const logAt = { branchId, entryId: at.entryId }
     pendingRef.current = true
-    setPending(true)
-    setMessage(null)
+    setRequest({ at, phase: PENDING })
     let committed = false
     // C8: from the press to the navigation, a Send in the reader refuses as during a dispatch.
     return holdingReader(
@@ -231,7 +231,7 @@ export function useBranchCreate({
 
   const onCreate = (name: string): void => {
     if (storyId == null || request == null || pendingRef.current || swapPending) return
-    void create(storyId, request, name)
+    void create(storyId, request.at, name)
   }
 
   const onCancel = (): void => {
@@ -242,9 +242,8 @@ export function useBranchCreate({
     request == null
       ? null
       : {
-          entryPosition: request.position,
-          pending,
-          message,
+          entryPosition: request.at.position,
+          phase: request.phase,
           createBlockedReason: swapPending ? t('reader:actions.blockedWhileSwapping') : undefined,
           onCreate,
           onCancel,

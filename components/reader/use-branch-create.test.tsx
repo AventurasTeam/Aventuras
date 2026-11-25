@@ -57,6 +57,9 @@ const COPY = {
   failed: "Couldn't create the branch.",
 }
 
+const PENDING = { kind: 'pending' }
+const idle = (line: string | null) => ({ kind: 'idle', line })
+
 const replaceStack = vi.fn<ReplaceStoryStack>(() => true)
 
 function openOn(branchId: string): void {
@@ -207,8 +210,7 @@ describe('useBranchCreate — opening', () => {
     await openModal(hook)
     expect(modal(hook)).toMatchObject({
       entryPosition: 47,
-      pending: false,
-      message: null,
+      phase: idle(null),
       createBlockedReason: undefined,
     })
   })
@@ -265,7 +267,7 @@ describe('useBranchCreate — opening', () => {
     press(hook, 'Side quest')
     await settle()
     expect(actions.fork).not.toHaveBeenCalled()
-    expect(modal(hook).pending).toBe(false)
+    expect(modal(hook).phase).toStrictEqual(idle(null))
     expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
   })
 
@@ -337,7 +339,7 @@ describe('useBranchCreate — Create', () => {
       storyId: STORY,
       error: 'disk',
     })
-    expect(modal(hook).message).toBeNull()
+    expect(modal(hook).phase).toStrictEqual(PENDING)
     expectNoToast()
   })
 
@@ -353,7 +355,7 @@ describe('useBranchCreate — Create', () => {
     })
     press(hook, 'Side quest')
     expect(actions.fork).toHaveBeenCalledTimes(1)
-    expect(modal(hook).pending).toBe(true)
+    expect(modal(hook).phase).toStrictEqual(PENDING)
     await act(async () => forked.resolve({ status: 'ok', branchId: CHILD }))
     await settle()
     expect(actions.fork).toHaveBeenCalledTimes(1)
@@ -372,7 +374,7 @@ describe('useBranchCreate — Create', () => {
       expect(readerHoldStore.isHeld(BRANCH)).toBe(true)
       expect(hook.result.current.dispatch.begin()).toBe(false)
       expect(generationStore.getTxState().pendingTurns.size).toBe(0)
-      expect(modal(hook).pending).toBe(true)
+      expect(modal(hook).phase).toStrictEqual(PENDING)
     }
     expectHeld()
 
@@ -413,7 +415,7 @@ describe('useBranchCreate — Create', () => {
       await openModal(hook)
       press(hook, 'Side quest')
       await settle()
-      expect(modal(hook)).toMatchObject({ pending: false, message: line })
+      expect(modal(hook).phase).toStrictEqual(idle(line))
       expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
       expect(actions.show).not.toHaveBeenCalled()
       expect(branchList.refresh).not.toHaveBeenCalled()
@@ -434,7 +436,7 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook)).toMatchObject({ pending: false, message: COPY.failed })
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.failed))
     expect(logError).toHaveBeenCalledExactlyOnceWith('reader.branch_create_failed', {
       branchId: BRANCH,
       entryId: ENTRY,
@@ -454,7 +456,7 @@ describe('useBranchCreate — Create', () => {
     press(hook, 'Side quest')
     await settle()
     expect(actions.fork).not.toHaveBeenCalled()
-    expect(modal(hook)).toMatchObject({ pending: false, message: line })
+    expect(modal(hook).phase).toStrictEqual(idle(line))
     expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
   })
 
@@ -471,7 +473,7 @@ describe('useBranchCreate — Create', () => {
     press(hook, 'Side quest')
     await settle()
     expect(actions.fork).not.toHaveBeenCalled()
-    expect(modal(hook)).toMatchObject({ pending: false, message: COPY.gate })
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.gate))
     expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
     await act(async () => body.resolve())
   })
@@ -485,7 +487,7 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook)).toMatchObject({ pending: false, message: COPY.failed })
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.failed))
     expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
     expect(logError).toHaveBeenCalledExactlyOnceWith('reader.branch_create_threw', {
       branchId: BRANCH,
@@ -514,7 +516,7 @@ describe('useBranchCreate — Create', () => {
       error: 'refresh broke',
     })
     await openModal(hook)
-    expect(modal(hook)).toMatchObject({ pending: false, message: null })
+    expect(modal(hook).phase).toStrictEqual(idle(null))
   })
 
   it("on a tail that can't navigate, refreshes the list, closes the modal and warns", async () => {
@@ -600,7 +602,7 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     act(() => modal(hook).onCancel())
-    expect(modal(hook).pending).toBe(true)
+    expect(modal(hook).phase).toStrictEqual(PENDING)
   })
 
   it('reopens with no line after a refusal and a Cancel', async () => {
@@ -613,10 +615,10 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook).message).toBe(COPY.unfinishedRun)
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.unfinishedRun))
     act(() => modal(hook).onCancel())
     await openModal(hook)
-    expect(modal(hook)).toMatchObject({ pending: false, message: null })
+    expect(modal(hook).phase).toStrictEqual(idle(null))
   })
 
   it("reopens idle after a tail that can't navigate, and its Create forks again", async () => {
@@ -627,7 +629,7 @@ describe('useBranchCreate — Create', () => {
     await settle()
     expect(hook.result.current.create.modal).toBeNull()
     await openModal(hook)
-    expect(modal(hook)).toMatchObject({ pending: false, message: null })
+    expect(modal(hook).phase).toStrictEqual(idle(null))
     press(hook, 'Side quest')
     await settle()
     expect(actions.fork).toHaveBeenCalledTimes(2)
@@ -643,17 +645,17 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook).message).toBe(COPY.unfinishedRun)
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.unfinishedRun))
 
     const forked = deferred<ForkResult>()
     actions.fork.mockReturnValueOnce(forked.promise)
     press(hook, 'Side quest')
-    expect(modal(hook)).toMatchObject({ pending: true, message: null })
+    expect(modal(hook).phase).toStrictEqual(PENDING)
     await act(async () =>
       forked.resolve({ status: 'rejected', code: FORK_REFUSAL.entryMissing, reason: 'x' }),
     )
     await settle()
-    expect(modal(hook)).toMatchObject({ pending: false, message: COPY.entryGone })
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.entryGone))
   })
 
   it("a swap starting or ending shows live, and a refusal's line stays through it", async () => {
@@ -662,11 +664,11 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook).message).toBe(COPY.gate)
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.gate))
 
     hook.rerender({ storyId: STORY, swapPending: true })
-    expect(modal(hook)).toMatchObject({ createBlockedReason: COPY.swap, message: COPY.gate })
+    expect(modal(hook)).toMatchObject({ createBlockedReason: COPY.swap, phase: idle(COPY.gate) })
     hook.rerender({ storyId: STORY, swapPending: false })
-    expect(modal(hook)).toMatchObject({ createBlockedReason: undefined, message: COPY.gate })
+    expect(modal(hook)).toMatchObject({ createBlockedReason: undefined, phase: idle(COPY.gate) })
   })
 })

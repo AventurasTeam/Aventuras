@@ -6,7 +6,11 @@ import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 
-import { BranchCreateModal, type BranchCreateModalProps } from './branch-create-modal'
+import {
+  BranchCreateModal,
+  type BranchCreateModalProps,
+  type BranchCreatePhase,
+} from './branch-create-modal'
 
 // CI runs plays several times slower than local; every wait uses this.
 const WAIT = { timeout: 5000 }
@@ -57,16 +61,18 @@ const expectedPanelWidth = () => Math.min(360, window.innerWidth - 32)
 
 const isDisabled = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true'
 
+const IDLE: BranchCreatePhase = { kind: 'idle', line: null }
+
 /** The host as it presses: pending from the press on. */
 function PendsOnCreate(props: BranchCreateModalProps) {
-  const [pending, setPending] = useState(false)
+  const [phase, setPhase] = useState<BranchCreatePhase>(IDLE)
   return (
     <BranchCreateModal
       {...props}
-      pending={pending}
+      phase={phase}
       onCreate={(name) => {
         props.onCreate(name)
-        setPending(true)
+        setPhase({ kind: 'pending' })
       }}
     />
   )
@@ -74,14 +80,14 @@ function PendsOnCreate(props: BranchCreateModalProps) {
 
 /** The host as a refusal lands: pending ends and the refusal's line shows. */
 function RefusesOnCreate({ line, ...props }: BranchCreateModalProps & { line: string }) {
-  const [message, setMessage] = useState<string | null>(null)
+  const [phase, setPhase] = useState<BranchCreatePhase>(IDLE)
   return (
     <BranchCreateModal
       {...props}
-      message={message}
+      phase={phase}
       onCreate={(name) => {
         props.onCreate(name)
-        setMessage(line)
+        setPhase({ kind: 'idle', line })
       }}
     />
   )
@@ -90,7 +96,7 @@ function RefusesOnCreate({ line, ...props }: BranchCreateModalProps & { line: st
 /** F2 starts or ends a swap, as the hook recomputes props each render; a press meets the gate. */
 function SwapToggles(props: BranchCreateModalProps) {
   const [swapping, setSwapping] = useState(true)
-  const [message, setMessage] = useState<string | null>(null)
+  const [phase, setPhase] = useState<BranchCreatePhase>(IDLE)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'F2') setSwapping((on) => !on)
@@ -101,11 +107,11 @@ function SwapToggles(props: BranchCreateModalProps) {
   return (
     <BranchCreateModal
       {...props}
-      message={message}
+      phase={phase}
       createBlockedReason={swapping ? t('reader:actions.blockedWhileSwapping') : undefined}
       onCreate={(name) => {
         props.onCreate(name)
-        setMessage(t('generationGate.inFlight'))
+        setPhase({ kind: 'idle', line: t('generationGate.inFlight') })
       }}
     />
   )
@@ -118,8 +124,7 @@ const meta: Meta<typeof BranchCreateModal> = {
   tags: ['autodocs'],
   args: {
     entryPosition: 47,
-    pending: false,
-    message: null,
+    phase: IDLE,
     onCreate: fn(),
     onCancel: fn(),
   },

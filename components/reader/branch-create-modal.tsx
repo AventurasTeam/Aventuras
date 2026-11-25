@@ -22,14 +22,17 @@ const PANEL_CLASS = cn(
   Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
 )
 
+/**
+ * `pending` from the press of Create to the navigation: Create spins, the rest disables, nothing
+ * closes. `idle` carries the refusal's or the failure's line above the buttons, or none.
+ */
+export type BranchCreatePhase = { kind: 'idle'; line: string | null } | { kind: 'pending' }
+
 export type BranchCreateModalProps = {
   /** The fork entry's position: `Branching from entry <position>.` */
   entryPosition: number
-  /** From the press of Create to the navigation: Create spins, the rest disables, nothing closes. */
-  pending: boolean
-  /** The refusal's or the failure's line above the buttons. */
-  message: string | null
-  /** Why Create can't run at all right now (a pending swap); shown when no message is. */
+  phase: BranchCreatePhase
+  /** Why Create can't run at all right now (a pending swap); shown when no refusal line is. */
   createBlockedReason?: string
   /** The name as typed; the action trims it. */
   onCreate: (name: string) => void
@@ -42,14 +45,15 @@ export type BranchCreateModalProps = {
  */
 export function BranchCreateModal({
   entryPosition,
-  pending,
-  message,
+  phase,
   createBlockedReason,
   onCreate,
   onCancel,
 }: BranchCreateModalProps): ReactElement {
   // One input with a submit: component state, not a form (code-conventions.md → Forms).
   const [name, setName] = useState('')
+  const pending = phase.kind === 'pending'
+  const message = phase.kind === 'idle' ? phase.line : null
   const canCreate = !pending && createBlockedReason == null && name.trim() !== ''
   const create = () => {
     if (canCreate) onCreate(name)
