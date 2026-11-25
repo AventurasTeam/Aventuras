@@ -882,6 +882,27 @@ describe('useCollisionResolve → held rows', () => {
     expect(readStampedLeadIds).toHaveBeenCalledTimes(2)
   })
 
+  // Each mount counts its opens from zero, so its first open shares the last mount's query key.
+  it('reads again in a World mounted after the last one closed', async () => {
+    const shared = queries()
+    readStampedLeadIds.mockResolvedValueOnce(new Set())
+    const first = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), shared)
+    act(() => first.result.current.request(NEWER.id, OLDER.id))
+    await waitFor(() => expect(first.result.current.dialog?.heldIds).toEqual([]))
+    act(() => first.result.current.close())
+    first.unmount()
+    // Navigating back takes far longer than the zero-delay tick a closed read is dropped on.
+    await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
+
+    readStampedLeadIds.mockResolvedValueOnce(new Set([NEWER.id]))
+    const second = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), shared)
+    act(() => second.result.current.request(NEWER.id, OLDER.id))
+
+    expect(second.result.current.dialog).toBeNull()
+    await waitFor(() => expect(second.result.current.dialog?.heldIds).toEqual([NEWER.id]))
+    expect(readStampedLeadIds).toHaveBeenCalledTimes(2)
+  })
+
   it('opens no dialog when the stamp read fails, closing the request with a toast', async () => {
     readStampedLeadIds.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'))
     const dialogs: (CollisionDialog | null)[] = []

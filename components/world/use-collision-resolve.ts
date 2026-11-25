@@ -239,6 +239,7 @@ export function useCollisionResolve(
     queryKey: ['collision-held', branchId, requested?.[0] ?? null, requested?.[1] ?? null, openSeq],
     queryFn:
       requested == null || !readsHeld ? skipToken : () => readStamped(branchId, requested, ctx.db),
+    // openSeq restarts per mount, so a remounted World would otherwise reuse the last one's read.
     gcTime: 0,
     retry: false,
   })
