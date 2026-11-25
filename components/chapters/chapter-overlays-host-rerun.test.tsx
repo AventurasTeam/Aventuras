@@ -906,7 +906,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(actions.show).not.toHaveBeenCalled()
   })
 
-  it('a sequence that throws past its own catches ends pending, logs, and keeps the confirm open', async () => {
+  it('a sequence that throws past its own catches ends pending, logs, and leaves the confirm open to cancel', async () => {
     vi.spyOn(toast, 'error').mockImplementation(() => {
       throw new Error('toast broke')
     })
@@ -927,6 +927,9 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(confirmView.mounted).toBe(true)
     expect(readerHoldStore.isHeld('br_1')).toBe(false)
     expect(actions.fork).not.toHaveBeenCalled()
+    // The press ended too: a Cancel made while pending would be ignored.
+    act(() => confirmView.props?.onCancel())
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
   })
 
   // A regenerate's follow-up sweep: a turn body with no run or mark, which the check refuses on.
