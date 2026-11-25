@@ -813,6 +813,22 @@ describe('readStorySwapPending', () => {
     }
     await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
   })
+
+  it('reads a swap admitted while the row is being read', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const read = readStorySwapPending(ctx.db, 's1')
+    const held = runExclusive('s1', () => gate)
+    try {
+      await expect(read).resolves.toBe(true)
+    } finally {
+      release()
+      await held
+    }
+  })
 })
 
 describe('crash recovery resolves its target from the marker', () => {
