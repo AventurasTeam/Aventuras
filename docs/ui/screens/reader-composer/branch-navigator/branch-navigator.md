@@ -310,17 +310,50 @@ modal centered over the reader:
 - **Cancel** — closes the modal, no branch created. Esc and
   click-outside both behave as Cancel.
 
+**Pending.** From `Create` to the new branch's reader, `Create` shows
+a spinner; the name, `Cancel` and `×` disable, and Esc, a click
+outside and hardware back don't close the modal, nor does a desktop
+Back (the mouse's Back button) leave the reader: the fork is one
+transaction and can't stop partway. The modal is
+[busy](../../../patterns/overlays.md#dialog--busy), and a second press
+does nothing.
+
+**Refused.** The fork checks before it writes anything. A refusal
+keeps the modal open with the name as typed and shows why as one line
+above the buttons. `Create` stays enabled, and the next press checks
+again; its line replaces the last.
+
+| The fork refuses                                     | The line                                                                            |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| a run, a pending turn or a reversal holds the gate   | the gate's reason, as the reader's disabled controls name it                        |
+| an embedder swap is pending                          | `Unavailable while the embedder switch finishes.`                                   |
+| the copy would carry memory work that never finished | `The memory work after this entry never finished, so branch from an earlier entry.` |
+| the entry is gone, or is a system entry              | `This entry is no longer on the branch.`                                            |
+| anything else                                        | `Couldn't create the branch.`, with the reason logged                               |
+
+A pending embedder swap is known before any press, so the modal opens
+with its line and `Create` disabled, as
+[Duplicate's](../../story-list/story-list.md#duplicate-a-story)
+refusals on open do. Unlike those, which are checked once, the swap's
+line and the disabled `Create` follow the swap: `Create` comes back
+when it ends. `⎇` itself stays live under a swap.
+
+**Failed.** If the fork throws, nothing was written: the modal stays
+open with `Couldn't create the branch.` above the buttons, and the
+error is logged.
+
 ### After confirm
 
 1. One transaction writes the new `branches` row
    (`parent_branch_id = <current>`,
-   `fork_entry_id = <triggering entry id>`, `name = <input>`),
+   `fork_entry_id = <triggering entry id>`, `name = <input>` trimmed),
    materializes the branch-scoped rows per the
    [hard-fork copy procedure](../../../../data-model.md#branch-model),
    and points `stories.current_branch_id` at the new branch.
 2. A fresh reader on the new branch replaces the story's screen
    stack, as a [switch](#per-row-anatomy) does (content is
-   byte-identical up to the fork point). From the confirm to that
+   byte-identical up to the fork point), and opens at its bottom, on
+   entry N, the new branch's last entry. From the confirm to that
    navigation the reader holds its gated controls and its ways out.
    The chip's count badge increments and now shows; `Esc → Esc`
    cycle of "open navigator → see new branch highlighted" is the
@@ -328,6 +361,15 @@ modal centered over the reader:
 
 No toast — the chip update + reader being on the new branch is
 self-evidence.
+
+**The reader can't be replaced.** If the fork has committed but the
+story's screens can't be replaced — an inline editor on a screen the
+replace would remove that must be asked before it leaves, one with
+unsaved changes or on native any open one — `stories.current_branch_id`
+goes back to the branch the reader shows, so the pointer and the
+screen still agree. The new branch stays and the chip counts it; the
+modal closes, and a warning toast reads
+`Created "<name>" but couldn't open it. Switch to it from the branch chip.`
 
 ### Name uniqueness
 

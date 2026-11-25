@@ -311,7 +311,9 @@ generation pipeline is in flight:
   CTRL-Z brings the close back, not the turns), and
   `Re-run on new branch` (primary — keeps the turns on the current
   branch and runs the re-run on the new fork). All buttons disable while
-  the rollback or fork is committing.
+  the rollback or fork is committing, and while the fork runs a desktop
+  Back (the mouse's Back button) does nothing, as on the
+  [branch creation modal](../reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal).
 - **After `Re-run on new branch`.** Closes the review window (if opened
   from it) and navigates to `reader-composer/[newBranchId]`, replacing
   the in-story stack so `← Back` returns to the Story List rather than
@@ -323,6 +325,16 @@ generation pipeline is in flight:
   If the fork commits and starting the re-run fails unexpectedly, the
   reader still opens on the new branch with a warning toast:
   `Branched "Ch. <seq> re-run" from entry <pos>, but couldn't start the re-run. Retry from Chapter Timeline.`
+  If the fork commits but the story's screens can't be replaced (an
+  inline editor on a screen the replace would remove that must be asked
+  before it leaves: one with unsaved changes, or on native any open one),
+  `stories.current_branch_id` goes back to the parent, so the pointer
+  and the screen still agree: the confirm closes, the new
+  branch stays, nothing starts, and a warning toast reads
+  `Branched "Ch. <seq> re-run" from entry <pos>, but couldn't open it. Switch to it, then retry from Chapter Timeline.`
+  The same toast shows, with the confirm closed and nothing started,
+  when the story was closed or another branch opened before the new
+  branch could be shown.
   If the re-run is cancelled or fails mid-run, the new branch stays at
   entry `N` with its copied prior close restored.
 - **Cost.** The framing names the model the re-run uses, and the line
@@ -339,6 +351,9 @@ generation pipeline is in flight:
   held until a restart, after a re-run's undo failed, refuses with the
   restart line its disabled actions show
   ([`principles.md → Affordance loci`](../../principles.md#affordance-loci)).
+  `Re-run on new branch` also refuses when the copy would carry memory
+  work that never finished, with
+  `Memory work on this branch never finished, so it can't branch here yet. Restart the app, then try again.`
   If the rollback lands but the
   screens can't follow it, the branch reloads and the confirm closes
   with the start-failed toast, or asks to reopen the story if the reload

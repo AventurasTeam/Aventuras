@@ -197,6 +197,10 @@ convention, and the expectation that subsystems route through
   for the boundary to refuse),
   `close_rerun_on_started_threw` (warn: a re-run start's host callback
   threw as the chain reserved; the re-run runs on),
+  `close_rerun_fork_point_missing` (error: a re-run preview with turns
+  since found no entry before the first of them, which a closed chapter
+  always has, with `branchId` and `targetEntryId`; the preview refuses
+  `integrity`),
   `rerun_journal_written` (debug,
   `lib/actions/delta/rerun-journal.ts`: a close's re-run's `reversal`
   phase committed its journal, with `branchId`, `chapterId`, the `floor`
@@ -419,7 +423,8 @@ convention, and the expectation that subsystems route through
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),
   `close_rerun_start_refused` (warn,
-  `components/chapters/run-close-rerun.ts`: a confirmed re-run was
+  `components/chapters/run-close-rerun.ts`: a confirmed re-run, or the
+  fork's check on the parent before `Re-run on new branch` forks, was
   refused for a reason other than the counts changing, the chapter no
   longer being the latest, a close owed, or a run in flight, with
   `branchId`, `chapterId` and the refusal `code` (`preflight-failed` for
@@ -438,6 +443,33 @@ convention, and the expectation that subsystems route through
   that re-hydration threw, or read no story or a corrupt one, with
   `branchId`, `chapterId` and `error`; the confirm closes with the
   `resyncFailed` copy, which asks to reopen the story),
+  and for `Re-run on new branch` (the same file,
+  `runCloseRerunOnBranch`) `close_rerun_fork_threw` (error: a step
+  threw, with `branchId`, `chapterId`, the `step` and `error`; for
+  `check` or `fork`, on the parent, no branch exists and the confirm
+  closes with the start-failed copy; for `show` or `start`, past the
+  commit, it also carries `newBranchId` and the warning toast says to
+  retry from the Timeline),
+  `close_rerun_fork_refused` (warn: the fork refused as an unfinished
+  run or for a reason the confirm has no copy of its own for, with
+  `branchId`, `chapterId` and the refusal `code`; the confirm closes
+  with the unfinished-run or the start-failed copy),
+  `close_rerun_fork_not_opened` (warn: the fork committed but the new
+  branch was never shown, either because the story's screens couldn't
+  be replaced, so the pointer went back to the parent, or because the
+  story had been left first, with `branchId`, `newBranchId`,
+  `chapterId` and, for a story left, `cause` `story-left`; nothing
+  started, and a warning toast says to switch to the new branch and
+  retry from the Timeline), `close_rerun_fork_start_failed` (warn: the
+  fork committed, but the start on the new branch refused, or the new
+  reader opened with nothing loaded, with `branchId`, `newBranchId`,
+  `chapterId` and the `cause`, the refusal's code or `shown-unloaded`;
+  the warning toast says to retry from the Timeline) and
+  `close_rerun_on_branch_threw` (error,
+  `components/chapters/chapter-overlays-host.tsx`: the sequence
+  rejected on a throw its steps don't catch, with `branchId`,
+  `chapterId` and `error`; the reader hold has ended, and the confirm
+  stops pending so it can be closed),
   `history_load_failed` / `history_load_more_failed`
   (`components/history/use-history-chunks.ts` — a chunk load or a
   load-more rejected; a failed load-more keeps the rows already
@@ -556,7 +588,29 @@ convention, and the expectation that subsystems route through
   `undo_failed` / `redo_failed` for a reversal that threw or a refusal
   that means the delta log cannot produce the reversal it should, and
   `undo_rejected` / `redo_rejected` at debug for the refusals that are
-  routine (gated, nothing to apply, branch mid-switch). The
+  routine (gated, nothing to apply, branch mid-switch). The `⎇` host
+  (`components/reader/use-branch-create.ts`) logs its own too:
+  `branch_create_open_failed` (error: opening the creation modal threw,
+  with `branchId`, `entryId` and `error`; the user sees
+  `Couldn't create the branch.`), `branch_create_entry_missing` (warn:
+  the pressed entry is no longer in the reader's store, so nothing
+  opens, with `branchId` and `entryId`), `branch_create_failed` (error:
+  the fork threw and wrote nothing, with `branchId`, `entryId` and
+  `error`; the modal shows the failed line), `branch_create_refused`
+  (warn: the fork refused for a reason the modal has no line of its own
+  for, with `branchId`, `entryId`, the `code` and the refusal's
+  `reason`),
+  `branch_create_not_opened` (warn: the fork committed but the new
+  branch was never shown, with `branchId` and `newBranchId`: either the
+  story's screens couldn't be replaced, so the pointer went back to the
+  parent and a warning toast says so, or the story had been left first,
+  with `cause` `story-left` and no toast),
+  `branch_create_show_threw` (error: showing the new branch threw after
+  its navigation, with `branchId`, `newBranchId` and `error`; the new
+  reader's own load reports the failure) and `branch_create_threw`
+  (error: a step threw that the others don't catch, with `branchId`,
+  `entryId` and `error`; the hold ends, and the modal shows the failed
+  line, or closes once the fork has committed). The
   rail and the peek add two outside `runAction`:
   `rail_pref_write_failed` (`components/reader/rail/use-rail-collapse.ts`
   — a rail collapse-preference write that rejected) and

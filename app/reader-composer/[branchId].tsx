@@ -15,6 +15,7 @@ import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
+import { BranchCreateModal } from '@/components/reader/branch-create-modal'
 import { branchSwitchPaused } from '@/components/reader/branch-switch-paused'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
 import { closeHereEntryIds } from '@/components/reader/close-here-entries'
@@ -131,6 +132,7 @@ import {
 } from '@/components/reader/system-entry-actions'
 import { readerUndoRedoGates } from '@/components/reader/undo-redo-gates'
 import { useAliveRef } from '@/components/reader/use-alive-ref'
+import { useBranchCreate } from '@/components/reader/use-branch-create'
 import { useEmptyAfterRowsSignal } from '@/components/reader/use-empty-after-rows-signal'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
@@ -1772,6 +1774,13 @@ function ReaderComposerBody({
     },
     [storyId],
   )
+  const { onBranch, modal: branchCreate } = useBranchCreate({
+    storyId,
+    branchId,
+    isDispatchBlocked,
+    replaceStack,
+    swapPending,
+  })
   const sendEntryLanding = useCallback((entryId: string, sliceKey: number) => {
     if (Platform.OS === 'web') surfaceRef.current?.jumpToEntry(entryId, sliceKey)
     else documentRef.current?.jumpToEntry(entryId, sliceKey)
@@ -1980,6 +1989,7 @@ function ReaderComposerBody({
     onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
     onCloseChapterHere: handleCloseChapterHere,
+    onBranch,
     // Undefined for a held pass entry: its branch can't run a pass.
     onRetrySystemEntry: retrySystemEntry != null ? handleRetrySystemEntry : undefined,
     onDismissSystemEntry: handleDismissSystemEntry,
@@ -2188,6 +2198,8 @@ function ReaderComposerBody({
           }
         />
       ) : null}
+      {/* Focus-gated: a portaled modal would stay over a screen pushed above the reader. */}
+      {branchCreate != null && isFocused ? <BranchCreateModal {...branchCreate} /> : null}
       {timeEdit != null && worldTimeFrame != null ? (
         <WorldTimeEditSheet
           frame={worldTimeFrame}

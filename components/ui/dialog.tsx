@@ -8,7 +8,14 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { Platform, ScrollView, useWindowDimensions, View, type ViewProps } from 'react-native'
+import {
+  Platform,
+  ScrollView,
+  useWindowDimensions,
+  View,
+  type ViewProps,
+  type ViewStyle,
+} from 'react-native'
 import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
@@ -66,12 +73,16 @@ function DialogOverlay({
 // reachable. Cap the panel and scroll inside it instead.
 const MAX_HEIGHT_RATIO = 0.9
 
+// RN-web's disabled leaves the ×'s children clickable; its sr-only label still reaches Radix close.
+const CLOSE_GATED: ViewStyle = { pointerEvents: 'none' }
+
 function DialogContent({
   className,
   portalHost,
   hideCloseButton,
   scrollable = true,
   busy = false,
+  closeDisabled = false,
   returnFocusTo,
   onOpenAutoFocus,
   onCloseAutoFocus,
@@ -92,6 +103,8 @@ function DialogContent({
   scrollable?: boolean
   /** Its actions are disabling (a save in flight, a gate): focus stays in the dialog. */
   busy?: boolean
+  /** Disables the × while an action the dialog can't abandon runs. */
+  closeDisabled?: boolean
 }) {
   // Keyed on `open` like AlertDialogContent: the reader's undo / End keys and the Actions
   // menu stand down only for a registered overlay.
@@ -147,12 +160,15 @@ function DialogContent({
           )}
           {hideCloseButton ? null : (
             <DialogPrimitive.Close
+              disabled={closeDisabled}
               className={cn(
                 'absolute right-4 top-4 rounded opacity-70 active:bg-tint-press active:opacity-100',
                 Platform.select({
                   web: 'outline-none transition-colors hover:bg-tint-hover hover:opacity-100 focus-visible:ring-2 focus-visible:ring-focus-ring',
                 }),
+                closeDisabled && 'opacity-50',
               )}
+              style={closeDisabled ? CLOSE_GATED : undefined}
               hitSlop={12}
             >
               <Icon as={X} className="size-4 shrink-0 text-fg-primary web:pointer-events-none" />

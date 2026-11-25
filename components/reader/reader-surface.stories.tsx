@@ -116,6 +116,7 @@ const noopHandlers = {
   onRequestEditWorldTime: async () => {},
   onRegenerate: async () => {},
   onCloseChapterHere: async () => {},
+  onBranch: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
   onCopySystemText: async () => {},
@@ -441,12 +442,20 @@ export const GatedRowControlNamesTheRun: Story = {
   },
   play: async () => {
     const reason = t('generationGate.updatingMemory')
-    const pencil = await waitFor(() => within(entryRow('p3')).getByRole('button', { name: reason }))
-    expect(pencil).toBeDisabled()
-    expect(pencil.closest('[title]')?.getAttribute('title')).toBe(reason)
+    // p3's pencil and ⎇: an older entry's edit and a branch, neither of which a pass lets through.
+    const gated = await waitFor(() => {
+      const buttons = within(entryRow('p3')).getAllByRole('button', { name: reason })
+      expect(buttons).toHaveLength(2)
+      return buttons
+    })
+    for (const button of gated) {
+      expect(button).toBeDisabled()
+      expect(button.closest('[title]')?.getAttribute('title')).toBe(reason)
+    }
     expect(rowButton('p3', t('reader:entryCard.regenerate'))).not.toBeDisabled()
     expect(rowButton('p5', t('reader:entryCard.editEntry'))).not.toBeDisabled()
-    expect(within(entryRow('p5')).queryByRole('button', { name: reason })).not.toBeInTheDocument()
+    // The head turn's controls keep their own names; only its ⎇ waits on the pass.
+    expect(within(entryRow('p5')).getAllByRole('button', { name: reason })).toHaveLength(1)
   },
 }
 
@@ -459,9 +468,10 @@ export const ClosedGateNamesItsBlocker: Story = {
   },
   play: async () => {
     const reason = t('generationGate.suggestionRefresh')
+    // Pencil, ↻, ⎇ and ×.
     const gated = await waitFor(() => {
       const buttons = within(entryRow('p5')).getAllByRole('button', { name: reason })
-      expect(buttons).toHaveLength(3)
+      expect(buttons).toHaveLength(4)
       return buttons
     })
     for (const button of gated) expect(button).toBeDisabled()
@@ -483,10 +493,10 @@ export const RerunHoldsStampedRows: Story = {
     stampedReversalsHeld: true,
   },
   play: async () => {
-    // p3's pencil (older entry, gate-held), ↻ and ×: a disabled button's name is the reason.
+    // p3's pencil (older entry, gate-held), ↻, ⎇ and ×: a disabled button's name is the reason.
     const held = await waitFor(() => {
       const buttons = within(entryRow('p3')).getAllByRole('button', { name: RERUN_REASON })
-      expect(buttons).toHaveLength(3)
+      expect(buttons).toHaveLength(4)
       return buttons
     })
     for (const button of held) expect(button).toBeDisabled()
@@ -3434,8 +3444,9 @@ export const EditFocusHoldsOtherRows: Story = {
       const held = within(entryRow(id)).getAllByRole('button', { name: HELD() })
       for (const button of held) expect(button).toBeDisabled()
     }
-    expect(within(entryRow('p3')).getAllByRole('button', { name: HELD() })).toHaveLength(3)
-    expect(within(entryRow('p5')).getAllByRole('button', { name: HELD() })).toHaveLength(3)
+    // Pencil, ↻, ⎇ and × on each reply.
+    expect(within(entryRow('p3')).getAllByRole('button', { name: HELD() })).toHaveLength(4)
+    expect(within(entryRow('p5')).getAllByRole('button', { name: HELD() })).toHaveLength(4)
     const retry = within(entryRow('p6')).getByRole('button', { name: /Retry/ })
     expect(retry).toBeDisabled()
     expect(retry.closest('[title]')?.getAttribute('title')).toBe(HELD())
@@ -3463,7 +3474,10 @@ export const EditFocusGateReasonOutranks: Story = {
     const gate = t('generationGate.updatingMemory')
 
     const p3 = entryRow('p3')
-    expect(within(p3).getByRole('button', { name: gate })).toBeDisabled()
+    // Pencil and ⎇ wait on the gate, which cancelling the edit wouldn't free; ↻ and × on the edit.
+    const gated = within(p3).getAllByRole('button', { name: gate })
+    expect(gated).toHaveLength(2)
+    for (const button of gated) expect(button).toBeDisabled()
     expect(within(p3).getAllByRole('button', { name: HELD() })).toHaveLength(2)
     // The head turn's pencil passes the interruptible gate, so only the edit holds it.
     expect(within(entryRow('p4')).getAllByRole('button', { name: HELD() })).toHaveLength(2)
@@ -4377,17 +4391,52 @@ export const CloseChapterHereWaitsOnTheGate: Story = {
     const reason = t('generationGate.updatingMemory')
     await waitFor(() => expect(rowButton('p5', t('reader:entryCard.editEntry'))).not.toBeDisabled())
     expect(rowButton('p5', t('reader:entryCard.regenerate'))).not.toBeDisabled()
-    // The head turn's reply: only Close chapter here is held, named by the reason.
+    // The head turn's reply: ⎇ and Close chapter here are held, named by the reason.
     const headHeld = within(entryRow('p5')).getAllByRole('button', { name: reason })
-    expect(headHeld).toHaveLength(1)
-    expect(headHeld[0]).toBeDisabled()
-    // An older reply: its pencil and Close chapter here both wait.
+    expect(headHeld).toHaveLength(2)
+    for (const button of headHeld) expect(button).toBeDisabled()
+    // An older reply: its pencil, ⎇ and Close chapter here all wait.
     const olderHeld = within(entryRow('p3')).getAllByRole('button', { name: reason })
-    expect(olderHeld).toHaveLength(2)
+    expect(olderHeld).toHaveLength(3)
     for (const button of olderHeld) expect(button).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: t('reader:entryCard.closeChapterHere') }),
     ).not.toBeInTheDocument()
+  },
+}
+
+// reader-composer.md → Per-entry actions: ⎇ on replies and the opening, never a user action.
+
+const BRANCH_FROM_HERE = t('reader:entryCard.branchFromHere')
+
+/** ⎇ on a reply hands the host the row's id. */
+export const BranchFromReplyCallsHost: Story = {
+  args: { onBranch: fn(async () => {}) },
+  play: async ({ args }) => {
+    await userEvent.click(await waitFor(() => rowButton('e3', BRANCH_FROM_HERE)))
+    await waitFor(() => expect(args.onBranch).toHaveBeenCalledWith('e3'))
+    expect(args.onBranch).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** The opening has no delete, but it is a fork point like any reply. */
+export const BranchFromOpeningCallsHost: Story = {
+  args: { onBranch: fn(async () => {}) },
+  play: async ({ args }) => {
+    await userEvent.click(await waitFor(() => rowButton('e1', BRANCH_FROM_HERE)))
+    await waitFor(() => expect(args.onBranch).toHaveBeenCalledWith('e1'))
+    expect(args.onBranch).toHaveBeenCalledTimes(1)
+  },
+}
+
+/** A user action's cluster renders, with no ⎇ in it; every reply and the opening carry one. */
+export const BranchAbsentOnUserAction: Story = {
+  play: async () => {
+    await waitFor(() => expect(rowButton('e2', t('reader:entryCard.editEntry'))).toBeVisible())
+    for (const id of ['e2', 'e5'])
+      expect(within(entryRow(id)).queryByRole('button', { name: BRANCH_FROM_HERE })).toBeNull()
+    for (const id of ['e1', 'e3', 'e4']) expect(rowButton(id, BRANCH_FROM_HERE)).toBeVisible()
+    expect(screen.getAllByRole('button', { name: BRANCH_FROM_HERE })).toHaveLength(3)
   },
 }
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { generateStructured, generateToolStep } from '@/lib/ai'
 import {
+  branches,
   chapters,
   deltas,
   emptyEntityState,
@@ -231,6 +232,7 @@ describe('getCloseRerunPreview', () => {
 
     expect(await preview(h, chapterId)).toEqual({
       chapterNumber: 1,
+      branchName: 'main',
       model: 'lore-model',
       // What the parts read: the close stored the same sum as the chapter's token count.
       tokens: chapter.tokenCount,
@@ -283,17 +285,20 @@ describe('getCloseRerunPreview', () => {
     )
     expect(named.status).toBe('ok')
     const action = h.fx.entries.find((entry) => entry.position === 12)!.id
+    const beforeAction = h.fx.entries.find((entry) => entry.position === 11)!.id
 
     const read = await preview(h, chapterId)
 
     expect(read).toEqual({
       chapterNumber: 1,
+      branchName: 'main',
       model: 'lore-model',
       tokens: expect.any(Number),
       // The close's description of Tobin is the re-run's alone; the shortcut takes the keywords.
       reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
       shortcut: {
         targetEntryId: action,
+        forkPoint: { entryId: beforeAction, position: 11 },
         turns: 1,
         entries: { count: 2, first: 12, last: 13 },
         counts: {
@@ -882,6 +887,159 @@ describe('getCloseRerunPreview', () => {
     expectTypeOf<RefusedCode<Awaited<ReturnType<typeof getCloseRerunPreview>>>>().toEqualTypeOf<
       'not-found' | 'not-latest' | 'no-close' | 'integrity' | 'close-owed'
     >()
+  })
+})
+
+async function kindOf(h: CloseHarness, entryId: string): Promise<string | undefined> {
+  const [row] = await h.fx.ctx.db
+    .select({ kind: storyEntries.kind })
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, h.fx.branchId), eq(storyEntries.id, entryId)))
+  return row?.kind
+}
+
+function fixtureEntryAt(h: CloseHarness, position: number): { id: string; position: number } {
+  const entry = h.fx.entries.find((e) => e.position === position)
+  if (!entry) throw new Error(`the fixture holds no entry at position ${position}`)
+  return entry
+}
+
+const endPositionOf = (h: CloseHarness): number =>
+  h.fx.entries.find((entry) => entry.id === h.endEntryId)!.position
+
+describe("getCloseRerunPreview's fork point and branch name (AC 11)", () => {
+  it("names the chapter's end entry as N for a head close", async () => {
+    const h = await openHarness(STAND_IN, MOCKS)
+    const end = endPositionOf(h)
+    // The turns past E go before the close runs, so it closes the region's head.
+    await h.rollBack(fixtureEntryAt(h, end + 1).id)
+    await h.close()
+    const chapterId = closedChapterId(h)
+    const [chapter] = await h.fx.ctx.db
+      .select({ endEntryId: chapters.endEntryId })
+      .from(chapters)
+      .where(and(eq(chapters.branchId, h.fx.branchId), eq(chapters.id, chapterId)))
+    expect(chapter?.endEntryId).toBe(h.endEntryId)
+    await turnSince(h, end + 1)
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      shortcut: {
+        targetEntryId: `entry_since_${end + 1}`,
+        forkPoint: { entryId: h.endEntryId, position: end },
+      },
+    })
+    expect(await kindOf(h, h.endEntryId)).toBe('ai_reply')
+  })
+
+  it('names the last open-region entry before B as N for an earlier manual close', async () => {
+    const { h, chapterId } = await closedStandIn()
+    const last = h.fx.entries.at(-1)!
+    expect(last.position, 'open-region turns follow E').toBeGreaterThan(endPositionOf(h))
+    await turnSince(h, last.position + 1)
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      shortcut: {
+        targetEntryId: `entry_since_${last.position + 1}`,
+        forkPoint: { entryId: last.id, position: last.position },
+      },
+    })
+    expect(await kindOf(h, last.id)).toBe('ai_reply')
+  })
+
+  it('skips a system entry standing directly before B', async () => {
+    const { h, chapterId } = await closedStandIn()
+    const last = h.fx.entries.at(-1)!
+    await systemEntry(h, last.position + 1)
+    await turnSince(h, last.position + 2)
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      shortcut: {
+        targetEntryId: `entry_since_${last.position + 2}`,
+        forkPoint: { entryId: last.id, position: last.position },
+      },
+    })
+    expect(await kindOf(h, last.id)).toBe('ai_reply')
+  })
+
+  it("carries the branch's name", async () => {
+    const { h, chapterId } = await closedStandIn()
+    await h.fx.ctx.db
+      .update(branches)
+      .set({ name: 'The long road' })
+      .where(eq(branches.id, h.fx.branchId))
+
+    expect(await preview(h, chapterId)).toMatchObject({ branchName: 'The long road' })
+  })
+
+  it("reads the fork point from its own branch's entries, not a sibling's", async () => {
+    const { h, chapterId } = await closedStandIn()
+    const last = h.fx.entries.at(-1)!
+    await systemEntry(h, last.position + 1)
+    await turnSince(h, last.position + 2)
+    // Sibling positions overlap: its non-system entry at last+1 would win if the read crossed over.
+    await h.fx.ctx.db
+      .insert(branches)
+      .values({ id: 'branch_sibling', storyId: 'story_close', name: 'Sibling', createdAt: 1 })
+    await h.fx.ctx.db.insert(storyEntries).values({
+      id: 'entry_sibling',
+      branchId: 'branch_sibling',
+      position: last.position + 1,
+      kind: 'ai_reply',
+      content: 'The sibling goes its own way.',
+      createdAt: 1,
+    })
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      shortcut: { forkPoint: { entryId: last.id, position: last.position } },
+    })
+  })
+
+  it("reads its own branch's name, not a sibling's", async () => {
+    const { h, chapterId } = await closedStandIn()
+    await h.fx.ctx.db
+      .insert(branches)
+      .values({ id: 'branch_sibling', storyId: 'story_close', name: 'Sibling', createdAt: 1 })
+    // An unfiltered read takes the table's first row; put the sibling there.
+    h.fx.sqlite.prepare('UPDATE branches SET rowid = -1 WHERE id = ?').run('branch_sibling')
+
+    expect(await preview(h, chapterId)).toMatchObject({ branchName: 'main' })
+  })
+
+  it('refuses not-found when the branch row is gone, its chapter still there', async () => {
+    const { h, chapterId } = await closedStandIn()
+    // No path deletes a branch under its chapters; the foreign keys are lifted to stage one.
+    h.fx.sqlite.exec('PRAGMA foreign_keys = OFF')
+    h.fx.sqlite.prepare('DELETE FROM branches WHERE id = ?').run(h.fx.branchId)
+    expect(
+      await h.fx.ctx.db
+        .select({ id: chapters.id })
+        .from(chapters)
+        .where(eq(chapters.branchId, h.fx.branchId)),
+    ).toEqual([{ id: chapterId }])
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.notFound,
+    })
+  })
+
+  it('refuses integrity, logged, when no entry stands before B', async () => {
+    const { h, chapterId } = await closedStandIn()
+    await turnSince(h, 14)
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    // A broken branch: a closed chapter's end entry always stands before B.
+    h.fx.sqlite
+      .prepare("UPDATE story_entries SET kind = 'system' WHERE branch_id = ? AND position < 14")
+      .run(h.fx.branchId)
+
+    expect(await preview(h, chapterId)).toMatchObject({
+      status: 'rejected',
+      code: CLOSE_RERUN_REFUSAL.integrity,
+    })
+    expect(error).toHaveBeenCalledWith('action_layer.close_rerun_fork_point_missing', {
+      branchId: h.fx.branchId,
+      targetEntryId: 'entry_since_14',
+    })
   })
 })
 

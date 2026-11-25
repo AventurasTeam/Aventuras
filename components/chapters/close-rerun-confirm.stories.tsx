@@ -30,11 +30,13 @@ const COPY = {
   rerun: 'Re-run close',
   rollbackAndRerun: 'Roll back & re-run',
   rerunOnBranch: 'Re-run on new branch',
-  rerunOnBranchLater: 'Re-running on a new branch lands in a later milestone',
+  forkSentence:
+    'Re-run on new branch keeps them on Harbor watch and branches from entry 90 as "Ch. 5 re-run".',
 }
 const LORE_LINE = /lore rows? removed/
 const OTHER_LINE = /other changes? reversed/
 const TURNS_LINE = /followed this close/
+const FORK_LINE = /keeps them on/
 
 const SHORTCUT_COUNTS: RollbackCounts = {
   entries: 6,
@@ -48,11 +50,13 @@ const SHORTCUT_COUNTS: RollbackCounts = {
 // chapter-timeline.md → Re-run a close's sketch.
 const PREVIEW: CloseRerunPreview = {
   chapterNumber: 5,
+  branchName: 'Main',
   model: 'gemma-4-26b',
   tokens: 24310,
   reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
   shortcut: {
     targetEntryId: 'ent_91',
+    forkPoint: { entryId: 'ent_90', position: 90 },
     turns: 3,
     entries: { count: 6, first: 91, last: 96 },
     counts: SHORTCUT_COUNTS,
@@ -86,14 +90,23 @@ const meta: Meta<typeof CloseRerunConfirm> = {
   component: CloseRerunConfirm,
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
-  args: { open: true, preview: PREVIEW, pending: false, onCancel: fn(), onConfirm: fn() },
+  args: {
+    open: true,
+    preview: PREVIEW,
+    pending: false,
+    onCancel: fn(),
+    onConfirm: fn(),
+    onConfirmOnBranch: fn(),
+  },
 }
 
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Turns followed the close: their block and warning, and three buttons, the fork held for later. */
+/** Turns followed the close: their block, the fork's sentence before the warning, three buttons. */
 export const TurnsFollowed: Story = {
+  // Not the default branch's name, so a sentence that hard-codes it shows.
+  args: { preview: { ...PREVIEW, branchName: 'Harbor watch' } },
   play: async () => {
     const dialog = await findDialog()
     const lines = [
@@ -103,6 +116,7 @@ export const TurnsFollowed: Story = {
       COPY.turnsFollowed,
       COPY.entries,
       COPY.worldChanges,
+      COPY.forkSentence,
       COPY.rollbackWarning,
       COPY.cost,
       COPY.undoLine,
@@ -112,13 +126,31 @@ export const TurnsFollowed: Story = {
     const text = document.getElementById(describedBy ?? '')?.textContent ?? ''
     const order = lines.map((line) => text.indexOf(line))
     expect(order).toEqual([...order].sort((a, b) => a - b))
+    // The sentence names the branch by the one key the stored name and the fork's toasts read.
+    expect(COPY.forkSentence).toContain(`"${t('chapters:rerunConfirm.autoName', { number: 5 })}"`)
 
     expect(button(COPY.cancel)).not.toHaveAttribute('aria-disabled', 'true')
     expect(button(COPY.rollbackAndRerun)).not.toHaveAttribute('aria-disabled', 'true')
     const fork = button(COPY.rerunOnBranch)
-    expect(fork).toHaveAttribute('aria-disabled', 'true')
-    expect(fork.closest('[title]')).toHaveAttribute('title', COPY.rerunOnBranchLater)
+    expect(fork).not.toHaveAttribute('aria-disabled', 'true')
+    expect(fork.closest('[title]')).toBeNull()
     expect(screen.queryByRole('button', { name: COPY.rerun })).toBeNull()
+  },
+}
+
+/** A system entry stands just before the turns since: the sentence names N below it, not B − 1. */
+export const ForkPointBelowSystemEntry: Story = {
+  args: {
+    preview: {
+      ...PREVIEW,
+      shortcut: { ...PREVIEW.shortcut!, forkPoint: { entryId: 'ent_89', position: 89 } },
+    },
+  },
+  play: async () => {
+    const dialog = await findDialog()
+    await expectDescription(dialog, [
+      'Re-run on new branch keeps them on Main and branches from entry 89 as "Ch. 5 re-run".',
+    ])
   },
 }
 
@@ -130,7 +162,7 @@ export const NoTurnsSince: Story = {
     await expectDescription(
       dialog,
       [COPY.framing, COPY.loreEdited, COPY.otherChanges, COPY.cost, COPY.undoLine],
-      [TURNS_LINE, COPY.rollbackWarning],
+      [TURNS_LINE, FORK_LINE, COPY.rollbackWarning],
     )
     expect(button(COPY.cancel)).toBeInTheDocument()
     expect(button(COPY.rerun)).not.toHaveAttribute('aria-disabled', 'true')
@@ -170,6 +202,7 @@ export const SingleOfEach: Story = {
       reversal: { createdLore: { count: 1, userEdited: false }, otherChanges: 1 },
       shortcut: {
         targetEntryId: 'ent_91',
+        forkPoint: { entryId: 'ent_90', position: 90 },
         turns: 1,
         entries: { count: 1, first: 91, last: 91 },
         counts: { ...SHORTCUT_COUNTS, entries: 1, worldStateChanges: 1 },
@@ -199,14 +232,20 @@ export const RerunFiresConfirm: Story = {
   },
 }
 
+/** Each of the two confirm actions fires its own handler. */
 export const RollbackAndRerunFiresConfirm: Story = {
   play: async ({ args }) => {
     await findDialog()
+    await userEvent.click(button(COPY.rerunOnBranch))
+    await waitFor(() => expect(args.onConfirmOnBranch).toHaveBeenCalledTimes(1), WAIT)
+    // The preview it showed, which the fork reads its expected counts from.
+    expect(args.onConfirmOnBranch).toHaveBeenCalledWith(PREVIEW)
+    expect(args.onConfirm).not.toHaveBeenCalled()
+
     await userEvent.click(button(COPY.rollbackAndRerun))
     await waitFor(() => expect(args.onConfirm).toHaveBeenCalledTimes(1), WAIT)
-    // The held fork fires nothing.
-    await userEvent.click(button(COPY.rerunOnBranch), { pointerEventsCheck: 0 })
-    expect(args.onConfirm).toHaveBeenCalledTimes(1)
+    expect(args.onConfirmOnBranch).toHaveBeenCalledTimes(1)
+    expect(args.onCancel).not.toHaveBeenCalled()
   },
 }
 
@@ -244,23 +283,23 @@ export const Blocked: Story = {
   },
 }
 
-/** Blocked with turns since: `Roll back & re-run` takes the gate's reason; the fork keeps its own. */
+/** Blocked with turns since: both confirm actions take the gate's reason and fire nothing. */
 export const BlockedWithTurns: Story = {
   args: { blockedReason: BLOCKED_REASON },
   play: async ({ args }) => {
     await findDialog()
-    const rollback = button(COPY.rollbackAndRerun)
-    await userEvent.click(rollback, { pointerEventsCheck: 0 })
+    for (const name of [COPY.rollbackAndRerun, COPY.rerunOnBranch]) {
+      const action = button(name)
+      await userEvent.click(action, { pointerEventsCheck: 0 })
+      expect(action).toHaveAttribute('aria-disabled', 'true')
+      expect(action.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
+    }
     expect(args.onConfirm).not.toHaveBeenCalled()
-    expect(rollback.closest('[title]')).toHaveAttribute('title', BLOCKED_REASON)
-    expect(button(COPY.rerunOnBranch).closest('[title]')).toHaveAttribute(
-      'title',
-      COPY.rerunOnBranchLater,
-    )
+    expect(args.onConfirmOnBranch).not.toHaveBeenCalled()
   },
 }
 
-/** A start is in flight: every button waits for its result. */
+/** A start or a fork is in flight: every button waits for its result. */
 export const Pending: Story = {
   args: { pending: true },
   play: async ({ args }) => {
@@ -270,6 +309,7 @@ export const Pending: Story = {
     // Esc asks the dialog to close; a start in flight keeps it where it is.
     await userEvent.keyboard('{Escape}')
     expect(args.onConfirm).not.toHaveBeenCalled()
+    expect(args.onConfirmOnBranch).not.toHaveBeenCalled()
     expect(args.onCancel).not.toHaveBeenCalled()
     for (const each of buttons) expect(each).toHaveAttribute('aria-disabled', 'true')
   },

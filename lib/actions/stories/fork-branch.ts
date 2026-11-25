@@ -50,7 +50,7 @@ export type ForkResult = { status: 'ok'; branchId: string } | ForkRefusal
 export type ForkBranchInput = {
   readonly parentBranchId: string
   readonly forkEntryId: string
-  /** Stored as given; no creation modal trims it yet (C8, M6.5). */
+  /** Stored trimmed (C8). */
   readonly name: string
   readonly makeCurrent: boolean
 }
@@ -142,7 +142,7 @@ async function forkHeld(input: ForkBranchCoreInput, ctx: DbCtx): Promise<ForkRes
         storyId: parent.storyId,
         parentBranchId,
         forkEntryId,
-        name: input.name,
+        name: input.name.trim(),
         createdAt: input.createdAt,
         classifierStatus: forkStatus(parent.classifierStatus, forkEntry.position),
       })

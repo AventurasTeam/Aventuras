@@ -1,17 +1,34 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest'
 
+import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import {
   CLOSE_RERUN_REFUSAL,
+  CLOSE_RERUN_TURNS_FOLLOWED,
   DeltaReplayError,
+  FORK_REFUSAL,
   MANUAL_CLOSE_REFUSAL,
   STORY_ENTRY_REJECTION,
+  type CloseRerunParentCheck,
   type CloseRerunPreview,
+  type CloseRerunForkPreview,
+  type CloseRerunForkStart,
+  type CloseRerunShortcut,
   type CloseRerunStart,
+  type ForkBranchInput,
   type RollbackCounts,
 } from '@/lib/actions'
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { STORY_SETTINGS_DEFAULTS, storyDefinitionSchema } from '@/lib/db'
+import { db, STORY_SETTINGS_DEFAULTS, storyDefinitionSchema, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
@@ -21,19 +38,50 @@ import {
   type ChainEnd,
   type PipelineError,
 } from '@/lib/pipeline'
-import { currentStoryStore, RERUN_HELD, resetAllStores, type OpenStory } from '@/lib/stores'
+import {
+  currentStoryStore,
+  generationStore,
+  readerHoldStore,
+  RERUN_HELD,
+  resetAllStores,
+  type OpenStory,
+} from '@/lib/stores'
+import { refreshBranches as refreshFromDb } from '@/lib/stores/branches/branches'
 import { toast } from '@/lib/toast'
 
-import { expectedOf, rerunEndNotice, rerunStartOutcome, runCloseRerun } from './run-close-rerun'
+import {
+  expectedOf,
+  rerunEndNotice,
+  rerunStartOutcome,
+  runCloseRerun,
+  runCloseRerunOnBranch,
+} from './run-close-rerun'
 
 // The close-failure copy's module also holds a hook on expo-router, which the unit project can't load.
 vi.mock('expo-router', () => ({ useRouter: () => ({}) }))
 
-const actions = vi.hoisted(() => ({ start: vi.fn(), load: vi.fn() }))
+const actions = vi.hoisted(() => ({
+  start: vi.fn(),
+  load: vi.fn(),
+  check: vi.fn(),
+  fork: vi.fn(),
+  show: vi.fn(),
+  startOnFork: vi.fn(),
+}))
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   startCloseRerun: actions.start,
   loadOpenStory: actions.load,
+  checkCloseRerunParent: actions.check,
+  forkBranch: actions.fork,
+  showBranch: actions.show,
+  startCloseRerunOnFork: actions.startOnFork,
+}))
+
+const branchList = vi.hoisted(() => ({ refresh: vi.fn() }))
+vi.mock('@/lib/stores', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  refreshBranches: branchList.refresh,
 }))
 
 const COUNTS: RollbackCounts = {
@@ -47,11 +95,13 @@ const COUNTS: RollbackCounts = {
 
 const PREVIEW: CloseRerunPreview = {
   chapterNumber: 2,
+  branchName: 'Main',
   model: 'gemma-4-26b',
   tokens: 24_310,
   reversal: { createdLore: { count: 2, userEdited: true }, otherChanges: 31 },
   shortcut: {
     targetEntryId: 'entry_58',
+    forkPoint: { entryId: 'entry_57', position: 57 },
     turns: 7,
     entries: { count: 15, first: 58, last: 72 },
     counts: COUNTS,
@@ -151,6 +201,14 @@ function story(branchId: string): OpenStory {
     }),
     settings: STORY_SETTINGS_DEFAULTS,
   }
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((settle) => {
+    resolve = settle
+  })
+  return { promise, resolve }
 }
 
 let info: MockInstance<typeof toast.info>
@@ -483,6 +541,494 @@ describe('runCloseRerun — a shortcut that landed and failed its store sync', (
         error: message,
       })
       expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.resyncFailed'))
+    },
+  )
+})
+
+describe('runCloseRerunOnBranch', () => {
+  const SHORTCUT: CloseRerunShortcut = {
+    targetEntryId: 'entry_58',
+    forkPoint: { entryId: 'entry_57', position: 57 },
+    turns: 7,
+    entries: { count: 15, first: 58, last: 72 },
+    counts: COUNTS,
+  }
+  const ON_PARENT: CloseRerunForkPreview = { ...PREVIEW, branchName: 'Main', shortcut: SHORTCUT }
+  const CLEAR: CloseRerunParentCheck = {
+    status: 'clear',
+    preview: { ...ON_PARENT, shortcut: SHORTCUT },
+  }
+  const CTX = { db, runInTransaction: expect.any(Function) }
+  const AT = { branchId: 'br_1', chapterId: 'chap_2' }
+  const START_FAILED =
+    'Branched "Ch. 2 re-run" from entry 57, but couldn\'t start the re-run. Retry from Chapter Timeline.'
+  const NOT_OPENED =
+    'Branched "Ch. 2 re-run" from entry 57, but couldn\'t open it. Switch to it, then retry from Chapter Timeline.'
+
+  const replaceStack = vi.fn<ReplaceStoryStack>(() => true)
+  const closeRequest = vi.fn<() => void>()
+  const onBranch = () =>
+    runCloseRerunOnBranch({
+      storyId: 'story_1',
+      branchId: 'br_1',
+      chapterId: 'chap_2',
+      preview: ON_PARENT,
+      replaceStack,
+      closeRequest,
+    })
+
+  let order: string[]
+  let pendingAtFork: number[]
+  let heldAt: Record<string, boolean>
+
+  type Logged = readonly ['warn' | 'error', string, Readonly<Record<string, string>>]
+
+  // One log for the event: a refusal warns, a throw is an error.
+  function expectLoggedOnce([level, kind, detail]: Logged): void {
+    const [used, unused] = level === 'warn' ? [logWarn, logError] : [logError, logWarn]
+    expect(used).toHaveBeenCalledExactlyOnceWith(kind, {
+      ...AT,
+      newBranchId: 'br_child',
+      ...detail,
+    })
+    expect(unused).not.toHaveBeenCalled()
+  }
+
+  function expectNothingAfterTheCheck(): void {
+    expect(actions.show).not.toHaveBeenCalled()
+    expect(branchList.refresh).not.toHaveBeenCalled()
+    expect(actions.startOnFork).not.toHaveBeenCalled()
+    expect(closeRequest).not.toHaveBeenCalled()
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  }
+
+  beforeEach(() => {
+    currentStoryStore.set(story('br_1'))
+    order = []
+    pendingAtFork = []
+    heldAt = {}
+    actions.check.mockReset().mockImplementation(async () => {
+      order.push('check')
+      heldAt.check = readerHoldStore.isHeld('br_1')
+      return CLEAR
+    })
+    actions.fork.mockReset().mockImplementation(async () => {
+      order.push('fork')
+      heldAt.fork = readerHoldStore.isHeld('br_1')
+      pendingAtFork.push(generationStore.getTxState().pendingTurns.size)
+      return { status: 'ok', branchId: 'br_child' }
+    })
+    actions.show.mockReset().mockImplementation(async () => {
+      order.push('show')
+      heldAt.show = readerHoldStore.isHeld('br_1')
+      return { status: 'ok' }
+    })
+    branchList.refresh.mockReset().mockImplementation(async () => {
+      order.push('refresh')
+    })
+    actions.startOnFork.mockReset().mockImplementation(async (_branch, _chapter, _ctx, opts) => {
+      order.push('start')
+      opts?.onStarted?.()
+      return END.committed
+    })
+    replaceStack.mockClear()
+    closeRequest.mockReset()
+  })
+
+  it('types every step before the commit as a refusal: the check ends no chain', () => {
+    type Step = Awaited<ReturnType<typeof runCloseRerunOnBranch>>
+    expectTypeOf<Extract<Step, { step: 'ended' }>>().toBeNever()
+  })
+
+  it("takes the parent reader's hold before its first await and keeps it to the tail", async () => {
+    const run = onBranch()
+    expect(readerHoldStore.isHeld('br_1')).toBe(true)
+    await run
+    expect(heldAt).toStrictEqual({ check: true, fork: true, show: true })
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
+  it('ends the hold when a step past its own catches throws', async () => {
+    actions.check.mockRejectedValue(new Error('disk'))
+    error.mockImplementation(() => {
+      throw new Error('toast broke')
+    })
+    await expect(onBranch()).rejects.toThrow('toast broke')
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
+  it('checks the parent, forks at N under the auto-name, shows the new branch through the stack reset, then refreshes and starts there', async () => {
+    expect(await onBranch()).toStrictEqual({ step: 'forked' })
+    expect(order).toStrictEqual(['check', 'fork', 'show', 'refresh', 'start'])
+    expect(actions.check).toHaveBeenCalledExactlyOnceWith(
+      'br_1',
+      'chap_2',
+      expectedOf(ON_PARENT),
+      CTX,
+    )
+    expect(actions.fork).toHaveBeenCalledExactlyOnceWith(
+      { parentBranchId: 'br_1', forkEntryId: 'entry_57', name: 'Ch. 2 re-run', makeCurrent: true },
+      CTX,
+    )
+    expect(actions.show).toHaveBeenCalledExactlyOnceWith(
+      {
+        storyId: 'story_1',
+        branchId: 'br_child',
+        hold: expect.objectContaining({ branchId: 'br_1' }),
+        replaceStack,
+      },
+      CTX,
+    )
+    expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
+    expect(actions.startOnFork).toHaveBeenCalledExactlyOnceWith('br_child', 'chap_2', CTX, {
+      onStarted: expect.any(Function),
+    })
+    expect(closeRequest).not.toHaveBeenCalled()
+    expect(warning).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it("forks at the check's fresh N, not the one the confirm showed", async () => {
+    const fresh = { ...SHORTCUT, forkPoint: { entryId: 'entry_56', position: 56 } }
+    actions.check.mockResolvedValue({ status: 'clear', preview: { ...ON_PARENT, shortcut: fresh } })
+    await onBranch()
+    expect(actions.fork).toHaveBeenCalledWith(
+      expect.objectContaining({ forkEntryId: 'entry_56' }),
+      CTX,
+    )
+    expect(info).toHaveBeenCalledExactlyOnceWith(
+      t('chapters:rerunNotice.forkStarted', { name: 'Ch. 2 re-run', position: 56, number: 2 }),
+    )
+  })
+
+  it.each([
+    [
+      'the start on it refuses',
+      () =>
+        actions.startOnFork.mockResolvedValue({
+          outcome: 'rejected',
+          blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+        }),
+      'Branched "Ch. 2 re-run" from entry 56, but couldn\'t start the re-run. Retry from Chapter Timeline.',
+    ],
+    [
+      "the tail can't navigate to it",
+      () => actions.show.mockResolvedValue({ status: 'navigation-blocked' }),
+      'Branched "Ch. 2 re-run" from entry 56, but couldn\'t open it. Switch to it, then retry from Chapter Timeline.',
+    ],
+  ] as const)(
+    "warns at the check's fresh N, not the confirm's, when %s",
+    async (_name, fail, message) => {
+      const fresh = { ...SHORTCUT, forkPoint: { entryId: 'entry_56', position: 56 } }
+      actions.check.mockResolvedValue({
+        status: 'clear',
+        preview: { ...ON_PARENT, shortcut: fresh },
+      })
+      fail()
+      expect(await onBranch()).toStrictEqual({ step: 'forked' })
+      expect(warning).toHaveBeenCalledExactlyOnceWith(message)
+    },
+  )
+
+  it('holds no pending turn at the fork', async () => {
+    await onBranch()
+    expect(pendingAtFork).toStrictEqual([0])
+  })
+
+  it('names the branch as the toast does, and toasts the start only at its reserve', async () => {
+    const started = deferred<CloseRerunForkStart>()
+    actions.startOnFork.mockImplementation(() => started.promise)
+    const run = onBranch()
+    await vi.waitFor(() => expect(actions.startOnFork).toHaveBeenCalledTimes(1))
+    expect(info).not.toHaveBeenCalled()
+
+    actions.startOnFork.mock.calls[0]?.[3]?.onStarted?.()
+    const { name } = actions.fork.mock.calls[0]?.[0] as ForkBranchInput
+    expect(name).toBe(t('chapters:rerunConfirm.autoName', { number: 2 }))
+    expect(info).toHaveBeenCalledExactlyOnceWith(
+      'Branched "Ch. 2 re-run" from entry 57 — re-running chapter 2\'s close.',
+    )
+    expect(info).toHaveBeenCalledWith(
+      t('chapters:rerunNotice.forkStarted', { name, position: 57, number: 2 }),
+    )
+
+    started.resolve(END.committed)
+    expect(await run).toStrictEqual({ step: 'forked' })
+    expect(info).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['cancelled', END.aborted, 'info', t('chapters:rerunNotice.cancelled', { number: 2 })],
+    [
+      'failed',
+      END.failed,
+      'warning',
+      t('chapters:rerunNotice.failedWithReason', { number: 2, reason: 'socket hang up' }),
+    ],
+    ['undone', END.abortedUndone, 'warning', t('chapters:rerunNotice.undone', { number: 2 })],
+  ] as const)(
+    'toasts a re-run that ended %s as in place',
+    async (_name, end, severity, message) => {
+      actions.startOnFork.mockImplementation(async (_branch, _chapter, _ctx, opts) => {
+        opts?.onStarted?.()
+        return end
+      })
+      expect(await onBranch()).toStrictEqual({ step: 'forked' })
+      expect({ info, warning, error }[severity]).toHaveBeenLastCalledWith(message)
+    },
+  )
+
+  it('logs a refresh whose read fails, toasts nothing for it, and still starts', async () => {
+    const failingRead = {
+      select: () => {
+        throw new Error('disk')
+      },
+    } as unknown as DbCtx['db']
+    branchList.refresh.mockImplementation((_db: unknown, storyId: string) =>
+      refreshFromDb(failingRead, storyId),
+    )
+    expect(await onBranch()).toStrictEqual({ step: 'forked' })
+    await vi.waitFor(() =>
+      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.branches_refresh_failed', {
+        storyId: 'story_1',
+        error: 'disk',
+      }),
+    )
+    expect(actions.startOnFork).toHaveBeenCalledTimes(1)
+    expect(warning).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it("starts without waiting on the refresh's read", async () => {
+    branchList.refresh.mockReturnValue(new Promise(() => {}))
+    expect(await onBranch()).toStrictEqual({ step: 'forked' })
+    expect(actions.startOnFork).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    [
+      'a busy story',
+      { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.busy },
+      { step: 'keep-open' },
+      'Unavailable while generating.',
+      null,
+    ],
+    [
+      'another branch open',
+      { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.branchNotOpen },
+      { step: 'refused' },
+      t('chapters:rerunNotice.startFailed'),
+      MANUAL_CLOSE_REFUSAL.branchNotOpen,
+    ],
+    [
+      'a pending swap',
+      { outcome: 'rejected', blockedBy: MANUAL_CLOSE_REFUSAL.swapPending },
+      { step: 'refused' },
+      t('reader:actions.blockedWhileSwapping'),
+      MANUAL_CLOSE_REFUSAL.swapPending,
+    ],
+    [
+      'a branch held until a restart',
+      { outcome: 'rejected', blockedBy: RERUN_HELD },
+      { step: 'refused' },
+      t('generationGate.rerunHeld'),
+      RERUN_HELD,
+    ],
+    [
+      'a chapter no longer the latest',
+      { status: 'rejected', code: CLOSE_RERUN_REFUSAL.notLatest, reason: 'x' },
+      { step: 'refused' },
+      t('chapters:rerunConfirm.notLatest'),
+      null,
+    ],
+    [
+      'counts that moved',
+      { status: 'rejected', code: 'counts-changed', reason: 'x', preview: FRESH },
+      { step: 'replace', preview: FRESH },
+      t('chapters:rerunNotice.countsChanged'),
+      null,
+    ],
+  ] as const)(
+    'refuses %s on the parent as the in-place start does, before any fork',
+    async (_name, refusal, step, message, code) => {
+      actions.check.mockResolvedValue(refusal)
+      expect(await onBranch()).toStrictEqual(step)
+      expect(error).toHaveBeenCalledExactlyOnceWith(message)
+      if (code == null) expect(logWarn).not.toHaveBeenCalled()
+      else
+        expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_start_refused', {
+          ...AT,
+          code,
+        })
+      expect(actions.fork).not.toHaveBeenCalled()
+      expectNothingAfterTheCheck()
+    },
+  )
+
+  it.each([
+    [FORK_REFUSAL.gated, { step: 'keep-open' }, 'Unavailable while generating.', false],
+    [
+      FORK_REFUSAL.swapPending,
+      { step: 'refused' },
+      'Unavailable while the embedder switch finishes.',
+      false,
+    ],
+    [
+      FORK_REFUSAL.unfinishedRun,
+      { step: 'refused' },
+      "Memory work on this branch never finished, so it can't branch here yet. Restart the app, then try again.",
+      true,
+    ],
+    [FORK_REFUSAL.entryMissing, { step: 'refused' }, "Couldn't start the re-run.", true],
+    [FORK_REFUSAL.entrySystem, { step: 'refused' }, "Couldn't start the re-run.", true],
+    [FORK_REFUSAL.rollbackFloor, { step: 'refused' }, "Couldn't start the re-run.", true],
+    [FORK_REFUSAL.integrity, { step: 'refused' }, "Couldn't start the re-run.", true],
+    ['lock-timeout', { step: 'refused' }, "Couldn't start the re-run.", true],
+  ] as const)(
+    'maps the fork refusing %s onto the confirm, and runs nothing after it',
+    async (code, step, message, logged) => {
+      actions.fork.mockResolvedValue({ status: 'rejected', code, reason: 'x' })
+      expect(await onBranch()).toStrictEqual(step)
+      expect(error).toHaveBeenCalledExactlyOnceWith(message)
+      if (logged)
+        expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_refused', {
+          ...AT,
+          code,
+        })
+      else expect(logWarn).not.toHaveBeenCalled()
+      expectNothingAfterTheCheck()
+    },
+  )
+
+  it.each([
+    ['check', () => actions.check.mockRejectedValue(new Error('disk')), 0],
+    ['fork', () => actions.fork.mockRejectedValue(new Error('disk')), 1],
+  ] as const)(
+    'logs a %s that throws and toasts start-failed; no branch exists',
+    async (step, fail, forks) => {
+      fail()
+      expect(await onBranch()).toStrictEqual({ step: 'refused' })
+      expect(logError).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_threw', {
+        ...AT,
+        step,
+        error: 'disk',
+      })
+      expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.startFailed'))
+      expect(actions.fork).toHaveBeenCalledTimes(forks)
+      expectNothingAfterTheCheck()
+    },
+  )
+
+  it("on a tail that can't navigate, refreshes the list, closes the request, warns and starts nothing", async () => {
+    actions.show.mockResolvedValue({ status: 'navigation-blocked' })
+    expect(await onBranch()).toStrictEqual({ step: 'forked' })
+    expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
+    expect(closeRequest).toHaveBeenCalledTimes(1)
+    expect(warning).toHaveBeenCalledExactlyOnceWith(NOT_OPENED)
+    expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_not_opened', {
+      ...AT,
+      newBranchId: 'br_child',
+    })
+    expect(actions.startOnFork).not.toHaveBeenCalled()
+    expect(actions.show).toHaveBeenCalledTimes(1)
+    expect(info).not.toHaveBeenCalled()
+    expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
+  it.each([
+    [
+      'navigated with nothing loaded',
+      () => actions.show.mockResolvedValue({ status: 'shown-unloaded' }),
+      ['warn', 'app.close_rerun_fork_start_failed', { cause: 'shown-unloaded' }],
+    ],
+    [
+      'threw',
+      () => actions.show.mockRejectedValue(new Error('disk')),
+      ['error', 'app.close_rerun_fork_threw', { step: 'show', error: 'disk' }],
+    ],
+  ] as const)(
+    'after the commit, a tail that %s starts nothing, closes the request and warns',
+    async (_name, fail, logged) => {
+      fail()
+      expect(await onBranch()).toStrictEqual({ step: 'forked' })
+      expect(actions.show).toHaveBeenCalledTimes(1)
+      expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
+      expect(closeRequest).toHaveBeenCalledTimes(1)
+      expect(warning).toHaveBeenCalledExactlyOnceWith(START_FAILED)
+      expectLoggedOnce(logged)
+      expect(actions.startOnFork).not.toHaveBeenCalled()
+      expect(readerHoldStore.isHeld('br_1')).toBe(false)
+    },
+  )
+
+  it.each([
+    [
+      'refuses with turns after the close',
+      () =>
+        actions.startOnFork.mockResolvedValue({
+          status: 'rejected',
+          code: CLOSE_RERUN_TURNS_FOLLOWED,
+          reason: 'x',
+        }),
+      ['warn', 'app.close_rerun_fork_start_failed', { cause: 'turns-followed' }],
+    ],
+    [
+      'refuses a busy story',
+      () =>
+        actions.startOnFork.mockResolvedValue({
+          outcome: 'rejected',
+          blockedBy: MANUAL_CLOSE_REFUSAL.busy,
+        }),
+      ['warn', 'app.close_rerun_fork_start_failed', { cause: 'story-busy' }],
+    ],
+    [
+      'throws',
+      () => actions.startOnFork.mockRejectedValue(new Error('disk')),
+      ['error', 'app.close_rerun_fork_threw', { step: 'start', error: 'disk' }],
+    ],
+  ] as const)(
+    'a start on the new branch that %s ends the sequence with the warning',
+    async (_name, fail, logged) => {
+      fail()
+      expect(await onBranch()).toStrictEqual({ step: 'forked' })
+      expect(warning).toHaveBeenCalledExactlyOnceWith(START_FAILED)
+      expectLoggedOnce(logged)
+      expect(info).not.toHaveBeenCalled()
+      // The tail ran once and published, so its prune, not the sequence, closes the confirm.
+      expect(actions.show).toHaveBeenCalledTimes(1)
+      expect(closeRequest).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    ['switched to another branch', () => currentStoryStore.set(story('br_2')), true],
+    ['closed', () => currentStoryStore.clear(), false],
+    [
+      'left for another story',
+      () => currentStoryStore.set({ ...story('br_9'), storyId: 'story_2' }),
+      false,
+    ],
+  ] as const)(
+    "after the commit, with the story %s, skips the tail, closes the request and warns it wasn't opened",
+    async (_name, leave, refreshes) => {
+      actions.fork.mockImplementation(async () => {
+        leave()
+        return { status: 'ok', branchId: 'br_child' }
+      })
+      expect(await onBranch()).toStrictEqual({ step: 'forked' })
+      expect(actions.show).not.toHaveBeenCalled()
+      // The list store holds one story: only this story, still open, is refreshed.
+      if (refreshes) expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
+      else expect(branchList.refresh).not.toHaveBeenCalled()
+      expect(closeRequest).toHaveBeenCalledTimes(1)
+      expect(warning).toHaveBeenCalledExactlyOnceWith(NOT_OPENED)
+      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_not_opened', {
+        ...AT,
+        newBranchId: 'br_child',
+        cause: 'story-left',
+      })
+      expect(actions.startOnFork).not.toHaveBeenCalled()
+      expect(readerHoldStore.isHeld('br_1')).toBe(false)
     },
   )
 })

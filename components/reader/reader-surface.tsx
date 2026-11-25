@@ -199,6 +199,7 @@ type ReaderRowProps = {
   /** This row is in the host's C10 table; a flag rather than the table keeps the memo holding. */
   closeHere: boolean
   onCloseChapterHere: (entryId: string) => Promise<void>
+  onBranch: (entryId: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
   onFixCutOff: () => Promise<void>
   onRetrySystemEntry?: () => Promise<void>
@@ -243,6 +244,7 @@ const ReaderRow = memo(function ReaderRow({
   onRegenerate,
   closeHere,
   onCloseChapterHere,
+  onBranch,
   onFixSystemEntry,
   onFixCutOff,
   onRetrySystemEntry,
@@ -299,6 +301,9 @@ const ReaderRow = memo(function ReaderRow({
       editDirty={editing && editContent !== row.content}
       onEdit={isSystem ? undefined : () => onStartEdit(row)}
       onRegen={row.kind === 'ai_reply' ? () => void onRegenerate(row.id) : undefined}
+      onBranch={
+        row.kind === 'ai_reply' || row.kind === 'opening' ? () => void onBranch(row.id) : undefined
+      }
       onCloseChapterHere={closeHere ? () => void onCloseChapterHere(row.id) : undefined}
       onContentChange={onContentChange}
       onCommitEdit={() => void onCommitEdit()}
@@ -409,6 +414,7 @@ export function ReaderSurface({
     onRequestEditScene,
     onRegenerate,
     onCloseChapterHere,
+    onBranch,
     onRetrySystemEntry,
     onDismissSystemEntry,
     onCopySystemText,
@@ -1377,6 +1383,7 @@ export function ReaderSurface({
                     onRegenerate={onRegenerate}
                     closeHere={closeHereEntryIds[row.id] === true}
                     onCloseChapterHere={onCloseChapterHere}
+                    onBranch={onBranch}
                     onFixSystemEntry={onFixSystemEntry}
                     onFixCutOff={onFixCutOff}
                     onRetrySystemEntry={onRetrySystemEntry}

@@ -135,6 +135,17 @@
   .modal-foot .btn { padding: 6px 16px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); color: var(--ink); font-size: 13px; cursor: pointer; font-family: inherit; }
   .modal-foot .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
   .modal-foot .btn.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* creation modal states (branch-navigator.md → Branch creation — modal): a refusal or a failure is one
+     line above the buttons; pending spins Create and disables the rest */
+  .modal-message { display: none; margin-top: 12px; font-size: 12px; color: var(--warn); }
+  .modal-message.show { display: block; }
+  .modal-foot .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .modal-input:disabled { color: var(--ink-muted); background: var(--bg-highlight); }
+  .modal.pending .modal-close { opacity: 0.4; pointer-events: none; }
+  .modal.pending .modal-foot .btn.primary:disabled { opacity: 1; cursor: progress; }
+  .modal-foot .spinner { display: none; width: 10px; height: 10px; margin-right: 6px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; vertical-align: -1px; animation: modal-spin 0.8s linear infinite; }
+  .modal.pending .modal-foot .spinner { display: inline-block; }
+  @keyframes modal-spin { to { transform: rotate(360deg); } }
 
   /* paused-during-generation state (per branch-navigator.md → During generation) */
   .gen-banner { display: none; padding: 8px 14px; background: #fff8e6; border-bottom: 1px solid #e8d890; color: #7a6020; font-size: 11px; }
@@ -178,6 +189,17 @@
     <button class="rb-btn active" data-surface="popover">Navigator (Popover · desktop / tablet)</button>
     <button class="rb-btn" data-surface="drawer">Navigator (Sheet · phone)</button>
     <button class="rb-btn" data-surface="modal">Creation modal</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">create:</span>
+    <button class="rb-btn active" data-create-state="empty">empty</button>
+    <button class="rb-btn" data-create-state="typed">typed</button>
+    <button class="rb-btn" data-create-state="pending">pending (busy)</button>
+    <button class="rb-btn" data-create-state="refused-gate">refused &middot; gate</button>
+    <button class="rb-btn" data-create-state="refused-run">refused &middot; unfinished run</button>
+    <button class="rb-btn" data-create-state="refused-entry">refused &middot; entry gone</button>
+    <button class="rb-btn" data-create-state="refused-swap">refused on open &middot; swap pending</button>
+    <button class="rb-btn" data-create-state="failed">failed</button>
   </div>
   <div class="rb-group">
     <span class="gl">row state:</span>
@@ -289,7 +311,7 @@
 
   <!-- creation modal -->
   <div class="modal-backdrop" id="modal-backdrop">
-    <div class="modal">
+    <div class="modal" id="create-modal">
       <div class="modal-head">
         <span class="modal-title">New branch</span>
         <span class="modal-close">×</span>
@@ -298,10 +320,11 @@
         <div class="modal-context">Branching from entry 47.</div>
         <div class="modal-field-label">Name <span class="req">*required</span></div>
         <input class="modal-input" id="modal-name-input" type="text" placeholder="e.g. alt-ending-2">
+        <div class="modal-message" id="modal-message" role="alert"></div>
       </div>
       <div class="modal-foot">
-        <button class="btn">Cancel</button>
-        <button class="btn primary" id="modal-create-btn" disabled>Create</button>
+        <button class="btn" id="modal-cancel-btn">Cancel</button>
+        <button class="btn primary" id="modal-create-btn" disabled><span class="spinner"></span>Create</button>
       </div>
     </div>
   </div>
@@ -562,15 +585,54 @@
     applySurface();
   });
 
-  // modal name input enables Create
+  // creation modal states (branch-navigator.md → Branch creation — modal)
   const nameInput = document.getElementById('modal-name-input');
   const createBtn = document.getElementById('modal-create-btn');
-  nameInput.addEventListener('input', () => {
-    createBtn.disabled = nameInput.value.trim().length === 0;
-  });
+  const cancelBtn = document.getElementById('modal-cancel-btn');
+  const createModal = document.getElementById('create-modal');
+  const modalMessage = document.getElementById('modal-message');
+  const CREATE_LINES = {
+    'refused-gate': 'Generation is in flight. Cancel to edit.',
+    'refused-run': 'The memory work after this entry never finished, so branch from an earlier entry.',
+    'refused-entry': 'This entry is no longer on the branch.',
+    'refused-swap': 'Unavailable while the embedder switch finishes.',
+    'failed': "Couldn't create the branch.",
+  };
+  let createState = 'empty';           // 'empty' | 'typed' | 'pending' | 'refused-*' | 'failed'
+
+  // Create needs a name; pending locks it, and a pending swap holds it until the swap ends.
+  // A refusal at the press leaves it live: the next press checks again.
+  function syncCreateBtn() {
+    createBtn.disabled = nameInput.value.trim().length === 0 || createState === 'pending' || createState === 'refused-swap';
+  }
+
+  function applyCreateState() {
+    const pending = createState === 'pending';
+    const line = CREATE_LINES[createState] || '';
+    // a refusal or a failure keeps the name as typed
+    nameInput.value = createState === 'empty' ? '' : 'alt-ending-3';
+    nameInput.disabled = pending;
+    cancelBtn.disabled = pending;
+    createModal.classList.toggle('pending', pending);
+    modalMessage.textContent = line;
+    modalMessage.classList.toggle('show', line !== '');
+    syncCreateBtn();
+  }
+
+  nameInput.addEventListener('input', syncCreateBtn);
+
+  document.querySelectorAll('.rb-btn[data-create-state]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-create-state]').forEach(x => x.classList.toggle('active', x === b));
+    createState = b.dataset.createState;
+    currentSurface = 'modal';
+    document.querySelectorAll('.rb-btn[data-surface]').forEach(x => x.classList.toggle('active', x.dataset.surface === 'modal'));
+    applySurface();
+    applyCreateState();
+  }));
 
   // init
   applySurface();
+  applyCreateState();
 </script>
 
 </body>

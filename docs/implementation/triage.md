@@ -619,3 +619,96 @@ slice-planning gate forces its resolution before that slice is planned.
   where in use it would regenerate at once. E2E specs that press ↻ on a
   seeded tail test the confirm path for that reason. Found by Slice
   6.8's slice review (2026-11-25).
+
+- **Web dialogs size to their content, not to their width class.**
+  `DialogContent`'s panel takes `w-full` inside Radix's unstyled
+  `role="dialog"` wrapper, which shrinks to fit inside a centred flex
+  column, so `w-full` fills nothing and every `sm:max-w-*` override
+  (`close-chapter-modal-view.tsx`'s 480 px, `embedder-download-dialog.tsx`'s
+  560 px) only caps a content-sized panel: it opens narrow and widens
+  when a longer line renders. The base `max-w-[calc(100%-2rem)]` also
+  resolves against that wrapper, so a definite width there loses 32 px.
+  The comment above the class list assumes otherwise
+  (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
+  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`. Found by Slice
+  6.5's task review (2026-11-24).
+
+- **The observability inventory lacks the branch switch's kinds.**
+  `docs/observability.md → Subsystem emission inventory` names no
+  `action_layer.branch_switch_*` (`_navigation_blocked`,
+  `_restore_retried`, `_restore_failed`, `_restore_reread_failed`,
+  `_failed`) or `action_layer.branch_show_*` kind
+  (`lib/actions/stories/switch-branch.ts`), nor
+  `app.branches_refresh_failed` (`lib/stores/branches/branches.ts`).
+  Slice 6.5's blocked-navigation restore now emits the restore kinds
+  from the fork paths too. The inventory calls itself illustrative, so
+  this is drift, not a contract break. Found by Slice 6.5's final
+  review (2026-11-25).
+
+- **The in-place re-run confirm can strand pending on a throw.**
+  `RerunConfirmHost`'s `Roll back & re-run` press
+  (`components/chapters/chapter-overlays-host.tsx`, `confirm`) chains
+  `runCloseRerun(...).then(...)` with no `.catch`, and the run's
+  refusal mapping (`speak`, `rerunStartOutcome`) sits outside its own
+  `try`: a throw there leaves the confirm pending with no way to close
+  it. Slice 6.5 gave the fork press a `.catch` that ends pending; the
+  in-place press predates the slice. Found by Slice 6.5's final review
+  (2026-11-25).
+
+- **The switch's input names the left branch twice.**
+  `SwitchBranchInput` (`lib/actions/stories/switch-branch.ts`) takes
+  `fromBranchId` beside `hold`, whose `branchId` is the same branch: the
+  reader takes the hold on the branch it shows and passes that id again
+  (`app/reader-composer/[branchId].tsx`, the switch's call). A failed
+  switch writes `fromBranchId` back into `stories.current_branch_id`,
+  which has no foreign key, so the two disagreeing would put the
+  pointer on a branch the frozen reader doesn't show. Per
+  `code-conventions.md → Type design` ("one argument where two could
+  disagree"), restore to `hold.branchId` and drop the field. Slice
+  6.5's review made the same change to `ShowBranchInput`. Found by
+  Slice 6.5's slice review (2026-11-25).
+
+- **The tag input likely drops focus after Enter on web.**
+  `components/compounds/tag-input.tsx` keeps the keyboard up for
+  repeated entry with `submitBehavior="submit"`, but RN-Web's
+  `TextInput` ignores that prop and blurs a single-line input after
+  Enter unless the keydown's default is prevented
+  (`react-native-web/dist/exports/TextInput/index.js`, `handleKeyDown`).
+  So on web each tag would need a click back into the field. The
+  branch rename input and the fork modal prevent it in a web-only
+  `onKeyPress` (`components/reader/branch-rename-input.tsx`). Read from
+  RN-Web's source, not probed in the tag input itself. Found by Slice
+  6.5's slice review (2026-11-25).
+
+- **Helpers copied across the reader's inputs and the E2E specs.** The
+  IME guard (`isComposing`, `IME_KEY_CODE`) is now in both
+  `components/reader/branch-rename-input.tsx` and
+  `branch-create-modal.tsx`; one `components/reader/` module could
+  serve both. In the specs, `branchName` and `entryContent` in
+  `e2e/tests/branch-navigator.spec.ts` repeat `branch-fork.spec.ts`'s,
+  and `chapter-delete.spec.ts` keeps its own `expandCard` beside
+  `e2e/flows/close-rerun.ts`'s `expandChapterCard`. Slice 6.5's
+  simplifier left them, since each move edits a file outside the
+  slice. Found by Slice 6.5's slice review (2026-11-25).
+
+- **A desktop mouse Back skips every leave guard.** Electron pops
+  history on the mouse's Back button, and expo-router's linking answers
+  the pop with `navigation.resetRoot(record.state)`
+  (`node_modules/expo-router/build/fork/useLinking.js`), a RESET at the
+  container root. The root's `__root` route keeps its key, so
+  `shouldPreventRemove` finds no removed route and the nested app
+  Stack's screens drop with no `beforeRemove`: no `usePreventRemove`
+  sees the pop. A dirty Story Settings draft is discarded with no
+  unsaved-changes dialog. Probe: open the hero story, open Story
+  Settings from the reader, change the About title, then
+  `page.goBack()` in an E2E spec; the reader shows and the dialog never
+  does. Plot's and World's drafts and the story-leave confirm sit on the
+  same `usePreventRemove` (`hooks/use-unsaved-changes-guard.ts`,
+  `hooks/use-story-leave-guard.ts`), so they should fail the same way;
+  not probed. A renderer `mouseup` listener that calls `preventDefault()` for
+  buttons 3 and 4 cancels the navigation in Electron 41, and Alt+Left
+  and the app menu don't navigate, so the likely fix routes the mouse's
+  Back through the guarded in-app back. Slice 6.5's
+  `hooks/use-inert-mouse-back.ts` is a narrow block for a pending fork
+  that this fix would subsume. Found by CodeRabbit's review of Slice
+  6.5 after the Slice 6.8 merge (2026-11-25).

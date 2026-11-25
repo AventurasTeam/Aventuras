@@ -23,7 +23,7 @@
   once the canon pass has landed R2 (fork writes the current branch in
   its own batch) and R1's edit of the re-run path's fork pre-conditions
   in `memory/chapter-close.md`. The rest starts without it.
-- **Size:** 13 tasks at planning. M5's plans held 3 to 7 tasks more than
+- **Size:** 13 tasks at planning; the plan held 12. M5's plans held 3 to 7 tasks more than
   their planning estimates.
 
 ## Goal
@@ -168,8 +168,9 @@ runs outside it, as `runCloseRerun` already does for the in-place path.
   - on the new id, 6.4's show-branch tail with 6.4's stack-replace helper
     as its navigation, since every switch replaces the whole in-story
     stack (C8), so Back lands on the Story List. The tail never moves the
-    pointer back, and on a failed load it still navigates, with the
-    reader's own load handling the failure;
+    pointer back, except when its stack reset doesn't take (D2, under
+    Implementation notes), and on a failed load it still navigates, with
+    the reader's own load handling the failure;
   - after the navigation, the branch store refresh C8 asks of the fork's
     callers. Its failure is logged and never surfaced: the new reader's
     mount re-reads the list anyway (C8).
@@ -285,8 +286,9 @@ runs outside it, as `runCloseRerun` already does for the in-place path.
   - once the fork commits, 6.4's show-branch tail, with 6.4's
     stack-replace helper as its navigation (C8). One step, so the reader
     mounts once on the new branch's route and Back lands on the Story
-    List. The tail never moves the pointer back, and on a failed load it
-    still navigates, the reader's own load handling the failure (C8). The
+    List. The tail never moves the pointer back, except when its stack
+    reset doesn't take (D2), and on a failed load it still navigates, the
+    reader's own load handling the failure (C8). The
     publish prunes the re-run request in the same render as the
     navigation, since its branch is no longer the open one
     (`chapter-overlays-host.tsx:177-182`): that closes it with
@@ -305,7 +307,8 @@ runs outside it, as `runCloseRerun` already does for the in-place path.
   - the start-failed path. Past the commit the route and
     `stories.current_branch_id` already name the new branch, whatever
     follows, since the tail has navigated and never moves the pointer
-    back. When the tail's load failed, nothing starts: the new branch
+    back; a reset that doesn't take is D2's case, which starts nothing.
+    When the tail's load failed, nothing starts: the new branch
     isn't the open one, so a start would only refuse as `branchNotOpen`,
     and the reader's own load deals with the failure. When the start
     refuses or throws, nothing more runs. Either way a warning toast reads
@@ -575,113 +578,129 @@ Pointers, canon and hygiene:
 
 ## Open questions
 
-- **Unaudited contract text.** What this slice consumes from C7 and C8
-  changed after the contract audit and had no audit of its own: C7's core
-  and its pass-through refusals, C8's step order, its failed-load rules,
-  the stack replacement, the hold from a fork's start to its navigation
-  and the refresh after it
-  ([milestone.md → Open questions](../milestone.md#open-questions)). Read
-  them against 6.3 and 6.4 as shipped at slice planning.
-- **The hold's handle on the re-run path.** The re-run path raises C8's
-  hold from the root overlay host. Planning checks whether 6.4's hold, as
-  shipped, can be raised from there; if not, the handle under Scope: in
-  is this slice's.
-- **The modal's states and `⎇` under a swap.** Canon gives the modal
-  no pending, refused or failed state. This doc's default: a busy pending
-  state; refusals inline with the name kept, a pending swap shown on open
-  as Duplicate's are; failures inline. Under a pending swap `⎇` stays
-  live, since `EntryCard`'s `disabled` also gates flip era,
-  `Close chapter here` and the scene editor, which a swap leaves live, and
-  disabling `⎇` alone needs a branch-only prop on `EntryCard`; the modal
-  says why as it opens. On a branch held until a restart, canon already
-  answers: every editable control on it disables with the restart line
-  ([principles.md → Affordance loci](../../../../ui/principles.md#affordance-loci)),
-  and `⎇` does as shipped, since the reader's `editBlocked` counts the
-  hold. C7's gate leaves the hold out, so the action would fork a held
-  parent from an entry before the re-run's writes; the reader doesn't
-  offer that until a restart drops the hold and boot recovery reverses the
-  orphan. Making it reachable earlier would take the same branch-only
-  prop. The developer confirms or changes the default at slice planning,
-  and the canon edit and the wireframe follow.
-- **A `user_action` fork point** (Slice 6.3's open question). On the
-  re-run path `N` is a reply or the opening: `B` is the turn's
-  `user_action`, or a reply with no `user_action` before it
-  (`close-rerun.ts:167-181`), and the entry before a `user_action` ends the
-  previous turn, since a failed turn's `user_action` is reverse-replayed
-  with its run
-  ([reader-composer.md → Custody of the turn's text](../../../../ui/screens/reader-composer/reader-composer.md#custody-of-the-turns-text)).
-  So a fork that refuses a `user_action` point wouldn't refuse this path.
-  Read from the code and canon, not run; the parent-side test in
-  `close-rerun-start.test.ts` asserts `N`'s kind on its fixtures.
-  _Answered by Slice 6.3:_ canon makes every kind but `system` a fork
-  point, a `user_action` included
-  ([`data-model.md → Branch model`](../../../../data-model.md#branch-model)),
-  and the fork refuses only `system`.
-- **The auto-name's locale.** `Ch. <seq> re-run` rendered from an i18n key
-  at fork time is stored in the locale active then and is user data from
-  that moment; a later language change doesn't rename it. The default
-  accepts that, since a user can rename the branch.
-- **The memory banner on the fresh branch.** `MemoryRunBanner` reads the
-  open branch's run (`components/compounds/use-memory-run-banner.ts:96-99`),
-  and the start follows the tail's publish, so it should show the re-run's
-  progress. The commit's done state names the new branch and the current
-  `openSeq`, which a switch doesn't bump (C8). Inferred, not run: the E2E
-  checks the banner is visible while the re-run runs.
-- **The window between the check and the lock.** The check holds no mark,
-  so a write could land between it and `forkBranch`'s exclusive lock.
-  Nothing starts by itself under a modal confirm, the reader's hold
-  refuses a Send from the press on, and a start that lands anyway meets
-  the fork's gate refusal while the confirm is mounted: C7's gate counts
-  every pending turn and run, and leaves out only the branch's hold.
-  Accepted, per the contract audit.
-- **Leave guards on the stack replace.** The confirm opens through the
-  current surface's guard (`chapter-overlays.ts:134-150`), so no editor
-  should be dirty when the fork commits, and with the hold no run on the
-  parent arms the story-leave guard's abort-confirm
-  (`hooks/use-story-leave-guard.ts:60`). Planning confirms the replace
-  meets no other `beforeRemove` guard that could stop it after the
-  commit.
-- **The fork's cost.** A fork is one batch, which blocks the main process
-  on desktop and the JS thread on Android, so the modal's pending spinner
-  may not animate on Android while it runs. 6.3's measure decides whether
-  that matters.
-- **A tail whose caller's reader is gone.** `showBranch` takes no abandon
-  check, by design: the fork has committed, so canon keeps the new branch.
-  A caller whose reader is already gone, as the re-run path's root host
-  can be, still gets the stack reset and the story published over
-  whatever is open, which can be another story the user has since
-  opened. Planning decides whether the create and re-run callers accept
-  that or check the open story before calling the tail.
-- **The root-host hold and the reader's unmount.** The reader's unmount
-  calls `readerHoldStore.clear(branchId)`, which ends every token on its
-  branch, the re-run path's root-host take included
-  ([Slice 6.4](./04-switching-navigator.md#implementation-notes)).
-  Planning decides whether that hold should survive the reader's unmount,
-  which `clear` doesn't allow today, or whether ending it there is right
-  once the reader is gone.
-- **The undo confirm reads no hold.** `confirmUndo`
-  (`components/reader/use-reader-undo.tsx:434-438`) runs the reversal
-  with no hold, mounted or staleness check, and `UndoConfirm` takes no
-  blocked prop. Unreachable in
-  [Slice 6.4](./04-switching-navigator.md#implementation-notes): the
-  confirm is modal, the Actions menu is blocked while it is open, and
-  the reader's own switch is the only hold-taker. Reachable if this
-  slice's root host can take a hold while the confirm is open. Planning
-  decides whether the confirm reads the hold.
-- **The tail after a failed stories re-read, with a native inline editor
-  open.** On native, a switch's stack reset goes through with an entry's
-  inline editor open only because the switch's stories re-read writes
-  `storiesStore` just before the reset, and that write's render commits
-  the edit guard's pending disarm (React 19 renders the pending lanes
-  together). `showBranch` carries on after a failed re-read
-  (`lib/actions/stories/switch-branch.ts:226-228`), so with a native
-  editor open `useReplaceStoryStack` still sees the guard armed and
-  refuses the reset: `navigation-blocked`, the fork committed, the
-  reader left on the parent. Reachable only
-  through this slice's callers; the mechanism is probe-verified, not
-  device-verified. Planning decides whether the tail's caller disarms
-  the guard first or the reset skips the held reader's own route.
+None open. Each question above was settled at planning or in the
+run; the answers are under Implementation notes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Decisions** (developer, 2026-11-24, unless marked).
+
+- **The creation modal's states (D1).** The slice default, now in
+  [`branch-navigator.md → Branch creation — modal`](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal)
+  and its wireframe: pending is a busy Dialog (`Create` spins; the
+  input, `Cancel` and `×` disable through `DialogContent`'s new
+  `closeDisabled`; Esc, a press outside and hardware back are inert, and
+  so is a desktop Back (Q16, below); a second press calls nothing). A
+  refusal is one line above the buttons
+  with the name kept and `Create` left enabled to retry. A pending swap
+  shows its line as the modal opens and disables `Create` while it
+  lasts, live. A throw shows `Couldn't create the branch.`. `⎇` stays
+  live under a swap: no branch-only prop on `EntryCard`.
+- **A blocked navigation after the fork commits (D2).** When
+  `showBranch`'s stack reset doesn't take, it puts
+  `stories.current_branch_id` back on the branch the reader shows (the
+  hold's branch) through the switch's own restore and its one retry,
+  before it releases the hold. Both callers keep the new branch,
+  refresh the branch list, close the modal or the re-run confirm (the
+  request with `reopen: false`) and show a warning toast; the re-run
+  path starts nothing. This amends C8's "the tail never moves the
+  pointer back" for this one case
+  ([milestone.md → C8](../milestone.md#c8--the-branch-list-the-switch-and-the-navigators-row)).
+  The live case is native only (a clean inline editor left armed under
+  the Timeline or the review window); `⎇` can't reach it, since
+  `EntryCard` holds `⎇` while an editor is open.
+- **A desktop Back while a fork is pending (Q16, developer,
+  2026-11-25).** The mouse's Back button does nothing from `Create`, or
+  from `Re-run on new branch`, until the fork settles, as hardware back
+  does. Electron pops history on that button, and expo-router answers
+  the pop with a root reset that no `usePreventRemove` sees, so without
+  the block the reader left mid-fork and the tail's stack reset pulled
+  the user back onto the new branch. The block is a web-only hook,
+  `useInertMouseBack`, that cancels the Back and Forward buttons'
+  `mouseup` while either path is pending; on success the old reader's
+  unmount releases it. The in-place re-run never navigates and isn't
+  blocked. The developer chose this narrow block for the slice (Q17,
+  2026-11-25). The app-wide mouse-Back hole is filed in
+  [`triage.md`](../../../triage.md) for its own fix, routing the mouse's
+  Back through the guarded in-app back, which would make this block
+  unnecessary.
+- **The name is trimmed in the action (IC1).** `forkBranch` stores it
+  trimmed, as `renameBranch` does; there is no empty-name refusal (the
+  modal gates an empty name and the auto-name is never empty).
+- **The callers own the tail's gate (IC2).** Before `forkBranch`, both
+  callers refuse a busy story and a turn body still active on the
+  parent, as `switchBranch` does before its reset; each shows as the
+  gate's refusal.
+- **A caller whose story is gone skips the tail (IC3),** refreshing the
+  list only while the forked story is still the open one (the branches
+  store holds one story's rows). Defence only: both surfaces are modal
+  and held. On the re-run path it toasts the not-opened warning, not
+  the start-failed one, since the new branch was never shown (changed
+  in review, 2026-11-25: the start-failed copy is for a reader that
+  opened on the new branch).
+- **No change to the hold or the undo confirm (IC4, IC5).** The
+  reader's unmount still clears the root host's token, when the hold
+  has nothing left to hold; the undo confirm stays unreachable on both
+  paths.
+- **The auto-name is stored in the locale active at the fork (IC6).**
+
+**Shape, as shipped.**
+
+- The re-run path's check on the parent (`checkCloseRerunParent`)
+  holds no pending mark: `forkBranch`'s gate counts every pending turn,
+  so a mark spanning the check and the fork would refuse every fork. It
+  skips the classifier-held read, so a parent whose run record says
+  `running` with no live run passes and `forkBranch` judges the orphan
+  (`unfinished-run`). The start on the new branch shares the in-place
+  start's checks through one private `checkedStart` that takes the mark
+  itself, so no await falls between the last check and the mark; on a
+  branch whose tail kept turns after the close it refuses
+  `turns-followed` and removes nothing.
+- The preview's fork point `N` is the highest-position non-system entry
+  before the shortcut's target, read on the branch alone; none found is
+  an `integrity` refusal, logged.
+- The creation modal's panel takes a definite 360 px on web
+  (`min(360, viewport − 32)` on phone): `DialogContent`'s `w-full` sits
+  in Radix's shrink-to-fit wrapper, so a `max-w` alone leaves every web
+  dialog content-sized (filed to
+  [triage](../../../triage.md)). Native keeps the Dialog's own width
+  classes.
+
+**Answered at planning, from the shipped code.**
+
+- C7 and C8 as shipped were read against this slice; the one gap was
+  `showBranch`'s third outcome, `navigation-blocked`, which D2 handles.
+- The re-run path's hold is `readerHoldStore`'s own token, taken from the
+  root host; no second handle was needed.
+- Only an armed unsaved-changes guard can stop the stack replace: the
+  story-leave guard needs a busy story, which the gate refusal and the
+  hold rule out. On native a clean inline editor left open under the
+  Timeline or the review window stays armed until the hold's render
+  disarms it; a reset it refuses is D2's case.
+- The window between the parent check and the fork's lock stays
+  accepted, as the contract audit had it; AC14's mutation pins that no
+  mark spans the two.
+- A `user_action` fork point: answered by
+  [Slice 6.3](./03-fork-core.md); the re-run path's `N` is a reply or
+  the opening.
+
+**Facts.**
+
+- Desktop E2E (`e2e/tests/branch-fork.spec.ts`): `⎇` on the hero's
+  last reply before chapter 2's close, a padded name and `Create` store
+  the trimmed name, the parent and the entry; the child keeps the
+  parent's non-system entries up to the reply and drops chapter 2; the
+  reader lands at the bottom on the fork entry; Back reaches the Story
+  List; the parent's Redo survives the fork and the child has none.
+  `Re-run on new branch` from the Timeline forks at `N`, lands on the
+  new branch's reader with the Lore banner running, commits the re-run
+  there and leaves the parent's entries, report and lore unchanged.
+- On the slot AVD (`Aventuras_Slot_1`, Android, x86_64 dev client),
+  `⎇` on a reply in the native document opens the modal with the input
+  focused, and `Create` lands the reader on the new branch at its
+  bottom, on the fork entry; Back reaches the Story List. The pending
+  spinner never paints: after the press the modal keeps its enabled
+  `Create` for about 0.5–0.7 s while the fork's batch holds the JS
+  thread, then the stack transition takes it away and the new reader
+  shows `Loading story…` for about 0.7 s (2026-11-25, forks at entries
+  71 and 23 of the hero story).
