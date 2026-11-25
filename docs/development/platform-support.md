@@ -22,7 +22,8 @@ Current but not usable yet, per MDN: the `popover` attribute, `text-wrap: balanc
 ## What sets the floor
 
 Tailwind CSS v4 needs Chrome 111 and Safari 16.4, and Vite's default `build.target` resolves to the
-same versions. When upgrading either, check whether its target moved.
+same versions. When upgrading either, check whether its target moved: the lightningcss `targets` in
+`@tailwindcss/node`, and `ESBUILD_BASELINE_WIDELY_AVAILABLE_TARGET` in Vite.
 
 ## Per platform
 
@@ -34,8 +35,8 @@ same versions. When upgrading either, check whether its target moved.
 | Android  | System WebView (Chromium)  | WebView 111 or later; `minSdk` 26 (Android 8)               |
 | iOS      | system WKWebView           | iOS 26 or later                                             |
 
-The install table in the [repository README](../../README.md) repeats these minimums; change both
-together.
+The install table in the [repository README](../../README.md) repeats these minimums, except the
+WebView2 runtime version for Windows; change both together.
 
 - **Windows**: the WebView2 runtime updates itself, but a machine that cannot update it can still
   sit below 111.
