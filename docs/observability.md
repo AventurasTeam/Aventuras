@@ -177,9 +177,13 @@ convention, and the expectation that subsystems route through
   after its rollback committed; for the periodic classifier both record
   attempts failed, and the branch stays `running` until boot recovery),
   `submit_failed` (error, `components/reader/send-run.ts`: a Send
-  threw rather than returning an outcome; its failure entry follows)
-  and `submit_failure_entry_failed` (error: that entry's write threw
-  too, and the Send's text went back to the composer), `lead_double`
+  threw rather than returning an outcome; its failure entry follows),
+  `submit_failure_entry_failed` (error: that entry's write threw
+  too, and the Send's text went back to the composer),
+  `submit_lead_refused` (warn, `app/reader-composer/[branchId].tsx`: the
+  turn refused a Send as `lead-missing` after the reader's own gate
+  passed, so the reader's store and the database disagree on the
+  branch's lead; with `branchId`) and `lead_double`
   (error, `lib/world/lead.ts`: a store read for the lead found two
   flagged characters on the branch, with `site`, `branchId` and the
   `ids`; the caller reads the branch as having no lead. Only the
@@ -239,7 +243,9 @@ convention, and the expectation that subsystems route through
   refused), `branch_lead_double` (error, `lib/db/entities/branch-lead.ts`:
   the table read a turn or a regenerate takes its lead from found two
   flagged characters, with `branchId` and the `ids`; the turn reads
-  the branch as having no lead), `entity_delete_rejected` /
+  the branch as having no lead. A set or an unset logs it too when the
+  flagged rows it reads to turn off number more than one),
+  `entity_delete_rejected` /
   `lore_delete_rejected` / `thread_delete_rejected` /
   `happening_delete_rejected` (warn: a confirmed delete refused —
   in-flight, not-found, or (entity only) a tail race; the
