@@ -1,8 +1,8 @@
 # Local network sync
 
 Two devices on one network pair with a QR code or a connection code. The one showing it runs a
-server; the one that scanned or entered it, the client, drives everything. Sync carries five sections: stories, characters,
-lorebooks, scenarios and prompt packs.
+server; the one that scanned or entered it, the client, drives everything. Sync carries five
+sections: stories, characters, lorebooks, scenarios and prompt packs.
 
 Code lives in `src-tauri/src/sync/` (the server and its protocol), `services/sync/` (status, rows,
 transfers) and `components/sync/`.
@@ -67,8 +67,9 @@ The same child-table triggers set `stories.updated_at`, for every story, and `pr
 Setting either is not an edit: neither column is in a root trigger's list.
 
 A new table with a `story_id` or `pack_id` column must get the triggers or join the exclusion list
-in `sync/device.rs`. A test reads the migrated schema and fails on anything else, because a missing
-trigger shows no error: edits go uncounted and the item reads as in sync.
+in `sync/device.rs`. A test there reads the schema and fails on anything else, because a missing
+trigger shows no error: edits go uncounted and the item reads as in sync. The test migrates only up
+to 045, so a table added by a later migration is not checked until that pin moves.
 
 An edit that is reverted still reads as moved. That costs a question, never data.
 
@@ -102,7 +103,8 @@ Replacing a version that holds edits the incoming one lacks gives `max(mine, the
 the resolving device. The result outranks both, so a discarded version on a third device reads as
 older.
 
-A send records nothing locally, resolved or not. The receiver can refuse a push, so a resolved
+A send records no vector change locally, resolved or not; a first send only gives the item its
+identity. The receiver can refuse a push, so a resolved
 vector kept at send time would outrank edits this device has never seen: the row would read as newer
 here, and a plain Send would overwrite them without asking. The client remembers what it sent, in
 memory for the app's lifetime so closing the sync screen does not forget it, and when a listing
@@ -135,11 +137,11 @@ modal polls, because the receiver may need to ask its user something. It takes t
 push arriving between a read and a clear cannot be lost. Each queued item carries its request ID,
 and the answer comes back through `sync_respond` the same way.
 
-Items travel in a `SyncEnvelope`: section, sync ID, vector, `updatedAt`, name, and `document`, the
-item's existing export as text. On the wire the header is one JSON line and the document follows
-verbatim, because nesting JSON text in JSON escapes every quote again at each level. That is exchange documents for vault items, `PackExport` for packs
-(the directory format is desktop only), and the story JSON from `exportStoryToJson`. The exchange
-format is unchanged; identity travels beside it.
+Items travel in a `SyncEnvelope` (`types/sync.ts`) whose `document` is the item's existing export
+as text: exchange documents for vault items, `PackExport` for packs (the directory format is desktop
+only), and the story JSON from `exportStoryToJson`. The exchange format is unchanged; identity
+travels beside it. On the wire the header is one JSON line and the document follows verbatim,
+because nesting JSON text in JSON escapes every quote again at each level.
 
 A story's `packBinding` gains `packSyncId` on this path only, so `.avt` files carry no sync IDs.
 Binding tries it first, then name and author.
@@ -150,8 +152,8 @@ title matching alive.
 
 ## Pairing
 
-A QR code and a connection code hold the same thing: address, port, token, app version and protocol
-version. The connection code is that JSON as one line of text, `av1-` plus URL-safe base64, for a
+A QR code and a connection code hold the same `QrCodeData` (`sync/types.rs`), including the token
+and protocol version. The connection code is that JSON as one line of text, `av1-` plus URL-safe base64, for a
 device with no camera. A camera that cannot start opens the code screen.
 
 The token is what authorises requests, and it is a fresh UUID each time a server starts, so a code
