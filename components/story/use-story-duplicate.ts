@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { useAliveRef } from '@/components/reader/use-alive-ref'
 import type {
@@ -88,7 +88,8 @@ export function useStoryDuplicate({
   const openSeq = useRef(0)
   const alive = useAliveRef()
   const latest = useRef({ focused, blocked, readBranches, check, duplicate, onDone })
-  useEffect(() => {
+  // Layout: a copy's continuation can run between a commit and its passive effects.
+  useLayoutEffect(() => {
     latest.current = { focused, blocked, readBranches, check, duplicate, onDone }
   })
 
