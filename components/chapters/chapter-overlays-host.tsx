@@ -358,9 +358,8 @@ function ReviewHost({
 }
 
 /**
- * chapter-timeline.md → Re-run a close, mounted while its request holds. The confirm closes once
- * the chain holds the branch and `runCloseRerun` speaks for its end; past the fork's commit it
- * stays pending to the publish's prune or the sequence's close.
+ * chapter-timeline.md → Re-run a close. Closes once the chain holds the branch and `runCloseRerun`
+ * speaks for its end; past the fork's commit it stays pending to the prune or the sequence's close.
  */
 function RerunConfirmHost({
   request,
