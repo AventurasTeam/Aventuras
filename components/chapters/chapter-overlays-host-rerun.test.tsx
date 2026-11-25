@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
 import type {
+  CloseRerunForkPreview,
   CloseRerunParentCheck,
   CloseRerunPreview,
   CloseRerunReadRefusal,
@@ -805,7 +806,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
       removedChapters: [],
     },
   }
-  const WITH_TURNS: CloseRerunPreview = { ...PREVIEW, branchName: 'Main', shortcut: SHORTCUT }
+  const WITH_TURNS: CloseRerunForkPreview = { ...PREVIEW, branchName: 'Main', shortcut: SHORTCUT }
   const CLEAR: CloseRerunParentCheck = {
     status: 'clear',
     preview: { ...WITH_TURNS, shortcut: SHORTCUT },
@@ -840,10 +841,10 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     openRerun()
     const props = await confirmShown()
 
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     expect(confirmView.props?.pending).toBe(true)
     // A second press while the first runs forks nothing more.
-    act(() => confirmView.props?.onConfirmOnBranch())
+    act(() => confirmView.props?.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() => expect(actions.fork).toHaveBeenCalledTimes(1))
     expect(actions.check).toHaveBeenCalledTimes(1)
     expect(actions.start).not.toHaveBeenCalled()
@@ -893,7 +894,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     // A background run the gate lets through: the hold alone disables the actions.
     const pass = { ...gateRun(), runId: 'run_pass', gateBehavior: 'no-gate' as const }
     act(() => generationStore.startRun(pass))
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() =>
       expect(confirmView.props?.blockedReason).toBe(t('reader:actions.blockedWhileGenerating')),
     )
@@ -914,7 +915,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     renderHost()
     openRerun()
     const props = await confirmShown()
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() =>
       expect(logError).toHaveBeenCalledWith('app.close_rerun_on_branch_threw', {
         branchId: 'br_1',
@@ -943,7 +944,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     openRerun()
     const props = await confirmShown()
     expect(props.blockedReason).toBeUndefined()
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() => expect(confirmView.props?.pending).toBe(false))
     await flush()
     expect(confirmView.props?.blockedReason).toBe(t('reader:actions.blockedWhileGenerating'))
@@ -968,7 +969,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     renderHost()
     openRerun()
     const props = await confirmShown()
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() => expect(confirmView.props?.preview).toBe(fresh))
     expect(confirmView.props?.pending).toBe(false)
     expect(error).toHaveBeenCalledExactlyOnceWith(t('chapters:rerunNotice.countsChanged'))
@@ -981,7 +982,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     await openReady()
     openRerun({ fromReview: true })
     const props = await confirmShown()
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() => expect(confirmView.mounted).toBe(false))
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
     expect(chapterOverlaysStore.getState().review).toBeNull()
@@ -997,7 +998,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     await openReady()
     openRerun({ fromReview: true })
     const props = await confirmShown()
-    act(() => props.onConfirmOnBranch())
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
     await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
     expect(confirmView.mounted).toBe(false)
     expect(chapterOverlaysStore.getState().review).toBeNull()

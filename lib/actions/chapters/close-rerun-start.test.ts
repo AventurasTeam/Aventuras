@@ -56,6 +56,7 @@ import {
   startCloseRerun,
   startCloseRerunOnFork,
   type CloseRerunExpected,
+  type CloseRerunForkExpected,
   type CloseRerunForkStart,
   type CloseRerunPreview,
   type CloseRerunStart,
@@ -102,6 +103,22 @@ const NETWORK_FAILURE: ScriptedStep = {
 const NOTHING_SHOWN: CloseRerunExpected = {
   shortcut: null,
   reversal: { createdLore: { count: 0, userEdited: false }, otherChanges: 0 },
+}
+
+// A confirm offering the fork showed a turn since: here one gone since, or never compared.
+const TURN_SHOWN: CloseRerunForkExpected = {
+  ...NOTHING_SHOWN,
+  shortcut: {
+    targetEntryId: 'entry_gone',
+    counts: {
+      entries: 2,
+      chapters: 0,
+      worldStateChanges: 0,
+      closeWrites: 0,
+      reopenedChapter: null,
+      removedChapters: [],
+    },
+  },
 }
 
 type Closed = { h: CloseHarness; chapterId: string }
@@ -165,6 +182,12 @@ function expectedOf(preview: CloseRerunPreview): CloseRerunExpected {
     shortcut: shortcut && { targetEntryId: shortcut.targetEntryId, counts: shortcut.counts },
     reversal: preview.reversal,
   }
+}
+
+// What a confirm offering the fork hands on: it showed the turn since.
+function withTurnShown(preview: CloseRerunPreview): CloseRerunForkExpected {
+  const { shortcut, reversal } = expectedOf(preview)
+  return { shortcut: defined(shortcut ?? undefined, 'the confirm showed no turn since'), reversal }
 }
 
 type StartOpts = { onStarted?: () => void; steps?: readonly ScriptedStep[] }
@@ -299,24 +322,26 @@ function watchStarts(h: CloseHarness): { onStarted: () => void; seen: Started[] 
   }
 }
 
-const MOVED: readonly (readonly [string, (shown: CloseRerunExpected) => CloseRerunExpected])[] = [
+type Move<Shown extends CloseRerunExpected> = readonly [
+  string,
+  (shown: CloseRerunForkExpected) => Shown,
+]
+
+// Each count a confirm with a turn since showed, moved; the turn stays shown.
+const MOVED_WITH_TURN: readonly Move<CloseRerunForkExpected>[] = [
   [
     "the shortcut's counts",
     (shown) => ({
       ...shown,
-      shortcut: shown.shortcut && {
+      shortcut: {
         ...shown.shortcut,
         counts: { ...shown.shortcut.counts, entries: shown.shortcut.counts.entries + 1 },
       },
     }),
   ],
-  ['the shortcut itself', (shown) => ({ ...shown, shortcut: null })],
   [
     "the shortcut's target alone",
-    (shown) => ({
-      ...shown,
-      shortcut: shown.shortcut && { ...shown.shortcut, targetEntryId: 'entry_elsewhere' },
-    }),
+    (shown) => ({ ...shown, shortcut: { ...shown.shortcut, targetEntryId: 'entry_elsewhere' } }),
   ],
   [
     "the reversal's counts",
@@ -348,6 +373,12 @@ const MOVED: readonly (readonly [string, (shown: CloseRerunExpected) => CloseRer
       },
     }),
   ],
+]
+
+// The in-place start also meets a confirm that showed no turn since, where one now stands.
+const MOVED: readonly Move<CloseRerunExpected>[] = [
+  ...MOVED_WITH_TURN,
+  ['the shortcut itself', (shown) => ({ ...shown, shortcut: null })],
 ]
 
 describe('startCloseRerun refuses before the turns go (AC 19)', () => {
@@ -551,7 +582,7 @@ describe('startCloseRerun refuses before the turns go (AC 19)', () => {
       const fresh = await previewOf(c)
       const before = await snapshot(c.h)
       const onStarted = vi.fn()
-      const moved = move(expectedOf(fresh))
+      const moved = move(withTurnShown(fresh))
       expect(moved, 'the row moved nothing').not.toEqual(expectedOf(fresh))
 
       expect(await start(c, moved, { onStarted })).toEqual({
@@ -886,12 +917,12 @@ async function expectCheckedOnly(h: CloseHarness, before: Snapshot): Promise<voi
 }
 
 // A turn since the close, and the counts the confirm then shows over it.
-async function shownWithTurn(c: Closed): Promise<CloseRerunExpected> {
+async function shownWithTurn(c: Closed): Promise<CloseRerunForkExpected> {
   await turnSince(c.h)
-  return expectedOf(await previewOf(c))
+  return withTurnShown(await previewOf(c))
 }
 
-const checkParent = ({ h, chapterId }: Closed, expected: CloseRerunExpected) =>
+const checkParent = ({ h, chapterId }: Closed, expected: CloseRerunForkExpected) =>
   checkCloseRerunParent(h.fx.branchId, chapterId, expected, h.fx.ctx)
 
 describe('checkCloseRerunParent (AC 13)', () => {
@@ -1024,7 +1055,7 @@ describe('checkCloseRerunParent (AC 13)', () => {
     expect(later.outcome).toBe('completed')
     const before = await snapshot(c.h)
 
-    expect(await checkParent(c, NOTHING_SHOWN)).toMatchObject({
+    expect(await checkParent(c, TURN_SHOWN)).toMatchObject({
       status: 'rejected',
       code: CLOSE_RERUN_REFUSAL.notLatest,
     })
@@ -1049,7 +1080,7 @@ describe('checkCloseRerunParent (AC 13)', () => {
     })
     const before = await snapshot(c.h)
 
-    expect(await checkParent({ ...c, chapterId: 'chap_by_hand' }, NOTHING_SHOWN)).toMatchObject({
+    expect(await checkParent({ ...c, chapterId: 'chap_by_hand' }, TURN_SHOWN)).toMatchObject({
       status: 'rejected',
       code: CLOSE_RERUN_REFUSAL.noClose,
     })
@@ -1069,13 +1100,13 @@ describe('checkCloseRerunParent (AC 13)', () => {
     await expectCheckedOnly(c.h, before)
   })
 
-  it.each(MOVED)(
+  it.each(MOVED_WITH_TURN)(
     'refuses counts-changed when %s moved, carrying the fresh preview',
     async (_label, move) => {
       const c = await closed()
       await turnSince(c.h)
       const fresh = await previewOf(c)
-      const moved = move(expectedOf(fresh))
+      const moved = move(withTurnShown(fresh))
       expect(moved, 'the row moved nothing').not.toEqual(expectedOf(fresh))
       const before = await snapshot(c.h)
 
@@ -1095,7 +1126,7 @@ describe('checkCloseRerunParent (AC 13)', () => {
     expect(fresh.shortcut).toBeNull()
     const before = await snapshot(c.h)
 
-    expect(await checkParent(c, expectedOf(fresh))).toEqual({
+    expect(await checkParent(c, { ...expectedOf(fresh), shortcut: TURN_SHOWN.shortcut })).toEqual({
       status: 'rejected',
       code: 'counts-changed',
       reason: expect.any(String),

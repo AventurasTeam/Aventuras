@@ -18,9 +18,12 @@ import {
   startCloseRerunOnFork,
   STORY_ENTRY_REJECTION,
   type CloseRerunExpected,
+  type CloseRerunForkExpected,
+  type CloseRerunForkPreview,
   type CloseRerunForkStart,
   type CloseRerunParentCheck,
   type CloseRerunPreview,
+  type CloseRerunShortcut,
   type CloseRerunStart,
   type ForkRefusal,
   type ForkResult,
@@ -58,13 +61,15 @@ export type RerunStartStep =
 
 type Outcome = { step: RerunStartStep; notice: RerunNotice | null; logCode: string | null }
 
+const shownShortcut = ({ targetEntryId, counts }: CloseRerunShortcut) => ({ targetEntryId, counts })
+
 export function expectedOf(preview: CloseRerunPreview): CloseRerunExpected {
-  const { shortcut } = preview
-  return {
-    shortcut:
-      shortcut == null ? null : { targetEntryId: shortcut.targetEntryId, counts: shortcut.counts },
-    reversal: preview.reversal,
-  }
+  const { shortcut, reversal } = preview
+  return { shortcut: shortcut == null ? null : shownShortcut(shortcut), reversal }
+}
+
+function forkExpectedOf({ shortcut, reversal }: CloseRerunForkPreview): CloseRerunForkExpected {
+  return { shortcut: shownShortcut(shortcut), reversal }
 }
 
 function firstLine(text: string | undefined): string | undefined {
@@ -268,7 +273,7 @@ async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunStartStep | F
   const at = { branchId, chapterId }
   let check: CloseRerunParentCheck
   try {
-    check = await checkCloseRerunParent(branchId, chapterId, expectedOf(preview), ctx)
+    check = await checkCloseRerunParent(branchId, chapterId, forkExpectedOf(preview), ctx)
   } catch (error) {
     return forkThrew(at, 'check', error)
   }
@@ -410,7 +415,7 @@ export async function runCloseRerunOnBranch(args: {
   /** The parent: the branch the confirm opened on. */
   branchId: string
   chapterId: string
-  preview: CloseRerunPreview
+  preview: CloseRerunForkPreview
   replaceStack: ReplaceStoryStack
   /** Closes this confirm's request with `reopen: false`, if it is still the held one. */
   closeRequest: () => void

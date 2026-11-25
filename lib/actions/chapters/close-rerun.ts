@@ -84,6 +84,9 @@ export type CloseRerunPreview = {
 
 export type CloseRerunShortcut = NonNullable<CloseRerunPreview['shortcut']>
 
+/** A preview with turns since: the only one whose confirm offers the fork. */
+export type CloseRerunForkPreview = CloseRerunPreview & { shortcut: CloseRerunShortcut }
+
 export const CLOSE_RERUN_REFUSAL = {
   notFound: 'not-found',
   notLatest: 'not-latest',
@@ -352,6 +355,11 @@ export type CloseRerunExpected = {
   reversal: CloseRerunPreview['reversal']
 }
 
+/** What a confirm offering the fork showed: a turn since, always. */
+export type CloseRerunForkExpected = CloseRerunExpected & {
+  shortcut: NonNullable<CloseRerunExpected['shortcut']>
+}
+
 /**
  * The counts moved since the confirm opened; `preview` is the confirm read again under the mark.
  */
@@ -443,7 +451,7 @@ type RerunStartArgs = {
 
 /** The fork's start refusals on the parent before it forks; holds no mark, starts nothing. */
 export type CloseRerunParentCheck =
-  | { status: 'clear'; preview: CloseRerunPreview & { shortcut: CloseRerunShortcut } }
+  | { status: 'clear'; preview: CloseRerunForkPreview }
   | RejectedStart
   | PreflightFailedStart
   | CloseRerunReadRefusal
@@ -457,7 +465,7 @@ export type CloseRerunParentCheck =
 export async function checkCloseRerunParent(
   branchId: string,
   chapterId: string,
-  expected: CloseRerunExpected,
+  expected: CloseRerunForkExpected,
   ctx: DbCtx,
 ): Promise<CloseRerunParentCheck> {
   const open = currentStoryStore.getCurrentStory()

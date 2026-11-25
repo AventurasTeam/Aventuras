@@ -221,6 +221,8 @@ export const RollbackAndRerunFiresConfirm: Story = {
     await findDialog()
     await userEvent.click(button(COPY.rerunOnBranch))
     await waitFor(() => expect(args.onConfirmOnBranch).toHaveBeenCalledTimes(1), WAIT)
+    // The preview it showed, which the fork reads its expected counts from.
+    expect(args.onConfirmOnBranch).toHaveBeenCalledWith(PREVIEW)
     expect(args.onConfirm).not.toHaveBeenCalled()
 
     await userEvent.click(button(COPY.rollbackAndRerun))

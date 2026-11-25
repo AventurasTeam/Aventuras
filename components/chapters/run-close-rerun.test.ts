@@ -11,6 +11,7 @@ import {
   STORY_ENTRY_REJECTION,
   type CloseRerunParentCheck,
   type CloseRerunPreview,
+  type CloseRerunForkPreview,
   type CloseRerunForkStart,
   type CloseRerunShortcut,
   type CloseRerunStart,
@@ -543,7 +544,7 @@ describe('runCloseRerunOnBranch', () => {
     entries: { count: 15, first: 58, last: 72 },
     counts: COUNTS,
   }
-  const ON_PARENT: CloseRerunPreview = { ...PREVIEW, branchName: 'Main', shortcut: SHORTCUT }
+  const ON_PARENT: CloseRerunForkPreview = { ...PREVIEW, branchName: 'Main', shortcut: SHORTCUT }
   const CLEAR: CloseRerunParentCheck = {
     status: 'clear',
     preview: { ...ON_PARENT, shortcut: SHORTCUT },

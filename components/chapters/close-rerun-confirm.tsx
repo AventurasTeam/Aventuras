@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import type { CloseRerunPreview, CloseRerunShortcut } from '@/lib/actions'
+import type { CloseRerunForkPreview, CloseRerunPreview, CloseRerunShortcut } from '@/lib/actions'
 import { t } from '@/lib/i18n'
 
 import { chapterImpactLines } from './chapter-impact-lines'
@@ -29,8 +29,8 @@ export type CloseRerunConfirmProps = {
   pending: boolean
   onCancel: () => void
   onConfirm: () => void
-  /** Re-run on new branch; rendered only with turns since. */
-  onConfirmOnBranch: () => void
+  /** Re-run on new branch; rendered only with turns since, it hands back the preview it showed. */
+  onConfirmOnBranch: (preview: CloseRerunForkPreview) => void
 }
 
 function reversalLines(preview: CloseRerunPreview): string[] {
@@ -138,7 +138,7 @@ export function CloseRerunConfirm({
                 variant="primary"
                 disabled={actionsDisabled}
                 disabledReason={reason}
-                onPress={onConfirmOnBranch}
+                onPress={() => onConfirmOnBranch({ ...preview, shortcut })}
               >
                 <Text>{t('chapters:rerunConfirm.rerunOnBranch')}</Text>
               </ReasonButton>

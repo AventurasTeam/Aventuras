@@ -7,6 +7,7 @@ import { useReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import {
   getCloseRerunPreview,
+  type CloseRerunForkPreview,
   type CloseRerunPreview,
   type CloseRerunReadRefusal,
 } from '@/lib/actions'
@@ -465,14 +466,14 @@ function RerunConfirmHost({
     })
   }
 
-  const confirmOnBranch = () => {
+  const confirmOnBranch = (withTurns: CloseRerunForkPreview) => {
     const open = begin()
     if (open == null) return
     void runCloseRerunOnBranch({
       storyId: open.storyId,
       branchId,
       chapterId,
-      preview,
+      preview: withTurns,
       replaceStack,
       closeRequest: closeOwn,
     })
