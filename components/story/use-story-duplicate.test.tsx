@@ -133,7 +133,7 @@ describe('useStoryDuplicate: opening', () => {
     expect(result.current.dialog).toBeNull()
     expect(check).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith(FAILED)
-    expect(logger.error).toHaveBeenCalledWith('app.story_duplicate_check_failed', {
+    expect(logger.error).toHaveBeenCalledWith('app.story_duplicate_read_failed', {
       storyId: 'story_a',
       error: 'db locked',
     })
@@ -147,7 +147,7 @@ describe('useStoryDuplicate: opening', () => {
     expect(check).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith(FAILED)
     expect(logger.error).toHaveBeenCalledWith(
-      'app.story_duplicate_check_failed',
+      'app.story_duplicate_read_failed',
       expect.objectContaining({ storyId: 'story_a' }),
     )
   })
@@ -269,7 +269,7 @@ describe('useStoryDuplicate: checking', () => {
       check.mockResolvedValueOnce({ status: 'rejected', code })
       await openOn(result)
       expect(result.current.dialog?.state).toEqual({ kind: 'failed' })
-      expect(logger.warn).toHaveBeenCalledWith('app.story_duplicate_check_failed', {
+      expect(logger.warn).toHaveBeenCalledWith('app.story_duplicate_refused', {
         storyId: 'story_a',
         code,
       })
@@ -432,12 +432,16 @@ describe('useStoryDuplicate: submitting', () => {
     expect(onDone).not.toHaveBeenCalled()
   })
 
-  it('shows the failure for an empty-title refusal at the press', async () => {
+  it('shows the failure for an empty-title refusal at the press and logs it', async () => {
     const { result, duplicate } = setup()
     await openOn(result)
     duplicate.mockResolvedValueOnce({ status: 'rejected', code: 'empty' })
     await submitOn(result)
     expect(result.current.dialog?.state).toEqual({ kind: 'failed' })
+    expect(logger.warn).toHaveBeenCalledWith('app.story_duplicate_refused', {
+      storyId: 'story_a',
+      code: 'empty',
+    })
   })
 
   it('logs a thrown copy, shows the failure, and copies on a retry', async () => {

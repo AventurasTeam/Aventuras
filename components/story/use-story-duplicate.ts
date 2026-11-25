@@ -38,7 +38,7 @@ function refusedState(storyId: string, code: DuplicateRefusalCode): DuplicateDia
   const line = REFUSED_LINE[code]
   if (line != null) return { kind: 'refused', reason: t(line) }
   // A stale list: the card offers no Duplicate on a draft, and the dialog blocks a blank name.
-  logger.warn('app.story_duplicate_check_failed', { storyId, code })
+  logger.warn('app.story_duplicate_refused', { storyId, code })
   return { kind: 'failed' }
 }
 
@@ -127,7 +127,7 @@ export function useStoryDuplicate({
       if (request !== openRequest.current || isCopying(dialogRef.current) || latest.current.blocked)
         return
       if (!read.ok || read.value.branches.length === 0) {
-        logger.error('app.story_duplicate_check_failed', {
+        logger.error('app.story_duplicate_read_failed', {
           storyId,
           error: read.ok ? 'the story has no branch' : messageOf(read.error),
         })
