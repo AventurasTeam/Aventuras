@@ -43,7 +43,7 @@ before rendering and splices it back afterwards, so text inside a marker never
 reached the renderer at all — markdown in there stayed literal, and a quote stayed
 uncoloured. Two consequences, both fixed in `ImageEmbeddingService`:
 
-- Marker text is now rendered rather than spliced back raw, through a renderer the
+- Marker text is rendered rather than spliced back raw, through a renderer the
   caller supplies — inline story markdown for the markdown path, and identity for
   Visual Prose, whose marker text is already HTML.
 - `snapMarkersToDialogue` widens any marker that would end mid-quote. Half a quote is
@@ -71,14 +71,16 @@ For TTS the voice is a property of each **chunk**, not of the call
 audible gap per line — and would leave `stopAudio` able to stop only the segment
 currently sounding. As chunks, the existing pipeline, retry and progress are unchanged.
 
-Two order-dependent rules, both silent when broken and both covered by
-`ttsText.test.ts`:
+Two order-dependent rules, both silent when broken:
 
 - **Sanitize, then split, then drop excluded characters.** Adding `"` to
   `excludedCharacters` is a legitimate way to silence the quote marks; run that filter
   before the split and it erases the very marks the split reads, collapsing playback
-  to one voice with no error anywhere.
-- **Visual Prose forces tag removal**, whatever `removeHtmlTags` says. That content is
+  to one voice with no error anywhere. `ttsText.test.ts` covers split-before-exclude
+  (`prepareTTSSegments`); sanitizing first is only enforced at the call site in
+  `StoryEntry.svelte`.
+- **Visual Prose forces tag removal**, whatever `removeHtmlTags` says (tested in
+  `ttsText.test.ts`). That content is
   generated HTML with a `<style>` block, and the toggle defaults to false — so the
   reader otherwise hears markup read aloud.
 
@@ -88,7 +90,7 @@ between two other characters becomes a **range**. `'*, -, ~'` — an entirely re
 thing to exclude — compiled to `[\*-~]`, every printable ASCII character from `*` to
 `~`, and erased the whole entry. It cannot be fixed in `escapeRegex` itself, whose
 output also feeds unicode-mode patterns where `\-` outside a class is a SyntaxError.
-An entry that comes out with nothing left to say now reports that rather than leaving
+An entry that comes out with nothing left to say raises an alert rather than leaving
 the play button to do nothing.
 
 The Google Translate provider is excluded: its "voice" is a language code, so a second
