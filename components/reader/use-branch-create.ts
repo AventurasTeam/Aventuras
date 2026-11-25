@@ -95,7 +95,11 @@ function refusalLine(
     case FORK_REFUSAL.entrySystem:
       return t('reader:branches.create.entryGone')
     default:
-      logger.warn('reader.branch_create_refused', { ...at, code: refusal.code })
+      logger.warn('reader.branch_create_refused', {
+        ...at,
+        code: refusal.code,
+        reason: refusal.reason,
+      })
       return t('reader:branches.create.failed')
   }
 }

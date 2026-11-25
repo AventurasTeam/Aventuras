@@ -410,7 +410,7 @@ describe('useBranchCreate — Create', () => {
     async (code, line, logged, runStarts) => {
       actions.fork.mockImplementation(async () => {
         if (runStarts) generationStore.startRun(closeRun())
-        return { status: 'rejected', code, reason: 'x' }
+        return { status: 'rejected', code, reason: 'no create delta for br_main' }
       })
       const hook = renderCreate()
       await openModal(hook)
@@ -426,6 +426,7 @@ describe('useBranchCreate — Create', () => {
           branchId: BRANCH,
           entryId: ENTRY,
           code,
+          reason: 'no create delta for br_main',
         })
       else expect(logWarn).not.toHaveBeenCalled()
     },
