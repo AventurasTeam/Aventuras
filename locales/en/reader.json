@@ -533,6 +533,16 @@
     "paused": "Generation in progress — switching paused.",
     "switchFailed": "Couldn't switch branches.",
     "renameFailed": "Couldn't rename the branch.",
+    "deleteReadFailed": "Couldn't read the branch. Please try again.",
+    "deleteConfirm": {
+      "title": "Delete {{name}}?",
+      "count_one": "{{count}} entry exists only on this branch.",
+      "count_other": "{{count}} entries exist only on this branch.",
+      "countNone": "No entries exist only on this branch.",
+      "consequence": "Its world, plot and chapter changes go with it. This can't be undone.",
+      "confirm": "Delete branch",
+      "failed": "Couldn't delete the branch."
+    },
     "create": {
       "title": "New branch",
       "context": "Branching from entry {{position}}.",
