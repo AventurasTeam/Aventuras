@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import {
   branches,
+  characterRelationships,
   deleteBranchVecOps,
   emptyWorkingState,
   ensureVecTablesSql,
+  entities,
+  happeningAwareness,
+  happenings,
   isVecFamilyTable,
   listVecFamilyTables,
   packFloat32,
@@ -19,6 +23,7 @@ import {
   wizardSessions,
   type BranchCopyArgs,
   type DbCtx,
+  type NewEntity,
   type SqlOp,
   type VecTargetKind,
 } from '@/lib/db'
@@ -34,6 +39,7 @@ import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending } from '@/lib/embedder-swap'
 import {
   currentStoryStore,
+  entriesStore,
   generationStore,
   resetAllStores,
   storiesStore,
@@ -50,7 +56,10 @@ import {
   type DuplicateRefusalCode,
   type DuplicateStoryResult,
 } from './duplicate-story'
+import { applyDeltaAction } from '../delta/apply-delta-action'
+import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
+import { redoLastAction, undoLastAction } from '../story-entries/undo'
 
 // An in-flight swap holds the embedder's in-process lock, which only a running swap takes; the
 // read's own in-flight case is in lib/embedder-swap/app-deps.test.ts. A story in `pending` reads
@@ -130,6 +139,7 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
+  __resetBranchWriteLocks()
   resetAllStores()
   vi.restoreAllMocks()
 })
@@ -1005,5 +1015,125 @@ describe('duplicateStory', () => {
 
     expect(everyRow(t.sqlite)).toEqual(before)
     expect(storiesStore.getStories().rows).toEqual([])
+  })
+})
+
+// data-model.md → Story duplicate: a copy keeps undo_payload verbatim, so a delete copied into
+// the new story still names the source branch; Reverse-replay restores onto the branch it writes.
+describe('CTRL-Z and redo in a copy', () => {
+  const UNDO_STORY = 's_undo'
+  const SOURCE = 'br_undo'
+  const GONE = 'char_gone'
+  const STAYS = 'char_stays'
+  const REL = 'rel_pair'
+  const HAP = 'hap_fire'
+  const HAW = 'haw_fire'
+  const DELETE_ACTION = 'act_gone'
+
+  const character = (id: string): NewEntity => ({
+    id,
+    branchId: SOURCE,
+    kind: 'character',
+    name: id,
+    status: 'active',
+    injectionMode: 'auto',
+    embeddingStale: 0,
+    createdAt: AT,
+    updatedAt: AT,
+  })
+
+  const branchesHolding = (table: string, id: string): unknown[] =>
+    (
+      t.sqlite
+        .prepare(`SELECT branch_id FROM "${table}" WHERE id = ? ORDER BY branch_id`)
+        .all(id) as {
+        branch_id: unknown
+      }[]
+    ).map((row) => row.branch_id)
+
+  // The source's newest group: a user's delete of GONE, capturing a relationship and an awareness
+  // row in its payload.
+  async function seedDeleteHead(): Promise<void> {
+    await t.db.insert(stories).values({
+      id: UNDO_STORY,
+      title: 'The Fire',
+      status: 'active',
+      createdAt: AT,
+      updatedAt: AT,
+      currentBranchId: SOURCE,
+    })
+    await t.db
+      .insert(branches)
+      .values({ id: SOURCE, storyId: UNDO_STORY, name: 'main', createdAt: AT })
+    await t.db.insert(entities).values([character(GONE), character(STAYS)])
+    await t.db
+      .insert(happenings)
+      .values({ id: HAP, branchId: SOURCE, title: 'The barn fire', createdAt: AT, updatedAt: AT })
+    // a_id < b_id: char_rel_canonical_order.
+    await t.db.insert(characterRelationships).values({
+      id: REL,
+      branchId: SOURCE,
+      aId: GONE,
+      bId: STAYS,
+      kind: 'ally',
+      inverseKind: null,
+      createdAt: AT,
+      updatedAt: AT,
+    })
+    await t.db
+      .insert(happeningAwareness)
+      .values({ id: HAW, branchId: SOURCE, happeningId: HAP, characterId: GONE })
+    const removed = await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteEntity',
+          source: 'user_edit',
+          payload: { branchId: SOURCE, id: GONE },
+        },
+        actionId: DELETE_ACTION,
+        branchId: SOURCE,
+      },
+      ctx,
+    )
+    if (removed.status !== 'ok') throw new Error(`deleteEntity: ${JSON.stringify(removed)}`)
+  }
+
+  it('undoes a delete copied from the source on the copy, and redoes it there, leaving the source alone', async () => {
+    await seedDeleteHead()
+    const copy = copyOf(
+      await duplicateStory(
+        { storyId: UNDO_STORY, title: 'The Fire (copy)', branch: { branchId: SOURCE } },
+        ctx,
+      ),
+    )
+    const [{ id: copyBranchId }] = copy.branches
+    const [held] = t.sqlite
+      .prepare(
+        "SELECT undo_payload FROM deltas WHERE branch_id = ? AND action_id = ? AND op = 'delete' AND target_table = 'entities'",
+      )
+      .all(copyBranchId, DELETE_ACTION) as { undo_payload: string }[]
+    // Not vacuous: the copy's delete still names the branch that wrote it, children included.
+    expect(JSON.parse(held.undo_payload)).toMatchObject({
+      branchId: SOURCE,
+      relationships: [{ id: REL, branchId: SOURCE }],
+      awareness: [{ id: HAW, branchId: SOURCE }],
+    })
+    const sourceBefore = branchSnapshot(t.sqlite, SOURCE)
+    entriesStore.hydrate(copyBranchId, [])
+
+    expect(await undoLastAction(copyBranchId, ctx)).toEqual({ status: 'ok' })
+
+    expect(branchesHolding('entities', GONE)).toEqual([copyBranchId])
+    expect(branchesHolding('character_relationships', REL)).toEqual([copyBranchId])
+    expect(branchesHolding('happening_awareness', HAW)).toEqual([copyBranchId])
+    expect(branchSnapshot(t.sqlite, SOURCE)).toEqual(sourceBefore)
+
+    expect(await redoLastAction(copyBranchId, ctx)).toEqual({ status: 'ok' })
+
+    expect(branchesHolding('entities', GONE)).toEqual([])
+    expect(branchesHolding('character_relationships', REL)).toEqual([])
+    expect(branchesHolding('happening_awareness', HAW)).toEqual([])
+    expect(branchSnapshot(t.sqlite, SOURCE)).toEqual(sourceBefore)
+    expect(undoRedoStore.hasRedo(copyBranchId)).toBe(false)
   })
 })
