@@ -821,6 +821,26 @@ describe('duplicateStory', () => {
     expect(copier.calls).toBe(2)
   })
 
+  it('refuses a swap marker stored during its last read, with no swap in flight', async () => {
+    let marked: Record<string, unknown[]> = {}
+    copier.afterCall = (call) => {
+      if (call !== 2) return
+      markSwap(STORY)
+      marked = everyRow(t.sqlite)
+    }
+    // Not vacuous: no story is open, so only the stored marker can refuse.
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+
+    expect(await duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, ctx)).toEqual({
+      status: 'rejected',
+      code: DUPLICATE_REFUSAL.swapPending,
+    })
+    expect(copier.calls).toBe(2)
+    expect(posted).not.toHaveBeenCalled()
+    expect(Object.keys(marked).length).toBeGreaterThan(0)
+    expect(everyRow(t.sqlite)).toEqual(marked)
+  })
+
   it('refuses a run registered during its last read, read with no await before the post', async () => {
     copier.afterCall = (call) => {
       if (call === 2) registerRun({ storyId: STORY, branchId: A })

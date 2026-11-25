@@ -220,9 +220,11 @@ export async function duplicateStory(
   ]
   for (const { row, to } of copies)
     ops.push(...(await branchCopyOps(ctx.db, { from: row.id, to, mode: 'duplicate' })))
+  // Read again: a swap can store its marker, then fail out of flight, during the copier's reads.
+  const swapStored = await readStorySwapPending(ctx.db, storyId)
 
   // No await from here to the post: a swap or a run admitted during the reads above refuses.
-  if (isStorySwapPending(storyId))
+  if (swapStored || isStorySwapPending(storyId))
     return { status: 'rejected', code: DUPLICATE_REFUSAL.swapPending }
   if (
     runOnStory(
