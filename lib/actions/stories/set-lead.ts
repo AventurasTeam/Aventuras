@@ -49,9 +49,14 @@ function refuse<Code extends LeadRejectionCode>(
   return { status: 'rejected', code }
 }
 
-// Each reads the flagged rows before its group takes their row locks, so two at once on one
-// branch would each clear only what the other hadn't flagged yet: they run one at a time.
-function queued<Result>(branchId: string, run: () => Promise<Result>): Promise<Result> {
+/**
+ * Runs a branch's lead writers one at a time: each reads the flag before its group takes the row
+ * locks. Not reentrant; taken after a tail's metadata lock and before any branch or row lock.
+ */
+export function withBranchLeadLock<Result>(
+  branchId: string,
+  run: () => Promise<Result>,
+): Promise<Result> {
   return withKeyLock(`lead:${branchId}`, run)
 }
 
@@ -111,7 +116,7 @@ export function setBranchLead(
   entityId: string,
   ctx: DbCtx,
 ): Promise<SetLeadResult> {
-  return queued(branchId, async () => {
+  return withBranchLeadLock(branchId, async () => {
     const story = await storyOf(branchId, ctx)
     if (story.status === 'draft') return refuse(branchId, entityId, LEAD_REJECTION.draftStory)
     const [target] = await ctx.db
@@ -132,7 +137,7 @@ export function setBranchLead(
 
 /** Clears every flagged row on the branch; refused on a story that needs a lead. */
 export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<UnsetLeadResult> {
-  return queued(branchId, async () => {
+  return withBranchLeadLock(branchId, async () => {
     const story = await storyOf(branchId, ctx)
     if (story.status === 'draft') return refuse(branchId, null, LEAD_REJECTION.draftStory)
     // A story with no stored definition can't say it needs none, so the lead stays.

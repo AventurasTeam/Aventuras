@@ -37,6 +37,7 @@ import {
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
+import { withBranchLeadLock } from '../stories/set-lead'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
 import type { DbCtx, PipelineAction } from '../types'
 
@@ -224,10 +225,13 @@ async function commitMerge(
           COLLISION_REJECTION.leadEntity,
           'an entry on the branch is stamped with the losing row as its lead',
         )
-      // The build reads the flag off the store, which a dispatched set patches once it commits.
-      await settleUserWrites()
       const story = storyPlaceOf({ tail: head?.tail, sceneSource })
-      return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
+      // The build reads the flag off the store, which a set patches once it commits: the lead lock
+      // keeps a set from landing between the settle and this group's commit.
+      return withBranchLeadLock(branchId, async () => {
+        await settleUserWrites()
+        return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
+      })
     },
     () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
   )

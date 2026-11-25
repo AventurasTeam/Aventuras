@@ -713,6 +713,43 @@ describe('resolveCollision — merge', () => {
     expect(await flaggedLeads()).toEqual(['char_b'])
   })
 
+  it('holds a lead set onto the loser dispatched while it settles another write, keeping the lead', async () => {
+    await ctx.db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await setLeadFlag('char_lead')
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // The merge settles this edit; the set's group would queue behind it on the loser's row.
+    const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_b' }), () => gate)
+    const editing = applyDeltaAction(
+      {
+        branchId: 'b1',
+        actionId: 'act_edit',
+        action: {
+          kind: 'updateEntity',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: 'char_b', patch: { description: 'edited' } },
+        },
+      },
+      ctx,
+    )
+    await flush()
+    const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx)
+    await flush()
+    const setting = setBranchLead('b1', 'char_b', ctx)
+    await flush()
+    release()
+    await held
+    const [edited, merged, set] = await Promise.all([editing, merging, setting])
+
+    expect(await flaggedLeads()).toEqual(['char_lead'])
+    expect(await entityRow('char_b')).toBeUndefined()
+    expect(edited).toMatchObject({ status: 'ok' })
+    expect(merged).toEqual({ status: 'ok' })
+    expect(set).toEqual({ status: 'rejected', code: 'wrong-branch' })
+  })
+
   it('merges a loser a stamp names only on another branch', async () => {
     await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'other', createdAt: 1 })
     await ctx.db.insert(storyEntries).values({
