@@ -26,6 +26,6 @@ dated idiom, [modern-code.md](modern-code.md) wins.
 ## Defaults
 
 Never write `?? <default>` for a value that has a default in `ai/core/defaults.ts`. The settings
-store merges every block over its defaults on load, so the key is always present, and a fallback
-at the call site is a second copy of the number that nothing keeps in step
+store merges every system-services block over its defaults on load, so the key is always
+present, and a fallback at the call site is a second copy of the number that nothing keeps in step
 ([ai-services.md](../architecture/ai-services.md#agent-profiles-and-service-resolution)).
