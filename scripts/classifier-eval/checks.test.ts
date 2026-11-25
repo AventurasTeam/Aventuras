@@ -237,6 +237,8 @@ describe('personWords', () => {
   it('takes no apostrophe or single quote for a quote mark', () => {
     expect(personWords('Hask’s riders saw you, and Sefa’s bolt saw them.')).toEqual(['you'])
     expect(personWords("Hask's riders saw 'me' first.")).toEqual(['me'])
+    expect(personWords("He wrote 'me' on the wall.")).toEqual(['me'])
+    expect(personWords('He wrote ‘me’ on the wall.')).toEqual(['me'])
   })
 
   it('counts the rest of the text as quoted after a quote left open', () => {
