@@ -2,6 +2,7 @@ import {
   clearLiveSession,
   createStoryWithBranch,
   openStory,
+  type CreateStoryInput,
   type DbCtx,
   type WizardCastEntityInput,
 } from '@/lib/actions'
@@ -9,7 +10,6 @@ import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/a
 import {
   buildStorySettings,
   type CharacterState,
-  type EntryMetadata,
   type FactionState,
   type ItemState,
   type LocationState,
@@ -285,7 +285,7 @@ export async function finishWizard(
   const activeLocationIds = new Set(
     s.cast.filter((r) => r.status === 'active' && r.kind === 'location').map((r) => r.id),
   )
-  const openingMetadata: EntryMetadata = {
+  const openingMetadata: CreateStoryInput['openingMetadata'] = {
     sceneEntities: s.opening.sceneEntities.filter((id) => sceneTaggableIds.has(id)),
     currentLocationId:
       s.opening.currentLocationId != null && activeLocationIds.has(s.opening.currentLocationId)
