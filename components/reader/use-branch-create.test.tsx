@@ -206,7 +206,6 @@ describe('useBranchCreate — opening', () => {
     expect(hook.result.current.create.modal).toBeNull()
     await openModal(hook)
     expect(modal(hook)).toMatchObject({
-      open: true,
       entryPosition: 47,
       pending: false,
       message: null,
@@ -414,7 +413,7 @@ describe('useBranchCreate — Create', () => {
       await openModal(hook)
       press(hook, 'Side quest')
       await settle()
-      expect(modal(hook)).toMatchObject({ open: true, pending: false, message: line })
+      expect(modal(hook)).toMatchObject({ pending: false, message: line })
       expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
       expect(actions.show).not.toHaveBeenCalled()
       expect(branchList.refresh).not.toHaveBeenCalled()
@@ -435,7 +434,7 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook)).toMatchObject({ open: true, pending: false, message: COPY.failed })
+    expect(modal(hook)).toMatchObject({ pending: false, message: COPY.failed })
     expect(logError).toHaveBeenCalledExactlyOnceWith('reader.branch_create_failed', {
       branchId: BRANCH,
       entryId: ENTRY,
@@ -486,7 +485,7 @@ describe('useBranchCreate — Create', () => {
     await openModal(hook)
     press(hook, 'Side quest')
     await settle()
-    expect(modal(hook)).toMatchObject({ open: true, pending: false, message: COPY.failed })
+    expect(modal(hook)).toMatchObject({ pending: false, message: COPY.failed })
     expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
     expect(logError).toHaveBeenCalledExactlyOnceWith('reader.branch_create_threw', {
       branchId: BRANCH,

@@ -23,7 +23,6 @@ const PANEL_CLASS = cn(
 )
 
 export type BranchCreateModalProps = {
-  open: boolean
   /** The fork entry's position: `Branching from entry <position>.` */
   entryPosition: number
   /** From the press of Create to the navigation: Create spins, the rest disables, nothing closes. */
@@ -42,7 +41,6 @@ export type BranchCreateModalProps = {
  * the request, the press in flight and the line.
  */
 export function BranchCreateModal({
-  open,
   entryPosition,
   pending,
   message,
@@ -63,7 +61,7 @@ export function BranchCreateModal({
   const line = message ?? createBlockedReason
   return (
     <Dialog
-      open={open}
+      open
       onOpenChange={(next) => {
         if (!next) cancel()
       }}

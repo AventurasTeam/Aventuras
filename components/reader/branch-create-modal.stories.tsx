@@ -117,7 +117,6 @@ const meta: Meta<typeof BranchCreateModal> = {
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
   args: {
-    open: true,
     entryPosition: 47,
     pending: false,
     message: null,

@@ -242,7 +242,6 @@ export function useBranchCreate({
     request == null
       ? null
       : {
-          open: true,
           entryPosition: request.position,
           pending,
           message,
