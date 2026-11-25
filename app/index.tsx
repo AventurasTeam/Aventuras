@@ -1,4 +1,5 @@
 import { useIsFocused } from '@react-navigation/native'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, type Href } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -6,8 +7,11 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { readerHref } from '@/components/reader/reader-href'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { AppBannerHost } from '@/components/story/app-banner-host'
+import { DuplicateStoryDialog } from '@/components/story/duplicate-story-dialog'
 import { StoryConfigRecoveryDialog } from '@/components/story/story-config-recovery-dialog'
 import { StoryList, type StoryCardHandlers } from '@/components/story/story-list'
+import { useDuplicateDoneToast } from '@/components/story/use-duplicate-done-toast'
+import { useStoryDuplicate } from '@/components/story/use-story-duplicate'
 import {
   ConcurrentStatePrompt,
   useWizardSessionExists,
@@ -26,8 +30,10 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useStoryChapterNumbers } from '@/hooks/use-story-chapter-numbers'
 import {
+  checkStoryDuplicate,
   clearLiveSession,
   deleteStory,
+  duplicateStory,
   loadDraft,
   loadLiveSession,
   openStory,
@@ -44,6 +50,7 @@ import {
   handleStoryRecoveryResetOutcome,
 } from '@/lib/recovery'
 import {
+  readStoryBranches,
   rehydrateStories,
   selectStoryCards,
   storiesStore,
@@ -181,6 +188,29 @@ export default function Index() {
     )
   }
 
+  const queryClient = useQueryClient()
+  const showDuplicated = useDuplicateDoneToast({
+    focused: isFocused,
+    open: (storyId) => attemptOpenStory(storyId),
+  })
+  const storyDuplicate = useStoryDuplicate({
+    focused: isFocused,
+    readBranches: async (storyId) => ({
+      branches: (await readStoryBranches(db, storyId)).map(({ id, name }) => ({ id, name })),
+      // switchBranch re-reads the stories store, so the row's pointer is the DB's.
+      currentBranchId:
+        storiesStore.getStories().rows.find((row) => row.id === storyId)?.currentBranchId ?? null,
+    }),
+    check: (storyId, branch) => checkStoryDuplicate(storyId, branch, ctx),
+    duplicate: (input) => duplicateStory(input, ctx),
+    onDone: (copy) => {
+      // The numbers' key doesn't move on a duplicate, so the copy's card would read Chapter 1.
+      void queryClient.invalidateQueries({ queryKey: ['story-chapter-numbers'] })
+      showDuplicated(copy)
+    },
+  })
+  const duplicateDialog = storyDuplicate.dialog
+
   const cardHandlers = (storyId: string): StoryCardHandlers => {
     const row = rows.find((r) => r.id === storyId)
     const isDraft = row?.status === 'draft'
@@ -210,6 +240,11 @@ export default function Index() {
         ? undefined
         : () =>
             attemptOpenStory(storyId, navigateToAbout(storyId), t('landing:errors.editInfoFailed')),
+      onDuplicate: isDraft
+        ? undefined
+        : () => {
+            void storyDuplicate.open(storyId, row?.title ?? '')
+          },
       onDelete: () => setPendingDelete(storyId),
     }
   }
@@ -226,7 +261,12 @@ export default function Index() {
       actions={
         <AppActionsMenu
           beforeLeaveStory={null}
-          blocked={prompt != null || storyRecovery != null || pendingDelete != null}
+          blocked={
+            prompt != null ||
+            storyRecovery != null ||
+            pendingDelete != null ||
+            duplicateDialog != null
+          }
         />
       }
     >
@@ -352,6 +392,25 @@ export default function Index() {
             }
           }}
           onDismiss={dismissStoryRecovery}
+        />
+      ) : null}
+
+      {/* Portaled: without the focus gate it would paint over a pushed reader. */}
+      {duplicateDialog != null && isFocused ? (
+        <DuplicateStoryDialog
+          key={duplicateDialog.openSeq}
+          open
+          onOpenChange={(open) => {
+            if (!open) storyDuplicate.dismiss()
+          }}
+          sourceTitle={duplicateDialog.sourceTitle}
+          branches={duplicateDialog.branches}
+          currentBranchId={duplicateDialog.currentBranchId}
+          state={duplicateDialog.state}
+          onBranchChange={storyDuplicate.setBranch}
+          onDuplicate={(values) => {
+            void storyDuplicate.submit(values)
+          }}
         />
       ) : null}
 
