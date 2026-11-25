@@ -45,7 +45,7 @@ const REASON = {
 // memory/chapter-close.md → Tools and writes: sent only with a mark. Turns before the first mark
 // are the named lead's; it never says the last run is the current lead's.
 const LEAD_MARK_NOTE =
-  'A turn with a leadMark was written under a different lead from the turn before it. From that turn until the next one with a leadMark, "I" and "you" outside quoted speech are who its leadMark names, not the lead your task names: a character, by id and name; gone, a character no longer in the story, so credit nothing to that "I"; or none, no one. Before the first leadMark, they are the lead your task names, if it names one.'
+  'A turn with a leadMark was written under a different lead from the turn before it in this answer (the first one in the answer, from the lead your task names). From that turn until the next one with a leadMark, "I" and "you" outside quoted speech are who its leadMark names, not the lead your task names: a character, by id and name; gone, a character no longer in the story, so credit nothing to that "I"; or none, no one. Before the first leadMark, they are the lead your task names, if it names one.'
 
 // Never echoed: the answer's swap to handles would mint a handle for a full id it found.
 const FULL_ID_LABEL = 'a full id'
