@@ -49,12 +49,15 @@ const isCopying = (dialog: StoryDuplicateDialogModel | null): boolean =>
 /** story-list.md → Duplicate a story: reads branches, checks the copy's, copies, calls `onDone`. */
 export function useStoryDuplicate({
   focused,
+  blocked,
   readBranches,
   check,
   duplicate,
   onDone,
 }: {
   focused: boolean
+  /** Another of the list's overlays is up; the Duplicate dialog itself doesn't count. */
+  blocked: boolean
   readBranches: (
     storyId: string,
   ) => Promise<{ branches: readonly DuplicateBranchOption[]; currentBranchId: string | null }>
@@ -74,9 +77,9 @@ export function useStoryDuplicate({
   const openRequest = useRef(0)
   const checkRequest = useRef(0)
   const openSeq = useRef(0)
-  const latest = useRef({ readBranches, check, duplicate, onDone })
+  const latest = useRef({ blocked, readBranches, check, duplicate, onDone })
   useEffect(() => {
-    latest.current = { readBranches, check, duplicate, onDone }
+    latest.current = { blocked, readBranches, check, duplicate, onDone }
   })
 
   const setDialog = useCallback((next: StoryDuplicateDialogModel | null) => {
@@ -120,8 +123,9 @@ export function useStoryDuplicate({
       openRequest.current += 1
       const request = openRequest.current
       const read = await attempt(() => latest.current.readBranches(storyId))
-      // A submit can start a copy during the read.
-      if (request !== openRequest.current || isCopying(dialogRef.current)) return
+      // A submit can start a copy during the read, and another overlay can open over the list.
+      if (request !== openRequest.current || isCopying(dialogRef.current) || latest.current.blocked)
+        return
       if (!read.ok || read.value.branches.length === 0) {
         logger.error('app.story_duplicate_check_failed', {
           storyId,

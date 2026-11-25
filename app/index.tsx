@@ -189,8 +189,10 @@ export default function Index() {
   }
 
   const queryClient = useQueryClient()
+  const otherOverlayUp = prompt != null || storyRecovery != null || pendingDelete != null
   const storyDuplicate = useStoryDuplicate({
     focused: isFocused,
+    blocked: otherOverlayUp,
     readBranches: async (storyId) => ({
       branches: (await readStoryBranches(db, storyId)).map(({ id, name }) => ({ id, name })),
       // switchBranch re-reads the stories store, so the row's pointer is the DB's.
@@ -207,8 +209,7 @@ export default function Index() {
   })
   const duplicateDialog = storyDuplicate.dialog
   // A confirm to answer before navigating away.
-  const listBlocked =
-    prompt != null || storyRecovery != null || pendingDelete != null || duplicateDialog != null
+  const listBlocked = otherOverlayUp || duplicateDialog != null
   const showDuplicated = useDuplicateDoneToast({
     focused: isFocused,
     blocked: listBlocked,

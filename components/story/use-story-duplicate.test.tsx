@@ -26,6 +26,7 @@ type Check = (storyId: string, branch: DuplicateBranch) => Promise<DuplicateChec
 type Duplicate = (input: DuplicateStoryInput) => Promise<DuplicateStoryResult>
 type OnDone = (copy: { storyId: string; title: string }) => void
 type Hook = ReturnType<typeof useStoryDuplicate>
+type Props = { focused: boolean; blocked: boolean }
 type Values = { title: string; branch: DuplicateBranch }
 
 // The locale's lines, written out: reading them through t() would pass on any string.
@@ -64,9 +65,8 @@ function setup() {
   const duplicate = vi.fn<Duplicate>(async () => COPIED)
   const onDone = vi.fn<OnDone>()
   const hook = renderHook(
-    ({ focused }: { focused: boolean }) =>
-      useStoryDuplicate({ focused, readBranches, check, duplicate, onDone }),
-    { initialProps: { focused: true } },
+    (props: Props) => useStoryDuplicate({ ...props, readBranches, check, duplicate, onDone }),
+    { initialProps: { focused: true, blocked: false } },
   )
   return { ...hook, readBranches, check, duplicate, onDone }
 }
@@ -208,7 +208,24 @@ describe('useStoryDuplicate: opening', () => {
     act(() => {
       opening = result.current.open('story_a', 'Aria')
     })
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
+    await act(async () => {
+      read.resolve({ branches: [MAIN], currentBranchId: MAIN.id })
+      await opening
+    })
+    expect(result.current.dialog).toBeNull()
+    expect(check).not.toHaveBeenCalled()
+  })
+
+  it('opens nothing when another list overlay is up as the branch read lands', async () => {
+    const { result, rerender, readBranches, check } = setup()
+    const read = deferred<BranchRead>()
+    readBranches.mockReturnValueOnce(read.promise)
+    let opening: Promise<void> = Promise.resolve()
+    act(() => {
+      opening = result.current.open('story_a', 'Aria')
+    })
+    rerender({ focused: true, blocked: true })
     await act(async () => {
       read.resolve({ branches: [MAIN], currentBranchId: MAIN.id })
       await opening
@@ -495,7 +512,7 @@ describe('useStoryDuplicate: dismissing', () => {
   it('dismisses when the list loses focus', async () => {
     const { result, rerender } = setup()
     await openOn(result)
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
     expect(result.current.dialog).toBeNull()
   })
 
@@ -508,7 +525,7 @@ describe('useStoryDuplicate: dismissing', () => {
     act(() => {
       submitting = result.current.submit(VALUES)
     })
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
     expect(result.current.dialog?.state).toEqual({ kind: 'copying' })
 
     await act(async () => {
