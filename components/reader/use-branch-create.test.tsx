@@ -672,3 +672,70 @@ describe('useBranchCreate — Create', () => {
     expect(modal(hook)).toMatchObject({ createBlockedReason: undefined, phase: idle(COPY.gate) })
   })
 })
+
+describe('useBranchCreate — a log that throws while a throw is handled', () => {
+  // A listener of our own makes vitest leave the expected rejection to the test.
+  const rejections: unknown[] = []
+  const onRejection = (reason: unknown) => {
+    rejections.push(reason)
+  }
+  beforeEach(() => {
+    rejections.length = 0
+    process.on('unhandledRejection', onRejection)
+  })
+  afterEach(() => {
+    process.off('unhandledRejection', onRejection)
+  })
+
+  const logBroke = new Error('error log broke')
+  function breakErrorLog(): void {
+    logError.mockImplementation(() => {
+      throw logBroke
+    })
+  }
+
+  it('before the commit still ends pending with the failed line; Cancel closes, and Create forks again', async () => {
+    actions.fork.mockResolvedValueOnce({ status: 'rejected', code: 'lock-timeout', reason: 'x' })
+    logWarn.mockImplementation(() => {
+      throw new Error('log broke')
+    })
+    breakErrorLog()
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.failed))
+    expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
+    await vi.waitFor(() => expect(rejections).toStrictEqual([logBroke]))
+
+    act(() => modal(hook).onCancel())
+    expect(hook.result.current.create.modal).toBeNull()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(actions.fork).toHaveBeenCalledTimes(2)
+  })
+
+  it('after the commit still closes the modal, and a reopened Create forks again', async () => {
+    actions.fork.mockImplementationOnce(async () => {
+      openOn('br_other')
+      return { status: 'ok', branchId: CHILD }
+    })
+    branchList.refresh.mockImplementationOnce(() => {
+      throw new Error('refresh broke')
+    })
+    breakErrorLog()
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(hook.result.current.create.modal).toBeNull()
+    expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
+    await vi.waitFor(() => expect(rejections).toStrictEqual([logBroke]))
+
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(actions.fork).toHaveBeenCalledTimes(2)
+  })
+})

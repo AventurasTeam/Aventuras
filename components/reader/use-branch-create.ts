@@ -221,10 +221,11 @@ export function useBranchCreate({
         toast.warning(t('reader:branches.create.notOpened', { name: name.trim() }))
       },
       (error) => {
-        logger.error('reader.branch_create_threw', { ...logAt, error: messageOf(error) })
         // Once committed the branch exists, so the modal closes rather than show the failed line.
         if (committed) close()
         else endPending(t('reader:branches.create.failed'))
+        // After the reset: a log that throws too still leaves the modal live.
+        logger.error('reader.branch_create_threw', { ...logAt, error: messageOf(error) })
       },
     )
   }
