@@ -32,7 +32,6 @@ import {
 import {
   applyDeltaActionGroup,
   DELTA_REJECTION,
-  settleUserWrites,
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
@@ -226,12 +225,11 @@ async function commitMerge(
           'an entry on the branch is stamped with the losing row as its lead',
         )
       const story = storyPlaceOf({ tail: head?.tail, sceneSource })
-      // The build reads the flag off the store, which a set patches once it commits: the lead lock
-      // keeps a set from landing between the settle and this group's commit.
-      return withBranchLeadLock(branchId, async () => {
-        await settleUserWrites()
-        return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
-      })
+      // The build reads the flag off the store, which a set patches as it commits: the lead lock
+      // runs a set wholly before this build or after this group's commit.
+      return withBranchLeadLock(branchId, () =>
+        commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx),
+      )
     },
     () => refusal(COLLISION_REJECTION.inFlight, 'tail moved'),
   )

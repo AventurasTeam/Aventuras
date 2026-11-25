@@ -713,14 +713,14 @@ describe('resolveCollision — merge', () => {
     expect(await flaggedLeads()).toEqual(['char_b'])
   })
 
-  it('holds a lead set onto the loser dispatched while it settles another write, keeping the lead', async () => {
+  it('holds a lead set onto the loser dispatched while it waits on another write, keeping the lead', async () => {
     await ctx.db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
     await setLeadFlag('char_lead')
     let release = () => {}
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
-    // The merge settles this edit; the set's group would queue behind it on the loser's row.
+    // The merge's group queues behind this edit on the loser's row; the set comes after the build.
     const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_b' }), () => gate)
     const editing = applyDeltaAction(
       {
