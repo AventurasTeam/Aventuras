@@ -14,6 +14,7 @@ import {
   type BranchNavigatorProps,
   type BranchNavigatorRow,
 } from './branch-navigator'
+import { hitAtCentre, withHitTesting } from './hit-test-probe'
 
 const TABLET = { viewport: { value: 'tablet' } }
 const PHONE = { viewport: { value: 'mobile1' } }
@@ -165,27 +166,6 @@ function PauseLiftsHarness(props: BranchNavigatorProps) {
     return () => document.removeEventListener('keydown', onKeyDown, true)
   }, [])
   return <BranchNavigator {...props} paused={paused} />
-}
-
-function centreOf(element: Element): { x: number; y: number } {
-  const box = element.getBoundingClientRect()
-  return { x: Math.floor(box.left + box.width / 2), y: Math.floor(box.top + box.height / 2) }
-}
-
-function hitAt({ x, y }: { x: number; y: number }): Element | null {
-  return document.elementFromPoint(x, y)
-}
-
-// An open modal turns a lower layer's pointer events off, and hit-testing skips such an element
-// whatever paints there: the layer under test takes them back for the probe alone.
-function withHitTesting<T>(layer: HTMLElement, probe: () => T): T {
-  const previous = layer.style.pointerEvents
-  layer.style.pointerEvents = 'auto'
-  try {
-    return probe()
-  } finally {
-    layer.style.pointerEvents = previous
-  }
 }
 
 // The reader's wiring in small: the confirm mounts beside the navigator, outside its tree, and a
@@ -789,7 +769,7 @@ export const HoldOpenUnderConfirm: Story = {
     const header = screen.getByText('Branches · 3')
     const navigatorDialog = navigator('Branches · 3')
     // Control: before the confirm, the header's point is the navigator's own.
-    expect(navigatorDialog.contains(hitAt(centreOf(header)))).toBe(true)
+    expect(navigatorDialog.contains(hitAtCentre(header))).toBe(true)
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete Main' }))
     const confirm = await screen.findByRole('alertdialog', { name: 'Delete Main?' }, ANIMATION)
@@ -798,10 +778,10 @@ export const HoldOpenUnderConfirm: Story = {
     await pause(300)
     await expect(screen.getByText('Branches · 3')).toBeVisible()
     // layout.md → Stacking: the confirm's scrim covers the held Popover, and the confirm its centre.
-    const covered = withHitTesting(navigatorDialog, () => hitAt(centreOf(header)))
+    const covered = withHitTesting(navigatorDialog, () => hitAtCentre(header))
     expect(covered).not.toBeNull()
     expect(navigatorDialog.contains(covered)).toBe(false)
-    const own = withHitTesting(navigatorDialog, () => hitAt(centreOf(confirm)))
+    const own = withHitTesting(navigatorDialog, () => hitAtCentre(confirm))
     expect(confirm.contains(own)).toBe(true)
 
     await userEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }))
@@ -877,7 +857,7 @@ export const HoldOpenUnderConfirmPhone: Story = {
     // The lower button sits where the short Sheet rises; the confirm paints over it.
     for (const name of ['Delete branch', 'Cancel']) {
       const button = within(confirm).getByRole('button', { name })
-      const hit = withHitTesting(sheet, () => hitAt(centreOf(button)))
+      const hit = withHitTesting(sheet, () => hitAtCentre(button))
       expect(button.contains(hit)).toBe(true)
     }
 

@@ -9,6 +9,7 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
 import { BranchDeleteConfirm, type BranchDeleteConfirmProps } from './branch-delete-confirm'
+import { hitAtCentre, withHitTesting } from './hit-test-probe'
 
 // CI runs plays several times slower than local; every wait uses this.
 const WAIT = { timeout: 5000 }
@@ -30,27 +31,6 @@ const COUNT_LINE = /\d+ entr(?:y|ies) exists? only on this branch/
 
 function findDialog() {
   return screen.findByRole('alertdialog', { name: COPY.title }, WAIT)
-}
-
-function centreOf(element: Element): { x: number; y: number } {
-  const box = element.getBoundingClientRect()
-  return { x: Math.floor(box.left + box.width / 2), y: Math.floor(box.top + box.height / 2) }
-}
-
-function hitAt({ x, y }: { x: number; y: number }): Element | null {
-  return document.elementFromPoint(x, y)
-}
-
-// An open modal turns a lower layer's pointer events off, and hit-testing skips such an element
-// whatever paints there: the layer under test takes them back for the probe alone.
-function withHitTesting<T>(layer: HTMLElement, probe: () => T): T {
-  const previous = layer.style.pointerEvents
-  layer.style.pointerEvents = 'auto'
-  try {
-    return probe()
-  } finally {
-    layer.style.pointerEvents = previous
-  }
 }
 
 const meta: Meta<typeof BranchDeleteConfirm> = {
@@ -220,14 +200,14 @@ export const AboveAnOpenPopover: Story = {
     const under = await screen.findByText('Under the confirm')
     const popover = screen.getByRole('dialog', { name: 'Host popover' })
     // Control: before the confirm, the point is the Popover's own.
-    expect(popover.contains(hitAt(centreOf(under)))).toBe(true)
+    expect(popover.contains(hitAtCentre(under))).toBe(true)
 
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
     const dialog = await findDialog()
-    const covered = withHitTesting(popover, () => hitAt(centreOf(under)))
+    const covered = withHitTesting(popover, () => hitAtCentre(under))
     expect(covered).not.toBeNull()
     expect(popover.contains(covered)).toBe(false)
-    const own = withHitTesting(popover, () => hitAt(centreOf(dialog)))
+    const own = withHitTesting(popover, () => hitAtCentre(dialog))
     expect(dialog.contains(own)).toBe(true)
   },
 }

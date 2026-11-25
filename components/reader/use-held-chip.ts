@@ -7,6 +7,6 @@ export function useHeldChip(chip: BranchChipView | null, open: boolean): BranchC
   // Latched in the render `open` flips in, so that render already returns the held chip.
   const [latch, setLatch] = useState(() => ({ open, chip: open ? chip : null }))
   if (latch.open !== open) setLatch({ open, chip: open ? chip : null })
-  if (!open) return chip
-  return (latch.open ? latch.chip : chip) ?? chip
+  if (!open || !latch.open) return chip
+  return latch.chip ?? chip
 }

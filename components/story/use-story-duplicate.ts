@@ -86,7 +86,7 @@ export function useStoryDuplicate({
   const openRequest = useRef(0)
   const checkRequest = useRef(0)
   const openSeq = useRef(0)
-  const alive = useAliveRef()
+  const aliveRef = useAliveRef()
   const latest = useRef({ focused, blocked, readBranches, check, duplicate, onDone })
   // Layout: a copy's continuation can run between a commit and its passive effects.
   useLayoutEffect(() => {
@@ -165,7 +165,7 @@ export function useStoryDuplicate({
   const setBranch = useCallback(
     (branch: DuplicateBranch) => {
       const current = dialogRef.current
-      if (current == null || current.state.kind === 'copying') return
+      if (current == null || isCopying(current)) return
       setDialog({ ...current, branch, state: { kind: 'checking' } })
       void runCheck(current.openSeq, current.storyId, branch)
     },
@@ -190,7 +190,7 @@ export function useStoryDuplicate({
       if (!copied.ok) {
         logger.error('app.story_duplicate_threw', { storyId, error: messageOf(copied.error) })
         // An unfocused or unmounted list shows no dialog to carry the line.
-        if (!alive.current || !latest.current.focused) toast.error(t('landing:duplicate.failed'))
+        if (!aliveRef.current || !latest.current.focused) toast.error(t('landing:duplicate.failed'))
         setState(seq, { kind: 'failed' })
         return
       }
@@ -202,17 +202,17 @@ export function useStoryDuplicate({
       if (dialogRef.current?.openSeq === seq) setDialog(null)
       latest.current.onDone({ storyId: result.storyId, title: result.title })
     },
-    [alive, setBranch, setDialog, setState],
+    [aliveRef, setBranch, setDialog, setState],
   )
 
   const dismiss = useCallback(() => {
-    if (dialogRef.current?.state.kind === 'copying') return
+    if (isCopying(dialogRef.current)) return
     openRequest.current += 1
     checkRequest.current += 1
     setDialog(null)
   }, [setDialog])
 
-  const copying = dialog?.state.kind === 'copying'
+  const copying = isCopying(dialog)
   // A Stack keeps the list mounted under a pushed reader: a dialog left open would come back on
   // return with a check nothing kept current. Re-checked as a copy ends, which no dismissal stops.
   useEffect(() => {

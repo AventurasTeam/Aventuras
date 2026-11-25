@@ -20,7 +20,7 @@ export function useDuplicateDoneToast({
 }): (copy: { storyId: string; title: string }) => void {
   const toastId = useRef<string | null>(null)
   // A copy can land after the list unmounts.
-  const mountedRef = useAliveRef()
+  const aliveRef = useAliveRef()
   // Read at the press: the toast is mounted at the root and outlives the list's focus.
   const live = useRef({ focused, blocked, open })
   useEffect(() => {
@@ -40,18 +40,18 @@ export function useDuplicateDoneToast({
   return useCallback(
     ({ storyId, title }: { storyId: string; title: string }) => {
       // The blur dismissal has already run, so a toast shown now would outlast it over a reader.
-      if (!mountedRef.current || !live.current.focused) return
+      if (!aliveRef.current || !live.current.focused) return
       dismissShown()
       toastId.current = toast.info(t('landing:duplicate.done', { name: title }), {
         action: {
           label: t('landing:duplicate.open'),
           onPress: () => {
             const { focused: isFocused, blocked: isBlocked, open: openCopy } = live.current
-            if (mountedRef.current && isFocused && !isBlocked) openCopy(storyId)
+            if (aliveRef.current && isFocused && !isBlocked) openCopy(storyId)
           },
         },
       })
     },
-    [dismissShown, mountedRef],
+    [dismissShown, aliveRef],
   )
 }

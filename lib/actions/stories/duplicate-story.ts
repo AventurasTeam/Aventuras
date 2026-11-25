@@ -170,8 +170,7 @@ export async function duplicateStory(
   const copies = copied.map((row) => ({ row, to: generateId('br') }))
   const [first] = copies
   // Gone since the check.
-  if (source == null || first == null)
-    return { status: 'rejected', code: DUPLICATE_REFUSAL.missing }
+  if (source == null || first == null) return refused(DUPLICATE_REFUSAL.missing)
   const toOf = new Map(copies.map(({ row, to }) => [row.id, to]))
   const currentBranchId =
     (source.currentBranchId == null ? undefined : toOf.get(source.currentBranchId)) ?? first.to
@@ -253,8 +252,7 @@ export async function duplicateStory(
   if (rechecked.status === 'rejected') return rechecked
 
   // No await from here to the post: a swap or a run admitted during the reads above refuses.
-  if (isStorySwapPending(storyId))
-    return { status: 'rejected', code: DUPLICATE_REFUSAL.swapPending }
+  if (isStorySwapPending(storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
   if (
     runOnStory(
       generationStore.getTxState(),
@@ -262,7 +260,7 @@ export async function duplicateStory(
       onStory.map(({ id }) => id),
     )
   )
-    return { status: 'rejected', code: DUPLICATE_REFUSAL.runRegistered }
+    return refused(DUPLICATE_REFUSAL.runRegistered)
   const started = Date.now()
   await ctx.runInTransaction(ops)
   logger.debug('action_layer.story_duplicated', {
