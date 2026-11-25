@@ -362,8 +362,9 @@ No toast — the chip update + reader being on the new branch is
 self-evidence.
 
 **The reader can't be replaced.** If the fork has committed but the
-story's screens can't be replaced — an editor holding unsaved changes
-on a screen the replace would remove — `stories.current_branch_id`
+story's screens can't be replaced — an inline editor on a screen the
+replace would remove that must be asked before it leaves, one with
+unsaved changes or on native any open one — `stories.current_branch_id`
 goes back to the branch the reader shows, so the pointer and the
 screen still agree. The new branch stays and the chip counts it; the
 modal closes, and a warning toast reads

@@ -324,7 +324,8 @@ generation pipeline is in flight:
   reader still opens on the new branch with a warning toast:
   `Branched "Ch. <seq> re-run" from entry <pos>, but couldn't start the re-run. Retry from Chapter Timeline.`
   If the fork commits but the story's screens can't be replaced (an
-  editor holding unsaved changes on a screen the replace would remove),
+  inline editor on a screen the replace would remove that must be asked
+  before it leaves: one with unsaved changes, or on native any open one),
   `stories.current_branch_id` goes back to the parent, so the pointer
   and the screen still agree: the confirm closes, the new
   branch stays, nothing starts, and a warning toast reads
