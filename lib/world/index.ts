@@ -75,8 +75,15 @@ export type { MergeDeselections, MergeTermChoices } from './merge-terms'
 export { cleanList, sameList } from './draft-text'
 export { EMPTY_LORE_DRAFT, loreActions, loreDraftFrom, loreDraftSchema } from './lore-draft'
 export type { LoreDraft } from './lore-draft'
-export { leadLabelFor, needsLead, resolveLead, resolveLeadLogged } from './lead'
-export type { LeadLabel } from './lead'
+export {
+  leadLabelFor,
+  leadMarks,
+  leadStampOf,
+  needsLead,
+  resolveLead,
+  resolveLeadLogged,
+} from './lead'
+export type { LeadLabel, LeadMark } from './lead'
 export {
   branchWorldTime,
   byName,
