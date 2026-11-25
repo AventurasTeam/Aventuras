@@ -538,18 +538,7 @@ describe('submitTurn', () => {
     it('leaves the stamp absent on a creative third-person branch with no lead', async () => {
       const { ctx, db } = await makeHarness()
       await openStory(db, 's1', 'b1', { lead: false })
-      const creativeThird = {
-        ...STORY_DEFINITION,
-        mode: 'creative' as const,
-        narration: 'third' as const,
-      }
-      await db.update(stories).set({ definition: creativeThird }).where(eq(stories.id, 's1'))
-      currentStoryStore.set({
-        storyId: 's1',
-        branchId: 'b1',
-        definition: creativeThird,
-        settings: STORY_SETTINGS,
-      })
+      await reshapeToCreativeThird(db)
       await seedCast(db, null)
       entriesStore.hydrate('b1', [])
       await hydrateAppSettings(async () => WORKING_CONFIG)

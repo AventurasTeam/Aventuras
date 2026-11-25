@@ -123,8 +123,9 @@ export const STORY_SETTINGS = storySettingsSchema.parse({
   packVariables: {},
 })
 
-/** The lead `openStory` flags on the branch: the fixture story is adventure, so it needs one. */
-export const TURN_LEAD_ID = 'char_00000000-0000-4000-8000-000000000001'
+// The lead `openStory` flags: the fixture story is adventure, so it needs one. Its own id, apart
+// from the cast the turn tests seed, so a test's rows never collide with it.
+const TURN_LEAD_ID = 'char_00000000-0000-4000-8000-00000000a1ea'
 
 function turnLead(branchId: string): Entity {
   return makeEntity({ id: TURN_LEAD_ID, branchId, kind: 'character', name: 'Aria', isLead: 1 })
@@ -146,7 +147,7 @@ export async function openStory(
     .set({ definition: STORY_DEFINITION, settings: STORY_SETTINGS })
     .where(eq(stories.id, storyId))
   const leadRows = opts.lead === false ? [] : [turnLead(branchId)]
-  if (leadRows.length > 0) await db.insert(entities).values(leadRows).onConflictDoNothing()
+  if (leadRows.length > 0) await db.insert(entities).values(leadRows)
   await rehydrateStories(db)
   currentStoryStore.set({
     storyId,
