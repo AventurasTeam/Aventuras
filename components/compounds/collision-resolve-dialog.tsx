@@ -483,8 +483,9 @@ function MergeBody({
   }
 
   // Reset reducer state when the entities or the held row change. Same render-cycle
-  // ref-check pattern as embedder-download-dialog.tsx.
-  const pairKey = `${entityA.id}::${entityB.id}::${defaultCanonicalId}`
+  // ref-check pattern as embedder-download-dialog.tsx. Keyed on fixedId: an unheld pair
+  // and a held A share a default, so the default alone misses A turning held.
+  const pairKey = `${entityA.id}::${entityB.id}::${fixedId ?? ''}`
   const lastPairRef = useRef(pairKey)
   if (lastPairRef.current !== pairKey) {
     lastPairRef.current = pairKey

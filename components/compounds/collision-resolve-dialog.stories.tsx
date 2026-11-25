@@ -735,7 +735,7 @@ export const HeldElsewhereKeepsThePicker: Story = {
 }
 
 let holdNow: ((ids: readonly string[]) => void) | null = null
-function HeldWhileOpen() {
+function HeldWhileOpen({ onResolve = resolveOk }: { onResolve?: typeof resolveOk }) {
   const [heldIds, setHeldIds] = useState<readonly string[]>([])
   useEffect(() => {
     holdNow = setHeldIds
@@ -744,7 +744,7 @@ function HeldWhileOpen() {
     }
   }, [])
   return (
-    <ControlledDialog entityA={entityA} entityB={entityB} heldIds={heldIds} onResolve={resolveOk} />
+    <ControlledDialog entityA={entityA} entityB={entityB} heldIds={heldIds} onResolve={onResolve} />
   )
 }
 
@@ -770,6 +770,24 @@ export const HeldRowArrivesWhileOpen: Story = {
     )
     expect(screen.queryByRole('button', { name: /^Merge into / })).toBeNull()
     expect(screen.getByText(HELD_BOTH_LINE)).toBeInTheDocument()
+  },
+}
+
+/** The older row turning held takes the canonical back from the newer row the user picked. */
+export const OlderRowHeldAfterPickingNewer: Story = {
+  render: () => <HeldWhileOpen onResolve={resolveCapturing} />,
+  play: async () => {
+    lastResolution = null
+    await userEvent.click(await screen.findByRole('radio', { name: /^Kael · Newer · / }))
+    await waitFor(() => expect(canonicalRadio('Newer')).toHaveAttribute('aria-checked', 'true'))
+
+    holdNow?.([entityA.id])
+    await waitFor(() => expect(canonicalRadio('Older')).toHaveAttribute('aria-checked', 'true'))
+    expect(canonicalRadio('Older')).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Merge into the older Kael' }))
+
+    await waitFor(() => expect(lastResolution).not.toBeNull())
+    expect(lastResolution).toMatchObject({ mode: 'merge', canonicalId: entityA.id })
   },
 }
 
