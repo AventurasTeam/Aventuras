@@ -30,7 +30,7 @@ export {
   setDrainKickSink,
   setDrainStatusSink,
   startStorySwap,
-  storedSwapTarget,
+  swapMarkerStored,
   withTurnAdmission,
   SwapBusyError,
   SwapConfigError,

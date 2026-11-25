@@ -1,15 +1,18 @@
+import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
+  branches,
   buildStorySettings,
   clearSwapTargetOp,
   compositeText,
   execRaw,
   setSwapTargetOp,
   sourceHash,
+  stories,
   storyDefinitionSchema,
   VEC_FAMILIES,
   type DbCtx,
@@ -53,6 +56,7 @@ import {
   runExclusive,
   startStorySwap,
   SwapBusyError,
+  swapMarkerStored,
 } from './app-deps'
 import {
   cancelSwap,
@@ -828,6 +832,46 @@ describe('readStorySwapPending', () => {
       release()
       await held
     }
+  })
+})
+
+describe('swapMarkerStored', () => {
+  // s1 marked, s2 unmarked with a branch, s3 corrupt; raw inserts, as readStorySwapPending's.
+  async function seedMarked(): Promise<DbCtx['db']> {
+    const { db, sqlite } = await createTestDb()
+    const insert = sqlite.prepare(
+      'INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)',
+    )
+    insert.run('s1', 's1', JSON.stringify({ embedding_swap_target: MINILM }), 1000, 1000)
+    insert.run('s2', 's2', JSON.stringify({ embedding_swap_target: null }), 1000, 1000)
+    insert.run('s3', 's3', '{not json', 1000, 1000)
+    sqlite
+      .prepare('INSERT INTO branches (id, story_id, name, created_at) VALUES (?,?,?,?)')
+      .run('b2', 's2', 'main', 1000)
+    return db
+  }
+
+  it('reads a stored marker from a query over another table, a corrupt blob as none', async () => {
+    const db = await seedMarked()
+    const marked = (storyId: string) =>
+      db.select({ marked: swapMarkerStored(storyId) }).from(branches)
+
+    await expect(marked('s1')).resolves.toEqual([{ marked: true }])
+    await expect(marked('s2')).resolves.toEqual([{ marked: false }])
+    await expect(marked('s3')).resolves.toEqual([{ marked: false }])
+    await expect(marked('missing')).resolves.toEqual([{ marked: false }])
+  })
+
+  it("reads its own story's row, not the row of a query over stories", async () => {
+    const db = await seedMarked()
+    const under = (outer: string, storyId: string) =>
+      db
+        .select({ id: stories.id, marked: swapMarkerStored(storyId) })
+        .from(stories)
+        .where(eq(stories.id, outer))
+
+    await expect(under('s2', 's1')).resolves.toEqual([{ id: 's2', marked: true }])
+    await expect(under('s1', 's2')).resolves.toEqual([{ id: 's1', marked: false }])
   })
 })
 
