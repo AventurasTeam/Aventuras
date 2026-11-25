@@ -818,9 +818,8 @@ export const HoldOpenUnderConfirm: Story = {
 }
 
 /**
- * overlays.md → Close focus: the hold records no outside interaction, so a later close still
- * restores the opener. From the chip Radix refocuses its trigger anyway; from the Actions menu only
- * the navigator's own restore reaches the menu's trigger.
+ * overlays.md → Close focus: the hold records no outside interaction, so a later close restores
+ * the opener; from the Actions menu only the navigator's own restore reaches its trigger.
  */
 export const HoldOpenKeepsCloseFocus: Story = {
   render: (args) => <ConfirmOverNavigatorHarness {...args} withActions />,

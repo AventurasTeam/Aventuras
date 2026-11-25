@@ -107,10 +107,8 @@ export function runBlocksHeadReversal(run: RunState, branchId: string): boolean 
   return run.gateBehavior === 'hard-gate' && !(run.interruptible && run.branchId === branchId)
 }
 
-// Pending turns and reversals hold no run yet, so leaving the story waits on them too; a start
-// holding its own mark (`ownMark`) skips that one, never another on the branch. A held branch
-// isn't busy: leaving waits on this, and a hold ends only with a restart or a delete of its
-// branch or story.
+// Pending turns and reversals hold no run yet, so leaving waits on them; a start skips only its
+// own mark (`ownMark`). A held branch isn't busy: its hold ends only by restart or a delete.
 export function isStoryBusy(
   txState: TxState,
   storyId: string,

@@ -147,7 +147,6 @@ function systemIdsOf(branchId: string): string[] {
   return rows.map(({ id }) => id)
 }
 
-// B's non-system entry ids that `holder` holds too.
 function sharedWith(holder: string): string[] {
   const rows = t.sqlite
     .prepare(

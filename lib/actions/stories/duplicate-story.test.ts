@@ -61,9 +61,8 @@ import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 
-// An in-flight swap holds the embedder's in-process lock, which only a running swap takes; the
-// read's own in-flight case is in lib/embedder-swap/app-deps.test.ts. A story in `pending` reads
-// as pending to the synchronous check too, which otherwise sees only the open story's marker.
+// In-flight = the embedder's in-process lock, taken only by a running swap (read's case:
+// lib/embedder-swap/app-deps.test.ts). `pending` also reads pending to the synchronous check.
 const swap = vi.hoisted(() => ({
   inFlight: new Set<string>(),
   pending: new Set<string>(),
@@ -144,10 +143,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-/**
- * `s_two`, active: A (`br_a`, current) and B (`br_b`), A's copy and child, every id shared; A
- * holds the fixture's finished re-run row. `s_other` holds one empty branch.
- */
+/** `s_two` (active): A current, B, A's copy and child, ids shared; `s_other`: one empty branch. */
 async function seedTwoStories(): Promise<void> {
   await seedCopyFixture(t)
   cloneBranch(t.sqlite, A, B)
@@ -577,9 +573,8 @@ function sourceState() {
 }
 
 /**
- * The source made archived and favorited, with JSON stored as text no serializer writes; B made a
- * fork of A at the reply, its own name and status; B's vectors in two dims, one of A's; a
- * finished run row on B and a wizard session for the story, neither of which copies.
+ * Source archived and favorited, JSON stored as text no serializer writes; B a fork of A at the
+ * reply with vectors in two dims; a run row on B and a wizard session, neither of which copies.
  */
 async function prepareSource(): Promise<void> {
   const [, , reply] = forkPoints()

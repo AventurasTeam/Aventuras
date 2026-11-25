@@ -42,10 +42,7 @@ function refusedState(storyId: string, code: DuplicateRefusalCode): DuplicateDia
   return { kind: 'failed' }
 }
 
-/**
- * The story list's Duplicate (story-list.md → Duplicate a story): reads the branches before the
- * dialog mounts, checks the branches a copy would take, copies, and hands the copy to `onDone`.
- */
+/** story-list.md → Duplicate a story: reads branches, checks the copy's, copies, calls `onDone`. */
 export function useStoryDuplicate({
   focused,
   readBranches,
