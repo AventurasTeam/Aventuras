@@ -361,7 +361,7 @@ module.exports = defineConfig([
     },
   },
 
-  // A close's record writers. The one other record write is prose reversal's clearPendingClose.
+  // A close's record writers.
   // Owner blocks sit before the off-block, so their files' tests stay exempt.
   {
     files: [

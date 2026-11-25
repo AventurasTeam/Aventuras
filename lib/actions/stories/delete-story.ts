@@ -30,7 +30,6 @@ import { embedderSwapStore, generationStore, rehydrateStories, undoRedoStore } f
 import type { DbCtx } from '../types'
 
 // Branch-scoped owned tables, cleared with a branch or a whole story.
-// assets excluded as they are handled by a separate GC
 export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   storyEntries,
   entities,
@@ -46,11 +45,12 @@ export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   probeCaptures,
   deltas,
   reversalJournals,
+  // Dropping these rows can orphan an asset; orphans aren't trashed yet (M9.3).
   entryAssets,
   pipelineRuns,
 ]
 
-/** The delete over branch-scoped tables and vec families for the given branches, story or branch. */
+/** Ops deleting the given branches' rows from every branch-scoped table and listed vec family. */
 export function branchRowDeleteOps(
   db: DbCtx['db'],
   branchIds: readonly string[],
@@ -89,7 +89,7 @@ export async function deleteStory(
   if (branchIds.length > 0) ops.push(...branchRowDeleteOps(ctx.db, branchIds, await listTables()))
   // Run rows older than pipeline_runs.branch_id may name no branch; they go by their story.
   ops.push(ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.storyId, storyId)).toSQL())
-  // A draft carries a wizard_sessions row keyed by its story id; this slice owns that table.
+  // A draft carries a wizard_sessions row keyed by its story id.
   ops.push(ctx.db.delete(wizardSessions).where(eq(wizardSessions.id, storyId)).toSQL())
   ops.push(ctx.db.delete(branches).where(eq(branches.storyId, storyId)).toSQL())
   ops.push(ctx.db.delete(stories).where(eq(stories.id, storyId)).toSQL())
