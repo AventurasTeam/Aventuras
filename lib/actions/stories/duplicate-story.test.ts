@@ -896,6 +896,25 @@ describe('duplicateStory', () => {
     expect(storyRow(copy.storyId).current_branch_id).toBe(named(copy, 'main').id)
   })
 
+  it("picks the copy's current branch over more branches than an SQL function takes arguments", async () => {
+    // node:sqlite caps a function at 1000 arguments; one per copied branch would pass it.
+    const insert = t.sqlite.prepare(
+      'INSERT INTO branches (id, story_id, parent_branch_id, name, created_at) VALUES (?, ?, ?, ?, ?)',
+    )
+    for (let i = 0; i < 1000; i += 1)
+      insert.run(`br_many_${i}`, OTHER_STORY, OTHER_BRANCH, `fork ${i}`, AT + 1)
+    t.sqlite
+      .prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?')
+      .run('br_many_500', OTHER_STORY)
+
+    const copy = copyOf(
+      await duplicateStory({ storyId: OTHER_STORY, title: TITLE, branch: 'all' }, ctx),
+    )
+
+    expect(copy.branches).toHaveLength(1001)
+    expect(storyRow(copy.storyId).current_branch_id).toBe(named(copy, 'fork 500').id)
+  })
+
   it('throws on a cycle in the parent links, writing nothing', async () => {
     seedTree()
     t.sqlite.prepare('UPDATE branches SET parent_branch_id = ? WHERE id = ?').run(C, A)
@@ -1017,6 +1036,27 @@ describe('duplicateStory', () => {
   it("makes the copy's root current when the current leaf is switched off and deleted before its batch", async () => {
     seedTree()
     t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(C, STORY)
+    const race = racing(async () => {
+      t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(B, STORY)
+      await t.runInTransaction(await branchDeleteOps(C))
+    })
+
+    const copy = copyOf(
+      await duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    )
+
+    expect(copy.branches.map(({ name }) => name).sort()).toEqual([B_NAME, 'main'].sort())
+    expect(storyRow(copy.storyId).current_branch_id).toBe(named(copy, 'main').id)
+  })
+
+  it("makes the copy's root current, not a child created before it, when the current leaf goes before its batch", async () => {
+    seedTree()
+    t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(C, STORY)
+    t.sqlite
+      .prepare('UPDATE branches SET created_at = ? WHERE id = ?')
+      .run(branchRow(A).created_at - 1, B)
+    // Not vacuous: on created_at alone, the root's child would come first.
+    expect(branchRow(B).created_at).toBeLessThan(branchRow(A).created_at)
     const race = racing(async () => {
       t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(B, STORY)
       await t.runInTransaction(await branchDeleteOps(C))

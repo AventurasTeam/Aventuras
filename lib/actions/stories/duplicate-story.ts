@@ -174,8 +174,6 @@ export async function duplicateStory(
           ),
         )}`
       : sql`select 1 from ${branches} where ${and(eq(branches.id, branch.branchId), eq(branches.storyId, storyId))}`
-  const inserted = (branchId: string): SQL =>
-    sql`(select ${branches.id} from ${branches} where ${eq(branches.id, branchId)})`
 
   const ops: SqlOp[] = [
     copyRowOp(
@@ -208,14 +206,14 @@ export async function duplicateStory(
         sql`${branches} where ${eq(branches.id, row.id)}`,
       ),
     ),
-    // The intended copy if it landed, else the first that did, a root by the walk.
+    // The intended copy if it landed, else the walk's first that did: a lost parent fails the
+    // batch, so that is the landed root first on `created_at, id`.
     ctx.db
       .update(stories)
       .set({
-        currentBranchId: sql`coalesce(${sql.join(
-          [currentBranchId, ...copies.map(({ to }) => to)].map(inserted),
-          sql`, `,
-        )})`,
+        currentBranchId: sql`(select ${branches.id} from ${branches} where ${eq(branches.storyId, newStoryId)}
+          order by ${branches.id} = ${currentBranchId} desc, ${branches.parentBranchId} is not null,
+          ${branches.createdAt}, ${branches.id} limit 1)`,
       })
       .where(eq(stories.id, newStoryId))
       .toSQL(),
