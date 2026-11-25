@@ -312,7 +312,8 @@ modal centered over the reader:
 
 **Pending.** From `Create` to the new branch's reader, `Create` shows
 a spinner; the name, `Cancel` and `×` disable, and Esc, a click
-outside and hardware back don't close the modal: the fork is one
+outside and hardware back don't close the modal, nor does a desktop
+Back (the mouse's Back button) leave the reader: the fork is one
 transaction and can't stop partway. The modal is
 [busy](../../../patterns/overlays.md#dialog--busy), and a second press
 does nothing.

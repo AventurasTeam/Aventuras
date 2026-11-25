@@ -589,8 +589,9 @@ run; the answers are under Implementation notes.
   [`branch-navigator.md → Branch creation — modal`](../../../../ui/screens/reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal)
   and its wireframe: pending is a busy Dialog (`Create` spins; the
   input, `Cancel` and `×` disable through `DialogContent`'s new
-  `closeDisabled`; Esc, a press outside and hardware back are inert; a
-  second press calls nothing). A refusal is one line above the buttons
+  `closeDisabled`; Esc, a press outside and hardware back are inert, and
+  so is a desktop Back (Q16, below); a second press calls nothing). A
+  refusal is one line above the buttons
   with the name kept and `Create` left enabled to retry. A pending swap
   shows its line as the modal opens and disables `Create` while it
   lasts, live. A throw shows `Couldn't create the branch.`. `⎇` stays
@@ -608,6 +609,19 @@ run; the answers are under Implementation notes.
   The live case is native only (a clean inline editor left armed under
   the Timeline or the review window); `⎇` can't reach it, since
   `EntryCard` holds `⎇` while an editor is open.
+- **A desktop Back while a fork is pending (Q16, developer,
+  2026-11-25).** The mouse's Back button does nothing from `Create`, or
+  from `Re-run on new branch`, until the fork settles, as hardware back
+  does. Electron pops history on that button, and expo-router answers
+  the pop with a root reset that no `usePreventRemove` sees, so without
+  the block the reader left mid-fork and the tail's stack reset pulled
+  the user back onto the new branch. The block is a web-only hook,
+  `useInertMouseBack`, that cancels the Back and Forward buttons'
+  `mouseup` while either path is pending; on success the old reader's
+  unmount releases it. The in-place re-run never navigates and isn't
+  blocked. The mechanism is provisional: the alternative routes the
+  mouse's Back through the guarded in-app back across the app, which
+  would make this narrow block unnecessary.
 - **The name is trimmed in the action (IC1).** `forkBranch` stores it
   trimmed, as `renameBranch` does; there is no empty-name refusal (the
   modal gates an empty name and the auto-name is never empty).

@@ -311,7 +311,9 @@ generation pipeline is in flight:
   CTRL-Z brings the close back, not the turns), and
   `Re-run on new branch` (primary — keeps the turns on the current
   branch and runs the re-run on the new fork). All buttons disable while
-  the rollback or fork is committing.
+  the rollback or fork is committing, and while the fork runs a desktop
+  Back (the mouse's Back button) does nothing, as on the
+  [branch creation modal](../reader-composer/branch-navigator/branch-navigator.md#branch-creation--modal).
 - **After `Re-run on new branch`.** Closes the review window (if opened
   from it) and navigates to `reader-composer/[newBranchId]`, replacing
   the in-story stack so `← Back` returns to the Story List rather than
