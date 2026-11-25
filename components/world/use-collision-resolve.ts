@@ -45,16 +45,13 @@ export type CollisionDialogPair = {
 
 type Sides = CollisionDialogPair['sides']
 
-/** Which of the pair's rows the branch's entries name: the lead flag, or a lead stamp. */
-export type CollisionHeld =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'ready'; ids: readonly string[] }
-  | { status: 'failed' }
+export type CollisionDialog = {
+  pair: CollisionDialogPair
+  /** The pair's rows the branch's entries name, by the lead flag or a lead stamp. */
+  heldIds: readonly string[]
+}
 
-const HELD_IDLE: CollisionHeld = { status: 'idle' }
-const HELD_LOADING: CollisionHeld = { status: 'loading' }
-const HELD_FAILED: CollisionHeld = { status: 'failed' }
+const NONE_HELD: readonly string[] = []
 
 // Logged from the fetch, so one failure logs once however many renders see it.
 async function readStamped(
@@ -145,8 +142,8 @@ function resolvedText(resolution: CollisionResolution, sides: Sides): string {
 
 /**
  * world.md → Resolve dialog. Pair read live under the resolve action's pair rule; closes for good
- * once a row is gone or no flag names the other, so an undo can't reopen it. `held` names the
- * pair's held rows once this open's stamp read lands; the flag half reads live.
+ * once a row is gone or no flag names the other, so an undo can't reopen it. `dialog` stays null
+ * until this open's stamp read lands, so no picker shows free; the flag half reads live.
  */
 export function useCollisionResolve(
   branchId: string,
@@ -154,8 +151,7 @@ export function useCollisionResolve(
   guard: (proceed: () => void) => void,
   story: StoryPlace,
 ): {
-  pair: CollisionDialogPair | null
-  held: CollisionHeld
+  dialog: CollisionDialog | null
   request: (flaggedId: string, otherId: string) => void
   close: () => void
   resolve: (resolution: Resolution) => Promise<void>
@@ -237,24 +233,27 @@ export function useCollisionResolve(
     if (requested != null && pair == null) setRequested(null)
   }, [requested, pair, setRequested])
 
+  // Only a character carries the flag (entities_lead_character) or a stamp, so no other pair reads.
+  const readsHeld = pair?.sides[0].kind === 'character'
   const { status: stampStatus, data: stampedIds } = useQuery({
     queryKey: ['collision-held', branchId, requested?.[0] ?? null, requested?.[1] ?? null, openSeq],
-    queryFn: requested == null ? skipToken : () => readStamped(branchId, requested, ctx.db),
+    queryFn:
+      requested == null || !readsHeld ? skipToken : () => readStamped(branchId, requested, ctx.db),
     gcTime: 0,
     retry: false,
   })
 
-  const held = useMemo((): CollisionHeld => {
-    if (pair == null || entityRows == null) return HELD_IDLE
-    if (stampStatus === 'error') return HELD_FAILED
-    if (stampedIds == null) return HELD_LOADING
-    const ids = pair.sides
+  const dialog = useMemo((): CollisionDialog | null => {
+    if (pair == null || entityRows == null) return null
+    if (!readsHeld) return { pair, heldIds: NONE_HELD }
+    if (stampStatus !== 'success') return null
+    const heldIds = pair.sides
       .map((side) => side.id)
       .filter((id) => entityRows.get(id)?.isLead === 1 || stampedIds.has(id))
-    return { status: 'ready', ids }
-  }, [pair, entityRows, stampStatus, stampedIds])
+    return { pair, heldIds }
+  }, [pair, entityRows, readsHeld, stampStatus, stampedIds])
 
-  // Without its held rows the dialog's picker would be free, so a failed read never opens it.
+  // A failed read leaves no dialog to show the failure, so the request closes with a toast.
   useEffect(() => {
     if (requested == null || stampStatus !== 'error') return
     toast.error(t('world:collision.heldFailed'))
@@ -298,7 +297,7 @@ export function useCollisionResolve(
     [pair, branchId, ctx],
   )
 
-  return { pair, held, request, close, resolve }
+  return { dialog, request, close, resolve }
 }
 
 /** WorldListPane's `resolveCollision`: Resolve acts, or stays inert with the gate's reason. */

@@ -197,7 +197,7 @@ type CollisionResolveDialogProps = {
    * Rows the branch's entries name, by the lead flag or a lead stamp: one held row is the fixed
    * canonical; with both held, Merge is unavailable and the dialog opens on Rename.
    */
-  heldIds?: readonly string[]
+  heldIds: readonly string[]
 }
 
 type FooterProps = {
@@ -247,13 +247,9 @@ type Held = {
   both: boolean
 }
 
-function heldOf(
-  entityA: EntitySummary,
-  entityB: EntitySummary,
-  heldIds: readonly string[] | undefined,
-): Held {
-  const a = heldIds?.includes(entityA.id) === true
-  const b = heldIds?.includes(entityB.id) === true
+function heldOf(entityA: EntitySummary, entityB: EntitySummary, heldIds: readonly string[]): Held {
+  const a = heldIds.includes(entityA.id)
+  const b = heldIds.includes(entityB.id)
   return { fixedId: a === b ? undefined : a ? entityA.id : entityB.id, both: a && b }
 }
 

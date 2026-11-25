@@ -12,6 +12,7 @@ import {
   type CharacterRelationship,
   type CollisionReason,
   type Entity,
+  type EntityKind,
   type Happening,
   type HappeningAwareness,
   type HappeningInvolvement,
@@ -33,8 +34,8 @@ import { storyPlaceOf, type StoryPlace } from '@/lib/world'
 import {
   collisionResolveProp,
   useCollisionResolve,
+  type CollisionDialog,
   type CollisionDialogPair,
-  type CollisionHeld,
 } from './use-collision-resolve'
 
 const resolveCollision = vi.hoisted(() => vi.fn())
@@ -163,10 +164,18 @@ function openPair(guard: (proceed: () => void) => void = run) {
   return result
 }
 
+// Opens the pair once its stamp read lands with `stamped`.
+async function openReady(stamped: ReadonlySet<string> = new Set()) {
+  readStampedLeadIds.mockResolvedValueOnce(stamped)
+  const result = openPair()
+  await waitFor(() => expect(result.current.dialog).not.toBeNull())
+  return result
+}
+
 function openedPair(result: {
   current: ReturnType<typeof useCollisionResolve>
 }): CollisionDialogPair {
-  const pair = result.current.pair
+  const pair = result.current.dialog?.pair
   if (pair == null) throw new Error('expected an open pair')
   return pair
 }
@@ -214,17 +223,20 @@ afterEach(() => {
 })
 
 describe('useCollisionResolve → opening', () => {
-  it('opens the pair only once the guard lets the request through, older row first', () => {
+  it('opens the pair only once the guard lets the request through, older row first', async () => {
+    readStampedLeadIds.mockResolvedValueOnce(new Set())
     let proceed: (() => void) | undefined
     const result = openPair((fn) => {
       proceed = fn
     })
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
+    expect(readStampedLeadIds).not.toHaveBeenCalled()
 
     act(() => proceed?.())
 
-    expect(result.current.pair?.sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
-    expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
+    await waitFor(() => expect(result.current.dialog).not.toBeNull())
+    expect(openedPair(result).sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
+    expect(openedPair(result)).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
   })
 
   // A fork copies the pair under its ids; the dialog reads the route's branch only.
@@ -233,7 +245,8 @@ describe('useCollisionResolve → opening', () => {
       { ...OLDER, branchId: 'br_2' },
       { ...NEWER, branchId: 'br_2' },
     ])
-    expect(openPair().current.pair).toBeNull()
+    expect(openPair().current.dialog).toBeNull()
+    expect(readStampedLeadIds).not.toHaveBeenCalled()
   })
 
   it('does not re-render on store patches while no pair is open', () => {
@@ -255,8 +268,8 @@ describe('useCollisionResolve → opening', () => {
     expect(renders).toBe(settled)
   })
 
-  it('re-derives the open pair when a link or translation row lands', () => {
-    const result = openPair()
+  it('re-derives the open pair when a link or translation row lands', async () => {
+    const result = await openReady()
     expect(openedPair(result).sides[1].relationCounts.awarenessRows).toBe(0)
     expect(openedPair(result).sides[1].relationCounts.translationRows).toBe(0)
 
@@ -270,21 +283,23 @@ describe('useCollisionResolve → opening', () => {
   })
 
   // Rebuilt in place, the story keeps its identity in useStoryPlace, which owns that stability.
-  it('re-derives the open pair once the story moves', () => {
+  it('re-derives the open pair once the story moves', async () => {
+    readStampedLeadIds.mockResolvedValueOnce(new Set())
     const { result, rerender } = renderHook(
       ({ story }: { story: StoryPlace }) => useCollisionResolve(BRANCH, ctx, run, story),
       { initialProps: { story: NOWHERE }, ...queries() },
     )
     act(() => result.current.request(NEWER.id, OLDER.id))
+    await waitFor(() => expect(result.current.dialog).not.toBeNull())
     const opened = openedPair(result)
 
     const at = { metadata: { currentLocationId: 'loc_harbor' } }
     rerender({ story: storyPlaceOf({ tail: at, sceneSource: null }) })
-    const tailMoved = result.current.pair
+    const tailMoved = openedPair(result)
     expect(tailMoved).not.toBe(opened)
 
     rerender({ story: storyPlaceOf({ tail: at, sceneSource: at }) })
-    expect(result.current.pair).not.toBe(tailMoved)
+    expect(openedPair(result)).not.toBe(tailMoved)
   })
 
   it('passes the story to the summary: an unplaced canonical holding it stays unplaced under a disabled place', () => {
@@ -330,49 +345,49 @@ describe('useCollisionResolve → opening', () => {
     ).toBe('stays-unplaced')
   })
 
-  it('closes once a row of the pair is gone, and stays closed when an undo brings it back', () => {
-    const result = openPair()
+  it('closes once a row of the pair is gone, and stays closed when an undo brings it back', async () => {
+    const result = await openReady()
 
     act(() => entitiesStore.hydrate(BRANCH, [OLDER]))
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
 
     act(() => entitiesStore.hydrate(BRANCH, [OLDER, NEWER]))
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
   })
 
-  it('closes once the flag is cleared elsewhere, and stays closed when an undo re-flags it', () => {
-    const result = openPair()
+  it('closes once the flag is cleared elsewhere, and stays closed when an undo re-flags it', async () => {
+    const result = await openReady()
 
     act(() => entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, ...UNFLAGGED }]))
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
 
     act(() => entitiesStore.hydrate(BRANCH, [OLDER, NEWER]))
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
   })
 
-  it('stays open on a rename that keeps the flag', () => {
-    const result = openPair()
+  it('stays open on a rename that keeps the flag', async () => {
+    const result = await openReady()
     act(() =>
       entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, name: 'Brannoc of the river gate' }]),
     )
-    expect(result.current.pair?.sides[1].name).toBe('Brannoc of the river gate')
-    expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
+    expect(openedPair(result).sides[1].name).toBe('Brannoc of the river gate')
+    expect(openedPair(result)).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
   })
 
-  it('reads the flag from the requested row when both rows name each other', () => {
+  it('reads the flag from the requested row when both rows name each other', async () => {
     entitiesStore.hydrate(BRANCH, [OLDER_NAMING_NEWER, NEWER])
-    const result = openPair()
-    expect(result.current.pair).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
+    const result = await openReady()
+    expect(openedPair(result)).toMatchObject({ flaggedId: NEWER.id, reason: 'distinct' })
   })
 
-  it('takes the flag and reason from the other row once only it names the pair', () => {
+  it('takes the flag and reason from the other row once only it names the pair', async () => {
     entitiesStore.hydrate(BRANCH, [OLDER_NAMING_NEWER, NEWER])
-    const result = openPair()
+    const result = await openReady()
 
     act(() => entitiesStore.hydrate(BRANCH, [OLDER_NAMING_NEWER, { ...NEWER, ...UNFLAGGED }]))
 
-    expect(result.current.pair?.sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
-    expect(result.current.pair).toMatchObject({ flaggedId: OLDER.id, reason: 'alike' })
+    expect(openedPair(result).sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
+    expect(openedPair(result)).toMatchObject({ flaggedId: OLDER.id, reason: 'alike' })
   })
 
   it('never opens two rows of different kinds, even when a flag names the other', () => {
@@ -388,13 +403,14 @@ describe('useCollisionResolve → opening', () => {
 
     act(() => result.current.request(NEWER.id, harbor.id))
 
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
+    expect(readStampedLeadIds).not.toHaveBeenCalled()
   })
 
-  it('close() drops the open pair', () => {
-    const result = openPair()
+  it('close() drops the open pair', async () => {
+    const result = await openReady()
     act(() => result.current.close())
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
   })
 })
 
@@ -674,11 +690,11 @@ describe('useCollisionResolve → outcomes', () => {
   it('toasts a refusal that lands after the pair went away, which unmounts the dialog', async () => {
     let settle: (result: unknown) => void = () => {}
     resolveCollision.mockReturnValue(new Promise((resolve) => (settle = resolve)))
-    const result = openPair()
+    const result = await openReady()
 
     const pending = result.current.resolve({ mode: 'keep' })
     act(() => entitiesStore.hydrate(BRANCH, [OLDER]))
-    expect(result.current.pair).toBeNull()
+    expect(result.current.dialog).toBeNull()
     settle({ status: 'rejected', reason: 'not found', code: COLLISION_REJECTION.notFound })
 
     await expect(pending).rejects.toThrow(NOT_FOUND_TEXT)
@@ -758,23 +774,27 @@ describe('useCollisionResolve → outcomes', () => {
 })
 
 describe('useCollisionResolve → held rows', () => {
-  it('reads nothing and holds nothing while no pair is requested', async () => {
+  it('reads nothing and opens nothing while no pair is requested', async () => {
     const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), queries())
     await act(async () => {})
 
-    expect(result.current.held).toEqual({ status: 'idle' })
+    expect(result.current.dialog).toBeNull()
     expect(readStampedLeadIds).not.toHaveBeenCalled()
   })
 
-  it('keeps the pair open while the stamp read runs, held loading', async () => {
+  it('opens no dialog while the stamp read runs, then opens it with the held rows', async () => {
+    let settle: (ids: ReadonlySet<string>) => void = () => {}
+    readStampedLeadIds.mockReturnValueOnce(new Promise((resolve) => (settle = resolve)))
     const result = openPair()
 
-    expect(result.current.pair).not.toBeNull()
-    expect(result.current.held).toEqual({ status: 'loading' })
     await waitFor(() =>
       expect(readStampedLeadIds).toHaveBeenCalledWith(BRANCH, [NEWER.id, OLDER.id], DB),
     )
-    expect(result.current.pair).not.toBeNull()
+    expect(result.current.dialog).toBeNull()
+
+    settle(new Set([NEWER.id]))
+    await waitFor(() => expect(result.current.dialog?.heldIds).toEqual([NEWER.id]))
+    expect(openedPair(result).sides.map((side) => side.id)).toEqual([OLDER.id, NEWER.id])
   })
 
   it.each<[string, Entity[], ReadonlySet<string>, string[]]>([
@@ -800,53 +820,83 @@ describe('useCollisionResolve → held rows', () => {
     readStampedLeadIds.mockResolvedValueOnce(stamped)
     const result = openPair()
 
-    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: held }))
+    await waitFor(() => expect(result.current.dialog?.heldIds).toEqual(held))
   })
 
+  it.each<EntityKind>(['location', 'item', 'faction'])(
+    'opens a pair of %ss at once holding nothing, with no read: only a character is held',
+    async (kind) => {
+      readStampedLeadIds.mockRejectedValue(new Error('SQLITE_BUSY: database is locked'))
+      const first = makeEntity({
+        id: `${kind}_harbor`,
+        kind,
+        name: 'Harbor',
+        state: emptyEntityState(kind),
+        createdAt: 1_000,
+      })
+      const second = makeEntity({
+        id: `${kind}_harbor_2`,
+        kind,
+        name: 'Harbor',
+        state: emptyEntityState(kind),
+        nameCollisionFlag: 1,
+        nameCollisionPartnerId: first.id,
+        nameCollisionReason: 'alike',
+        createdAt: 2_000,
+      })
+      entitiesStore.hydrate(BRANCH, [first, second])
+      const { result } = renderHook(() => useCollisionResolve(BRANCH, ctx, run, NOWHERE), queries())
+
+      act(() => result.current.request(second.id, first.id))
+
+      expect(result.current.dialog).toMatchObject({ heldIds: [] })
+      await act(async () => {})
+      expect(readStampedLeadIds).not.toHaveBeenCalled()
+      expect(toast.error).not.toHaveBeenCalled()
+    },
+  )
+
   it('takes a flag set while open into held without reading again', async () => {
-    readStampedLeadIds.mockResolvedValueOnce(new Set())
-    const result = openPair()
-    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [] }))
+    const result = await openReady()
+    expect(result.current.dialog?.heldIds).toEqual([])
 
     act(() => entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, isLead: 1 }]))
 
-    expect(result.current.held).toEqual({ status: 'ready', ids: [NEWER.id] })
+    expect(result.current.dialog?.heldIds).toEqual([NEWER.id])
     expect(readStampedLeadIds).toHaveBeenCalledTimes(1)
   })
 
   it("reads again on a reopen of the same pair, never showing the last open's held rows", async () => {
-    readStampedLeadIds.mockResolvedValueOnce(new Set())
-    const result = openPair()
-    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [] }))
+    const result = await openReady()
+    expect(result.current.dialog?.heldIds).toEqual([])
     act(() => result.current.close())
 
     let settle: (ids: ReadonlySet<string>) => void = () => {}
     readStampedLeadIds.mockReturnValueOnce(new Promise((resolve) => (settle = resolve)))
     act(() => result.current.request(NEWER.id, OLDER.id))
 
-    expect(result.current.held).toEqual({ status: 'loading' })
+    expect(result.current.dialog).toBeNull()
     settle(new Set([NEWER.id]))
     // React Query notifies on its own scheduler tick, so wait rather than read once.
-    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [NEWER.id] }))
+    await waitFor(() => expect(result.current.dialog?.heldIds).toEqual([NEWER.id]))
     expect(readStampedLeadIds).toHaveBeenCalledTimes(2)
   })
 
-  it('closes the request and toasts when the stamp read fails, held failed and never ready', async () => {
+  it('opens no dialog when the stamp read fails, closing the request with a toast', async () => {
     readStampedLeadIds.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'))
-    const statuses: CollisionHeld['status'][] = []
+    const dialogs: (CollisionDialog | null)[] = []
+    let renders = 0
     const { result } = renderHook(() => {
+      renders += 1
       const hook = useCollisionResolve(BRANCH, ctx, run, NOWHERE)
-      statuses.push(hook.held.status)
+      dialogs.push(hook.dialog)
       return hook
     }, queries())
     act(() => result.current.request(NEWER.id, OLDER.id))
 
-    await waitFor(() => expect(result.current.pair).toBeNull())
-    expect(result.current.held).toEqual({ status: 'idle' })
-    expect(statuses).toContain('failed')
-    expect(statuses).not.toContain('ready')
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(HELD_FAILED_TEXT))
     expect(toast.error).toHaveBeenCalledTimes(1)
-    expect(toast.error).toHaveBeenCalledWith(HELD_FAILED_TEXT)
+    expect(dialogs.every((dialog) => dialog == null)).toBe(true)
     expect(logger.error).toHaveBeenCalledWith(
       'app.world_collision_held_read_failed',
       expect.objectContaining({
@@ -855,12 +905,16 @@ describe('useCollisionResolve → held rows', () => {
         error: 'SQLITE_BUSY: database is locked',
       }),
     )
+    // Closed: the hook no longer follows the pair's rows.
+    const settled = renders
+    act(() => entitiesStore.hydrate(BRANCH, [OLDER, { ...NEWER, description: 'Edited.' }]))
+    expect(renders).toBe(settled)
 
     // A reopen starts from its own read, not the failed one.
     readStampedLeadIds.mockResolvedValueOnce(new Set([NEWER.id]))
     act(() => result.current.request(NEWER.id, OLDER.id))
-    expect(result.current.held).toEqual({ status: 'loading' })
-    await waitFor(() => expect(result.current.held).toEqual({ status: 'ready', ids: [NEWER.id] }))
+    expect(result.current.dialog).toBeNull()
+    await waitFor(() => expect(result.current.dialog?.heldIds).toEqual([NEWER.id]))
     expect(toast.error).toHaveBeenCalledTimes(1)
   })
 })

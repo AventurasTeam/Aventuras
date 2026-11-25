@@ -106,6 +106,7 @@ const resolveCapturing = async (r: Resolution) => {
   lastResolution = r
 }
 const resolveLoading = () => new Promise<void>(() => {})
+const NONE_HELD: readonly string[] = []
 // Settled by the play itself, so the dialog closes and releases the body scroll lock.
 let settleResolve: (() => void) | null = null
 const resolveDeferred = () =>
@@ -124,7 +125,7 @@ function ControlledDialog({
   onResolve,
   blockedReason,
   isNameTaken,
-  heldIds,
+  heldIds = NONE_HELD,
 }: {
   initialOpen?: boolean
   entityA: EntitySummary
