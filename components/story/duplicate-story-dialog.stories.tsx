@@ -1,9 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { t } from '@/lib/i18n'
 
-import { DuplicateStoryDialog, type DuplicateBranchOption } from './duplicate-story-dialog'
+import {
+  DuplicateStoryDialog,
+  type DuplicateBranchOption,
+  type DuplicateDialogState,
+  type DuplicateStoryDialogProps,
+} from './duplicate-story-dialog'
 
 // CI runs plays several times slower than local; every wait uses this.
 const WAIT = { timeout: 5000 }
@@ -54,6 +60,22 @@ function expectAbout360(field: HTMLElement) {
   expect(width).toBeLessThanOrEqual(320)
 }
 
+/** The styled panel inside Radix's own role=dialog wrapper, which shrinks to its content. */
+function panelOf(dialog: HTMLElement): HTMLElement {
+  const panel = dialog.firstElementChild
+  if (!(panel instanceof HTMLElement)) throw new Error("the dialog's panel is not rendered")
+  return panel
+}
+
+// At 390 px the 360 px panel would leave 15 px a side, so the 16 px gutters cap it to 358.
+function expectPhonePanel(dialog: HTMLElement) {
+  const box = panelOf(dialog).getBoundingClientRect()
+  expect(window.innerWidth).toBe(390)
+  expect(box.width).toBeCloseTo(358, 0)
+  expect(box.left).toBeCloseTo(16, 0)
+  expect(window.innerWidth - box.right).toBeCloseTo(16, 0)
+}
+
 function expectInViewport(element: HTMLElement) {
   const box = element.getBoundingClientRect()
   expect(box.left).toBeGreaterThanOrEqual(0)
@@ -64,6 +86,21 @@ async function pickBranch(name: string) {
   await userEvent.click(button(COPY.branch))
   await userEvent.click(await screen.findByRole('option', { name }, WAIT))
   await waitFor(() => expect(screen.queryByRole('option')).toBeNull(), WAIT)
+}
+
+/** The host as it duplicates: copying from the press on. */
+function CopiesOnDuplicate(props: DuplicateStoryDialogProps) {
+  const [state, setState] = useState<DuplicateDialogState>({ kind: 'ready' })
+  return (
+    <DuplicateStoryDialog
+      {...props}
+      state={state}
+      onDuplicate={(values) => {
+        props.onDuplicate(values)
+        setState({ kind: 'copying' })
+      }}
+    />
+  )
 }
 
 const meta = {
@@ -268,6 +305,29 @@ export const Copying: Story = {
   },
 }
 
+/** A click on `Duplicate` disables the button it focused: focus stays in the dialog, one copy runs. */
+export const CopyingFromClick: Story = {
+  render: (args) => <CopiesOnDuplicate {...args} />,
+  play: async ({ args }) => {
+    const dialog = await findDialog()
+    const field = await nameField()
+    const action = confirm()
+    await userEvent.click(action)
+    await waitFor(() => expect(action).toHaveAttribute('aria-busy', 'true'), WAIT)
+    expect(document.activeElement).not.toBe(document.body)
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    // Past user-event's pointer check, so only the copying gate stops these.
+    await userEvent.type(field, '{Enter}')
+    await userEvent.click(confirm(), { pointerEventsCheck: 0 })
+    await pause(50)
+    expect(args.onDuplicate).toHaveBeenCalledTimes(1)
+    expect(args.onDuplicate).toHaveBeenCalledWith({
+      title: COPY.prefilled,
+      branch: { branchId: FORK.id },
+    })
+  },
+}
+
 /** Nothing was written: the line shows, and both actions stay live for a retry or a cancel. */
 export const Failed: Story = {
   args: { state: { kind: 'failed' } },
@@ -289,14 +349,27 @@ export const Failed: Story = {
   },
 }
 
-/** Phone width: every control stays on screen. */
+/** Phone width: the panel keeps its width and 16 px gutters, and every control stays on screen. */
 export const PhoneSeveralBranches: Story = {
   globals: PHONE,
   play: async () => {
-    await findDialog()
+    const dialog = await findDialog()
     const field = await nameField()
+    expectPhonePanel(dialog)
     for (const element of [field, button(COPY.branch), button(COPY.cancel), confirm()])
       expectInViewport(element)
+  },
+}
+
+/** The refusal's line wraps inside the same panel: the dialog doesn't resize per state. */
+export const PhoneRefused: Story = {
+  globals: PHONE,
+  args: { state: { kind: 'refused', reason: t('landing:duplicate.refused.unrecovered') } },
+  play: async () => {
+    const dialog = await findDialog()
+    await nameField()
+    await waitFor(() => expect(screen.getByText(COPY.unrecovered)).toBeVisible(), WAIT)
+    expectPhonePanel(dialog)
   },
 }
 

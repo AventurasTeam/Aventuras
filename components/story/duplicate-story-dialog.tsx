@@ -16,6 +16,7 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import type { DuplicateBranch } from '@/lib/actions'
 import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
 export type DuplicateDialogState =
   | { kind: 'checking' }
@@ -40,6 +41,13 @@ export type DuplicateStoryDialogProps = {
 }
 
 type DuplicateForm = { title: string; branch: string }
+
+// A definite width on every tier: a content-sized dialog resizes as a state's line comes and goes.
+// Radix's web wrapper shrinks to content, so web needs `w-*`; the cap serves native.
+const PANEL_CLASS = cn(
+  'sm:max-w-[360px]',
+  Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
+)
 
 // Branch ids are `br_<uuid>`, so no branch's option can carry this value.
 const ALL_BRANCHES = 'all'
@@ -120,8 +128,7 @@ export function DuplicateStoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* Explicit from sm up: a content-sized dialog resizes as a state's line comes and goes. */}
-      <DialogContent className="sm:w-[360px]" busy={copying} closeDisabled={copying}>
+      <DialogContent className={PANEL_CLASS} busy={copying} closeDisabled={copying}>
         <DialogHeader>
           <DialogTitle>{t('landing:duplicate.title')}</DialogTitle>
         </DialogHeader>
