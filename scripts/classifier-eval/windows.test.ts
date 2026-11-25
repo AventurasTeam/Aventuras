@@ -204,3 +204,22 @@ it('the namedrops window finds Jorun Vask by his name, not in any new character'
   expect(holds(w.ideal)).toBe(true)
   expect(holds({ ...w.ideal, newCharacters: [{ ...jorun, name: 'Saint Aldric' }] })).toBe(false)
 })
+
+it('the switch window credits the break-in by awareness as by involvement', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const isWennas = w.checks.find((c) => c.name.startsWith('the archive break-in is Wenna’s'))!.holds
+  const notDaces = w.checks.find((c) => c.name.startsWith('the archive break-in is not'))!.holds
+  const breakInKnownTo = (ref: string) =>
+    reply({
+      happenings: [
+        {
+          title: 'The Calder Shoals chart is stolen from the archive',
+          involvements: [{ ref: 'loc_archive', role: 'site' }],
+          awareness: [{ ref, source: 'was told', severity: 0.5 }],
+          sourceTurn: 't2',
+        },
+      ],
+    })
+  expect(isWennas(breakInKnownTo('char_wenna'))).toBe(true)
+  expect(notDaces(breakInKnownTo('char_dace'))).toBe(false)
+})
