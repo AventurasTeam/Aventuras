@@ -608,3 +608,14 @@ slice-planning gate forces its resolution before that slice is planned.
   ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
   Known shape). Older code; Slice 6.8 added `lead-missing`. Found by
   Slice 6.8's slice review (2026-11-25).
+
+- **The dev seed logs a create for its system entries.**
+  `entryCreateDeltas` in `lib/db/devtools/seed-dataset.ts` skips only
+  the opening, so the seeded system entries (`entry_hero_0072` on
+  `br_hero_main` among them) carry a `story_entries` create delta. The
+  app writes none for a system entry
+  (`components/reader/regenerate-gate.ts:51`), so on the seed the last
+  reply's ↻ counts two entries in range and opens the cascade confirm,
+  where in use it would regenerate at once. E2E specs that press ↻ on a
+  seeded tail test the confirm path for that reason. Found by Slice
+  6.8's slice review (2026-11-25).
