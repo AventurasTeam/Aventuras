@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
-import { Platform, type TextInputKeyPressEvent } from 'react-native'
+import { Platform, View, type TextInputKeyPressEvent } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
 import { Button } from '@/components/ui/button'
@@ -175,13 +175,17 @@ export function DuplicateStoryDialog({
           />
         ) : null}
         {state.kind === 'refused' ? (
-          <Text size="sm" variant="secondary">
-            {state.reason}
-          </Text>
+          <View role="status">
+            <Text size="sm" variant="secondary">
+              {state.reason}
+            </Text>
+          </View>
         ) : state.kind === 'failed' ? (
-          <Text size="sm" className="text-danger">
-            {t('landing:duplicate.failed')}
-          </Text>
+          <View role="alert" accessibilityLiveRegion="assertive">
+            <Text size="sm" className="text-danger">
+              {t('landing:duplicate.failed')}
+            </Text>
+          </View>
         ) : null}
         <DialogFooter>
           <Button variant="secondary" disabled={copying} onPress={() => handleOpenChange(false)}>

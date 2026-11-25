@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { t } from '@/lib/i18n'
 
@@ -254,6 +254,7 @@ function refusedPlay(line: string): Story['play'] {
     const field = await nameField()
     // The dialog fades in from opacity 0.
     await waitFor(() => expect(screen.getByText(line)).toBeVisible(), WAIT)
+    await expect(within(await findDialog()).getByRole('status')).toHaveTextContent(line)
     // The width holds with the line in: the dialog doesn't resize per state.
     expectAbout360(field)
     const action = confirm()
@@ -334,6 +335,7 @@ export const Failed: Story = {
   play: async ({ args }) => {
     await nameField()
     await waitFor(() => expect(screen.getByText(COPY.failed)).toBeVisible(), WAIT)
+    await expect(within(await findDialog()).getByRole('alert')).toHaveTextContent(COPY.failed)
     await expect(confirm()).not.toHaveAttribute('aria-disabled', 'true')
     await userEvent.click(confirm())
     await waitFor(
