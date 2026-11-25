@@ -308,7 +308,6 @@ describe('useBranchCreate — Create', () => {
       {
         storyId: STORY,
         branchId: CHILD,
-        fromBranchId: BRANCH,
         hold: expect.objectContaining({ branchId: BRANCH }),
         replaceStack,
       },

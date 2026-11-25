@@ -1055,7 +1055,6 @@ describe('showBranch', () => {
     return {
       storyId: 'story_1',
       branchId: 'br_b',
-      fromBranchId: 'br_a',
       replaceStack: () => true,
       ...overrides,
       hold: overrides.hold ?? readerHoldStore.take('br_a'),

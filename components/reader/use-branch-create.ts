@@ -203,10 +203,7 @@ export function useBranchCreate({
         }
         let shown: ShowBranchResult
         try {
-          shown = await showBranch(
-            { storyId: sid, branchId: newBranchId, fromBranchId: branchId, hold, replaceStack },
-            ctx,
-          )
+          shown = await showBranch({ storyId: sid, branchId: newBranchId, hold, replaceStack }, ctx)
         } catch (error) {
           // Its throws come after its reset: the reader navigated, and the new one's load reports.
           logger.error('reader.branch_create_show_threw', {

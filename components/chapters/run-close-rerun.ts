@@ -410,10 +410,7 @@ async function showThenStart(
   }
   let shown: ShowBranchResult
   try {
-    shown = await showBranch(
-      { storyId, branchId: forked.newBranchId, fromBranchId: branchId, hold, replaceStack },
-      ctx,
-    )
+    shown = await showBranch({ storyId, branchId: forked.newBranchId, hold, replaceStack }, ctx)
   } catch (error) {
     readerHoldStore.release(hold)
     closeUnshown(args)

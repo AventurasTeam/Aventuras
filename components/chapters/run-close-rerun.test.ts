@@ -674,7 +674,6 @@ describe('runCloseRerunOnBranch', () => {
       {
         storyId: 'story_1',
         branchId: 'br_child',
-        fromBranchId: 'br_1',
         hold: expect.objectContaining({ branchId: 'br_1' }),
         replaceStack,
       },

@@ -238,8 +238,7 @@ function fillAndPublish(set: BranchWorkingSet): void {
 export type ShowBranchInput = {
   storyId: string
   branchId: string
-  /** The branch the reader shows: where the pointer goes back when the reset doesn't take. */
-  fromBranchId: string
+  /** Taken on the reader's branch: where the pointer goes back when the reset doesn't take. */
   hold: ReaderHoldToken
   replaceStack: (branchId: string) => boolean
 }
@@ -248,12 +247,12 @@ export type ShowBranchResult =
   | { status: 'ok' }
   /** Navigated with nothing filled: the new reader's own load takes over. */
   | { status: 'shown-unloaded' }
-  /** Nothing navigated or published; the pointer is back on `fromBranchId` (logged on failure). */
+  /** Nothing navigated or published; the pointer is back on `hold.branchId` (logged on failure). */
   | { status: 'navigation-blocked' }
 
 /**
  * C8: shows a branch the caller's transaction made current (a fork): the switch's read, re-read
- * and block, no gate or abandon. Writes the pointer only to restore `fromBranchId` if reset fails.
+ * and block, no gate or abandon. Writes the pointer only to restore `hold.branchId` if reset fails.
  */
 export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
   const { storyId, branchId, hold, replaceStack } = input
@@ -291,8 +290,8 @@ export async function showBranch(input: ShowBranchInput, ctx: DbCtx): Promise<Sh
 
 // Awaited inside the hold: the reader takes no input until the pointer names what it shows again.
 async function blockedShow(input: ShowBranchInput, ctx: DbCtx): Promise<ShowBranchResult> {
-  const { storyId, fromBranchId, branchId } = input
-  await restorePointer({ storyId, fromBranchId, toBranchId: branchId }, ctx)
+  const { storyId, branchId, hold } = input
+  await restorePointer({ storyId, fromBranchId: hold.branchId, toBranchId: branchId }, ctx)
   return { status: 'navigation-blocked' }
 }
 
