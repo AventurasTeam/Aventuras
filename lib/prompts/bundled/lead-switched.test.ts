@@ -297,6 +297,13 @@ describe('the suggestion refresh', () => {
     expect(markCount(user)).toBe(0)
   })
 
+  it('explains a mark on the last turn alone', () => {
+    const { user } = refresh({ entries: withMarks(SWITCHED_TURNS, { 3: { none: true } }) })
+    expect(user).toContain(`# Story so far\n${EXPLAINER}\n\nThe gate stood open.`)
+    expect(user).toContain(`\n${NONE_LINE}\nYou reach the top as the bell starts to ring.`)
+    expect(markCount(user)).toBe(1)
+  })
+
   it('matches the recorded switched render', () => {
     expect(refresh(marked).user).toMatchSnapshot()
   })
