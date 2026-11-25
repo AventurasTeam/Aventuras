@@ -80,10 +80,15 @@ export function useBranchDeleteConfirm({
   // One ref for the confirm's life: FocusScope reads `.current` as the confirm unmounts, after the
   // render that cleared the target, so a prop set in that render would never reach it.
   const returnFocusTo = useRef<unknown>(null)
-  const latest = useRef({ count, remove, refresh, focusAfterDelete })
+  const latest = useRef({ count, remove, refresh, focusAfterDelete, swapPending })
   useEffect(() => {
-    latest.current = { count, remove, refresh, focusAfterDelete }
+    latest.current = { count, remove, refresh, focusAfterDelete, swapPending }
   })
+  // The reader saw a swap during the press: a refusal landing after that swap ended is stale.
+  const swapSeenInPress = useRef(false)
+  useEffect(() => {
+    if (swapPending && pendingRef.current) swapSeenInPress.current = true
+  }, [swapPending])
 
   // A gate refusal lasts while the gate holds: once it opens, `Delete branch` is live again.
   const gateClosed = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
@@ -123,6 +128,7 @@ export function useBranchDeleteConfirm({
     if (pendingRef.current || target == null) return
     const { branchId } = target
     pendingRef.current = true
+    swapSeenInPress.current = latest.current.swapPending
     setPending(true)
     setFailed(false)
     setRefusal(null)
@@ -147,6 +153,9 @@ export function useBranchDeleteConfirm({
       return
     }
     if (result.code === 'gated' || result.code === 'swap-pending') {
+      // The edge that clears a held refusal ran before this one landed.
+      if (result.code === 'swap-pending' && swapSeenInPress.current && !latest.current.swapPending)
+        return
       setRefusal(result.code)
       return
     }

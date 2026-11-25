@@ -307,6 +307,49 @@ describe('useBranchDeleteConfirm: the delete', () => {
     expect(result.current.refusal).toBe('swap-pending')
   })
 
+  /** Presses Delete with `remove` held, applies `during` while it runs, then lands `swap-pending`. */
+  async function swapRefusalAfter(
+    initial: boolean,
+    during: readonly boolean[],
+  ): Promise<{ current: Hook }> {
+    const { result, rerender, remove } = setup(initial)
+    await openOn(result)
+    const removal = deferred<DeleteBranchResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let pressing: Promise<void> = Promise.resolve()
+    act(() => {
+      pressing = result.current.confirm()
+    })
+    for (const swapPending of during) rerender({ active: true, swapPending })
+    await act(async () => {
+      removal.resolve({ status: 'rejected', code: 'swap-pending' })
+      await pressing
+    })
+    return result
+  }
+
+  it('holds no swap refusal when the swap the reader saw ends while the delete runs', async () => {
+    const result = await swapRefusalAfter(true, [false])
+    expect(result.current.refusal).toBeNull()
+    expect(result.current.failed).toBe(false)
+    expect(result.current.target).toEqual(FORK)
+  })
+
+  it('holds no swap refusal when a swap starts and ends while the delete runs', async () => {
+    const result = await swapRefusalAfter(false, [true, false])
+    expect(result.current.refusal).toBeNull()
+  })
+
+  it('holds a swap refusal that lands while the swap the reader saw still runs', async () => {
+    const result = await swapRefusalAfter(true, [])
+    expect(result.current.refusal).toBe('swap-pending')
+  })
+
+  it('holds a swap refusal from a marker the reader never saw pending during the delete', async () => {
+    const result = await swapRefusalAfter(false, [false])
+    expect(result.current.refusal).toBe('swap-pending')
+  })
+
   it('marks a thrown delete failed and keeps the confirm; a retry clears the line', async () => {
     const { result, remove } = setup()
     await openOn(result)
