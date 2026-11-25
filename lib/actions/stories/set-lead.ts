@@ -130,7 +130,7 @@ export function setBranchLead(
   })
 }
 
-/** Clears every flagged row on the branch; offered only on a story that needs no lead. */
+/** Clears every flagged row on the branch; refused on a story that needs a lead. */
 export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<UnsetLeadResult> {
   return queued(branchId, async () => {
     const story = await storyOf(branchId, ctx)
