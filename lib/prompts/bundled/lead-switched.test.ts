@@ -476,6 +476,26 @@ describe('the periodic classifier, switched', () => {
     expect(user).toContain('\n[t1] from this turn on, "I" and "you" are [c1] Aefre\n')
   })
 
+  // A pass lagging a switch: its window is one run under the former lead, so one mark, on t1.
+  it('explains a lone mark on the first turn, with the clause on the lead line', () => {
+    const { user } = renderTemplate(
+      TEMPLATE_IDS.periodicClassifier,
+      context([
+        turn('t1', 'ai_reply', 'The gate groans open.', { leadMark: { id: 'c1', name: 'Aefre' } }),
+        turn('t2', 'user_action', 'I step into the yard.', { scene: ['c1'] }),
+      ]),
+    )
+    expect(user).toContain(
+      '\n[t1] from this turn on, "I" and "you" are [c1] Aefre\nThe gate groans open.\n',
+    )
+    expect(user.endsWith("\n[t2] the user's turn; scene: [c1]\nI step into the yard.")).toBe(true)
+    expect(user).not.toContain('[t2] from this turn on')
+    expect(user).toContain(
+      `\nThe story's lead is [c2] Bael. Outside quoted speech, "I" and "you" in the turns are the lead${CLAUSE}.\n\nTurns to classify.`,
+    )
+    expect(user).toContain(INTRO)
+  })
+
   it('says nothing of marks when no turn holds one', () => {
     const unmarked = SWITCHED.map(({ leadMark, ...rest }) => rest)
     const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(unmarked))
