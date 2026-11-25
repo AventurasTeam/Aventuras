@@ -2407,7 +2407,7 @@ describe('buildGenerationContext — lead marks', () => {
   })
   const FALLBACK = TEMPLATE_IDS.piggybackFallbackClassifier
 
-  /** One turn per stamp, in position order, odd positions replies; undefined leaves it unstamped. */
+  /** One turn per stamp, in position order, odd positions replies; undefined = unstamped. */
   const stampedTurns = (...stamps: (string | undefined)[]): StoryEntry[] =>
     stamps.map((leadId, i) => ({
       id: `entry_${i + 1}`,
@@ -2536,7 +2536,7 @@ describe('buildGenerationContext — lead marks', () => {
     ])
   })
 
-  // A retired former lead still names a row, so its mark carries the placeholder `entities` gives it.
+  // A retired former lead still names a row, so its mark carries the roster's placeholder.
   it('marks a retired former lead by its placeholder', async () => {
     const cast = [
       character(JORIN, 'Jorin', { isLead: 1 }),

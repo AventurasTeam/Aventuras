@@ -315,10 +315,9 @@ function currentTimeOf(
 }
 
 /**
- * Prose, position, kind and the turn's lead mark only: substituting `metadata`'s historical scene
- * rosters, or its raw lead stamp, would map long-deleted entities, which resolveRef reads as shown
- * to the model. No `id`: `entry_` would leak raw, since it doesn't substitute. `leadMark` is set
- * only on a marked turn, so an unmarked one is key for key what it was.
+ * Prose, position, kind and lead mark only: `metadata`'s old scene rosters or raw lead stamp would
+ * map long-deleted entities as shown to the model. No `id`: `entry_` would leak raw.
+ * `leadMark` only on a marked turn.
  */
 function promptEntry(
   entry: StoryEntry,
@@ -507,8 +506,8 @@ export async function buildGenerationContext(
     const row = branchById.get(id)
     return row?.kind === 'character' ? oneLine(row.name) : undefined
   }
-  // Each list is walked on its own from the lead the prompt names (architecture.md → System and
-  // user halves). A `{ gone }` or `{ none }` mark carries no id, so it allocates no placeholder.
+  // Each list walks on its own from the named lead (architecture.md → System and user halves).
+  // `{ gone }` / `{ none }` marks carry no id, so they allocate no placeholder.
   const withLeadMarks = (turns: readonly StoryEntry[]) => {
     const marks = leadMarks(turns.map(leadStampOf), lead?.id ?? null, nameOf)
     return turns.map((entry, i) => promptEntry(entry, marks[i]))

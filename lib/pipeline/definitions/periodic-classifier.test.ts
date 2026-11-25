@@ -704,8 +704,7 @@ describe('periodicClassifierPhase', () => {
     expect(prompt).not.toContain('from this turn on, "I" and "you" are')
   })
 
-  // architecture.md → System and user halves: each row's stamp, read with the window, reaches its
-  // turn's header.
+  // architecture.md → System and user halves: each row's stamp reaches its turn's header.
   it("marks where the lead changed, from each turn's stamp in the database", async () => {
     const character = (id: string, name: string, isLead: 0 | 1) =>
       ({

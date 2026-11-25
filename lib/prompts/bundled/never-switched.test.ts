@@ -4,9 +4,8 @@ import { emptyEntityView } from '@/lib/world'
 
 import { renderTemplate, TEMPLATE_IDS, templateReads, type TemplateId } from '../index'
 
-// Milestone 6's Definition of done: a story whose lead never changed gets no mark and no clause,
-// and changes only in the lines canon gives it. The snapshot is that record: a variable a later
-// prompt reads joins the story constants below, and the turns stay as they are.
+// A story whose lead never changed gets no mark and no clause, and changes only in the lines
+// canon gives it; a variable a later prompt reads joins the story constants below.
 const CLAUSE = 'except where a turn names another'
 
 type Turn = { position: number; kind: string; content: string }

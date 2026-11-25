@@ -89,8 +89,8 @@ function judge(
   return { row }
 }
 
-// The answered turns in position order, walked from the lead the task names, read per call: the
-// close's hard gate holds the flag still, so it is the lead the task's start read.
+// Walked from the task's lead, read per call: the close's hard gate holds the flag still, so it
+// is the lead the task started with.
 async function answeredMarks(
   ctx: ToolContext,
   rows: readonly TurnRow[],

@@ -1,6 +1,6 @@
-// staticContent: reads only `entry` and `ids`. Marks the user's turns, bounded so a long turn ends
-// where the tag does, and a turn's lead mark on a line before it (architecture.md → System and user
-// halves). `ids`, passed at every include: false (no id), 'bracketed' ([c1] Name) or 'bare' (Name (c1)).
+// staticContent: reads only `entry` and `ids`. Bounds the user's turns so a long one ends where the
+// tag does; lead mark on a line before (architecture.md → System and user halves). `ids`: false (no
+// id), 'bracketed' ([c1] Name) or 'bare' (Name (c1)).
 export const STORY_ENTRY = `{% if entry.leadMark %}(From this turn on, {% if entry.leadMark.gone %}"I" and "you" are a character no longer in the story and none of those named here, so credit what they do to no one.{% elsif entry.leadMark.none %}the story had no lead.{% else %}"I" and "you" are {% if ids == 'bracketed' %}[{{ entry.leadMark.id }}] {% endif %}{{ entry.leadMark.name }}{% if ids == 'bare' %} ({{ entry.leadMark.id }}){% endif %}.{% endif %})
 {% endif %}{% if entry.kind == 'user_action' %}<user_turn>
 {{ entry.content }}

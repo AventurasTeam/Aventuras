@@ -1,10 +1,9 @@
 import type { TemplateSources } from '../types'
 import { THIRD_PERSON_RULE } from './third-person'
 
-// architecture.md → System and user halves: the mode sits in the system half; the chapter, prior
-// summary and threads are per call, and the lead and the narration sit beside them in the user
-// half (canon's bundled table). Mode paragraph: classifier-mode-rule.ts's, worded for a summary.
-// The rules and sections below are shared with a part's template and the merge's.
+// architecture.md → System and user halves: mode in the system half; the lead and narration sit
+// with the per-call chapter, summary and threads in the user half. Rules and sections below are
+// shared with a part's template and the merge's.
 
 export const CHAPTER_TITLE_RULE = `- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.`
 
@@ -34,7 +33,7 @@ export const CHAPTER_CONTINUITY_SECTIONS = `{% if previousChapterSummary != blan
 
 {% endif -%}`
 
-/** The narration and the lead, before a chapter call's turns (Phase 2); reads narration, lead, entries. */
+/** The narration and the lead, before a chapter call's turns; reads narration, lead, entries. */
 export const CHAPTER_LEAD_SECTION = `# The narration
 The chapter is narrated in the {{ narration }} person.
 {%- if lead %}

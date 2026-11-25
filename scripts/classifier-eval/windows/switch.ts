@@ -20,9 +20,8 @@ const tells = (h: ReplyHappening, fact: RegExp): boolean =>
 const credits = (h: ReplyHappening, ref: string): boolean =>
   involves(h, ref) || h.awareness.some((a) => a.ref === ref)
 
-// Adventure mode, narrated in the first person; the prose never names its "I". The user played
-// Wenna through the break-in, then set Dace as the lead. A turn's stamp is what a lead mark shows;
-// unmarked, only the scene (Wenna alone at the archive) contradicts the lead line naming Dace.
+// Adventure, first person, "I" never named: the user played Wenna through the break-in, then set
+// Dace as lead. Unmarked, only the scene (Wenna alone at the archive) contradicts the lead line.
 export const switchWindow: EvalWindow = {
   name: 'switch',
   about: 'a lead switch partway: two turns written under Wenna, then two under Dace, the lead now',

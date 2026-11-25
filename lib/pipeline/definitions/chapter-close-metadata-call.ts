@@ -85,10 +85,10 @@ export type MetadataCallInputs = {
   threads: readonly Thread[]
   mode: StoryMode
   modelConfig: ResolveModelConfig
-  /** The branch's lead by the flag (resolveLeadLogged), its name on one line; null with none or two. */
+  /** The branch's lead by the flag, its name on one line; null with none or two. */
   lead: { id: string; name: string } | null
   narration: StoryDefinition['narration']
-  /** A character on the branch by its name on one line, as read here; undefined for no such row. */
+  /** A branch character's name on one line; undefined for no such row. */
   nameOf: (id: string) => string | undefined
 }
 

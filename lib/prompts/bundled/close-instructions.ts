@@ -25,9 +25,8 @@ Wherever turns appear, the user's are marked with <user_turn> tags.
 // part's tasks; the task's own rows go in its user half.
 export const CLOSE_TASK_SYSTEM = `{% include '${MACRO_IDS.closeInstructions}' %}\n\n{% include '${MACRO_IDS.closeProse}' %}`
 
-// memory/chapter-close.md → Conversations: each task's user half names the lead, so "I" and "you"
-// in the turns have a referent, and CLOSE_INSTRUCTIONS stays free of it. Renders nothing with no
-// lead. Happenings and Awareness show no turns, so their line never takes the clause.
+// memory/chapter-close.md → Conversations: the user half names the lead so "I"/"you" have a referent;
+// renders nothing with no lead. Happenings and Awareness show no turns, so no clause.
 const leadLine = (clause: string): string => `{% if lead %}
 
 The story's lead is {{ lead.name | one_line }} ({{ lead.id }}). Outside quoted speech, "I" and "you" in the turns are the lead${clause}.{% endif %}`

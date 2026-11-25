@@ -1,7 +1,6 @@
-// chapter (C3): a prose task's chapter or part, in its system half after the instructions; stable
-// across a part's tasks, not the story (memory/chapter-close.md → Conversations). Each turn sits
-// under the handle a write cites, the user's marked as every history marks them, and a lead mark
-// names its character by close handle, bare as the close writes every id.
+// chapter (C3): a prose task's chapter or part, in its system half; stable across a part's tasks
+// (memory/chapter-close.md → Conversations). Turns sit under the handle a write cites; a lead mark
+// names its character by close handle, bare.
 export const CLOSE_PROSE = `# The turns
 {%- for turn in closeTurns %}
 

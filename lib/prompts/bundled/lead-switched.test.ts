@@ -11,9 +11,8 @@ import {
 } from '../index'
 import { loadPack } from '../load-pack'
 
-// The shared switched fixture: four turns stamped Mara, Mara, Jorin, Jorin, Jorin the lead the
-// prompt names. The helper marks turn 1 (Mara is not the named lead) and turn 3 (the switch); turns
-// 2 and 4 carry no `leadMark` key. Each describe block puts the marks in its prompt's id scheme.
+// Four turns stamped Mara, Mara, Jorin, Jorin under lead Jorin: marks on turns 1 and 3 only, the
+// others carry no `leadMark` key. Each describe block puts the marks in its prompt's id scheme.
 const FORMER = 'Mara'
 const CURRENT = 'Jorin'
 const SWITCHED_TURNS = [
@@ -44,7 +43,7 @@ const CLAUSE = ', except where a turn names another'
 // A mark line opens its own line; the explainer quotes the opener mid-line, so it isn't counted.
 const markCount = (text: string) => text.split('\n(From this turn on, ').length - 1
 
-// The narrator's, the refresh's and the fallback's marks: placeholder ids, as substituteIds leaves them.
+// Narrator, refresh and fallback marks: placeholder ids, as substituteIds leaves them.
 const FORMER_MARK = { id: 'c2', name: FORMER }
 const CURRENT_MARK = { id: 'c1', name: CURRENT }
 
@@ -115,7 +114,7 @@ const refresh = (over: Record<string, unknown>) =>
 const fallback = (over: Record<string, unknown>) =>
   renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, generationContext(over))
 
-// Story so far over the switched fixture, as the narrator and the refresh render it, no id anywhere.
+// Story so far over the switched fixture, as the narrator and the refresh render it, without ids.
 const SWITCHED_HISTORY = [
   '# Story so far',
   EXPLAINER,
