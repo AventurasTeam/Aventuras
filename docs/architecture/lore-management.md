@@ -21,9 +21,9 @@ is a candidate in the first case and not in the second.
 whenever the story calls someone by a different title, so one measured save held
 `Baron Kaelen` and `Forge-Master Kaelen`, `Captain Vor'koth`, `General Vor'koth` and
 `The Captain` — thirty-eight rows for about thirty-one people. The **Duplicates** window in
-the Active Context panel is where those are resolved: one group at a time, with the members
-side by side and a radio for which name survives. A group, not a pair — grouping is
-transitive, and those four Vor'koth rows are one decision.
+the Active Context panel is where those are resolved: each group lists its members side by side
+with a radio for which name survives, and a merge's preview shows one group at a time. A group,
+not a pair — grouping is transitive, and those four Vor'koth rows are one decision.
 
 **A merge is shown before it is written**, because it deletes rows and `deleteCharacter` is
 not undoable. `generation/mergeEntities.ts` builds a _plan_ rather than a result: every
@@ -59,7 +59,7 @@ it, so a decision made once is not re-argued by either side.
 Lorebook on its own. It runs after a chapter is created — automatically at the token threshold,
 manually from the Memory view, and once per batch during `chapterizeFromBeginning` (the
 SillyTavern import path) — and on demand from **Run lore management** in the Active Context
-panel, called Tidy below (`runManualLoreManagement`, shared by both manual callers). With State
+panel, called Tidy below (`runManualLoreManagement`, the entry point for every manual run). With State
 Tracking on, every change a session makes is recorded: a session after a chapter as `chapter` on the
 chapter's last entry, a Tidy run as `tidy` on the last completed entry, so a revert can undo them —
 see [state-tracking.md](state-tracking.md).
@@ -108,7 +108,7 @@ one. Several things hold that down, and only the last is optional:
   the agent legitimately holds indices past the end of the list the session started with, and a
   delete leaves its slot in place rather than shifting everything under it.
   `lorebook/sessionChanges.ts` owns that mapping: one slot per index, each knowing whether
-  writing it back means an insert, an update, a merge or nothing at all. That is what makes a
+  writing it back means an insert, an update, a merge, a delete or nothing at all. That is what makes a
   create-then-update land as one create, an update-then-delete land as one delete, and a second
   update to the same entry keep the first — all of which were silently dropped when the write
   side looked the index up in the original list, after the tool had already answered
@@ -123,11 +123,8 @@ one. Several things hold that down, and only the last is optional:
   failed while `create_entry` — the one that does not validate it — went through. An agent
   that can only create is an agent that only grows the lorebook. It is stripped by
   `withoutFields`, the same mechanism that removes `injectionMode`.
-- **Duplicate candidates are found in code, before the call**
-  (`src/lib/services/duplicates/`: `names.ts` is the comparison, `index.ts` runs it over a
-  pool and drops what has already been dismissed), by exact name, shared alias, token
-  containment and a length-scaled edit distance, grouped transitively. The list goes into
-  the prompt as a worklist. Under **Require duplicate
+- **Duplicate candidates are found in code, before the call** (see
+  [Duplicate Entities](#duplicate-entities)), and go into the prompt as a worklist. Under **Require duplicate
   consolidation** (Advanced → Lore Management, off by default) `finish_lore_management` also
   refuses to complete while a group is unresolved — which is why the loop stops on
   `stopOnCompletedTerminalTool`, reading the tool's answer rather than its call. The refusal is
@@ -168,8 +165,9 @@ a chapter creation card on its branch is still working or any session holds the 
 `onSaveSession`, and `story.saveLoreSession` writes it in one transaction with its records:
 creates, updates, merges (survivor first), deletes, each planned against the lorebook the ones
 before it leave. An entry the session updated is never also merged or deleted by it: the ledger
-folds that into the merge or the delete. A session that fails at any point, its save included, leaves the lorebook
-and its records as they were, which is why an incomplete chapter's card has no lore to report.
+folds that into the merge or the delete. A session that fails at any point, its save included,
+leaves the lorebook and its records as they were, which is why an incomplete chapter's card has no
+lore to report.
 
 In the activity record a run is a list of model calls and tool calls side by side. A model call is
 named before it is made, by why the loop makes it (`loreModelCallReason` in `loreSteps.ts`): every
@@ -181,15 +179,15 @@ step. Nothing more about a call is known in advance; the model chooses its tools
 moves during a turn: the classifier writes lorebook entries, and the chapter check that decides
 whether lore management runs at all creates the chapter. A snapshot taken up front handed the
 agent a lorebook missing what was just classified, a chapter list missing the chapter that
-triggered the run, and a "recent story" still holding the entries that chapter had absorbed. Both
-the background path and the batch importer now pass a thunk. The background path's thunk throws
-when the turn's story and branch are no longer open, and the session does not start.
+triggered the run, and a "recent story" still holding the entries that chapter had absorbed. The
+background path passes a thunk, which throws when the turn's story and branch are no longer open,
+and the session does not start. The batch importer builds its inputs once its chapters are written.
 
 `query_chapter` here shares `ChapterQueryBudget` with the retrieval agent — see
 [Agentic Retrieval](context-injection.md) — at its own allowance of six per session, and with no
 `grep_chapters` to name in the refusal. It does **not** echo the chapter summary back: every
 summary is already in the instructions untruncated, so returning one is the same text twice in one
-prompt, which is the reason there is no `list_chapters` either.
+prompt.
 
 **There is no `list_chapters` tool.** The prompt carries the complete chapter list with
 untruncated summaries, so the same material never exists in two places for the agent to
@@ -264,7 +262,8 @@ retried as Tidy.
 
 **An agent with no story text must not create.** Chapters are the usual material, but a manual run
 can happen before any chapter exists, so every caller passes `recentEntries` — the un-chapterized
-tail — along with the story's `tokenThreshold` and `chapterBuffer`. `LoreManagementService` picks
+tail — along with the story's `tokenThreshold`, and every caller but the batch importer its
+`chapterBuffer`. `LoreManagementService` picks
 what the agent reads of it (`loreRecentEntries`). By default that is bounded to
 `recentStoryBudgetChars(tokenThreshold)`: the same `CHAPTER_READ_BUDGET_RATIO` (2.5) a chapter read
 uses, converted to characters at ~4 per token, so it reads as "about 2.5 chapters" on both sides
@@ -290,9 +289,8 @@ of the story the chapter was cut. How far it runs is the Advanced Settings switc
 with no character budget and no floor, however long they are. Off, it is the same character budget
 and floor, counted from the chapter's end. A buffer of 0 shows none, and an empty tail is absent
 rather than announced: `hasRecentStory` drops both its section and every mention of it in the
-instructions. Callers pass `chapterBuffer` unconditionally; only a run with a `newChapter` uses it,
-so the batch importer and Tidy read the newest entries within the character
-budget.
+instructions. Only a run with a `newChapter` uses `chapterBuffer`, so the batch importer and Tidy
+read the newest entries within the character budget.
 
 **A tail that stops short of the present says so.** Cut off at Buffer Messages, the excerpt can end
 well before the last entry of the story. `loreRecentEntries` reports `continues`, and the prompt
@@ -301,7 +299,7 @@ too: no excerpt is shown, but the note still follows the chapter when later pros
 
 All three callers go through `LoreManagementCoordinator` with the same
 `buildLoreManagementCallbacks(scope)`, which is the only place that says what a lore change does
-to the story. Each used to write those five callbacks out itself, and they had drifted — one
+to the story. Each used to write those callbacks out itself, and they had drifted — one
 merged by passing the entry whole, another by copying fourteen fields by hand.
 
 **The callbacks are bound to a story branch, and refuse to write outside it.** They go through
