@@ -25,7 +25,7 @@ export type StoryDuplicateDialogModel = {
   storyId: string
   sourceTitle: string
   branches: DuplicateBranchOptions
-  /** The selection `state` judges, and the one a submit copies. */
+  /** The selection `state` judges: a submit copies it, and checks any other instead. */
   branch: DuplicateBranch
   state: DuplicateDialogState
 }
@@ -47,6 +47,9 @@ function refusedState(storyId: string, code: DuplicateRefusalCode): DuplicateDia
   logger.warn('app.story_duplicate_refused', { storyId, code })
   return { kind: 'failed' }
 }
+
+const sameBranch = (a: DuplicateBranch, b: DuplicateBranch): boolean =>
+  a === 'all' || b === 'all' ? a === b : a.branchId === b.branchId
 
 // A call, not an inline test: TS keeps a ref's narrowing across an await that can change it.
 const isCopying = (dialog: StoryDuplicateDialogModel | null): boolean =>
@@ -74,7 +77,7 @@ export function useStoryDuplicate({
   dialog: StoryDuplicateDialogModel | null
   open: (storyId: string, sourceTitle: string) => Promise<void>
   setBranch: (branch: DuplicateBranch) => void
-  submit: (values: { title: string }) => Promise<void>
+  submit: (values: { title: string; branch: DuplicateBranch }) => Promise<void>
   dismiss: () => void
 } {
   const [dialog, setDialogState] = useState<StoryDuplicateDialogModel | null>(null)
@@ -169,13 +172,20 @@ export function useStoryDuplicate({
   )
 
   const submit = useCallback(
-    async ({ title }: { title: string }) => {
+    async ({ title, branch }: { title: string; branch: DuplicateBranch }) => {
       const current = dialogRef.current
-      if (current == null || (current.state.kind !== 'ready' && current.state.kind !== 'failed'))
+      if (current == null) return
+      // A pick ignored mid-copy leaves the form on an unjudged branch: check it, copy nothing.
+      if (!sameBranch(branch, current.branch)) {
+        setBranch(branch)
         return
-      const { openSeq: seq, storyId, branch } = current
+      }
+      if (current.state.kind !== 'ready' && current.state.kind !== 'failed') return
+      const { openSeq: seq, storyId } = current
       setState(seq, { kind: 'copying' })
-      const copied = await attempt(() => latest.current.duplicate({ storyId, title, branch }))
+      const copied = await attempt(() =>
+        latest.current.duplicate({ storyId, title, branch: current.branch }),
+      )
       if (!copied.ok) {
         logger.error('app.story_duplicate_threw', { storyId, error: messageOf(copied.error) })
         // An unfocused or unmounted list shows no dialog to carry the line.
@@ -191,7 +201,7 @@ export function useStoryDuplicate({
       if (dialogRef.current?.openSeq === seq) setDialog(null)
       latest.current.onDone({ storyId: result.storyId, title: title.trim() })
     },
-    [alive, setDialog, setState],
+    [alive, setBranch, setDialog, setState],
   )
 
   const dismiss = useCallback(() => {

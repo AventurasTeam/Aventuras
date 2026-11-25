@@ -401,7 +401,6 @@ export default function Index() {
           }}
           sourceTitle={duplicateDialog.sourceTitle}
           branches={duplicateDialog.branches}
-          branch={duplicateDialog.branch}
           state={duplicateDialog.state}
           onBranchChange={storyDuplicate.setBranch}
           onDuplicate={(values) => {
