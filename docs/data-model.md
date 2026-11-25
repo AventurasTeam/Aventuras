@@ -1686,14 +1686,16 @@ inherit, since a duplicate copies the status verbatim; when an embedder swap is
 pending on the story; or when a run is registered on any of its branches.
 
 **One transaction, no lock.** One `runInTransaction` batch of
-`INSERT … SELECT`: the `stories` row, then `branches` in `created_at` order
-(parents before children), then an `UPDATE stories SET current_branch_id`
-that points the copy at its current branch, then each copied branch's tables,
-its `*_vec` after them. A source that vanished before the batch ran fails it. A full duplicate's branches share the batch, so a failure
+`INSERT … SELECT`: the `stories` row, then `branches` (parents before
+children, level by level, `created_at` within one), then an
+`UPDATE stories SET current_branch_id` that points the copy at its current
+branch, then each copied branch's tables, its `*_vec` after them. A source that
+vanished before the batch ran fails it, as does a full duplicate whose copied
+branches all did. A full duplicate's branches share the batch, so a failure
 writes nothing. A fork holds the parent's exclusive write lock because it
-plans its rewind outside its transaction; a duplicate plans nothing, and
-one batch reads one consistent snapshot of the source. The copy needs the fork's composite
-`deltas` key and the same `vec0` self-insert, or its fallback.
+plans its rewind outside its transaction; a duplicate plans nothing, and one
+batch reads one consistent snapshot of the source. The copy needs the fork's
+composite `deltas` key and the same `vec0` self-insert, or its fallback.
 
 **Not undoable.** A duplicate writes no deltas, like a story delete; deleting
 the copy is the way back.

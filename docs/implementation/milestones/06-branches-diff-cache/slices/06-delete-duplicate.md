@@ -684,17 +684,20 @@ change amends the scope above.
 - **The refusal line for an unfinished run.** Canon's Refused paragraph
   names a pending embedder change, a branch held by an unrecovered memory
   update, or a run still going. An unfinished row of another kind, a
-  per-turn orphan for one, is none of these. Default: one line for
+  per-turn orphan for one, is none of these. Decided (D1): one line for
   `branch-held` and `unfinished-run`, that a branch being copied has an
-  interrupted update the app hasn't recovered, and that restarting the
-  app retries it; canon's paragraph gains it.
+  interrupted update the app hasn't recovered. It carries no restart
+  clause, since the recovery modal says it won't retry, and canon's
+  paragraph gains nothing; the Implementation notes record why.
 - **A source changing mid-duplicate.** The branch list and the vec
   family list are read before the batch. Resolved: a source story, or for
   a single-branch copy the copied branch, gone in that gap fails the
-  batch and nothing lands; a leaf lost from a full duplicate leaves a
-  copy without it, a non-leaf fails on the remapped parent's foreign key,
-  and a branch forked in the gap is left out. The Implementation notes
-  record how the batch holds that. Neither race is reachable from the UI:
+  batch and nothing lands, and so does a full duplicate whose copied
+  branches all went while the story stayed; a leaf lost from a full
+  duplicate leaves a copy without it, a non-leaf fails on the remapped
+  parent's foreign key, and a branch forked in the gap is left out. The
+  Implementation notes record how the batch holds that. No race is
+  reachable from the UI:
   the story list and the navigator never take input together. A vec
   family created in the gap is missed, which C3 accepts.
 - **The group the duplicate E2E undoes.** The seeded hero story's newest
@@ -708,8 +711,11 @@ change amends the scope above.
 - **The Popover under the confirm on web.** Radix keeps a lower layer
   from dismissing while a modal sits above it, and the lockfile holds one
   copy of `@radix-ui/react-dismissable-layer` (1.1.11), so the navigator
-  should stay open under the confirm. Unverified; the delete E2E's "the
-  navigator stays open" checks it on desktop.
+  should stay open under the confirm. Decided: it doesn't. A desktop
+  probe showed the Popover closing without a hold, so
+  `BranchNavigator` gained `holdOpen`; the Implementation notes'
+  Deviations record it, and the delete E2E's "the navigator stays open"
+  checks it.
 - **`branchQueues`** (`lib/actions/turns/branch-queue.ts:16`) never
   prunes, so a deleted branch's settled entry stays. A deleted branch's
   id can't come back, which is what the lesson guards against. Default:
@@ -763,15 +769,16 @@ change amends the scope above.
   subquery that yields NULL when the source story, or for a
   single-branch copy the copied source branch, is gone; the NOT NULL
   constraint fails the batch, nothing lands, and the host shows the
-  failure. The row goes in with a null `current_branch_id`, which a
-  trailing `UPDATE` resolves to the intended copy if it landed, else
-  the first copy that did (a root, by the walk). A full duplicate
-  losing a leaf still yields a copy without it, and losing a non-leaf
-  still fails on the foreign key. One edge stays open: a full duplicate
-  whose every copied branch vanishes while the story stays still lands
-  a branchless copy, reachable only by forking, switching and deleting
-  within a few awaits. The copy's current branch follows the pointer
-  read before the batch, not the source's at batch time.
+  failure. The row goes in with a null `current_branch_id`, which an
+  `UPDATE` after the branch rows resolves to the intended copy if it
+  landed, else the first copy that did (a root, by the walk). A full
+  duplicate losing a leaf still yields a copy without it, and losing a
+  non-leaf still fails on the foreign key. A full duplicate takes the
+  title from a subquery over its own copied branch rows, so one whose
+  every copied branch vanishes while the story stays fails the batch as
+  well, rather than landing a branchless copy. The copy's current
+  branch follows the pointer read before the batch, not the source's at
+  batch time.
 
 **Deviations from the brief.**
 
@@ -804,8 +811,7 @@ change amends the scope above.
   pointer-downs, but its focus-outside dismiss has no highest-layer
   check, so the confirm's autofocus, mounted at the route outside the
   Popover's tree, closes the navigator. A Storybook probe on desktop
-  (`ProbeConfirmWithoutHold`) showed the Popover closing without help
-  and staying open with `BranchNavigator`'s new `holdOpen`, which
+  showed the Popover closing without help and staying open with `BranchNavigator`'s new `holdOpen`, which
   prevents the outside dismiss while the confirm is open and doesn't
   record it, so a later Esc or Close still restores focus. On phone the
   Sheet stays under the confirm with no code, since gorhom's modal
@@ -855,8 +861,8 @@ vectors on its one branch, so the dialog shows no Select and that
 branch is the whole story), read from `action_layer.story_duplicated`,
 which times the batch alone. In the desktop dev app (2026-11-25, slot
 1, `577884761`), three duplicates took 19, 19 and 26 ms for 22
-statements each, at load 1.36, 1.25 and 1.82 with the GPU idle; each
-copy held the source's 133 entries and 103 vectors. On the slot AVD's
+statements each, at load 1.36, 1.25 and 1.82 with the GPU idle; the
+last copy held the source's 133 entries and 103 vectors. On the slot AVD's
 dev client (`emulator-5554`, 2026-11-25), indicative only, a
 software-rendered debug build, they took 41, 37 and 38 ms for 22
 statements, at load 2.29, 2.40 and 2.18. The figures cover a one-branch

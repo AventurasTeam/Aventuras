@@ -630,8 +630,12 @@ slice-planning gate forces its resolution before that slice is planned.
   resolves against that wrapper, so a definite width there loses 32 px.
   The comment above the class list assumes otherwise
   (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
-  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`. Found by Slice
-  6.5's task review (2026-11-24).
+  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`, and
+  `components/story/duplicate-story-dialog.tsx` adds the same, having
+  measured 245–257 px at a 390 px window without it. A width option or a
+  web fix in the primitive would spare each new dialog the workaround and
+  its story. Found by Slice 6.5's task review (2026-11-24); a second
+  consumer found during Slice 6.6.
 
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
@@ -715,7 +719,7 @@ slice-planning gate forces its resolution before that slice is planned.
 
 - **`abortRun`'s docblock says any pass or close end clears the pending
   re-run, but a re-run's own abort clears it too.** The block at
-  `lib/stores/generation/generation.ts:177-179` reads "any pass or close
+  `lib/stores/generation/generation.ts:177-182` reads "any pass or close
   end clears the pending re-run", while
   [`generation-pipeline.md`](../generation-pipeline.md#multi-run-txstate)
   (`:657-661`) has the record cleared "whatever ends it: … or the
@@ -747,16 +751,6 @@ slice-planning gate forces its resolution before that slice is planned.
   fix is either to portal the Toaster to the body or to correct the doc.
   Found during Slice 6.6.
 
-- **`DialogContent`'s width rule doesn't hold on web, so every
-  consumer re-states it.** `components/ui/dialog.tsx:133` sets
-  `w-full max-w-[calc(100%-2rem)]`, but Radix's wrapper shrinks to
-  content, and a dialog measured 245–257 px at a 390 px window.
-  `components/reader/branch-create-modal.tsx:19-23` and
-  `components/story/duplicate-story-dialog.tsx` each add a web-only
-  `w-[360px] max-w-[calc(100vw-2rem)]`. A width option or a web fix in
-  the primitive would spare each new dialog the same workaround and its
-  story. Found during Slice 6.6.
-
 - **Radix logs "Missing `Description` or `aria-describedby`" for five
   dialogs.** `DuplicateStoryDialog` and four existing ones open with
   the warning: `components/chapters/review-window.tsx:124`,
@@ -768,3 +762,11 @@ slice-planning gate forces its resolution before that slice is planned.
   One decision at the `DialogContent` primitive (`aria-describedby`
   set to `undefined` when no Description renders) would silence them
   all. Found during Slice 6.6.
+
+- **`deleteStory`'s comment says assets are "handled by a separate GC",
+  but none exists yet.** `lib/actions/stories/delete-story.ts:33` leaves
+  `assets` out of `BRANCH_SCOPED` on that ground, and no asset GC exists
+  until M9.3, so a deleted story's or branch's assets stay in the table
+  until then. Reword the comment to name the missing capability and its
+  milestone, or route the orphan check to M9.3's slice. Found during
+  Slice 6.6.
