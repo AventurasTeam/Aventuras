@@ -135,7 +135,7 @@ export const Blocked: Story = {
 
 /** The delete is running: it can't stop partway, so nothing answers until it settles. */
 export const Pending: Story = {
-  args: { pending: true },
+  args: { phase: 'pending' },
   play: async ({ args }) => {
     const dialog = await findDialog()
     const cancel = within(dialog).getByRole('button', { name: COPY.cancel })
@@ -154,7 +154,7 @@ export const Pending: Story = {
 
 /** The last press threw: the line shows, and both buttons stay live for a retry or Cancel. */
 export const Failed: Story = {
-  args: { failed: true },
+  args: { phase: 'failed' },
   play: async ({ args }) => {
     const dialog = await findDialog()
     await expect(within(dialog).getByRole('alert')).toHaveTextContent(COPY.failed)
@@ -233,7 +233,7 @@ export const AboveAnOpenPopover: Story = {
 }
 
 // The owner flips one state on the press: the gate closing (`blockedReason`) or the delete
-// starting (`pending`), the two ways `Delete branch` disables under the focus it holds.
+// starting (`phase`), the two ways `Delete branch` disables under the focus it holds.
 function FlipOnDelete({
   flip,
   ...props
@@ -243,7 +243,7 @@ function FlipOnDelete({
     <BranchDeleteConfirm
       {...props}
       blockedReason={flip === 'blocked' && flipped ? BLOCKED_REASON : props.blockedReason}
-      pending={flip === 'pending' && flipped}
+      phase={flip === 'pending' && flipped ? 'pending' : props.phase}
       onDelete={() => {
         props.onDelete()
         setFlipped(true)

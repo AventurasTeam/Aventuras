@@ -91,9 +91,7 @@ describe('useBranchDeleteConfirm: opening', () => {
     await openOn(result)
     expect(count).toHaveBeenCalledWith('br_fork')
     expect(result.current.target).toEqual(FORK)
-    expect(result.current.pending).toBe(false)
-    expect(result.current.failed).toBe(false)
-    expect(result.current.refusal).toBeNull()
+    expect(result.current.phase).toEqual({ kind: 'idle' })
     expect(result.current.returnFocusTo.current).toBeNull()
   })
 
@@ -182,7 +180,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
       first = result.current.confirm()
       second = result.current.confirm()
     })
-    expect(result.current.pending).toBe(true)
+    expect(result.current.phase).toEqual({ kind: 'pending' })
     await act(async () => {
       removal.resolve({ status: 'deleted' })
       await first
@@ -190,7 +188,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     })
     expect(remove).toHaveBeenCalledTimes(1)
     expect(remove).toHaveBeenCalledWith('br_fork')
-    expect(result.current.pending).toBe(false)
+    expect(result.current.phase).toEqual({ kind: 'idle' })
   })
 
   it('names the current row for focus before the confirm clears', async () => {
@@ -243,7 +241,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
       remove.mockResolvedValueOnce({ status: 'rejected', code })
       await confirmOn(result)
       expect(result.current.target).toBeNull()
-      expect(result.current.refusal).toBeNull()
+      expect(result.current.phase).toEqual({ kind: 'idle' })
       expect(result.current.returnFocusTo.current).toBeNull()
       expect(refresh).toHaveBeenCalledTimes(1)
       expect(logger.warn).toHaveBeenCalledWith('app.branch_delete_refused', {
@@ -279,9 +277,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
       remove.mockResolvedValueOnce({ status: 'rejected', code })
       await confirmOn(result)
       expect(result.current.target).toEqual(FORK)
-      expect(result.current.refusal).toBe(code)
-      expect(result.current.pending).toBe(false)
-      expect(result.current.failed).toBe(false)
+      expect(result.current.phase).toEqual({ kind: 'refused', code })
       expect(refresh).not.toHaveBeenCalled()
     },
   )
@@ -292,9 +288,9 @@ describe('useBranchDeleteConfirm: the delete', () => {
     closeTheGate()
     remove.mockResolvedValueOnce({ status: 'rejected', code: 'gated' })
     await confirmOn(result)
-    expect(result.current.refusal).toBe('gated')
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'gated' })
     act(() => generationStore.setReversalInProgress(false))
-    expect(result.current.refusal).toBeNull()
+    expect(result.current.phase).toEqual({ kind: 'idle' })
     expect(result.current.target).toEqual(FORK)
   })
 
@@ -305,7 +301,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
     await confirmOn(result)
     act(() => generationStore.setReversalInProgress(false))
-    expect(result.current.refusal).toBe('swap-pending')
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
   })
 
   it('lets a swap refusal go once the swap the reader saw ends, so Delete branch is live again', async () => {
@@ -314,9 +310,9 @@ describe('useBranchDeleteConfirm: the delete', () => {
     remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
     await confirmOn(result)
     rerender({ active: true, swapPending: true })
-    expect(result.current.refusal).toBe('swap-pending')
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
     rerender({ active: true, swapPending: false })
-    expect(result.current.refusal).toBeNull()
+    expect(result.current.phase).toEqual({ kind: 'idle' })
     expect(result.current.target).toEqual(FORK)
   })
 
@@ -326,7 +322,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
     await confirmOn(result)
     rerender({ active: true, swapPending: false })
-    expect(result.current.refusal).toBe('swap-pending')
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
   })
 
   /** Presses Delete with `remove` held, applies `during` while it runs, then lands `swap-pending`. */
@@ -352,24 +348,23 @@ describe('useBranchDeleteConfirm: the delete', () => {
 
   it('holds no swap refusal when the swap the reader saw ends while the delete runs', async () => {
     const result = await swapRefusalAfter(true, [false])
-    expect(result.current.refusal).toBeNull()
-    expect(result.current.failed).toBe(false)
+    expect(result.current.phase).toEqual({ kind: 'idle' })
     expect(result.current.target).toEqual(FORK)
   })
 
   it('holds no swap refusal when a swap starts and ends while the delete runs', async () => {
     const result = await swapRefusalAfter(false, [true, false])
-    expect(result.current.refusal).toBeNull()
+    expect(result.current.phase).toEqual({ kind: 'idle' })
   })
 
   it('holds a swap refusal that lands while the swap the reader saw still runs', async () => {
     const result = await swapRefusalAfter(true, [])
-    expect(result.current.refusal).toBe('swap-pending')
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
   })
 
   it('holds a swap refusal from a marker the reader never saw pending during the delete', async () => {
     const result = await swapRefusalAfter(false, [false])
-    expect(result.current.refusal).toBe('swap-pending')
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
   })
 
   it('marks a thrown delete failed and keeps the confirm; a retry clears the line', async () => {
@@ -377,7 +372,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     await openOn(result)
     remove.mockRejectedValueOnce(new Error('disk full'))
     await confirmOn(result)
-    expect(result.current.failed).toBe(true)
+    expect(result.current.phase).toEqual({ kind: 'failed' })
     expect(result.current.target).toEqual(FORK)
     expect(result.current.returnFocusTo.current).toBeNull()
     expect(logger.error).toHaveBeenCalledWith('app.branch_delete_threw', {
@@ -392,7 +387,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     act(() => {
       pressed = result.current.confirm()
     })
-    expect(result.current.failed).toBe(false)
+    expect(result.current.phase).toEqual({ kind: 'pending' })
     await act(async () => {
       retry.resolve({ status: 'deleted' })
       await pressed
@@ -436,7 +431,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     })
     rerender({ active: false })
     expect(result.current.target).toEqual(FORK)
-    expect(result.current.pending).toBe(true)
+    expect(result.current.phase).toEqual({ kind: 'pending' })
     await act(async () => {
       removal.resolve({ status: 'rejected', code: 'gated' })
       await pressed
@@ -471,7 +466,7 @@ function blockedReason(
     storyId: 'story_1',
     switchPaused: false,
     swapPending: false,
-    refusal: null,
+    phase: { kind: 'idle' },
     ...overrides,
   })
 }
@@ -500,8 +495,8 @@ describe('branchDeleteBlockedReason', () => {
   })
 
   it('falls back to the refusal the press met', () => {
-    expect(blockedReason({ refusal: 'gated' })).toBe(IN_FLIGHT)
-    expect(blockedReason({ refusal: 'swap-pending' })).toBe(SWAPPING)
+    expect(blockedReason({ phase: { kind: 'refused', code: 'gated' } })).toBe(IN_FLIGHT)
+    expect(blockedReason({ phase: { kind: 'refused', code: 'swap-pending' } })).toBe(SWAPPING)
   })
 
   it('gives nothing while nothing blocks', () => {

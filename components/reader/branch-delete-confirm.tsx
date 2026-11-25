@@ -22,10 +22,11 @@ export type BranchDeleteConfirmProps = {
   count: number
   /** The gate's or the swap's reason; disables `Delete branch` while set. */
   blockedReason?: string
-  /** The delete is running: both buttons disable, and Esc and back wait for it. */
-  pending?: boolean
-  /** The last press threw; both buttons stay live for a retry or Cancel. */
-  failed?: boolean
+  /**
+   * `pending`: the delete is running; both buttons disable, and Esc and back do nothing.
+   * `failed`: the last press threw; both buttons stay live for a retry or Cancel.
+   */
+  phase?: 'idle' | 'pending' | 'failed'
   portalHost?: string
   returnFocusTo?: RefObject<unknown>
   onDelete: () => void
@@ -44,12 +45,12 @@ export function BranchDeleteConfirm({
   name,
   count,
   blockedReason,
-  pending = false,
-  failed = false,
+  phase = 'idle',
   portalHost,
   returnFocusTo,
   onDelete,
 }: BranchDeleteConfirmProps): ReactElement {
+  const pending = phase === 'pending'
   function handleOpenChange(next: boolean) {
     // Escape and Android back land here too; the batch can't stop partway.
     if (!next && pending) return
@@ -77,7 +78,7 @@ export function BranchDeleteConfirm({
               {blockedReason}
             </Text>
           </View>
-        ) : failed ? (
+        ) : phase === 'failed' ? (
           <View role="alert" accessibilityLiveRegion="assertive">
             <Text size="sm" className="text-danger">
               {t('reader:branches.deleteConfirm.failed')}

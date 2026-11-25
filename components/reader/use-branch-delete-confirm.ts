@@ -16,13 +16,24 @@ export type BranchDeleteTarget = { branchId: string; name: string; count: number
 /** The refusals that keep the confirm open, its line naming why. */
 type HeldRefusal = Extract<DeleteBranchRefusalCode, 'gated' | 'swap-pending'>
 
+/** `failed`: the last press threw. */
+export type BranchDeletePhase =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'pending' }
+  | { readonly kind: 'failed' }
+  | { readonly kind: 'refused'; readonly code: HeldRefusal }
+
+const IDLE: BranchDeletePhase = { kind: 'idle' }
+const PENDING: BranchDeletePhase = { kind: 'pending' }
+const FAILED: BranchDeletePhase = { kind: 'failed' }
+
 /** The confirm's blocked line: the gate's or the swap's live reason, else the refusal its press met. */
 export function branchDeleteBlockedReason(input: {
   txState: TxState
   storyId: string | undefined
   switchPaused: boolean
   swapPending: boolean
-  refusal: HeldRefusal | null
+  phase: BranchDeletePhase
 }): string | undefined {
   // Hold-free: a held branch never blocks a delete, so no hold names the block.
   const gateReason = generationGateReason(
@@ -31,9 +42,8 @@ export function branchDeleteBlockedReason(input: {
   )
   if (input.switchPaused) return gateReason
   if (input.swapPending) return t('reader:actions.blockedWhileSwapping')
-  if (input.refusal === 'gated') return gateReason
-  if (input.refusal === 'swap-pending') return t('reader:actions.blockedWhileSwapping')
-  return undefined
+  if (input.phase.kind !== 'refused') return undefined
+  return input.phase.code === 'gated' ? gateReason : t('reader:actions.blockedWhileSwapping')
 }
 
 /**
@@ -61,19 +71,15 @@ export function useBranchDeleteConfirm({
   focusAfterDelete: RefObject<unknown>
 }): {
   target: BranchDeleteTarget | null
-  pending: boolean
-  failed: boolean
+  phase: BranchDeletePhase
   /** Stable; its `.current` names the row only once a delete landed, else null. */
   returnFocusTo: RefObject<unknown>
-  refusal: HeldRefusal | null
   open: (branchId: string, name: string) => Promise<void>
   dismiss: () => void
   confirm: () => Promise<void>
 } {
   const [target, setTarget] = useState<BranchDeleteTarget | null>(null)
-  const [pending, setPending] = useState(false)
-  const [failed, setFailed] = useState(false)
-  const [refusal, setRefusal] = useState<HeldRefusal | null>(null)
+  const [phase, setPhase] = useState<BranchDeletePhase>(IDLE)
   // Read synchronously, so a second press returns before it reaches the action.
   const pendingRef = useRef(false)
   const openRequest = useRef(0)
@@ -92,12 +98,13 @@ export function useBranchDeleteConfirm({
 
   // A gate refusal lasts while the gate holds: once it opens, `Delete branch` is live again.
   const gateClosed = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  if (refusal === 'gated' && !gateClosed) setRefusal(null)
+  const refusal = phase.kind === 'refused' ? phase.code : null
+  if (refusal === 'gated' && !gateClosed) setPhase(IDLE)
   // On the edge only: a marker the reader never saw pending keeps its refusal.
   const [swapSeen, setSwapSeen] = useState(swapPending)
   if (swapSeen !== swapPending) {
     setSwapSeen(swapPending)
-    if (!swapPending && refusal === 'swap-pending') setRefusal(null)
+    if (!swapPending && refusal === 'swap-pending') setPhase(IDLE)
   }
 
   const open = useCallback(
@@ -117,8 +124,7 @@ export function useBranchDeleteConfirm({
         toast.error(t('reader:branches.deleteReadFailed'))
         return
       }
-      setFailed(false)
-      setRefusal(null)
+      setPhase((prev) => (prev.kind === 'pending' ? prev : IDLE))
       setTarget({ branchId, name, count: read.value })
     },
     [storyId],
@@ -129,20 +135,18 @@ export function useBranchDeleteConfirm({
     const { branchId } = target
     pendingRef.current = true
     swapSeenInPress.current = latest.current.swapPending
-    setPending(true)
-    setFailed(false)
-    setRefusal(null)
+    setPhase(PENDING)
     returnFocusTo.current = null
     const removal = await attempt(() => latest.current.remove(branchId))
     pendingRef.current = false
-    setPending(false)
+    setPhase(IDLE)
     if (!removal.ok) {
       logger.error('app.branch_delete_threw', {
         storyId,
         branchId,
         error: messageOf(removal.error),
       })
-      setFailed(true)
+      setPhase(FAILED)
       return
     }
     const result = removal.value
@@ -156,7 +160,7 @@ export function useBranchDeleteConfirm({
       // The edge that clears a held refusal ran before this one landed.
       if (result.code === 'swap-pending' && swapSeenInPress.current && !latest.current.swapPending)
         return
-      setRefusal(result.code)
+      setPhase({ kind: 'refused', code: result.code })
       return
     }
     logger.warn('app.branch_delete_refused', { storyId, branchId, code: result.code })
@@ -171,10 +175,10 @@ export function useBranchDeleteConfirm({
     openRequest.current += 1
     returnFocusTo.current = null
     setTarget(null)
-    setFailed(false)
-    setRefusal(null)
+    setPhase(IDLE)
   }, [])
 
+  const pending = phase.kind === 'pending'
   // A Stack keeps the reader mounted under a pushed screen, and the confirm would reopen on
   // return. Re-checked as a delete ends: one that ran while focus left closes what it kept.
   useEffect(() => {
@@ -188,5 +192,5 @@ export function useBranchDeleteConfirm({
     [],
   )
 
-  return { target, pending, failed, returnFocusTo, refusal, open, dismiss, confirm }
+  return { target, phase, returnFocusTo, open, dismiss, confirm }
 }

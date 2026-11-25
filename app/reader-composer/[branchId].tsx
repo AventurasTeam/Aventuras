@@ -1792,10 +1792,8 @@ function ReaderComposerBody({
   }, [storyId])
   const {
     target: deleteTarget,
-    pending: deletePending,
-    failed: deleteFailed,
+    phase: deletePhase,
     returnFocusTo: deleteReturnFocusTo,
-    refusal: deleteRefusal,
     open: openDeleteConfirm,
     dismiss: dismissDeleteConfirm,
     confirm: confirmDelete,
@@ -1824,7 +1822,7 @@ function ReaderComposerBody({
       storyId: storyId ?? undefined,
       switchPaused,
       swapPending,
-      refusal: deleteRefusal,
+      phase: deletePhase,
     }),
   )
   const { onBranch, modal: branchCreate } = useBranchCreate({
@@ -2267,8 +2265,7 @@ function ReaderComposerBody({
           name={deleteTarget.name}
           count={deleteTarget.count}
           blockedReason={deleteBlockedReason}
-          pending={deletePending}
-          failed={deleteFailed}
+          phase={deletePhase.kind === 'refused' ? 'idle' : deletePhase.kind}
           portalHost={tier === 'phone' ? ABOVE_SHEETS_PORTAL_HOST : undefined}
           returnFocusTo={deleteReturnFocusTo}
           onDelete={() => void confirmDelete()}
