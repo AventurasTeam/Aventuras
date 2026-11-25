@@ -42,7 +42,7 @@ export function useDuplicateDoneToast({
       // The blur dismissal has already run, so a toast shown now would outlast it over a reader.
       if (!mountedRef.current || !live.current.focused) return
       dismissShown()
-      toastId.current = toast.success(t('landing:duplicate.done', { name: title }), {
+      toastId.current = toast.info(t('landing:duplicate.done', { name: title }), {
         action: {
           label: t('landing:duplicate.open'),
           onPress: () => {

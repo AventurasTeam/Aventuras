@@ -7,7 +7,7 @@ import { toast } from '@/lib/toast'
 
 import { useDuplicateDoneToast } from './use-duplicate-done-toast'
 
-vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), dismiss: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { info: vi.fn(), dismiss: vi.fn() } }))
 
 // The locale's lines, written out: reading them through t() would pass on any string.
 const DONE = 'Duplicated as "Ashes of Aria"'
@@ -17,8 +17,8 @@ const COPIED = { storyId: 'story_copy', title: 'Ashes of Aria' }
 let shown = 0
 beforeEach(() => {
   shown = 0
-  vi.mocked(toast.success).mockReset()
-  vi.mocked(toast.success).mockImplementation(() => `toast-${++shown}`)
+  vi.mocked(toast.info).mockReset()
+  vi.mocked(toast.info).mockImplementation(() => `toast-${++shown}`)
   vi.mocked(toast.dismiss).mockReset()
 })
 afterEach(() => {
@@ -36,7 +36,7 @@ function setup(focused = true) {
 }
 
 function pressOpen(call = 0) {
-  const action = vi.mocked(toast.success).mock.calls[call]?.[1]?.action
+  const action = vi.mocked(toast.info).mock.calls[call]?.[1]?.action
   if (action == null) throw new Error(`toast ${call} carries no action`)
   act(() => {
     action.onPress()
@@ -44,13 +44,13 @@ function pressOpen(call = 0) {
 }
 
 describe('useDuplicateDoneToast', () => {
-  it('shows the success toast with an Open action', () => {
+  it('shows the info toast with an Open action', () => {
     const { result } = setup()
     act(() => {
       result.current(COPIED)
     })
-    expect(toast.success).toHaveBeenCalledTimes(1)
-    expect(toast.success).toHaveBeenCalledWith(DONE, {
+    expect(toast.info).toHaveBeenCalledTimes(1)
+    expect(toast.info).toHaveBeenCalledWith(DONE, {
       action: { label: OPEN, onPress: expect.any(Function) },
     })
   })
@@ -110,7 +110,7 @@ describe('useDuplicateDoneToast', () => {
     const show = result.current
     unmount()
     show(COPIED)
-    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.info).not.toHaveBeenCalled()
   })
 
   it("opens nothing when a kept toast's Open is pressed after the list unmounts", () => {
@@ -132,7 +132,7 @@ describe('useDuplicateDoneToast', () => {
     act(() => {
       result.current(COPIED)
     })
-    expect(toast.success).toHaveBeenCalledTimes(1)
+    expect(toast.info).toHaveBeenCalledTimes(1)
     pressOpen()
     expect(open).toHaveBeenCalledWith('story_copy')
   })
@@ -146,7 +146,7 @@ describe('useDuplicateDoneToast', () => {
       result.current({ storyId: 'story_copy_2', title: 'Second' })
     })
     expect(toast.dismiss).toHaveBeenCalledWith('toast-1')
-    expect(toast.success).toHaveBeenLastCalledWith('Duplicated as "Second"', expect.anything())
+    expect(toast.info).toHaveBeenLastCalledWith('Duplicated as "Second"', expect.anything())
     rerender({ focused: false, blocked: false })
     expect(toast.dismiss).toHaveBeenLastCalledWith('toast-2')
   })
@@ -156,7 +156,7 @@ describe('useDuplicateDoneToast', () => {
     act(() => {
       result.current(COPIED)
     })
-    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.info).not.toHaveBeenCalled()
   })
 
   it('dismisses nothing when it never showed a toast', () => {
