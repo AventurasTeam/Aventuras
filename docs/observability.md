@@ -407,7 +407,8 @@ convention, and the expectation that subsystems route through
   failed, with `branchId`, `actionId` and `error`; the banner holds the
   latest chapter with no count),
   `close_rerun_start_refused` (warn,
-  `components/chapters/run-close-rerun.ts`: a confirmed re-run was
+  `components/chapters/run-close-rerun.ts`: a confirmed re-run, or the
+  fork's check on the parent before `Re-run on new branch` forks, was
   refused for a reason other than the counts changing, the chapter no
   longer being the latest, a close owed, or a run in flight, with
   `branchId`, `chapterId` and the refusal `code` (`preflight-failed` for
@@ -427,10 +428,12 @@ convention, and the expectation that subsystems route through
   `branchId`, `chapterId` and `error`; the confirm closes with the
   `resyncFailed` copy, which asks to reopen the story),
   and for `Re-run on new branch` (the same file,
-  `runCloseRerunOnBranch`) `close_rerun_fork_threw` (error: the check
-  on the parent or the fork threw, with `branchId`, `chapterId`, the
-  `step` and `error`; no branch exists, and the confirm closes with the
-  start-failed copy),
+  `runCloseRerunOnBranch`) `close_rerun_fork_threw` (error: a step
+  threw, with `branchId`, `chapterId`, the `step` and `error`; for
+  `check` or `fork`, on the parent, no branch exists and the confirm
+  closes with the start-failed copy; for `show` or `start`, past the
+  commit, it also carries `newBranchId` and the warning toast says to
+  retry from the Timeline),
   `close_rerun_fork_refused` (warn: the fork refused as an unfinished
   run or for a reason the confirm has no copy of its own for, with
   `branchId`, `chapterId` and the refusal `code`; the confirm closes
@@ -442,10 +445,10 @@ convention, and the expectation that subsystems route through
   `chapterId` and, for a story left, `cause` `story-left`; nothing
   started, and a warning toast says to switch to the new branch and
   retry from the Timeline), `close_rerun_fork_start_failed` (warn: the
-  fork committed, but the start refused or threw, showing the new
-  branch threw, or the new reader opened with nothing loaded, with
-  `branchId`, `newBranchId`, `chapterId` and the `cause`; the warning
-  toast says to retry from the Timeline) and
+  fork committed, but the start on the new branch refused, or the new
+  reader opened with nothing loaded, with `branchId`, `newBranchId`,
+  `chapterId` and the `cause`, the refusal's code or `shown-unloaded`;
+  the warning toast says to retry from the Timeline) and
   `close_rerun_on_branch_threw` (error,
   `components/chapters/chapter-overlays-host.tsx`: the sequence
   rejected on a throw its steps don't catch, with `branchId`,
