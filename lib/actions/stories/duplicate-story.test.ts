@@ -1120,6 +1120,56 @@ describe('duplicateStory', () => {
     expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
   })
 
+  it('fails the batch, writing nothing, when a copied branch gains an unfinished run row before it', async () => {
+    // Not vacuous: A's finished run row stands, and must not fail the batch.
+    expect(countWhere('pipeline_runs', 'branch_id = ? AND finished_at IS NOT NULL', A)).toBe(1)
+    const race = racing(async () => {
+      t.sqlite
+        .prepare(
+          'INSERT INTO pipeline_runs (run_id, kind, action_id, story_id, branch_id, started_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('run_open_a', 'per-turn', 'act_open_a', STORY, A, AT)
+    })
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: { branchId: A } }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it("fails the batch, writing nothing, when a copied branch's classifier starts running before it", async () => {
+    const race = racing(async () => setClassifierState(B, 'running'))
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it("fails the batch, writing nothing, when a copied branch's classifier status turns malformed before it", async () => {
+    const race = racing(async () => {
+      t.sqlite.prepare('UPDATE branches SET classifier_status = ? WHERE id = ?').run('{not json', B)
+    })
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it("copies one branch while the story's other branch's classifier runs at its batch", async () => {
+    const race = racing(async () => setClassifierState(B, 'running'))
+
+    const copy = copyOf(
+      await duplicateStory({ storyId: STORY, title: TITLE, branch: { branchId: A } }, race.ctx),
+    )
+
+    expect(copy.branches).toHaveLength(1)
+  })
+
   it("makes the copy's root current when the current leaf is switched off and deleted before its batch", async () => {
     seedTree()
     t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(C, STORY)

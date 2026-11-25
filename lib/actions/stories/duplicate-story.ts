@@ -1,7 +1,7 @@
-import { and, eq, getTableColumns, inArray, sql, type SQL } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, isNull, sql, type SQL } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
-import { branchCopyOps, branches, stories, type SqlOp } from '@/lib/db'
+import { branchCopyOps, branches, pipelineRuns, stories, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
@@ -167,17 +167,25 @@ export async function duplicateStory(
   const now = Date.now()
   const parentOf = (row: BranchRow): SQL =>
     sql`${row.parentBranchId == null ? null : (toOf.get(row.parentBranchId) ?? null)}`
+  const copiedIds = copies.map(({ row }) => row.id)
   // For a tree, the story row alone would let a copy land with no branch once all its sources went.
   const sourceHeld =
     branch === 'all'
       ? sql`select 1 from ${branches} where ${and(
           eq(branches.storyId, storyId),
-          inArray(
-            branches.id,
-            copies.map(({ row }) => row.id),
-          ),
+          inArray(branches.id, copiedIds),
         )}`
       : sql`select 1 from ${branches} where ${and(eq(branches.id, branch.branchId), eq(branches.storyId, storyId))}`
+  // The check's refusals as the batch reads them: a run row, or a status, landing after its reads.
+  const runUnfinished = sql`select 1 from ${pipelineRuns} where ${and(
+    inArray(pipelineRuns.branchId, copiedIds),
+    isNull(pipelineRuns.finishedAt),
+  )}`
+  // A malformed status counts too: the check throws on one, so the batch fails on it as well.
+  const classifierRefused = sql`select 1 from ${branches} where ${inArray(branches.id, copiedIds)}
+    and case when json_valid(${branches.classifierStatus})
+      then json_extract(${branches.classifierStatus}, '$.state') = 'running'
+      else ${branches.classifierStatus} is not null end`
 
   const ops: SqlOp[] = [
     copyRowOp(
@@ -185,8 +193,9 @@ export async function duplicateStory(
       stories,
       {
         id: sql`${newStoryId}`,
-        // A source gone since the reads yields a row with a NULL title, failing the batch.
-        title: sql`(select ${title} where exists (${sourceHeld}))`,
+        // A source gone, or one the check would now refuse, yields a NULL title, failing the batch.
+        title: sql`(select ${title} where exists (${sourceHeld})
+          and not exists (${runUnfinished}) and not exists (${classifierRefused}))`,
         status: sql`'active'`,
         favorite: sql`0`,
         lastOpenedAt: sql`null`,
