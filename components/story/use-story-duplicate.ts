@@ -42,6 +42,10 @@ function refusedState(storyId: string, code: DuplicateRefusalCode): DuplicateDia
   return { kind: 'failed' }
 }
 
+// A call, not an inline test: TS keeps a ref's narrowing across an await that can change it.
+const isCopying = (dialog: StoryDuplicateDialogModel | null): boolean =>
+  dialog?.state.kind === 'copying'
+
 /** story-list.md → Duplicate a story: reads branches, checks the copy's, copies, calls `onDone`. */
 export function useStoryDuplicate({
   focused,
@@ -112,12 +116,12 @@ export function useStoryDuplicate({
 
   const open = useCallback(
     async (storyId: string, sourceTitle: string) => {
-      if (dialogRef.current?.state.kind === 'copying') return
+      if (isCopying(dialogRef.current)) return
       openRequest.current += 1
       const request = openRequest.current
       const read = await attempt(() => latest.current.readBranches(storyId))
       // A submit can start a copy during the read.
-      if (request !== openRequest.current || dialogRef.current?.state.kind === 'copying') return
+      if (request !== openRequest.current || isCopying(dialogRef.current)) return
       if (!read.ok || read.value.branches.length === 0) {
         logger.error('app.story_duplicate_check_failed', {
           storyId,
