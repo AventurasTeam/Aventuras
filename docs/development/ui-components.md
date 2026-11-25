@@ -34,15 +34,15 @@ rest:
 - **Layout.** A header with the centred title alone and no close button: Cancel is the way out.
   The description opens the body.
   The header and the buttons' panel are tinted (`bg-muted/40`) with a rule each, so they frame the
-  body. The header stays pinned. On desktop the buttons are pinned under the body too, and only the body
-  scrolls; on a phone the body and the buttons scroll together, leaving the small screen to the
-  content. Nothing inside scrolls on its own: an autosizing `Textarea`
-  in the body drops its height cap and lets the modal scroll.
+  body. The header stays pinned. On desktop the buttons are pinned under the body too, and only the
+  body scrolls; on a phone the body and the buttons scroll together, leaving the small screen to the
+  content. Nothing inside scrolls on its own: an autosizing `Textarea` in the body drops its height
+  cap and lets the modal scroll.
 - **Phone.** Below 768px an action modal is a dialog inset from the screen's edges: centred, or
   held near the top when it has a text field. It is never a sheet (see below).
 - **Buttons.** An outlined Cancel and the action, side by side on a phone and at the trailing edge
-  on desktop, where both share one width: the same on every modal, and wider for both only when a
-  label needs it. The discard question is only as wide as its pair, which fills its footer. On a
+  on desktop. From 640px up (`shared/buttonPair.ts`) both share one width: the same on every modal,
+  and wider for both only when a label needs it. The discard question is only as wide as its pair, which fills its footer. On a
   phone each takes half the width, and when a label does not fit they stack in reading order,
   Cancel above the action. The action's icon turns into a spinner while it runs.
 - **Ways out.** Cancel, Escape, Android's back press (claimed by the open modal through
@@ -69,7 +69,8 @@ rest:
 
 ### Width
 
-A modal's width follows what it does, not its content on the day it was written. On desktop:
+A modal's width follows what it does, not its content on the day it was written. `size` covers `md`
+to `2xl`; the wider surfaces are hand-built and set their own `max-w-*`. On desktop:
 
 | Width       | For                                              | Examples                                                                               |
 | ----------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
@@ -114,8 +115,8 @@ question when there is something to lose, or by the busy lock while the action r
 
 ### Removing the thing the modal edits
 
-`removal` puts a small outlined button in the `delete` red after the body, before Cancel and the action, so it
-scrolls with the content and is read after what it would remove. It asks inside the modal before
+`removal` puts a small outlined button in the `delete` red after the body, before Cancel and the
+action, so it scrolls with the content and is read after what it would remove. It asks inside the modal before
 running. Use it only to remove the thing the modal edits, never as a general third action.
 
 ### A plain confirmation
@@ -123,10 +124,9 @@ running. Use it only to remove the thing the modal edits, never as a general thi
 A confirmation that is its question alone — a title, a sentence or two, Cancel and the action, with
 no field, list, switch or long text — is a `shared/ConfirmModal.svelte`. It is the action modal in
 the discard question's shape: as wide as its buttons, which sit centred, with the title and
-description wrapping to that width. Its props are the action modal's minus the body: `open`,
-`onCancel`, `onClosed`, `title`, `titleIcon`, a string `description`, `action`, `busy` and
-`cancelLabel`. Everything else about the shell holds, the ways out and the busy lock included. A
-confirmation that grows a body becomes an `ActionModal`.
+description wrapping to that width. Its props are the action modal's minus the body and the
+editing ones, with a string `description`. Everything else about the shell holds, the ways out and
+the busy lock included. A confirmation that grows a body becomes an `ActionModal`.
 
 A deletion is the usual case: the title names the object, the description says what is lost, and
 the action is "Delete" with the trash icon in the `delete` tone. The lorebook's "Delete all entries"
@@ -170,8 +170,8 @@ opening, so a phone raises its keyboard. The dialog it sits in is already held n
 the keyboard only takes height from its bottom edge, and the content scrolls. Mark nothing when the
 first such control is a toggle, or when the modal edits a whole record whose fields the user may
 each want or not: Edit story opens with no keyboard. An unmarked text field is never focused on
-opening, even when it comes first, where bits-ui would focus it; the modal takes the focus itself. iOS raises no keyboard for this focus, so
-there it waits for a tap.
+opening, even when it comes first, where bits-ui would focus it; the modal takes the focus itself.
+iOS raises no keyboard for this focus, so there it waits for a tap.
 
 Enter in a single-line field moves to the next text field, with `enterkeyhint="next"`. In the
 last one, a modal that creates or adds performs its action (`enterkeyhint="go"`). A modal that
@@ -202,8 +202,7 @@ They come with the shell, so no caller adds them. Jumping to the bottom with a p
 closes the keyboard first and waits for the body to regain its height, so the jump lands where the
 keyboard no longer is.
 
-The body never repeats the title: "Entry 47 will
-be deleted" under "Delete entry 47" says nothing.
+The body never repeats the title: "Entry 47 will be deleted" under "Delete entry 47" says nothing.
 
 - **Sentence case** for titles and buttons.
 - **A command's title is a statement:** a verb, its object with an article, and the target when
@@ -257,7 +256,9 @@ inside its own content, over an `inert` body, never the native `ask()` of
 `@tauri-apps/plugin-dialog`. The question is a `PendingQuestion` (`shared/pendingQuestion.svelte.ts`):
 `await question.ask({ title, description })` is true when the reader discards, and an attempt made
 while one is up gets false. The action modal, both wizards and `TimelineReconciliationModal` use
-it, and each answers Escape and an outside click with "keep" while the question is up. Every
+it. While the question is up, each answers Escape with "keep"; the action modal and
+`TimelineReconciliationModal` answer an outside click the same way, and the wizards leave the
+question open. Every
 caller names what is lost: the overlay has no wording of its own beyond "Keep editing" and
 "Discard".
 
