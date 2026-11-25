@@ -13,6 +13,7 @@ import type { Chapter } from '#lib/types/index.ts'
 import {
   LoreManagementCoordinator,
   isLoreManagementRunning,
+  type LoreSessionActivity,
   type LoreSessionResult,
 } from './LoreManagementCoordinator'
 import { buildLoreManagementCallbacks, buildLoreManagementUICallbacks } from './loreCallbacks'
@@ -33,22 +34,33 @@ const log = createLogger('ManualLoreManagement')
  *
  * @param newChapter The chapter just created by hand, if this run follows one. Given to the
  * agent in full; absent for the Tidy lorebook button, which has no new chapter.
+ * @param reporting Where the run records itself. A recorded run is not refused up front by
+ * another holding the branch: the coordinator refuses it, so the refusal is recorded too.
+ * @param options.readAfterChapter Off, a run after a chapter reads that chapter and none of the
+ * story after it.
  */
 export async function runManualLoreManagement(
   newChapter?: Chapter,
+  reporting?: LoreSessionActivity,
+  options: { readAfterChapter?: boolean } = {},
 ): Promise<LoreSessionResult | null> {
   try {
-    return await startManualLoreManagement(newChapter)
+    return await startManualLoreManagement(newChapter, reporting, options.readAfterChapter ?? true)
   } catch (error) {
     log('Manual lore management failed', error)
     return null
   }
 }
 
-async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSessionResult | null> {
+async function startManualLoreManagement(
+  newChapter: Chapter | undefined,
+  reporting: LoreSessionActivity | undefined,
+  readAfterChapter: boolean,
+): Promise<LoreSessionResult | null> {
   if (
     !story.currentStory ||
-    isLoreManagementRunning(story.currentStory.id, story.currentStory.currentBranchId)
+    (!reporting &&
+      isLoreManagementRunning(story.currentStory.id, story.currentStory.currentBranchId))
   )
     return null
 
@@ -71,7 +83,7 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
       // Everything the chapters do not cover. On a story with no chapters this is the
       // whole story, and without it a manual run would be reasoning from the entry list
       // alone — see `LoreManagementContext.recentEntries`.
-      recentEntries: story.getUnchapterizedEntries(),
+      recentEntries: newChapter && !readAfterChapter ? [] : story.getUnchapterizedEntries(),
       mode: currentStory.mode ?? 'adventure',
       pov: story.pov,
       tense: story.tense,
@@ -80,11 +92,15 @@ async function startManualLoreManagement(newChapter?: Chapter): Promise<LoreSess
         ? { chapter: newChapter, entries: story.getChapterEntries(newChapter) }
         : undefined,
       chapterBuffer: story.memoryConfig.chapterBuffer,
+      readAfterChapter,
     },
-    buildLoreManagementCallbacks({
-      storyId: currentStory.id,
-      branchId: currentStory.currentBranchId,
-    }),
+    buildLoreManagementCallbacks(
+      { storyId: currentStory.id, branchId: currentStory.currentBranchId },
+      newChapter
+        ? { origin: 'chapter', entryId: newChapter.endEntryId }
+        : { origin: 'tidy', entryId: story.lastCompletedEntryId ?? undefined },
+    ),
     buildLoreManagementUICallbacks(),
+    reporting,
   )
 }

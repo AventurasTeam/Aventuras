@@ -110,30 +110,24 @@ The one swipe inside a panel that may not bubble up is over the Branches panel's
 could still scroll in the swipe's direction as the gesture starts, it stops the `touchend`, so the
 swipe scrolls the tree and changes no tab and no panel. At the tree's edge the swipe goes through.
 
-## Drawer swipes, and the one place we reach into `vaul`
+## Drawer sheets
 
-A drawer that holds unsaved work has to answer a swipe with a question rather than a close, and
-`vaul` offers no veto: it decides inside its own release handler. `createDrawerSwipeGuard`
-(`ui/drawer/swipe-guard.ts`) takes the one seam there is — `vaul` calls the content's
-`onpointerup` just before it measures the swipe — and, when the caller says the drawer is dirty,
-puts the sheet back at rest so that measurement finds nothing to act on, then animates the settle
-itself.
+`vaul` offers no veto over a close: a swipe past `closeThreshold` (0.75, set in `drawer.svelte`) or
+a tap on the handle closes a sheet, even one that is not dismissible. So nothing with unsaved work
+is a sheet: every action modal is a dialog on a phone too (see
+[ui-components.md](../development/ui-components.md)). Escape and an outside click reach their guard
+through bits-ui, which can be vetoed. Android's back press does not rely on that: an open action
+modal claims it (`utils/backPress.ts`), and the layout's back handler offers it to the claims,
+latest first, before it tries anything else. A claim declines when another layer, such as a
+Select's list, was opened over its modal, and the press falls through to the handler's Escape. The synthetic Escape the handler sends to other dialogs closed a
+dirty action modal without asking. A close driven from our side
+never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
 
-**On upgrading `vaul-svelte`**, check three things against the new version, because the guard
-copies them rather than importing them (they are internal):
+A sheet spans the screen, so `ResponsiveModal.Content` drops a caller's width classes (`w-*`,
+`max-w-*`, `min-w-*`, under any variant) before they reach it; they size the dialog only.
 
-- the release callback still runs before the swipe is measured (`use-drawer-content.svelte.js`),
-- `VELOCITY_THRESHOLD` and the settle transition in `internal/constants.js`, mirrored in the
-  guard, and
-- `closeThreshold`, which the guard reads from `DRAWER_CLOSE_THRESHOLD` and `drawer.svelte`
-  passes to `vaul`; the two must stay one constant.
-
-If the seam closes, the fallback still holds: a dirty drawer that closes anyway comes back as a
-fresh sheet once the old one has released its scroll lock — slower, but not broken.
-
-Two other `vaul` behaviours the callers have to know: it closes a non-dismissible drawer when its
-handle is tapped, and a close driven from our side never reaches its restore, so the scroll lock
-is released by hand (see `utils/scrollLock`).
+Sheets open and close in 180ms, set in `app.css` over `vaul`'s 0.5s animation. Only the open and
+close animations change; a drag's settle keeps `vaul`'s timing.
 
 ## The soft keyboard
 
@@ -186,6 +180,17 @@ does not scroll. Two things keep that true, and both are structural:
 `holdFocus` calls remain where a card is about to disappear under an open soft keyboard, so the
 keyboard closes before the card does; they are no longer what stops the scroll.
 
+## One way out of a dialog
+
+A dialog has exactly one dismiss control: either the header's X or a Cancel button, never both.
+Two controls that do the same thing make the reader wonder how they differ, and a Cancel beside a
+confirming action is the clearer of the two wherever the dialog asks for a decision. Such a dialog
+passes `closeButton={false}` to `ResponsiveModal.Header`; the X stays for dialogs that only show
+something and have no action to cancel. The rule is about controls drawn on the dialog, not the
+platform's own gestures: where a dialog is a sheet on a phone, swiping it down stays available
+whenever Cancel is (`dismissible`), so it is withheld only while a write is in flight. Which
+dialogs are sheets on a phone is in [ui-components.md](../development/ui-components.md).
+
 ## Data Model
 
 The story is an append-only list of `StoryEntry` rows (`user_action`, `narration`, `system`),
@@ -199,8 +204,8 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   its text.** Say a branch was forked at entry 30, and entry 12 is then rewritten. Entries are one
   set of rows that branches point into, never copies, so the new branch shows the new wording
   immediately. What it does _not_ show is any consequence of the rewrite: the world state it was
-  given when it forked, the per-entry `worldStateDelta` a rollback would restore, and the clock
-  stored on the fork's checkpoint were all derived from the old text and are left as they were. So
+  given when it forked, the change records a rollback would undo, and the clock stored on the
+  fork's checkpoint were all derived from the old text and are left as they were. So
   the branch can be reading a passage that no longer mentions a knife while its world state still
   holds one. Nothing detects or reports this.
 
@@ -209,6 +214,10 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   standing on) and refuses the reverse case, where you stand on the new branch and edit entry 12
   — the edit that would have had the same effect, from the branch that cares about it. That is
   known, and left alone until we decide what editing shared history should mean.
+
+  An inherited entry carries a lineage marker in the slot the fork marker uses, and shows no Edit
+  or Delete: both are refused on it, as are a past checkpoint and a branch from it. Its popover
+  names the branch the entry belongs to, where those actions are.
 
 - **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
   so the last entry's number equals the branch's entry count. Numbering is per branch view — a
@@ -266,16 +275,62 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
 [inactive]` came back as the name, missed `sameEntityName`, and created a second
   character — four of thirty-eight on a measured 41-chapter save, two carrying the
   subject's own `relationship` verbatim. Name and attributes are now separate lines
-  (`relationship:`, `status:`, `appearance:`), in every list `ClassifierService` renders —
-  characters, locations, items, story beats — and in `WorldStateInjector`'s narrator block,
-  whose prose the classifier also reads. One name per line also holds names a
-  comma-separated list could not: locations and items were CSV until they carried state.
+  (`relationship:`, `status:`, `description:`, `traits:`, `appearance:`), in every list the
+  classifier is shown — characters (`classifierCharacters.ts`), locations, items, story beats
+  (`ClassifierService`) — and in `WorldStateInjector`'s narrator block, whose prose the
+  classifier also reads. Every further line of a character's value is indented under it, blank
+  lines kept, and a rewrite has the indent taken off again; traits are listed as a JSON list,
+  since the model writes the list back whole and a trait may hold a comma. One
+  name per line also holds names a comma-separated list could not: locations and items were
+  CSV until they carried state.
 
-  **State reaches the classifier only where it can act on it.** `appearance:` goes with a
-  character in the scene, `description:` with the current location, and an item's
-  `quantity`/`equipped`/`location` only when they differ from the default — because each of
-  those is a whole-value replacement, and a model cannot rewrite what it was not shown. The
-  same rule sizes the prompt: on a large cast the omitted halves are most of it.
+  **State reaches the classifier only where it can act on it.** `description:`, `traits:` and
+  `appearance:` go with a character in the scene, `description:` with the current location, and
+  an item's `quantity`/`equipped`/`location` only when they differ from the default — because
+  each of those is a whole-value replacement, and a model cannot rewrite what it was not shown.
+  The same rule sizes the prompt: on a large cast the omitted halves are most of it.
+
+  For characters the rule is enforced as well as stated: `classifierCharacterView`
+  (`services/ai/generation/classifierCharacters.ts`) decides both what is listed and which
+  rewrites `applyClassificationResult` takes. The classifier attaches what it listed to its
+  result (`_shownCharacters`), so a status changed while it ran does not widen the gate, and
+  lists nobody, with a console warning, when the rendered prompt does not carry
+  `existingCharacters` as given: a custom template that leaves it out or filters it. A result
+  without the list showed nobody. A rewrite of a field
+  that was not listed is dropped and logged, an empty description, trait list or appearance
+  never erases one, and a rewrite or status equal to the current value writes nothing.
+  A rewritten field drops its translation, which would otherwise be shown in its place, and
+  with world-state translation on it is translated again after the turn, as a new character's
+  fields are: `applyClassificationResult` returns the characters it wrote and the text fields
+  it changed (`WrittenCharacter`), and only those are translated; batch chapterization
+  translates what its chapters wrote once it ends, cancelled or failed included, in the
+  background and ten characters per request. Characters are translated
+  from their stored rows, traits one by one and appearance by category, and a field is written
+  only whole and only while the character still holds the text that was sent, so a revert
+  landing mid-translation is not overwritten. Answers are matched to what was sent by id, and a
+  failed request returns none, so a source text is never saved as its translation. The
+  protagonist's appearance is
+  listed, but not their description or traits: those are usually the reader's own setup, and
+  the protagonist is in every scene, so every turn would be a chance to rewrite them. Traits
+  and descriptions are replaced whole, like appearance; there is no add or remove. A trait list
+  is cut to the first 8, the most the prompt asks for (`traitList`), and a rewrite that loses
+  traits that way is logged with the other ignored rewrites. A new character takes the status
+  its entry gives, `active` when it gives none. The presence pass counts a character the
+  response creates as in the scene, unless it is created away: then only `presentCharacterNames`
+  brings it in.
+
+  **A character listed under a placeholder is renamed when the story reveals their name.**
+  `characterUpdates[].changes.newName` carries it, under the listed name (`planRename`).
+  What a response does to the cast is planned whole before anything is written
+  (`planCharacterResponse`), and the store, the presence pass and the scene image all read the
+  same plan. Renames apply first, and the rest of the response may name the character either
+  way. A listed name means the character listed under it, so two renames in one response (Bob
+  to Robert, the stranger to Bob) keep two characters, in either order. Each character gets one
+  write, its rename included. A name another character still holds once the other renames are
+  done is refused and logged, because that is a duplicate to merge, not a rename; so is any
+  rename of the protagonist. An update whose
+  listed name matches no one goes to the character holding its new name, or creates one under
+  it from the `newCharacters` entry filed under either name, and answers to both.
 
   **`scene.currentLocationName` is the only thing that moves the scene.** It creates the
   location if the name is new, marks it `current` and `visited`, and clears the previous
@@ -293,14 +348,27 @@ each carrying a `position` and a `branchId`. Almost everything else hangs off th
   the list carries no signal: a salvaged or failed classification, or an empty array — which the
   schema defaults, so "the model said nobody" and "the model did not answer" arrive identically.
   `characterUpdates.status` stays for what the scene states outright, `deceased` above all, and
-  wins over the inference. `appearance:` is sent to the classifier only for characters in the
-  scene, and the template forbids rewriting an appearance it was not shown, so a returning
-  character keeps the descriptors it accumulated.
+  wins over the inference. A character's description, traits and appearance are sent to the
+  classifier only while they are in the scene, and a rewrite of one it was not shown is
+  dropped, so a returning character keeps what it accumulated.
 
-- **`worldStateDelta`** on an entry records what its classification changed, which is what makes
-  retry, time-travel delete and regenerate reversible (`rollbackService`).
-- **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
-  survive an app restart or a story switch. A checkpoint is anchored to its `lastEntryId` and is
+- **State Tracking** (Labs) records every world and lorebook change in `world_state_changes`,
+  which is what makes retry, time-travel delete and regenerate reversible (`rollbackService`) and
+  lets a checkpoint be rebuilt at a past entry.
+  See [state-tracking.md](state-tracking.md).
+- **Checkpoints** are full state snapshots. A story's first turn takes one named "Story start"
+  before it writes anything (`ensureStartCheckpoint`), so a branch can always go back to the
+  beginning, with the edits made before playing. "Not played yet" means the last entry was written
+  by the wizard's opening or a chat import (`isStoryStartEntry`, by `metadata.source`); a
+  regenerate of an imported reply takes it after its undo, on the imported action. It is an
+  ordinary checkpoint, and a failure to take it does not stop the turn. **Retry backups** are
+  in-memory only and do not
+  survive an app restart or a story switch. With State Tracking on, a retry backup copies no world
+  state: the retry rewinds through the records, as a delete does (see
+  [state-tracking.md](state-tracking.md)). The backup says which (`throughRecords`), so turning
+  the feature on or off between a turn and its retry does not pick the wrong path. With it off,
+  the lorebook is left as it is, as before. Either way the entries go through
+  `deleteEntriesFromPosition`, so chapters on them are dropped. A checkpoint is anchored to its `lastEntryId` and is
   deleted with that entry - in the same transaction, alongside the chapters and embedded images
   that reference it. It is the fork point a branch would be created from, so an orphaned one
   yields a branch pointing at an entry the database no longer holds. A reader may delete a
@@ -393,24 +461,30 @@ a switch is queued but unsettled, and `performBranchSwitch` refuses while a leas
 second check sits inside the queued body rather than at `switchBranch`'s entrance, because a switch
 accepted while idle reaches the front of the queue _after_ a generation may have begun.
 
-Two moments are distinct. **Drained** is when the turn's own writes have settled; **finished**
-is when a rewind deferred by Stop has run too, and only then is the branch given up.
+The lease is held until the turn's own writes have settled, and only then is the branch given up.
 
 The lease does **not** cover the post-turn background tasks — chapter creation and lore
 management are started un-awaited and outlive it. Lore management refuses a write whose branch
-has moved (`loreCallbacks.assertScope`); chapter creation does not, so a chapter finished after
-a switch takes its number from the branch now loaded. The row still carries the right branch,
-so this is a numbering fault rather than a misplaced chapter. Analyzed images outlive it too; a
+has moved (`loreCallbacks.assertScope`), and does not start at all once its branch is no longer
+open: the session's input thunk checks first, so it never reasons over another branch's lorebook.
+Chapter creation numbers the chapter from the chapters captured with the turn and passes its
+scope to `story.addChapter`, which always writes the row but adds it to the loaded list only while
+that branch is open. Analyzed images outlive it too; a
 generated portrait is saved only if its story and branch are still open and the character has no
 portrait yet (`story.saveGeneratedPortrait`), and the write — including any copy-on-write
 override — lands on the captured branch and reaches the in-memory list only while that branch is
-still the open one. Stop registers
-its rewind on the lease and waits for it rather than releasing — aborting the request to the model
-is not the completion of the generation's writes, and an `applyClassificationResult` already entered
-keeps going regardless. One release owner throughout, so the rewind cannot race the writes it
-exists to reverse. Once the narration is saved, Stop is refused outright — the button dims and a tap
-explains — since nothing after the narration observes the abort. "Generate a different response"
-refuses it throughout, as its own rewind of the previous turn is already running.
+still the open one. Stop abandons the request and does not release: the holder does, once the turn
+has settled. Stop does not rewind either. Nothing writes the world before the narration, and Stop is
+refused from the moment the narration is complete — the button dims and a tap explains — since nothing
+after it observes the abort. So a Stop on any turn leaves the action as the last entry, and the
+action's card offers **Generate a response** for any action nothing answers, however it got there
+(a Stop, a deleted narration, the app closing mid-turn). While one does, Send waits and explains:
+a second action would bury the first, which nothing answers once another follows it. The input stays
+editable, so what the reader types is kept as a draft until the action has its answer.
+
+A press on Regenerate claims the branch at once (`ui.regeneratePending`), before the previews that
+precede the lease: the entries lock, and the store refuses a new generation or a branch switch as
+if the lease were held. A repeated press starts nothing.
 
 **Why the switch is refused rather than the writes redirected.** `applyClassificationResult` reads
 the active branch and mutates the in-memory `characters`/`locations`/`items`/`storyBeats` arrays,
@@ -457,7 +531,8 @@ Each request is its own step, opened by the caller that knows what it is for and
 `retryOn429Middleware`: a request that needs a second attempt gets one step per attempt (the first
 backfilled) and one per wait the retry middleware schedules. The SDK's own retries re-enter the
 chain and show as attempts; the waits between them are the library's and are not reported. The
-retrieval agent builds its model elsewhere (`sdk/agents/factory.ts`) and has no attempt rows.
+agents, retrieval and lore management, build their model elsewhere (`sdk/agents/factory.ts`) and
+have no attempt rows.
 
 A failed step carries its reason, worded once by `describeActivityError` (status and provider
 message for an API error). Services that absorb a failure into a fallback — translation,
@@ -489,28 +564,229 @@ and the interface reset, so a stored `off` is a choice and is read back as one �
 absent keys only.
 
 A turn's timeline opens by default while it is the latest turn in `tree` mode, and in either
-mode for any turn in which a step failed, a recovered attempt included. A reader's own choice wins.
+mode for any turn in which a step failed, a recovered attempt included, or finished with an error it
+worked around, such as a salvaged classification. A reader's own choice wins until a step fails
+after it: each record counts its failures, and a choice is kept only while that count is unchanged.
+
+The recorder holds several records open at once. A step goes to the record of its parent, or to
+the record named by `recordId`, or else to the newest open turn, which is where every
+generation-path step without a parent has always gone. A parent in an ended record refuses the
+step, so work unwinding from one record cannot land in another. There are two kinds of record:
+`turn`, keyed by the narration entry and bounded by `RETAINED_TURNS`, and `chapter`, keyed by a
+chapter creation card and kept as long as the card.
+
+A turn's record stays open past its narration while its background work runs: **After the turn**
+holds the style review and the chapter check (`BackgroundTaskCoordinator`), and the record ends
+when both have settled. The input is free as soon as the narration is in. A check or review that
+is not due is not recorded, and an empty **After the turn** is dropped. Until a later turn starts,
+the spinner under the latest entry names them ("Checking for a new chapter...",
+`ui.chapterCheckActiveFor`, and the style review's own loading flag). When the check cuts a
+chapter it records a hand-off and the card starts at once, without waiting for the style
+review; the summary and lore management go to the chapter creation card's own record instead:
+lore management's model calls, each named for why the loop makes it (`loreModelCallReason`), each
+followed by its tool calls at the same level, and **Saving changes**, one step per lorebook write,
+after the last call. The agent only approves changes into its ledger; `saveLoreSession` writes
+them once it has finished.
+
+### Chapter creation cards
+
+A chapter cut automatically after a turn is reported by a card in the story, right after the
+narration of the turn that cut it (`ChapterCreationCard.svelte`). The card is virtual: never a
+story entry, never sent to a model or counted, held for the session only
+(`services/chapterCreation/`, wrapped by `stores/chapterCards.svelte.ts`), and shown only on its
+own story and branch. It carries its record with the same line and tree as an entry's report,
+following the reporting setting.
+
+It finishes when lore management finishes: with banners on it names the chapter and offers
+**Go to Chapter N**, landing on the banner, and **Dismiss**; with banners off it reads that
+chapter creation is finished. A failed summary leaves no chapter and offers **Retry**, while
+the span is still the first one no chapter covers, and **Dismiss**; a later turn cuts the span
+again. A retry runs outside the turn's background tasks, so it is put off while another chapter
+check, card or lore management run on the branch is in progress (`cutState`), and `createManualChapter` refuses while a
+card on the branch is pending, as it does during a turn's background tasks. Lore management that fails, or is refused by the branch lock,
+leaves a chapter without its lore, so the card offers **Restart lore management**, recorded as a
+further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Delete, here and
+in the Memory view, is offered only for the branch's last chapter, and `story.deleteChapter`
+refuses any other, and any while `chapterCards.busy`: the next chapter starts where the last ends,
+so an earlier one's entries, or the one a running cut started after, would stay uncut. Deleting a
+chapter, from anywhere, removes its card. A card whose narration a retry or a delete removed is shown after the last entry. Both kinds of
+failure also raise a toast, since the reader may already be on the next turn or another branch.
+
+While a chapter check on a branch is asking the model, a card on it is summarizing or running lore
+management, or any lore management run holds it, a turn on it starts no chapter check
+(`chapterCards.busy`): a second chapter cut meanwhile would cover the same entries, or have
+its own lore management refused.
 
 ## Images
 
-Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenRouter,
-Google, Chutes, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111.
+Nine backends live under `src/lib/services/ai/image/providers/` — NanoGPT, OpenAI, OpenAI Compatible,
+OpenRouter, Google, Z.AI, Pollinations, plus local ComfyUI (workflow-based) and A1111. All of them
+generate through the AI SDK's `generateImage` (`sdkImage.ts`), so retry, abort and the result shape
+are the same everywhere. OpenAI, OpenAI Compatible (a user-supplied proxy), OpenRouter and Google use
+their SDK providers; Pollinations and Z.AI speak the OpenAI image API and reuse the shared
+OpenAI-compatible request (`openaiCompatible.ts`). Three backends have no usable SDK provider and get a small custom
+`ImageModelV4` each:
+
+- **NanoGPT** (`nanogptImage.ts`): its unified `/images` endpoint covers text-to-image and edits in
+  one request and is not the OpenAI shape.
+- **A1111** (`a1111Image.ts`, also Forge, SD.Next and KoboldCpp): no maintained SDK provider speaks
+  its API, and the community package cannot use the app's HTTP transport.
+- **ComfyUI** (`comfyImage.ts`): ComfyUI only announces a finished job over a WebSocket, so the app
+  submits the workflow and checks on the job over plain HTTP instead. That keeps it on the same
+  transport as every other backend. If the user cancels, or the app gives up on a job it has
+  already queued, it tells ComfyUI to cancel that job so the server is not left generating an
+  image nobody will see.
+
+**Supported ComfyUI: 0.26.0 and later** (`MIN_COMFYUI_VERSION` in `comfyImage.ts`). That is the first
+release with a single job-status route and a cancel that can only stop the app's own job, never
+someone else's. Older servers are refused with a message asking the user to update; a server that
+cannot be asked its version is let through.
+
+**A1111 scheduler list: 1.9.1 and later** (`MIN_A1111_SCHEDULERS_VERSION` in `a1111.ts`), the first
+release with `/sdapi/v1/schedulers`. A server without the route still lists its samplers and generates;
+the form says that schedulers need the newer version.
+
+**Parsing replies from these servers.** The parsing of a response follows what the response is for:
+
+1. An error body is read for its message, with the shared `providerMessage` for the common JSON shapes or an
+   adapter's own `safeParse` schema for a stranger one, and falls back to the raw excerpt, so the original
+   failure is never masked.
+2. A reply the operation depends on is parsed with `safeParse`, and a failure throws a readable error whose
+   first line names the endpoint, followed by `z.prettifyError` or a body excerpt. It is never a raw
+   `ZodError` (its message is multi-line JSON and shows as `[`), and never an empty result in its place: a
+   server that answers 200 with something else is not the server the profile names, and the form shows that.
+3. A best-effort probe, such as the ComfyUI system stats or a job cancel, may swallow its failure, because
+   the request that matters reports its own.
+4. In a list, an entry that does not match is skipped; a reply that is not a list throws.
 
 Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four size
-steps — and each adapter turns it into what its backend accepts: an aspect ratio for Google and
-OpenRouter, the model's own published resolution list for NanoGPT, real dimensions for
-ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`). A backend that is handed pixel dimensions
-it does not offer answers with the nearest thing it does, which is not the same picture.
+steps — and each adapter turns it into what its backend accepts: an aspect ratio plus an `imageSize`
+tier where the model has them for Google (its capabilities are a table in the adapter, because
+`models.list` carries none), the closest of the model's own listed ratios plus one of its listed
+resolution tiers for OpenRouter (no tier when it lists none, because a tier is only honoured where
+listed), the model's own published resolution list for NanoGPT, for OpenAI one of the three standard
+sizes where a model takes only those and otherwise real dimensions raised to its pixel floor (its
+capabilities are a table in the adapter, because `/models` carries none; OpenAI Compatible shares the
+step, `pickRequestSize`, with the floor from its capability override), real dimensions for
+ComfyUI/A1111, real dimensions plus one of the model's listed resolution tiers for Pollinations (no
+tier when it lists none, because the pixel count follows the tier where there is one), and a
+snapped-to-grid size inside the model's limits for Z.AI (glm-image, and the CogView models on BigModel;
+its API reference publishes both, because no endpoint lists image models)
+(`src/lib/utils/image.ts`). A backend that is handed pixel dimensions it does not offer answers
+with the nearest thing it does, which is not the same picture.
 
-OpenAI, NanoGPT and Pollinations share one OpenAI-compatible request (`openaiCompatible.ts`):
-`/images/generations`, or `/images/edits` as multipart when there are references. Each keeps its own
-model discovery and size handling. The registry hands references only to the providers that send
-them, cut to the model's `maxReferenceImages` first, and fetches `http(s)` ones to base64, so every
-adapter receives raw base64. A reference URL can come from a discovery card, so it is fetched only
-from a public host and each redirect is checked the same way (`fetchPublicImageBase64`); a name that
-merely resolves to a private address is not caught. A reference that cannot be fetched is dropped
-and the image is generated without it. Google takes them on `gemini-*` image models only; the SDK sends any
-other id down the Imagen path, which rejects input images.
+The output format is a preference, not a request: `systemServicesSettings.imageGeneration.outputFormats`
+is an ordered list of PNG, JPEG and WebP, each with an optional compression level (Settings →
+Advanced → Image Output Format), and it applies to every image. `generateImage` resolves it once,
+with `pickImageOutput` (`src/lib/utils/imageOutput.ts`): the first preferred format the model's
+capabilities list in `outputFormats`, plus compression only when the model lists that format in
+`compressionFormats`. Unknown means unsupported: a model that lists no formats, or none of the
+preferred ones, is sent no format field at all, and so is every model when the list is empty. It is
+decided before the request and never by retrying on an error, because a failed generation may
+already have been billed. Support comes from the OpenAI adapter's table (the GPT image models, which
+the Images API reference documents `output_format` for; an id the table lacks is unknown), from the
+`output_format` and `output_compression` entries in the OpenRouter and NanoGPT catalogues, and, for
+OpenAI Compatible, from the profile's capability override, since those hosts publish nothing.
+Google, Z.AI, Pollinations, ComfyUI and A1111 have no such parameter and return their own format.
+The fields are `providerOptions.openai.outputFormat` and `outputCompression` for OpenAI and
+`output_format` and `output_compression` in the body for the rest; the unrelated `response_format:
+'b64_json'` that OpenAI-shaped hosts are always asked for is unchanged.
+
+Because a portrait can now be stored as JPEG or WebP and later sent as a reference, `generateImage`
+drops a reference whose sniffed type is not in the model's `referenceConstraints.mimeTypes` (NanoGPT
+publishes them), as it does one that cannot be fetched. NanoGPT's route and provider lists are
+normalized (`jpg` is `image/jpeg`, case ignored) before they are intersected, and an animated PNG
+(`image/apng`) counts as `image/png`. A reference whose type cannot be told is kept. Nothing
+downstream assumes a generated image is a PNG: stored images are labelled by sniffing their bytes
+(`normalizeImageDataUrl`).
+
+Only a 429 is retried, because any other failure may already have been billed. The same rule has
+one sharp edge: when a reply gives a URL and the SDK downloads the image itself, a 429 from the
+image host makes the whole generation run again, and it is billed again. The key is sent only to
+the API's own origin, and redirects are checked rather than followed blindly.
+
+Each adapter keeps its own model discovery and size handling; discovery throws on a failed request
+rather than substituting a list. ComfyUI generation reads no model list to choose a workflow: the
+id's `checkpoint:` or `unet:` prefix does, and a UNet text encoder or VAE left blank falls back to
+the first file the server lists. That pick is kept per connection until the connection's model list
+is loaded again; the form shows the first one as the blank field's placeholder. OpenAI Compatible has no standard model list: its filtering and
+capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
+extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
+provider (`PROVIDER_API_KEY` in `providers/connection.ts`, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
+`hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so a
+connection is cut down to the fields its provider has an input for (`imageConnectionFor`) where it
+enters: in the form, and when settings load. The result is an `ImageProviderConnection`, branded so only that
+function makes one; `ImageProfile` extends it and the store takes one to save, so the registry and the
+model-list cache use a connection as given. A leftover base URL is never saved for OpenRouter, nor a
+leftover API key for A1111. A stored profile whose provider this build does not know is skipped on load.
+Discovery (`listModels`, `getSamplerInfo`,
+`listLoras`, `listClipTypes`, `getModelCapabilities`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
+a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
+never cached, even when an adapter answers with a partial one. Model lists are cached for 12 hours per
+connection (`modelListKey`: provider, API key, base URL); a save that changes a profile's connection
+drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. For NanoGPT, OpenRouter, Pollinations and OpenAI Compatible, generation reads a model's capabilities from the connection's cached list by id or alias, so they are no older than the list. A model the list omits is looked up through the provider (`getModelCapabilities`) and kept in a second in-memory cache, 12 hours per connection and model; the lookup is cancelled after 10 seconds. A failed lookup is not retried for 5 minutes and generation proceeds with unknown capabilities. Loading a connection's list clears that second cache for it, and Stop cancels the wait. Nothing is saved on the profile. At the end of startup the lists, and the capabilities of any model they omit, for the profiles in the four image slots are loaded once, so the first image does not wait; a connection shared by several slots is fetched once, and a failure there is only logged and caches nothing. Migration `042` moved image settings that still named an
+API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
+(that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
+`open.bigmodel.cn`, which they used before the default became `api.z.ai`.
+
+A profile may leave its model empty only where the host does not need one
+(`PROVIDER_REQUIRES_MODEL`, read through `providerNeedsModel`): Pollinations, which defaults it,
+OpenAI Compatible, A1111, and a ComfyUI custom workflow, whose checkpoints are the workflow's own.
+The others fail an empty model in `generateImage`, and the vault image tools say so before calling
+it. The SDK writes its model id into every OpenAI-style request, so an empty one is dropped from the
+JSON and the multipart edit body alike, leaving the host's own default. An empty model looks up no
+capabilities.
+
+Every cloud provider except Z.AI takes reference images. A1111 takes them only with its profile
+switch on, and ComfyUI only through a custom workflow's selected nodes. The registry holds each
+provider's reference limit (`PROVIDER_REFERENCE_LIMIT`), downloads nothing for a limit of 0, and
+otherwise fills up to the smaller of that limit and the model's `maxReferenceImages`, fetching
+`http(s)` ones to base64 only as many as there are free slots, so every adapter receives raw base64.
+A reference skipped for its format leaves its slot to the next one; one that fails to download keeps
+its slot. A reference URL can
+come from a discovery card, so it is fetched only from a public host and each redirect is checked
+the same way (`fetchPublicImageBase64`); a name that merely resolves to a private address is not
+caught. A NanoGPT reply that carries a URL instead of base64 is downloaded the same way, and a failed
+download is a plain error, so the 429 retry cannot re-run, and re-bill, the generation. A reference that cannot be fetched is dropped and the image is
+generated without it. Google takes them on every image model it lists.
+
+Two local backends take them differently. A1111 sends them as `extra_images` on the `txt2img`
+request; `init_images` is not used, because that is a canvas to denoise, not a reference. Only
+sd.cpp documents `extra_images` on `txt2img`, and KoboldCpp, built on it, most likely follows;
+stock A1111 and Forge ignore the field. The profile's "Model takes reference images" switch
+(`takesReferences`, off by default) is therefore the only thing that makes the registry send them,
+and keeps the `edit_image` refusal in place for a server that would drop them.
+
+ComfyUI uploads each reference to the server's `temp/aventuras/` folder and writes the file names
+(`… [temp]`) into the custom workflow's selected `LoadImage` nodes in node-id order. Unselected
+nodes keep their saved image. The registry sends at most one reference per selected node, so the
+adapter's drop-with-a-warning only matters to a direct caller. Which nodes are selected is the
+profile's `referenceInputPaths`; when absent, `suggestReferenceInputs` walks the graph downstream
+from each `LoadImage` and de-selects one whose picture reaches a ControlNet, IP-Adapter,
+preprocessor, mask or inpaint node, or is VAE-encoded into a sampler's `latent_image`, unless
+another path reaches a reference consumer (`ReferenceLatent`, `TextEncodeQwenImage*`).
+The server reports node types, not intent, so this is only the default: the picker under the
+workflow summary in the image settings is the authority, and it is pre-filled from the probe when a
+workflow is loaded. The same holds for the rest of a custom workflow's fields. `detectWorkflowFields`
+only pre-fills them: it takes the sampler upstream of the single `SaveImage` (a node with a latent
+and either conditioning or a guider, so custom samplers count), reads the text inputs of the
+encoder nearest its positive conditioning, the same for the negative (a text input another node
+feeds is followed to that node's text, `value` or `string` input, never into a loader, and not to
+any other string widget), and finds the seed on the
+sampler or the noise node it links, or on the source of a seed input another node feeds (a seed- or
+`value`-named input, or the source's only number). A conditioning that leads back to the positive
+encoder through `ConditioningZeroOut` is not a negative. Only a graph with no sampler falls back to
+encoders, and only to one whose title says `positive` or `negative`; a sampler that settled nothing
+leaves the field unset, as does anything else the graph does not settle. The form lists every string
+and number input and every node for the user to choose, and keeps listing a stored choice whose
+input is now linked; a workflow with no prompt input or no output node still saves, but `generateImage` refuses it. Every checked
+prompt input receives the same prompt, so a Flux encoder can fill both `clip_l` and `t5xxl`, and
+every checked negative input receives the negative; an input is one or the other. With no seed input
+the workflow's own seed is used for every image. Names are a hash of the bytes, so an image reused across scenes is stored once,
+and concurrent generations share a pending upload. ComfyUI empties `temp` on restart; a per-profile
+switch (`inputReferences`) uploads to `input/aventuras/` instead, which it never clears. The
+built-in basic, LoRA and UNet workflows take none, so the registry downloads nothing for them
+(`comfyReferenceLimit`).
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see
@@ -520,13 +796,13 @@ handled natively in Rust so the payloads never enter the WebView heap — see
 
 App Transport Security blocks the WebView's `fetch` to plaintext `http://` hosts outside the
 local-network exception, and it does so silently. Local backends therefore make every HTTP call
-through Tauri's HTTP plugin (`imageGetFetch`, or the patched `fetchApi` for ComfyUI, whose SDK
-has no injection point), on every platform. `comfy.test.ts` fails if an SDK upgrade renames the
-members that patch replaces.
+through Tauri's HTTP plugin (`imageGetFetch` for discovery, `createSdkFetch` for generation), on
+every platform.
 
-The ComfyUI SDK also holds a WebSocket, and `CallWrapper` only finishes on events from it, so the
-socket goes through `tauri-plugin-websocket` too (`tauriWebSocket.ts`, passed as
-`customWebSocketImpl`); the WebView's own `ws://` is subject to the same ATS block.
+Neither A1111 nor ComfyUI has working auth of its own, so a server reachable online sits behind a
+proxy or tunnel. Their profiles take an optional API key, sent as `Authorization: Bearer` on every
+request, discovery and generation alike. Basic auth (A1111's `--api-auth`) and multi-header schemes
+such as Cloudflare Access service tokens are not supported.
 
 ## Network transport
 

@@ -16,7 +16,7 @@ are indexed in [docs/README.md](../README.md).
   history, measurements, self-referential prose or restatements. [comments.md](comments.md)
 - Match the surrounding code, unless that means a dated idiom. [code-style.md](code-style.md)
 - Write new code, and code you are already changing, in the current idiom of the installed
-  versions, and name the modernizations in the commit message. [modern-code.md](modern-code.md)
+  versions, keeping the modernizations out of the commit message. [modern-code.md](modern-code.md)
 - Use no JS, CSS or Web API newer than Chrome 111 / Safari 16.4 unless MDN says it works there.
   [platform-support.md](platform-support.md)
 - Read an area's decisions and architecture doc before changing it. Record a decision as an ADR in
@@ -32,7 +32,16 @@ are indexed in [docs/README.md](../README.md).
 - Never write `?? <default>` for a value that has a default in `ai/core/defaults.ts`.
   [code-style.md](code-style.md#defaults)
 - Build a new UI primitive on bits-ui by hand; do not run the shadcn-svelte generator.
+  [ui-components.md](ui-components.md#primitives)
+- Build a modal, a confirmation or a control in a feature colour from the catalog's components.
   [ui-components.md](ui-components.md)
+- Check the Tauri and AI SDK doc indexes before a general web search.
+  [external-docs.md](external-docs.md)
+
+## Prompt templates
+
+- A template change that an edited or custom pack will not pick up gets an
+  `## Updating your prompt pack` section in its PR. [prompt-template-changes.md](prompt-template-changes.md)
 
 ## Tests
 
@@ -46,8 +55,8 @@ are indexed in [docs/README.md](../README.md).
 
 - Send remote HTTP through the plugin helpers, never the WebView's `fetch`.
   [network-requests.md](network-requests.md)
-- After an abort, check `signal.aborted`; the plugin never throws an `AbortError`.
-  [network-requests.md](network-requests.md#what-the-helpers-do-not-do-yet)
+- After an abort without a request guard, check `signal.aborted`; the plugin never throws an
+  `AbortError`. [network-requests.md](network-requests.md#aborts-and-timeouts)
 - Bring in no second TLS provider on the Rust side. [network-requests.md](network-requests.md#rust-side)
 
 ## Database
@@ -59,6 +68,8 @@ are indexed in [docs/README.md](../README.md).
 
 ## Builds and releases
 
+- Read how a generation survives the background on iOS before changing the `generation` plugin;
+  it needs iOS 26 and a real device. [ios-background-generation.md](ios-background-generation.md)
 - Never run `tauri android init` over the tracked `src-tauri/gen/android/`. Generate
   `src-tauri/gen/apple/` only with the bootstrap workflow. [release.md](release.md#building-android),
   [release.md](release.md#building-ios)

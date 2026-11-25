@@ -191,12 +191,12 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
 
   chutes: {
     name: 'Chutes',
-    description: 'Text and image generation',
+    description: 'Text generation',
     baseUrl: 'https://llm.chutes.ai/v1',
     requiresApiKey: true,
     capabilities: {
       textGeneration: true,
-      imageGeneration: true,
+      imageGeneration: false,
       structuredOutput: false,
       reasoning: true,
     },
@@ -382,9 +382,9 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
   },
 
   zhipu: {
-    name: 'Zhipu AI',
-    description: 'GLM models (Chinese AI provider)',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    name: 'Z.AI',
+    description: 'GLM models',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
     requiresApiKey: true,
     capabilities: {
       textGeneration: true,

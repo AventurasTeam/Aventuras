@@ -9,6 +9,7 @@ import { tool } from 'ai'
 import * as z from 'zod'
 import type { VaultScenario } from '#lib/types/index.ts'
 import type { VaultPendingChange } from '../schemas/vault'
+import { withUnsaved } from '#lib/services/ai/vault/effectiveVault.ts'
 import { vaultScenarioInputSchema, vaultScenarioNpcSchema } from '../schemas'
 
 /**
@@ -17,6 +18,7 @@ import { vaultScenarioInputSchema, vaultScenarioNpcSchema } from '../schemas'
 export interface ScenarioToolContext {
   /** Getter for current vault scenarios (live, not snapshot) */
   scenarios: () => VaultScenario[]
+  unsavedFields?: (id: string) => string[]
   /** Callback to register a pending change */
   onPendingChange: (change: VaultPendingChange) => void
   /** Generate unique ID for pending changes */
@@ -44,7 +46,7 @@ export function toScenarioDetails(scenario: VaultScenario) {
  * Create scenario CRUD tools with the given context.
  */
 export function createScenarioTools(context: ScenarioToolContext) {
-  const { scenarios, onPendingChange, generateId } = context
+  const { scenarios, unsavedFields, onPendingChange, generateId } = context
 
   /** Helper to build a scenario input snapshot for `previous` field */
   function toScenarioInput(s: VaultScenario): z.infer<typeof vaultScenarioInputSchema> {
@@ -101,7 +103,10 @@ export function createScenarioTools(context: ScenarioToolContext) {
           return { found: false, error: `Scenario with ID "${scenarioId}" not found` }
         }
 
-        return { found: true, scenario: toScenarioDetails(scenario) }
+        return withUnsaved(
+          { found: true, scenario: toScenarioDetails(scenario) },
+          unsavedFields?.(scenarioId) ?? [],
+        )
       },
     }),
 

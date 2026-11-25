@@ -4,7 +4,7 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: { apiSettings: { llmTimeoutMs: 60_000 } },
 }))
 
-import { retryOn429Middleware } from './retryMiddleware'
+import { retryOn429ImageMiddleware, retryOn429Middleware } from './retryMiddleware'
 
 const rateLimited = (retryAfter?: string) =>
   Object.assign(new Error('Too Many Requests'), {
@@ -92,6 +92,62 @@ describe('retryOn429Middleware', () => {
     const doGenerate = vi.fn().mockRejectedValue(rateLimited())
 
     const result = generate(doGenerate, controller.signal)
+    const settled = expect(result).rejects.toBeDefined()
+    await vi.advanceTimersByTimeAsync(1_000)
+    controller.abort(new Error('stopped'))
+
+    await settled
+    expect(doGenerate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('retryOn429ImageMiddleware', () => {
+  const generateImage = (doGenerate: () => Promise<unknown>, abortSignal?: AbortSignal) =>
+    (retryOn429ImageMiddleware().wrapGenerate as any)({
+      doGenerate,
+      params: { abortSignal },
+      model: {},
+    })
+
+  it('retries a 429 after backing off, and returns the success', async () => {
+    const doGenerate = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimited())
+      .mockResolvedValueOnce({ images: ['AAA'] })
+
+    const result = generateImage(doGenerate)
+    await vi.advanceTimersByTimeAsync(11_000)
+
+    await expect(result).resolves.toEqual({ images: ['AAA'] })
+    expect(doGenerate).toHaveBeenCalledTimes(2)
+  })
+
+  it('waits out a Retry-After longer than the LLM timeout', async () => {
+    const doGenerate = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimited('90'))
+      .mockResolvedValueOnce({ images: ['AAA'] })
+
+    const result = generateImage(doGenerate)
+    await vi.advanceTimersByTimeAsync(90_000)
+
+    await expect(result).resolves.toEqual({ images: ['AAA'] })
+    expect(doGenerate).toHaveBeenCalledTimes(2)
+  })
+
+  it('rethrows at once when Retry-After exceeds the image timeout', async () => {
+    const error = rateLimited('600')
+    const doGenerate = vi.fn().mockRejectedValue(error)
+
+    await expect(generateImage(doGenerate)).rejects.toBe(error)
+    expect(doGenerate).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops waiting when the abort signal in params fires', async () => {
+    const controller = new AbortController()
+    const doGenerate = vi.fn().mockRejectedValue(rateLimited())
+
+    const result = generateImage(doGenerate, controller.signal)
     const settled = expect(result).rejects.toBeDefined()
     await vi.advanceTimersByTimeAsync(1_000)
     controller.abort(new Error('stopped'))

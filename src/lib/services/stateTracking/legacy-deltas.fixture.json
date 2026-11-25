@@ -1,0 +1,756 @@
+{
+  "about": "Old world_state_delta values and the world_state_changes rows they convert to. Asserted against fromWorldStateDelta (legacy.test.ts) and migration 041 (src-tauri/src/world_state_delta_migration.rs). Rows are listed in the seq order 041 gives them.",
+  "entries": [
+    {
+      "id": "e1",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 1,
+      "createdAt": 1001,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "a scene move to an existing location" },
+        "previousState": {
+          "characters": [
+            {
+              "id": "c1",
+              "name": "Aria",
+              "status": "active",
+              "relationship": "ally",
+              "traits": ["brave"],
+              "visualDescriptors": {},
+              "metadata": null
+            }
+          ],
+          "locations": [
+            {
+              "id": "loc-2",
+              "name": "Docks",
+              "visited": false,
+              "current": false,
+              "description": null,
+              "metadata": null
+            }
+          ],
+          "items": [
+            {
+              "id": "i1",
+              "name": "Lamp",
+              "quantity": 1,
+              "equipped": false,
+              "location": "inventory",
+              "metadata": null
+            }
+          ],
+          "storyBeats": [
+            {
+              "id": "sb1",
+              "title": "Find the map",
+              "status": "pending",
+              "description": "Somewhere in the docks",
+              "resolvedAt": null,
+              "metadata": { "runtimeVars": { "clue": 2 } }
+            }
+          ],
+          "currentLocationId": "loc-1",
+          "timeTracker": { "years": 0, "days": 1, "hours": 2, "minutes": 0 }
+        },
+        "createdEntities": {
+          "characterIds": ["c-new"],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e2",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 2,
+      "createdAt": 1002,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "a scene move to a created location" },
+        "previousState": {
+          "characters": [],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": "loc-2",
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": ["loc-stub"],
+          "itemIds": ["i-new"],
+          "storyBeatIds": ["sb-new"]
+        }
+      }
+    },
+    {
+      "id": "e3",
+      "storyId": "s1",
+      "branchId": "b1",
+      "position": 3,
+      "createdAt": 1003,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "a scene move on a lightweight branch, both rows copied" },
+        "previousState": {
+          "characters": [],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": "loc-stub",
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": ["loc-stub-b1", "loc-1-b1"],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e4",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 4,
+      "createdAt": 1004,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "the scene did not move" },
+        "previousState": {
+          "characters": [],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": "loc-1",
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e5",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 5,
+      "createdAt": 1005,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "written before currentLocationId existed" },
+        "previousState": {
+          "characters": [
+            {
+              "id": "c1",
+              "name": "Aria",
+              "status": "injured",
+              "relationship": "ally",
+              "traits": [],
+              "visualDescriptors": {}
+            }
+          ],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e6",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 6,
+      "createdAt": 1006,
+      "worldStateDelta": {
+        "classificationResult": {},
+        "previousState": {
+          "characters": [],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": null,
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e7",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 7,
+      "createdAt": 1007,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "the scene's own before-state is listed" },
+        "previousState": {
+          "characters": [],
+          "locations": [
+            {
+              "id": "loc-1",
+              "name": "Inn",
+              "visited": true,
+              "current": true,
+              "description": "Warm",
+              "metadata": null
+            }
+          ],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": "loc-1",
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e8",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 8,
+      "createdAt": 1008,
+      "worldStateDelta": "{\"previousState\": {not json"
+    },
+    {
+      "id": "e9",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 9,
+      "createdAt": 1009,
+      "worldStateDelta": {
+        "classificationResult": { "raw": "regenerated since, so it has a header of its own" },
+        "previousState": {
+          "characters": [
+            {
+              "id": "c1",
+              "name": "Aria",
+              "status": "lost",
+              "relationship": "ally",
+              "traits": [],
+              "visualDescriptors": {}
+            }
+          ],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": "loc-1",
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    },
+    {
+      "id": "e10",
+      "storyId": "s1",
+      "branchId": null,
+      "position": 10,
+      "createdAt": 1010,
+      "worldStateDelta": null
+    },
+    {
+      "id": "e11",
+      "storyId": "s2",
+      "branchId": null,
+      "position": 1,
+      "createdAt": 2001,
+      "worldStateDelta": {
+        "classificationResult": {},
+        "previousState": {
+          "characters": [],
+          "locations": [],
+          "items": [],
+          "storyBeats": [],
+          "currentLocationId": null,
+          "timeTracker": null
+        },
+        "createdEntities": {
+          "characterIds": [],
+          "locationIds": [],
+          "itemIds": [],
+          "storyBeatIds": []
+        }
+      }
+    }
+  ],
+  "existing": [
+    {
+      "id": "h9",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e9",
+      "seq": 1,
+      "kind": "header",
+      "origin": null,
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 1,
+      "created_at": 5000
+    },
+    {
+      "id": "m9",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e9",
+      "seq": 2,
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "character",
+      "entity_id": "c1",
+      "op": "update",
+      "before": { "status": "active" },
+      "after": null,
+      "continuous": null,
+      "created_at": 5000
+    }
+  ],
+  "converted": [
+    {
+      "id": "e1:header",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1001
+    },
+    {
+      "id": "e1:1",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "character",
+      "entity_id": "c1",
+      "op": "update",
+      "before": {
+        "status": "active",
+        "relationship": "ally",
+        "traits": ["brave"],
+        "visualDescriptors": {},
+        "metadata": null
+      },
+      "after": null,
+      "continuous": null,
+      "created_at": 1001
+    },
+    {
+      "id": "e1:2",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-2",
+      "op": "update",
+      "before": { "visited": false, "current": false, "description": null, "metadata": null },
+      "after": null,
+      "continuous": null,
+      "created_at": 1001
+    },
+    {
+      "id": "e1:3",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "item",
+      "entity_id": "i1",
+      "op": "update",
+      "before": { "quantity": 1, "equipped": false, "location": "inventory", "metadata": null },
+      "after": null,
+      "continuous": null,
+      "created_at": 1001
+    },
+    {
+      "id": "e1:4",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "story_beat",
+      "entity_id": "sb1",
+      "op": "update",
+      "before": {
+        "status": "pending",
+        "description": "Somewhere in the docks",
+        "resolvedAt": null,
+        "metadata": { "runtimeVars": { "clue": 2 } }
+      },
+      "after": null,
+      "continuous": null,
+      "created_at": 1001
+    },
+    {
+      "id": "e1:5",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-1",
+      "op": "update",
+      "before": { "current": true },
+      "after": null,
+      "continuous": null,
+      "created_at": 1001
+    },
+    {
+      "id": "e1:6",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e1",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "character",
+      "entity_id": "c-new",
+      "op": "create",
+      "before": null,
+      "after": null,
+      "continuous": null,
+      "created_at": 1001
+    },
+
+    {
+      "id": "e2:header",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e2",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1002
+    },
+    {
+      "id": "e2:1",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e2",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-2",
+      "op": "update",
+      "before": { "current": true },
+      "after": null,
+      "continuous": null,
+      "created_at": 1002
+    },
+    {
+      "id": "e2:2",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e2",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-stub",
+      "op": "create",
+      "before": null,
+      "after": null,
+      "continuous": null,
+      "created_at": 1002
+    },
+    {
+      "id": "e2:3",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e2",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "item",
+      "entity_id": "i-new",
+      "op": "create",
+      "before": null,
+      "after": null,
+      "continuous": null,
+      "created_at": 1002
+    },
+    {
+      "id": "e2:4",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e2",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "story_beat",
+      "entity_id": "sb-new",
+      "op": "create",
+      "before": null,
+      "after": null,
+      "continuous": null,
+      "created_at": 1002
+    },
+
+    {
+      "id": "e3:header",
+      "story_id": "s1",
+      "branch_id": "b1",
+      "entry_id": "e3",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1003
+    },
+    {
+      "id": "e3:1",
+      "story_id": "s1",
+      "branch_id": "b1",
+      "entry_id": "e3",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-stub",
+      "op": "update",
+      "before": { "current": true },
+      "after": null,
+      "continuous": null,
+      "created_at": 1003
+    },
+    {
+      "id": "e3:2",
+      "story_id": "s1",
+      "branch_id": "b1",
+      "entry_id": "e3",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-stub-b1",
+      "op": "create",
+      "before": null,
+      "after": null,
+      "continuous": null,
+      "created_at": 1003
+    },
+    {
+      "id": "e3:3",
+      "story_id": "s1",
+      "branch_id": "b1",
+      "entry_id": "e3",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-1-b1",
+      "op": "create",
+      "before": null,
+      "after": null,
+      "continuous": null,
+      "created_at": 1003
+    },
+
+    {
+      "id": "e4:header",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e4",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1004
+    },
+    {
+      "id": "e4:1",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e4",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-1",
+      "op": "update",
+      "before": { "current": true },
+      "after": null,
+      "continuous": null,
+      "created_at": 1004
+    },
+
+    {
+      "id": "e5:header",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e5",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1005
+    },
+    {
+      "id": "e5:1",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e5",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "character",
+      "entity_id": "c1",
+      "op": "update",
+      "before": {
+        "status": "injured",
+        "relationship": "ally",
+        "traits": [],
+        "visualDescriptors": {}
+      },
+      "after": null,
+      "continuous": null,
+      "created_at": 1005
+    },
+
+    {
+      "id": "e6:header",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e6",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1006
+    },
+
+    {
+      "id": "e7:header",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e7",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 1007
+    },
+    {
+      "id": "e7:1",
+      "story_id": "s1",
+      "branch_id": null,
+      "entry_id": "e7",
+      "kind": "change",
+      "origin": "classifier",
+      "entity_type": "location",
+      "entity_id": "loc-1",
+      "op": "update",
+      "before": { "visited": true, "current": true, "description": "Warm", "metadata": null },
+      "after": null,
+      "continuous": null,
+      "created_at": 1007
+    },
+
+    {
+      "id": "e11:header",
+      "story_id": "s2",
+      "branch_id": null,
+      "entry_id": "e11",
+      "kind": "header",
+      "origin": "legacy",
+      "entity_type": null,
+      "entity_id": null,
+      "op": null,
+      "before": null,
+      "after": null,
+      "continuous": 0,
+      "created_at": 2001
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "cp1",
+      "storyId": "s1",
+      "entriesSnapshot": [
+        {
+          "id": "e1",
+          "content": "First",
+          "position": 1,
+          "worldStateDelta": { "previousState": { "characters": [] }, "createdEntities": {} }
+        },
+        { "id": "e2", "content": "Second", "position": 2, "worldStateDelta": null },
+        {
+          "id": "e3",
+          "content": "Third",
+          "position": 3,
+          "metadata": { "timeEnd": { "years": 0, "days": 1, "hours": 0, "minutes": 0 } }
+        }
+      ],
+      "expected": [
+        { "id": "e1", "content": "First", "position": 1 },
+        { "id": "e2", "content": "Second", "position": 2 },
+        {
+          "id": "e3",
+          "content": "Third",
+          "position": 3,
+          "metadata": { "timeEnd": { "years": 0, "days": 1, "hours": 0, "minutes": 0 } }
+        }
+      ]
+    },
+    {
+      "id": "cp2",
+      "storyId": "s1",
+      "entriesSnapshot": [{ "id": "e1", "content": "First", "position": 1 }],
+      "expected": [{ "id": "e1", "content": "First", "position": 1 }]
+    }
+  ]
+}

@@ -148,7 +148,7 @@ export default [
       'node_modules/',
       '.npm-cache/',
       'src-tauri/',
-      '.release-pre3-check/',
+      '.delta/',
     ],
   },
   {
@@ -201,6 +201,25 @@ export default [
               },
               message:
                 'Import from the service public API (index.ts), not internal modules. Use relative imports within the same service.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.{ts,svelte}'],
+    ignores: ['src/lib/services/http/httpFetch.ts', '**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@tauri-apps/plugin-http',
+              importNames: ['fetch'],
+              message:
+                "Use httpFetch from '#lib/services/http/index.ts'; it drops the webview Origin.",
             },
           ],
         },

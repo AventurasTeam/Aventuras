@@ -8,10 +8,13 @@
     ref = $bindable(null),
     class: className,
     portalProps,
+    handle = true,
     children,
     ...restProps
   }: DrawerPrimitive.ContentProps & {
     portalProps?: DrawerPrimitive.PortalProps
+    /** `false` for content that draws the handle itself, as `shared/ModalHeader` does. */
+    handle?: boolean
   } = $props()
 </script>
 
@@ -25,7 +28,9 @@
     )}
     {...restProps}
   >
-    <DrawerHandle />
+    {#if handle}
+      <DrawerHandle />
+    {/if}
     {@render children?.()}
   </DrawerPrimitive.Content>
 </DrawerPrimitive.Portal>

@@ -12,6 +12,8 @@
     onOpenChange?: OnChangeFn<boolean>
     /** Drawer-only: `false` stops the swipe-down gesture. The desktop dialog has no equivalent. */
     dismissible?: boolean
+    /** `false` keeps a dialog at every width instead of a sheet on a phone. */
+    sheet?: boolean
     children: Snippet
     [key: string]: unknown
   }
@@ -20,12 +22,20 @@
     open = $bindable(false),
     onOpenChange,
     dismissible = true,
+    sheet = true,
     children,
     ...props
   }: Props = $props()
 
   const isMobile = createIsMobile()
-  setResponsiveModalContext({ isMobile })
+  // The parts read this to pick the drawer's or the dialog's variant.
+  setResponsiveModalContext({
+    isMobile: {
+      get current() {
+        return isMobile.current && sheet
+      },
+    },
+  })
 
   function handleOpenChange(newOpen: boolean) {
     if (!newOpen) blurFocusedElement(isMobile.current)
@@ -33,7 +43,7 @@
   }
 </script>
 
-{#if isMobile.current}
+{#if isMobile.current && sheet}
   <Drawer.Root bind:open {dismissible} onOpenChange={handleOpenChange} {...props}>
     {@render children?.()}
   </Drawer.Root>

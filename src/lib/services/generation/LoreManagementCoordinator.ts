@@ -15,18 +15,38 @@ import type {
 } from '#lib/types/index.ts'
 import { createLogger } from '#lib/log.ts'
 import { branchScopeKey } from '#lib/utils/branchScope.ts'
+import {
+  describeActivityError,
+  failStep,
+  type ActivityReporter,
+  type StartStepOptions,
+} from '#lib/services/activity/index.ts'
 
 const log = createLogger('LoreManagementCoordinator')
 
 /** How long the completion message stays up after the run is over. */
 const COMPLETION_LINGER_MS = 2000
 
+/** Why a session refused by the branch lock did not run. */
+export const LORE_SESSION_BUSY = 'Another lore management run was in progress'
+
+/** An approved session's writes, in the order they apply. */
+export interface LoreSessionWrites {
+  creates: Entry[]
+  updates: Entry[]
+  merges: { sourceIds: string[]; merged: Entry }[]
+  deletes: string[]
+}
+
 export interface LoreManagementCallbacks {
-  onCreateEntry: (entry: Entry) => Promise<void>
-  onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-  onDeleteEntry: (id: string) => Promise<void>
-  onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
-  onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>
+  /** Writes every change of an approved session, with its records, or none of them. */
+  onSaveSession: (writes: LoreSessionWrites) => Promise<void>
+  /** `activityParentId`: the read's own step, when the run is recorded. */
+  onQueryChapter?: (
+    chapterNumber: number,
+    question: string,
+    activityParentId?: string,
+  ) => Promise<string>
   /**
    * Pairs already declared distinct, by the user or by an earlier run.
    *
@@ -48,7 +68,8 @@ export interface LoreManagementUICallbacks {
    * `onComplete` two seconds later — and this is the only record of what a run did.
    */
   onSummary?: (summary: string, changeCount: number) => void
-  onError?: (error: string) => void
+  /** `failed`: the chapter session that failed and how it read; absent for a Tidy or batch run. */
+  onError?: (error: string, failed?: { chapter: Chapter; readAfterChapter: boolean }) => void
   onComplete: () => void
 }
 
@@ -76,6 +97,8 @@ export interface LoreSessionInput {
   newChapter?: LoreNewChapterInput
   /** The story's Buffer Messages; sizes the post-chapter tail when `chapterBufferTail` is on. */
   chapterBuffer?: number
+  /** Off, a chapter session read nothing after its chapter; a retry reads the same. */
+  readAfterChapter?: boolean
 }
 
 export type LoreRunOptions = Pick<
@@ -92,7 +115,15 @@ export interface LoreManagementDependencies {
     chapters: Chapter[],
     callbacks: LoreManagementCallbacks,
     options: LoreRunOptions,
+    activityParentId?: string,
   ) => Promise<LoreManagementResult>
+}
+
+/** Where a session records itself: one step, placed by `placement`, holding its work. */
+export interface LoreSessionActivity {
+  activity: ActivityReporter
+  placement: Pick<StartStepOptions, 'parentId' | 'recordId'>
+  label?: string
 }
 
 export interface LoreSessionResult {
@@ -101,6 +132,8 @@ export interface LoreSessionResult {
   changeCount: number
   /** Nothing ran: another session already holds this story. See `runningStories`. */
   skipped?: boolean
+  /** Why the session did not complete, as the reader is shown it. */
+  error?: string
 }
 
 /**
@@ -145,13 +178,21 @@ export class LoreManagementCoordinator {
     input: LoreSessionInput,
     callbacks: LoreManagementCallbacks,
     uiCallbacks?: LoreManagementUICallbacks,
+    reporting?: LoreSessionActivity,
   ): Promise<LoreSessionResult> {
+    const label = reporting?.label ?? 'Lore management'
     const key = branchScopeKey(input.storyId, input.currentBranchId)
     if (runningBranches.has(key)) {
       log('Session already running for this branch, skipping', { key })
-      return { completed: false, changeCount: 0, skipped: true }
+      reporting?.activity.recordStep(label, {
+        ...reporting.placement,
+        status: 'skipped',
+        detail: LORE_SESSION_BUSY,
+      })
+      return { completed: false, changeCount: 0, skipped: true, error: LORE_SESSION_BUSY }
     }
     runningBranches.add(key)
+    const stepId = reporting?.activity.startStep(label, reporting.placement) ?? ''
 
     log('Starting lore management session', { key })
 
@@ -163,11 +204,8 @@ export class LoreManagementCoordinator {
     }
     uiCallbacks?.onStart()
 
-    let changeCount = 0
-    const bumpChanges = (delta = 1) => {
-      changeCount += delta
-      return changeCount
-    }
+    // The session saves once, so nothing is saved until all of it is.
+    let saved = 0
 
     // The completion message is left up for a moment, but the lock is not: it is released
     // as soon as the writes are done, so the next run is not blocked by a UI delay.
@@ -188,21 +226,15 @@ export class LoreManagementCoordinator {
         input.recentEntries,
         input.chapters,
         {
-          onCreateEntry: async (entry) => {
-            await callbacks.onCreateEntry(entry)
-            uiCallbacks?.onProgress('Creating entries...', bumpChanges())
-          },
-          onUpdateEntry: async (id, updates) => {
-            await callbacks.onUpdateEntry(id, updates)
-            uiCallbacks?.onProgress('Updating entries...', bumpChanges())
-          },
-          onDeleteEntry: async (id) => {
-            await callbacks.onDeleteEntry(id)
-            uiCallbacks?.onProgress('Cleaning up entries...', bumpChanges())
-          },
-          onMergeEntries: async (entryIds, mergedEntry) => {
-            await callbacks.onMergeEntries(entryIds, mergedEntry)
-            uiCallbacks?.onProgress('Merging entries...', bumpChanges())
+          onSaveSession: async (writes) => {
+            uiCallbacks?.onProgress('Saving changes...', 0)
+            await callbacks.onSaveSession(writes)
+            saved =
+              writes.creates.length +
+              writes.updates.length +
+              writes.merges.length +
+              writes.deletes.length
+            uiCallbacks?.onProgress('Saved changes', saved)
           },
           onQueryChapter: callbacks.onQueryChapter,
           getKeptSeparate: callbacks.getKeptSeparate,
@@ -216,6 +248,7 @@ export class LoreManagementCoordinator {
           newChapter: input.newChapter,
           chapterBuffer: input.chapterBuffer,
         },
+        stepId || undefined,
       )
 
       log('Lore management complete', {
@@ -226,6 +259,8 @@ export class LoreManagementCoordinator {
       uiCallbacks?.onProgress(`Complete: ${result.summary}`, result.changes.length)
       uiCallbacks?.onSummary?.(result.summary, result.changes.length)
       finishUI()
+      const count = result.changes.length
+      reporting?.activity.endStep(stepId, 'done', `${count} ${count === 1 ? 'change' : 'changes'}`)
 
       return {
         completed: true,
@@ -235,14 +270,22 @@ export class LoreManagementCoordinator {
     } catch (error) {
       log('Lore management failed', error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      uiCallbacks?.onError?.(errorMessage)
+      uiCallbacks?.onError?.(
+        errorMessage,
+        input.newChapter && {
+          chapter: input.newChapter.chapter,
+          readAfterChapter: input.readAfterChapter ?? true,
+        },
+      )
+      if (reporting) failStep(reporting.activity, stepId, error)
 
       // Still clear the UI state: a failed run must not leave the lorebook read-only.
       finishUI()
 
       return {
         completed: false,
-        changeCount,
+        changeCount: saved,
+        error: describeActivityError(error),
       }
     } finally {
       runningBranches.delete(key)

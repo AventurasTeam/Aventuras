@@ -1,14 +1,13 @@
 <script lang="ts">
   import { Drawer as DrawerPrimitive } from 'vaul-svelte'
   import { isAndroid } from '#lib/utils/platform.ts'
-  import { DRAWER_CLOSE_THRESHOLD } from './swipe-guard'
 
   let {
     shouldScaleBackground = true,
     open = $bindable(false),
     activeSnapPoint = $bindable(null),
     handleOnly = true,
-    closeThreshold = DRAWER_CLOSE_THRESHOLD,
+    closeThreshold = 0.75,
     // On Android the keyboard shrinks the layout viewport itself; see overview.md, "The soft keyboard".
     repositionInputs = !isAndroid(),
     ...restProps

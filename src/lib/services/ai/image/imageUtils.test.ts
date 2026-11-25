@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ImageProviderType } from '#lib/types/index.ts'
 import type { ImageProfileSlot } from './imageUtils'
 
 const state = {
@@ -7,8 +8,18 @@ const state = {
     backgroundProfileId: null as string | null,
     portraitProfileId: null as string | null,
     referenceProfileId: null as string | null,
+    size: { orientation: 'square' as const, size: 'medium' as const },
   },
-  profiles: {} as Record<string, { id: string; providerType: string; apiKey: string }>,
+  profiles: {} as Record<
+    string,
+    {
+      id: string
+      providerType: ImageProviderType
+      apiKey: string
+      baseUrl?: string
+      model?: string
+    }
+  >,
 }
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
@@ -25,12 +36,53 @@ vi.mock('#lib/stores/settings.svelte.ts', () => ({
   },
 }))
 
-vi.mock('./providers/registry', () => ({
-  supportsImageGeneration: (providerType: string) => providerType !== 'no-backend',
-  requiresApiKey: (providerType: string) => providerType === 'openai',
+const updateEmbeddedImage = vi.fn(async (_id: string, _updates: unknown) => {})
+const cancelEmbeddedImage = vi.fn(async (_id: string) => true)
+const failEmbeddedImage = vi.fn(async (_id: string, _errorMessage: string) => {})
+const getEmbeddedImage = vi.fn(
+  async (_id: string): Promise<{ entryId: string; imageData?: string } | null> => ({
+    entryId: 'entry',
+  }),
+)
+const emitImageQueued = vi.fn()
+const emitImageReady = vi.fn()
+const emitImageAnalysisFailed = vi.fn()
+
+vi.mock('#lib/services/database.ts', () => ({
+  database: {
+    updateEmbeddedImage: (id: string, updates: unknown) => updateEmbeddedImage(id, updates),
+    cancelEmbeddedImage: (id: string) => cancelEmbeddedImage(id),
+    failEmbeddedImage: (id: string, errorMessage: string) => failEmbeddedImage(id, errorMessage),
+    getEmbeddedImage: (id: string) => getEmbeddedImage(id),
+  },
 }))
 
-const { isImageGenerationEnabled, hasRequiredCredentials } = await import('./imageUtils')
+vi.mock('#lib/services/events.ts', () => ({
+  emitImageQueued: (...args: unknown[]) => emitImageQueued(...args),
+  emitImageReady: (...args: unknown[]) => emitImageReady(...args),
+  emitImageAnalysisFailed: (...args: unknown[]) => emitImageAnalysisFailed(...args),
+}))
+
+const warmImageCapabilities = vi.fn(async (_profiles: unknown[]) => {})
+const generateImage = vi.fn(async (_options: unknown) => ({ base64: 'PORTRAIT' }))
+
+vi.mock('./providers/registry', () => ({
+  IMAGE_PROVIDER_LABELS: { openai: 'OpenAI' },
+  warmImageCapabilities: (profiles: unknown[]) => warmImageCapabilities(profiles),
+  generateImage: (options: unknown) => generateImage(options),
+}))
+
+const {
+  isImageGenerationEnabled,
+  hasRequiredCredentials,
+  missingCredential,
+  warmSlotCapabilities,
+  generatePortrait,
+  runImageGeneration,
+  retryImageGeneration,
+  beginImageAttempt,
+  cancelImageGeneration,
+} = await import('./imageUtils')
 
 const SLOTS: ImageProfileSlot[] = ['standard', 'background', 'portrait', 'reference']
 
@@ -50,37 +102,28 @@ beforeEach(() => {
   setSlotIds('p-std', null, null, null)
   state.profiles = {
     'p-std': { id: 'p-std', providerType: 'openai', apiKey: '' },
-    'p-bg': { id: 'p-bg', providerType: 'local', apiKey: '' },
-    'p-port': { id: 'p-port', providerType: 'local', apiKey: '' },
-    'p-ref': { id: 'p-ref', providerType: 'local', apiKey: '' },
-    'p-local': { id: 'p-local', providerType: 'local', apiKey: '' },
+    'p-bg': { id: 'p-bg', providerType: 'a1111', apiKey: '' },
+    'p-port': { id: 'p-port', providerType: 'a1111', apiKey: '' },
+    'p-ref': { id: 'p-ref', providerType: 'a1111', apiKey: '' },
+    'p-local': { id: 'p-local', providerType: 'a1111', apiKey: '' },
   }
 })
 
 describe('hasRequiredCredentials', () => {
-  it('does not fall back to the standard profile for background', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(hasRequiredCredentials('background')).toBe(false)
-  })
-
   it('is true when the background profile supports generation and needs no api key', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 
     expect(hasRequiredCredentials('background')).toBe(true)
   })
 
-  it('does not fall back to the standard profile for portrait', () => {
-    setSlotIds('p-std', null, null, null)
+  it.each(['background', 'portrait', 'reference'] satisfies ImageProfileSlot[])(
+    'does not fall back to the standard profile for %s',
+    (slot) => {
+      setSlotIds('p-std', null, null, null)
 
-    expect(hasRequiredCredentials('portrait')).toBe(false)
-  })
-
-  it('does not fall back to the standard profile for reference', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(hasRequiredCredentials('reference')).toBe(false)
-  })
+      expect(hasRequiredCredentials(slot)).toBe(false)
+    },
+  )
 
   it('requires the api key when the provider needs one', () => {
     setSlotIds('p-std', null, null, null)
@@ -91,21 +134,53 @@ describe('hasRequiredCredentials', () => {
 
     expect(hasRequiredCredentials('standard')).toBe(true)
   })
+
+  it('requires a base URL when the provider has no endpoint of its own', () => {
+    setSlotIds('p-proxy', null, null, null)
+    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'openai-compatible', apiKey: '' }
+
+    expect(hasRequiredCredentials('standard')).toBe(false)
+
+    state.profiles['p-proxy'].baseUrl = '   '
+    expect(hasRequiredCredentials('standard')).toBe(false)
+
+    state.profiles['p-proxy'].baseUrl = 'http://localhost:4000/v1'
+    expect(hasRequiredCredentials('standard')).toBe(true)
+  })
+})
+
+describe('missingCredential', () => {
+  it("names the slot's profile when none is set", () => {
+    setSlotIds('p-std', null, null, null)
+    expect(missingCredential('background')).toBe('profile')
+  })
+
+  it('names the api key or the base URL, whichever is missing', () => {
+    state.profiles['p-proxy'] = { id: 'p-proxy', providerType: 'openai-compatible', apiKey: '' }
+    setSlotIds('p-proxy', null, null, null)
+    expect(missingCredential()).toBe('baseUrl')
+
+    state.profiles['p-std'].apiKey = ''
+    setSlotIds('p-std', null, null, null)
+    expect(missingCredential()).toBe('apiKey')
+  })
+
+  it.each(['a1111', 'comfyui'] as const)(
+    'does not ask a %s profile for an api key',
+    (providerType) => {
+      state.profiles['p-local'] = { id: 'p-local', providerType, apiKey: '' }
+      setSlotIds('p-local', null, null, null)
+      expect(missingCredential()).toBeUndefined()
+    },
+  )
+
+  it('is undefined once the slot is usable', () => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    expect(missingCredential()).toBeUndefined()
+  })
 })
 
 describe('isImageGenerationEnabled', () => {
-  it('is false for background when backgroundProfileId is unset, even with a standard profile', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(isImageGenerationEnabled(undefined, 'background')).toBe(false)
-  })
-
-  it('is true for standard when the profile supports generation', () => {
-    setSlotIds('p-std', null, null, null)
-
-    expect(isImageGenerationEnabled(undefined, 'standard')).toBe(true)
-  })
-
   it('is false for non-background slots when generation mode is none', () => {
     setSlotIds('p-std', 'p-bg', null, null)
 
@@ -163,4 +238,389 @@ describe('agreement between isImageGenerationEnabled and hasRequiredCredentials'
       })
     }
   }
+})
+
+describe('warmSlotCapabilities', () => {
+  beforeEach(() => {
+    warmImageCapabilities.mockClear()
+  })
+
+  it('passes the profile of every slot that is ready, in slot order', async () => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    setSlotIds('p-std', 'p-bg', 'p-port', 'p-ref')
+
+    await warmSlotCapabilities()
+
+    expect(warmImageCapabilities).toHaveBeenCalledWith([
+      state.profiles['p-std'],
+      state.profiles['p-bg'],
+      state.profiles['p-port'],
+      state.profiles['p-ref'],
+    ])
+  })
+
+  it('leaves out a slot with no profile, a missing profile, or missing credentials', async () => {
+    setSlotIds('p-std', 'p-gone', null, 'p-ref')
+
+    await warmSlotCapabilities()
+
+    expect(warmImageCapabilities).toHaveBeenCalledWith([state.profiles['p-ref']])
+  })
+})
+
+describe('generatePortrait', () => {
+  beforeEach(() => {
+    generateImage.mockClear()
+  })
+
+  it('generates with a profile that names no model', async () => {
+    setSlotIds('p-std', null, 'p-port', null)
+
+    await expect(generatePortrait('a face')).resolves.toBe('PORTRAIT')
+
+    expect(generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({ profileId: 'p-port', model: '', prompt: 'a face' }),
+    )
+  })
+
+  it('refuses when no portrait profile is set', async () => {
+    await expect(generatePortrait('a face')).rejects.toThrow('No image generation profile')
+    expect(generateImage).not.toHaveBeenCalled()
+  })
+})
+
+const deferred = () => {
+  let resolve: () => void = () => {}
+  const promise = new Promise<void>((done) => (resolve = done))
+  return { promise, resolve }
+}
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+describe('retryImageGeneration', () => {
+  beforeEach(() => {
+    state.profiles['p-std'].apiKey = 'sk-test'
+    getEmbeddedImage.mockReset()
+    getEmbeddedImage.mockResolvedValue({ entryId: 'entry' })
+    generateImage.mockReset()
+    generateImage.mockResolvedValue({ base64: 'PIXELS' })
+    updateEmbeddedImage.mockClear()
+    failEmbeddedImage.mockClear()
+    emitImageQueued.mockClear()
+    emitImageReady.mockClear()
+  })
+
+  const expectUntouched = () => {
+    expect(getEmbeddedImage).not.toHaveBeenCalled()
+    expect(updateEmbeddedImage).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
+  }
+
+  it('returns the api key, and touches nothing, when the profile has none', async () => {
+    state.profiles['p-std'].apiKey = ''
+
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBe('apiKey')
+
+    expectUntouched()
+  })
+
+  it('returns the profile, and touches nothing, when none is selected', async () => {
+    setSlotIds(null, null, null, null)
+
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBe('profile')
+
+    expectUntouched()
+  })
+
+  it('returns nothing, and generates nothing, when the row is gone', async () => {
+    getEmbeddedImage.mockResolvedValue(null)
+
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBeUndefined()
+
+    expect(updateEmbeddedImage).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
+  })
+
+  it('regenerates the row and announces it', async () => {
+    await expect(retryImageGeneration('img', 'a scene')).resolves.toBeUndefined()
+
+    expect(updateEmbeddedImage).toHaveBeenNthCalledWith(
+      1,
+      'img',
+      expect.objectContaining({ prompt: 'a scene', status: 'generating' }),
+    )
+    expect(updateEmbeddedImage).toHaveBeenLastCalledWith('img', {
+      imageData: 'PIXELS',
+      status: 'complete',
+    })
+    expect(emitImageQueued).toHaveBeenCalledWith('img', 'entry')
+  })
+
+  describe('a row that already holds pixels', () => {
+    beforeEach(() => {
+      getEmbeddedImage.mockResolvedValue({ entryId: 'entry', imageData: 'OLD' })
+    })
+
+    it('flips only the status, and writes the new description with the new image', async () => {
+      await retryImageGeneration('img', 'a scene')
+
+      expect(updateEmbeddedImage).toHaveBeenNthCalledWith(1, 'img', { status: 'generating' })
+      expect(updateEmbeddedImage).toHaveBeenLastCalledWith(
+        'img',
+        expect.objectContaining({
+          prompt: 'a scene',
+          imageData: 'PIXELS',
+          status: 'complete',
+        }),
+      )
+    })
+
+    it('leaves the old description alone when the generation fails', async () => {
+      generateImage.mockResolvedValue({ base64: null, error: 'provider down' } as never)
+
+      await retryImageGeneration('img', 'a scene')
+
+      expect(updateEmbeddedImage).toHaveBeenCalledTimes(1)
+      expect(updateEmbeddedImage).toHaveBeenCalledWith('img', { status: 'generating' })
+      expect(failEmbeddedImage).toHaveBeenCalledWith('img', expect.any(String))
+    })
+  })
+
+  it('keeps the new description on a row without pixels when the generation fails', async () => {
+    generateImage.mockResolvedValue({ base64: null, error: 'provider down' } as never)
+
+    await retryImageGeneration('img', 'a scene')
+
+    expect(updateEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(updateEmbeddedImage).toHaveBeenCalledWith(
+      'img',
+      expect.objectContaining({ prompt: 'a scene', status: 'generating' }),
+    )
+    expect(failEmbeddedImage).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('image attempts', () => {
+  const request = (attempt: AbortController, notifyFailure = false) => ({
+    imageId: 'img',
+    entryId: 'entry',
+    attempt,
+    prompt: 'a scene',
+    profileId: 'p-std',
+    model: 'm',
+    size: { orientation: 'square' as const, size: 'medium' as const },
+    notifyFailure,
+  })
+
+  beforeEach(() => {
+    generateImage.mockReset()
+    generateImage.mockResolvedValue({ base64: 'PIXELS' })
+    updateEmbeddedImage.mockClear()
+    cancelEmbeddedImage.mockClear()
+    emitImageQueued.mockClear()
+    emitImageReady.mockClear()
+    emitImageAnalysisFailed.mockClear()
+  })
+
+  it('writes a finished generation and hands its signal to the request', async () => {
+    const attempt = beginImageAttempt('img')
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBe('PIXELS')
+
+    expect(generateImage).toHaveBeenCalledWith(expect.objectContaining({ signal: attempt.signal }))
+    expect(updateEmbeddedImage).toHaveBeenLastCalledWith('img', {
+      imageData: 'PIXELS',
+      status: 'complete',
+    })
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', true)
+  })
+
+  it('does not start, flip the record or write when cancelled before it began', async () => {
+    const attempt = beginImageAttempt('img')
+    await cancelImageGeneration('img')
+
+    await expect(runImageGeneration(request(attempt, true))).resolves.toBeNull()
+
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(updateEmbeddedImage).not.toHaveBeenCalled()
+    expect(emitImageAnalysisFailed).not.toHaveBeenCalled()
+    // The queued event still needs its pair.
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
+  })
+
+  it('leaves the record alone, and raises nothing, when cancelled mid-request', async () => {
+    const attempt = beginImageAttempt('img')
+    generateImage.mockImplementation(async (options) => {
+      await cancelImageGeneration('img')
+      ;(options as { signal: AbortSignal }).signal.throwIfAborted()
+      return { base64: 'LATE' }
+    })
+
+    await expect(runImageGeneration(request(attempt, true))).resolves.toBeNull()
+
+    expect(updateEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(updateEmbeddedImage).toHaveBeenCalledWith('img', { status: 'generating' })
+    expect(cancelEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(emitImageAnalysisFailed).not.toHaveBeenCalled()
+    expect(emitImageReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('settles the row through the database when cancelled', async () => {
+    const attempt = beginImageAttempt('img')
+
+    await cancelImageGeneration('img')
+
+    expect(attempt.signal.aborted).toBe(true)
+    expect(cancelEmbeddedImage).toHaveBeenCalledWith('img')
+  })
+
+  it('sends a cancel only after the generating flip already in flight has finished', async () => {
+    const attempt = beginImageAttempt('img')
+    const flip = deferred()
+    updateEmbeddedImage.mockImplementationOnce(() => flip.promise)
+    cancelEmbeddedImage.mockClear()
+
+    const run = runImageGeneration(request(attempt))
+    await vi.waitFor(() => expect(updateEmbeddedImage).toHaveBeenCalledTimes(1))
+    const cancel = cancelImageGeneration('img')
+    await tick()
+    expect(cancelEmbeddedImage).not.toHaveBeenCalled()
+
+    flip.resolve()
+    await Promise.all([run, cancel])
+
+    expect(cancelEmbeddedImage).toHaveBeenCalledTimes(1)
+    expect(generateImage).not.toHaveBeenCalled()
+    await expect(run).resolves.toBeNull()
+  })
+
+  it('lets the result write already sent finish, so a cancel during it is too late', async () => {
+    const attempt = beginImageAttempt('img')
+    const write = deferred()
+    updateEmbeddedImage.mockImplementationOnce(async () => {})
+    updateEmbeddedImage.mockImplementationOnce(() => write.promise)
+    cancelEmbeddedImage.mockClear()
+
+    const run = runImageGeneration(request(attempt))
+    await vi.waitFor(() => expect(updateEmbeddedImage).toHaveBeenCalledTimes(2))
+    const cancel = cancelImageGeneration('img')
+    await tick()
+    expect(cancelEmbeddedImage).not.toHaveBeenCalled()
+
+    write.resolve()
+
+    await expect(run).resolves.toBe('PIXELS')
+    await cancel
+    expect(updateEmbeddedImage).toHaveBeenLastCalledWith('img', {
+      imageData: 'PIXELS',
+      status: 'complete',
+    })
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', true)
+  })
+
+  it('settles a failed generation through the database, and reports the failure', async () => {
+    const attempt = beginImageAttempt('img')
+    generateImage.mockResolvedValue({ base64: null, error: 'provider down' } as never)
+    failEmbeddedImage.mockClear()
+
+    await expect(runImageGeneration(request(attempt, true))).resolves.toBeNull()
+
+    expect(failEmbeddedImage).toHaveBeenCalledWith('img', 'No image data returned')
+    expect(emitImageAnalysisFailed).toHaveBeenCalledWith('entry', 'No image data returned')
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
+  })
+
+  it('returns no pixels when the result write fails', async () => {
+    const attempt = beginImageAttempt('img')
+    updateEmbeddedImage.mockImplementationOnce(async () => {})
+    updateEmbeddedImage.mockImplementationOnce(async () => {
+      throw new Error('disk full')
+    })
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBeNull()
+
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
+  })
+
+  it('keeps an older attempt from settling over the retry that replaced it', async () => {
+    const first = beginImageAttempt('img')
+    let finishFirst: (value: { base64: string }) => void = () => {}
+    generateImage.mockImplementationOnce(
+      () => new Promise((resolve) => (finishFirst = resolve as typeof finishFirst)),
+    )
+    const firstRun = runImageGeneration(request(first))
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+
+    const flip = deferred()
+    updateEmbeddedImage.mockImplementationOnce(() => flip.promise)
+    const second = beginImageAttempt('img')
+    const secondRun = runImageGeneration(request(second))
+    await vi.waitFor(() => expect(updateEmbeddedImage).toHaveBeenCalledTimes(2))
+
+    // The older attempt's result reaches its turn in the write order after the retry's flip.
+    finishFirst({ base64: 'OLD' })
+    flip.resolve()
+    await Promise.all([firstRun, secondRun])
+
+    expect(
+      updateEmbeddedImage.mock.calls.map(([, updates]) => (updates as { status: string }).status),
+    ).toEqual(['generating', 'generating', 'complete'])
+  })
+
+  it('reports an aborted attempt as failed even when the provider still returned pixels', async () => {
+    const attempt = beginImageAttempt('img')
+    generateImage.mockImplementation(async () => {
+      attempt.abort()
+      return { base64: 'LATE' }
+    })
+
+    await expect(runImageGeneration(request(attempt))).resolves.toBeNull()
+
+    expect(emitImageReady).toHaveBeenCalledWith('img', 'entry', false)
+  })
+
+  it('announces a reset row after it reads generating, and before it is ready', async () => {
+    const attempt = beginImageAttempt('img')
+    const order: string[] = []
+    updateEmbeddedImage.mockImplementation(async (_id, updates) => {
+      order.push(`update:${(updates as { status: string }).status}`)
+    })
+    emitImageQueued.mockImplementation(() => order.push('queued'))
+    emitImageReady.mockImplementation(() => order.push('ready'))
+
+    await runImageGeneration({ ...request(attempt), announce: true })
+
+    expect(order).toEqual(['update:generating', 'queued', 'update:complete', 'ready'])
+    updateEmbeddedImage.mockImplementation(async () => {})
+    emitImageQueued.mockReset()
+    emitImageReady.mockReset()
+  })
+
+  it('keeps a superseded request from writing over the one that replaced it', async () => {
+    const first = beginImageAttempt('img')
+    let finishFirst: (value: { base64: string }) => void = () => {}
+    generateImage.mockImplementationOnce(
+      () => new Promise((resolve) => (finishFirst = resolve as typeof finishFirst)),
+    )
+    const firstRun = runImageGeneration(request(first))
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+
+    const second = beginImageAttempt('img')
+    expect(first.signal.aborted).toBe(true)
+    expect(second.signal.aborted).toBe(false)
+
+    finishFirst({ base64: 'OLD' })
+    await firstRun
+
+    expect(updateEmbeddedImage).not.toHaveBeenCalledWith(
+      'img',
+      expect.objectContaining({ imageData: 'OLD' }),
+    )
+  })
+
+  it('adopts a controller made earlier instead of making its own', () => {
+    const controller = new AbortController()
+
+    expect(beginImageAttempt('adopted', controller)).toBe(controller)
+  })
 })

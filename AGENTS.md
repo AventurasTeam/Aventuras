@@ -32,7 +32,7 @@ Never push or commit with `--no-verify`. When a hook fails, fix the cause; CI ru
   the real extension (`#lib/services/database.ts`); there is no `$lib`.
   [code-style.md](docs/development/code-style.md)
 - **Modern code**: write new code, and modernize code you are already changing, in the current
-  idiom of the installed versions; name the modernizations in the commit message.
+  idiom of the installed versions; keep the modernizations out of the commit message.
   [modern-code.md](docs/development/modern-code.md)
 - **Platform floor**: nothing newer than Chrome 111 / Safari 16.4 unless MDN says it works there.
   Vite adds no polyfills and `check` will not catch it.
@@ -78,6 +78,8 @@ These areas still have one doc each, until they move into decisions. Read the re
 | `utils/dialogue.ts`, dialogue highlighting, TTS                                | [docs/architecture/dialogue-and-tts.md](docs/architecture/dialogue-and-tts.md)     |
 | `services/storyTime/`, time anchors, reconciliation, a new story's start       | [docs/architecture/story-time.md](docs/architecture/story-time.md)                 |
 | `services/exchange/`, vault export/import, the Aventura lorebook format        | [docs/architecture/exchange-format.md](docs/architecture/exchange-format.md)       |
+| `services/stateTracking/`, `rollbackService`, a store write method, past checkpoints | [docs/architecture/state-tracking.md](docs/architecture/state-tracking.md) |
+| `services/sync/`, `src-tauri/src/sync/`, version vectors, the edit triggers | [docs/architecture/sync.md](docs/architecture/sync.md) |
 | `utils/narrationClean.ts`, the Style Reviewer's input                          | [docs/architecture/narration-cleaning.md](docs/architecture/narration-cleaning.md) |
 | Tauri's HTTP plugin, capability URL scopes, the WebView's `fetch`              | [docs/architecture/network-transport.md](docs/architecture/network-transport.md)   |
 | tests, network requests, the platform floor, UI components, CI, releases       | [docs/development/README.md](docs/development/README.md)                           |

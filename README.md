@@ -24,12 +24,21 @@ state — who is present, where you are, what you carry — is tracked turn by t
   tool-calling assistant that edits them and shows you a diff before anything lands.
 - **Every prompt is editable** — they are Liquid templates, all of them, in an in-app editor.
 - **Images** — inline `<pic>` illustrations, scene backgrounds and character portraits, across
-  nine backends including local ComfyUI and A1111.
+  nine backends including local ComfyUI (0.26.0 or later) and A1111.
 - **Writing tools** — local grammar checking (Harper/WASM), style analysis for repetition,
   suggestions that match how you write.
 - **Yours to keep** — SQLite on your machine, full backup/restore, `.avt` story export, LAN sync
   between devices over QR pairing, and an optional translation layer over the whole app.
+- **Story time** — every entry knows when it happens in the story's world. Anchor the moments you
+  are sure of, and reconcile the stretches between them when the clock drifts.
 - **26 themes**, adjustable text size, dialogue highlighting.
+
+## Guides
+
+- [Story time](guides/story-time.md) — why story time drifts, anchors and reference points,
+  timeline anomalies, reconciling a stretch, and a new story's starting time.
+- [Prompt packs as folders](guides/prompt-packs-as-folders.md) — keeping a custom prompt pack in
+  step with each release through git, and what an exported folder holds.
 
 ## Install
 
@@ -41,7 +50,7 @@ Pre-built binaries are on the [Releases](https://github.com/AventurasTeam/Aventu
 | macOS    | `Aventuras_vX.Y.Z_x64.dmg` / `_aarch64.dmg`                    | macOS 13.3                                                               |
 | Linux    | `Aventuras_vX.Y.Z_amd64.deb` / `.AppImage`, or `_x86_64.rpm`   | WebKitGTK 2.40 for the `.deb` / `.rpm`; the AppImage carries its own, needs glibc 2.35 |
 | Android  | `Aventuras_vX.Y.Z.apk`                                         | Android 8, with System WebView 111 or later                              |
-| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) | iOS 16.4                                                                 |
+| iOS      | `Aventuras_vX.Y.Z_ios-arm64-unsigned.ipa` (sideload; unsigned) | iOS 26                                                                   |
 
 The minimums come from each platform's web engine, OS and runtime requirements. They are derived from documentation and
 have not been tested on devices at those versions; see

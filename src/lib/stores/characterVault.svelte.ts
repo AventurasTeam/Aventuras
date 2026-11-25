@@ -12,6 +12,8 @@ import { lorebookVault } from './lorebookVault.svelte'
 import { ui } from './ui.svelte'
 import { createLogger } from '#lib/log.ts'
 import { uniqueTerms } from '#lib/utils/text.ts'
+import { sniffImageMime } from '#lib/utils/image.ts'
+import { fetchPublicImageBase64 } from '#lib/services/ai/image/providers/fetchAdapter.ts'
 
 const log = createLogger('CharacterVault')
 
@@ -344,6 +346,21 @@ class CharacterVaultStore {
     })
   }
 
+  /** The portrait at `url` as a data URL, or `null` when it cannot be fetched or is not an image. */
+  private async _downloadPortrait(url: string): Promise<string | null> {
+    try {
+      const base64 = await fetchPublicImageBase64(url, {
+        serviceId: 'vault-portrait',
+        timeoutMs: 15_000,
+      })
+      const mime = sniffImageMime(base64)
+      return mime ? `data:${mime};base64,${base64}` : null
+    } catch (e) {
+      console.warn('Failed to fetch portrait from sourceUrl, using URL as fallback', e)
+      return null
+    }
+  }
+
   private async _processFileImport(
     tempId: string,
     file: File,
@@ -371,30 +388,21 @@ class CharacterVaultStore {
       const parsed = CharacterCardImport.parseJson(jsonString)
       if (!parsed) throw new Error('Failed to parse character card')
 
+      // The download needs nothing from `sanitize`, so the two run together.
+      const download =
+        !file.type.startsWith('image/') && extraMetadata.sourceUrl
+          ? this._downloadPortrait(extraMetadata.sourceUrl)
+          : null
+
       // Sanitize. No pack: the Vault is global, so it renders from `default-pack`.
       const sanitized = await CharacterCardImport.sanitize(undefined, jsonString)
 
-      // Convert image if needed
       let portrait: string | null = null
       if (file.type.startsWith('image/')) {
         portrait = await this._blobToBase64(file)
-      } else if (extraMetadata.sourceUrl) {
-        // Try to fetch image from source URL
-        try {
-          const response = await fetch(extraMetadata.sourceUrl)
-          if (response.ok) {
-            const blob = await response.blob()
-            if (blob.type.startsWith('image/')) {
-              portrait = await this._blobToBase64(blob)
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to fetch portrait from sourceUrl, using URL as fallback', e)
-        }
-        // Fallback to URL if fetch failed or returned non-image
-        if (!portrait) {
-          portrait = extraMetadata.sourceUrl
-        }
+      } else if (download) {
+        // The URL itself is the fallback when the download failed or returned a non-image.
+        portrait = (await download) ?? extraMetadata.sourceUrl
       }
 
       // Prepare final data

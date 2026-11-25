@@ -185,7 +185,8 @@ export class TranslationService extends BaseAIService {
   }
 
   /**
-   * Batch translate UI elements.
+   * Batch translate UI elements. Returns only the items the model translated, matched by id:
+   * none on failure, so the caller never mistakes a source text for its translation.
    */
   async translateUIElements(
     items: UITranslationItem[],
@@ -209,15 +210,15 @@ export class TranslationService extends BaseAIService {
 
       const result = await this.generate(translatedUIResultSchema, system, prompt, 'translate-ui')
 
-      // Merge translated text back into original items
       log('Translated', result.items.length, 'UI elements to', targetLanguage)
-      return items.map((original, index) => ({
-        ...original,
-        text: result.items[index]?.text ?? original.text,
-      }))
+      const translated = new Map(result.items.map((item) => [item.id, item.text]))
+      return items.flatMap((original) => {
+        const text = translated.get(original.id)
+        return text === undefined ? [] : [{ ...original, text }]
+      })
     } catch (error) {
       log('UI translation failed:', error)
-      return items // Return original on failure
+      return []
     }
   }
 

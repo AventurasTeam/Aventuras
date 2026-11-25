@@ -1,6 +1,7 @@
 <script lang="ts">
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
   import { Plus, Settings } from '@lucide/svelte'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
@@ -19,13 +20,16 @@
   const threshold = $derived(story.memoryConfig.tokenThreshold)
   const autoSummarize = $derived(story.memoryConfig.autoSummarize)
   const messagesSinceLastChapter = $derived(story.messagesSinceLastChapter)
-  // A turn's background tasks may be building a chapter on this branch right now, and two
-  // chapters over overlapping ranges is what comes of offering the button anyway.
-  const chapterWorkInFlight = $derived(
-    story.currentStory
-      ? ui.backgroundTasksActiveFor(story.currentStory.id, story.currentStory.currentBranchId)
-      : false,
-  )
+  // Why a chapter cannot be made by hand now.
+  const unavailableReason = $derived.by(() => {
+    // The lore run set is not reactive; this flag starts and ends with every run.
+    void ui.loreManagementActive
+    void chapterCards.version
+    const blocked = story.manualChapterBlock()
+    if (blocked) return blocked
+    if (messagesSinceLastChapter === 0) return 'No new entries since the last chapter.'
+    return null
+  })
   const bufferSize = $derived(story.memoryConfig.chapterBuffer)
 
   const percentage = $derived(
@@ -109,7 +113,8 @@
       <Button
         class="flex-1 gap-2"
         onclick={handleCreateChapter}
-        disabled={ui.memoryLoading || chapterWorkInFlight || messagesSinceLastChapter === 0}
+        disabled={ui.memoryLoading || unavailableReason !== null}
+        title={unavailableReason ?? undefined}
       >
         <Plus class="h-4 w-4" />
         <span>Create Chapter Now</span>
@@ -125,5 +130,9 @@
         <Settings class="h-5 w-5" />
       </Button>
     </div>
+    <!-- Shown as well as the title: a touch screen never shows a tooltip. -->
+    {#if unavailableReason && !ui.memoryLoading}
+      <p class="text-muted-foreground text-xs">{unavailableReason}</p>
+    {/if}
   </CardContent>
 </Card>

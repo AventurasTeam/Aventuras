@@ -17,6 +17,7 @@ import type { RenderResult } from './types'
 import type { Character, Location, Item, StoryBeat } from '#lib/types/index.ts'
 import type { RuntimeVariable, RuntimeVarsMap } from '#lib/services/packs/types.ts'
 import { storyImageMode } from '#lib/utils/image.ts'
+import { storyPov, storyTense } from '#lib/utils/storySettings.ts'
 
 const log = createLogger('ContextBuilder')
 
@@ -89,8 +90,8 @@ export class ContextBuilder {
     // Load story data into context
     builder.add({
       mode,
-      pov: story.settings?.pov || 'second',
-      tense: story.settings?.tense || 'present',
+      pov: storyPov(story),
+      tense: storyTense(story),
       genre: story.genre || '',
       tone: story.settings?.tone || '',
       themes: story.settings?.themes?.join(', ') || '',

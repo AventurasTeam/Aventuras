@@ -14,7 +14,7 @@
   import { characterVault } from '#lib/stores/characterVault.svelte.ts'
   import { scenarioVault } from '#lib/stores/scenarioVault.svelte.ts'
   import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
-  import { characterToRecord, scenarioToRecord } from '#lib/utils/vaultMerge.ts'
+  import { characterToRecord, scenarioToRecord, type ViewDraft } from '#lib/utils/vaultMerge.ts'
   import { SvelteMap } from 'svelte/reactivity'
   import { ui } from '#lib/stores/ui.svelte.ts'
 
@@ -23,6 +23,8 @@
     onApprove: (change?: VaultPendingChange) => void
     onReject?: (change: VaultPendingChange) => void
     onApproveAllAsync?: () => Promise<string | null>
+    /** Called after a view-mode Save, with the pending proposals the saved form already held */
+    onViewModeSaved?: (changeIds: string[]) => void
     onClose: () => void
     hideHeader?: boolean
   }
@@ -32,6 +34,7 @@
     onApprove,
     onReject,
     onApproveAllAsync,
+    onViewModeSaved,
     onClose,
     hideHeader = false,
   }: Props = $props()
@@ -41,7 +44,23 @@
   let entryData = $state<VaultLorebookEntry | null>(null)
   let formDirty = $state(false)
 
+  // The record the view-mode form was last synced from (`data` equals `previous`), and the pending
+  // updates folded into it. Plain variables: only handlers read them.
+  let viewSynced: ViewDraft | null = null
+  let viewPendingIds: string[] = []
+
   const composedData = $derived(vaultEditor.composedData)
+  const isViewMode = $derived(vaultEditor.viewMode)
+
+  // Edits never carry across targets: edit mode has already pushed them (emitUpdate), and
+  // openViewer/openEditor drop the view draft.
+  const editTarget = $derived(
+    isViewMode ? `${vaultEditor.viewEntityType}:${vaultEditor.viewEntityId}` : change.id,
+  )
+  $effect.pre(() => {
+    void editTarget
+    formDirty = false
+  })
 
   // In view mode, the source of truth is the vault store + remaining pending
   // changes, composed reactively. In edit mode, the source is the change data
@@ -60,13 +79,13 @@
       eid,
     )
     return {
-      name: composed.name as string,
-      description: composed.description as string | null,
-      traits: [...(composed.traits as string[])],
-      visualDescriptors: JSON.parse(JSON.stringify(composed.visualDescriptors)),
-      portrait: (composed.portrait as string | null) ?? null,
-      tags: [...(composed.tags as string[])],
-      favorite: composed.favorite as boolean,
+      name: composed.name,
+      description: composed.description,
+      traits: [...composed.traits],
+      visualDescriptors: $state.snapshot(composed.visualDescriptors),
+      portrait: composed.portrait ?? null,
+      tags: [...composed.tags],
+      favorite: composed.favorite,
     }
   })
 
@@ -78,15 +97,15 @@
     if (!existing) return null
     const composed = vaultEditor.composePendingChanges(scenarioToRecord(existing), 'scenario', eid)
     return {
-      name: composed.name as string,
-      description: composed.description as string | null,
-      settingSeed: composed.settingSeed as string,
-      npcs: JSON.parse(JSON.stringify(composed.npcs)),
-      primaryCharacterName: composed.primaryCharacterName as string,
-      firstMessage: composed.firstMessage as string | null,
-      alternateGreetings: (composed.alternateGreetings as string[]) ?? [],
-      tags: [...(composed.tags as string[])],
-      favorite: composed.favorite as boolean,
+      name: composed.name,
+      description: composed.description,
+      settingSeed: composed.settingSeed,
+      npcs: $state.snapshot(composed.npcs),
+      primaryCharacterName: composed.primaryCharacterName,
+      firstMessage: composed.firstMessage,
+      alternateGreetings: [...(composed.alternateGreetings ?? [])],
+      tags: [...composed.tags],
+      favorite: composed.favorite,
     }
   })
 
@@ -108,36 +127,40 @@
       if (formDirty) return
       // In view mode, local state is not the source of truth but we keep
       // it in sync so that handleViewModeSave can use it after user edits.
-      if (viewCharData) {
+      const entityId = vaultEditor.viewEntityId
+      if (viewCharData && entityId) {
         charData = { ...viewCharData }
-      } else if (viewScenarioData) {
+        const synced = $state.snapshot(viewCharData)
+        viewSynced = { entityType: 'character', entityId, data: synced, previous: synced }
+        viewPendingIds = vaultEditor.pendingChangeIdsFor('character', entityId)
+      } else if (viewScenarioData && entityId) {
         scenarioData = { ...viewScenarioData }
+        const synced = $state.snapshot(viewScenarioData)
+        viewSynced = { entityType: 'scenario', entityId, data: synced, previous: synced }
+        viewPendingIds = vaultEditor.pendingChangeIdsFor('scenario', entityId)
       }
     } else if (formDirty) {
       return
-    } else if (change.entityType === 'character' && 'data' in change && change.data) {
-      const source =
-        composedData ??
-        ('previous' in change && change.previous
-          ? {
-              ...(change.previous as Record<string, unknown>),
-              ...(change.data as Record<string, unknown>),
-            }
-          : change.data)
-      charData = JSON.parse(JSON.stringify(source))
+    } else if (change.entityType === 'character' && change.action === 'create') {
+      charData = $state.snapshot(change.data)
+    } else if (change.entityType === 'character' && change.action === 'update') {
+      if (composedData?.entityType === 'character') charData = $state.snapshot(composedData.data)
     } else if (change.entityType === 'lorebook-entry' && 'data' in change) {
-      entryData = JSON.parse(JSON.stringify(change.data))
-    } else if (change.entityType === 'scenario' && 'data' in change && change.data) {
-      const source =
-        composedData ??
-        ('previous' in change && change.previous
-          ? {
-              ...(change.previous as Record<string, unknown>),
-              ...(change.data as Record<string, unknown>),
-            }
-          : change.data)
-      scenarioData = JSON.parse(JSON.stringify(source))
+      entryData = $state.snapshot(change.data) as VaultLorebookEntry
+    } else if (change.entityType === 'scenario' && change.action === 'create') {
+      scenarioData = $state.snapshot(change.data)
+    } else if (change.entityType === 'scenario' && change.action === 'update') {
+      if (composedData?.entityType === 'scenario') {
+        scenarioData = $state.snapshot(composedData.data)
+      }
     }
+  })
+
+  // A panel that is torn down late (the fade-out, or a layout switch) must not clear a draft a
+  // newer instance published.
+  let publishedDraft: ViewDraft | null = null
+  $effect(() => () => {
+    if (vaultEditor.viewDraft === publishedDraft) vaultEditor.viewDraft = null
   })
 
   /** Inject a portrait data URL into the local form state (called externally) */
@@ -146,6 +169,20 @@
       charData = { ...charData, portrait: dataUrl }
       formDirty = true
       emitUpdate()
+      trackViewDraft()
+    }
+  }
+
+  /** Publish unsaved view-mode edits so the assistant can see them */
+  function trackViewDraft() {
+    if (!isViewMode) return
+    if (viewSynced?.entityType === 'character' && charData) {
+      publishedDraft = vaultEditor.viewDraft = { ...viewSynced, data: $state.snapshot(charData) }
+    } else if (viewSynced?.entityType === 'scenario' && scenarioData) {
+      publishedDraft = vaultEditor.viewDraft = {
+        ...viewSynced,
+        data: $state.snapshot(scenarioData),
+      }
     }
   }
 
@@ -270,8 +307,6 @@
           : 'Scenario',
   )
 
-  const isViewMode = $derived(vaultEditor.viewMode)
-
   const actionLabel = $derived(
     isViewMode
       ? 'View'
@@ -310,6 +345,8 @@
       })
     }
 
+    onViewModeSaved?.(viewPendingIds)
+    vaultEditor.viewDraft = null
     formDirty = false
     ui.showToast('Changes saved', 'info')
   }
@@ -349,8 +386,7 @@
     // When multiple pending updates target the same entity, diff the composed
     // preview against the original so the editor highlights ALL changed fields
     // (not just the fields from this single change).
-    const data = (composedData ?? change.data) as Record<string, unknown>
-    return computeChangedFields(data, change.previous as Record<string, unknown>)
+    return computeChangedFields(composedData?.data ?? change.data, change.previous)
   })
 
   const changedFieldKeys = $derived(new Set<string>(changedFieldsMap.keys()))
@@ -429,6 +465,7 @@
               charData = newData
               formDirty = true
               emitUpdate()
+              trackViewDraft()
             }}
           />
         </div>
@@ -440,6 +477,7 @@
             scenarioData = newData
             formDirty = true
             emitUpdate()
+            trackViewDraft()
           }}
         />
       {:else if !('data' in change)}

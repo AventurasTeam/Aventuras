@@ -3,6 +3,8 @@
   import { createDebouncedSave } from '#lib/utils/debounce.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import { Label } from '#lib/components/ui/label/index.ts'
+  import { Switch } from '#lib/components/ui/switch/index.ts'
+  import { Checkbox } from '#lib/components/ui/checkbox/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Input } from '#lib/components/ui/input/index.ts'
   import { Autocomplete } from '#lib/components/ui/autocomplete/index.ts'
@@ -10,31 +12,70 @@
   import { RotateCcw, Info, Plus, Copy, Eye, EyeOff, ChevronRight, Check } from '@lucide/svelte'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import {
-    listImageModelsByProvider,
+    listImageModels,
+    evictReplacedModelList,
     getProviderSamplerInfo,
+    getProviderClipTypes,
+    isLocalServer,
     listLoras,
     generateImage,
     requiresApiKey,
+    baseUrlMode,
+    imageConnectionFor,
+    keyProvider,
+    IMAGE_PROVIDER_LABELS,
+    IMAGE_PROVIDER_OPTIONS,
     ComfyMode,
-    type ImageModelInfo,
-  } from '#lib/services/ai/image/index.ts'
-  import {
-    validateApiWorkflow,
     detectWorkflowFields,
-    fetchModelList,
-    clearComfyCacheForUrl,
-  } from '#lib/services/ai/image/providers/comfy.ts'
-  import type { ComfyCustomWorkflow } from '#lib/services/ai/image/providers/types.ts'
+    listNodes,
+    loadImageInputs,
+    pickInputs,
+    referenceBlocker,
+    referenceInputsOf,
+    suggestReferenceInputs,
+    validateApiWorkflow,
+    workflowInputs,
+    workflowProblems,
+    applyCapabilityOverride,
+    canonicalModelId,
+    findListedModel,
+    modelListKey,
+    overriddenFields,
+    overrideConflicts,
+    takesCapabilityOverride,
+    type ComfyCustomWorkflow,
+    type ImageModelInfo,
+    type LoadedList,
+    type LoadFailure,
+    type WorkflowInput,
+  } from '#lib/services/ai/image/index.ts'
+  import { isAbortError } from '#lib/services/activity/index.ts'
+  import { fetchModelList, numberOr } from '#lib/services/ai/image/providers/comfy.ts'
   import ImageModelSelect from '#lib/components/settings/ImageModelSelect.svelte'
-  import type { ImageProfile, ImageProviderType, APIProfile } from '#lib/types/index.ts'
+  import type {
+    ImageProfile,
+    ImageProviderType,
+    ImageCapabilityOverride,
+    APIProfile,
+  } from '#lib/types/index.ts'
   import * as Tabs from '#lib/components/ui/tabs/index.ts'
   import * as Alert from '#lib/components/ui/alert/index.ts'
   import { Card, CardContent } from '#lib/components/ui/card/index.ts'
   import * as Collapsible from '#lib/components/ui/collapsible/index.ts'
-  import { SvelteSet } from 'svelte/reactivity'
+  import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts'
   import IconRow from '#lib/components/ui/icon-row.svelte'
   import ImageResolutionSelector from '#lib/components/settings/ImageResolutionSelector.svelte'
-  import { defaultImageSpec, type ImageSpec } from '#lib/utils/image.ts'
+  import {
+    defaultImageSpec,
+    isSizeString,
+    normalizeImageDataUrl,
+    sniffImageMime,
+    type ImageSpec,
+  } from '#lib/utils/image.ts'
+  import { IMAGE_OUTPUT_FORMATS, type ImageOutputFormat } from '#lib/utils/imageOutput.ts'
+  import { cn } from '#lib/utils/cn.ts'
+  import { describeLoadError } from '#lib/utils/error.ts'
+  import { parseHttpUrl } from '#lib/utils/url.ts'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
@@ -42,35 +83,15 @@
     { value: 'image-style-photorealistic', label: 'Photorealistic' },
   ] as const
 
-  const providerTypes: { value: ImageProviderType; label: string }[] = [
-    { value: 'nanogpt', label: 'NanoGPT' },
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'openrouter', label: 'OpenRouter' },
-    { value: 'chutes', label: 'Chutes' },
-    { value: 'pollinations', label: 'Pollinations' },
-    { value: 'google', label: 'Google AI Studio' },
-    { value: 'zhipu', label: 'Zhipu CogView' },
-    { value: 'comfyui', label: 'ComfyUI' },
-    { value: 'a1111', label: 'A1111 / SD.cpp / Kobold' },
-  ]
+  const profileOptionLabel = (p: ImageProfile) =>
+    `${p.name} (${IMAGE_PROVIDER_LABELS[p.providerType] ?? p.providerType}${p.model ? ` · ${p.model}` : ''})`
   const profileModes = [
     { value: ComfyMode.CustomWorkflow, label: 'Custom Workflow' },
     { value: ComfyMode.BasicTxt2Img, label: 'Basic Text to Image' },
     { value: ComfyMode.LoraTxt2Img, label: 'LoRA Text to Image' },
-    { value: ComfyMode.UnetTxt2Img, label: 'UNet / Flux Text to Image' },
+    { value: ComfyMode.UnetTxt2Img, label: 'UNet / Z-Image Text to Image' },
   ] as const
 
-  const clipTypeItems = [
-    { value: 'lumina2', label: 'Lumina 2' },
-    { value: 'flux', label: 'Flux' },
-    { value: 'sd3', label: 'SD3' },
-    { value: 'stable_audio', label: 'Stable Audio' },
-    { value: 'mochi', label: 'Mochi' },
-    { value: 'ltxv', label: 'LTX Video' },
-    { value: 'cosmos', label: 'Cosmos' },
-    { value: 'wan', label: 'Wan' },
-    { value: 'hidream', label: 'HiDream' },
-  ] as const
   const weightDtypeItems = [
     { value: 'default', label: 'default' },
     { value: 'fp8_e4m3fn', label: 'fp8_e4m3fn' },
@@ -121,19 +142,28 @@
   let profileApiKey = $state('')
   let profileBaseUrl = $state('')
   let showApiKey = $state(false)
-  let showCopyDropdown = $state(false)
-  let openProfileIds = new SvelteSet<string>()
 
   // Profile form model state
   let profileModel = $state('')
   let profileModels = $state<ImageModelInfo[]>([])
-  const referenceProfileImg2ImgWarning = $derived(
-    isEditingReferenceProfile &&
-      !!profileModel &&
-      profileModels.find((m) => m.id === profileModel)?.supportsImg2Img === false,
-  )
+  // The `modelListKey` of the inputs `profileModels` was loaded for.
+  let profileModelsKey = $state<string | null>(null)
   let isLoadingProfileModels = $state(false)
-  let profileModelsError = $state<string | null>(null)
+  let profileLoadFailures = $state<LoadFailure[]>([])
+
+  // Capability override form state; a blank field means unset.
+  let profileMinPixels = $state<number | null>(null)
+  let profileSizesText = $state('')
+  let profileReferences = $state<'' | 'on' | 'off'>('')
+  let profileOutputFormats = $state<ImageOutputFormat[]>([])
+  let profileOutputCompression = $state(false)
+  let capabilitiesOpen = $state(false)
+  const markedClass = 'ring-2 ring-amber-500/60'
+  const referencesItems = [
+    { value: '', label: 'From the provider' },
+    { value: 'on', label: 'On' },
+    { value: 'off', label: 'Off' },
+  ] as const
 
   // ComfyUI specific state
   let profileSampler = $state('dpmpp_2m_sde_gpu')
@@ -152,30 +182,60 @@
   const { trigger: triggerAutoSave, flush: flushAutoSave } = createDebouncedSave(autoSaveProfile)
 
   // Custom workflow state
-  let profileCustomWorkflow = $state<ComfyCustomWorkflow | null>(null)
-  // Holds parsed workflow data while the user resolves an ambiguous picker — not yet saved to profileCustomWorkflow
-  let pendingWorkflowData = $state<{
-    workflow: ComfyCustomWorkflow['workflow']
-    seedPath: string
-    outputNodeId: string
-    negativePromptPath: string | null
-  } | null>(null)
-  let workflowAmbiguousNodes = $state<
-    Array<{
-      nodeId: string
-      title: string
-      path: string
-      textPreview: string
-      kSamplerSlot: string | null
-    }>
-  >([])
-  let workflowPickerSelection = $state<string>('')
+  let profileCustomWorkflow = $state.raw<ComfyCustomWorkflow | null>(null)
+  let profileInputReferences = $state(false)
+  let profileTakesReferences = $state(false)
+  const activeWorkflow = $derived(
+    profileMode === ComfyMode.CustomWorkflow ? profileCustomWorkflow : null,
+  )
+  const workflowGraph = $derived(activeWorkflow?.workflow)
+  const loadImageNodes = $derived(workflowGraph ? loadImageInputs(workflowGraph) : [])
+  // Read apart from the rest of the workflow, so an edit to anything else does not rerun them.
+  const referenceInputPaths = $derived(activeWorkflow?.referenceInputPaths)
+  const seedPath = $derived(activeWorkflow?.seedPath)
+  const selectedReferenceInputs = $derived(
+    workflowGraph ? referenceInputsOf({ workflow: workflowGraph, referenceInputPaths }) : [],
+  )
+  // Null when the profile can send references.
+  const referenceProfileWarningReason = $derived.by(() => {
+    if (!isEditingReferenceProfile) return null
+    const blocker = referenceBlocker(profileProviderType, buildProviderOptions())
+    if (blocker) return blocker
+    if (capabilityOverride?.references === false) {
+      return 'reference images are switched off under Model capabilities.'
+    }
+    const capabilities = applyCapabilityOverride(publishedCapabilities, capabilityOverride)
+    return !!profileModel && capabilities?.supportsImg2Img === false
+      ? 'the selected model does not support img2img.'
+      : null
+  })
+  const inputLabel = (input: WorkflowInput) =>
+    `${input.nodeId} · ${input.title} · ${input.name}${input.value === null ? ' · linked' : ''}`
+  const selectedPromptPaths = $derived(activeWorkflow?.positivePromptPaths ?? [])
+  const selectedNegativePaths = $derived(activeWorkflow?.negativePromptPaths ?? [])
+  const graphInputs = $derived(workflowGraph ? workflowInputs(workflowGraph) : [])
+  const promptInputs = $derived(
+    pickInputs(graphInputs, 'string', [...selectedPromptPaths, ...selectedNegativePaths]),
+  )
+  const seedInputs = $derived(pickInputs(graphInputs, 'number', seedPath ? [seedPath] : []))
+  const seedItems = $derived([
+    { value: '', label: 'None (fixed seed)' },
+    ...seedInputs.map((input) => ({ value: input.path, label: inputLabel(input) })),
+  ])
+  const outputItems = $derived(
+    (workflowGraph ? listNodes(workflowGraph) : []).map((node) => ({
+      value: node.nodeId,
+      label: `${node.nodeId} · ${node.title}`,
+    })),
+  )
+  const workflowIssues = $derived(
+    profileCustomWorkflow ? workflowProblems(profileCustomWorkflow) : [],
+  )
+  const workflowMissing = $derived(workflowIssues.length > 0 ? workflowIssues.join(' ') : null)
+  const previewOf = (value: string | number | null) =>
+    value === null ? 'linked from another node' : String(value).slice(0, 80)
   let workflowError = $state<string | null>(null)
   let workflowFileName = $state<string | null>(null)
-
-  // Tracks the baseUrl active when the last cache population happened; used to
-  // detect URL changes and evict stale cache entries in comfy.ts.
-  let prevComfyBaseUrl: string | null = null
 
   // UNet mode specific state
   let profileClipName = $state('')
@@ -184,18 +244,48 @@
   let profileWeightDtype = $state('default')
   let availableClips = $state<string[]>([])
   let availableVaes = $state<string[]>([])
-  let isLoadingUnetModels = $state(false)
+  let availableClipTypes = $state<string[]>([])
+  // A blank field falls back to the first file the server lists, so that is what the placeholder names.
+  const clipPlaceholder = $derived(
+    availableClips.length ? `Auto: ${availableClips[0]}` : 'Auto-detect first available',
+  )
+  const vaePlaceholder = $derived(
+    availableVaes.length ? `Auto: ${availableVaes[0]}` : 'Auto-detect first available',
+  )
   const clipItems = $derived(availableClips.map((c) => ({ value: c, label: c })))
   const vaeItems = $derived(availableVaes.map((v) => ({ value: v, label: v })))
-
-  const needsWorkflow = $derived(
-    profileProviderType === 'comfyui' &&
-      profileMode === ComfyMode.CustomWorkflow &&
-      (!profileCustomWorkflow || !!pendingWorkflowData),
+  const clipTypeItems = $derived(availableClipTypes.map((t) => ({ value: t, label: t })))
+  const clipTypeUnlisted = $derived(
+    !!profileClipType &&
+      availableClipTypes.length > 0 &&
+      !availableClipTypes.includes(profileClipType),
   )
-  const canSaveProfile = $derived(!!profileName.trim() && !needsWorkflow)
 
-  onDestroy(() => flushAutoSave())
+  // A field the provider has no input for is neither saved nor sent; the form keeps what was typed.
+  const connection = $derived(
+    imageConnectionFor(profileProviderType, profileApiKey, profileBaseUrl || undefined),
+  )
+  const listKey = $derived(modelListKey(connection))
+  const baseUrlInvalid = $derived(
+    baseUrlMode(profileProviderType) !== 'none' &&
+      !!profileBaseUrl.trim() &&
+      !parseHttpUrl(profileBaseUrl.trim()),
+  )
+  const takesOverride = $derived(takesCapabilityOverride(profileProviderType))
+  const parsedSizes = $derived(profileSizesText.split(/[\s,]+/).filter(Boolean))
+  const invalidSizes = $derived(parsedSizes.filter((s) => !isSizeString(s)))
+  const sizesInvalid = $derived(takesOverride && invalidSizes.length > 0)
+  const canSaveProfile = $derived(!!profileName.trim() && !baseUrlInvalid && !sizesInvalid)
+  const copyableApiProfiles = $derived(
+    settings.apiSettings.profiles.filter(
+      (p) => keyProvider(p.providerType) === keyProvider(profileProviderType),
+    ),
+  )
+
+  onDestroy(() => {
+    flushAutoSave()
+    stopProfileModels()
+  })
 
   // Testing state
   let testProfileId = $state<string | null>(null)
@@ -203,6 +293,9 @@
   let testSize = $state<ImageSpec>(defaultImageSpec())
   let isGeneratingTestImage = $state(false)
   let testImageResult = $state<string | null>(null)
+  const testImageMime = $derived(
+    testImageResult ? sniffImageMime(testImageResult.replace(/^data:[^,]*;base64,/, '')) : null,
+  )
   let testError = $state<string | null>(null)
 
   $effect(() => {
@@ -215,74 +308,167 @@
   // Derived LoRA items — avoids re-mapping on every render
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
 
-  // Load models for the profile form when provider/apiKey/baseUrl change
-  let profileModelsReqId = 0
+  // The form has one current model-list request. Every abort goes through stopProfileModels, so an
+  // aborted request is never still current when its catch runs.
+  const MODEL_LOAD_DEBOUNCE_MS = 400
+  let modelsRequest: AbortController | null = null
+  let modelsDebounce: ReturnType<typeof setTimeout> | undefined
+  // Whether the current request also reads the UNet text encoder and VAE lists.
+  let requestHasUnetLists = false
 
-  async function loadProfileFormModels(
-    providerType: ImageProviderType,
-    apiKey: string,
-    baseUrl: string,
-    forceReload: boolean,
-  ) {
-    const effectiveBaseUrl = baseUrl || undefined
-    const reqId = ++profileModelsReqId
+  function stopProfileModels() {
+    clearTimeout(modelsDebounce)
+    modelsDebounce = undefined
+    modelsRequest?.abort()
+    modelsRequest = null
+    requestHasUnetLists = false
+    isLoadingProfileModels = false
+  }
+
+  async function loadProfileForm(force: boolean) {
+    stopProfileModels()
+    if (baseUrlInvalid) return
+    const request = new AbortController()
+    modelsRequest = request
     isLoadingProfileModels = true
-    profileModelsError = null
-    try {
-      const models = await listImageModelsByProvider(
-        providerType,
-        apiKey,
-        forceReload,
-        effectiveBaseUrl,
+    profileLoadFailures = []
+
+    const inputs = connection
+    const { providerType, baseUrl } = inputs
+    const timeoutMs = settings.apiSettings.llmTimeoutMs
+    const unet = providerType === 'comfyui' && profileMode === ComfyMode.UnetTxt2Img
+    requestHasUnetLists = unet
+
+    // A reply for another profile or server is dropped; a failure is reported unless it is a cancel.
+    async function read<T>(list: LoadedList, load: () => Promise<T>, apply: (value: T) => void) {
+      try {
+        const value = await load()
+        if (modelsRequest === request) apply(value)
+      } catch (error) {
+        if (modelsRequest !== request || isAbortError(error)) return
+        profileLoadFailures = [...profileLoadFailures, { list, ...describeLoadError(error) }]
+      }
+    }
+
+    const reads = [
+      read(
+        'models',
+        () => listImageModels(inputs, force, request.signal),
+        (models) => {
+          profileModels = models
+          profileModelsKey = modelListKey(inputs)
+        },
+      ),
+    ]
+    if (isLocalServer(providerType)) {
+      reads.push(
+        read(
+          'samplers',
+          () => getProviderSamplerInfo(inputs, request.signal),
+          (info) => {
+            profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
+            profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
+            if (info.schedulersUnavailable) {
+              profileLoadFailures = [
+                ...profileLoadFailures,
+                {
+                  list: 'schedulers',
+                  summary: info.schedulersUnavailable,
+                  detail: info.schedulersUnavailable,
+                },
+              ]
+            }
+          },
+        ),
       )
-      // Discard stale results if a newer request has already started.
-      if (reqId !== profileModelsReqId) return
-      profileModels = models
-    } catch (error) {
-      if (reqId !== profileModelsReqId) return
-      profileModelsError = error instanceof Error ? error.message : 'Failed to load models'
-    } finally {
-      if (reqId === profileModelsReqId) isLoadingProfileModels = false
+    } else {
+      profileSamplers = []
+      profileSchedulers = []
+    }
+    if (providerType === 'comfyui') {
+      reads.push(
+        read(
+          'loras',
+          () => listLoras(inputs, request.signal),
+          (loras) => (availableLoras = loras),
+        ),
+      )
+    }
+    if (unet) {
+      reads.push(
+        read(
+          'textEncoders',
+          () => fetchModelList(baseUrl, inputs.apiKey, 'text_encoders', timeoutMs, request.signal),
+          (clips) => (availableClips = clips),
+        ),
+        read(
+          'vaes',
+          () => fetchModelList(baseUrl, inputs.apiKey, 'vae', timeoutMs, request.signal),
+          (vaes) => (availableVaes = vaes),
+        ),
+        read(
+          'clipTypes',
+          () => getProviderClipTypes(inputs, request.signal),
+          (types) => (availableClipTypes = types),
+        ),
+      )
+    }
+
+    await Promise.all(reads)
+    if (modelsRequest === request) {
+      isLoadingProfileModels = false
+      requestHasUnetLists = false
     }
   }
 
-  // Reactively load models when provider, apiKey, or (for ComfyUI) baseUrl changes in profile form.
-  // Reactive deps are captured explicitly before untrack() so that reads inside the loader
-  // functions (e.g. settings.apiSettings.llmTimeoutMs) are NOT accidentally tracked as
-  // dependencies — which would cause the effect to re-run on unrelated settings changes.
+  // Reactive deps are captured before untrack() so the loaders' own reads (e.g.
+  // settings.apiSettings.llmTimeoutMs) do not become dependencies of this effect. The list key
+  // stands in for the connection so an edit that leaves the effective URL alone does not reload.
+  let loadedProfileId: string | null = null
+  let loadedProviderType: ImageProviderType | null = null
+
   $effect(() => {
-    if (editingProfileId && profileProviderType) {
-      const providerType = profileProviderType
-      const apiKey = profileApiKey
-      const baseUrl = profileBaseUrl
+    void editingProfileId
+    void listKey
+    void baseUrlInvalid
 
-      untrack(() => {
-        loadProfileFormModels(providerType, apiKey, baseUrl, false)
-        if (providerType === 'comfyui') {
-          loadSamplerInfo(baseUrl || undefined, 'comfyui')
-          loadLoras(baseUrl || undefined)
-        } else if (providerType === 'a1111') {
-          loadSamplerInfo(baseUrl || undefined, 'a1111')
-        } else {
-          profileSamplers = []
-          profileSchedulers = []
-        }
-      })
-    }
+    untrack(() => {
+      const { providerType } = connection
+      if (!editingProfileId) {
+        stopProfileModels()
+        loadedProfileId = null
+        loadedProviderType = null
+        return
+      }
+      const targetChanged =
+        editingProfileId !== loadedProfileId || providerType !== loadedProviderType
+      loadedProfileId = editingProfileId
+      loadedProviderType = providerType
+
+      if (baseUrlInvalid || profileModelsKey !== listKey) {
+        profileModels = []
+        profileModelsKey = null
+        profileSamplers = []
+        profileSchedulers = []
+        availableLoras = []
+        availableClips = []
+        availableVaes = []
+        availableClipTypes = []
+        profileLoadFailures = []
+      }
+      if (baseUrlInvalid) {
+        stopProfileModels()
+        return
+      }
+      if (targetChanged) {
+        void loadProfileForm(false)
+        return
+      }
+      stopProfileModels()
+      isLoadingProfileModels = true
+      modelsDebounce = setTimeout(() => void loadProfileForm(false), MODEL_LOAD_DEBOUNCE_MS)
+    })
   })
-
-  async function loadSamplerInfo(baseUrl?: string, providerType: 'comfyui' | 'a1111' = 'comfyui') {
-    const info = await getProviderSamplerInfo(baseUrl, providerType)
-    if ((profileBaseUrl || undefined) !== baseUrl) return
-    profileSamplers = info.samplers.map((s) => ({ value: s, label: s }))
-    profileSchedulers = info.schedulers.map((s) => ({ value: s, label: s }))
-  }
-
-  async function loadLoras(baseUrl?: string) {
-    const loras = await listLoras(baseUrl)
-    if ((profileBaseUrl || undefined) !== baseUrl) return
-    availableLoras = loras
-  }
 
   async function handleTestGenerate() {
     if (isGeneratingTestImage || !testProfileId || !testPrompt.trim()) return
@@ -330,6 +516,7 @@
         negativePrompt: profileNegativePrompt,
         sampler: profileSampler,
         scheduler: profileScheduler,
+        ...(profileTakesReferences && { takesReferences: true }),
       }
     }
     if (profileProviderType !== 'comfyui') return {}
@@ -352,6 +539,7 @@
     if (profileCustomWorkflow) {
       opts.customWorkflow = profileCustomWorkflow
     }
+    if (profileInputReferences) opts.inputReferences = true
     if (profileMode === ComfyMode.UnetTxt2Img) {
       if (profileClipName) opts.clipName = profileClipName
       if (profileVaeName) opts.vaeName = profileVaeName
@@ -361,18 +549,63 @@
     return opts
   }
 
+  // Whether the loaded model list is for the form's current provider, key and URL.
+  const modelsSettled = $derived(profileModelsKey === listKey)
+
+  // Undefined when every field is blank or the provider takes no override; the form keeps what was typed.
+  const capabilityOverride = $derived.by((): ImageCapabilityOverride | undefined => {
+    if (!takesOverride) return undefined
+    const override: ImageCapabilityOverride = {}
+    if (profileMinPixels && profileMinPixels > 0) override.minPixels = profileMinPixels
+    const sizes = parsedSizes.filter(isSizeString)
+    if (sizes.length > 0) override.sizes = sizes
+    if (profileReferences) override.references = profileReferences === 'on'
+    if (profileOutputFormats.length > 0) {
+      override.outputFormats = IMAGE_OUTPUT_FORMATS.filter((f) => profileOutputFormats.includes(f))
+      if (profileOutputCompression) override.outputCompression = true
+    }
+    return Object.keys(override).length > 0 ? override : undefined
+  })
+
+  function loadCapabilityOverride(override: ImageCapabilityOverride | undefined) {
+    profileMinPixels = override?.minPixels ?? null
+    profileSizesText = override?.sizes?.join('\n') ?? ''
+    profileReferences = override?.references === undefined ? '' : override.references ? 'on' : 'off'
+    profileOutputFormats = override?.outputFormats?.slice() ?? []
+    profileOutputCompression = override?.outputCompression === true
+    capabilitiesOpen = !!override
+  }
+
+  function toggleOutputFormat(format: ImageOutputFormat, on: boolean) {
+    profileOutputFormats = on
+      ? [...profileOutputFormats, format]
+      : profileOutputFormats.filter((f) => f !== format)
+    if (profileOutputFormats.length === 0) profileOutputCompression = false
+  }
+
+  // What the provider published for the current model, once the loaded list is for these inputs.
+  const publishedCapabilities = $derived(
+    modelsSettled ? findListedModel(profileModels, profileModel) : undefined,
+  )
+  const overridden = $derived(overriddenFields(capabilityOverride, publishedCapabilities))
+  const conflicts = $derived(overrideConflicts(capabilityOverride, publishedCapabilities))
+
   // Save current profile edits (called when collapsible closes)
   async function autoSaveProfile() {
     if (isNewProfile || !editingProfileId || !canSaveProfile) return
 
-    await settings.updateImageProfile(editingProfileId, {
-      name: profileName.trim(),
-      providerType: profileProviderType,
-      apiKey: profileApiKey,
-      baseUrl: profileBaseUrl || undefined,
-      model: profileModel,
-      providerOptions: buildProviderOptions(),
-    })
+    const previous = settings.getImageProfile(editingProfileId)
+    await settings.updateImageProfile(
+      editingProfileId,
+      {
+        name: profileName.trim(),
+        model: profileModel,
+        capabilityOverride,
+        providerOptions: buildProviderOptions(),
+      },
+      connection,
+    )
+    if (previous) evictReplacedModelList(previous, connection)
   }
 
   $effect(() => {
@@ -384,6 +617,11 @@
         profileApiKey,
         profileBaseUrl,
         profileModel,
+        profileMinPixels,
+        profileSizesText,
+        profileReferences,
+        profileOutputFormats,
+        profileOutputCompression,
         profileSampler,
         profileScheduler,
         profileMode,
@@ -395,6 +633,8 @@
         profileLoraStrengthModel,
         profileLoraStrengthClip,
         profileCustomWorkflow,
+        profileInputReferences,
+        profileTakesReferences,
         profileClipName,
         profileVaeName,
         profileClipType,
@@ -421,12 +661,14 @@
     }
     editingProfileId = crypto.randomUUID()
     isNewProfile = true
-    profileName = ''
     profileProviderType = 'nanogpt'
+    profileName = IMAGE_PROVIDER_LABELS[profileProviderType]
     profileApiKey = ''
     profileBaseUrl = ''
     profileModel = ''
     profileModels = []
+    profileModelsKey = null
+    loadCapabilityOverride(undefined)
     profileSampler = 'dpmpp_2m_sde_gpu'
     profileScheduler = 'sgm_uniform'
     profileMode = ComfyMode.BasicTxt2Img
@@ -434,11 +676,9 @@
     profileSteps = 20
     profilePositivePrompt = ''
     profileNegativePrompt = ''
-    prevComfyBaseUrl = null
     profileCustomWorkflow = null
-    pendingWorkflowData = null
-    workflowAmbiguousNodes = []
-    workflowPickerSelection = ''
+    profileInputReferences = false
+    profileTakesReferences = false
     workflowError = null
     workflowFileName = null
     profileClipName = ''
@@ -448,8 +688,14 @@
     availableClips = []
     availableVaes = []
     showApiKey = false
-    showCopyDropdown = false
-    openProfileIds.clear()
+  }
+
+  function selectProviderType(next: ImageProviderType) {
+    const name = profileName.trim()
+    if (!name || name === IMAGE_PROVIDER_LABELS[profileProviderType]) {
+      profileName = IMAGE_PROVIDER_LABELS[next]
+    }
+    profileProviderType = next
   }
 
   function startEditProfile(profile: ImageProfile) {
@@ -462,10 +708,13 @@
     profileName = profile.name
     profileProviderType = profile.providerType
     profileApiKey = profile.apiKey
-    prevComfyBaseUrl = null
     profileBaseUrl = profile.baseUrl || ''
     profileModel = profile.model || ''
     profileModels = []
+    profileModelsKey = null
+    loadCapabilityOverride(profile.capabilityOverride)
+    profileTakesReferences = profile.providerOptions?.takesReferences === true
+    profileInputReferences = profile.providerOptions?.inputReferences === true
 
     if (profile.providerType === 'a1111') {
       const opts = profile.providerOptions || {}
@@ -481,15 +730,12 @@
       profileSampler = (opts.sampler as string) || 'dpmpp_2m_sde_gpu'
       profileScheduler = (opts.scheduler as string) || 'sgm_uniform'
       profileMode = (opts.mode as string) || ComfyMode.BasicTxt2Img
-      profileCfg = Number(opts.cfg) || 1
+      profileCfg = numberOr(opts.cfg, 1)
       profileSteps = Number(opts.step) || 6
       profilePositivePrompt = (opts.positivePrompt as string) || ''
       profileNegativePrompt = (opts.negativePrompt as string) || ''
       profileCustomWorkflow = (opts.customWorkflow as ComfyCustomWorkflow) || null
-      pendingWorkflowData = null
       workflowFileName = profileCustomWorkflow ? 'Loaded from profile' : null
-      workflowAmbiguousNodes = []
-      workflowPickerSelection = ''
       workflowError = null
       profileClipName = (opts.clipName as string) || ''
       profileVaeName = (opts.vaeName as string) || ''
@@ -510,27 +756,25 @@
     }
 
     showApiKey = false
-    showCopyDropdown = false
-    openProfileIds.add(profile.id)
   }
 
   function resetEditState() {
     editingProfileId = null
     isNewProfile = false
-    showCopyDropdown = false
   }
 
   async function handleSaveProfile() {
     if (!canSaveProfile) return
 
-    await settings.addImageProfile({
-      name: profileName.trim(),
-      providerType: profileProviderType,
-      apiKey: profileApiKey,
-      baseUrl: profileBaseUrl || undefined,
-      model: profileModel,
-      providerOptions: buildProviderOptions(),
-    })
+    await settings.addImageProfile(
+      {
+        name: profileName.trim(),
+        model: profileModel,
+        capabilityOverride,
+        providerOptions: buildProviderOptions(),
+      },
+      connection,
+    )
 
     resetEditState()
   }
@@ -542,7 +786,6 @@
 
   function copyApiKeyFromProfile(apiProfile: APIProfile) {
     profileApiKey = apiProfile.apiKey
-    showCopyDropdown = false
   }
 
   function handleProfileOpenChange(open: boolean, profile: ImageProfile) {
@@ -553,7 +796,6 @@
         saveEditingProfile()
         resetEditState()
       }
-      openProfileIds.delete(profile.id)
     }
   }
 
@@ -561,14 +803,9 @@
   // Custom workflow handlers
   // ---------------------------------------------------------------------------
 
-  /**
-   * Called after a file is selected or JSON is pasted.
-   * Validates the JSON, runs detection, and either auto-confirms or shows the picker.
-   */
+  // Detection only pre-fills the fields; the user edits every one of them.
   function processWorkflowJson(json: unknown, filename: string) {
     workflowError = null
-    workflowAmbiguousNodes = []
-    workflowPickerSelection = ''
 
     const validationError = validateApiWorkflow(json)
     if (validationError) {
@@ -577,50 +814,11 @@
     }
 
     const workflow = json as ComfyCustomWorkflow['workflow']
-    const { positiveNodes, negativeNode, seedPath, outputNodeId, saveImageCount } =
-      detectWorkflowFields(workflow)
-
-    if (positiveNodes.length === 0) {
-      workflowError = 'No CLIPTextEncode (positive) node found in workflow.'
-      return
-    }
-    if (!seedPath) {
-      workflowError = 'No KSampler or KSamplerAdvanced node found — cannot detect seed path.'
-      return
-    }
-    if (saveImageCount === 0) {
-      workflowError = 'No SaveImage node found in workflow.'
-      return
-    }
-    if (saveImageCount > 1) {
-      workflowError = `Workflow has ${saveImageCount} SaveImage nodes. Please keep exactly one SaveImage node.`
-      return
-    }
-
     workflowFileName = filename
-
-    if (positiveNodes.length > 1) {
-      // Ambiguous — show picker. Store parsed data in pending state; do NOT write
-      // profileCustomWorkflow yet so the auto-save effect doesn't fire prematurely.
-      pendingWorkflowData = {
-        workflow,
-        seedPath,
-        outputNodeId: outputNodeId!,
-        negativePromptPath: negativeNode?.path ?? null,
-      }
-      workflowAmbiguousNodes = positiveNodes
-      workflowPickerSelection = positiveNodes[0].path
-    } else {
-      // Unambiguous — auto-confirm immediately
-      pendingWorkflowData = null
-      profileCustomWorkflow = {
-        workflow,
-        positivePromptPath: positiveNodes[0].path,
-        seedPath,
-        outputNodeId: outputNodeId!,
-        negativePromptPath: negativeNode?.path ?? null,
-      }
-      workflowAmbiguousNodes = []
+    profileCustomWorkflow = {
+      workflow,
+      ...detectWorkflowFields(workflow),
+      referenceInputPaths: suggestReferenceInputs(workflow),
     }
   }
 
@@ -642,73 +840,48 @@
     input.value = ''
   }
 
-  function confirmWorkflowPicker() {
-    if (!pendingWorkflowData || !workflowPickerSelection) return
-    profileCustomWorkflow = { ...pendingWorkflowData, positivePromptPath: workflowPickerSelection }
-    pendingWorkflowData = null
-    workflowAmbiguousNodes = []
+  function updateWorkflow(patch: Partial<ComfyCustomWorkflow>) {
+    if (profileCustomWorkflow) profileCustomWorkflow = { ...profileCustomWorkflow, ...patch }
+  }
+
+  function toggleReferenceInput(path: string, selected: boolean) {
+    const others = selectedReferenceInputs.filter((p) => p !== path)
+    updateWorkflow({ referenceInputPaths: selected ? [...others, path] : others })
+  }
+
+  // An input takes the prompt or the negative, never both.
+  function togglePromptInput(role: 'positive' | 'negative', path: string, selected: boolean) {
+    const drop = (paths: string[]) => paths.filter((p) => p !== path)
+    const next = (paths: string[], listRole: typeof role) =>
+      selected && listRole === role ? [...drop(paths), path] : drop(paths)
+    updateWorkflow({
+      positivePromptPaths: next(selectedPromptPaths, 'positive'),
+      negativePromptPaths: next(selectedNegativePaths, 'negative'),
+    })
   }
 
   function clearCustomWorkflow() {
     profileCustomWorkflow = null
-    pendingWorkflowData = null
-    workflowAmbiguousNodes = []
-    workflowPickerSelection = ''
     workflowError = null
     workflowFileName = null
   }
 
-  // ---------------------------------------------------------------------------
-  // UNet model loading
-  // ---------------------------------------------------------------------------
-
-  let unetModelsReqId = 0
-
-  async function loadUnetModels() {
-    if (profileProviderType !== 'comfyui') return
-    const baseUrl = profileBaseUrl?.trim() || 'http://localhost:8188'
-    const reqId = ++unetModelsReqId
-    isLoadingUnetModels = true
-    try {
-      const [clips, vaes] = await Promise.all([
-        fetchModelList(baseUrl, 'text_encoders', settings.apiSettings.llmTimeoutMs),
-        fetchModelList(baseUrl, 'vae', settings.apiSettings.llmTimeoutMs),
-      ])
-      if (reqId !== unetModelsReqId) return
-      availableClips = clips
-      availableVaes = vaes
-    } finally {
-      if (reqId === unetModelsReqId) isLoadingUnetModels = false
-    }
-  }
-
-  // Auto-load when switching to UNet mode
+  // Switching into UNet mode loads the lists, unless a pending or running load reads them.
   $effect(() => {
-    if (profileMode === ComfyMode.UnetTxt2Img && availableClips.length === 0) {
-      untrack(() => void loadUnetModels())
-    }
+    if (profileMode !== ComfyMode.UnetTxt2Img || profileProviderType !== 'comfyui') return
+    untrack(() => {
+      if (availableClips.length > 0 || modelsDebounce !== undefined) return
+      if (modelsRequest && requestHasUnetLists) return
+      void loadProfileForm(false)
+    })
   })
 
-  // Evict comfy.ts caches when the user changes the ComfyUI base URL so that
-  // the next generate/listModels call fetches fresh model lists.
-  // Also clear availableClips/Vaes so the auto-load effect can trigger a fresh fetch.
+  // The profile-models effect above clears the lists and auto-filled names when the connection
+  // changes; switching to a provider without UNet lists clears them too.
   $effect(() => {
-    if (profileProviderType === 'comfyui') {
-      const currentUrl = profileBaseUrl.trim() || 'http://localhost:8188'
-      if (prevComfyBaseUrl !== null && prevComfyBaseUrl !== currentUrl) {
-        clearComfyCacheForUrl(prevComfyBaseUrl)
-        availableClips = []
-        availableVaes = []
-      }
-      prevComfyBaseUrl = currentUrl
-    } else {
-      if (prevComfyBaseUrl !== null) {
-        clearComfyCacheForUrl(prevComfyBaseUrl)
-      }
-      prevComfyBaseUrl = null
-      availableClips = []
-      availableVaes = []
-    }
+    if (profileProviderType === 'comfyui') return
+    availableClips = []
+    availableVaes = []
   })
 </script>
 
@@ -749,11 +922,6 @@
           <Card class="border-primary/50 bg-primary/5">
             <CardContent>
               {@render profileForm()}
-              {#if needsWorkflow}
-                <p class="text-destructive pt-2 text-xs">
-                  Upload and confirm a workflow before saving.
-                </p>
-              {/if}
               <div class="flex gap-2 pt-2">
                 <Button variant="outline" onclick={resetEditState} class="flex-1">Cancel</Button>
                 <Button onclick={handleSaveProfile} disabled={!canSaveProfile} class="flex-1">
@@ -779,7 +947,7 @@
             {#each settings.imageProfiles as profile (profile.id)}
               <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
                 <Collapsible.Root
-                  open={openProfileIds.has(profile.id)}
+                  open={!isNewProfile && editingProfileId === profile.id}
                   onOpenChange={(open) => handleProfileOpenChange(open, profile)}
                 >
                   <div class="flex items-center gap-3 p-3 pl-4">
@@ -792,8 +960,7 @@
                       <div class="min-w-0 flex-1">
                         <span class="text-sm font-medium">{profile.name}</span>
                         <p class="text-muted-foreground text-xs">
-                          {providerTypes.find((p) => p.value === profile.providerType)?.label ||
-                            profile.providerType}
+                          {IMAGE_PROVIDER_LABELS[profile.providerType] ?? profile.providerType}
                           {profile.model ? ` · ${profile.model}` : ''}
                           {profile.apiKey ? ' · Key configured' : ' · No API key'}
                         </p>
@@ -851,8 +1018,7 @@
                     items={settings.imageProfiles}
                     selected={getSelectedImageProfile('standard')}
                     onSelect={(v) => onProfileChange((v as ImageProfile).id, 'standard')}
-                    itemLabel={(p: ImageProfile) =>
-                      `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+                    itemLabel={profileOptionLabel}
                     itemValue={(p: ImageProfile) => p.id}
                     placeholder="Select an image profile"
                   />
@@ -878,8 +1044,7 @@
                     items={settings.imageProfiles}
                     selected={getSelectedImageProfile('reference')}
                     onSelect={(v) => onProfileChange((v as ImageProfile).id, 'reference')}
-                    itemLabel={(p: ImageProfile) =>
-                      `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+                    itemLabel={profileOptionLabel}
                     itemValue={(p: ImageProfile) => p.id}
                     placeholder="Select an image profile"
                   />
@@ -954,8 +1119,7 @@
               items={settings.imageProfiles}
               selected={getSelectedImageProfile('portrait')}
               onSelect={(v) => onProfileChange((v as ImageProfile).id, 'portrait')}
-              itemLabel={(p: ImageProfile) =>
-                `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+              itemLabel={profileOptionLabel}
               itemValue={(p: ImageProfile) => p.id}
               placeholder="Select an image profile"
             />
@@ -1008,8 +1172,7 @@
               items={settings.imageProfiles}
               selected={getSelectedImageProfile('background')}
               onSelect={(v) => onProfileChange((v as ImageProfile).id, 'background')}
-              itemLabel={(p: ImageProfile) =>
-                `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+              itemLabel={profileOptionLabel}
               itemValue={(p: ImageProfile) => p.id}
               placeholder="Select an image profile"
             />
@@ -1056,8 +1219,7 @@
                 items={settings.imageProfiles}
                 selected={settings.imageProfiles.find((p) => p.id === testProfileId)}
                 onSelect={(v) => (testProfileId = (v as ImageProfile).id)}
-                itemLabel={(p: ImageProfile) =>
-                  `${p.name} (${providerTypes.find((t) => t.value === p.providerType)?.label || p.providerType}${p.model ? ` · ${p.model}` : ''})`}
+                itemLabel={profileOptionLabel}
                 itemValue={(p: ImageProfile) => p.id}
                 placeholder="Select a profile to test"
               />
@@ -1097,9 +1259,12 @@
             {#if testImageResult}
               <div class="mt-4 space-y-2">
                 <Label>Result Image</Label>
+                <p class="text-muted-foreground text-xs">
+                  Format received: {testImageMime ?? 'unknown'}
+                </p>
                 <div class="overflow-hidden rounded-lg border bg-black/5">
                   <img
-                    src="data:image/png;base64,{testImageResult}"
+                    src={normalizeImageDataUrl(testImageResult) ?? ''}
                     alt="Generated test"
                     class="mx-auto block h-auto max-w-full"
                   />
@@ -1123,74 +1288,79 @@
     <div class="space-y-2">
       <Label>Provider</Label>
       <Autocomplete
-        items={providerTypes}
-        selected={providerTypes.find((p) => p.value === profileProviderType)}
+        items={IMAGE_PROVIDER_OPTIONS}
+        selected={IMAGE_PROVIDER_OPTIONS.find((p) => p.value === profileProviderType)}
         onSelect={(v) => {
-          profileProviderType = (v as { value: ImageProviderType }).value
+          if (v && !Array.isArray(v)) selectProviderType(v.value)
         }}
-        itemLabel={(p: { label: string }) => p.label}
-        itemValue={(p: { value: string }) => p.value}
+        itemLabel={(p) => p.label}
+        itemValue={(p) => p.value}
         placeholder="Select provider"
       />
     </div>
 
-    {#if requiresApiKey(profileProviderType)}
-      <div class="space-y-2">
-        <Label>API Key</Label>
-        <div class="flex gap-2">
-          <div class="relative flex-1">
-            <Input
-              type={showApiKey ? 'text' : 'password'}
-              bind:value={profileApiKey}
-              placeholder="Enter API key"
-            />
-            <button
-              type="button"
-              class="absolute inset-y-0 right-0 flex items-center pr-3"
-              onclick={() => (showApiKey = !showApiKey)}
-            >
-              {#if showApiKey}
-                <EyeOff class="text-muted-foreground h-4 w-4" />
-              {:else}
-                <Eye class="text-muted-foreground h-4 w-4" />
-              {/if}
-            </button>
-          </div>
-        </div>
-
-        {#if settings.apiSettings.profiles.length > 0}
-          <div class="relative">
-            <Button
-              variant="outline"
-              size="sm"
-              onclick={() => (showCopyDropdown = !showCopyDropdown)}
-            >
-              <Copy class="mr-1 h-3 w-3" />
-              Copy from API Profile
-            </Button>
-            {#if showCopyDropdown}
-              <div class="bg-popover absolute z-10 mt-1 w-64 rounded-md border shadow-md">
-                {#each settings.apiSettings.profiles as apiProfile (apiProfile.id)}
-                  <button
-                    type="button"
-                    class="hover:bg-accent w-full px-3 py-2 text-left text-sm"
-                    onclick={() => copyApiKeyFromProfile(apiProfile)}
-                  >
-                    {apiProfile.name}
-                    <span class="text-muted-foreground text-xs">({apiProfile.providerType})</span>
-                  </button>
-                {/each}
-              </div>
+    <div class="space-y-2">
+      <Label>API Key</Label>
+      <div class="flex gap-2">
+        <div class="relative flex-1">
+          <Input
+            type={showApiKey ? 'text' : 'password'}
+            bind:value={profileApiKey}
+            placeholder={requiresApiKey(profileProviderType)
+              ? 'Enter API key'
+              : 'Optional, only if the server sits behind an auth proxy'}
+          />
+          <button
+            type="button"
+            class="absolute inset-y-0 right-0 flex items-center pr-3"
+            onclick={() => (showApiKey = !showApiKey)}
+          >
+            {#if showApiKey}
+              <EyeOff class="text-muted-foreground h-4 w-4" />
+            {:else}
+              <Eye class="text-muted-foreground h-4 w-4" />
             {/if}
-          </div>
-        {/if}
+          </button>
+        </div>
       </div>
-    {/if}
 
-    {#if profileProviderType === 'comfyui' || profileProviderType === 'openai' || profileProviderType === 'zhipu' || profileProviderType === 'a1111'}
+      {#if copyableApiProfiles.length > 0}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button {...props} variant="outline" size="sm">
+                <Copy class="mr-1 h-3 w-3" />
+                Copy from API Profile
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="start" class="w-64">
+            {#each copyableApiProfiles as apiProfile (apiProfile.id)}
+              <DropdownMenu.Item onSelect={() => copyApiKeyFromProfile(apiProfile)}>
+                {apiProfile.name}
+                <span class="text-muted-foreground text-xs">({apiProfile.providerType})</span>
+              </DropdownMenu.Item>
+            {/each}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      {/if}
+    </div>
+
+    {#if baseUrlMode(profileProviderType) !== 'none'}
       <div class="space-y-2">
-        <Label>Base URL (optional)</Label>
-        <Input bind:value={profileBaseUrl} placeholder="Custom base URL" />
+        <Label>
+          {baseUrlMode(profileProviderType) === 'required' ? 'Base URL' : 'Base URL (optional)'}
+        </Label>
+        <Input
+          bind:value={profileBaseUrl}
+          placeholder="Custom base URL"
+          aria-invalid={baseUrlInvalid}
+        />
+        {#if baseUrlInvalid}
+          <p class="text-destructive text-xs" role="alert">
+            Enter a full URL starting with http:// or https://
+          </p>
+        {/if}
       </div>
     {/if}
 
@@ -1198,23 +1368,24 @@
       <Label>Model</Label>
       <ImageModelSelect
         models={profileModels}
-        selectedModelId={profileModel}
+        selectedModelId={modelsSettled
+          ? canonicalModelId(profileModel, profileModels)
+          : profileModel}
         onModelChange={(id) => {
-          profileModel = id
+          profileModel = modelsSettled ? canonicalModelId(id, profileModels) : id
         }}
-        showCost={true}
         showImg2ImgIndicator={true}
         showDescription={profileProviderType === 'comfyui'}
         isLoading={isLoadingProfileModels}
-        errorMessage={profileModelsError}
+        failures={profileLoadFailures}
+        labelLists={isLocalServer(profileProviderType)}
         showRefreshButton={true}
-        onRefresh={() =>
-          loadProfileFormModels(profileProviderType, profileApiKey, profileBaseUrl, true)}
+        onRefresh={() => loadProfileForm(true)}
+        onStop={stopProfileModels}
       />
-      {#if referenceProfileImg2ImgWarning}
-        <p class="text-warning mt-1 text-xs">
-          This profile is used for reference image generation (img2img), but the selected model does
-          not support img2img.
+      {#if referenceProfileWarningReason}
+        <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+          This profile is used for reference image generation, but {referenceProfileWarningReason}
         </p>
       {:else}
         <p class="text-muted-foreground mt-1 text-xs">
@@ -1223,10 +1394,125 @@
       {/if}
     {/snippet}
 
-    {#if profileProviderType !== 'comfyui' && profileProviderType !== 'a1111'}
+    {#if !isLocalServer(profileProviderType)}
       <div class="space-y-2">
         {@render modelSelectContent()}
       </div>
+      {#if takesOverride}
+        <Collapsible.Root bind:open={capabilitiesOpen}>
+          <Collapsible.Trigger
+            class="group/caps text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm"
+          >
+            <ChevronRight
+              class="size-4 transition-transform duration-200 group-data-[state=open]/caps:rotate-90"
+            />
+            Model capabilities
+          </Collapsible.Trigger>
+          <Collapsible.Content class="space-y-4 pt-3">
+            <p class="text-muted-foreground text-xs">
+              Set what the provider's list leaves out or gets wrong. A blank field uses the
+              provider's own value.
+            </p>
+            <div class="space-y-2">
+              <Label for="override-min-pixels">Minimum pixels</Label>
+              <Input
+                id="override-min-pixels"
+                type="number"
+                bind:value={profileMinPixels}
+                placeholder="None"
+                min="1"
+                step="1"
+              />
+              <p class="text-muted-foreground text-xs">
+                Smaller sizes are raised to at least this many pixels, ratio kept.
+              </p>
+            </div>
+            <div class="space-y-2">
+              <Label for="override-sizes">Sizes</Label>
+              <Textarea
+                id="override-sizes"
+                bind:value={profileSizesText}
+                placeholder="1024x1024, 1536x1024"
+                rows={2}
+                aria-invalid={sizesInvalid}
+                class={cn(overridden.includes('sizes') && markedClass)}
+              />
+              {#if sizesInvalid}
+                <p class="text-destructive text-xs" role="alert">
+                  Not a WxH size: {invalidSizes.join(', ')}
+                </p>
+              {:else if overridden.includes('sizes') && publishedCapabilities?.supportedResolutions}
+                <p class="text-xs text-amber-600 dark:text-amber-400">
+                  Replaces the provider's list: {publishedCapabilities.supportedResolutions.join(
+                    ', ',
+                  )}
+                </p>
+              {:else}
+                <p class="text-muted-foreground text-xs">
+                  One WxH per line or comma-separated. Replaces the provider's size list.
+                </p>
+              {/if}
+            </div>
+            <div class="space-y-2">
+              <Label>References</Label>
+              <Autocomplete
+                items={referencesItems}
+                selected={referencesItems.find((o) => o.value === profileReferences)}
+                onSelect={(v) => {
+                  profileReferences = (v as (typeof referencesItems)[number]).value
+                }}
+                itemLabel={(o: { label: string }) => o.label}
+                itemValue={(o: { value: string }) => o.value}
+                placeholder="From the provider"
+                class={cn(overridden.includes('references') && markedClass)}
+              />
+              {#if overridden.includes('references')}
+                <p class="text-xs text-amber-600 dark:text-amber-400">
+                  Replaces what the provider says about reference images
+                </p>
+              {/if}
+              {#each conflicts as conflict (conflict.field)}
+                <p class="text-xs text-amber-600 dark:text-amber-400" role="alert">
+                  {conflict.message}
+                </p>
+              {/each}
+            </div>
+            <div class="space-y-2">
+              <Label>Output formats</Label>
+              <div class="flex flex-wrap gap-x-4 gap-y-2">
+                {#each IMAGE_OUTPUT_FORMATS as format, index (index)}
+                  <div class="flex items-center gap-2">
+                    <Checkbox
+                      id="override-format-{format}"
+                      checked={profileOutputFormats.includes(format)}
+                      onCheckedChange={(checked) => toggleOutputFormat(format, checked)}
+                    />
+                    <Label for="override-format-{format}" class="font-normal uppercase">
+                      {format}
+                    </Label>
+                  </div>
+                {/each}
+              </div>
+              <div class="flex items-center gap-2">
+                <Checkbox
+                  id="override-output-compression"
+                  checked={profileOutputCompression}
+                  disabled={profileOutputFormats.length === 0}
+                  onCheckedChange={(checked) => (profileOutputCompression = checked)}
+                />
+                <Label for="override-output-compression" class="font-normal">
+                  Takes a compression level
+                </Label>
+              </div>
+              <p class="text-muted-foreground text-xs">
+                The formats this host returns on request. They are used only for formats in the
+                preference list under Settings → Advanced → Image Output Format; with none ticked,
+                no format is sent.
+              </p>
+            </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
+      {/if}
     {/if}
     {#if profileProviderType === 'a1111'}
       <div class="space-y-2">
@@ -1270,6 +1556,15 @@
         <div class="col-span-2 space-y-2">
           <Label>Negative Prompt</Label>
           <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
+        </div>
+        <div class="col-span-2 flex items-center justify-between gap-3">
+          <div>
+            <Label for="a1111-takes-references">Model takes reference images</Label>
+            <p class="text-muted-foreground text-xs">
+              Kontext / Qwen Edit on sd.cpp or KoboldCpp; stock A1111 and Forge ignore them
+            </p>
+          </div>
+          <Switch id="a1111-takes-references" bind:checked={profileTakesReferences} />
         </div>
       </div>
     {/if}
@@ -1331,7 +1626,7 @@
           <Label>Positive Prompt Base</Label>
           <Textarea bind:value={profilePositivePrompt} placeholder="Base positive prompt..." />
         </div>
-        {#if (profileMode !== ComfyMode.CustomWorkflow && profileMode !== ComfyMode.UnetTxt2Img) || profileCustomWorkflow?.negativePromptPath}
+        {#if (profileMode !== ComfyMode.CustomWorkflow && profileMode !== ComfyMode.UnetTxt2Img) || selectedNegativePaths.length > 0}
           <div class="col-span-2 space-y-2">
             <Label>Negative Prompt</Label>
             <Textarea bind:value={profileNegativePrompt} placeholder="Negative prompt..." />
@@ -1353,67 +1648,138 @@
               {/if}
             </div>
 
-            {#if profileCustomWorkflow && workflowAmbiguousNodes.length === 0}
-              <!-- State B: workflow loaded and confirmed -->
-              <div class="bg-muted/40 space-y-1 rounded-md border px-3 py-2 text-xs">
+            {#if profileCustomWorkflow}
+              <!-- State B: workflow loaded -->
+              <div class="bg-muted/40 space-y-2 rounded-md border px-3 py-2 text-xs">
                 <p class="text-foreground font-medium">
                   ✓ {workflowFileName ?? 'Workflow loaded'} ({Object.keys(
                     profileCustomWorkflow.workflow,
                   ).length} nodes)
                 </p>
-                <p class="text-muted-foreground">
-                  Prompt → <code class="text-xs">{profileCustomWorkflow.positivePromptPath}</code>
-                </p>
-                <p class="text-muted-foreground">
-                  Seed → <code class="text-xs">{profileCustomWorkflow.seedPath}</code>
-                </p>
-                {#if profileCustomWorkflow.negativePromptPath}
-                  <p class="text-muted-foreground">
-                    Negative → <code class="text-xs"
-                      >{profileCustomWorkflow.negativePromptPath}</code
-                    >
-                  </p>
-                {:else}
-                  <p class="text-muted-foreground italic">
-                    No negative prompt node detected (ignored).
+                {#if workflowMissing}
+                  <p class="text-xs text-amber-600 dark:text-amber-400" role="alert">
+                    {workflowMissing}
                   </p>
                 {/if}
-              </div>
-            {:else if workflowAmbiguousNodes.length > 0}
-              <!-- Picker: multiple CLIPTextEncode positive nodes found -->
-              <div class="bg-muted/40 space-y-2 rounded-md border px-3 py-2">
-                <p class="text-muted-foreground text-xs">
-                  Multiple prompt nodes found. Select the one to use as the positive prompt:
-                </p>
-                {#each workflowAmbiguousNodes as node (node.nodeId)}
-                  <label
-                    class="hover:bg-muted/60 flex cursor-pointer items-start gap-2.5 rounded p-1.5 text-xs transition-colors"
-                  >
-                    <input
-                      type="radio"
-                      name="workflow-positive-node"
-                      value={node.path}
-                      bind:group={workflowPickerSelection}
-                      class="mt-0.5 shrink-0"
-                    />
-                    <span class="flex flex-col gap-0.5">
-                      <span class="font-mono text-[11px]"
-                        >{node.nodeId}{#if node.title}
-                          <span class="text-muted-foreground font-sans">— {node.title}</span>{/if}
-                        {#if node.kSamplerSlot}
-                          <span
-                            class="bg-primary/10 text-primary ml-1 rounded px-1 py-0.5 font-sans text-[10px] not-italic"
-                            >{node.kSamplerSlot}</span
-                          >
-                        {/if}
-                      </span>
-                      <span class="text-muted-foreground italic">{node.textPreview}</span>
-                    </span>
-                  </label>
-                {/each}
-                <Button size="sm" class="w-full" onclick={confirmWorkflowPicker}
-                  >Confirm selection</Button
-                >
+                {#snippet inputChecklist(
+                  role: 'positive' | 'negative',
+                  hint: string,
+                  selectedPaths: string[],
+                )}
+                  <div class="space-y-1">
+                    <p class="text-muted-foreground">{hint}</p>
+                    <div class="max-h-48 space-y-1 overflow-y-auto">
+                      {#each promptInputs as input (input.path)}
+                        <div class="flex items-center gap-2">
+                          <Checkbox
+                            id="comfy-{role}-{input.path}"
+                            checked={selectedPaths.includes(input.path)}
+                            onCheckedChange={(checked) =>
+                              togglePromptInput(role, input.path, checked)}
+                          />
+                          <Label for="comfy-{role}-{input.path}" class="min-w-0 font-normal">
+                            <span class="block truncate">
+                              <code class="text-xs">{input.nodeId}</code>
+                              {input.title}
+                              <span class="text-muted-foreground"
+                                >{input.name}: {previewOf(input.value)}</span
+                              >
+                            </span>
+                          </Label>
+                        </div>
+                      {:else}
+                        <p class="text-muted-foreground italic">
+                          This workflow has no text inputs.
+                        </p>
+                      {/each}
+                    </div>
+                  </div>
+                {/snippet}
+                {@render inputChecklist(
+                  'positive',
+                  'Prompt inputs → every checked input receives the scene prompt.',
+                  selectedPromptPaths,
+                )}
+                {@render inputChecklist(
+                  'negative',
+                  'Negative inputs → every checked input receives the negative prompt.',
+                  selectedNegativePaths,
+                )}
+                <div class="space-y-1">
+                  <Label>Seed input</Label>
+                  <Autocomplete
+                    items={seedItems}
+                    selected={seedItems.find(
+                      (item) => item.value === (profileCustomWorkflow?.seedPath ?? ''),
+                    )}
+                    onSelect={(v) =>
+                      updateWorkflow({ seedPath: (v as { value: string }).value || null })}
+                    itemLabel={(s: { label: string }) => s.label}
+                    itemValue={(s: { value: string }) => s.value}
+                    placeholder="None (fixed seed)"
+                  />
+                  {#if profileCustomWorkflow.seedPath === null}
+                    <p class="text-muted-foreground">
+                      Every image will use the workflow's own seed.
+                    </p>
+                  {/if}
+                </div>
+                <div class="space-y-1">
+                  <Label>Output node</Label>
+                  <Autocomplete
+                    items={outputItems}
+                    selected={outputItems.find(
+                      (item) => item.value === profileCustomWorkflow?.outputNodeId,
+                    )}
+                    onSelect={(v) =>
+                      updateWorkflow({ outputNodeId: (v as { value: string }).value })}
+                    itemLabel={(s: { label: string }) => s.label}
+                    itemValue={(s: { value: string }) => s.value}
+                    placeholder="Select output node"
+                  />
+                </div>
+                {#if loadImageNodes.length === 0}
+                  <p class="text-muted-foreground italic">
+                    No LoadImage node detected (reference images ignored).
+                  </p>
+                {:else}
+                  <div class="space-y-1 pt-1">
+                    <p class="text-muted-foreground">
+                      Reference images → the checked LoadImage nodes. Unchecked ones keep their
+                      saved image.
+                    </p>
+                    {#each loadImageNodes as node (node.path)}
+                      <div class="flex items-center gap-2">
+                        <Checkbox
+                          id="comfy-reference-{node.nodeId}"
+                          checked={selectedReferenceInputs.includes(node.path)}
+                          onCheckedChange={(checked) => toggleReferenceInput(node.path, checked)}
+                        />
+                        <Label for="comfy-reference-{node.nodeId}" class="font-normal">
+                          <code class="text-xs">{node.nodeId}</code>
+                          {node.title}
+                          {#if node.image}
+                            <span class="text-muted-foreground">({node.image})</span>
+                          {/if}
+                        </Label>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+                {#if selectedReferenceInputs.length > 0}
+                  <div class="flex items-center justify-between gap-3 pt-1">
+                    <div>
+                      <Label for="comfy-input-references"
+                        >Store references in the input folder</Label
+                      >
+                      <p class="text-muted-foreground">
+                        Use this if reference images fail to load. ComfyUI never clears this folder;
+                        the default temp folder is emptied on restart.
+                      </p>
+                    </div>
+                    <Switch id="comfy-input-references" bind:checked={profileInputReferences} />
+                  </div>
+                {/if}
               </div>
             {:else}
               <!-- State A: no workflow loaded -->
@@ -1451,8 +1817,7 @@
                   <li>
                     <span class="text-foreground font-medium">4. Upload it below.</span>
                     <br />
-                    The app will automatically detect your prompt and seed nodes. If multiple prompt nodes
-                    are found, you will be asked to pick one.
+                    The app pre-fills your prompt, seed and output nodes. You can change any of them afterwards.
                   </li>
                 </ol>
               </details>
@@ -1521,17 +1886,7 @@
       {#if profileMode === ComfyMode.UnetTxt2Img}
         <div class="grid grid-cols-2 gap-4 pt-2">
           <div class="col-span-2 space-y-2">
-            <div class="flex items-center justify-between">
-              <Label>CLIP / Text Encoder</Label>
-              <button
-                type="button"
-                class="text-muted-foreground hover:text-foreground text-xs underline"
-                disabled={isLoadingUnetModels}
-                onclick={loadUnetModels}
-              >
-                {isLoadingUnetModels ? 'Loading…' : '↻ Refresh'}
-              </button>
-            </div>
+            <Label>CLIP / Text Encoder</Label>
             <Autocomplete
               items={clipItems}
               selected={availableClips.includes(profileClipName)
@@ -1539,19 +1894,16 @@
                 : profileClipName
                   ? { value: profileClipName, label: profileClipName }
                   : undefined}
-              onSelect={(v) => {
-                profileClipName = (v as { value: string }).value
-              }}
+              onSelect={(v) => (profileClipName = (v as { value: string }).value)}
               allowCustom={true}
-              onCustomSelect={(v) => {
-                profileClipName = v
-              }}
+              onCustomSelect={(v) => (profileClipName = v)}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
-              placeholder="Auto-detect first available"
+              placeholder={clipPlaceholder}
             />
             <p class="text-muted-foreground text-xs">
-              Leave empty to auto-detect the first text encoder found in ComfyUI.
+              Empty uses the first text encoder ComfyUI lists, so pick one if the server has
+              several.
             </p>
           </div>
 
@@ -1564,19 +1916,15 @@
                 : profileVaeName
                   ? { value: profileVaeName, label: profileVaeName }
                   : undefined}
-              onSelect={(v) => {
-                profileVaeName = (v as { value: string }).value
-              }}
+              onSelect={(v) => (profileVaeName = (v as { value: string }).value)}
               allowCustom={true}
-              onCustomSelect={(v) => {
-                profileVaeName = v
-              }}
+              onCustomSelect={(v) => (profileVaeName = v)}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
-              placeholder="Auto-detect first available"
+              placeholder={vaePlaceholder}
             />
             <p class="text-muted-foreground text-xs">
-              Leave empty to auto-detect the first VAE found in ComfyUI.
+              Empty uses the first VAE ComfyUI lists, so pick one if the server has several.
             </p>
           </div>
 
@@ -1584,14 +1932,25 @@
             <Label>CLIP Type</Label>
             <Autocomplete
               items={clipTypeItems}
-              selected={clipTypeItems.find((s) => s.value === profileClipType)}
+              selected={clipTypeItems.find((s) => s.value === profileClipType) ??
+                (profileClipType ? { value: profileClipType, label: profileClipType } : undefined)}
               onSelect={(v) => {
                 profileClipType = (v as { value: string }).value
+              }}
+              allowCustom={true}
+              onCustomSelect={(v) => {
+                profileClipType = v
               }}
               itemLabel={(s: { label: string }) => s.label}
               itemValue={(s: { value: string }) => s.value}
               placeholder="Select CLIP type"
             />
+            {#if clipTypeUnlisted}
+              <p class="text-muted-foreground text-xs" role="status">
+                "{profileClipType}" is not in the list this server reports. It will be sent as
+                typed.
+              </p>
+            {/if}
           </div>
 
           <div class="space-y-2">

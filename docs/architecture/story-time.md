@@ -14,17 +14,23 @@ There is no calendar. Arithmetic goes through total minutes (`toMinutes` / `from
 
 `stories.time_tracker` is the register. Every other stored time is a copy of it, taken at some moment:
 
-| Copy                                        | Taken when                                  |
-| ------------------------------------------- | ------------------------------------------- |
-| `metadata.timeStart` on an entry            | the entry is added (`addEntry`)             |
-| `metadata.timeEnd` on a narration           | classification has advanced the clock       |
-| `worldStateDelta.previousState.timeTracker` | the entry's delta is recorded, for rollback |
-| `chapters.start_time` / `end_time`          | the chapter is written                      |
-| `checkpoints.time_tracker_snapshot`         | the checkpoint is taken                     |
+| Copy                                          | Taken when                            |
+| --------------------------------------------- | ------------------------------------- |
+| `metadata.timeStart` on an entry              | the entry is added (`addEntry`)       |
+| `metadata.timeEnd` on a narration             | classification has advanced the clock |
+| `chapters.start_time` / `end_time`            | the chapter is written                |
+| `checkpoints.time_tracker_snapshot`           | the checkpoint is taken               |
+| `world_state_snapshots.time_tracker_snapshot` | the world-state snapshot is taken     |
 
 Classification advances the clock by one of four buckets — none, 15 minutes, 2 hours, 1 day — and a
 failed classification counts as none. A player action is an instant: its start and end are the same
 moment, and it never carries a duration or a weight anywhere below.
+
+Loading a branch sets the register from its last entry's `timeEnd`. A branch that ends on a
+story-start entry, a wizard opening or an imported chat, takes the clock of the checkpoint on that
+entry instead (`startClock`): it keeps a clock edited before the first turn, and branching from or
+returning to a story's start does not carry the clock of turns played elsewhere. A checkpoint with
+no clock clears the register only for an unstamped entry; a stamped one keeps its own time.
 
 A zero clock and an absent one are written identically by `addEntry`, so a stored zero cannot be read
 as either. Detection treats it as suspect, never as proof.
@@ -70,7 +76,8 @@ the shared entries to a destination inside one branch, rewriting the history eve
 stands on to suit that one. Stopping every range at the fork keeps shared entries reconciled only
 between points they all share. It also keeps the fork's own ending still, since every branch forked
 there opens on it. Forks are taken from every branch in the story, not just the one in view, and
-kept where their entry is visible. Anchoring a fork point is the one deliberate way to move it. A checkpoint is not a
+kept where their entry is visible. A fork point moves only deliberately: by anchoring it, or by
+restating it as the later boundary of a reconciliation, which warns how many branches open on it. A checkpoint is not a
 boundary: its clock is a copy, updated when its entry moves.
 
 A **range** is the stretch between two adjacent boundaries (`selectableRanges`). Adjacent only: a
@@ -82,6 +89,14 @@ exactly at the boundary. `refuseRange` refuses a range whose end has no time, or
 
 `reconcileRange` (`reconcile.ts`) is pure — entries and boundaries in, new times out — so the
 preview and the apply path share one calculation: the preview _is_ the result.
+
+The reader may restate either boundary for one reconciliation (`BoundaryDrafts`, resolved by
+`restateBoundaries`). A restated earlier boundary moves only the baseline: its entry stays as it is,
+and the mismatch with it is the leading join. A restated later boundary is the target, and applying
+writes it to that entry's ending; an action has no ending to write, so only the earlier boundary may
+name one (`canRestate`). A restatement is an input like a weight: an Assert is never stored, and an
+Edit updates the existing anchor when the reconciliation is applied. The fingerprint keeps comparing
+the stored boundaries.
 
 The range is weighed as alternating entry durations and the intervals between them,
 `[d0, g0, d1, g1, … dN-1]`:
@@ -101,23 +116,29 @@ has a weight. Reconciling again with unchanged boundaries changes nothing.
 ## Applying
 
 `planReconciliation` (`reconciliation.ts`) turns the new times into every write that must accompany
-them: chapter spans covering the range, the clock inside each rewritten delta, a checkpoint whose
-last entry moved, the world-state keyframes of the rewritten entries, and the story clock — **only**
+them: chapter spans covering the range, a checkpoint whose last entry moved, the clock of each
+world-state snapshot of the rewritten entries (kept, since past states are rebuilt from them), and
+the story clock — **only**
 when the range reaches the branch's last entry. An interior range makes no claim about where the
 story now stands, and writing the clock anyway would discard a clock adjustment the reader had not
 yet committed by continuing.
+
+A restated boundary that was already anchored is an edit of that anchor, and the plan stores it in the
+same transaction (`plan.anchors`); one that was not anchored is stored nowhere.
 
 `applyReconciliation` commits the plan as one transaction and publishes it to memory only after the
 commit. The store refuses while a generation holds the story (`assertNotBusy`), re-resolves the
 range from the current boundaries, recomputes the preview with the reader's weights, and applies
 only when its fingerprint matches the one the reader saw; otherwise the screen refreshes. The
-fingerprint covers the endpoints and their times, the entries in the range and their endings, and
-any boundary that appeared inside the range.
+fingerprint covers the endpoints and their times, the note of an anchor on either endpoint (an
+edited anchor is written whole), the entries in the range and their endings, and any boundary that
+appeared inside the range.
 
 ## Editing one entry
 
 `setEntryTimes` writes one entry's own beginning and ending as a one-entry plan, so it carries the
-same guarantees. The player action before a narration moves with it, to the narration's new
+same guarantees. It is offered from the entry and from the reference-points list, not from the
+reconciliation screen, which restates boundaries for the repair instead. The player action before a narration moves with it, to the narration's new
 beginning. Beyond the generation guard it is never refused: on a fork point it also updates the
 checkpoint the branches open on, and the dialog tells the reader how many intervals the edit reaches. No other entry moves, so an edit
 can open a gap or an overlap that detection then reports.

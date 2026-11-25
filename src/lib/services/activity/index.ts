@@ -8,6 +8,7 @@
 export type {
   ActivityStep,
   ActivityTurn,
+  ActivityRecordKind,
   ActivityNode,
   ActivityRow,
   ActivityStatus,

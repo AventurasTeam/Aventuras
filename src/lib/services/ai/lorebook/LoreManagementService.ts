@@ -40,6 +40,9 @@ import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
 import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
 import { LORE_MANAGEMENT_DEFAULTS, recentStoryBudgetChars } from '../core/defaults'
 import { loreChapterContext, loreRecentEntries, renderLoreProse } from './newChapter'
+import { loreModelCallReason, loreToolOutcome, loreToolStep, type StepToolCall } from './loreSteps'
+import { activity } from '#lib/stores/activity.svelte.ts'
+import { failStep } from '#lib/services/activity/index.ts'
 
 const log = createLogger('LoreManagement')
 
@@ -85,8 +88,12 @@ export interface LoreManagementContext {
   mode: StoryMode
   pov: POV
   tense: Tense
-  /** Callback to query a chapter with a question */
-  queryChapter?: (chapterNumber: number, question: string) => Promise<string>
+  /** Callback to query a chapter with a question, under the model call that asked */
+  queryChapter?: (
+    chapterNumber: number,
+    question: string,
+    activityParentId?: string,
+  ) => Promise<string>
   /**
    * Name pairs already declared distinct — by the user in the duplicates window, or by an
    * earlier run. Groups they cover are not put to the agent again.
@@ -95,6 +102,8 @@ export interface LoreManagementContext {
   /** Persist a `keep_separate` decision, so it outlives the session. */
   onKeepSeparate?: (names: string[]) => Promise<void>
   newChapter?: LoreNewChapterInput
+  /** Step the session's model calls are recorded under. Without one, none are. */
+  activityParentId?: string
 }
 
 /**
@@ -163,6 +172,9 @@ export class LoreManagementService extends BaseAIService {
     })
 
     let changeIdCounter = 0
+    let modelCallId = ''
+    /** The step each chapter read in flight is recorded as, by chapter and question. */
+    const readSteps = new Map<string, string>()
 
     // Convert entries to vault format for tools
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
@@ -235,7 +247,14 @@ export class LoreManagementService extends BaseAIService {
       chapterQueries: new ChapterQueryBudget({
         max: MAX_CHAPTER_QUERIES_LORE,
         scope: 'session',
-        ask: context.queryChapter,
+        ask:
+          context.queryChapter &&
+          ((chapterNumber, question) =>
+            context.queryChapter!(
+              chapterNumber,
+              question,
+              readSteps.get(`${chapterNumber}:${question}`) || undefined,
+            )),
       }),
       // Without the obligation there is nothing to refuse over, so the predicate is not
       // installed: the worklist and `keep_separate` stay, they just stop being a gate.
@@ -261,6 +280,12 @@ export class LoreManagementService extends BaseAIService {
 
     // Create tools
     const tools = createLoreManagementTools(toolContext)
+    if (context.activityParentId) {
+      this.recordToolCalls(tools, context.activityParentId, vaultEntries, readSteps, () => {
+        // The response that asked for these tools is in, so its model call is over.
+        activity.endStep(modelCallId)
+      })
+    }
 
     // Build entry summaries for user prompt (use 0-based indices to match tool expectations)
     const entrySummary =
@@ -330,6 +355,32 @@ export class LoreManagementService extends BaseAIService {
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')
 
+    // A run that hits the ceiling has its changes, but its account of them lives only in the
+    // message history — and that summary is the only thing the user is shown. Spend the last
+    // step, which was going to happen anyway, on it.
+    const lastStepOnly = finishOnlyOnLastStep('finish_lore_management', this.maxIterations)
+    // Wrapped to open a step per model call, named for why the loop makes it.
+    const prepareStep = ((input: {
+      stepNumber: number
+      steps: readonly { toolCalls?: readonly StepToolCall[] }[]
+    }) => {
+      activity.endStep(modelCallId)
+      if (context.activityParentId) {
+        modelCallId = activity.startStep(`Model call ${input.stepNumber + 1}`, {
+          parentId: context.activityParentId,
+          isLLM: true,
+          detail: loreModelCallReason({
+            stepNumber: input.stepNumber,
+            isLast: input.stepNumber >= this.maxIterations - 1,
+            previous: input.steps.at(-1)?.toolCalls ?? [],
+            openDuplicates: openDuplicateGroups().length,
+            newChapterNumber: context.newChapter?.chapter.number,
+          }),
+        })
+      }
+      return lastStepOnly(input)
+    }) as PrepareStepFunction<typeof tools>
+
     // Create the agent
     const agent = createAgentFromPreset(
       {
@@ -339,20 +390,21 @@ export class LoreManagementService extends BaseAIService {
         // The terminal tool refuses to finish while duplicate groups are open, so the loop
         // has to read its answer rather than its call.
         stopWhen: stopOnCompletedTerminalTool('finish_lore_management', this.maxIterations),
-        // A run that hits the ceiling has already written its changes, but its account of
-        // them lives only in the message history — and that summary is the only thing the
-        // user is shown. Spend the last step, which was going to happen anyway, on it.
-        prepareStep: finishOnlyOnLastStep(
-          'finish_lore_management',
-          this.maxIterations,
-        ) as PrepareStepFunction<typeof tools>,
+        prepareStep,
         signal,
       },
       'lore-management',
     )
 
     // Run the agent
-    const result = await agent.generate({ prompt: userPrompt })
+    let result: Awaited<ReturnType<typeof agent.generate>>
+    try {
+      result = await agent.generate({ prompt: userPrompt })
+    } catch (error) {
+      failStep(activity, modelCallId, error)
+      throw error
+    }
+    activity.endStep(modelCallId)
 
     // Started inside the synchronous tool callback, settled here: a dismissal the session
     // reports must be one that reached the table.
@@ -385,6 +437,43 @@ export class LoreManagementService extends BaseAIService {
       deletedEntries,
       merges,
       reasoning: terminalResult?.summary,
+    }
+  }
+
+  /**
+   * Record each tool call as a step beside the model calls, opened when it starts running and
+   * closed on what it answered. `onStart` runs first, for the model call that asked for it.
+   */
+  private recordToolCalls(
+    tools: Record<string, unknown>,
+    parentId: string,
+    entries: VaultLorebookEntry[],
+    readSteps: Map<string, string>,
+    onStart: () => void,
+  ): void {
+    for (const [toolName, value] of Object.entries(tools)) {
+      const tool = value as { execute?: (input: unknown, options: unknown) => Promise<unknown> }
+      const execute = tool.execute
+      if (!execute) continue
+      tool.execute = async (input, options) => {
+        onStart()
+        const { label, isLLM } = loreToolStep({ toolName, input }, (i) => entries[i]?.name)
+        const id = activity.startStep(label, { parentId, isLLM })
+        const read = input as { chapterNumber?: number; question?: string }
+        const readKey = toolName === 'query_chapter' ? `${read.chapterNumber}:${read.question}` : ''
+        if (readKey) readSteps.set(readKey, id)
+        try {
+          const result = await execute(input, options)
+          const { status, detail, error } = loreToolOutcome(result)
+          activity.endStep(id, status, detail, error)
+          return result
+        } catch (error) {
+          failStep(activity, id, error)
+          throw error
+        } finally {
+          if (readKey) readSteps.delete(readKey)
+        }
+      }
     }
   }
 }

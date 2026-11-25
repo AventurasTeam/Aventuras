@@ -21,6 +21,7 @@ import { createLogger } from '#lib/log.ts'
 import { stripPicTags } from '#lib/utils/inlineImageParser.ts'
 import { formatTimeSpan } from '#lib/utils/storyTime.ts'
 import { storyImageMode } from '#lib/utils/image.ts'
+import { storyPov, storyTense } from '#lib/utils/storySettings.ts'
 import { STREAM_FAILURE, type StreamChunk } from '../core/types'
 import type {
   Story,
@@ -463,8 +464,8 @@ export class NarrativeService {
       ctx = new ContextBuilder()
       ctx.add({
         mode,
-        pov: story?.settings?.pov ?? 'second',
-        tense: story?.settings?.tense ?? 'present',
+        pov: storyPov(story),
+        tense: storyTense(story),
         protagonistName: 'the protagonist',
       })
     }

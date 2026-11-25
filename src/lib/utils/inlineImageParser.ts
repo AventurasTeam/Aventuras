@@ -1,3 +1,5 @@
+import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+
 /**
  * Inline Image Parser
  *
@@ -226,12 +228,12 @@ function missingRecordInfo(prompt: string, shortPrompt: string): string {
 // ─── Completed image renderers ───
 
 function renderCompleteImage(imageId: string, prompt: string, imageData: string): string {
-  return `<div class="inline-generated-image" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}" data-action="view" role="button" tabindex="0"><img src="data:image/png;base64,${imageData}" alt="${escapeHtml(prompt)}" loading="lazy" /></div>`
+  return `<div class="inline-generated-image" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}" data-action="view" role="button" tabindex="0"><img src="${normalizeImageDataUrl(imageData)}" alt="${escapeHtml(prompt)}" loading="lazy" /></div>`
 }
 
 function renderRegeneratingImage(imageId: string, prompt: string, imageData: string): string {
   return `<div class="inline-generated-image regenerating" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}">
-    <img src="data:image/png;base64,${imageData}" alt="${escapeHtml(prompt)}" loading="lazy" class="regenerating-image" />
+    <img src="${normalizeImageDataUrl(imageData)}" alt="${escapeHtml(prompt)}" loading="lazy" class="regenerating-image" />
     <div class="regenerating-overlay">
       <div class="regenerating-content">
         <svg class="regenerating-spinner" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="80, 200" stroke-dashoffset="0"></circle></svg>

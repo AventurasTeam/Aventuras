@@ -3,9 +3,25 @@ import type { StoryEntry } from '#lib/types/index.ts'
 /** `metadata.source` of the system entry a failed generation leaves in place of its narration. */
 export const GENERATION_ERROR_SOURCE = 'generation-error'
 
+/** `metadata.source` of the entries a story starts from: a wizard's opening, an imported chat. */
+export const OPENING_SOURCE = 'wizard'
+export const IMPORTED_CHAT_SOURCE = 'sillytavern_import'
+
+/** Whether story creation or a chat import wrote the entry, rather than a turn. */
+export function isStoryStartEntry(entry: Pick<StoryEntry, 'metadata'>): boolean {
+  const source = entry.metadata?.source
+  return source === OPENING_SOURCE || source === IMPORTED_CHAT_SOURCE
+}
+
 /** Whether a system entry records a failed generation, which offers Retry and Dismiss. */
 export function isGenerationErrorEntry(entry: StoryEntry): boolean {
   return entry.type === 'system' && entry.metadata?.source === GENERATION_ERROR_SOURCE
+}
+
+/** The action ending the story with nothing answering it, if there is one. */
+export function trailingAction(entries: StoryEntry[]): StoryEntry | null {
+  const last = entries.at(-1)
+  return last?.type === 'user_action' ? last : null
 }
 
 /**

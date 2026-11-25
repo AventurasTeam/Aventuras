@@ -6,6 +6,7 @@ import Title from './responsive-modal-title.svelte'
 import Description from './responsive-modal-description.svelte'
 import Trigger from './responsive-modal-trigger.svelte'
 import Close from './responsive-modal-close.svelte'
+export { getResponsiveModalContext } from './context'
 
 export {
   Root,

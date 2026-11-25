@@ -1,0 +1,332 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('#lib/stores/settings.svelte.ts', () => ({
+  settings: { apiSettings: { llmTimeoutMs: 60_000 } },
+}))
+
+const sent = vi.hoisted(() => ({
+  calls: [] as { url: string; init: RequestInit }[],
+  replies: [] as (() => Response)[],
+}))
+
+// The recording fetch stands in for the Tauri transport; everything above it is the real SDK.
+vi.mock('#lib/services/ai/sdk/providers/sdkFetch.ts', () => ({
+  createSdkFetch: () => {
+    return async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      sent.calls.push({ url: input.toString(), init })
+      return (sent.replies.shift() ?? okReply)()
+    }
+  },
+}))
+vi.mock('./fetchAdapter', () => ({ imageGetFetch: vi.fn() }))
+
+import { imageGetFetch } from './fetchAdapter'
+import { createOpenAIProvider, openaiModelCapabilities } from './openai'
+import { IMAGE_SIZE_TIERS, type ImageSpec } from '#lib/utils/image.ts'
+import type { ImageGenerateOptions } from './types'
+
+const json =
+  (body: unknown, status = 200, headers: Record<string, string> = {}) =>
+  () =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json', ...headers },
+    })
+const okReply = json({ data: [{ b64_json: 'AAA' }] })
+
+const PNG = 'iVBORw0KGgo='
+const JPEG = '/9j/4AAQSkZJRg=='
+
+const options = (over: Partial<ImageGenerateOptions> = {}): ImageGenerateOptions => ({
+  model: 'gpt-image-2',
+  prompt: 'a castle',
+  spec: { orientation: 'square', size: 'medium' },
+  ...over,
+})
+
+const lastCall = () => sent.calls.at(-1)!
+const lastJson = () => JSON.parse(lastCall().init.body as string)
+const lastForm = () => lastCall().init.body as FormData
+
+beforeEach(() => {
+  sent.calls.length = 0
+  sent.replies.length = 0
+  vi.clearAllMocks()
+})
+
+describe('OpenAI image generation', () => {
+  it('posts a JSON generation with no response_format for gpt-image models', async () => {
+    const result = await createOpenAIProvider({ apiKey: 'k' }).generate(options())
+
+    expect(result).toEqual({ base64: 'AAA' })
+    expect(lastCall().url).toBe('https://api.openai.com/v1/images/generations')
+    expect(lastCall().init.method).toBe('POST')
+    expect(new Headers(lastCall().init.headers).get('authorization')).toBe('Bearer k')
+    expect(lastJson()).toEqual({
+      model: 'gpt-image-2',
+      prompt: 'a castle',
+      n: 1,
+      size: '1536x1536',
+    })
+  })
+
+  it('still asks other model ids for b64_json', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ model: 'some-image-model' }))
+    expect(lastJson().response_format).toBe('b64_json')
+  })
+
+  it('posts one reference as an edit with a single image part', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ referenceImages: [PNG] }))
+
+    expect(lastCall().url).toBe('https://api.openai.com/v1/images/edits')
+    const form = lastForm()
+    expect(form).toBeInstanceOf(FormData)
+    expect(form.get('model')).toBe('gpt-image-2')
+    expect(form.get('prompt')).toBe('a castle')
+    expect(form.get('n')).toBe('1')
+    expect(form.get('size')).toBe('1536x1536')
+    expect(form.has('response_format')).toBe(false)
+    const parts = form.getAll('image') as Blob[]
+    expect(parts).toHaveLength(1)
+    expect(parts[0].type).toBe('image/png')
+  })
+
+  it('posts several references as repeated image[] parts', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ referenceImages: [PNG, JPEG] }))
+
+    const form = lastForm()
+    expect(form.has('image')).toBe(false)
+    expect((form.getAll('image[]') as Blob[]).map((part) => part.type)).toEqual([
+      'image/png',
+      'image/jpeg',
+    ])
+  })
+
+  it('fails when the reply carries only a url', async () => {
+    sent.replies.push(json({ data: [{ url: 'https://img.test/a.png' }] }))
+    await expect(createOpenAIProvider({ apiKey: 'k' }).generate(options())).rejects.toThrow(
+      'Invalid JSON response',
+    )
+  })
+
+  it('surfaces the provider error message', async () => {
+    sent.replies.push(json({ error: { message: 'Billing hard limit reached' } }, 400))
+    await expect(createOpenAIProvider({ apiKey: 'k' }).generate(options())).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Billing hard limit reached',
+    })
+    expect(sent.calls).toHaveLength(1)
+  })
+})
+
+describe('OpenAI image size', () => {
+  const sizeFor = async (
+    model: string,
+    orientation: ImageSpec['orientation'],
+    size: ImageSpec['size'],
+    referenceImages?: string[],
+  ) => {
+    const provider = createOpenAIProvider({ apiKey: 'k' })
+    await provider.generate(
+      options({
+        model,
+        spec: { orientation, size },
+        modelInfo: openaiModelCapabilities(model),
+        referenceImages,
+      }),
+    )
+    return referenceImages ? lastForm().get('size') : lastJson().size
+  }
+
+  /** Non-square tiers fall under the 655,360-pixel floor unless raised; a square-only check would not notice. */
+  it.each([
+    ['square', ['816x816', '1024x1024', '1536x1536', '2048x2048']],
+    ['landscape', ['1088x608', '1088x608', '1536x864', '2048x1152']],
+  ] as const)(
+    'sends a %s gpt-image-2 request real dimensions at or above the pixel floor',
+    async (orientation, expected) => {
+      for (const [i, tier] of IMAGE_SIZE_TIERS.entries()) {
+        expect(await sizeFor('gpt-image-2', orientation, tier)).toBe(expected[i])
+      }
+    },
+  )
+
+  it('sends a landscape request to a fixed-size model its standard size', async () => {
+    for (const tier of IMAGE_SIZE_TIERS) {
+      expect(await sizeFor('gpt-image-1.5', 'landscape', tier)).toBe('1536x1024')
+    }
+  })
+
+  it('sends a gpt-image-2.6 landscape request real dimensions at or above the pixel floor', async () => {
+    expect(await sizeFor('gpt-image-2.6-flare', 'landscape', 'tiny')).toBe('1088x608')
+    expect(await sizeFor('gpt-image-2.6-sunburst', 'landscape', 'medium')).toBe('1536x864')
+  })
+
+  it('sends the same size on the edits endpoint', async () => {
+    expect(await sizeFor('gpt-image-1.5', 'landscape', 'medium', [PNG])).toBe('1536x1024')
+    expect(await sizeFor('gpt-image-2', 'landscape', 'tiny', [PNG])).toBe('1088x608')
+  })
+
+  it('sends real dimensions to a model with unknown capabilities or an unlisted id', async () => {
+    const provider = createOpenAIProvider({ apiKey: 'k' })
+    await provider.generate(
+      options({ spec: { orientation: 'landscape', size: 'tiny' }, modelInfo: undefined }),
+    )
+    expect(lastJson().size).toBe('1088x608')
+
+    await provider.generate(
+      options({
+        model: 'gpt-image-9',
+        spec: { orientation: 'landscape', size: 'medium' },
+        modelInfo: openaiModelCapabilities('gpt-image-9'),
+      }),
+    )
+    expect(lastJson().size).toBe('1536x864')
+  })
+})
+
+describe('OpenAI model listing', () => {
+  const modelsResponse = (body: unknown) =>
+    ({ ok: true, json: async () => body }) as unknown as Response
+
+  it('keeps the gpt-image and chatgpt-image ids, each taking references', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({
+        data: [
+          { id: 'dall-e-3' },
+          { id: 'gpt-image-2' },
+          { id: 'chatgpt-image-latest' },
+          { id: 'gpt-4o' },
+        ],
+      }),
+    )
+    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+    expect(models.map((m) => [m.id, m.supportsImg2Img, m.maxReferenceImages])).toEqual([
+      ['gpt-image-2', true, 16],
+      ['chatgpt-image-latest', true, 16],
+    ])
+  })
+
+  it('lists sizes only for the models that take a fixed set', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({ data: [{ id: 'gpt-image-2' }, { id: 'gpt-image-1.5' }] }),
+    )
+    const [free, fixed] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+    expect(free.supportedResolutions).toBeUndefined()
+    expect(fixed.supportedResolutions).toEqual(['1024x1024', '1536x1024', '1024x1536'])
+  })
+
+  it('gives a dated snapshot its undated model’s capabilities', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({
+        data: [{ id: 'gpt-image-2.5-flare' }, { id: 'gpt-image-2.5-flare-2026-09-08' }],
+      }),
+    )
+    const [model, snapshot] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+    expect(snapshot).toMatchObject({ id: 'gpt-image-2.5-flare-2026-09-08' })
+    expect(snapshot.maxReferenceImages).toBe(model.maxReferenceImages)
+  })
+
+  it.each(['gpt-image-2.6-sunburst', 'gpt-image-2.6-flare'])(
+    'lists %s as a free-form model taking 16 references',
+    async (id) => {
+      vi.mocked(imageGetFetch).mockResolvedValue(modelsResponse({ data: [{ id }] }))
+      const [model] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+      expect(model).toMatchObject({ id, supportsImg2Img: true, maxReferenceImages: 16 })
+      expect(model.supportedResolutions).toBeUndefined()
+    },
+  )
+
+  it('knows only that an unlisted image model takes references', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(modelsResponse({ data: [{ id: 'gpt-image-9' }] }))
+    const [model] = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+    expect(model.supportsImg2Img).toBe(true)
+    expect(model.maxReferenceImages).toBeUndefined()
+    expect(model.supportedResolutions).toBeUndefined()
+  })
+
+  it('skips entries without a string id', async () => {
+    vi.mocked(imageGetFetch).mockResolvedValue(
+      modelsResponse({ data: [null, 'gpt-image-2', { id: 7 }, { id: 'gpt-image-2' }] }),
+    )
+    const models = await createOpenAIProvider({ apiKey: 'k' }).listModels()
+    expect(models.map((m) => m.id)).toEqual(['gpt-image-2'])
+  })
+})
+
+describe('OpenAI model capabilities', () => {
+  it('answers from the table without a request or a key', () => {
+    expect(openaiModelCapabilities('gpt-image-1.5')).toMatchObject({
+      supportsImg2Img: true,
+      maxReferenceImages: 16,
+      supportedResolutions: ['1024x1024', '1536x1024', '1024x1536'],
+    })
+    expect(imageGetFetch).not.toHaveBeenCalled()
+  })
+
+  it('does not know a model that is not an image model', () => {
+    expect(openaiModelCapabilities('gpt-4o')).toBeUndefined()
+    expect(openaiModelCapabilities('dall-e-3')).toBeUndefined()
+  })
+
+  it('lists the output formats of the gpt-image models, with compression for the lossy ones', () => {
+    for (const model of [
+      'gpt-image-2',
+      'gpt-image-1.5',
+      'gpt-image-1-mini',
+      'chatgpt-image-latest',
+    ]) {
+      expect(openaiModelCapabilities(model)).toMatchObject({
+        outputFormats: ['png', 'jpeg', 'webp'],
+        compressionFormats: ['jpeg', 'webp'],
+      })
+    }
+  })
+
+  it('lists no output formats for a model the table does not know', () => {
+    expect(openaiModelCapabilities('gpt-image-9')?.outputFormats).toBeUndefined()
+  })
+
+  it('reads a dated snapshot as its undated model', () => {
+    expect(openaiModelCapabilities('gpt-image-1.5-2025-12-16')?.outputFormats).toEqual([
+      'png',
+      'jpeg',
+      'webp',
+    ])
+  })
+})
+
+describe('OpenAI output format', () => {
+  it('sends the format and compression in a JSON generation', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(
+      options({ output: { format: 'webp', compression: 80 } }),
+    )
+
+    expect(lastJson()).toMatchObject({ output_format: 'webp', output_compression: 80 })
+  })
+
+  it('sends them in an edit form too', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(
+      options({ referenceImages: [PNG], output: { format: 'jpeg', compression: 55 } }),
+    )
+
+    const form = lastForm()
+    expect(lastCall().url).toBe('https://api.openai.com/v1/images/edits')
+    expect(form.get('output_format')).toBe('jpeg')
+    expect(form.get('output_compression')).toBe('55')
+  })
+
+  it('sends a format alone when no compression is chosen', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options({ output: { format: 'png' } }))
+
+    expect(lastJson().output_format).toBe('png')
+    expect(lastJson()).not.toHaveProperty('output_compression')
+  })
+
+  it('sends neither without a chosen output', async () => {
+    await createOpenAIProvider({ apiKey: 'k' }).generate(options())
+
+    expect(lastJson()).not.toHaveProperty('output_format')
+    expect(lastJson()).not.toHaveProperty('output_compression')
+  })
+})

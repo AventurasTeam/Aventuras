@@ -34,9 +34,11 @@
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Slider } from '#lib/components/ui/slider/index.ts'
   import { Separator } from '#lib/components/ui/separator/index.ts'
-  import * as Dialog from '#lib/components/ui/dialog/index.ts'
+  import ActionModal from '#lib/components/shared/ActionModal.svelte'
   import { database } from '#lib/services/database.ts'
-  import { isAndroid, isIos } from '#lib/utils/platform.ts'
+  import { story } from '#lib/stores/story.svelte.ts'
+  import { isIos } from '#lib/utils/platform.ts'
+  import { supportsBackgroundGeneration } from '#lib/utils/backgroundKeepAlive.ts'
   import { autosize } from '#lib/utils/autosize.ts'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '#lib/utils/dialogFilters.ts'
@@ -44,6 +46,7 @@
 
   // Local mirror so we can revert the visual state if the confirm dialog is cancelled
   let stateTrackingChecked = $state(settings.experimentalFeatures.stateTracking)
+  let closingTracking = $state(false)
 
   let isBackingUp = $state(false)
   let backupResult = $state<{ success: boolean; message: string } | null>(null)
@@ -214,7 +217,34 @@
         return
       }
     }
+    if (!checked && !(await closeTracking())) {
+      stateTrackingChecked = true
+      return
+    }
     await settings.updateExperimentalFeatures({ stateTracking: checked })
+  }
+
+  /**
+   * Before tracking goes off: branches must still resolve as they did while tracked. False when
+   * the snapshots failed and the reader chose to keep tracking on, since a later attempt
+   * can only run while it still is.
+   */
+  async function closeTracking(): Promise<boolean> {
+    closingTracking = true
+    try {
+      await story.takeClosingSnapshots()
+      return true
+    } catch (error) {
+      console.error('[ExperimentalSettings] Closing snapshots failed:', error)
+      return await ask(
+        `The closing snapshots could not be saved: ${errMessage(error)}\n\n` +
+          'Without them, past checkpoints in what was tracked may be refused. ' +
+          'Turn State Tracking off anyway?',
+        { title: 'Turn off State Tracking', kind: 'warning' },
+      )
+    } finally {
+      closingTracking = false
+    }
   }
 
   async function handleRollbackToggle(checked: boolean) {
@@ -229,9 +259,9 @@
     await settings.updateExperimentalFeatures({ autoSnapshotInterval: value })
   }
 
-  // -- Android background generation handlers --
+  // -- Background generation handlers --
 
-  const showAndroidSection = isAndroid()
+  const showBackgroundSection = supportsBackgroundGeneration()
 
   async function handleBackgroundGenerationToggle(checked: boolean) {
     if (!checked) {
@@ -281,6 +311,7 @@
   }
 
   async function handleResetAll() {
+    if (settings.experimentalFeatures.stateTracking && !(await closeTracking())) return
     await settings.resetExperimentalFeatures()
     stateTrackingChecked = settings.experimentalFeatures.stateTracking
   }
@@ -310,13 +341,13 @@
       which holds every story, lorebook entry and image. You can restore from a backup to revert to
       a previous state.
     </p>
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap gap-2 sm:gap-3">
       <Button
         variant="outline"
         size="sm"
         onclick={handleBackup}
         disabled={isBackingUp || isRestoring}
-        class="gap-2"
+        class="grow gap-2 sm:grow-0"
       >
         {#if isBackingUp}
           <Loader2 class="h-4 w-4 animate-spin" />
@@ -331,7 +362,7 @@
         size="sm"
         onclick={handleRestore}
         disabled={isBackingUp || isRestoring}
-        class="gap-2"
+        class="grow gap-2 sm:grow-0"
       >
         {#if isRestoring}
           <Loader2 class="h-4 w-4 animate-spin" />
@@ -371,16 +402,22 @@
           <Label>State Tracking</Label>
         </div>
         <p class="text-muted-foreground text-xs">
-          Record world state changes (deltas) on each story entry after AI classification. This is
-          the foundation for rollback and lightweight branches.
+          Record every change to the world and the lorebook, and which entry it belongs to. Rollback
+          on Delete, regenerate and checkpoints at past entries rebuild state from these records.
         </p>
-        {#if settings.experimentalFeatures.stateTracking}
+        {#if closingTracking}
+          <p class="text-muted-foreground pt-1 text-xs italic">Saving where tracking stops…</p>
+        {:else if settings.experimentalFeatures.stateTracking}
           <p class="pt-1 text-xs font-medium text-amber-500">
-            Active — deltas will be recorded on new entries.
+            Active — every change to the world and the lorebook is recorded.
           </p>
         {/if}
       </div>
-      <Switch bind:checked={stateTrackingChecked} onCheckedChange={handleStateTrackingToggle} />
+      <Switch
+        bind:checked={stateTrackingChecked}
+        onCheckedChange={handleStateTrackingToggle}
+        disabled={closingTracking}
+      />
     </div>
 
     <!-- Rollback on Delete -->
@@ -459,8 +496,9 @@
       <Label>Auto-Snapshot Interval</Label>
     </div>
     <p class="text-muted-foreground text-xs">
-      Number of entries between automatic world state snapshots. Lower values allow faster rollback
-      but use more storage.
+      Number of entries between automatic world state snapshots. A checkpoint at a past entry is
+      rebuilt from the nearest snapshot after it, so lower values keep that closer but use more
+      storage.
     </p>
     <div class="flex items-center gap-4">
       <Slider
@@ -481,12 +519,12 @@
 
   <Separator />
 
-  <!-- Android Background Generation (only shown on Android) -->
-  {#if showAndroidSection}
+  <!-- Background Generation (Android and iOS) -->
+  {#if showBackgroundSection}
     <div class="space-y-5">
       <div class="flex items-center gap-2">
         <Smartphone class="text-muted-foreground h-4 w-4" />
-        <Label class="text-sm font-medium">Android Background Generation</Label>
+        <Label class="text-sm font-medium">Background Generation</Label>
       </div>
 
       <!-- Background Generation toggle -->
@@ -498,7 +536,13 @@
           </div>
           <p class="text-muted-foreground text-xs">
             Keeps the app alive during text generation when you switch apps or lock your screen.
-            Uses a foreground service and wake lock — may use slightly more battery.
+            {#if onIos}
+              Uses a system background task, shown in the Dynamic Island, and an inaudible audio
+              loop that keeps the story page running — may use slightly more battery. iOS can still
+              end the task early.
+            {:else}
+              Uses a foreground service and wake lock — may use slightly more battery.
+            {/if}
           </p>
           {#if settings.experimentalFeatures.backgroundGeneration}
             <p class="pt-1 text-xs font-medium text-amber-500">
@@ -568,11 +612,13 @@
         />
       </div>
 
-      <p class="text-muted-foreground text-xs italic">
-        Note: Some phone manufacturers (Xiaomi, Huawei, Samsung, etc.) have aggressive battery
-        optimization that may still interrupt generation. You may need to exempt Aventura from
-        battery optimization in your device settings.
-      </p>
+      {#if !onIos}
+        <p class="text-muted-foreground text-xs italic">
+          Note: Some phone manufacturers (Xiaomi, Huawei, Samsung, etc.) have aggressive battery
+          optimization that may still interrupt generation. You may need to exempt Aventura from
+          battery optimization in your device settings.
+        </p>
+      {/if}
     </div>
 
     <Separator />
@@ -586,7 +632,13 @@
         Disable all experimental features and reset to defaults.
       </p>
     </div>
-    <Button variant="outline" size="sm" onclick={handleResetAll} class="gap-2">
+    <Button
+      variant="outline"
+      size="sm"
+      onclick={handleResetAll}
+      disabled={closingTracking}
+      class="gap-2"
+    >
       <RotateCcw class="h-4 w-4" />
       Reset
     </Button>
@@ -705,72 +757,59 @@
   {/if}
 </div>
 
-<!-- Backup Warning Dialog -->
-<Dialog.Root bind:open={showBackupConfirm}>
-  <Dialog.Content class="sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title class="flex items-center gap-2">
-        <AlertTriangle class="h-5 w-5 text-amber-500" />
-        Backup Contains Sensitive Data
-      </Dialog.Title>
-      <Dialog.Description class="space-y-3 pt-2">
-        <p>
-          The backup includes your <strong>full settings</strong>, which contain your
-          <strong class="text-destructive">API keys</strong> and
-          <strong class="text-destructive">API provider profiles</strong>.
-        </p>
-        <p class="font-medium text-amber-500">
-          Do not share this file with others — anyone with the backup can access your API keys.
-        </p>
-      </Dialog.Description>
-    </Dialog.Header>
-    <Dialog.Footer class="gap-2 sm:gap-0">
-      <Button variant="outline" onclick={() => (showBackupConfirm = false)}>Cancel</Button>
-      <Button onclick={handleBackupConfirmed} class="gap-2">
-        <Download class="h-4 w-4" />
-        Continue
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+{#snippet warning()}
+  <AlertTriangle class="size-5 text-amber-500" />
+{/snippet}
 
-<!-- Restore Confirmation Dialog -->
-<Dialog.Root bind:open={showRestoreConfirm}>
-  <Dialog.Content class="p-6 sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title class="flex items-center gap-2">
-        <AlertTriangle class="h-5 w-5 text-amber-500" />
-        Restore from Backup
-      </Dialog.Title>
-      <Dialog.Description class="space-y-3 pt-2">
-        <p>
-          This will <strong class="text-destructive">replace your entire database</strong> with the one
-          from the backup ZIP.
-        </p>
-        <p>
-          A safety copy of your current database will be saved as
-          <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
-        </p>
-        <p class="font-medium text-amber-500">
-          {#if onIos}
-            iOS cannot close the app for you. After restoring, close Aventuras from the app
-            switcher, then reopen it.
-          {:else}
-            The application will close after restoring. You will need to reopen it manually.
-          {/if}
-        </p>
-      </Dialog.Description>
-    </Dialog.Header>
-    <Dialog.Footer class="mt-4 justify-between sm:justify-between">
-      <Button variant="outline" onclick={() => (showRestoreConfirm = false)}>Cancel</Button>
-      <Button
-        variant="outline"
-        onclick={handleRestoreConfirmed}
-        class="border-destructive text-destructive hover:bg-destructive/10 gap-2"
-      >
-        <Upload class="h-4 w-4" />
-        {onIos ? 'Restore' : 'Restore & Close App'}
-      </Button>
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+<ActionModal
+  bind:open={showBackupConfirm}
+  title="Backup Contains Sensitive Data"
+  titleIcon={warning}
+  action={{ label: 'Continue', icon: Download, onConfirm: handleBackupConfirmed }}
+>
+  {#snippet description()}
+    <span class="block space-y-3 pt-2">
+      <span class="block">
+        The backup includes your <strong>full settings</strong>, which contain your
+        <strong class="text-destructive">API keys</strong> and
+        <strong class="text-destructive">API provider profiles</strong>.
+      </span>
+      <span class="block font-medium text-amber-500">
+        Do not share this file with others — anyone with the backup can access your API keys.
+      </span>
+    </span>
+  {/snippet}
+</ActionModal>
+
+<ActionModal
+  bind:open={showRestoreConfirm}
+  title="Restore from Backup"
+  titleIcon={warning}
+  action={{
+    label: onIos ? 'Restore' : 'Restore & Close App',
+    icon: Upload,
+    tone: 'overwrite',
+    onConfirm: handleRestoreConfirmed,
+  }}
+>
+  {#snippet description()}
+    <span class="block space-y-3 pt-2">
+      <span class="block">
+        This will <strong class="text-destructive">replace your entire database</strong> with the one
+        from the backup ZIP.
+      </span>
+      <span class="block">
+        A safety copy of your current database will be saved as
+        <span class="font-mono text-xs">aventura-pre-restore.db</span> in the app data folder.
+      </span>
+      <span class="block font-medium text-amber-500">
+        {#if onIos}
+          iOS cannot close the app for you. After restoring, close Aventuras from the app switcher,
+          then reopen it.
+        {:else}
+          The application will close after restoring. You will need to reopen it manually.
+        {/if}
+      </span>
+    </span>
+  {/snippet}
+</ActionModal>

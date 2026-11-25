@@ -2,11 +2,15 @@
   import { story } from '#lib/stores/story.svelte.ts'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { settings, STORY_WIDTH_OPTIONS } from '#lib/stores/settings.svelte.ts'
-  import { Loader2, BookOpen, ChevronDown, ChevronUp } from '@lucide/svelte'
+  import { Loader2, BookOpen } from '@lucide/svelte'
+  import ScrollEdgeButton from '#lib/components/shared/ScrollEdgeButton.svelte'
   import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'
   import ChapterBanner from './ChapterBanner.svelte'
+  import ChapterCreationCard from './ChapterCreationCard.svelte'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
+  import type { ChapterCard } from '#lib/services/chapterCreation/index.ts'
   import TimeAnchorModal from '#lib/components/world/TimeAnchorModal.svelte'
   import EntryTimeModal from '#lib/components/world/EntryTimeModal.svelte'
   import StreamingEntry from './StreamingEntry.svelte'
@@ -17,6 +21,11 @@
   import { eventBus, type BranchSwitchedEvent } from '#lib/services/events.ts'
   import { repinDecision, type PinSnapshot } from '#lib/utils/storyPin.ts'
   import { contextLift } from '#lib/utils/storyNavigation.ts'
+  import { normalizeImageDataUrl } from '#lib/utils/image.ts'
+  import DeleteEntryModal from './DeleteEntryModal.svelte'
+  import RegenerateEntryModal from './RegenerateEntryModal.svelte'
+  import CreateCheckpointModal from './CreateCheckpointModal.svelte'
+  import CreateBranchModal from '#lib/components/branch/CreateBranchModal.svelte'
 
   const storyMaxWidthStyle = $derived.by(() => {
     const maxWidth =
@@ -125,6 +134,33 @@
   const chapterBanners = $derived(
     settings.uiSettings.showChapterBanners ? story.chapterBanners : null,
   )
+
+  const afterTurnStatus = $derived.by(() => {
+    const current = story.currentStory
+    if (!current) return ''
+    const checking = ui.chapterCheckActiveFor(current.id, current.currentBranchId ?? null)
+    const reviewing = ui.styleReviewLoading
+    if (checking && reviewing) return 'Checking for a new chapter and reviewing the prose style...'
+    if (checking) return 'Checking for a new chapter...'
+    if (reviewing) return 'Reviewing the prose style...'
+    return ''
+  })
+
+  // Each card sits after the narration of the turn that cut its chapter, on that branch only.
+  // A card whose narration is gone, by a retry or a delete, goes after the last entry instead,
+  // so its controls and the toast pointing at it still lead somewhere.
+  const placedCards = $derived.by(() => {
+    const byAnchor: Record<string, ChapterCard[]> = {}
+    const unanchored: ChapterCard[] = []
+    const current = story.currentStory
+    if (!current) return { byAnchor, unanchored }
+    const present = new Set(story.entries.map((entry) => entry.id))
+    for (const card of chapterCards.forScope(current.id, current.currentBranchId ?? null)) {
+      if (present.has(card.anchorEntryId)) (byAnchor[card.anchorEntryId] ??= []).push(card)
+      else unanchored.push(card)
+    }
+    return { byAnchor, unanchored }
+  })
 
   // Load earlier entries above, compensate scroll, then trim the bottom if it's
   // safely off-screen (two-phase so each compensation is isolated and correct).
@@ -520,12 +556,9 @@
     })
   })
 
-  // Format background image URL (handling raw base64 vs data URL)
   const bgImageUrl = $derived.by(() => {
-    const raw = story.currentBgImage
-    if (!raw) return null
-    if (raw.startsWith('data:')) return `url(${raw})`
-    return `url(data:image/png;base64,${raw})`
+    const url = normalizeImageDataUrl(story.currentBgImage)
+    return url && `url(${url})`
   })
 </script>
 
@@ -599,20 +632,37 @@
             {/if}
             <StoryEntry {entry} />
           </div>
+          {#each placedCards.byAnchor[entry.id] ?? [] as card (card.id)}
+            <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
+          {/each}
         {/each}
+
+        {#if displayedEntries.hiddenAtBottom === 0}
+          {#each placedCards.unanchored as card (card.id)}
+            <ChapterCreationCard {card} onNavigate={(id) => void landOnEntry(id)} />
+          {/each}
+        {/if}
 
         <!-- Show streaming entry while generating -->
         {#if showStreamingEntry}
           <StreamingEntry />
         {/if}
 
-        <!-- Show post-generation status (e.g. Updating world...) -->
+        <!-- Show post-generation status (e.g. Updating world...), then the work that outlives
+             the turn until a chapter card, if any, takes over. -->
         {#if ui.isGenerating && !ui.isStreaming && ui.generationStatus}
           <div
             class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
           >
             <Loader2 class="h-4 w-4 animate-spin" />
             <span class="text-sm">{ui.generationStatus}</span>
+          </div>
+        {:else if !ui.isGenerating && afterTurnStatus}
+          <div
+            class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
+          >
+            <Loader2 class="h-4 w-4 animate-spin" />
+            <span class="text-sm">{afterTurnStatus}</span>
           </div>
         {/if}
 
@@ -644,38 +694,16 @@
 
     <!-- Scroll navigation buttons (floating at bottom of scroll container) -->
     {#if story.entries.length > 0}
-      {@const buttonClasses = 'h-8 w-8 rounded-full shadow-lg disabled:opacity-50 sm:h-9 sm:w-9'}
-      {@const iconClasses = 'h-4 w-4 sm:h-5 sm:w-5'}
-
       <div class="pointer-events-none sticky right-0 bottom-0 left-0 z-20 flex justify-center py-2">
         <div class="pointer-events-auto flex gap-2">
-          <!-- Scroll to top button -->
           {#if settings.uiSettings.showScrollToTop && !atVeryTop}
             <div transition:fade={{ duration: 150 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                class={buttonClasses}
-                onclick={scrollToTop}
-                aria-label="Scroll to first message"
-              >
-                <ChevronUp class={iconClasses} />
-              </Button>
+              <ScrollEdgeButton edge="top" label="Scroll to first message" onclick={scrollToTop} />
             </div>
           {/if}
-
-          <!-- Scroll to bottom button -->
           {#if settings.uiSettings.showScrollToBottom && !atVeryBottom}
             <div transition:fade={{ duration: 150 }}>
-              <Button
-                variant="secondary"
-                size="sm"
-                class={buttonClasses}
-                onclick={scrollToBottom}
-                aria-label="Scroll to bottom"
-              >
-                <ChevronDown class={iconClasses} />
-              </Button>
+              <ScrollEdgeButton edge="bottom" label="Scroll to bottom" onclick={scrollToBottom} />
             </div>
           {/if}
         </div>
@@ -699,3 +727,17 @@
   <TimeAnchorModal bind:open={ui.anchorModalOpen} entryId={ui.timeDialogEntryId} />
   <EntryTimeModal bind:open={ui.entryTimeModalOpen} entryId={ui.timeDialogEntryId} />
 {/if}
+
+<!-- One of each for every entry: an entry asks through `ui` for the one it needs. -->
+<DeleteEntryModal />
+<RegenerateEntryModal />
+<CreateCheckpointModal />
+<CreateBranchModal
+  bind:open={
+    () => ui.branchCheckpointId !== null,
+    (next) => {
+      if (!next) ui.requestBranchFrom(null)
+    }
+  }
+  checkpoint={story.checkpoints.find((cp) => cp.id === ui.branchCheckpointId) ?? null}
+/>

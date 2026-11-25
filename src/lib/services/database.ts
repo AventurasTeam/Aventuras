@@ -1,5 +1,13 @@
 import Database from '@tauri-apps/plugin-sql'
 import { invoke } from '@tauri-apps/api/core'
+import {
+  RECORD_COLUMNS,
+  markRecord,
+  markToRow,
+  recordToRow,
+  rowToMark,
+  rowToRecord,
+} from './stateTracking'
 import type {
   Story,
   StoryEntry,
@@ -30,6 +38,8 @@ import type {
   VaultConversation,
   VisualDescriptors,
   WorldStateSnapshot,
+  WorldStateMark,
+  WorldStateRecord,
 } from '#lib/types/index.ts'
 import type {
   PresetPack,
@@ -40,14 +50,17 @@ import type {
   RuntimeEntityType,
   EnumOption,
 } from '#lib/services/packs/types.ts'
-import { hashContent } from '#lib/services/packs/hash.ts'
+import { hashContent, packTemplateHashes } from '#lib/services/packs/hash.ts'
+import { timeAnchorUpsert } from '#lib/services/storyTime/index.ts'
 import {
   packReplacementStatements,
   shippedTemplateStatements,
 } from '#lib/services/packs/replace-statements.ts'
 import type { PackExport } from '#lib/services/packs/validation.ts'
+import type { SyncEntityType, SyncPeer, SyncSection, SyncVector } from '#lib/types/sync.ts'
 import { readStorySettings } from '#lib/utils/storySettings.ts'
 import { uniqueTerms } from '#lib/utils/text.ts'
+import { stringToDescriptors } from '#lib/utils/visualDescriptors.ts'
 import {
   uniqueInjectionTerms,
   withUniqueEntryTerms,
@@ -76,22 +89,51 @@ function runtimeVarPath(defId: string, field?: string): string {
 /** Entity tables that can carry runtime-variable values in their metadata JSON. */
 const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_beats'] as const
 
-/** `DELETE ... IN (...)` split into chunks that stay under SQLite's bound-parameter limit. */
-function deleteInStatements(
-  table: string,
-  column: string,
+/** Must match the partial index in migration 047, or SQLite scans the table instead. */
+const IN_PROGRESS_IMAGES = "status IN ('pending', 'generating')"
+
+/** SET clause for an unfinished row, with one `?` for the reason: a row still holding pixels reverts to `complete`. */
+const SETTLE_UNFINISHED_IMAGE = `status = CASE WHEN image_data <> '' THEN 'complete' ELSE 'failed' END,
+   error_message = CASE WHEN image_data <> '' THEN NULL ELSE ? END`
+
+export interface DbStatement {
+  sql: string
+  params: unknown[]
+}
+
+function statement(sql: string, params: unknown[]): DbStatement {
+  return { sql, params }
+}
+
+/** `branch_id` matching one of `branchIds`, `null` being the main branch; null for none. */
+function branchClause(branchIds: (string | null)[]): { sql: string; params: string[] } | null {
+  const named = branchIds.filter((id): id is string => id !== null)
+  const clauses = [
+    ...(branchIds.includes(null) ? ['branch_id IS NULL'] : []),
+    ...(named.length > 0 ? [`branch_id IN (${named.map(() => '?').join(', ')})`] : []),
+  ]
+  return clauses.length > 0 ? { sql: `(${clauses.join(' OR ')})`, params: named } : null
+}
+
+/** Statements over `ids` in chunks that stay under SQLite's bound-parameter limit. */
+function chunkedStatements(
   ids: string[],
-): { sql: string; params: unknown[] }[] {
+  build: (slice: string[], placeholders: string) => DbStatement[],
+): DbStatement[] {
   const CHUNK = 500
-  const statements: { sql: string; params: unknown[] }[] = []
+  const statements: DbStatement[] = []
   for (let i = 0; i < ids.length; i += CHUNK) {
     const slice = ids.slice(i, i + CHUNK)
-    statements.push({
-      sql: `DELETE FROM ${table} WHERE ${column} IN (${slice.map(() => '?').join(',')})`,
-      params: slice,
-    })
+    statements.push(...build(slice, slice.map(() => '?').join(',')))
   }
   return statements
+}
+
+/** `DELETE ... IN (...)`, chunked. */
+function deleteInStatements(table: string, column: string, ids: string[]): DbStatement[] {
+  return chunkedStatements(ids, (slice, list) => [
+    statement(`DELETE FROM ${table} WHERE ${column} IN (${list})`, slice),
+  ])
 }
 
 /**
@@ -192,6 +234,72 @@ function parseVaultEntries(raw: string | null): VaultLorebookEntry[] {
   return stored.filter((e) => e && typeof e === 'object').map(withUniqueVaultEntryTerms)
 }
 
+export interface SyncRecord {
+  syncId: string
+  vector: SyncVector
+  lastSynced: Record<string, number>
+}
+
+interface SyncRecordRow {
+  local_id: string
+  sync_id: string
+  device_id: string | null
+  counter: number | null
+  last_synced_at: number | null
+}
+
+interface SqlBatchStatement {
+  sql: string
+  params?: unknown[]
+}
+
+export interface SyncListingRow {
+  localId: string
+  name: string
+  author: string | null
+  updatedAt: number
+}
+
+const SYNC_LISTINGS: Record<
+  SyncSection,
+  { table: string; name: string; author: string; where?: string }
+> = {
+  stories: { table: 'stories', name: 'title', author: 'NULL' },
+  characters: { table: 'character_vault', name: 'name', author: 'NULL' },
+  lorebooks: { table: 'lorebook_vault', name: 'name', author: 'NULL' },
+  scenarios: { table: 'scenario_vault', name: 'name', author: 'NULL' },
+  packs: { table: 'preset_packs', name: 'name', author: 'author', where: 'is_default = 0' },
+}
+
+function packContentStatements(
+  packId: string,
+  packData: PackExport,
+  hashes: Map<string, string>,
+): SqlBatchStatement[] {
+  return packReplacementStatements({
+    packId,
+    packData,
+    hashes,
+    ids: {
+      templates: packData.templates.map(() => crypto.randomUUID()),
+      variables: packData.variables.map(() => crypto.randomUUID()),
+    },
+    now: Date.now(),
+  })
+}
+
+function mapSyncRecords(rows: SyncRecordRow[]): Map<string, SyncRecord> {
+  const records = new Map<string, SyncRecord>()
+  for (const row of rows) {
+    const record = records.get(row.local_id) ?? { syncId: row.sync_id, vector: {}, lastSynced: {} }
+    records.set(row.local_id, record)
+    if (row.device_id === null) continue
+    record.vector[row.device_id] = row.counter ?? 0
+    if (row.last_synced_at !== null) record.lastSynced[row.device_id] = row.last_synced_at
+  }
+  return records
+}
+
 class DatabaseService {
   private db: Database | null = null
   /** Pending open promise — prevents concurrent callers from opening the DB twice. */
@@ -234,6 +342,12 @@ class DatabaseService {
       await this.init()
     }
     return this.db!
+  }
+
+  async runStatement(stmt: DbStatement | null): Promise<void> {
+    if (!stmt) return
+    const db = await this.getDb()
+    await db.execute(stmt.sql, stmt.params)
   }
 
   /**
@@ -303,6 +417,17 @@ class DatabaseService {
   async setSetting(key: string, value: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [key, value])
+  }
+
+  /** Every setting whose key starts with `prefix`, keyed by the rest of the key. */
+  async getSettingsWithPrefix(prefix: string): Promise<Map<string, string>> {
+    const db = await this.getDb()
+    // `substr` rather than LIKE, whose `_` and `%` a prefix may contain.
+    const rows = await db.select<{ key: string; value: string }[]>(
+      'SELECT key, value FROM settings WHERE substr(key, 1, ?) = ?',
+      [prefix.length, prefix],
+    )
+    return new Map(rows.map((row) => [row.key.slice(prefix.length), row.value]))
   }
 
   async deleteSetting(key: string): Promise<void> {
@@ -587,20 +712,26 @@ class DatabaseService {
   /**
    * Save time tracker for a story.
    */
-  async saveTimeTracker(storyId: string, timeTracker: TimeTracker): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE stories SET time_tracker = ? WHERE id = ?', [
+  saveTimeTrackerStatement(storyId: string, timeTracker: TimeTracker): DbStatement {
+    return statement('UPDATE stories SET time_tracker = ? WHERE id = ?', [
       JSON.stringify(timeTracker),
       storyId,
     ])
   }
 
+  async saveTimeTracker(storyId: string, timeTracker: TimeTracker): Promise<void> {
+    await this.runStatement(this.saveTimeTrackerStatement(storyId, timeTracker))
+  }
+
   /**
    * Clear time tracker for a story.
    */
+  clearTimeTrackerStatement(storyId: string): DbStatement {
+    return statement('UPDATE stories SET time_tracker = NULL WHERE id = ?', [storyId])
+  }
+
   async clearTimeTracker(storyId: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE stories SET time_tracker = NULL WHERE id = ?', [storyId])
+    await this.runStatement(this.clearTimeTrackerStatement(storyId))
   }
 
   async deleteStory(id: string): Promise<void> {
@@ -714,8 +845,8 @@ class DatabaseService {
     const db = await this.getDb()
     const now = Date.now()
     await db.execute(
-      `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, world_state_delta, suggested_actions)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, suggested_actions)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.storyId,
@@ -730,7 +861,6 @@ class DatabaseService {
         entry.translatedContent || null,
         entry.translationLanguage || null,
         entry.originalInput || null,
-        entry.worldStateDelta ? JSON.stringify(entry.worldStateDelta) : null,
         entry.suggestedActions || null,
       ],
     )
@@ -820,10 +950,6 @@ class DatabaseService {
       setClauses.push('original_input = ?')
       values.push(updates.originalInput || null)
     }
-    if (updates.worldStateDelta !== undefined) {
-      setClauses.push('world_state_delta = ?')
-      values.push(updates.worldStateDelta ? JSON.stringify(updates.worldStateDelta) : null)
-    }
     if (updates.suggestedActions !== undefined) {
       setClauses.push('suggested_actions = ?')
       values.push(updates.suggestedActions || null)
@@ -836,8 +962,8 @@ class DatabaseService {
 
   /**
    * Delete all main-branch entries for a story (branch_id IS NULL).
-   * Also clears related world_state_snapshots so stale snapshots don't
-   * reference non-existent entry positions after the import, and clears
+   * Also clears related world_state_snapshots and world_state_changes, which describe a story
+   * that no longer exists, and clears
    * main-branch chapters so none are left pointing at deleted entries
    * (chapters have no ON DELETE behavior tying them to story_entries).
    * Used by the SillyTavern chat import to overwrite story content.
@@ -851,6 +977,10 @@ class DatabaseService {
       ...deleteInStatements('checkpoints', 'id', checkpointIds),
       {
         sql: 'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
+      {
+        sql: 'DELETE FROM world_state_changes WHERE story_id = ? AND branch_id IS NULL',
         params: [storyId],
       },
       {
@@ -891,7 +1021,7 @@ class DatabaseService {
 
     for (let batchStart = 0; batchStart < entries.length; batchStart += BATCH_SIZE) {
       const batch = entries.slice(batchStart, batchStart + BATCH_SIZE)
-      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
+      const valuePlaceholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',')
       const values: unknown[] = []
 
       for (const entry of batch) {
@@ -909,27 +1039,16 @@ class DatabaseService {
           entry.translatedContent || null,
           entry.translationLanguage || null,
           entry.originalInput || null,
-          entry.worldStateDelta ? JSON.stringify(entry.worldStateDelta) : null,
           entry.suggestedActions || null,
         )
       }
 
       await db.execute(
-        `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, world_state_delta, suggested_actions)
+        `INSERT INTO story_entries (id, story_id, type, content, parent_id, position, created_at, metadata, branch_id, reasoning, translated_content, translation_language, original_input, suggested_actions)
          VALUES ${valuePlaceholders}`,
         values,
       )
     }
-  }
-
-  /**
-   * Delete multiple story entries by ID.
-   */
-  async deleteStoryEntries(ids: string[]): Promise<void> {
-    if (ids.length === 0) return
-    const db = await this.getDb()
-    const placeholders = ids.map(() => '?').join(',')
-    await db.execute(`DELETE FROM story_entries WHERE id IN (${placeholders})`, ids)
   }
 
   // Character operations
@@ -954,10 +1073,9 @@ class DatabaseService {
     return results.map(this.mapCharacter)
   }
 
-  async addCharacter(character: Character): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
-      `INSERT INTO characters (id, story_id, name, description, relationship, traits, visual_descriptors, portrait, status, metadata, branch_id, overrides_id, deleted, translated_name, translated_description, translated_relationship, translated_traits, translated_visual_descriptors, translation_language)
+  addCharacterStatement(character: Character, replace = false): DbStatement {
+    return statement(
+      `INSERT ${replace ? 'OR REPLACE ' : ''}INTO characters (id, story_id, name, description, relationship, traits, visual_descriptors, portrait, status, metadata, branch_id, overrides_id, deleted, translated_name, translated_description, translated_relationship, translated_traits, translated_visual_descriptors, translation_language)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         character.id,
@@ -987,8 +1105,11 @@ class DatabaseService {
     )
   }
 
-  async updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
-    const db = await this.getDb()
+  async addCharacter(character: Character): Promise<void> {
+    await this.runStatement(this.addCharacterStatement(character))
+  }
+
+  updateCharacterStatement(id: string, updates: Partial<Character>): DbStatement | null {
     const setClauses: string[] = []
     const values: any[] = []
 
@@ -1058,14 +1179,21 @@ class DatabaseService {
       values.push(updates.translationLanguage || null)
     }
 
-    if (setClauses.length === 0) return
+    if (setClauses.length === 0) return null
     values.push(id)
-    await db.execute(`UPDATE characters SET ${setClauses.join(', ')} WHERE id = ?`, values)
+    return statement(`UPDATE characters SET ${setClauses.join(', ')} WHERE id = ?`, values)
+  }
+
+  async updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
+    await this.runStatement(this.updateCharacterStatement(id, updates))
+  }
+
+  deleteCharacterStatement(id: string): DbStatement {
+    return statement('DELETE FROM characters WHERE id = ?', [id])
   }
 
   async deleteCharacter(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM characters WHERE id = ?', [id])
+    await this.runStatement(this.deleteCharacterStatement(id))
   }
 
   // Location operations
@@ -1090,10 +1218,9 @@ class DatabaseService {
     return results.map(this.mapLocation)
   }
 
-  async addLocation(location: Location): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
-      `INSERT INTO locations (id, story_id, name, description, visited, current, connections, metadata, branch_id, overrides_id, deleted, translated_name, translated_description, translation_language)
+  addLocationStatement(location: Location, replace = false): DbStatement {
+    return statement(
+      `INSERT ${replace ? 'OR REPLACE ' : ''}INTO locations (id, story_id, name, description, visited, current, connections, metadata, branch_id, overrides_id, deleted, translated_name, translated_description, translation_language)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         location.id,
@@ -1114,14 +1241,24 @@ class DatabaseService {
     )
   }
 
-  async setCurrentLocation(storyId: string, locationId: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE locations SET current = 0 WHERE story_id = ?', [storyId])
-    await db.execute('UPDATE locations SET current = 1, visited = 1 WHERE id = ?', [locationId])
+  async addLocation(location: Location): Promise<void> {
+    await this.runStatement(this.addLocationStatement(location))
   }
 
-  async updateLocation(id: string, updates: Partial<Location>): Promise<void> {
-    const db = await this.getDb()
+  setCurrentLocationStatements(storyId: string, locationId: string): DbStatement[] {
+    return [
+      statement('UPDATE locations SET current = 0 WHERE story_id = ?', [storyId]),
+      statement('UPDATE locations SET current = 1, visited = 1 WHERE id = ?', [locationId]),
+    ]
+  }
+
+  async setCurrentLocation(storyId: string, locationId: string): Promise<void> {
+    for (const write of this.setCurrentLocationStatements(storyId, locationId)) {
+      await this.runStatement(write)
+    }
+  }
+
+  updateLocationStatement(id: string, updates: Partial<Location>): DbStatement | null {
     const setClauses: string[] = []
     const values: any[] = []
 
@@ -1163,14 +1300,21 @@ class DatabaseService {
       values.push(updates.translationLanguage || null)
     }
 
-    if (setClauses.length === 0) return
+    if (setClauses.length === 0) return null
     values.push(id)
-    await db.execute(`UPDATE locations SET ${setClauses.join(', ')} WHERE id = ?`, values)
+    return statement(`UPDATE locations SET ${setClauses.join(', ')} WHERE id = ?`, values)
+  }
+
+  async updateLocation(id: string, updates: Partial<Location>): Promise<void> {
+    await this.runStatement(this.updateLocationStatement(id, updates))
+  }
+
+  deleteLocationStatement(id: string): DbStatement {
+    return statement('DELETE FROM locations WHERE id = ?', [id])
   }
 
   async deleteLocation(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM locations WHERE id = ?', [id])
+    await this.runStatement(this.deleteLocationStatement(id))
   }
 
   // Item operations
@@ -1195,10 +1339,9 @@ class DatabaseService {
     return results.map(this.mapItem)
   }
 
-  async addItem(item: Item): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
-      `INSERT INTO items (id, story_id, name, description, quantity, equipped, location, metadata, branch_id, overrides_id, deleted)
+  addItemStatement(item: Item, replace = false): DbStatement {
+    return statement(
+      `INSERT ${replace ? 'OR REPLACE ' : ''}INTO items (id, story_id, name, description, quantity, equipped, location, metadata, branch_id, overrides_id, deleted)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         item.id,
@@ -1216,8 +1359,11 @@ class DatabaseService {
     )
   }
 
-  async updateItem(id: string, updates: Partial<Item>): Promise<void> {
-    const db = await this.getDb()
+  async addItem(item: Item): Promise<void> {
+    await this.runStatement(this.addItemStatement(item))
+  }
+
+  updateItemStatement(id: string, updates: Partial<Item>): DbStatement | null {
     const setClauses: string[] = []
     const values: any[] = []
 
@@ -1259,18 +1405,24 @@ class DatabaseService {
       values.push(updates.translationLanguage || null)
     }
 
-    if (setClauses.length === 0) return
+    if (setClauses.length === 0) return null
     values.push(id)
-    await db.execute(`UPDATE items SET ${setClauses.join(', ')} WHERE id = ?`, values)
+    return statement(`UPDATE items SET ${setClauses.join(', ')} WHERE id = ?`, values)
+  }
+
+  async updateItem(id: string, updates: Partial<Item>): Promise<void> {
+    await this.runStatement(this.updateItemStatement(id, updates))
+  }
+
+  deleteItemStatement(id: string): DbStatement {
+    return statement('DELETE FROM items WHERE id = ?', [id])
   }
 
   async deleteItem(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM items WHERE id = ?', [id])
+    await this.runStatement(this.deleteItemStatement(id))
   }
 
-  async updateStoryBeat(id: string, updates: Partial<StoryBeat>): Promise<void> {
-    const db = await this.getDb()
+  updateStoryBeatStatement(id: string, updates: Partial<StoryBeat>): DbStatement | null {
     const setClauses: string[] = []
     const values: any[] = []
 
@@ -1316,9 +1468,13 @@ class DatabaseService {
       values.push(updates.translationLanguage || null)
     }
 
-    if (setClauses.length === 0) return
+    if (setClauses.length === 0) return null
     values.push(id)
-    await db.execute(`UPDATE story_beats SET ${setClauses.join(', ')} WHERE id = ?`, values)
+    return statement(`UPDATE story_beats SET ${setClauses.join(', ')} WHERE id = ?`, values)
+  }
+
+  async updateStoryBeat(id: string, updates: Partial<StoryBeat>): Promise<void> {
+    await this.runStatement(this.updateStoryBeatStatement(id, updates))
   }
 
   // Story beats operations
@@ -1345,10 +1501,9 @@ class DatabaseService {
     return results.map(this.mapStoryBeat)
   }
 
-  async addStoryBeat(beat: StoryBeat): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
-      `INSERT INTO story_beats (id, story_id, title, description, type, status, triggered_at, resolved_at, metadata, branch_id, overrides_id, deleted)
+  addStoryBeatStatement(beat: StoryBeat, replace = false): DbStatement {
+    return statement(
+      `INSERT ${replace ? 'OR REPLACE ' : ''}INTO story_beats (id, story_id, title, description, type, status, triggered_at, resolved_at, metadata, branch_id, overrides_id, deleted)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         beat.id,
@@ -1367,9 +1522,16 @@ class DatabaseService {
     )
   }
 
+  async addStoryBeat(beat: StoryBeat): Promise<void> {
+    await this.runStatement(this.addStoryBeatStatement(beat))
+  }
+
+  deleteStoryBeatStatement(id: string): DbStatement {
+    return statement('DELETE FROM story_beats WHERE id = ?', [id])
+  }
+
   async deleteStoryBeat(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM story_beats WHERE id = ?', [id])
+    await this.runStatement(this.deleteStoryBeatStatement(id))
   }
 
   // Chapter operations
@@ -1413,9 +1575,9 @@ class DatabaseService {
     return (result[0]?.maxNum ?? 0) + 1
   }
 
-  async addChapter(chapter: Chapter): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
+  /** `mark: false` leaves its mark to the caller, as an import placing the file's does. */
+  async addChapter(chapter: Chapter, opts: { mark?: boolean } = {}): Promise<void> {
+    const insert = statement(
       `INSERT INTO chapters (
         id, story_id, number, title, start_entry_id, end_entry_id, entry_count,
         summary, start_time, end_time, keywords, characters, locations, plot_threads, emotional_tone,
@@ -1441,6 +1603,19 @@ class DatabaseService {
         chapter.createdAt,
       ],
     )
+    const scope = { storyId: chapter.storyId, branchId: chapter.branchId || null }
+    await this.insertMarked(
+      insert,
+      opts.mark === false
+        ? null
+        : markRecord({ ...scope, entryId: chapter.endEntryId }, 'chapter', chapter.id),
+    )
+  }
+
+  /** An insert and, unless `mark` is null, the mark placing it in the write order, together. */
+  private async insertMarked(insert: DbStatement, mark: WorldStateMark | null): Promise<void> {
+    if (!mark) return this.runStatement(insert)
+    await this.transaction([insert, this.worldStateMarkStatement(mark)])
   }
 
   async updateChapter(id: string, updates: Partial<Chapter>): Promise<void> {
@@ -1490,9 +1665,12 @@ class DatabaseService {
     await db.execute(`UPDATE chapters SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
+  deleteChapterStatement(id: string): DbStatement {
+    return statement('DELETE FROM chapters WHERE id = ?', [id])
+  }
+
   async deleteChapter(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM chapters WHERE id = ?', [id])
+    await this.runStatement(this.deleteChapterStatement(id))
   }
 
   // Checkpoint operations
@@ -1538,9 +1716,15 @@ class DatabaseService {
     return results.map(this.mapCheckpointRecord)
   }
 
-  async createCheckpoint(checkpoint: CheckpointRecord): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
+  /**
+   * `mark` places a checkpoint of the live state in the write order, on the branch whose state it
+   * holds. One rebuilt from the records gets none: it holds no state the records lack.
+   */
+  async createCheckpoint(
+    checkpoint: CheckpointRecord,
+    mark?: { branchId: string | null },
+  ): Promise<void> {
+    const insert = statement(
       `INSERT INTO checkpoints (
         id, story_id, name, last_entry_id, last_entry_preview, entry_count,
         entries_snapshot, characters_snapshot, locations_snapshot,
@@ -1567,6 +1751,11 @@ class DatabaseService {
         checkpoint.createdAt,
       ],
     )
+    const scope = { storyId: checkpoint.storyId, entryId: checkpoint.lastEntryId }
+    await this.insertMarked(
+      insert,
+      mark ? markRecord({ ...scope, branchId: mark.branchId }, 'checkpoint', checkpoint.id) : null,
+    )
   }
 
   async renameCheckpoint(id: string, name: string): Promise<void> {
@@ -1589,11 +1778,159 @@ class DatabaseService {
     }
   }
 
+  // ===== World State Change Records =====
+
+  /** Appends a row; `seq` continues the story's write order inside the same statement. */
+  private worldStateRowStatement(storyId: string, row: unknown[]): DbStatement {
+    return statement(
+      `INSERT INTO world_state_changes (${RECORD_COLUMNS.join(', ')}, seq)
+       VALUES (${RECORD_COLUMNS.map(() => '?').join(', ')},
+         (SELECT COALESCE(MAX(seq), 0) + 1 FROM world_state_changes WHERE story_id = ?))`,
+      [...row, storyId],
+    )
+  }
+
+  worldStateRecordStatement(record: WorldStateRecord): DbStatement {
+    return this.worldStateRowStatement(record.storyId, recordToRow(record))
+  }
+
+  worldStateMarkStatement(mark: WorldStateMark): DbStatement {
+    return this.worldStateRowStatement(mark.storyId, markToRow(mark))
+  }
+
+  /** Removes rows from the history by id, as when a live revert invalidates them. */
+  deleteWorldStateRecordsStatements(ids: string[]): DbStatement[] {
+    return deleteInStatements('world_state_changes', 'id', ids)
+  }
+
+  deleteWorldStateSnapshotsStatements(ids: string[]): DbStatement[] {
+    return deleteInStatements('world_state_snapshots', 'id', ids)
+  }
+
+  /** Records written on the given branches, in write order. */
+  async getWorldStateRecords(
+    storyId: string,
+    branchIds: (string | null)[],
+    kinds?: WorldStateRecord['kind'][],
+    /** Only records on entries at or after this position, on any branch. */
+    fromPosition?: number,
+    /** Only records written after this one. */
+    afterSeq?: number,
+  ): Promise<WorldStateRecord[]> {
+    const db = await this.getDb()
+    const branches = branchClause(branchIds)
+    if (!branches) return []
+    const kindClause = kinds ? ` AND kind IN (${kinds.map(() => '?').join(', ')})` : ''
+    const positionClause =
+      fromPosition === undefined
+        ? ''
+        : ' AND entry_id IN (SELECT id FROM story_entries WHERE story_id = ? AND position >= ?)'
+    const seqClause = afterSeq === undefined ? '' : ' AND seq > ?'
+    const rows = await db.select<Record<string, unknown>[]>(
+      `SELECT * FROM world_state_changes WHERE story_id = ? AND kind <> 'mark'
+       AND ${branches.sql}${kindClause}${positionClause}${seqClause}
+       ORDER BY seq ASC`,
+      [
+        storyId,
+        ...branches.params,
+        ...(kinds ?? []),
+        ...(fromPosition === undefined ? [] : [storyId, fromPosition]),
+        ...(afterSeq === undefined ? [] : [afterSeq]),
+      ],
+    )
+    return rows.map(rowToRecord)
+  }
+
+  async getWorldStateRecordsForStory(storyId: string): Promise<WorldStateRecord[]> {
+    const db = await this.getDb()
+    const rows = await db.select<Record<string, unknown>[]>(
+      "SELECT * FROM world_state_changes WHERE story_id = ? AND kind <> 'mark' ORDER BY seq ASC",
+      [storyId],
+    )
+    return rows.map(rowToRecord)
+  }
+
+  /** The marks on the given branches, in write order. */
+  async getWorldStateMarks(
+    storyId: string,
+    branchIds: (string | null)[],
+  ): Promise<WorldStateMark[]> {
+    const db = await this.getDb()
+    const branches = branchClause(branchIds)
+    if (!branches) return []
+    const rows = await db.select<Record<string, unknown>[]>(
+      `SELECT * FROM world_state_changes WHERE story_id = ? AND kind = 'mark'
+       AND ${branches.sql} ORDER BY seq ASC`,
+      [storyId, ...branches.params],
+    )
+    return rows.map(rowToMark)
+  }
+
+  async getWorldStateMarksForStory(storyId: string): Promise<WorldStateMark[]> {
+    const db = await this.getDb()
+    const rows = await db.select<Record<string, unknown>[]>(
+      "SELECT * FROM world_state_changes WHERE story_id = ? AND kind = 'mark' ORDER BY seq ASC",
+      [storyId],
+    )
+    return rows.map(rowToMark)
+  }
+
+  /** Branches of any story with a record written at or after `since`. */
+  async getBranchesRecordedSince(
+    since: number,
+  ): Promise<{ storyId: string; branchId: string | null }[]> {
+    const db = await this.getDb()
+    const rows = await db.select<{ story_id: string; branch_id: string | null }[]>(
+      "SELECT DISTINCT story_id, branch_id FROM world_state_changes WHERE created_at >= ? AND kind <> 'mark'",
+      [since],
+    )
+    return rows.map((r) => ({ storyId: r.story_id, branchId: r.branch_id ?? null }))
+  }
+
+  /** When each snapshot of a branch was taken, without loading its contents. */
+  async getWorldStateSnapshotTimes(
+    storyId: string,
+    branchId: string | null,
+  ): Promise<
+    { id: string; entryId: string; entryPosition: number; createdAt: number; complete: boolean }[]
+  > {
+    const db = await this.getDb()
+    // `complete`: it holds the lorebook too, which a snapshot from the old build lacks.
+    const columns =
+      'id, entry_id, entry_position, created_at, (lorebook_entries_snapshot IS NOT NULL) AS complete'
+    const rows = await db.select<
+      {
+        id: string
+        entry_id: string
+        entry_position: number
+        created_at: number
+        complete: number
+      }[]
+    >(
+      branchId === null
+        ? `SELECT ${columns} FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL`
+        : `SELECT ${columns} FROM world_state_snapshots WHERE story_id = ? AND branch_id = ?`,
+      branchId === null ? [storyId] : [storyId, branchId],
+    )
+    return rows.map((r) => ({
+      id: r.id,
+      entryId: r.entry_id,
+      entryPosition: r.entry_position,
+      createdAt: r.created_at,
+      complete: Boolean(r.complete),
+    }))
+  }
+
+  async getWorldStateSnapshot(id: string): Promise<WorldStateSnapshot | null> {
+    const db = await this.getDb()
+    const rows = await db.select<any[]>('SELECT * FROM world_state_snapshots WHERE id = ?', [id])
+    return rows.length > 0 ? this.mapWorldStateSnapshot(rows[0]) : null
+  }
+
   // ===== World State Snapshots (Phase 1) =====
 
   async createWorldStateSnapshot(snapshot: WorldStateSnapshot): Promise<void> {
-    const db = await this.getDb()
-    await db.execute(
+    const insert = statement(
       `INSERT INTO world_state_snapshots (
         id, story_id, branch_id, entry_id, entry_position,
         characters_snapshot, locations_snapshot, items_snapshot,
@@ -1615,6 +1952,12 @@ class DatabaseService {
         snapshot.createdAt,
       ],
     )
+    const scope = {
+      storyId: snapshot.storyId,
+      branchId: snapshot.branchId ?? null,
+      entryId: snapshot.entryId,
+    }
+    await this.insertMarked(insert, markRecord(scope, 'snapshot', snapshot.id))
   }
 
   async getWorldStateSnapshots(
@@ -1652,17 +1995,10 @@ class DatabaseService {
     position: number,
   ): Promise<void> {
     const db = await this.getDb()
-    if (branchId === null) {
-      await db.execute(
-        'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL AND entry_position > ?',
-        [storyId, position],
-      )
-    } else {
-      await db.execute(
-        'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id = ? AND entry_position > ?',
-        [storyId, branchId, position],
-      )
-    }
+    await db.execute(
+      'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS ? AND entry_position > ?',
+      [storyId, branchId, position],
+    )
   }
 
   async deleteWorldStateSnapshotsForBranch(branchId: string): Promise<void> {
@@ -1680,7 +2016,6 @@ class DatabaseService {
    * Does NOT touch chapters or lorebook entries (those are more permanent).
    */
   async restoreRetryBackup(
-    entryIdsToDelete: string[],
     storyId: string,
     branchId: string | null,
     characters: Character[],
@@ -1690,11 +2025,7 @@ class DatabaseService {
   ): Promise<void> {
     const db = await this.getDb()
 
-    // Delete current state (except chapters and lorebook entries which are more permanent)
-    // Note: embedded_images will be cascade-deleted when story_entries are deleted
-    if (entryIdsToDelete.length > 0) {
-      await this.deleteStoryEntries(entryIdsToDelete)
-    }
+    // The entries are already gone; chapters and lorebook entries are left as they are.
     // Branch-aware delete: only remove world state for the current branch
     const branchFilter = branchId === null ? 'AND branch_id IS NULL' : 'AND branch_id = ?'
     const branchParams = branchId === null ? [storyId] : [storyId, branchId]
@@ -1702,8 +2033,6 @@ class DatabaseService {
     await db.execute(`DELETE FROM locations WHERE story_id = ? ${branchFilter}`, branchParams)
     await db.execute(`DELETE FROM items WHERE story_id = ? ${branchFilter}`, branchParams)
     await db.execute(`DELETE FROM story_beats WHERE story_id = ? ${branchFilter}`, branchParams)
-
-    // Restore entries not necessary as we are only deleting redundant entries since backup
 
     // The insert covers exactly what the delete covered — see the retry-backup bullet under
     // Data Model in docs/architecture/overview.md for what a wider one destroys.
@@ -1805,6 +2134,8 @@ class DatabaseService {
       },
       // Chapters reference story entries, so remove them before their branch's entries.
       { sql: 'DELETE FROM chapters WHERE branch_id = ?', params: [id] },
+      // A record can sit on an inherited entry, which the entry cascade does not reach.
+      { sql: 'DELETE FROM world_state_changes WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM story_entries WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM characters WHERE branch_id = ?', params: [id] },
       { sql: 'DELETE FROM locations WHERE branch_id = ?', params: [id] },
@@ -1817,11 +2148,7 @@ class DatabaseService {
 
   async setStoryCurrentBranch(storyId: string, branchId: string | null): Promise<void> {
     const db = await this.getDb()
-    await db.execute('UPDATE stories SET current_branch_id = ?, updated_at = ? WHERE id = ?', [
-      branchId,
-      Date.now(),
-      storyId,
-    ])
+    await db.execute('UPDATE stories SET current_branch_id = ? WHERE id = ?', [branchId, storyId])
   }
 
   private mapBranch(row: any): Branch {
@@ -2054,29 +2381,52 @@ class DatabaseService {
    * Mark an entity as deleted (tombstone) on a COW branch.
    * The entity must already be owned by the branch (via cowEnsure*).
    */
+  markCharacterDeletedStatement(id: string): DbStatement {
+    return statement('UPDATE characters SET deleted = 1 WHERE id = ?', [id])
+  }
+
   async markCharacterDeleted(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE characters SET deleted = 1 WHERE id = ?', [id])
+    await this.runStatement(this.markCharacterDeletedStatement(id))
+  }
+
+  markLocationDeletedStatement(id: string): DbStatement {
+    return statement('UPDATE locations SET deleted = 1 WHERE id = ?', [id])
   }
 
   async markLocationDeleted(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE locations SET deleted = 1 WHERE id = ?', [id])
+    await this.runStatement(this.markLocationDeletedStatement(id))
+  }
+
+  markItemDeletedStatement(id: string): DbStatement {
+    return statement('UPDATE items SET deleted = 1 WHERE id = ?', [id])
   }
 
   async markItemDeleted(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE items SET deleted = 1 WHERE id = ?', [id])
+    await this.runStatement(this.markItemDeletedStatement(id))
+  }
+
+  markStoryBeatDeletedStatement(id: string): DbStatement {
+    return statement('UPDATE story_beats SET deleted = 1 WHERE id = ?', [id])
   }
 
   async markStoryBeatDeleted(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE story_beats SET deleted = 1 WHERE id = ?', [id])
+    await this.runStatement(this.markStoryBeatDeletedStatement(id))
+  }
+
+  markEntryDeletedStatement(id: string): DbStatement {
+    return statement('UPDATE entries SET deleted = 1 WHERE id = ?', [id])
+  }
+
+  /** Clears a tombstone and nothing else, so columns no record holds survive a revert. */
+  clearTombstoneStatement(
+    table: 'characters' | 'locations' | 'items' | 'story_beats' | 'entries',
+    id: string,
+  ): DbStatement {
+    return statement(`UPDATE ${table} SET deleted = 0 WHERE id = ?`, [id])
   }
 
   async markEntryDeleted(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('UPDATE entries SET deleted = 1 WHERE id = ?', [id])
+    await this.runStatement(this.markEntryDeletedStatement(id))
   }
 
   /**
@@ -2271,11 +2621,10 @@ class DatabaseService {
     )
   }
 
-  async addEntry(entry: Entry): Promise<void> {
-    const db = await this.getDb()
+  addEntryStatement(entry: Entry, replace = false): DbStatement {
     const { aliases, injection } = withUniqueEntryTerms(entry)
-    await db.execute(
-      `INSERT INTO entries (
+    return statement(
+      `INSERT ${replace ? 'OR REPLACE ' : ''}INTO entries (
         id, story_id, name, type, description, hidden_info, aliases,
         state, adventure_state, creative_state, injection, created_by,
         created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
@@ -2303,8 +2652,11 @@ class DatabaseService {
     )
   }
 
-  async updateEntry(id: string, updates: Partial<Entry>): Promise<void> {
-    const db = await this.getDb()
+  async addEntry(entry: Entry): Promise<void> {
+    await this.runStatement(this.addEntryStatement(entry))
+  }
+
+  updateEntryStatement(id: string, updates: Partial<Entry>): DbStatement {
     const { aliases, injection } = withUniqueEntryTerms(updates)
     const setClauses: string[] = ['updated_at = ?']
     const values: any[] = [Date.now()]
@@ -2351,12 +2703,19 @@ class DatabaseService {
     }
 
     values.push(id)
-    await db.execute(`UPDATE entries SET ${setClauses.join(', ')} WHERE id = ?`, values)
+    return statement(`UPDATE entries SET ${setClauses.join(', ')} WHERE id = ?`, values)
+  }
+
+  async updateEntry(id: string, updates: Partial<Entry>): Promise<void> {
+    await this.runStatement(this.updateEntryStatement(id, updates))
+  }
+
+  deleteEntryStatement(id: string): DbStatement {
+    return statement('DELETE FROM entries WHERE id = ?', [id])
   }
 
   async deleteEntry(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM entries WHERE id = ?', [id])
+    await this.runStatement(this.deleteEntryStatement(id))
   }
 
   async mergeEntries(entryIds: string[], mergedEntry: Entry): Promise<void> {
@@ -2526,6 +2885,37 @@ class DatabaseService {
     await db.execute(`UPDATE embedded_images SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
+  /** Marks a row that has not finished as failed. False when it had already finished. */
+  async cancelEmbeddedImage(id: string): Promise<boolean> {
+    const db = await this.getDb()
+    const result = await db.execute(
+      `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
+       WHERE id = ? AND ${IN_PROGRESS_IMAGES}`,
+      ['Cancelled', id],
+    )
+    return (result.rowsAffected ?? 0) > 0
+  }
+
+  /** Settles a row whose generation failed. A row holding pixels keeps them and reads `complete`. */
+  async failEmbeddedImage(id: string, errorMessage: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(`UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE} WHERE id = ?`, [
+      errorMessage,
+      id,
+    ])
+  }
+
+  /** Settles every row a closed app left unfinished. Run once per launch, before any generation. */
+  async failInterruptedEmbeddedImages(): Promise<number> {
+    const db = await this.getDb()
+    const result = await db.execute(
+      `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
+       WHERE ${IN_PROGRESS_IMAGES}`,
+      ['Interrupted'],
+    )
+    return result.rowsAffected ?? 0
+  }
+
   async deleteEmbeddedImage(id: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM embedded_images WHERE id = ?', [id])
@@ -2549,12 +2939,31 @@ class DatabaseService {
     entryIds,
     chapterIds = [],
     checkpointIds = [],
+    recordsTo,
   }: {
     entryIds: string[]
     chapterIds?: string[]
     checkpointIds?: string[]
+    /**
+     * The entry the deleted entries' changes and breaks move to, their effects staying live, with
+     * a header that marks a gap or a converted one: it is the only record of the gap, or of the
+     * changes being the classifier's alone. Other headers go with their entry. Without it, every
+     * record goes.
+     */
+    recordsTo?: string
   }): Promise<void> {
+    const moves = recordsTo
+      ? chunkedStatements(entryIds, (slice, list) => [
+          statement(
+            `UPDATE world_state_changes SET entry_id = ?
+             WHERE (kind IN ('change', 'break') OR (kind = 'header' AND continuous = 0))
+               AND entry_id IN (${list})`,
+            [recordsTo, ...slice],
+          ),
+        ])
+      : []
     await this.transaction([
+      ...moves,
       // Chapters first: `start_entry_id` and `end_entry_id` are foreign keys to story_entries.
       ...deleteInStatements('chapters', 'id', chapterIds),
       ...deleteInStatements('checkpoints', 'id', checkpointIds),
@@ -2778,8 +3187,6 @@ class DatabaseService {
       translatedContent: row.translated_content || null,
       translationLanguage: row.translation_language || null,
       originalInput: row.original_input || null,
-      // Phase 1: World state delta
-      worldStateDelta: row.world_state_delta ? JSON.parse(row.world_state_delta) : null,
       // Persisted action suggestions for time-travel
       suggestedActions: row.suggested_actions || null,
     }
@@ -2790,6 +3197,13 @@ class DatabaseService {
     const rawTranslatedDescriptors = row.translated_visual_descriptors
       ? JSON.parse(row.translated_visual_descriptors)
       : null
+    // A translation stored as one "Face: …, Hair: …" string is read back by category.
+    const translatedDescriptors =
+      typeof rawTranslatedDescriptors === 'string'
+        ? stringToDescriptors(rawTranslatedDescriptors)
+        : rawTranslatedDescriptors
+          ? migrateVisualDescriptors(rawTranslatedDescriptors)
+          : {}
     const rawTranslatedTraits = row.translated_traits ? JSON.parse(row.translated_traits) : null
 
     return {
@@ -2813,9 +3227,8 @@ class DatabaseService {
       translatedTraits: Array.isArray(rawTranslatedTraits)
         ? uniqueTerms(rawTranslatedTraits)
         : null,
-      translatedVisualDescriptors: rawTranslatedDescriptors
-        ? migrateVisualDescriptors(rawTranslatedDescriptors)
-        : null,
+      translatedVisualDescriptors:
+        Object.keys(translatedDescriptors).length > 0 ? translatedDescriptors : null,
       translationLanguage: row.translation_language || null,
     }
   }
@@ -3724,18 +4137,7 @@ class DatabaseService {
     packData: PackExport,
     hashes: Map<string, string>,
   ): Promise<void> {
-    await this.transaction(
-      packReplacementStatements({
-        packId,
-        packData,
-        hashes,
-        ids: {
-          templates: packData.templates.map(() => crypto.randomUUID()),
-          variables: packData.variables.map(() => crypto.randomUUID()),
-        },
-        now: Date.now(),
-      }),
-    )
+    await this.transaction(packContentStatements(packId, packData, hashes))
   }
 
   /**
@@ -3765,6 +4167,168 @@ class DatabaseService {
     return results[0].count === 0
   }
 
+  /** A pack's contents and metadata as one batch of statements, keeping its id. */
+  async packSyncStatements(packId: string, packData: PackExport): Promise<SqlBatchStatement[]> {
+    return [
+      ...packContentStatements(packId, packData, await packTemplateHashes(packData)),
+      {
+        sql: 'UPDATE preset_packs SET name = ?, description = ?, author = ? WHERE id = ?',
+        params: [packData.name, packData.description ?? null, packData.author ?? null, packId],
+      },
+    ]
+  }
+
+  /** Names and times only: a section's rows can hold every portrait in the vault. */
+  async getSyncListing(section: SyncSection, id?: string): Promise<SyncListingRow[]> {
+    const db = await this.getDb()
+    const { table, name, author, where } = SYNC_LISTINGS[section]
+    const conditions = [...(where ? [where] : []), ...(id ? ['id = ?'] : [])]
+    const rows = await db.select<
+      { id: string; name: string; author: string | null; updated_at: number }[]
+    >(
+      `SELECT id, ${name} AS name, ${author} AS author, updated_at FROM ${table}
+       ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}`,
+      id ? [id] : [],
+    )
+    return rows.map((r) => ({
+      localId: r.id,
+      name: r.name,
+      author: r.author,
+      updatedAt: r.updated_at,
+    }))
+  }
+
+  async getSyncSelf(): Promise<SyncPeer> {
+    const db = await this.getDb()
+    const rows = await db.select<{ device_id: string; name: string }[]>(
+      'SELECT device_id, name FROM sync_device WHERE is_self = 1',
+    )
+    return { deviceId: rows[0].device_id, name: rows[0].name }
+  }
+
+  async setSyncDeviceName(name: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute('UPDATE sync_device SET name = ? WHERE is_self = 1', [name])
+  }
+
+  async getSyncRecords(entityType: SyncEntityType): Promise<Map<string, SyncRecord>> {
+    const db = await this.getDb()
+    const rows = await db.select<SyncRecordRow[]>(
+      `SELECT i.local_id, i.sync_id, v.device_id, v.counter, v.last_synced_at
+       FROM sync_identity i LEFT JOIN sync_vector v ON v.sync_id = i.sync_id
+       WHERE i.entity_type = ?`,
+      [entityType],
+    )
+    return mapSyncRecords(rows)
+  }
+
+  async getSyncRecord(entityType: SyncEntityType, localId: string): Promise<SyncRecord | null> {
+    const db = await this.getDb()
+    const rows = await db.select<SyncRecordRow[]>(
+      `SELECT i.local_id, i.sync_id, v.device_id, v.counter, v.last_synced_at
+       FROM sync_identity i LEFT JOIN sync_vector v ON v.sync_id = i.sync_id
+       WHERE i.entity_type = ? AND i.local_id = ?`,
+      [entityType, localId],
+    )
+    return mapSyncRecords(rows).get(localId) ?? null
+  }
+
+  async findSyncedLocalId(entityType: SyncEntityType, syncId: string): Promise<string | null> {
+    const db = await this.getDb()
+    const rows = await db.select<{ local_id: string }[]>(
+      'SELECT local_id FROM sync_identity WHERE entity_type = ? AND sync_id = ?',
+      [entityType, syncId],
+    )
+    return rows[0]?.local_id ?? null
+  }
+
+  async getSyncVector(syncId: string): Promise<SyncVector> {
+    const db = await this.getDb()
+    const rows = await db.select<{ device_id: string; counter: number }[]>(
+      'SELECT device_id, counter FROM sync_vector WHERE sync_id = ?',
+      [syncId],
+    )
+    return Object.fromEntries(rows.map((r) => [r.device_id, r.counter]))
+  }
+
+  /**
+   * Favourite state stays out: it belongs to the device. `metadataPatch` is merged into the stored
+   * metadata, so keys only this device holds stay, and a null removes a key.
+   */
+  vaultCharacterReplaceStatement(
+    c: VaultCharacter,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
+    return {
+      sql: `UPDATE character_vault SET name = ?, description = ?, traits = ?,
+              visual_descriptors = ?, portrait = ?, tags = ?,
+              metadata = json_patch(COALESCE(metadata, '{}'), ?)
+            WHERE id = ?`,
+      params: [
+        c.name,
+        c.description,
+        JSON.stringify(uniqueTerms(c.traits)),
+        JSON.stringify(c.visualDescriptors),
+        c.portrait,
+        JSON.stringify(c.tags),
+        JSON.stringify(metadataPatch),
+        c.id,
+      ],
+    }
+  }
+
+  vaultLorebookReplaceStatement(
+    l: VaultLorebook,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
+    return {
+      sql: `UPDATE lorebook_vault SET name = ?, description = ?, entries = ?, tags = ?,
+              metadata = json_patch(COALESCE(metadata, '{}'), ?)
+            WHERE id = ?`,
+      params: [
+        l.name,
+        l.description,
+        JSON.stringify(l.entries.map(withUniqueVaultEntryTerms)),
+        JSON.stringify(l.tags),
+        JSON.stringify(metadataPatch),
+        l.id,
+      ],
+    }
+  }
+
+  vaultScenarioReplaceStatement(
+    s: VaultScenario,
+    metadataPatch: Record<string, unknown>,
+  ): SqlBatchStatement {
+    return {
+      sql: `UPDATE scenario_vault SET name = ?, description = ?, setting_seed = ?, npcs = ?,
+              primary_character_name = ?, first_message = ?, alternate_greetings = ?,
+              starting_time = ?, tags = ?, metadata = json_patch(COALESCE(metadata, '{}'), ?)
+            WHERE id = ?`,
+      params: [
+        s.name,
+        s.description,
+        s.settingSeed,
+        JSON.stringify(s.npcs),
+        s.primaryCharacterName,
+        s.firstMessage,
+        JSON.stringify(s.alternateGreetings),
+        s.startingTime ? JSON.stringify(s.startingTime) : null,
+        JSON.stringify(s.tags),
+        JSON.stringify(metadataPatch),
+        s.id,
+      ],
+    }
+  }
+
+  /** The time an item changed on the device it came from. */
+  syncedTimeStatement(section: SyncSection, id: string, updatedAt: number): SqlBatchStatement {
+    return {
+      sql: `UPDATE ${SYNC_LISTINGS[section].table} SET updated_at = ? WHERE id = ?`,
+      params: [updatedAt, id],
+    }
+  }
+
   async getPackUsageCount(packId: string): Promise<number> {
     const db = await this.getDb()
     const results = await db.select<any[]>(
@@ -3772,6 +4336,15 @@ class DatabaseService {
       [packId],
     )
     return results[0].count
+  }
+
+  async getPackStoryTitles(packId: string): Promise<string[]> {
+    const db = await this.getDb()
+    const rows = await db.select<{ title: string }[]>(
+      'SELECT title FROM stories WHERE pack_id = ? ORDER BY title COLLATE NOCASE',
+      [packId],
+    )
+    return rows.map((row) => row.title)
   }
 
   // ===== Pack Template Operations =====
@@ -3945,19 +4518,8 @@ class DatabaseService {
    */
   async setTimeAnchor(anchor: TimeAnchor): Promise<void> {
     const db = await this.getDb()
-    await db.execute(
-      `INSERT INTO time_anchors (id, story_id, entry_id, asserted_time, note, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(entry_id) DO UPDATE SET asserted_time = excluded.asserted_time, note = excluded.note`,
-      [
-        anchor.id,
-        anchor.storyId,
-        anchor.entryId,
-        JSON.stringify(anchor.assertedTime),
-        anchor.note,
-        anchor.createdAt,
-      ],
-    )
+    const { sql, params } = timeAnchorUpsert(anchor)
+    await db.execute(sql, params)
   }
 
   async deleteTimeAnchor(entryId: string): Promise<void> {

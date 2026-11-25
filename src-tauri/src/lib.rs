@@ -3,18 +3,29 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod avt_import;
 mod backup;
+#[cfg(test)]
+mod comfy_workflow_paths;
 mod db;
 mod db_tx;
+mod image_profiles;
 mod migration_patch;
+#[cfg(test)]
+mod reasoning_effort;
 mod sync;
+#[cfg(test)]
+mod test_db;
 mod time_anchors;
+#[cfg(test)]
+mod world_state_delta_migration;
+#[cfg(test)]
+mod world_state_marks_migration;
 
 use backup::{
-    backup_database, export_images_zip, export_single_image, export_story_avt, restore_database,
+    backup_database, embedded_image_extension, export_images_zip, export_single_image,
+    export_story_avt, restore_database,
 };
 use sync::commands::{
-    clear_received_stories, get_received_stories, start_sync_server, stop_sync_server,
-    sync_connect, sync_pull_story, sync_push_story,
+    start_sync_server, stop_sync_server, sync_request, sync_respond, take_received_items,
 };
 
 #[tauri::command]
@@ -22,11 +33,9 @@ fn is_ios() -> bool {
     cfg!(target_os = "ios")
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
-    let migrations = vec![
+/// Every migration, in order. The plugin runs the pending ones at startup, before any frontend code.
+pub(crate) fn migrations() -> Vec<Migration> {
+    vec![
         Migration {
             version: 1,
             description: "create_initial_tables",
@@ -261,7 +270,60 @@ pub fn run() {
             sql: include_str!("../migrations/039_scenario_starting_time.sql"),
             kind: MigrationKind::Up,
         },
-    ];
+        Migration {
+            version: 40,
+            description: "world_state_changes",
+            sql: include_str!("../migrations/040_world_state_changes.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 41,
+            description: "retire_world_state_delta",
+            sql: include_str!("../migrations/041_retire_world_state_delta.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 42,
+            description: "image_profiles",
+            sql: include_str!("../migrations/042_image_profiles.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 43,
+            description: "reasoning_effort",
+            sql: include_str!("../migrations/043_reasoning_effort.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 44,
+            description: "explanation_fold_keys",
+            sql: include_str!("../migrations/044_explanation_fold_keys.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 45,
+            description: "sync_identity",
+            sql: include_str!("../migrations/045_sync_identity.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 46,
+            description: "comfy_workflow_paths",
+            sql: include_str!("../migrations/046_comfy_workflow_paths.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 47,
+            description: "embedded_images_in_progress_index",
+            sql: include_str!("../migrations/047_embedded_images_in_progress_index.sql"),
+            kind: MigrationKind::Up,
+        },
+    ]
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
 
     #[cfg_attr(not(all(debug_assertions, feature = "devtools")), allow(unused_mut))]
     let mut builder = tauri::Builder::default();
@@ -277,7 +339,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:aventura.db", migrations)
+                .add_migrations("sqlite:aventura.db", migrations())
                 .build(),
         )
         .setup(|app| {
@@ -291,6 +353,11 @@ pub fn run() {
                 tauri::async_runtime::block_on(migration_patch::apply_checksum_patch(&db_path));
             }
 
+            // The HTTP plugin's cookie jar is off; drop the file an older build left behind.
+            if let Ok(dir) = app.path().app_cache_dir() {
+                let _ = std::fs::remove_file(dir.join(".cookies"));
+            }
+
             Ok(())
         })
         .plugin(tauri_plugin_fs::init())
@@ -298,19 +365,18 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_websocket::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_generation::init())
         .invoke_handler(tauri::generate_handler![
             start_sync_server,
             stop_sync_server,
-            get_received_stories,
-            clear_received_stories,
-            sync_connect,
-            sync_pull_story,
-            sync_push_story,
+            take_received_items,
+            sync_request,
+            sync_respond,
             is_ios,
             backup_database,
             restore_database,
+            embedded_image_extension,
             export_images_zip,
             export_single_image,
             export_story_avt,

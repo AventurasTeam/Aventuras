@@ -1,104 +1,146 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getImageProfile: vi.fn(),
+    updateImageProfile: vi.fn(),
     apiSettings: {
       llmTimeoutMs: 30000,
     },
-  },
-}))
-
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debugStore: {
-    logApiRequest: vi.fn(),
-    logApiResponse: vi.fn(),
+    systemServicesSettings: { imageGeneration: { outputFormats: [] } },
   },
 }))
 
 vi.mock('./fetchAdapter', () => ({
-  imageFetch: vi.fn(),
   imageGetFetch: vi.fn(),
   fetchPublicImageBase64: vi.fn(),
 }))
 
 vi.mock('./openai', () => ({
   createOpenAIProvider: vi.fn(),
+  openaiModelCapabilities: vi.fn(),
 }))
 
+vi.mock('./openrouter', () => ({
+  createOpenRouterProvider: vi.fn(),
+}))
+
+vi.mock('./openaiCompatibleProvider', () => ({
+  createOpenAICompatibleProvider: vi.fn(),
+}))
+
+vi.mock('./zhipu', () => ({
+  createZhipuProvider: vi.fn(),
+}))
+
+const clearComfyCache = vi.hoisted(() => vi.fn())
 vi.mock('./comfy', () => ({
   createComfyProvider: vi.fn(),
+  comfyReferenceLimit: vi.fn(),
+  comfyNeedsModel: (options?: { mode?: string }) => options?.mode !== 'custom-workflow',
+  clearComfyCache,
+}))
+
+vi.mock('./a1111', () => ({
+  createA1111Provider: vi.fn(),
+  a1111ReferenceLimit: (options: { takesReferences?: boolean }) =>
+    options.takesReferences === true ? Infinity : 0,
 }))
 
 vi.mock('./google', () => ({
   createGoogleProvider: vi.fn(),
+  googleModelCapabilities: vi.fn(),
 }))
 
+vi.mock('#lib/utils/url.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('#lib/utils/url.ts')>()
+  return { ...actual, normalizeBaseUrl: vi.fn(actual.normalizeBaseUrl) }
+})
+
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import { fetchPublicImageBase64 } from './fetchAdapter'
-import { createOpenAIProvider } from './openai'
-import { createComfyProvider } from './comfy'
-import { createGoogleProvider } from './google'
-import type { ImageModelInfo } from './types'
-import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
+import { createOpenAIProvider, openaiModelCapabilities } from './openai'
+import { createOpenRouterProvider } from './openrouter'
+import { createOpenAICompatibleProvider } from './openaiCompatibleProvider'
+import { createZhipuProvider } from './zhipu'
+import { comfyReferenceLimit, createComfyProvider } from './comfy'
+import { createA1111Provider } from './a1111'
+import { createGoogleProvider, googleModelCapabilities } from './google'
+import type { ImageModelInfo, ImageProvider } from './types'
+import { imageConnectionFor, modelListKey } from './connection'
+import {
+  IMAGE_PROVIDER_LABELS,
+  IMAGE_PROVIDER_OPTIONS,
+  generateImage,
+  providerNeedsModel,
+  referenceBlocker,
+  supportsReferenceImages,
+  listImageModels,
+  evictReplacedModelList,
+  warmImageCapabilities,
+} from './registry'
 import { settings } from '#lib/stores/settings.svelte.ts'
-import type { ImageProviderType } from '#lib/types/index.ts'
+import type { ImageModelCapabilities, ImageProfile, ImageProviderType } from '#lib/types/index.ts'
+import type { ImageOutputPreference } from '#lib/utils/imageOutput.ts'
+
+const conn = (providerType: ImageProviderType, apiKey: string, baseUrl?: string) =>
+  imageConnectionFor(providerType, apiKey, baseUrl)
+
+const adapter = (listModels: ImageProvider['listModels']): ImageProvider => ({
+  id: 'openai',
+  name: 'openai',
+  generate: vi.fn(),
+  listModels,
+})
 
 describe('Image Provider Registry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(comfyReferenceLimit).mockReturnValue(0)
+    vi.mocked(openaiModelCapabilities).mockReturnValue(undefined)
+    vi.mocked(googleModelCapabilities).mockReturnValue(undefined)
   })
 
-  describe('supportsImageGeneration', () => {
-    // A `Record` over the union, not an array: an array annotated `ImageProviderType[]`
-    // accepts a short list happily, so the exhaustiveness this claims was never checked.
-    // As a record, a provider added to the union and left out here fails `svelte-check`.
-    const ALL_PROVIDERS: Record<ImageProviderType, true> = {
-      nanogpt: true,
-      openai: true,
-      openrouter: true,
-      chutes: true,
-      pollinations: true,
-      google: true,
-      zhipu: true,
-      comfyui: true,
-      a1111: true,
-    }
-
-    it.each(Object.keys(ALL_PROVIDERS) as ImageProviderType[])(
-      'returns true for %s',
-      (providerType) => {
-        expect(supportsImageGeneration(providerType)).toBe(true)
-      },
-    )
-
-    it('returns false for unknown providers', () => {
-      expect(supportsImageGeneration('unknown-provider')).toBe(false)
+  describe('IMAGE_PROVIDER_OPTIONS', () => {
+    it('offers every provider once, under its label', () => {
+      expect(IMAGE_PROVIDER_OPTIONS.map((o) => o.value).toSorted()).toEqual(
+        Object.keys(IMAGE_PROVIDER_LABELS).toSorted(),
+      )
+      for (const { value, label } of IMAGE_PROVIDER_OPTIONS) {
+        expect(label).toBe(IMAGE_PROVIDER_LABELS[value])
+      }
     })
   })
 
-  describe('requiresApiKey', () => {
-    it.each(['comfyui', 'a1111'] as ImageProviderType[])(
-      'returns false for the self-hosted provider %s',
-      (providerType) => {
-        expect(requiresApiKey(providerType)).toBe(false)
-      },
-    )
+  describe('providerNeedsModel', () => {
+    it.each<[ImageProviderType, Record<string, unknown>, boolean]>([
+      ['nanogpt', {}, true],
+      ['openai', {}, true],
+      ['openrouter', {}, true],
+      ['google', {}, true],
+      ['zhipu', {}, true],
+      ['pollinations', {}, false],
+      ['openai-compatible', {}, false],
+      ['a1111', {}, false],
+      ['comfyui', {}, true],
+      ['comfyui', { mode: 'basic-txt2img' }, true],
+      ['comfyui', { mode: 'custom-workflow' }, false],
+    ])('for %s with %j is %s', (providerType, providerOptions, expected) => {
+      expect(providerNeedsModel(providerType, providerOptions)).toBe(expected)
+    })
+  })
 
-    it.each([
-      'nanogpt',
-      'openai',
-      'openrouter',
-      'chutes',
-      'google',
-      'zhipu',
-      // Its model list is open, its generation is not.
-      'pollinations',
-    ] as ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
-      expect(requiresApiKey(providerType)).toBe(true)
+  describe('referenceBlocker', () => {
+    it('names what to fix for a provider whose settings control references', () => {
+      expect(referenceBlocker('comfyui', { mode: 'custom-workflow' })).toContain('LoadImage')
     })
 
-    it('assumes an unknown provider needs a key', () => {
-      expect(requiresApiKey('unknown-provider')).toBe(true)
+    it('falls back to a generic reason for a provider that never sends references', () => {
+      expect(referenceBlocker('zhipu', {})).toBe('its provider cannot send reference images.')
+    })
+
+    it('is undefined when the provider can send references', () => {
+      expect(referenceBlocker('openai', {})).toBeUndefined()
     })
   })
 
@@ -117,7 +159,11 @@ describe('Image Provider Registry', () => {
 
     // The model list is cached per key, so each case gets its own.
     let keyCounter = 0
-    function setup(providerType: 'openai' | 'google' | 'comfyui', models: ImageModelInfo[] = []) {
+    function setup(
+      providerType: 'openai' | 'openrouter' | 'google' | 'comfyui' | 'a1111',
+      models: ImageModelInfo[] = [],
+      providerOptions: Record<string, unknown> = {},
+    ) {
       const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
       const provider = {
         id: providerType,
@@ -126,15 +172,38 @@ describe('Image Provider Registry', () => {
         listModels: vi.fn(async () => models),
       }
       vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createOpenRouterProvider).mockReturnValue(provider)
       vi.mocked(createGoogleProvider).mockReturnValue(provider)
       vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(createA1111Provider).mockReturnValue(provider)
       vi.mocked(settings.getImageProfile).mockReturnValue({
         providerType,
         apiKey: `sk-key-${keyCounter++}`,
+        providerOptions,
       } as ReturnType<typeof settings.getImageProfile>)
       vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
       return generate
     }
+
+    it('refuses an empty model for a provider that needs one', async () => {
+      const generate = setup('openai')
+
+      await expect(generateImage({ profileId: 'p', model: '', prompt: 'x' })).rejects.toThrow(
+        'No image model configured for OpenAI',
+      )
+      expect(generate).not.toHaveBeenCalled()
+    })
+
+    it.each<['a1111' | 'comfyui', Record<string, unknown>]>([
+      ['a1111', {}],
+      ['comfyui', { mode: 'custom-workflow' }],
+    ])('generates with an empty model for %s with %j', async (providerType, providerOptions) => {
+      const generate = setup(providerType, [], providerOptions)
+
+      await generateImage({ profileId: 'p', model: '', prompt: 'x' })
+
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ model: '' }))
+    })
 
     it('hands adapters raw base64 for data: and http(s) references', async () => {
       const generate = setup('openai')
@@ -161,7 +230,7 @@ describe('Image Provider Registry', () => {
     })
 
     it('trims references to the model limit before downloading any', async () => {
-      const generate = setup('openai', [
+      const generate = setup('openrouter', [
         { id: 'dall-e-2', name: 'dall-e-2', supportsImg2Img: true, maxReferenceImages: 1 },
       ])
 
@@ -231,18 +300,13 @@ describe('Image Provider Registry', () => {
     })
 
     it('downloads no reference for a model that takes none', async () => {
-      const generate = setup('google', [
-        {
-          id: 'imagen-4.0-generate-001',
-          name: 'Imagen 4',
-          supportsImg2Img: false,
-          maxReferenceImages: 0,
-        },
+      const generate = setup('openrouter', [
+        { id: 'dall-e-3', name: 'DALL·E 3', supportsImg2Img: false, maxReferenceImages: 0 },
       ])
 
       await generateImage({
         profileId: 'p',
-        model: 'imagen-4.0-generate-001',
+        model: 'dall-e-3',
         prompt: 'x',
         referenceImages: ['https://img.test/a.png'],
       })
@@ -251,7 +315,38 @@ describe('Image Provider Registry', () => {
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
     })
 
-    it('sends no references, and downloads none, to a provider that ignores them', async () => {
+    it('downloads no reference for a model the list marks as not taking them', async () => {
+      const generate = setup('openrouter', [
+        { id: 'flux-dev', name: 'Flux', supportsImg2Img: false },
+      ])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'flux-dev',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+    })
+
+    it('still sends references when the list does not say either way', async () => {
+      const generate = setup('openrouter', [{ id: 'flux-dev', name: 'Flux' }])
+
+      await generateImage({
+        profileId: 'p',
+        model: 'flux-dev',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
+    it('sends no references, and downloads none, to a ComfyUI workflow that has no LoadImage', async () => {
       const generate = setup('comfyui')
 
       await generateImage({
@@ -265,12 +360,1160 @@ describe('Image Provider Registry', () => {
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
     })
 
+    it('hands ComfyUI as many references as its workflow has selected inputs', async () => {
+      const generate = setup('comfyui')
+      vi.mocked(comfyReferenceLimit).mockReturnValue(1)
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png', 'https://img.test/b.png'],
+      })
+
+      expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
+    it('sends no references, and downloads none, to A1111 with the switch off', async () => {
+      const generate = setup('a1111')
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+      expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
+    })
+
+    it('hands A1111 references with the switch on', async () => {
+      const generate = setup('a1111', [], { takesReferences: true })
+
+      await generateImage({
+        profileId: 'p',
+        model: 'm',
+        prompt: 'x',
+        referenceImages: ['https://img.test/a.png'],
+      })
+
+      expect(generate).toHaveBeenCalledWith(
+        expect.objectContaining({ referenceImages: ['DOWNLOADED'] }),
+      )
+    })
+
     it('passes no references when none were given', async () => {
       const generate = setup('openai')
 
       await generateImage({ profileId: 'p', model: 'gpt-image-1', prompt: 'x' })
 
       expect(generate).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: undefined }))
+    })
+  })
+
+  describe('supportsReferenceImages', () => {
+    let keyCounter = 0
+    function setup(
+      providerType: ImageProviderType,
+      models: ImageModelInfo[] = [],
+      providerOptions: Record<string, unknown> = {},
+    ) {
+      const provider = {
+        id: providerType,
+        name: providerType,
+        generate: vi.fn(),
+        listModels: vi.fn(async () => models),
+      }
+      vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createOpenRouterProvider).mockReturnValue(provider)
+      vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(createA1111Provider).mockReturnValue(provider)
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        providerType,
+        apiKey: `sk-ref-${keyCounter++}`,
+        providerOptions,
+      } as ReturnType<typeof settings.getImageProfile>)
+    }
+
+    it('is false for ComfyUI without a workflow that takes references', async () => {
+      setup('comfyui')
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it('is true for ComfyUI with one', async () => {
+      setup('comfyui')
+      vi.mocked(comfyReferenceLimit).mockReturnValue(1)
+      expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    })
+
+    it('is false for Z.AI', async () => {
+      setup('zhipu')
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it.each([
+      [{}, false],
+      [{ takesReferences: true }, true],
+    ])('for A1111 with %j is %s', async (providerOptions, expected) => {
+      setup('a1111', [], providerOptions)
+      expect(await supportsReferenceImages('p', 'm')).toBe(expected)
+    })
+
+    it('is false for a model marked as lacking img2img', async () => {
+      setup('openrouter', [{ id: 'm', name: 'm', supportsImg2Img: false }])
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it('is true for a model that supports img2img', async () => {
+      setup('openrouter', [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    })
+
+    it('passes a model absent from the list', async () => {
+      setup('openrouter', [{ id: 'other', name: 'other', supportsImg2Img: false }])
+      expect(await supportsReferenceImages('p', 'm')).toBe(true)
+    })
+
+    it('looks up no capabilities for an empty model', async () => {
+      setup('openrouter', [{ id: 'm', name: 'm', supportsImg2Img: false }])
+      expect(await supportsReferenceImages('p', '')).toBe(true)
+      expect(createOpenRouterProvider).not.toHaveBeenCalled()
+    })
+
+    it('is false for an unknown profile', async () => {
+      vi.mocked(settings.getImageProfile).mockReturnValue(undefined)
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    describe('capability override', () => {
+      let overrideCounter = 0
+      function overrideSetup(
+        providerType: 'openai-compatible' | 'openrouter',
+        over: Partial<ImageProfile>,
+        listed: ImageModelInfo,
+      ) {
+        const provider = {
+          id: providerType,
+          name: providerType,
+          generate: vi.fn(),
+          listModels: vi.fn(async () => [listed]),
+        }
+        vi.mocked(createOpenAICompatibleProvider).mockReturnValue(provider)
+        vi.mocked(createOpenRouterProvider).mockReturnValue(provider)
+        vi.mocked(settings.getImageProfile).mockReturnValue({
+          providerType,
+          apiKey: `sk-override-${overrideCounter++}`,
+          model: 'm',
+          providerOptions: {},
+          ...over,
+        } as ImageProfile)
+        return provider
+      }
+      const listed = (over: Partial<ImageModelInfo>): ImageModelInfo => ({
+        id: 'm',
+        name: 'm',
+        supportsImg2Img: true,
+        ...over,
+      })
+
+      it('turns references off over a model the list says takes them', async () => {
+        overrideSetup(
+          'openai-compatible',
+          { capabilityOverride: { references: false } },
+          listed({}),
+        )
+        expect(await supportsReferenceImages('p', 'm')).toBe(false)
+      })
+
+      it('sends no reference to a profile whose override turns references off', async () => {
+        const provider = overrideSetup(
+          'openai-compatible',
+          { capabilityOverride: { references: false } },
+          listed({}),
+        )
+
+        await generateImage({
+          profileId: 'p',
+          model: 'm',
+          prompt: 'x',
+          referenceImages: ['https://img.test/a.png'],
+        })
+
+        expect(fetchPublicImageBase64).not.toHaveBeenCalled()
+        expect(provider.generate).toHaveBeenCalledWith(
+          expect.objectContaining({ referenceImages: [] }),
+        )
+      })
+
+      it('turns references on over a model the list says lacks them', async () => {
+        overrideSetup(
+          'openai-compatible',
+          { capabilityOverride: { references: true } },
+          listed({ supportsImg2Img: false }),
+        )
+        expect(await supportsReferenceImages('p', 'm')).toBe(true)
+      })
+
+      it('names the override when it leaves a model that needs a reference without one', async () => {
+        overrideSetup(
+          'openai-compatible',
+          { capabilityOverride: { references: false } },
+          listed({ requiresReferenceImage: true }),
+        )
+        await expect(generateImage({ profileId: 'p', model: 'm', prompt: 'x' })).rejects.toThrow(
+          'References override is Off',
+        )
+      })
+
+      it('is ignored by a provider that takes none', async () => {
+        overrideSetup('openrouter', { capabilityOverride: { references: false } }, listed({}))
+        expect(await supportsReferenceImages('p', 'm')).toBe(true)
+      })
+    })
+  })
+
+  describe('model capabilities', () => {
+    // The capability cache and the model cache outlive a test, so each case gets its own key.
+    let counter = 0
+    function setup(
+      over: Partial<ImageProfile> = {},
+      {
+        listModels = vi.fn(async (): Promise<ImageModelInfo[]> => []),
+        getModelCapabilities,
+      }: {
+        listModels?: (signal?: AbortSignal) => Promise<ImageModelInfo[]>
+        getModelCapabilities?: (
+          model: string,
+          listed: ImageModelInfo[],
+          signal?: AbortSignal,
+        ) => Promise<ImageModelCapabilities | undefined>
+      } = {},
+    ) {
+      const n = counter++
+      const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        id: 'openrouter',
+        name: 'openrouter',
+        generate,
+        listModels,
+        getModelCapabilities,
+      })
+      const profile = {
+        id: `caps-${n}`,
+        providerType: 'openrouter',
+        apiKey: `sk-caps-${n}`,
+        model: 'm',
+        providerOptions: {},
+        ...over,
+      } as ImageProfile
+      vi.mocked(settings.getImageProfile).mockReturnValue(profile)
+      vi.mocked(fetchPublicImageBase64).mockResolvedValue('DOWNLOADED')
+      return { profile, generate, listModels }
+    }
+
+    const generate = (model = 'm', referenceImages?: string[]) =>
+      generateImage({ profileId: 'p', model, prompt: 'x', referenceImages })
+
+    describe('output format', () => {
+      const prefer = (list: ImageOutputPreference[]) => {
+        settings.systemServicesSettings.imageGeneration.outputFormats = list
+      }
+      const listing = (over: Partial<ImageModelInfo>) => ({
+        listModels: vi.fn(async (): Promise<ImageModelInfo[]> => [{ id: 'm', name: 'm', ...over }]),
+      })
+
+      afterEach(() => prefer([]))
+
+      it('hands the adapter the first preferred format the model lists, with its compression', async () => {
+        prefer([
+          { format: 'webp', compression: 80 },
+          { format: 'jpeg', compression: 90 },
+        ])
+        const { generate: send } = setup(
+          {},
+          listing({ outputFormats: ['png', 'jpeg'], compressionFormats: ['jpeg'] }),
+        )
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ output: { format: 'jpeg', compression: 90 } }),
+        )
+      })
+
+      it('sends a format without compression the model does not take for it', async () => {
+        prefer([{ format: 'webp', compression: 80 }])
+        const { generate: send } = setup({}, listing({ outputFormats: ['webp'] }))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: { format: 'webp' } }))
+      })
+
+      it('sends no output when the model lists none of the preferred formats', async () => {
+        prefer([{ format: 'webp' }])
+        const { generate: send } = setup({}, listing({ outputFormats: ['png', 'jpeg'] }))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: undefined }))
+      })
+
+      it('sends no output for a model whose formats are unknown', async () => {
+        prefer([{ format: 'png' }])
+        const { generate: send } = setup({}, listing({}))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: undefined }))
+      })
+
+      it('sends no output when nothing is preferred', async () => {
+        const { generate: send } = setup({}, listing({ outputFormats: ['png', 'jpeg', 'webp'] }))
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ output: undefined }))
+      })
+
+      it('reads the formats of an OpenAI Compatible host from its override', async () => {
+        prefer([{ format: 'webp', compression: 70 }])
+        const send = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+        vi.mocked(createOpenAICompatibleProvider).mockReturnValue({
+          id: 'openai-compatible',
+          name: 'openai-compatible',
+          generate: send,
+          listModels: vi.fn(async () => []),
+        })
+        vi.mocked(settings.getImageProfile).mockReturnValue({
+          id: 'compat-output',
+          providerType: 'openai-compatible',
+          apiKey: 'sk-compat-output',
+          baseUrl: 'https://proxy.test/v1',
+          model: 'm',
+          providerOptions: {},
+          capabilityOverride: { outputFormats: ['png', 'webp'], outputCompression: true },
+        } as ImageProfile)
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(
+          expect.objectContaining({ output: { format: 'webp', compression: 70 } }),
+        )
+      })
+    })
+
+    describe('reference formats', () => {
+      const PNG = 'iVBORw0KGgo='
+      const JPEG = '/9j/4AAQSkZJRg=='
+      const WEBP = 'UklGRgAAAABXRUJQ'
+      const UNKNOWN = 'AAAA'
+      const takes = (mimeTypes: string[], over: Partial<ImageModelInfo> = {}) => ({
+        listModels: vi.fn(async (): Promise<ImageModelInfo[]> => [
+          {
+            id: 'm',
+            name: 'm',
+            supportsImg2Img: true,
+            referenceConstraints: { mimeTypes },
+            ...over,
+          },
+        ]),
+      })
+
+      it('drops a reference in a format the model does not list, and keeps the rest', async () => {
+        const { generate: send } = setup({}, takes(['image/png', 'image/jpeg']))
+
+        await generate('m', [WEBP, PNG, JPEG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG, JPEG] }))
+      })
+
+      it('keeps a reference whose format cannot be told', async () => {
+        const { generate: send } = setup({}, takes(['image/png']))
+
+        await generate('m', [UNKNOWN, WEBP])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [UNKNOWN] }))
+      })
+
+      it('keeps every reference when the model lists no formats', async () => {
+        const { generate: send } = setup({}, takes([]))
+
+        await generate('m', [WEBP, PNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [WEBP, PNG] }))
+      })
+
+      it('lets a reference the model cannot read leave its slot to the next one', async () => {
+        const { generate: send } = setup(
+          {},
+          takes(['image/png', 'image/jpeg'], { maxReferenceImages: 1 }),
+        )
+
+        await generate('m', [WEBP, PNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG] }))
+      })
+
+      it('rounds a fractional reference limit down', async () => {
+        const { generate: send } = setup({}, takes(['image/png'], { maxReferenceImages: 1.5 }))
+
+        await generate('m', [PNG, PNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [PNG] }))
+      })
+
+      it('does not give a failed download slot to the next reference', async () => {
+        const { generate: send } = setup({}, takes(['image/png'], { maxReferenceImages: 1 }))
+        vi.mocked(fetchPublicImageBase64).mockImplementation(async (url) => {
+          if (url.includes('bad')) throw new Error('refused')
+          return PNG
+        })
+
+        await generate('m', ['http://bad.test/a.png', 'https://img.test/b.png'])
+
+        expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [] }))
+      })
+
+      it('reads an animated PNG as a PNG', async () => {
+        const APNG = btoa('\x89PNG\r\n\x1a\n\0\0\0\x08acTL' + '\0'.repeat(12))
+        const { generate: send } = setup({}, takes(['image/png']))
+
+        await generate('m', [APNG])
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ referenceImages: [APNG] }))
+      })
+
+      it('still refuses a model that needs a reference when none is left', async () => {
+        const { generate: send } = setup({}, takes(['image/png'], { requiresReferenceImage: true }))
+
+        await expect(generate('m', [WEBP])).rejects.toThrow('needs a reference image')
+        expect(send).not.toHaveBeenCalled()
+      })
+    })
+
+    it('reads the model from the list once, and saves nothing to the profile', async () => {
+      const { generate: send, listModels } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [
+            { id: 'm', name: 'm', supportsImg2Img: true, maxReferenceImages: 1 },
+          ]),
+        },
+      )
+
+      await generate('m', ['https://img.test/a.png', 'https://img.test/b.png'])
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(fetchPublicImageBase64).toHaveBeenCalledTimes(1)
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ maxReferenceImages: 1 }),
+        }),
+      )
+      expect(settings.updateImageProfile).not.toHaveBeenCalled()
+    })
+
+    it('remembers a model the list does not know', async () => {
+      const { listModels } = setup(
+        {},
+        { listModels: vi.fn(async () => [{ id: 'other', name: 'other' }]) },
+      )
+
+      await generate()
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('still generates from an empty list, and does not ask again for a few minutes', async () => {
+      vi.useFakeTimers()
+      try {
+        const getModelCapabilities = vi.fn(async (): Promise<undefined> => undefined)
+        const { generate: send } = setup({}, { getModelCapabilities })
+
+        await generate()
+        await generate()
+        expect(send).toHaveBeenCalledTimes(2)
+        expect(getModelCapabilities).toHaveBeenCalledTimes(1)
+
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+        await generate()
+        expect(getModelCapabilities).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('reads a listed model from a loaded list without asking the provider', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ supportedAspectRatios: ['1:1'] }))
+      const {
+        profile,
+        generate: send,
+        listModels,
+      } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [{ id: 'm', name: 'm', maxReferenceImages: 2 }]),
+          getModelCapabilities,
+        },
+      )
+
+      await listImageModels(profile, true)
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(getModelCapabilities).not.toHaveBeenCalled()
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ maxReferenceImages: 2 }),
+        }),
+      )
+    })
+
+    it('prefers a reloaded list to the answer a lookup was still fetching for the old one', async () => {
+      let finish: (value: ImageModelCapabilities) => void = () => {}
+      const getModelCapabilities = vi.fn(
+        () => new Promise<ImageModelCapabilities | undefined>((resolve) => (finish = resolve)),
+      )
+      const listModels = vi
+        .fn<() => Promise<ImageModelInfo[]>>()
+        .mockResolvedValueOnce([{ id: 'other', name: 'other' }])
+        .mockResolvedValue([{ id: 'm', name: 'm', maxReferenceImages: 5 }])
+      const { profile, generate: send } = setup({}, { listModels, getModelCapabilities })
+
+      const slow = generate()
+      await vi.waitFor(() => expect(getModelCapabilities).toHaveBeenCalled())
+      await listImageModels(profile, true)
+      finish({ maxReferenceImages: 1 })
+      await slow
+      await generate()
+
+      expect(send).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ maxReferenceImages: 5 }),
+        }),
+      )
+    })
+
+    it('stops waiting for capabilities when generation is cancelled', async () => {
+      vi.useFakeTimers()
+      try {
+        const { generate: send } = setup(
+          {},
+          { listModels: vi.fn(() => new Promise<ImageModelInfo[]>(() => {})) },
+        )
+        const controller = new AbortController()
+        const reason = new DOMException('Stopped', 'AbortError')
+
+        const done = generateImage({
+          profileId: 'p',
+          model: 'm',
+          prompt: 'x',
+          signal: controller.signal,
+        })
+        controller.abort(reason)
+
+        await expect(done).rejects.toBe(reason)
+        expect(send).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(10_000)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('cancels a list request that outlasts the lookup bound, and still generates', async () => {
+      vi.useFakeTimers()
+      try {
+        let listSignal: AbortSignal | undefined
+        const { generate: send } = setup(
+          {},
+          {
+            listModels: vi.fn((signal?: AbortSignal) => {
+              listSignal = signal
+              return new Promise<ImageModelInfo[]>(() => {})
+            }),
+          },
+        )
+
+        const done = generate()
+        await vi.advanceTimersByTimeAsync(10_000)
+        await done
+
+        expect(listSignal?.aborted).toBe(true)
+        expect((listSignal?.reason as Error).name).toBe('AbortError')
+        expect(send).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('refuses a model that edits only when no reference could be sent', async () => {
+      const { generate: send } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [{ id: 'm', name: 'm', requiresReferenceImage: true }]),
+        },
+      )
+      vi.mocked(fetchPublicImageBase64).mockRejectedValue(new Error('refused'))
+
+      await expect(generate()).rejects.toThrow('needs a reference image')
+      await expect(generate('m', ['https://img.test/a.png'])).rejects.toThrow(
+        'needs a reference image',
+      )
+      expect(send).not.toHaveBeenCalled()
+    })
+
+    it('asks a provider for a model its list lacks', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ supportedAspectRatios: ['1:1'] }))
+      const { generate: send, listModels } = setup({}, { getModelCapabilities })
+
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+      expect(getModelCapabilities).toHaveBeenCalledWith('m', [], expect.any(AbortSignal))
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ supportedAspectRatios: ['1:1'] }),
+        }),
+      )
+    })
+
+    it('prefers the listed entry to the provider’s own lookup', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ supportedAspectRatios: ['1:1'] }))
+      const { generate: send } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [{ id: 'm', name: 'm', maxReferenceImages: 2 }]),
+          getModelCapabilities,
+        },
+      )
+
+      await generate()
+
+      expect(getModelCapabilities).not.toHaveBeenCalled()
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ maxReferenceImages: 2 }),
+        }),
+      )
+    })
+
+    it('finds a model listed under an alias', async () => {
+      const { generate: send } = setup(
+        {},
+        {
+          listModels: vi.fn(async () => [
+            { id: 'canonical', name: 'c', aliases: ['m'], maxReferenceImages: 3 },
+          ]),
+        },
+      )
+
+      await generate()
+
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ maxReferenceImages: 3 }),
+        }),
+      )
+    })
+
+    it('generates without capabilities when the provider lookup fails', async () => {
+      const getModelCapabilities = vi.fn(async (): Promise<undefined> => {
+        throw new Error('503')
+      })
+      const { generate: send } = setup({}, { getModelCapabilities })
+
+      await generate()
+
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
+    })
+
+    it('reads the list in supportsReferenceImages', async () => {
+      setup({}, { listModels: vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: false }]) })
+
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it('looks the model up again after the list is reloaded', async () => {
+      const listModels = vi
+        .fn<() => Promise<ImageModelInfo[]>>()
+        .mockResolvedValueOnce([{ id: 'm', name: 'm', maxReferenceImages: 1 }])
+        .mockResolvedValue([{ id: 'm', name: 'm', maxReferenceImages: 5 }])
+      const { profile, generate: send } = setup({}, { listModels })
+
+      await generate()
+      await listImageModels(profile, true)
+      await generate()
+
+      expect(send).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          modelInfo: expect.objectContaining({ maxReferenceImages: 5 }),
+        }),
+      )
+    })
+
+    it('looks the model up again when the profile moves to another connection', async () => {
+      const { profile, listModels } = setup(
+        {},
+        { listModels: vi.fn(async () => [{ id: 'm', name: 'm' }]) },
+      )
+
+      await generate()
+      evictReplacedModelList(profile, conn('openrouter', 'sk-caps-moved'))
+      await generate()
+
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('warmImageCapabilities', () => {
+    let counter = 0
+    function setup({
+      listModels = vi.fn(async (): Promise<ImageModelInfo[]> => []),
+      getModelCapabilities,
+    }: {
+      listModels?: (signal?: AbortSignal) => Promise<ImageModelInfo[]>
+      getModelCapabilities?: (
+        model: string,
+        listed: ImageModelInfo[],
+        signal?: AbortSignal,
+      ) => Promise<ImageModelCapabilities | undefined>
+    } = {}) {
+      const n = counter++
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        id: 'openrouter',
+        name: 'openrouter',
+        generate: vi.fn(async (_options: unknown) => ({ base64: 'RESULT' })),
+        listModels,
+        getModelCapabilities,
+      })
+      const profile = (model: string, over: Partial<ImageProfile> = {}) =>
+        ({
+          id: `warm-${n}`,
+          providerType: 'openrouter',
+          apiKey: `sk-warm-${n}`,
+          model,
+          providerOptions: {},
+          ...over,
+        }) as ImageProfile
+      return { listModels, profile }
+    }
+
+    it('lists once for the same profile passed several times', async () => {
+      const { listModels, profile } = setup({
+        listModels: vi.fn(async () => [{ id: 'm', name: 'm' }]),
+      })
+
+      await warmImageCapabilities([profile('m'), profile('m'), profile('m')])
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('lists once for two profiles on one connection', async () => {
+      const { listModels, profile } = setup({
+        listModels: vi.fn(async () => [
+          { id: 'a', name: 'a' },
+          { id: 'b', name: 'b' },
+        ]),
+      })
+
+      await warmImageCapabilities([profile('a', { id: 'p1' }), profile('b', { id: 'p2' })])
+
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('reads a listed model from the list, and generation does not list again', async () => {
+      const getModelCapabilities = vi.fn(async (): Promise<undefined> => undefined)
+      const { listModels, profile } = setup({
+        listModels: vi.fn(async () => [{ id: 'm', name: 'm' }]),
+        getModelCapabilities,
+      })
+      const warmed = profile('m')
+      vi.mocked(settings.getImageProfile).mockReturnValue(warmed)
+
+      await warmImageCapabilities([warmed])
+      await generateImage({ profileId: warmed.id, model: 'm', prompt: 'x' })
+
+      expect(getModelCapabilities).not.toHaveBeenCalled()
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    it('looks up a model the list omits once, and generation does not ask again', async () => {
+      const getModelCapabilities = vi.fn(async () => ({ maxReferenceImages: 2 }))
+      const { profile } = setup({
+        listModels: vi.fn(async () => [{ id: 'other', name: 'other' }]),
+        getModelCapabilities,
+      })
+      const warmed = profile('m')
+      vi.mocked(settings.getImageProfile).mockReturnValue(warmed)
+
+      await warmImageCapabilities([warmed])
+      await generateImage({ profileId: warmed.id, model: 'm', prompt: 'x' })
+
+      expect(getModelCapabilities).toHaveBeenCalledTimes(1)
+    })
+
+    it('resolves when the list fails, and generation lists again', async () => {
+      const listModels = vi
+        .fn<() => Promise<ImageModelInfo[]>>()
+        .mockRejectedValueOnce(new Error('503'))
+        .mockResolvedValue([{ id: 'm', name: 'm' }])
+      const { profile } = setup({ listModels })
+      const warmed = profile('m')
+      vi.mocked(settings.getImageProfile).mockReturnValue(warmed)
+
+      await expect(warmImageCapabilities([warmed])).resolves.toBeUndefined()
+      await generateImage({ profileId: warmed.id, model: 'm', prompt: 'x' })
+
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not list for a provider whose capabilities are a table', async () => {
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+
+      await warmImageCapabilities([
+        {
+          id: 'warm-openai',
+          providerType: 'openai',
+          apiKey: 'sk-warm-openai',
+          model: 'gpt-image-1',
+          providerOptions: {},
+        } as ImageProfile,
+      ])
+
+      expect(listModels).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('capability source', () => {
+    let counter = 0
+    function setup(providerType: ImageProviderType, over: Partial<ImageProfile> = {}) {
+      const n = counter++
+      const generate = vi.fn(async (_options: unknown) => ({ base64: 'RESULT' }))
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      const provider = { id: providerType, name: providerType, generate, listModels }
+      vi.mocked(createOpenAIProvider).mockReturnValue(provider)
+      vi.mocked(createGoogleProvider).mockReturnValue(provider)
+      vi.mocked(createZhipuProvider).mockReturnValue(provider)
+      vi.mocked(createComfyProvider).mockReturnValue(provider)
+      vi.mocked(createA1111Provider).mockReturnValue(provider)
+      vi.mocked(settings.getImageProfile).mockReturnValue({
+        id: `source-${n}`,
+        providerType,
+        apiKey: `sk-source-${n}`,
+        model: 'm',
+        providerOptions: {},
+        ...over,
+      } as ImageProfile)
+      return { generate, listModels }
+    }
+
+    const generate = () => generateImage({ profileId: 'p', model: 'm', prompt: 'x' })
+
+    it.each([
+      ['openai', openaiModelCapabilities],
+      ['google', googleModelCapabilities],
+    ] as const)(
+      'hands a %s profile its table and does not list models',
+      async (providerType, lookup) => {
+        const table = { supportedResolutions: ['1024x1024'] }
+        vi.mocked(lookup).mockReturnValue(table)
+        const { generate: send, listModels } = setup(providerType)
+
+        await generate()
+
+        expect(lookup).toHaveBeenCalledWith('m')
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: table }))
+        expect(listModels).not.toHaveBeenCalled()
+      },
+    )
+
+    it('reads the table in supportsReferenceImages', async () => {
+      vi.mocked(openaiModelCapabilities).mockReturnValue({ supportsImg2Img: false })
+      setup('openai')
+
+      expect(await supportsReferenceImages('p', 'm')).toBe(false)
+    })
+
+    it.each(['zhipu', 'comfyui', 'a1111'] as const)(
+      'gives a %s profile no capabilities and does not list models',
+      async (providerType) => {
+        const { generate: send, listModels } = setup(providerType)
+
+        await generate()
+
+        expect(send).toHaveBeenCalledWith(expect.objectContaining({ modelInfo: undefined }))
+        expect(listModels).not.toHaveBeenCalled()
+      },
+    )
+  })
+
+  describe('model listing failures', () => {
+    function failingProvider() {
+      vi.mocked(createOpenAIProvider).mockReturnValue(
+        adapter(async () => {
+          throw new Error('Image API error 401: bad key')
+        }),
+      )
+    }
+
+    it('rethrows from listImageModels so the profile form can show it', async () => {
+      failingProvider()
+      await expect(listImageModels(conn('openai', 'sk-fail-a'), true)).rejects.toThrow('bad key')
+    })
+
+    it('does not cache a failure', async () => {
+      failingProvider()
+      await expect(listImageModels(conn('openai', 'sk-fail-b'), false)).rejects.toThrow()
+
+      const listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+      expect(await listImageModels(conn('openai', 'sk-fail-b'), false)).toHaveLength(1)
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('cancelled model listing', () => {
+    it('hands the signal to the adapter', async () => {
+      const listModels = vi.fn(async (_signal?: AbortSignal) => [])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+      const { signal } = new AbortController()
+
+      await listImageModels(conn('openai', 'sk-abort-pass'), true, signal)
+
+      expect(listModels.mock.calls[0][0]).toBe(signal)
+    })
+
+    it('rejects and caches nothing when the abort lands as the adapter returns a list', async () => {
+      const controller = new AbortController()
+      const listModels = vi.fn(async (_signal?: AbortSignal) => {
+        controller.abort()
+        return [{ id: 'partial', name: 'partial' }]
+      })
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+
+      await expect(
+        listImageModels(conn('openai', 'sk-abort-cache'), false, controller.signal),
+      ).rejects.toMatchObject({ name: 'AbortError' })
+
+      listModels.mockImplementationOnce(async () => [{ id: 'full', name: 'full' }])
+      const models = await listImageModels(conn('openai', 'sk-abort-cache'), false)
+      expect(models.map((m) => m.id)).toEqual(['full'])
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('overlapping list requests', () => {
+    const deferred = () => {
+      const resolvers: ((models: ImageModelInfo[]) => void)[] = []
+      const listModels = vi.fn(
+        () => new Promise<ImageModelInfo[]>((resolve) => resolvers.push(resolve)),
+      )
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+      return { listModels, resolvers }
+    }
+    const ids = (models: ImageModelInfo[]) => models.map((m) => m.id)
+
+    it('keeps the list of the request that started last when an earlier one finishes after it', async () => {
+      const { listModels, resolvers } = deferred()
+      const connection = conn('openai', 'sk-order-forced')
+
+      const warmup = listImageModels(connection, false)
+      const refresh = listImageModels(connection, true)
+      resolvers[1]([{ id: 'new', name: 'new' }])
+      await refresh
+      resolvers[0]([{ id: 'old', name: 'old' }])
+
+      expect(ids(await warmup)).toEqual(['old'])
+      expect(ids(await listImageModels(connection, false))).toEqual(['new'])
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+
+    it('stores an earlier request that finishes first, then the later one', async () => {
+      const { resolvers } = deferred()
+      const connection = conn('openai', 'sk-order-natural')
+
+      const first = listImageModels(connection, false)
+      const second = listImageModels(connection, true)
+      resolvers[0]([{ id: 'old', name: 'old' }])
+      await first
+      expect(ids(await listImageModels(connection, false))).toEqual(['old'])
+
+      resolvers[1]([{ id: 'new', name: 'new' }])
+      await second
+      expect(ids(await listImageModels(connection, false))).toEqual(['new'])
+    })
+  })
+
+  describe('empty model lists', () => {
+    const MINUTE = 60 * 1000
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('asks a catalogue provider again after five minutes', async () => {
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      vi.mocked(createOpenRouterProvider).mockReturnValue({
+        ...adapter(listModels),
+        id: 'openrouter',
+      })
+      const connection = conn('openrouter', 'sk-empty-catalogue')
+
+      await listImageModels(connection, false)
+      await vi.advanceTimersByTimeAsync(5 * MINUTE - 1)
+      await listImageModels(connection, false)
+      expect(listModels).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await listImageModels(connection, false)
+      expect(listModels).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps an empty list for a host that has no route for 12 hours', async () => {
+      const listModels = vi.fn(async (): Promise<ImageModelInfo[]> => [])
+      vi.mocked(createOpenAICompatibleProvider).mockReturnValue({
+        ...adapter(listModels),
+        id: 'openai-compatible',
+      })
+      const connection = conn('openai-compatible', 'sk-empty-route', 'https://host.test/v1')
+
+      await listImageModels(connection, false)
+      await vi.advanceTimersByTimeAsync(60 * MINUTE)
+      await listImageModels(connection, false)
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('model cache key', () => {
+    let listModels: ReturnType<typeof vi.fn<NonNullable<ImageProvider['listModels']>>>
+
+    beforeEach(() => {
+      listModels = vi.fn(async () => [{ id: 'm', name: 'm', supportsImg2Img: true }])
+      vi.mocked(createOpenAIProvider).mockReturnValue(adapter(listModels))
+    })
+
+    it('shares one entry across base URLs that normalize alike', async () => {
+      vi.mocked(normalizeBaseUrl)
+        .mockReturnValueOnce('https://normalized.test/v1')
+        .mockReturnValueOnce('https://normalized.test/v1')
+
+      await listImageModels(conn('openai', 'sk-key-norm', 'https://one.test/'), false)
+      await listImageModels(conn('openai', 'sk-key-norm', 'https://two.test//'), false)
+
+      expect(normalizeBaseUrl).toHaveBeenCalledWith('https://one.test/')
+      expect(normalizeBaseUrl).toHaveBeenCalledWith('https://two.test//')
+      expect(listModels).toHaveBeenCalledTimes(1)
+    })
+
+    describe('lifetime', () => {
+      const HOUR = 60 * 60 * 1000
+
+      beforeEach(() => {
+        vi.useFakeTimers()
+      })
+
+      afterEach(() => {
+        vi.useRealTimers()
+      })
+
+      it('serves an entry for 12 hours, then refetches', async () => {
+        await listImageModels(conn('openai', 'sk-ttl-0000'), false)
+        vi.advanceTimersByTime(12 * HOUR - 1)
+        await listImageModels(conn('openai', 'sk-ttl-0000'), false)
+        expect(listModels).toHaveBeenCalledTimes(1)
+
+        vi.advanceTimersByTime(1)
+        await listImageModels(conn('openai', 'sk-ttl-0000'), false)
+        expect(listModels).toHaveBeenCalledTimes(2)
+      })
+
+      it('keeps distinct API keys with a shared tail apart', async () => {
+        await listImageModels(conn('openai', 'sk-aaa-shared-tail'), false)
+        await listImageModels(conn('openai', 'sk-bbb-shared-tail'), false)
+        expect(listModels).toHaveBeenCalledTimes(2)
+      })
+
+      it('refetches on forceReload and replaces the entry', async () => {
+        await listImageModels(conn('openai', 'sk-force-0000'), false)
+        await listImageModels(conn('openai', 'sk-force-0000'), true)
+        await listImageModels(conn('openai', 'sk-force-0000'), false)
+        expect(listModels).toHaveBeenCalledTimes(2)
+      })
+
+      it('drops the Comfy picks for a connection when its list is reloaded', async () => {
+        const connection = conn('openai', 'sk-reload-comfy')
+        await listImageModels(connection, false)
+        clearComfyCache.mockClear()
+
+        await listImageModels(connection, false)
+        expect(clearComfyCache).not.toHaveBeenCalled()
+
+        await listImageModels(connection, true)
+        expect(clearComfyCache).toHaveBeenCalledExactlyOnceWith(modelListKey(connection))
+      })
+    })
+
+    describe('evictReplacedModelList', () => {
+      it('drops the old connection when the key changes and keeps the new one', async () => {
+        await listImageModels(conn('openai', 'sk-evict-old'), false)
+        await listImageModels(conn('openai', 'sk-evict-new'), false)
+        listModels.mockClear()
+
+        evictReplacedModelList(conn('openai', 'sk-evict-old'), conn('openai', 'sk-evict-new'))
+
+        await listImageModels(conn('openai', 'sk-evict-new'), false)
+        expect(listModels).not.toHaveBeenCalled()
+        await listImageModels(conn('openai', 'sk-evict-old'), false)
+        expect(listModels).toHaveBeenCalledTimes(1)
+      })
+
+      it('drops the old connection when the base URL changes', async () => {
+        await listImageModels(conn('openai', 'sk-evict-url', 'https://one.test'), false)
+        listModels.mockClear()
+
+        evictReplacedModelList(
+          conn('openai', 'sk-evict-url', 'https://one.test'),
+          conn('openai', 'sk-evict-url', 'https://two.test'),
+        )
+
+        await listImageModels(conn('openai', 'sk-evict-url', 'https://one.test'), false)
+        expect(listModels).toHaveBeenCalledTimes(1)
+      })
+
+      it('keeps the entry when the connection is unchanged', async () => {
+        await listImageModels(conn('openai', 'sk-evict-same'), false)
+        listModels.mockClear()
+        clearComfyCache.mockClear()
+
+        evictReplacedModelList(conn('openai', 'sk-evict-same'), conn('openai', 'sk-evict-same'))
+
+        await listImageModels(conn('openai', 'sk-evict-same'), false)
+        expect(listModels).not.toHaveBeenCalled()
+        expect(clearComfyCache).not.toHaveBeenCalled()
+      })
+
+      it('drops the Comfy picks for the old connection when its key changes', () => {
+        const previous = conn('comfyui', 'sk-evict-comfy', 'http://comfy.test:8188')
+        clearComfyCache.mockClear()
+
+        evictReplacedModelList(
+          previous,
+          conn('comfyui', 'sk-evict-comfy-new', 'http://comfy.test:8188'),
+        )
+
+        expect(clearComfyCache).toHaveBeenCalledExactlyOnceWith(modelListKey(previous))
+      })
     })
   })
 })

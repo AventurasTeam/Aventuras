@@ -13,6 +13,7 @@ import { createLogger } from '#lib/log.ts'
 import { styleReviewResultSchema, type PhraseAnalysis } from '../sdk/schemas/style'
 import { CLEAN_FOR_REVIEW, CLEAN_NONE } from '#lib/utils/narrationClean.ts'
 import { buildReviewPassages } from './styleReviewPassages'
+import { describeActivityError } from '#lib/services/activity/index.ts'
 
 const log = createLogger('StyleReviewer')
 
@@ -26,6 +27,8 @@ export interface StyleReviewResult {
   overallAssessment: string
   reviewedEntryCount: number
   timestamp: number
+  /** Why the review failed, when `overallAssessment` says it did. */
+  failure?: string
 }
 
 /**
@@ -80,6 +83,7 @@ export class StyleReviewerService extends BaseAIService {
     pov: POV = 'second',
     tense: Tense = 'present',
     recentEntriesCount = 32,
+    activityParentId?: string,
   ): Promise<StyleReviewResult> {
     log('analyzeStyle', { entriesCount: entries.length })
 
@@ -108,7 +112,13 @@ export class StyleReviewerService extends BaseAIService {
     const { system, user: prompt } = await ctx.render('style-reviewer')
 
     try {
-      const result = await this.generate(styleReviewResultSchema, system, prompt, 'style-reviewer')
+      const result = await this.generate(
+        styleReviewResultSchema,
+        system,
+        prompt,
+        'style-reviewer',
+        activityParentId,
+      )
 
       log('analyzeStyle complete', { phrasesFound: result.phrases.length })
 
@@ -124,6 +134,7 @@ export class StyleReviewerService extends BaseAIService {
         overallAssessment: 'Analysis failed.',
         reviewedEntryCount: count,
         timestamp: Date.now(),
+        failure: describeActivityError(error),
       }
     }
   }

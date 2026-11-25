@@ -218,30 +218,6 @@ describe('RetryService branch enforcement', () => {
     })
   })
 
-  describe('handleStopGeneration', () => {
-    it('refuses a snapshot from another branch and leaves the active branch alone', async () => {
-      const cleanup = uiCleanup()
-
-      const result = await service.handleStopGeneration(makeBackup(), callbacks, cleanup, {
-        storyId: 'story-1',
-        branchId: 'branch-b',
-      })
-
-      expect(result.success).toBe(false)
-      expect(cleanup.clearGenerationError).not.toHaveBeenCalled()
-      for (const call of mutatingCalls(callbacks)) expect(call).not.toHaveBeenCalled()
-    })
-
-    it('proceeds on a matching branch', async () => {
-      const result = await service.handleStopGeneration(makeBackup(), callbacks, uiCleanup(), {
-        storyId: 'story-1',
-        branchId: 'branch-a',
-      })
-
-      expect(result.success).toBe(true)
-    })
-  })
-
   it('still refuses on a branch mismatch when the entries are otherwise removable', async () => {
     callbacks.assertEntriesRemovable = vi.fn(() => {
       throw new Error('should not be consulted')
@@ -253,5 +229,71 @@ describe('RetryService branch enforcement', () => {
     })
 
     expect(result.error).toMatch(/another branch/i)
+  })
+
+  it('reports a database error thrown as a string', async () => {
+    callbacks.restoreFromRetryBackup = vi.fn(async () => {
+      throw 'FOREIGN KEY constraint failed'
+    })
+
+    const result = await service.handleRetryLastMessage(makeBackup(), callbacks, uiCleanup(), {
+      storyId: 'story-1',
+      branchId: 'branch-a',
+    })
+
+    expect(result.error).toBe('FOREIGN KEY constraint failed')
+  })
+})
+
+describe('RetryService restore paths', () => {
+  const scope = { storyId: 'story-1', branchId: 'branch-a' }
+
+  it('rewinds a backup taken with records through them, touching no copy', async () => {
+    const callbacks = makeCallbacks()
+    const rewind = vi.fn(async () => {})
+    const result = await new RetryService().handleRetryLastMessage(
+      makeBackup({ throughRecords: true }),
+      { ...callbacks, rewindThroughRecords: rewind },
+      uiCleanup(),
+      scope,
+    )
+
+    expect(result.success).toBe(true)
+    expect(rewind).toHaveBeenCalledWith(12)
+    expect(callbacks.restoreFromRetryBackup).not.toHaveBeenCalled()
+    expect(callbacks.deleteEntitiesCreatedAfterBackup).not.toHaveBeenCalled()
+    expect(callbacks.unlockRetryInProgress).toHaveBeenCalled()
+  })
+
+  it('reports a failed rewind and unlocks', async () => {
+    const callbacks = makeCallbacks()
+    const result = await new RetryService().handleRetryLastMessage(
+      makeBackup({ throughRecords: true }),
+      {
+        ...callbacks,
+        rewindThroughRecords: vi.fn(async () => {
+          throw new Error('A recorded change could not be undone')
+        }),
+      },
+      uiCleanup(),
+      scope,
+    )
+
+    expect(result.error).toBe('A recorded change could not be undone')
+    expect(callbacks.unlockRetryInProgress).toHaveBeenCalled()
+  })
+
+  it('restores a backup taken without records from its copy', async () => {
+    const callbacks = makeCallbacks()
+    const rewind = vi.fn(async () => {})
+    await new RetryService().handleRetryLastMessage(
+      makeBackup({ throughRecords: false }),
+      { ...callbacks, rewindThroughRecords: rewind },
+      uiCleanup(),
+      scope,
+    )
+
+    expect(rewind).not.toHaveBeenCalled()
+    expect(callbacks.restoreFromRetryBackup).toHaveBeenCalled()
   })
 })

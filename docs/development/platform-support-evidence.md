@@ -77,4 +77,5 @@ WebView provider and bundles none
 
 WKWebView is tied to the OS, and Safari 16.4's WebKit shipped in iOS 16.4
 ([WebKit blog](https://webkit.org/blog/13966/webkit-features-in-safari-16-4/)); Vite's default
-target names `ios16.4` too.
+target names `ios16.4` too. The app's iOS 26 minimum is set by `BGContinuedProcessingTask`, which
+needs iOS 26 ([ios-background-generation.md](ios-background-generation.md)).

@@ -22,7 +22,8 @@
 {:else}
   <Dialog.Footer
     class={cn(
-      'border-border bg-background relative z-10 border-t py-4 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] sm:rounded-b-lg',
+      // Rounded at every width, like the header, so it never covers the dialog's border corners.
+      'border-border bg-background relative z-10 rounded-b-lg border-t py-4 shadow-[0_-1px_3px_rgba(0,0,0,0.05)]',
       className,
     )}
     {...props}

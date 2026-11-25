@@ -5,10 +5,11 @@ import type {
   FontSource,
   FontSizeOption,
   GenerationPreset,
+  ImageProviderConnection,
   ImageProfile,
-  ImageProviderType,
   ProviderType,
   ReasoningEffort,
+  StoredImageProfile,
   TextModel,
   ThemeId,
   TranslationSettings,
@@ -16,6 +17,10 @@ import type {
   UpdateSettings,
 } from '#lib/types/index.ts'
 import { database } from '#lib/services/database.ts'
+import {
+  imageConnectionFor,
+  isImageProviderType,
+} from '#lib/services/ai/image/providers/connection.ts'
 import { grammarService } from '#lib/services/grammar.ts'
 import { PROVIDERS } from '#lib/services/ai/sdk/providers/config.ts'
 import {
@@ -25,31 +30,36 @@ import {
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from '#lib/services/ai/core/defaults.ts'
-import { isReasoningOn } from '#lib/services/ai/core/reasoning.ts'
+import { isReasoningEffort } from '#lib/services/ai/core/reasoning.ts'
 import {
   clearDanglingAssignments,
   migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
-  migrateReasoningEffort,
-  migrateReasoningIn,
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
-import { ui, NAV_FILTER_SETTING } from '#lib/stores/ui.svelte.ts'
+import {
+  ui,
+  NAV_FILTER_SETTING,
+  EXPLANATION_FOLD_PREFIX,
+  EXPLANATION_FOLD_IDS,
+  isExplanationFoldId,
+} from '#lib/stores/ui.svelte.ts'
 import { LANDMARK_FILTER_GROUPS } from '#lib/utils/storyNavigation.ts'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '#lib/constants/timeout.ts'
 import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '#lib/constants/layout.ts'
-import { SvelteSet, SvelteMap } from 'svelte/reactivity'
+import { SvelteSet } from 'svelte/reactivity'
 import { dedupeTextModels } from '#lib/utils/dedupeTextModels.ts'
 import { applyIncognitoKeyboard } from '#lib/utils/platform.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 import type { ActivityReporting } from '#lib/services/activity/index.ts'
 import type {
   ImageGenerationServiceSettings,
   TimelineFillSettings,
 } from '#lib/services/ai/index.ts'
-import { debug } from './debug.svelte'
+import { debugLog } from '#lib/stores/debugLog.ts'
 import { activity } from './activity.svelte'
 import { modelHealth } from './modelHealth.svelte'
 import {
@@ -682,6 +692,7 @@ export function getDefaultImageGenerationSettings(): ImageGenerationServiceSetti
     backgroundProfileId: null,
     backgroundSize: { orientation: 'landscape', size: 'small' },
     backgroundBlur: 2, // Default blur for atmosphere
+    outputFormats: [],
   }
 }
 
@@ -925,6 +936,7 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     rollbackOnDelete: false,
     lightweightBranches: false,
     autoSnapshotInterval: 20,
+    trackingEnabledSince: null,
     backgroundGeneration: false,
     generationNotifications: false,
     notificationPreview: false,
@@ -1416,16 +1428,8 @@ class SettingsStore {
       if (temperature) this.apiSettings.temperature = parseFloat(temperature)
       if (maxTokens) this.apiSettings.maxTokens = parseInt(maxTokens)
 
-      // `enable_thinking` is a legacy boolean, kept only for installs old enough to have no
-      // stored level. It is never the source of truth while `main_reasoning_effort` exists.
-      const reasoningEffort = migrateReasoningEffort(
-        await database.getSetting('main_reasoning_effort'),
-      )
-      if (reasoningEffort) {
-        this.apiSettings.reasoningEffort = reasoningEffort
-      } else if ((await database.getSetting('enable_thinking')) === 'true') {
-        this.apiSettings.reasoningEffort = 'high'
-      }
+      const reasoningEffort = await database.getSetting('main_reasoning_effort')
+      if (isReasoningEffort(reasoningEffort)) this.apiSettings.reasoningEffort = reasoningEffort
 
       const manualBody = await database.getSetting('main_manual_body')
       if (manualBody !== null) {
@@ -1617,7 +1621,7 @@ class SettingsStore {
       applyIncognitoKeyboard(this.uiSettings.incognitoKeyboard)
 
       const debugMode = await database.getSetting('debug_mode')
-      if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
+      if (debugMode !== null) debugLog.active = this.uiSettings.debugMode = debugMode === 'true'
 
       const activityReporting = await database.getSetting('activity_reporting')
       if (
@@ -1654,6 +1658,10 @@ class SettingsStore {
         if (shown !== null) ui.navFilter[group] = shown === 'true'
       }
 
+      for (const [id, value] of await database.getSettingsWithPrefix(EXPLANATION_FOLD_PREFIX)) {
+        if (isExplanationFoldId(id)) ui.explanationFolded.set(id, value === 'true')
+      }
+
       const galleryNewestFirst = await database.getSetting('gallery_newest_first')
       if (galleryNewestFirst !== null) ui.galleryNewestFirst = galleryNewestFirst === 'true'
 
@@ -1666,7 +1674,7 @@ class SettingsStore {
       const wizardSettingsJson = await database.getSetting('wizard_settings')
       if (wizardSettingsJson) {
         try {
-          const loaded = migrateReasoningIn(JSON.parse(wizardSettingsJson))
+          const loaded = JSON.parse(wizardSettingsJson)
           // Merge with defaults to ensure all fields exist
           const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
@@ -1698,7 +1706,7 @@ class SettingsStore {
       const presetsJson = await database.getSetting('generation_presets')
       if (presetsJson) {
         try {
-          const loadedPresets = migrateReasoningIn(JSON.parse(presetsJson))
+          const loadedPresets = JSON.parse(presetsJson)
           if (Array.isArray(loadedPresets) && loadedPresets.length > 0) {
             // Populate null profileIds with default profile
             const defaultProfileId = this.getDefaultProfileIdForProvider()
@@ -1790,6 +1798,13 @@ class SettingsStore {
             ...getDefaultExperimentalFeatures(),
             ...loaded,
           }
+          if (
+            this.experimentalFeatures.stateTracking &&
+            this.experimentalFeatures.trackingEnabledSince === null
+          ) {
+            this.experimentalFeatures.trackingEnabledSince = Date.now()
+            await this.saveExperimentalFeatures()
+          }
         } catch {
           // Keep defaults
         }
@@ -1799,7 +1814,7 @@ class SettingsStore {
       const systemServicesJson = await database.getSetting('system_services_settings')
       if (systemServicesJson) {
         try {
-          const loaded = migrateReasoningIn(JSON.parse(systemServicesJson))
+          const loaded = JSON.parse(systemServicesJson)
           const defaults = getDefaultSystemServicesSettingsForProvider(
             this.getDefaultProviderType(),
           )
@@ -1826,7 +1841,7 @@ class SettingsStore {
                 ...loaded.worldStateInjection,
               }),
             ),
-            imageGeneration: migrateImageGeneration({
+            imageGeneration: migrateImageGeneration<ImageGenerationServiceSettings>({
               ...defaults.imageGeneration,
               ...loaded.imageGeneration,
             }),
@@ -1934,9 +1949,6 @@ class SettingsStore {
       // Load image profiles
       await this.loadImageProfiles()
 
-      // Ensure default image generation profiles are set
-      await this.migrateImageProfileDefaults()
-
       this.initialized = true
     } catch (error) {
       console.error('Failed to load settings:', error)
@@ -1981,16 +1993,9 @@ class SettingsStore {
     await database.setSetting('llm_timeout_ms', clamped.toString())
   }
 
-  /**
-   * The only writer of the reasoning level, and of the legacy `enable_thinking` boolean that
-   * shadows it. The flag is derived here rather than tracked: it is a persistence detail for
-   * downgrades, not a second setting, and keeping it as one had eight call sites able to
-   * disagree with the level they sat next to.
-   */
   async setMainReasoningEffort(effort: ReasoningEffort) {
     this.apiSettings.reasoningEffort = effort
     await database.setSetting('main_reasoning_effort', effort)
-    await database.setSetting('enable_thinking', isReasoningOn(effort).toString())
   }
 
   async setMainManualBody(body: string) {
@@ -2047,7 +2052,9 @@ class SettingsStore {
       updates.apiKey !== undefined && updates.apiKey !== oldProfile.apiKey && !!oldProfile.apiKey
     const providerChanged =
       updates.providerType !== undefined && updates.providerType !== oldProfile.providerType
-    const baseUrlChanged = updates.baseUrl !== undefined && updates.baseUrl !== oldProfile.baseUrl
+    const baseUrlChanged =
+      updates.baseUrl !== undefined &&
+      normalizeBaseUrl(updates.baseUrl) !== normalizeBaseUrl(oldProfile.baseUrl)
     if (pingDisabled || apiKeyChanged || providerChanged || baseUrlChanged) {
       await clearProfileHealth(oldProfile).catch((err) =>
         console.warn('[Settings] Failed to clear health cache:', err),
@@ -2468,89 +2475,6 @@ class SettingsStore {
   }
 
   /**
-   * Auto-migrate existing API Profile references to Image Profiles.
-   * On first load after the rework, if imageProfiles is empty but imageGeneration
-   * settings have API profile IDs, create Image Profiles from those API Profiles.
-   */
-  async migrateImageProfileDefaults() {
-    if (this.imageProfiles.length > 0) return
-
-    const imgSettings = this.systemServicesSettings.imageGeneration
-    // Map each profile field to its corresponding old model field
-    // The old model fields (model, referenceModel, portraitModel, backgroundModel) have been
-    // removed from the type but may still exist in persisted user data
-    const profileFieldMap: Record<string, string> = {
-      profileId: 'model',
-      referenceProfileId: 'referenceModel',
-      portraitProfileId: 'portraitModel',
-      backgroundProfileId: 'backgroundModel',
-    }
-
-    // Map from "apiProfileId:model" → new Image Profile ID
-    const newProfileIds = new SvelteMap<string, string>()
-    let changed = false
-
-    for (const [profileField, modelField] of Object.entries(profileFieldMap)) {
-      const apiProfileId = (imgSettings as unknown as Record<string, unknown>)[profileField] as
-        string | undefined
-      const model = (imgSettings as unknown as Record<string, unknown>)[modelField] as
-        string | undefined
-
-      if (!apiProfileId || !model) continue
-
-      const uniqueKey = `${apiProfileId}:${model}`
-      if (newProfileIds.has(uniqueKey)) {
-        ;(imgSettings as unknown as Record<string, unknown>)[profileField] =
-          newProfileIds.get(uniqueKey)!
-        changed = true
-        continue
-      }
-
-      const apiProfile = this.getProfile(apiProfileId)
-      if (!apiProfile) continue
-
-      // Map ProviderType to ImageProviderType (only for image-capable providers)
-      const providerType = apiProfile.providerType as string
-      const imageProviderTypes = ['nanogpt', 'openai', 'chutes', 'pollinations', 'google', 'zhipu']
-      if (!imageProviderTypes.includes(providerType)) continue
-
-      const newProfile = await this.addImageProfile({
-        name: `${apiProfile.name} (${model})`,
-        providerType: providerType as ImageProviderType,
-        apiKey: apiProfile.apiKey ?? '',
-        baseUrl: apiProfile.baseUrl,
-        model: model,
-        providerOptions: {},
-      })
-
-      newProfileIds.set(uniqueKey, newProfile.id)
-      ;(imgSettings as unknown as Record<string, unknown>)[profileField] = newProfile.id
-      changed = true
-    }
-
-    if (changed) {
-      await this.saveSystemServicesSettings()
-      console.log(
-        '[Settings] Auto-migrated image generation profiles from API Profiles to Image Profiles',
-      )
-    }
-
-    // Ensure all existing image profiles have a model field
-    let profilesUpdated = false
-    for (const profile of this.imageProfiles) {
-      if (!profile.model) {
-        profile.model = 'flux'
-        profilesUpdated = true
-      }
-    }
-    if (profilesUpdated) {
-      this.imageProfiles = [...this.imageProfiles]
-      await this.saveImageProfiles()
-      console.log('[Settings] Migrated image profiles to include model field')
-    }
-  }
-
-  /**
    * Get the default profile for the current provider.
    */
   getDefaultProfile(): APIProfile | undefined {
@@ -2786,7 +2710,7 @@ class SettingsStore {
   }
 
   async setDebugMode(enabled: boolean) {
-    debug.isActive = this.uiSettings.debugMode = enabled
+    debugLog.active = this.uiSettings.debugMode = enabled
     await database.setSetting('debug_mode', enabled.toString())
   }
 
@@ -2808,10 +2732,6 @@ class SettingsStore {
       database.setSetting('temperature', this.apiSettings.temperature.toString()),
       database.setSetting('max_tokens', this.apiSettings.maxTokens.toString()),
       database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort),
-      database.setSetting(
-        'enable_thinking',
-        isReasoningOn(this.apiSettings.reasoningEffort).toString(),
-      ),
       database.setSetting('default_model', this.apiSettings.defaultModel),
       database.setSetting('main_narrative_profile_id', this.apiSettings.mainNarrativeProfileId),
       database.setSetting('main_manual_body', this.apiSettings.manualBody),
@@ -2911,6 +2831,9 @@ class SettingsStore {
     ) {
       updates.lightweightBranches = false
     }
+    if (updates.stateTracking === true && !this.experimentalFeatures.stateTracking) {
+      updates.trackingEnabledSince = Date.now()
+    }
     // Disabling stateTracking cascades
     if (updates.stateTracking === false) {
       updates.rollbackOnDelete = false
@@ -2950,20 +2873,36 @@ class SettingsStore {
     const json = await database.getSetting('image_profiles')
     if (json) {
       try {
-        const parsed = JSON.parse(json) as ImageProfile[]
-        this.imageProfiles = parsed.map((p) => ({
-          ...p,
-          providerOptions: p.providerOptions ?? {},
-        }))
+        const parsed = JSON.parse(json) as StoredImageProfile[]
+        this.imageProfiles = parsed.flatMap((p) => {
+          if (!isImageProviderType(p.providerType)) {
+            console.warn(
+              '[Settings] Skipped an image profile with an unknown provider:',
+              p.providerType,
+            )
+            return []
+          }
+          return [
+            {
+              ...p,
+              ...imageConnectionFor(p.providerType, p.apiKey, p.baseUrl),
+              providerOptions: p.providerOptions ?? {},
+            },
+          ]
+        })
       } catch {
         this.imageProfiles = []
       }
     }
   }
 
-  async addImageProfile(profile: Omit<ImageProfile, 'id' | 'createdAt'>): Promise<ImageProfile> {
+  async addImageProfile(
+    profile: Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageProviderConnection>,
+    connection: ImageProviderConnection,
+  ): Promise<ImageProfile> {
     const newProfile: ImageProfile = {
       ...profile,
+      ...connection,
       id: crypto.randomUUID(),
       createdAt: Date.now(),
     }
@@ -2972,10 +2911,14 @@ class SettingsStore {
     return newProfile
   }
 
-  async updateImageProfile(id: string, updates: Partial<Omit<ImageProfile, 'id' | 'createdAt'>>) {
+  async updateImageProfile(
+    id: string,
+    updates: Partial<Omit<ImageProfile, 'id' | 'createdAt' | keyof ImageProviderConnection>>,
+    connection?: ImageProviderConnection,
+  ) {
     const index = this.imageProfiles.findIndex((p) => p.id === id)
     if (index === -1) return
-    this.imageProfiles[index] = { ...this.imageProfiles[index], ...updates }
+    this.imageProfiles[index] = { ...this.imageProfiles[index], ...updates, ...connection }
     this.imageProfiles = [...this.imageProfiles]
     await this.saveImageProfiles()
   }
@@ -3081,9 +3024,16 @@ class SettingsStore {
   }
 
   async resetImageGenerationSettings() {
-    this.systemServicesSettings.imageGeneration = getDefaultImageGenerationSettingsForProvider(
-      this.providerPreset,
-    )
+    // The format list has its own reset on the Advanced page.
+    this.systemServicesSettings.imageGeneration = {
+      ...getDefaultImageGenerationSettingsForProvider(this.providerPreset),
+      outputFormats: this.systemServicesSettings.imageGeneration.outputFormats,
+    }
+    await this.saveSystemServicesSettings()
+  }
+
+  async resetImageOutputSettings() {
+    this.systemServicesSettings.imageGeneration.outputFormats = []
     await this.saveSystemServicesSettings()
   }
 
@@ -3184,6 +3134,7 @@ class SettingsStore {
     await ui.setNavPanelOpen(false)
     await ui.setGalleryNewestFirst(false)
     for (const group of LANDMARK_FILTER_GROUPS) await ui.setNavFilter(group, true)
+    for (const id of EXPLANATION_FOLD_IDS) await ui.setExplanationFolded(id, false)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')
@@ -3208,10 +3159,6 @@ class SettingsStore {
     await database.setSetting('default_model', this.apiSettings.defaultModel)
     await database.setSetting('temperature', this.apiSettings.temperature.toString())
     await database.setSetting('max_tokens', this.apiSettings.maxTokens.toString())
-    await database.setSetting(
-      'enable_thinking',
-      isReasoningOn(this.apiSettings.reasoningEffort).toString(),
-    )
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
     await database.setSetting('main_manual_body', this.apiSettings.manualBody)
     await database.setSetting('theme', this.uiSettings.theme)
@@ -3331,10 +3278,6 @@ class SettingsStore {
     await database.setSetting('max_tokens', this.apiSettings.maxTokens.toString())
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
     await database.setSetting('main_manual_body', this.apiSettings.manualBody)
-    await database.setSetting(
-      'enable_thinking',
-      isReasoningOn(this.apiSettings.reasoningEffort).toString(),
-    )
 
     // Apply provider-specific defaults to system services
     this.systemServicesSettings = getDefaultSystemServicesSettingsForProvider(provider)

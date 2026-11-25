@@ -15,6 +15,8 @@ import {
   type LorebookEntryPendingChangeSchema,
   type VaultLorebookPendingChangeSchema,
 } from '../schemas/lorebook'
+import type { PendingEntryStatus } from '../schemas/vault'
+import { withUnsaved } from '#lib/services/ai/vault/effectiveVault.ts'
 import { entityNameMatches, foldName } from '#lib/utils/text.ts'
 import type { ChapterQueryBudget } from './chapterQueries'
 import { cleanAliases, cleanKeywords, describeDropped } from '../../lorebook/entryFields'
@@ -45,6 +47,8 @@ export interface LorebookEntryToolContext {
    * Required if tools are allowed to access lorebooks other than the bound 'entries'.
    */
   getLorebookEntries?: (lorebookId: string) => VaultLorebookEntry[] | undefined
+  /** Pending changes to a lorebook's entries, flagged on `list_entries` and `read_entry`. */
+  pendingEntryStatus?: (lorebookId: string) => PendingEntryStatus
   /**
    * Indices of `entries` removed earlier in this session.
    *
@@ -94,6 +98,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
     onPendingChange,
     generateId,
     getLorebookEntries,
+    pendingEntryStatus,
     removedIndices,
     preventDuplicateNames,
     isAutonomous,
@@ -134,7 +139,10 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      */
     list_entries: tool({
       description:
-        'List lorebook entries with their indices, optionally narrowed by a search term or a type. Reflects the changes made so far in this session, so it is worth calling after merging or deleting — not before, when the list you were given is still accurate.',
+        'List lorebook entries with their indices, optionally narrowed by a search term or a type. Reflects the changes made so far in this session, so it is worth calling after merging or deleting — not before, when the list you were given is still accurate.' +
+        (pendingEntryStatus
+          ? ' An entry with an unapproved change carries a `pending` flag, and proposed new entries are listed under `pendingCreates`.'
+          : ''),
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook to list entries from'),
         query: z
@@ -208,17 +216,24 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         const cap = limit ?? MAX_LIST_ENTRIES
         filtered = filtered.slice(0, cap)
 
+        const status = resolved.targetId ? pendingEntryStatus?.(resolved.targetId) : undefined
+
         return {
           availableTotal,
           hasMore: availableTotal > filtered.length,
-          entries: filtered.map(({ entry: e, index }) => ({
-            index,
-            name: e.name,
-            type: e.type,
-            description: e.description.slice(0, 200) + (e.description.length > 200 ? '...' : ''),
-            keywords: e.keywords.slice(0, 5),
-          })),
+          entries: filtered.map(({ entry: e, index }) => {
+            const pending = status?.byIndex.get(index)
+            return {
+              index,
+              name: e.name,
+              type: e.type,
+              description: e.description.slice(0, 200) + (e.description.length > 200 ? '...' : ''),
+              keywords: e.keywords.slice(0, 5),
+              ...(pending ? { pending } : {}),
+            }
+          }),
           returnedCount: filtered.length,
+          ...(status && status.creates.length > 0 ? { pendingCreates: status.creates } : {}),
         }
       },
     }),
@@ -250,10 +265,14 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           return { found: false, error: removedError(index) }
         }
 
+        const pending = resolved.targetId
+          ? pendingEntryStatus?.(resolved.targetId).byIndex.get(index)
+          : undefined
         return {
           found: true,
           index,
           entry: targetEntries[index],
+          ...(pending ? { pending } : {}),
         }
       },
     }),
@@ -875,14 +894,20 @@ export type LoreManagementTools = ReturnType<typeof createLoreManagementTools>
 export interface VaultLorebookToolContext {
   /** Getter for all vault lorebooks (live, not snapshot) */
   lorebooks: () => VaultLorebook[]
+  unsavedFields?: (id: string) => string[]
+  /** Pending changes to a lorebook's entries, flagged on the summary tools. */
+  pendingEntryStatus?: (lorebookId: string) => PendingEntryStatus
   /** Callback to register a pending change for vault-level operations */
   onPendingChange?: (change: VaultLorebookPendingChangeSchema) => void
   /** Generate unique ID for pending changes */
   generateId?: () => string
 }
 
-/** `read_lorebook_summary` minus its entry list, and the focused-entity record the Vault sends. */
-export function toLorebookSummary(lorebook: VaultLorebook) {
+/**
+ * `read_lorebook_summary` minus its entry list, and the focused-entity record the Vault sends.
+ * `entryCount` counts the entries the lorebook has now; proposed new ones are in `pendingCreates`.
+ */
+export function toLorebookSummary(lorebook: VaultLorebook, status?: PendingEntryStatus) {
   return {
     id: lorebook.id,
     name: lorebook.name,
@@ -891,8 +916,12 @@ export function toLorebookSummary(lorebook: VaultLorebook) {
     favorite: lorebook.favorite,
     source: lorebook.source,
     entryCount: lorebook.entries.length,
+    ...(status && status.creates.length > 0 ? { pendingCreates: status.creates } : {}),
   }
 }
+
+const PENDING_SUMMARY_NOTE =
+  ' An entry with an unapproved change carries a `pending` flag, and proposed new entries are listed under `pendingCreates`; `entryCount` does not include them.'
 
 /**
  * Create vault-level lorebook browsing tools.
@@ -900,7 +929,7 @@ export function toLorebookSummary(lorebook: VaultLorebook) {
  * cross-lorebook visibility.
  */
 function createVaultLorebookTools(context: VaultLorebookToolContext) {
-  const { lorebooks, onPendingChange, generateId } = context
+  const { lorebooks, unsavedFields, pendingEntryStatus, onPendingChange, generateId } = context
 
   return {
     /**
@@ -946,7 +975,8 @@ function createVaultLorebookTools(context: VaultLorebookToolContext) {
      */
     list_lorebooks: tool({
       description:
-        'List all lorebooks in the vault with summaries including name, entry count, type breakdown, and tags.',
+        'List all lorebooks in the vault with summaries including name, entry count, type breakdown, and tags.' +
+        (pendingEntryStatus ? PENDING_SUMMARY_NOTE : ''),
       inputSchema: z.object({}),
       execute: async () => {
         const all = lorebooks()
@@ -957,6 +987,7 @@ function createVaultLorebookTools(context: VaultLorebookToolContext) {
               entryBreakdown[entry.type] = (entryBreakdown[entry.type] ?? 0) + 1
             }
 
+            const creates = pendingEntryStatus?.(lb.id).creates ?? []
             return {
               id: lb.id,
               name: lb.name,
@@ -965,6 +996,7 @@ function createVaultLorebookTools(context: VaultLorebookToolContext) {
               entryBreakdown,
               tags: lb.tags,
               favorite: lb.favorite,
+              ...(creates.length > 0 ? { pendingCreates: creates } : {}),
             }
           }),
           total: all.length,
@@ -977,7 +1009,8 @@ function createVaultLorebookTools(context: VaultLorebookToolContext) {
      */
     read_lorebook_summary: tool({
       description:
-        "Read a lorebook's metadata and entry list. Returns entry names, types, and keywords without full descriptions. Use read_entry for full details.",
+        "Read a lorebook's metadata and entry list. Returns entry names, types, and keywords without full descriptions. Use read_entry for full details." +
+        (pendingEntryStatus ? PENDING_SUMMARY_NOTE : ''),
       inputSchema: z.object({
         lorebookId: z.string().describe('The ID of the lorebook to read'),
       }),
@@ -988,19 +1021,27 @@ function createVaultLorebookTools(context: VaultLorebookToolContext) {
           return { found: false, error: `Lorebook with ID "${lorebookId}" not found` }
         }
 
-        return {
-          found: true,
-          lorebook: {
-            ...toLorebookSummary(lorebook),
-            entries: lorebook.entries.map((e, index) => ({
-              index,
-              name: e.name,
-              type: e.type,
-              keywords: e.keywords,
-              injectionMode: e.injectionMode,
-            })),
+        const status = pendingEntryStatus?.(lorebookId)
+        return withUnsaved(
+          {
+            found: true,
+            lorebook: {
+              ...toLorebookSummary(lorebook, status),
+              entries: lorebook.entries.map((e, index) => {
+                const pending = status?.byIndex.get(index)
+                return {
+                  index,
+                  name: e.name,
+                  type: e.type,
+                  keywords: e.keywords,
+                  injectionMode: e.injectionMode,
+                  ...(pending ? { pending } : {}),
+                }
+              }),
+            },
           },
-        }
+          unsavedFields?.(lorebookId) ?? [],
+        )
       },
     }),
   }

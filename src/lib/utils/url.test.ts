@@ -1,5 +1,71 @@
 import { describe, it, expect } from 'vitest'
-import { isPublicHttpUrl } from './url'
+import { endpoint, isPublicHttpUrl, normalizeBaseUrl, parseBaseUrl, parseHttpUrl } from './url'
+
+describe('parseHttpUrl', () => {
+  it.each([
+    ['http://192.168.1.50:4000/v1', '192.168.1.50'],
+    ['https://open.bigmodel.cn/api', 'open.bigmodel.cn'],
+  ])('parses %j', (input, hostname) => {
+    expect(parseHttpUrl(input)?.hostname).toBe(hostname)
+  })
+
+  it.each(['', 'h', 'open.bigmodel.cn/api', 'http://', 'ftp://example.com', 'file:///tmp/a'])(
+    'gives null for %j',
+    (input) => {
+      expect(parseHttpUrl(input)).toBeNull()
+    },
+  )
+})
+
+describe('normalizeBaseUrl', () => {
+  it.each([
+    ['https://api.example.com/v1/', 'https://api.example.com/v1'],
+    ['https://api.example.com/v1///', 'https://api.example.com/v1'],
+    ['  https://api.example.com/v1  ', 'https://api.example.com/v1'],
+    [' https://api.example.com/v1// ', 'https://api.example.com/v1'],
+    ['https://api.example.com/v1', 'https://api.example.com/v1'],
+    ['http://localhost:8188/', 'http://localhost:8188'],
+  ])('turns %j into %j', (input, expected) => {
+    expect(normalizeBaseUrl(input)).toBe(expected)
+  })
+
+  it.each([undefined, '', '   ', ' / ', 'https://', ' http:// ', 'http:///'])(
+    'gives an empty string for %j',
+    (input) => {
+      expect(normalizeBaseUrl(input)).toBe('')
+    },
+  )
+})
+
+describe('parseBaseUrl', () => {
+  it.each(['', 'h', 'open.bigmodel.cn/api', 'http://', 'ftp://example.com'])(
+    'throws for %j',
+    (input) => {
+      expect(() => parseBaseUrl(input)).toThrow('Base URL is not an http(s) URL')
+    },
+  )
+})
+
+describe('endpoint', () => {
+  it.each([
+    ['https://host/v1', 'https://host/v1/images/models'],
+    ['https://host/v1/', 'https://host/v1/images/models'],
+    ['https://host', 'https://host/images/models'],
+    ['http://localhost:8188', 'http://localhost:8188/images/models'],
+  ])('appends to %j', (input, expected) => {
+    expect(endpoint(input, 'images/models')).toBe(expected)
+  })
+
+  it('adds query parameters', () => {
+    expect(endpoint('https://host/v1', 'models', { pageSize: '200' })).toBe(
+      'https://host/v1/models?pageSize=200',
+    )
+  })
+
+  it('throws for a base that is not an http(s) URL', () => {
+    expect(() => endpoint('h', 'models')).toThrow('Base URL is not an http(s) URL')
+  })
+})
 
 describe('isPublicHttpUrl', () => {
   it.each([

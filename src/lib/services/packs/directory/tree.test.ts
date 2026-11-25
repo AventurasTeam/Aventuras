@@ -1,16 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
-import { ABOUT_FILE, GITATTRIBUTES_FILE, PACK_FILE, REFERENCE_DIR, UNGROUPED_DIR } from './layout'
+import {
+  ABOUT_FILE,
+  GITATTRIBUTES_FILE,
+  PACK_FILE,
+  README_FILE,
+  REFERENCE_DIR,
+  UNGROUPED_DIR,
+  VERSION_FILE,
+} from './layout'
 import {
   buildShippedBaselineTree,
   buildTree,
+  emptiedFolderCandidates,
+  holdsOnlyOsClutter,
+  folderOrigin,
+  planFolderChanges,
   planPrune,
   shippedTemplateRows,
   type TreeInput,
 } from './tree'
 
 const input: TreeInput = {
-  source: 'pack',
   appVersion: '0.7.9',
   name: 'My Pack',
   templates: [
@@ -19,7 +30,6 @@ const input: TreeInput = {
     { templateId: 'retired-prompt', content: 'An id the app no longer ships.' },
   ],
   variables: [],
-  status: { kind: 'custom-pack', rows: [] },
 }
 
 describe('buildTree', () => {
@@ -34,22 +44,47 @@ describe('buildTree', () => {
   it('writes one file per stored row plus the reserved files', () => {
     const tree = buildTree(input)
 
-    expect(tree.has('Story Generation/adventure.md')).toBe(true)
-    expect(tree.has('Story Generation/adventure-user.md')).toBe(true)
+    expect(tree.has('01 Story Generation/adventure.md')).toBe(true)
+    expect(tree.has('01 Story Generation/adventure-user.md')).toBe(true)
     expect(tree.has(`${UNGROUPED_DIR}/retired-prompt.md`)).toBe(true)
 
     expect(tree.has(PACK_FILE)).toBe(true)
-    expect(tree.has(ABOUT_FILE)).toBe(true)
+    expect(tree.has(README_FILE)).toBe(true)
+    expect(tree.has(ABOUT_FILE)).toBe(false)
     expect(tree.has(GITATTRIBUTES_FILE)).toBe(true)
-    expect(tree.has(`${REFERENCE_DIR}/system-variables.md`)).toBe(true)
-    expect(tree.has(`${REFERENCE_DIR}/runtime-variables.md`)).toBe(true)
-    expect(tree.has(`${REFERENCE_DIR}/template-variables.md`)).toBe(true)
-    expect(tree.has(`${REFERENCE_DIR}/template-status.md`)).toBe(true)
+    expect([...tree.keys()].filter((path) => path.startsWith(`${REFERENCE_DIR}/`)).sort()).toEqual([
+      `${REFERENCE_DIR}/runtime-variables.md`,
+      `${REFERENCE_DIR}/system-variables.md`,
+      `${REFERENCE_DIR}/${VERSION_FILE}`,
+    ])
   })
 
   it('writes a template file as its text and nothing else', () => {
     const tree = buildTree(input)
-    expect(tree.get('Story Generation/adventure.md')).toBe('Narrate for {{ protagonistName }}.\n')
+    expect(tree.get('01 Story Generation/adventure.md')).toBe(
+      'Narrate for {{ protagonistName }}.\n',
+    )
+  })
+
+  it('states the application version in the version file alone', () => {
+    const tree = buildTree({ ...input, appVersion: '9.8.7' })
+    const stating = [...tree].filter(([, content]) => content.includes('9.8.7')).map(([p]) => p)
+    expect(stating).toEqual([`${REFERENCE_DIR}/${VERSION_FILE}`])
+  })
+
+  it('leaves the reference material unchanged when a template’s variables change', () => {
+    const before = buildTree(input)
+    const after = buildTree({
+      ...input,
+      templates: input.templates.with(0, {
+        templateId: 'adventure',
+        content: 'Narrate for {{ storyTitle }}.',
+      }),
+    })
+
+    for (const [path, content] of before) {
+      if (path.startsWith(`${REFERENCE_DIR}/`)) expect(after.get(path)).toBe(content)
+    }
   })
 })
 
@@ -64,15 +99,15 @@ describe('buildShippedBaselineTree', () => {
     expect(shippedTemplateRows().length).toBeGreaterThan(PROMPT_TEMPLATES.length)
   })
 
-  it('declares itself a shipped baseline with no custom variables', () => {
+  it('declares no custom variables', () => {
     const packFile = buildShippedBaselineTree('0.7.9').get(PACK_FILE)!
-    expect(packFile).toContain('source: shipped-baseline')
     expect(packFile).toContain('variables: []')
   })
 
-  it('reports nothing edited', () => {
-    const status = buildShippedBaselineTree('0.7.9').get(`${REFERENCE_DIR}/template-status.md`)!
-    expect(status).toContain('No template in this export carries an edit made in the app.')
+  it('writes the same pack.yaml from every application version', () => {
+    expect(buildShippedBaselineTree('1.1.0').get(PACK_FILE)).toBe(
+      buildShippedBaselineTree('1.0.0').get(PACK_FILE),
+    )
   })
 
   it('is unaffected by anything stored in a pack', () => {
@@ -115,6 +150,184 @@ describe('planPrune', () => {
   it('still prunes a genuinely stale file whose casing differs from nothing written', () => {
     const stale = 'analysis/dropped-prompt.md'
     expect(planPrune([...tree.keys(), stale], tree)).toEqual([stale])
+  })
+})
+
+describe('folderOrigin', () => {
+  it('tells this format, an earlier one, and a stranger’s folder apart', () => {
+    expect(folderOrigin(buildTree(input).get(PACK_FILE))).toBe('current')
+    expect(
+      folderOrigin('formatVersion: 1\nappVersion: 0.7.9\nsource: pack\nname: X\nvariables: []\n'),
+    ).toBe('earlier')
+    expect(folderOrigin(undefined)).toBe('foreign')
+    expect(folderOrigin('name: someone else’s tool\n')).toBe('foreign')
+  })
+
+  // A newer format may change the rest of the schema, so only its declared version is trusted.
+  it('recognises a newer format even when the rest of pack.yaml no longer parses', () => {
+    expect(folderOrigin('formatVersion: 99\nsomethingNew: true\n')).toBe('newer')
+  })
+})
+
+describe('planFolderChanges', () => {
+  const tree = buildTree(input)
+  const formatOne = [
+    PACK_FILE,
+    ABOUT_FILE,
+    README_FILE,
+    GITATTRIBUTES_FILE,
+    'Story Generation/adventure.md',
+    'Story Generation/adventure-user.md',
+    'Other/retired-prompt.md',
+    `${REFERENCE_DIR}/system-variables.md`,
+    `${REFERENCE_DIR}/runtime-variables.md`,
+    `${REFERENCE_DIR}/template-variables.md`,
+    `${REFERENCE_DIR}/template-status.md`,
+    '_notes/ideas.md',
+    'NOTES.md',
+  ]
+
+  it('brings a format 1 tree up to date, moving the user’s README aside', () => {
+    const { prunePaths, renames } = planFolderChanges(formatOne, tree, 'earlier')
+
+    expect(renames).toEqual([{ from: README_FILE, to: 'README_user.md' }])
+    expect(prunePaths).toEqual(
+      [
+        ABOUT_FILE,
+        'Other/retired-prompt.md',
+        'Story Generation/adventure-user.md',
+        'Story Generation/adventure.md',
+        `${REFERENCE_DIR}/template-status.md`,
+        `${REFERENCE_DIR}/template-variables.md`,
+      ].toSorted(),
+    )
+  })
+
+  it('tells templates that move to a numbered folder from files that are gone', () => {
+    const { movedPaths, movedPromptCount, deletedPaths, deletesPrompt } = planFolderChanges(
+      formatOne,
+      tree,
+      'earlier',
+    )
+    expect(movedPaths).toEqual([
+      'Other/retired-prompt.md',
+      'Story Generation/adventure-user.md',
+      'Story Generation/adventure.md',
+    ])
+    // `adventure` and its user half are one prompt.
+    expect(movedPromptCount).toBe(2)
+    expect(deletedPaths).toEqual([
+      ABOUT_FILE,
+      `${REFERENCE_DIR}/template-status.md`,
+      `${REFERENCE_DIR}/template-variables.md`,
+    ])
+    expect(deletesPrompt).toBe(false)
+  })
+
+  it('still counts a template the pack no longer has as deleted, not moved', () => {
+    const { prunePaths, movedPaths, deletedPaths, deletesPrompt } = planFolderChanges(
+      [...tree.keys(), '02 Analysis/dropped-prompt.md'],
+      tree,
+      'current',
+    )
+    expect(prunePaths).toEqual(['02 Analysis/dropped-prompt.md'])
+    expect(movedPaths).toEqual([])
+    expect(deletedPaths).toEqual(['02 Analysis/dropped-prompt.md'])
+    expect(deletesPrompt).toBe(true)
+  })
+
+  it('counts a second copy of a template already in place as deleted, not moved', () => {
+    const { movedPaths, deletedPaths } = planFolderChanges(
+      [...tree.keys(), 'drafts/adventure.md'],
+      tree,
+      'current',
+    )
+    expect(movedPaths).toEqual([])
+    expect(deletedPaths).toEqual(['drafts/adventure.md'])
+  })
+
+  it('counts only one of two old copies of a template as the move', () => {
+    const { movedPaths, deletedPaths } = planFolderChanges(
+      [PACK_FILE, 'Story Generation/adventure.md', 'drafts/adventure.md'],
+      tree,
+      'earlier',
+    )
+    expect(movedPaths).toHaveLength(1)
+    expect(deletedPaths.filter((path) => path.endsWith('adventure.md'))).toHaveLength(1)
+  })
+
+  it('passes over a name a folder already has', () => {
+    expect(
+      planFolderChanges([README_FILE], tree, 'foreign', ['README_user.md', 'notes']).renames,
+    ).toEqual([{ from: README_FILE, to: 'README_user_2.md' }])
+  })
+
+  it('takes the next free name when README_user.md is taken', () => {
+    const taken = [...formatOne, 'readme_user.md', 'README_user_2.md']
+    expect(planFolderChanges(taken, tree, 'earlier').renames).toEqual([
+      { from: README_FILE, to: 'README_user_3.md' },
+    ])
+  })
+
+  it('moves a README aside in a folder it does not recognise, and prunes nothing', () => {
+    const { prunePaths, renames } = planFolderChanges(
+      ['readme.md', 'notes/ideas.md'],
+      tree,
+      'foreign',
+    )
+    expect(renames).toEqual([{ from: 'readme.md', to: 'README_user.md' }])
+    expect(prunePaths).toEqual([])
+  })
+
+  it('moves aside every spelling of README.md a case-sensitive filesystem can hold', () => {
+    expect(planFolderChanges(['readme.md', README_FILE], tree, 'foreign').renames).toEqual([
+      { from: README_FILE, to: 'README_user.md' },
+      { from: 'readme.md', to: 'README_user_2.md' },
+    ])
+  })
+
+  it('overwrites its own README and keeps a user’s ABOUT.md in a current tree', () => {
+    const { prunePaths, renames, replacedPaths } = planFolderChanges(
+      [...tree.keys(), ABOUT_FILE],
+      tree,
+      'current',
+    )
+    expect(renames).toEqual([])
+    expect(prunePaths).toEqual([])
+    expect(replacedPaths).toEqual([])
+  })
+
+  it('names the files it would replace in a folder it does not recognise, not the README it moves aside', () => {
+    const { replacedPaths } = planFolderChanges(
+      [README_FILE, '.GitAttributes', 'notes.txt'],
+      tree,
+      'foreign',
+    )
+    expect(replacedPaths).toEqual(['.GitAttributes'])
+  })
+})
+
+describe('holdsOnlyOsClutter', () => {
+  it('counts a folder holding only OS metadata as empty', () => {
+    expect(holdsOnlyOsClutter([])).toBe(true)
+    expect(holdsOnlyOsClutter(['.DS_Store', 'Thumbs.db', 'desktop.ini'])).toBe(true)
+  })
+
+  it('keeps a folder holding anything else', () => {
+    expect(holdsOnlyOsClutter(['.DS_Store', 'notes.txt'])).toBe(false)
+  })
+})
+
+describe('emptiedFolderCandidates', () => {
+  it('lists each pruned file’s folders, deepest first, and no root', () => {
+    expect(
+      emptiedFolderCandidates([
+        'Analysis/classifier.md',
+        'Analysis/old/deep.md',
+        `${REFERENCE_DIR}/template-status.md`,
+        ABOUT_FILE,
+      ]),
+    ).toEqual(['Analysis/old', REFERENCE_DIR, 'Analysis'])
   })
 })
 

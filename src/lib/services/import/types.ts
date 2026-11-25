@@ -18,6 +18,9 @@ import type {
   CheckpointRecord,
   Branch,
   TimeAnchor,
+  WorldStateDelta,
+  WorldStateMark,
+  WorldStateRecord,
   PersistentStyleReviewState,
   EmbeddedImage,
 } from '#lib/types/index.ts'
@@ -68,16 +71,25 @@ export interface PackRuntimeVariableExport {
  */
 export interface PackBindingExport {
   pack: { name: string; author: string | null }
+  /** Written by sync only. */
+  packSyncId?: string
   customVariableValues?: Record<string, string>
   variables?: PackVariableExport[]
   runtimeVariables?: PackRuntimeVariableExport[]
+}
+
+/** An entry as a file carries it. Files written before v1.11.0 hold its world-state delta. */
+export type ExportedStoryEntry = StoryEntry & { worldStateDelta?: WorldStateDelta | null }
+
+export type ExportedCheckpoint = Omit<CheckpointRecord, 'entriesSnapshot'> & {
+  entriesSnapshot: ExportedStoryEntry[]
 }
 
 export interface AventuraExport {
   version: string
   exportedAt: number
   story: Story
-  entries: StoryEntry[]
+  entries: ExportedStoryEntry[]
   characters: Character[]
   locations: Location[]
   items: Item[]
@@ -86,12 +98,14 @@ export interface AventuraExport {
   styleReviewState?: PersistentStyleReviewState | null // Added in v1.2.0
   // Note: story.timeTracker added in v1.3.0
   embeddedImages?: EmbeddedImage[] // Added in v1.4.0
-  checkpoints?: CheckpointRecord[] // Added in v1.6.0
+  checkpoints?: ExportedCheckpoint[] // Added in v1.6.0
   branches?: Branch[] // Added in v1.6.0
   chapters?: Chapter[] // Added in v1.7.0
   currentBgImage?: string | null // Added in v1.8.0
   packBinding?: PackBindingExport // Added in v1.9.0
   timeAnchors?: TimeAnchor[] // Added in v1.10.0
+  worldStateRecords?: WorldStateRecord[] // Added in v1.11.0
+  worldStateMarks?: WorldStateMark[] // Added in v1.11.0
 }
 
 /**
@@ -117,8 +131,11 @@ export interface AventuraExport {
  * - v1.10.0 Added timeAnchors (the in-story times the reader asserts entries ended at).
  *          Deliberately absent from `FEATURE_HISTORY`: a story that carries no anchors is the
  *          normal state, not a feature the file lost, so an older file has nothing to warn about.
+ * - v1.11.0 Added worldStateRecords (State Tracking's change records, headers and breaks) and
+ *          worldStateMarks (where each chapter and checkpoint falls among them).
+ *          Absent from `FEATURE_HISTORY` for the same reason: only Labs stories have any.
  */
-export const EXPORT_FORMAT_VERSION = '1.10.0'
+export const EXPORT_FORMAT_VERSION = '1.11.0'
 
 export interface ImportResult {
   success: boolean

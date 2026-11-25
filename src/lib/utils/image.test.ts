@@ -1,18 +1,26 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseImageSpec,
+  pickResolution,
+  atLeastMinPixels,
+  isSizeString,
+  pickRequestSize,
+  pickSize,
   specFromPixels,
   specToPixels,
   specToAspectRatio,
   specToRatioString,
+  isAspectRatio,
   expectedPixels,
   normalizeImageDataUrl,
-  base64ImageMime,
+  sniffImageMime,
   bytesToBase64,
   base64ToBytes,
   storyImageMode,
   IMAGE_ORIENTATIONS,
   IMAGE_SIZE_TIERS,
+  type ImageOrientation,
+  type ImageSizeTier,
 } from './image'
 
 describe('specToPixels', () => {
@@ -133,6 +141,15 @@ describe('specFromPixels', () => {
   })
 })
 
+describe('isAspectRatio', () => {
+  it('keeps only w:h aspect ratios', () => {
+    expect(['1:1', '2.35:1', 'auto', 'match_input_image', ''].filter(isAspectRatio)).toEqual([
+      '1:1',
+      '2.35:1',
+    ])
+  })
+})
+
 describe('specToAspectRatio', () => {
   const SUPPORTED = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']
 
@@ -169,6 +186,112 @@ describe('specToAspectRatio', () => {
   })
 })
 
+describe('pickResolution', () => {
+  const pick = (size: ImageSizeTier, listed?: string[], orientation: ImageOrientation = 'square') =>
+    pickResolution({ orientation, size }, listed)
+
+  it('picks the smallest listed tier that covers the long edge', () => {
+    expect(pick('tiny', ['512', '1K', '2K'])).toBe('512')
+    expect(pick('small', ['512', '1K', '2K'])).toBe('1K')
+    expect(pick('medium', ['512', '1K', '2K'])).toBe('2K')
+    expect(pick('large', ['512', '1K', '2K', '4K'])).toBe('2K')
+  })
+
+  it('rounds up to the next listed tier when the exact one is missing', () => {
+    expect(pick('tiny', ['1K', '2K', '4K'])).toBe('1K')
+    expect(pick('medium', ['1K', '2K', '4K'])).toBe('2K')
+  })
+
+  it('falls back to the largest tier when none covers the long edge', () => {
+    expect(pick('large', ['512', '1K'])).toBe('1K')
+  })
+
+  it('measures the long edge, so a landscape tier needs the same tier as a square one', () => {
+    expect(pick('small', ['512', '1K', '2K'], 'landscape')).toBe('1K')
+    expect(pick('small', ['512', '1K', '2K'], 'portrait')).toBe('1K')
+  })
+
+  it('reads a tier in any case and returns it as listed', () => {
+    expect(pick('small', ['1k', '2k'])).toBe('1k')
+    expect(pick('medium', ['1k', '2k'])).toBe('2k')
+    expect(pick('large', ['1k', '2K'])).toBe('2K')
+  })
+
+  it('ignores tiers it cannot place and sorts the rest', () => {
+    expect(pick('small', ['auto', '2K', '1K'])).toBe('1K')
+    expect(pick('small', ['auto'])).toBeUndefined()
+  })
+
+  it('places every tier spelling the listings use', () => {
+    const listed = ['512', '768', '1K', '1.5K', '2K', '4K']
+    expect(pick('tiny', ['768', '1K'])).toBe('768')
+    expect(pick('medium', listed.slice(0, 5))).toBe('1.5K')
+    expect(pick('large', listed)).toBe('2K')
+  })
+
+  it('sends nothing when the model lists no tiers', () => {
+    expect(pick('medium')).toBeUndefined()
+    expect(pick('medium', [])).toBeUndefined()
+  })
+})
+
+describe('pickSize', () => {
+  const pick = (
+    orientation: ImageOrientation,
+    size: ImageSizeTier,
+    listed?: string[],
+  ): string | undefined => pickSize({ orientation, size }, listed)
+
+  const standard = ['1024x1024', '1536x1024', '1024x1536']
+
+  it('matches orientation before long edge', () => {
+    expect(pick('landscape', 'tiny', standard)).toBe('1536x1024')
+    expect(pick('portrait', 'large', standard)).toBe('1024x1536')
+    expect(pick('square', 'large', standard)).toBe('1024x1024')
+  })
+
+  it('returns a model’s only option whatever it is', () => {
+    expect(pick('landscape', 'large', ['1024x1024'])).toBe('1024x1024')
+    expect(pick('square', 'small', ['auto'])).toBe('auto')
+  })
+
+  it('reads symbolic names, size tokens and bare ratios', () => {
+    expect(pick('landscape', 'small', ['square_hd', 'landscape_16_9'])).toBe('landscape_16_9')
+    expect(pick('square', 'large', ['1k', '2k', '4k'])).toBe('2k')
+    expect(pick('portrait', 'small', ['1:1', '16:9', '9:16'])).toBe('9:16')
+  })
+
+  it('falls to the widest option for a model with no landscape', () => {
+    expect(pick('landscape', 'small', ['512x512', '1024x1024'])).toBe('1024x1024')
+  })
+
+  it('prefers a square to the opposite orientation when the shape is missing', () => {
+    expect(pick('landscape', 'small', ['768x1024', '1024x1024'])).toBe('1024x1024')
+    expect(pick('portrait', 'small', ['1024x768', '1024x1024'])).toBe('1024x1024')
+  })
+
+  it('takes the closest aspect ratio, not just the closest orientation', () => {
+    expect(pick('landscape', 'small', ['2:3', '1:1', '3:2'])).toBe('3:2')
+    expect(pick('portrait', 'small', ['3:2', '1:1', '2:3'])).toBe('2:3')
+    expect(pick('landscape', 'small', ['2:3', '1:1'])).toBe('1:1')
+  })
+
+  it('falls to the long edge among shapes that are about equal', () => {
+    expect(pick('landscape', 'large', ['1024x576', '1920x1080'])).toBe('1920x1080')
+    expect(pick('landscape', 'tiny', ['1024x576', '1920x1080'])).toBe('1024x576')
+  })
+
+  it('prefers a readable option to one it cannot place', () => {
+    expect(pick('square', 'small', ['auto', '1024x1024'])).toBe('1024x1024')
+    expect(pick('square', 'small', ['auto', 'match_input_image'])).toBe('auto')
+  })
+
+  it('sends nothing when the model lists none', () => {
+    expect(pick('square', 'small')).toBeUndefined()
+    expect(pick('square', 'small', [])).toBeUndefined()
+  })
+})
+
 describe('expectedPixels', () => {
   it('resolves a stored value straight to placeholder dimensions', () => {
     expect(expectedPixels({ orientation: 'landscape', size: 'large' })).toEqual({
@@ -194,6 +317,35 @@ describe('normalizeImageDataUrl', () => {
   it('prefixes bare base64, which is how older saves stored it', () => {
     expect(normalizeImageDataUrl('AAA')).toBe('data:image/png;base64,AAA')
   })
+
+  describe('labelling by content', () => {
+    const JPEG = bytesToBase64(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46]))
+
+    it('labels bare base64 by its bytes', () => {
+      expect(normalizeImageDataUrl(JPEG)).toBe(`data:image/jpeg;base64,${JPEG}`)
+    })
+
+    it('relabels a data URL whose label disagrees with its bytes', () => {
+      expect(normalizeImageDataUrl(`data:image/png;base64,${JPEG}`)).toBe(
+        `data:image/jpeg;base64,${JPEG}`,
+      )
+    })
+
+    it('leaves a matching label alone', () => {
+      const url = `data:image/jpeg;base64,${JPEG}`
+      expect(normalizeImageDataUrl(url)).toBe(url)
+    })
+
+    it('keeps the label of bytes it does not recognise', () => {
+      const svg = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg"/>')}`
+      expect(normalizeImageDataUrl(svg)).toBe(svg)
+    })
+
+    it('passes through a data URL that is not base64', () => {
+      const url = 'data:image/svg+xml,%3Csvg%2F%3E'
+      expect(normalizeImageDataUrl(url)).toBe(url)
+    })
+  })
 })
 
 describe('storyImageMode', () => {
@@ -209,14 +361,74 @@ describe('storyImageMode', () => {
   })
 })
 
-describe('base64ImageMime', () => {
+describe('sniffImageMime', () => {
+  const text = (s: string) => Array.from(s, (c) => c.charCodeAt(0))
+  const u32 = (n: number) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff]
+  const b64 = (...parts: number[][]) => bytesToBase64(Uint8Array.from(parts.flat()))
+
+  const PNG_SIGNATURE = [0x89, ...text('PNG'), 0x0d, 0x0a, 0x1a, 0x0a]
+  const pngChunk = (type: string, dataLength: number) => [
+    ...u32(dataLength),
+    ...text(type),
+    ...new Array<number>(dataLength).fill(0),
+    ...u32(0),
+  ]
+  const ftyp = (major: string, ...compatible: string[]) => [
+    ...u32(16 + compatible.length * 4),
+    ...text('ftyp'),
+    ...text(major),
+    ...u32(0),
+    ...compatible.flatMap(text),
+  ]
+
   it.each([
-    ['iVBORw0KGgo', 'image/png'],
-    ['/9j/4AAQSkZJRg', 'image/jpeg'],
-    ['UklGRiQAAABXRUJQ', 'image/webp'],
-    ['AAAA', 'image/png'],
-  ])('sniffs %s as %s', (b64, mime) => {
-    expect(base64ImageMime(b64)).toBe(mime)
+    ['PNG', b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('IDAT', 4)), 'image/png'],
+    [
+      'PNG with a pHYs chunk',
+      b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('pHYs', 9), pngChunk('IDAT', 4)),
+      'image/png',
+    ],
+    ['truncated PNG', b64(PNG_SIGNATURE, pngChunk('IHDR', 13)), 'image/png'],
+    [
+      'APNG',
+      b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('acTL', 8), pngChunk('IDAT', 4)),
+      'image/apng',
+    ],
+    [
+      'APNG behind a large iCCP profile',
+      b64(PNG_SIGNATURE, pngChunk('IHDR', 13), pngChunk('iCCP', 40_000), pngChunk('acTL', 8)),
+      'image/apng',
+    ],
+    ['JPEG', b64([0xff, 0xd8, 0xff, 0xe0], text('JFIF')), 'image/jpeg'],
+    ['GIF87a', b64(text('GIF87a'), [1, 0, 1, 0]), 'image/gif'],
+    ['GIF89a', b64(text('GIF89a'), [1, 0, 1, 0]), 'image/gif'],
+    ['WebP', b64(text('RIFF'), [0x24, 0, 0, 0], text('WEBPVP8 ')), 'image/webp'],
+    ['AVIF', b64(ftyp('avif', 'mif1', 'miaf')), 'image/avif'],
+    ['AVIF sequence', b64(ftyp('avis', 'msf1', 'iso8')), 'image/avif'],
+    ['AVIF behind a mif1 major brand', b64(ftyp('mif1', 'miaf', 'avif')), 'image/avif'],
+    [
+      'AVIF in an ftyp box of size 0',
+      b64(u32(0), text('ftyp'), text('mif1'), u32(0), text('miaf'), text('avif')),
+      'image/avif',
+    ],
+    ['HEIC', b64(ftyp('heic', 'mif1')), 'image/heic'],
+    ['HEIC (heix)', b64(ftyp('heix')), 'image/heic'],
+    ['HEIC sequence', b64(ftyp('hevc', 'msf1')), 'image/heic-sequence'],
+    ['HEIF', b64(ftyp('mif1', 'miaf')), 'image/heif'],
+    ['HEIF sequence', b64(ftyp('msf1', 'iso8')), 'image/heif-sequence'],
+  ])('recognises %s', (_, data, mime) => {
+    expect(sniffImageMime(data)).toBe(mime)
+  })
+
+  it.each([
+    ['zero bytes', 'AAAA'],
+    ['HTML', 'PGh0bWw+'],
+    ['text that is not base64', '<html><body>Not found</body></html>'],
+    ['a RIFF WAV header', b64(text('RIFF'), [0x24, 0, 0, 0], text('WAVEfmt '))],
+    ['an empty string', ''],
+    ['an ISO-BMFF file of an unknown brand', b64(ftyp('mp42', 'isom'))],
+  ])('returns null for %s', (_, data) => {
+    expect(sniffImageMime(data)).toBeNull()
   })
 })
 
@@ -233,3 +445,100 @@ describe('bytesToBase64 / base64ToBytes', () => {
     expect(base64ToBytes('')).toEqual(new Uint8Array())
   })
 })
+
+describe('atLeastMinPixels', () => {
+  it('keeps a size that meets the floor, or any size without one', () => {
+    expect(atLeastMinPixels({ width: 1024, height: 1024 }, 655_360)).toEqual({
+      width: 1024,
+      height: 1024,
+    })
+    expect(atLeastMinPixels({ width: 64, height: 64 })).toEqual({ width: 64, height: 64 })
+  })
+
+  it('raises a smaller size, ratio kept, to multiples of 16 above the floor', () => {
+    const { width, height } = atLeastMinPixels({ width: 512, height: 288 }, 655_360)
+    expect(width * height).toBeGreaterThanOrEqual(655_360)
+    expect(width % 16).toBe(0)
+    expect(height % 16).toBe(0)
+    expect(Math.abs(width / height - 512 / 288)).toBeLessThan(0.05)
+  })
+})
+
+describe('isSizeString', () => {
+  it('accepts WxH only', () => {
+    expect(isSizeString('1024x1024')).toBe(true)
+    expect(isSizeString('1536x864')).toBe(true)
+    for (const value of ['auto', '1:1', '1024', '1024x', 'x1024', '1024x1024px', '', undefined]) {
+      expect(isSizeString(value)).toBe(false)
+    }
+  })
+
+  it('rejects a zero or non-finite dimension', () => {
+    for (const value of ['0x1024', '1024x0', '0x0', `${'9'.repeat(400)}x1`]) {
+      expect(isSizeString(value)).toBe(false)
+    }
+  })
+})
+
+describe('pickSize with unusable dimensions', () => {
+  it('treats a zero-sized option as unreadable', () => {
+    expect(pickSize({ orientation: 'square', size: 'small' }, ['0x0', '1024x1024'])).toBe(
+      '1024x1024',
+    )
+    expect(pickSize({ orientation: 'square', size: 'small' }, ['0:1', '0x512'])).toBe('0:1')
+  })
+})
+
+describe('pickRequestSize', () => {
+  const FLOOR = 655_360
+  const standard = ['1024x1024', '1536x1024', '1024x1536']
+
+  it('sends the model’s own WxH pick', () => {
+    expect(pickRequestSize({ orientation: 'landscape', size: 'medium' }, standard)).toBe(
+      '1536x1024',
+    )
+  })
+
+  it('sends the canonical pixels when the model lists none', () => {
+    expect(pickRequestSize({ orientation: 'landscape', size: 'medium' }, undefined)).toBe(
+      '1536x864',
+    )
+    expect(pickRequestSize({ orientation: 'landscape', size: 'medium' }, [])).toBe('1536x864')
+  })
+
+  it('sends the canonical pixels when the pick is not a WxH', () => {
+    expect(pickRequestSize({ orientation: 'square', size: 'medium' }, ['square_hd', 'auto'])).toBe(
+      '1536x1536',
+    )
+  })
+
+  it('raises the canonical pixels to the floor', () => {
+    expect(pickRequestSize({ orientation: 'square', size: 'tiny' }, undefined, FLOOR)).toBe(
+      '816x816',
+    )
+  })
+
+  it('leaves the model’s own pick alone, even below the floor', () => {
+    expect(pickRequestSize({ orientation: 'square', size: 'tiny' }, ['512x512'], FLOOR)).toBe(
+      '512x512',
+    )
+  })
+
+  it('keeps every tier and orientation at or above the floor, on the grid', () => {
+    for (const orientation of IMAGE_ORIENTATIONS) {
+      for (const size of IMAGE_SIZE_TIERS) {
+        const { width, height } = parseSize(
+          pickRequestSize({ orientation, size }, undefined, FLOOR),
+        )
+        expect(width * height).toBeGreaterThanOrEqual(FLOOR)
+        expect(width % 16).toBe(0)
+        expect(height % 16).toBe(0)
+      }
+    }
+  })
+})
+
+function parseSize(size: string): { width: number; height: number } {
+  const [width, height] = size.split('x').map(Number)
+  return { width, height }
+}

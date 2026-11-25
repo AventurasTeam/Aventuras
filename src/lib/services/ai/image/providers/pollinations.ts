@@ -1,10 +1,13 @@
 /**
  * Pollinations Image Provider
  *
- * Generates against gen.pollinations.ai/v1; model discovery uses Pollinations' own catalogue.
+ * Generates through the OpenAI Compatible SDK path against gen.pollinations.ai/v1; models come
+ * from Pollinations' own catalogue at /image/models.
  */
 
-import { specToPixels, formatImageSize } from '#lib/utils/image.ts'
+import * as z from 'zod'
+import type { ImageModelCapabilities } from '#lib/types/index.ts'
+import { specToPixels, formatImageSize, pickResolution } from '#lib/utils/image.ts'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -12,108 +15,111 @@ import type {
   ImageGenerateResult,
   ImageModelInfo,
 } from './types'
-import { imageGetFetch } from './fetchAdapter'
-import { generateOpenAICompatible } from './openaiCompatible'
+import { bearerHeaders, imageDiscoveryFetch } from './discoveryFetch'
+import {
+  editsOnly,
+  nonEmpty,
+  optionalString,
+  optionalStrings,
+  referenceSupport,
+} from './modelCatalogue'
+import { parseModelList } from './parseModelList'
+import { generateOpenAICompatibleImage } from './openaiCompatible'
 
-import { POLLINATIONS_DEFAULT_MODEL_ID, POLLINATIONS_REFERENCE_MODEL_ID } from '../constants'
-const DEFAULT_MODEL = POLLINATIONS_DEFAULT_MODEL_ID
-const REFERENCE_MODEL = POLLINATIONS_REFERENCE_MODEL_ID
 const GENERATION_BASE_URL = 'https://gen.pollinations.ai/v1'
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
 
-interface PollinationsImageModelResponse {
-  name: string
-  description?: string
-  input_modalities?: string[]
-  output_modalities?: string[]
-  pricing?: {
-    completionImageTokens?: string | number
-    promptTextTokens?: string | number
-    promptImageTokens?: string | number
+const PollinationsModel = z.object({
+  name: z.string(),
+  title: optionalString,
+  description: optionalString,
+  community: z.boolean().optional().catch(undefined),
+  aliases: optionalStrings,
+  input_modalities: optionalStrings,
+  output_modalities: optionalStrings,
+  max_reference_images: z.number().optional().catch(undefined),
+  resolutions: optionalStrings,
+})
+
+type PollinationsModel = z.output<typeof PollinationsModel>
+
+function toCapabilities({
+  input_modalities: inputs,
+  max_reference_images: refs,
+  resolutions,
+}: PollinationsModel): ImageModelCapabilities {
+  const listed = refs !== undefined && refs >= 0 ? refs : undefined
+  const supportsImg2Img = referenceSupport(inputs, listed)
+  // A zero that an image input contradicts is not a limit.
+  const maxReferenceImages = listed === 0 && supportsImg2Img ? undefined : listed
+
+  return {
+    supportsImg2Img,
+    maxReferenceImages,
+    requiresReferenceImage: editsOnly(inputs) ? true : undefined,
+    supportedResolutions: nonEmpty(resolutions),
   }
 }
 
-function parseOptionalNumber(val: string | number | undefined | null): number | undefined {
-  if (val === undefined || val === null || val === '') return undefined
-  const num = Number(val)
-  return isNaN(num) ? undefined : num
+// A community proxy can share its title with the official model, and the picker shows only this.
+function modelLabel({ name, title, community }: PollinationsModel): string {
+  const label = title || name
+  const owner = community ? name.split('/')[1] : undefined
+  return owner ? `${label} (Community - ${owner})` : label
+}
+
+function toModelInfo(m: PollinationsModel): ImageModelInfo {
+  return {
+    id: m.name,
+    name: modelLabel(m),
+    aliases: nonEmpty(m.aliases),
+    description: m.description,
+    inputModalities: m.input_modalities,
+    outputModalities: m.output_modalities,
+    ...toCapabilities(m),
+  }
 }
 
 export function createPollinationsProvider(config: ImageProviderConfig): ImageProvider {
+  // Discovery works without a key; it is sent when set.
+  async function listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+    const headers = { Accept: 'application/json', ...bearerHeaders(config.apiKey) }
+
+    const response = await imageDiscoveryFetch(MODELS_ENDPOINT, headers, {
+      serviceId: 'pollinations-image-models',
+      signal,
+    })
+    return parseModelList(await response.json(), PollinationsModel, MODELS_ENDPOINT)
+      .filter((model) => model.output_modalities?.includes('image'))
+      .map(toModelInfo)
+  }
+
   return {
     id: 'pollinations',
     name: 'Pollinations',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, referenceImages, signal } = options
+      const { model, prompt, spec, modelInfo, referenceImages, signal } = options
 
       if (!config.apiKey) {
         throw new Error('Pollinations API key is required to bypass Turnstile protection.')
       }
 
-      return generateOpenAICompatible({
+      const resolution = pickResolution(spec, modelInfo?.supportedResolutions)
+
+      return generateOpenAICompatibleImage({
         baseUrl: GENERATION_BASE_URL,
         apiKey: config.apiKey,
-        model: model || DEFAULT_MODEL,
+        serviceId: 'pollinations-image',
+        model,
         prompt,
         size: formatImageSize(specToPixels(spec)),
         referenceImages,
-        extraFields: { safe: false, nologo: true },
+        extraFields: { safe: false, ...(resolution && { resolution }) },
         signal,
-        serviceId: 'pollinations-image',
       })
     },
 
-    async listModels(apiKey?: string): Promise<ImageModelInfo[]> {
-      try {
-        const headers: Record<string, string> = { Accept: 'application/json' }
-        if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
-
-        const response = await imageGetFetch(MODELS_ENDPOINT, headers)
-        if (!response.ok) return getFallbackModels()
-
-        const data = await response.json()
-        if (!Array.isArray(data) || data.length === 0) return getFallbackModels()
-
-        return (data as PollinationsImageModelResponse[])
-          .filter((model) => model.output_modalities?.includes('image') ?? false)
-          .map((model) => ({
-            id: model.name,
-            name: model.name,
-            description: model.description,
-            supportsImg2Img: model.input_modalities?.includes('image') ?? false,
-            costPerImage: parseOptionalNumber(model.pricing?.completionImageTokens),
-            costPerTextToken: parseOptionalNumber(model.pricing?.promptTextTokens),
-            costPerImageToken: parseOptionalNumber(model.pricing?.promptImageTokens),
-            inputModalities: model.input_modalities,
-            outputModalities: model.output_modalities,
-          }))
-      } catch {
-        return getFallbackModels()
-      }
-    },
+    listModels,
   }
-}
-
-function getFallbackModels(): ImageModelInfo[] {
-  return [
-    {
-      id: DEFAULT_MODEL,
-      name: 'Z Image',
-      description: 'Default fast image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: 'flux',
-      name: 'Flux',
-      description: 'High quality image generation',
-      supportsImg2Img: false,
-    },
-    {
-      id: REFERENCE_MODEL,
-      name: 'Flux Kontext',
-      description: 'In-context editing & generation',
-      supportsImg2Img: true,
-    },
-  ]
 }

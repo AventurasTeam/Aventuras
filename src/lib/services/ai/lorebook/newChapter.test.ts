@@ -104,6 +104,11 @@ describe('loreRecentEntries', () => {
       )
     })
 
+    it('given no tail, as a chapter made by hand without reading past it, reads nothing after it', () => {
+      expect(loreRecentEntries([], 100, {})).toEqual({ shown: [], continues: false })
+      expect(loreRecentEntries([], 100, { entryLimit: 7 })).toEqual({ shown: [], continues: false })
+    })
+
     it('without a limit, takes the oldest entries the budget allows', () => {
       // 100 + 5 × 102 = 610 fits in 700; a seventh entry would not.
       const tail = sized(100, 100, 100, 100, 100, 100, 100, 100, 100, 100)

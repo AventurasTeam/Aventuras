@@ -32,7 +32,7 @@ same versions. When upgrading either, check whether its target moved.
 | macOS    | system WKWebView           | Safari 16.4's WebKit; macOS 13.3 or later                   |
 | Linux    | WebKitGTK `webkit2gtk-4.1` | 2.40 or later (`.deb`/`.rpm`); the AppImage carries its own |
 | Android  | System WebView (Chromium)  | WebView 111 or later; `minSdk` 26 (Android 8)               |
-| iOS      | system WKWebView           | iOS 16.4 or later                                           |
+| iOS      | system WKWebView           | iOS 26 or later                                             |
 
 The install table in the [repository README](../../README.md) repeats these minimums; change both
 together.
@@ -44,10 +44,18 @@ together.
 - **Linux**: the `.deb` and `.rpm` use the system's WebKitGTK and declare no minimum. Do not read
   distro versions off Tauri's Linux table; it is stale. The AppImage bundles its own WebKitGTK and
   needs the host's glibc 2.35 ([release.md](release.md#runner-pinning)).
+- **NVIDIA on Wayland** (`is_nvidia_wayland` in `src-tauri/src/main.rs`) sets
+  `__NV_DISABLE_EXPLICIT_SYNC=1` to avoid "Error 71". Inside an AppImage (`APPIMAGE` is set) it also
+  sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`, because the bundled libgbm cannot allocate buffers on
+  NVIDIA; that fallback renders on the CPU. System builds keep GPU rendering. A variable already
+  set in the environment is never overwritten.
 - **Android**: the floor is the WebView version, not the Android version. Devices that update
   WebView through Play are fine; devices without Play, or with an outdated provider, fall below it.
-- **iOS**: `src-tauri/tauri.ios.conf.json` sets `bundle.iOS.minimumSystemVersion` to 16.4. The
-  `.ipa` is unsigned and built best-effort ([release.md](release.md#building-ios)).
+- **iOS**: `src-tauri/tauri.ios.conf.json` sets `bundle.iOS.minimumSystemVersion` to 26.0. The
+  floor is set by the background-generation task (`BGContinuedProcessingTask`,
+  [ios-background-generation.md](ios-background-generation.md)), not by WebKit, so Vite's target
+  still names `ios16.4`. The `.ipa` is unsigned and built best-effort
+  ([release.md](release.md#building-ios)).
 
 ## Not enforced yet
 

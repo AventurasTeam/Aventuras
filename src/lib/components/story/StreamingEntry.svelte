@@ -52,7 +52,11 @@
   // Reported in place of the ellipsis while waiting, and kept reachable once the narration
   // starts arriving -- below the text, so it never displaces what is being written.
   let reportingEnabled = $derived(settings.uiSettings.activityReporting !== 'off')
-  let activeTurn = $derived(activity.activeTurn)
+  // By entry, not the newest open turn: the previous turn's record stays open while its
+  // background work runs, and is still the newest until this turn's record starts.
+  let activeTurn = $derived(
+    ui.streamingNarrationEntryId ? activity.recordFor(ui.streamingNarrationEntryId) : null,
+  )
   // Shown by default; the header badge hides it.
   let showActivity = $derived(
     reportingEnabled && activeTurn !== null && activity.isReportVisible(activeTurn.entryId),

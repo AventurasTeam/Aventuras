@@ -1,0 +1,174 @@
+// Transport for SDK image providers: Tauri HTTP, a request guard, and debug logging. Responses come
+// back unthrown so the SDK builds its own errors. `createTimeoutFetch` is the text-model transport.
+
+import {
+  describeReadFailure,
+  describeRequestBody,
+  headerEntries,
+  loggedFetch,
+  parseLoggedBody,
+  readLoggedBody,
+  redactHeaders,
+} from '#lib/services/http/index.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
+import { errMessage } from '#lib/utils/error.ts'
+import { logSdkResponse } from './debugLog'
+
+interface SdkFetchOptions {
+  serviceId: string
+  timeoutMs: number
+  what?: string
+  /** Attaches the request to an existing debug entry. */
+  debugId?: string
+  /** False keeps the request out of the debug log, for polls that would crowd out real entries. */
+  log?: boolean
+}
+
+// The plugin encodes a `FormData` itself and fills in the multipart boundary, but only when the
+// caller has set no `content-type`.
+function headersFor(init: RequestInit | undefined): RequestInit['headers'] {
+  if (!(init?.body instanceof FormData)) return init?.headers
+  // Entries, not `Headers`, which lowercases the names the debug panel shows.
+  return Array.from(headerEntries(init.headers)).filter(
+    ([name]) => name.toLowerCase() !== 'content-type',
+  )
+}
+
+export type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+
+const requestUrl = (input: RequestInfo | URL): string =>
+  input instanceof Request ? input.url : input.toString()
+
+export function createSdkFetch(options: SdkFetchOptions): Fetch {
+  const { serviceId, timeoutMs, what, debugId, log } = options
+
+  return (input, init) =>
+    loggedFetch(
+      requestUrl(input),
+      {
+        method: init?.method ?? 'GET',
+        headers: headersFor(init),
+        body: init?.body,
+        // The SDK follows redirects itself, to validate each hop.
+        ...(init?.redirect === 'manual' && { maxRedirections: 0 }),
+      },
+      {
+        serviceId,
+        timeoutMs,
+        what,
+        signal: init?.signal,
+        debugId,
+        log,
+        logResponse: logSdkResponse,
+      },
+    )
+}
+
+const MAX_FAILURES_KEPT = 20
+const FAILURE_BODY_EXCERPT = 200
+
+interface PollFailure {
+  method: string
+  url: string
+  status?: number
+  error?: string
+  body?: string
+}
+
+type PollRequest =
+  | { method: string; url: string; status: number; body: unknown }
+  | { method: string; url: string; status?: number; error: string; body?: unknown }
+
+/**
+ * A fetch whose requests share one debug entry, updated in place: how many there were, the last
+ * request with its response, and the ones that failed. For polls, which would otherwise push the
+ * generation's own requests out of the log.
+ */
+export function createPollSdkFetch(options: Omit<SdkFetchOptions, 'log' | 'debugId'>): Fetch {
+  const { serviceId } = options
+  const inner = createSdkFetch({ ...options, log: false })
+  let debugId: string | undefined
+  let startTime = 0
+  let requests = 0
+  let failures: PollFailure[] = []
+  // Keeps writes in request order while each one waits for its body.
+  let queue: Promise<void> = Promise.resolve()
+
+  const enqueue = (task: () => Promise<void> | void) => {
+    queue = queue
+      .then(task)
+      .catch((err: unknown) => console.warn('[Fetch] Failed to write the poll debug entry:', err))
+  }
+
+  const write = (id: string, count: number, last: PollRequest, failure?: PollFailure) => {
+    if (failure) failures = [...failures, failure].slice(-MAX_FAILURES_KEPT)
+    debugLog.addResponse(
+      id,
+      serviceId,
+      { requests: count, last, ...(failures.length > 0 && { failures }) },
+      startTime,
+    )
+  }
+
+  return async (input, init) => {
+    if (!debugLog.active) return inner(input, init)
+
+    const url = requestUrl(input)
+    const method = init?.method ?? 'GET'
+    if (debugId === undefined) {
+      startTime = Date.now()
+      debugId = debugLog.addRequest(serviceId, {
+        url,
+        method,
+        headers: redactHeaders(init?.headers),
+        body: describeRequestBody(init?.body),
+      })
+    }
+    const id = debugId
+    const count = ++requests
+
+    let response: Response
+    try {
+      response = await inner(input, init)
+    } catch (error) {
+      const message = errMessage(error)
+      enqueue(() =>
+        write(id, count, { method, url, error: message }, { method, url, error: message }),
+      )
+      throw error
+    }
+
+    // Cloned before the caller reads the body, which a clone taken later could not copy.
+    const copy = response.clone()
+    const { status, ok } = response
+    enqueue(async () => {
+      const read = await readLoggedBody(copy)
+      if (!read.ok) {
+        const error = describeReadFailure(read)
+        const received = read.bytes > 0 ? parseLoggedBody(read.text) : undefined
+        write(
+          id,
+          count,
+          { method, url, status, error, body: received },
+          {
+            method,
+            url,
+            status,
+            error,
+            body: read.text.slice(0, FAILURE_BODY_EXCERPT) || undefined,
+          },
+        )
+        return
+      }
+      write(
+        id,
+        count,
+        { method, url, status, body: parseLoggedBody(read.text) },
+        ok
+          ? undefined
+          : { method, url, status, body: read.text.slice(0, FAILURE_BODY_EXCERPT) || undefined },
+      )
+    })
+    return response
+  }
+}

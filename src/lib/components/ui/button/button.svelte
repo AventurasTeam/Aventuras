@@ -14,6 +14,9 @@
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
         text: 'text-foreground hover:text-primary/80',
+        // Colour comes from `--feature`, set by a tone in `shared/featureColors.ts`.
+        feature:
+          'border-input text-(color:--feature) border bg-[color-mix(in_oklab,var(--feature)_16%,var(--background))] hover:bg-[color-mix(in_oklab,var(--feature)_24%,var(--background))]',
       },
       size: {
         default: 'h-10 px-4 py-2',

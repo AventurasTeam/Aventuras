@@ -35,12 +35,10 @@ async function exportThenImport(rewriteLineEndings: boolean) {
   )
 
   const tree = buildTree({
-    source: 'pack',
     appVersion: '0.7.9',
     name: 'My Pack',
     templates: stored,
     variables: [],
-    status: { kind: 'custom-pack', rows: [] },
   })
 
   const result = validateTree(asReadContents(tree, rewriteLineEndings))
@@ -85,5 +83,64 @@ describe.each([
       const back = imported.find((t) => t.templateId === row.templateId)!
       expect(back.content.replace(/\r\n/g, '\n')).toBe(row.content)
     }
+  })
+})
+
+describe('a tree written by format 1', () => {
+  // Unnumbered folders, `appVersion` in `pack.yaml` and a generated `ABOUT.md`.
+  const writingStyle = {
+    variableName: 'writing_style',
+    displayName: 'Writing Style',
+    variableType: 'text',
+    isRequired: false,
+    sortOrder: 0,
+  } as const
+
+  const formatOne = new Map([
+    [
+      'pack.yaml',
+      [
+        'formatVersion: 1',
+        'appVersion: 0.7.9',
+        'source: pack',
+        'name: My Pack',
+        'description: A pack',
+        'author: Someone',
+        'variables:',
+        '  - variableName: writing_style',
+        '    displayName: Writing Style',
+        '    variableType: text',
+        '    isRequired: false',
+        '    sortOrder: 0',
+        '',
+      ].join('\n'),
+    ],
+    ['ABOUT.md', '# About this directory\n'],
+    ['Story Generation/adventure.md', `${stored[0].content}\n`],
+    ['Story Generation/adventure-user.md', `${stored[1].content}\n`],
+    ['Analysis/classifier.md', `${stored[2].content}\n`],
+  ])
+
+  it('imports as the same pack the current format writes', () => {
+    const current = buildTree({
+      appVersion: '0.7.9',
+      name: 'My Pack',
+      description: 'A pack',
+      author: 'Someone',
+      templates: stored,
+      variables: [writingStyle],
+    })
+
+    const fromOld = validateTree(asReadContents(formatOne))
+    const fromCurrent = validateTree(asReadContents(current))
+    expect(fromOld.valid).toBe(true)
+
+    const byId = (templates: { templateId: string; content: string }[]) =>
+      templates.toSorted((a, b) => a.templateId.localeCompare(b.templateId))
+    expect(byId(fromOld.pack!.templates)).toEqual(byId(fromCurrent.pack!.templates))
+    expect(fromOld.pack!.variables).toEqual(fromCurrent.pack!.variables)
+    expect(fromOld.pack!.variables).toHaveLength(1)
+    expect(fromOld.pack!.description).toBe('A pack')
+    expect(fromOld.pack!.author).toBe('Someone')
   })
 })

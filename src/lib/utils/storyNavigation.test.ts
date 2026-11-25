@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { Branch, Chapter, Checkpoint, StoryEntry } from '#lib/types/index.ts'
 import { buildChapterBanners } from './chapterBanners'
 import {
+  canCreateCheckpointAt,
   branchesUsingCheckpoint,
   buildLandmarks,
   checkpointsOnBranch,
@@ -11,8 +12,12 @@ import {
   entryNumber,
   entryNumberRange,
   jumpToEntry,
+  needsStartCheckpoint,
   resolveEntryByNumber,
+  startClock,
+  withSnapshotLandmarks,
   type EntryJumpUi,
+  type Landmark,
 } from './storyNavigation'
 
 function entry(id: string, position: number, branchId: string | null = null): StoryEntry {
@@ -675,5 +680,148 @@ describe('filterLandmarks', () => {
     const shown = kinds({ ...all, firstLast: false })
     expect(shown).not.toContain('first')
     expect(shown).not.toContain('last')
+  })
+})
+
+describe('withSnapshotLandmarks', () => {
+  const entries = [entry('a', 0), entry('b', 1), entry('c', 2)]
+  const checkpointRow: Landmark = {
+    entryId: 'b',
+    checkpointId: 'cp',
+    branchId: null,
+    switchesBranch: false,
+    number: entryNumber(entries[1]),
+    kind: 'checkpoint',
+    label: 'Before the duel',
+    branchName: 'Main',
+  }
+
+  it('lists snapshots in entry order, after other rows on the same entry', () => {
+    const rows = withSnapshotLandmarks(
+      [checkpointRow],
+      [
+        { id: 'snap-c', entryId: 'c' },
+        { id: 'snap-b', entryId: 'b' },
+      ],
+      entries,
+      null,
+      'Main',
+    )
+    expect(rows.map((r) => [r.kind, r.entryId])).toEqual([
+      ['checkpoint', 'b'],
+      ['snapshot', 'b'],
+      ['snapshot', 'c'],
+    ])
+  })
+
+  it('names the snapshot taken when tracking was turned off', () => {
+    const [row] = withSnapshotLandmarks(
+      [],
+      [{ id: 'closing:x', entryId: 'a' }],
+      entries,
+      null,
+      'Main',
+    )
+    expect(row).toMatchObject({ label: 'Snapshot (tracking stopped)', kind: 'snapshot' })
+  })
+
+  it('leaves out a snapshot whose entry is not on the branch', () => {
+    expect(
+      withSnapshotLandmarks([], [{ id: 's', entryId: 'gone' }], entries, null, 'Main'),
+    ).toEqual([])
+  })
+})
+
+describe('canCreateCheckpointAt', () => {
+  const entry = (id: string, type: StoryEntry['type'], branchId: string | null = null) =>
+    ({ id, type, branchId }) as StoryEntry
+  const entries = [entry('a', 'narration'), entry('b', 'user_action'), entry('c', 'narration')]
+  const context = {
+    entries,
+    checkpoints: [],
+    currentBranchId: null,
+    tracking: true,
+    locked: false,
+  }
+
+  it('allows the latest entry whatever tracking says', () => {
+    expect(canCreateCheckpointAt(entries[2], { ...context, tracking: false })).toBe(true)
+  })
+
+  it('allows an earlier narration only while tracking is on and the branch owns it', () => {
+    expect(canCreateCheckpointAt(entries[0], context)).toBe(true)
+    expect(canCreateCheckpointAt(entries[0], { ...context, tracking: false })).toBe(false)
+    expect(canCreateCheckpointAt(entries[1], context)).toBe(false)
+    expect(canCreateCheckpointAt(entries[0], { ...context, currentBranchId: 'b' })).toBe(false)
+  })
+
+  it('refuses where a checkpoint exists or while entries are locked', () => {
+    expect(
+      canCreateCheckpointAt(entries[0], { ...context, checkpoints: [{ lastEntryId: 'a' }] }),
+    ).toBe(false)
+    expect(canCreateCheckpointAt(entries[2], { ...context, locked: true })).toBe(false)
+  })
+})
+
+describe('needsStartCheckpoint', () => {
+  const entry = (id: string, type: StoryEntry['type'], source?: string) =>
+    ({ id, type, metadata: source ? { source } : null }) as StoryEntry
+  const opening = entry('o', 'narration', 'wizard')
+  const action = (id: string) => entry(id, 'user_action', 'sillytavern_import')
+  const reply = (id: string) => entry(id, 'narration', 'sillytavern_import')
+
+  it('wants one on a story that has not been played', () => {
+    expect(needsStartCheckpoint([opening], [])).toBe(true)
+    expect(needsStartCheckpoint([action('a'), reply('b')], [])).toBe(true)
+    expect(needsStartCheckpoint([reply('b'), action('a')], [])).toBe(true)
+  })
+
+  it('wants none once a turn has been played', () => {
+    expect(needsStartCheckpoint([opening, entry('u', 'user_action')], [])).toBe(false)
+    expect(
+      needsStartCheckpoint([opening, entry('u', 'user_action'), entry('n', 'narration')], []),
+    ).toBe(false)
+  })
+
+  it('wants none without an entry, after a system entry, or where one exists', () => {
+    expect(needsStartCheckpoint([], [])).toBe(false)
+    expect(needsStartCheckpoint([opening, entry('s', 'system')], [])).toBe(false)
+    expect(needsStartCheckpoint([opening], [{ lastEntryId: 'o' }])).toBe(false)
+  })
+})
+
+describe('startClock', () => {
+  const clock = { years: 0, days: 2, hours: 3, minutes: 0 }
+  const entry = (id: string, metadata: StoryEntry['metadata']) => ({ id, metadata })
+  const imported = entry('i', { source: 'sillytavern_import' })
+  const checkpoint = (lastEntryId: string, timeTrackerSnapshot: typeof clock | null) => ({
+    lastEntryId,
+    timeTrackerSnapshot,
+  })
+
+  const opening = (timeEnd: typeof clock) => entry('o', { source: 'wizard', timeEnd })
+
+  it("keeps the start checkpoint's clock over a stamped opening's", () => {
+    const edited = { ...clock, days: 5 }
+    expect(startClock(opening(clock), [checkpoint('o', edited)])).toEqual(edited)
+  })
+
+  it('leaves a stamped opening to its own time when its checkpoint has no clock', () => {
+    expect(startClock(opening(clock), [checkpoint('o', null)])).toBeUndefined()
+  })
+
+  it('leaves an entry that is not a story start alone', () => {
+    expect(startClock(entry('x', null), [checkpoint('x', clock)])).toBeUndefined()
+    expect(startClock(entry('x', { timeEnd: clock }), [checkpoint('x', null)])).toBeUndefined()
+  })
+
+  it('leaves the clock alone without a checkpoint on the entry', () => {
+    expect(startClock(imported, [])).toBeUndefined()
+    expect(startClock(imported, [checkpoint('other', clock)])).toBeUndefined()
+  })
+
+  it("takes the start checkpoint's clock, including none", () => {
+    expect(startClock(imported, [checkpoint('i', clock)])).toEqual(clock)
+    expect(startClock(imported, [checkpoint('i', null)])).toBeNull()
   })
 })

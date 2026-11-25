@@ -1,4 +1,5 @@
 import type { RetrievalSnapshot } from '#lib/services/ai/retrieval/retrievalSnapshot.ts'
+import type { ImageOutputFormat } from '#lib/utils/imageOutput.ts'
 // Core entity types for Aventura
 export type StoryMode = 'adventure' | 'creative-writing'
 export type POV = 'first' | 'second' | 'third'
@@ -84,15 +85,31 @@ export interface PersistentRetryState {
   // The branch the generation was bound to. Absent in state written before it was recorded;
   // such state cannot be attributed to a branch and is discarded rather than guessed at.
   branchId?: string | null
+  // Taken while State Tracking was on: a retry rewinds through the records.
+  throughRecords?: boolean
 }
 
 export interface PersistentCharacterSnapshot {
   id: string
+  /** Left as they are by a restore when the snapshot does not hold them. */
+  name?: string
+  description?: string | null
   traits: string[]
   status: 'active' | 'inactive' | 'deceased'
   relationship: string | null
   visualDescriptors: VisualDescriptors
   portrait: string | null // Data URL (data:image/...) or legacy base64
+  /** The translations of the text above, so a restore can put them back with it. */
+  translations?: Partial<
+    Pick<
+      Character,
+      | 'translatedName'
+      | 'translatedDescription'
+      | 'translatedRelationship'
+      | 'translatedTraits'
+      | 'translatedVisualDescriptors'
+    >
+  >
 }
 
 // Persistent style review state - saved per-story for style analysis tracking
@@ -167,6 +184,8 @@ export interface StoryDetails {
   genre: string | null
   description: string | null
   genreColor: string | null
+  pov: POV
+  tense: Tense
 }
 
 export interface StoryEntry {
@@ -184,8 +203,6 @@ export interface StoryEntry {
   translatedContent?: string | null // Translated text for display
   translationLanguage?: string | null // Language code of translation
   originalInput?: string | null // Original user input before translation (for user_action type)
-  // Phase 1: World state delta tracking
-  worldStateDelta?: WorldStateDelta | null // World state changes caused by this entry's classification
   // Persisted action suggestions/choices for time-travel restore
   suggestedActions?: string | null // JSON blob: ActionChoice[] or Suggestion[] depending on story mode
 }
@@ -773,7 +790,11 @@ export interface APISettings {
   llmTimeoutMs: number // Request timeout in milliseconds (default: 360000 = 6 minutes)
 }
 
-export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+import type { LanguageModelV4CallOptions } from '@ai-sdk/provider'
+export type ReasoningEffort = Exclude<
+  NonNullable<LanguageModelV4CallOptions['reasoning']>,
+  'provider-default'
+>
 
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport
@@ -842,21 +863,82 @@ export interface UpdateSettings {
 export type ImageProviderType =
   | 'nanogpt'
   | 'openai'
+  | 'openai-compatible'
   | 'openrouter'
-  | 'chutes'
   | 'pollinations'
   | 'google'
   | 'zhipu'
   | 'comfyui'
   | 'a1111'
 
-export interface ImageProfile {
-  id: string
-  name: string
+export interface ReferenceImageConstraints {
+  maxBytes?: number
+  /** Pixels, applied to each side. */
+  minSide?: number
+  maxSide?: number
+  mimeTypes?: string[]
+}
+
+export interface ImageModelCapabilities {
+  /** Absent means unknown. */
+  supportsImg2Img?: boolean
+  /** How many reference images one request takes; absent means no known limit. */
+  maxReferenceImages?: number
+  /** The model edits only: a request without a reference fails. */
+  requiresReferenceImage?: boolean
+  referenceConstraints?: ReferenceImageConstraints
+  /**
+   * The exact values this model accepts for its size parameter, verbatim.
+   *
+   * Not normalised: NanoGPT's catalogue mixes `1024x1024` with `square_hd`, `auto` and
+   * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
+   */
+  supportedResolutions?: string[]
+  /** The `w:h` ratios this model accepts, verbatim; options like `auto` are left out. */
+  supportedAspectRatios?: string[]
+  /** The fewest pixels a request may ask for. Set only by a profile's override, never listed. */
+  minPixels?: number
+  /** Formats the model returns on request; absent means unknown, and no format is sent. */
+  outputFormats?: ImageOutputFormat[]
+  /** Formats that take a compression level; absent means none do. */
+  compressionFormats?: ImageOutputFormat[]
+}
+
+/** What a profile says about its model where the provider publishes nothing usable. A blank field defers to the provider. */
+export interface ImageCapabilityOverride {
+  minPixels?: number
+  /** Sizes to send, as `WxH`. */
+  sizes?: string[]
+  references?: boolean
+  /** Formats the host returns on request. */
+  outputFormats?: ImageOutputFormat[]
+  /** The host takes a compression level for its lossy formats. */
+  outputCompression?: boolean
+}
+
+declare const imageConnectionBrand: unique symbol
+
+/** The provider, key and URL a provider is built from. Only `imageConnectionFor` makes one. */
+export interface ImageProviderConnection {
+  readonly [imageConnectionBrand]: true
   providerType: ImageProviderType
   apiKey: string
+  baseUrl: string | undefined
+}
+
+/** An `ImageProfile` as parsed from the settings blob, before its provider is checked. */
+export type StoredImageProfile = Omit<ImageProfile, keyof ImageProviderConnection> & {
+  providerType: string
+  apiKey: string
   baseUrl?: string
+}
+
+export interface ImageProfile extends ImageProviderConnection {
+  id: string
+  name: string
   model: string
+  /** Saved only for providers that take one. */
+  capabilityOverride?: ImageCapabilityOverride
   providerOptions: Record<string, unknown>
   createdAt: number
 }
@@ -934,6 +1016,8 @@ export interface ExperimentalFeatures {
   lightweightBranches: boolean
   /** Number of entries between automatic world state snapshots (for fast rollback) */
   autoSnapshotInterval: number
+  /** When State Tracking was last turned on; a header written before it cannot vouch for a run. */
+  trackingEnabledSince: number | null
   /** Android: Keep generation alive when app is backgrounded or screen is locked */
   backgroundGeneration: boolean
   /** Android: Send OS notification when generation completes while app is backgrounded */
@@ -990,9 +1074,8 @@ export interface StoryBeatBeforeState {
 }
 
 /**
- * Records the complete world state change caused by a single classification.
- * Stored as JSON on the story_entries.world_state_delta column.
- * Contains enough information to fully undo the classification's effects.
+ * The world state change one classification made, as story files written before change records
+ * carry it on each entry. Import turns it into records (`fromWorldStateDelta`).
  */
 export interface WorldStateDelta {
   /** The raw classification result that was applied (stored as-is for debugging/audit) */
@@ -1019,10 +1102,85 @@ export interface WorldStateDelta {
   }
 }
 
+export type TrackedEntityType = 'character' | 'location' | 'item' | 'story_beat' | 'lorebook_entry'
+
 /**
- * Periodic full snapshot of world state for fast rollback reconstruction.
- * Instead of replaying all deltas from the start, rollback can start from the
- * nearest snapshot and only replay/undo deltas from there.
+ * Who made a change: the classifier, the story-image generator's portraits (`image`), lore
+ * management after a chapter (`chapter`), a lore management run the reader started (`tidy`), or
+ * the reader (`manual`).
+ */
+export type ChangeOrigin = 'classifier' | 'image' | 'chapter' | 'tidy' | 'manual'
+
+/** `softDelete` sets the row's tombstone flag; `delete` removes the row. */
+export type ChangeOp = 'create' | 'update' | 'delete' | 'softDelete'
+
+interface WorldStateRecordBase {
+  id: string
+  storyId: string
+  branchId: string | null
+  entryId: string
+  /** Write order within the story. */
+  seq: number
+  createdAt: number
+}
+
+/**
+ * One write to one entity. `entityId` is the row written, which on a lightweight branch can be
+ * an override or a tombstone.
+ * - create: `before` is the row this one shadows (null for a new entity); `after` is the full row.
+ * - update: `before`/`after` hold only the changed fields.
+ * `after` is absent on the classifier's records: they are written with the snapshot that follows
+ * them, so none is ever applied late.
+ * - delete / softDelete: `before` is the full row; `after` is `{ mergedInto }` when a lore
+ *   session merged the row into the entry it names, and null otherwise.
+ */
+export interface WorldStateChangeRecord extends WorldStateRecordBase {
+  kind: 'change'
+  origin: ChangeOrigin
+  entityType: TrackedEntityType
+  entityId: string
+  op: ChangeOp
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+}
+
+/** Written for every narration classified while tracking is on, even when nothing changed. */
+export interface WorldStateHeaderRecord extends WorldStateRecordBase {
+  kind: 'header'
+  continuous: boolean
+  /** `classifier` marks history recorded before lorebook and manual changes were tracked. */
+  coverage: 'full' | 'classifier'
+}
+
+export interface WorldStateBreakRecord extends WorldStateRecordBase {
+  kind: 'break'
+}
+
+export type WorldStateRecord =
+  WorldStateChangeRecord | WorldStateHeaderRecord | WorldStateBreakRecord
+
+/**
+ * Where a snapshot, a checkpoint or a chapter was made in the write order, stored with the
+ * records as kind `mark`. A snapshot or checkpoint holds every record before its mark; a
+ * chapter's lore sessions are recorded after its own. Lives as long as what it marks.
+ */
+export interface WorldStateMark {
+  id: string
+  storyId: string
+  branchId: string | null
+  /** The snapshot's entry, the checkpoint's last entry, the chapter's end entry. */
+  entryId: string
+  seq: number
+  entityType: WorldStateMarkType
+  entityId: string
+  createdAt: number
+}
+
+export type WorldStateMarkType = 'snapshot' | 'checkpoint' | 'chapter'
+
+/**
+ * A full world state saved at an entry: every few entries while State Tracking is on, and on
+ * each written branch when it is turned off. A past state is rebuilt from the nearest one after it.
  */
 export interface WorldStateSnapshot {
   id: string

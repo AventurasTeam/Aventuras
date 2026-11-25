@@ -51,10 +51,13 @@
   let open = $state(false)
   let inputValue = $state('')
 
+  // Ignores punctuation and spaces, so `gpt4o` or `claude opus` finds `gpt-4o` / `claude-opus-4`.
+  const normalize = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+
   let filteredItems = $derived.by(() => {
-    if (!inputValue.trim()) return items
-    const search = inputValue.toLowerCase()
-    return items.filter((item) => itemLabel(item).toLowerCase().includes(search))
+    const search = normalize(inputValue)
+    if (!search) return items
+    return items.filter((item) => normalize(itemLabel(item)).includes(search))
   })
 
   let inputMatchesExisting = $derived(

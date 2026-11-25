@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { mergeGenerators, pLimit } from './async'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { mergeGenerators, pLimit, sleep } from './async'
 
 describe('pLimit', () => {
   it('throws on invalid concurrency inputs', () => {
@@ -160,5 +160,41 @@ describe('mergeGenerators cleanup is not blocking', () => {
 
     expect(releaseSibling).toBeDefined()
     releaseSibling!()
+  })
+})
+
+describe('sleep', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('resolves once the delay has passed', async () => {
+    vi.useFakeTimers()
+    const done = vi.fn()
+    void sleep(1000).then(done)
+
+    await vi.advanceTimersByTimeAsync(999)
+    expect(done).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(done).toHaveBeenCalledOnce()
+  })
+
+  it('rejects with the signal reason when it aborts mid-wait, and frees the timer', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const waiting = sleep(60_000, controller.signal)
+    const outcome = expect(waiting).rejects.toBe('stop')
+
+    controller.abort('stop')
+
+    await outcome
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('rejects at once for a signal that has already aborted', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    controller.abort('stop')
+
+    await expect(sleep(60_000, controller.signal)).rejects.toBe('stop')
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

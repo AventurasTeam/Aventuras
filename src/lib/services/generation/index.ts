@@ -56,7 +56,7 @@ export { ChapterService } from './ChapterService'
 export type {
   ChapterServiceDependencies,
   ChapterCheckInput,
-  ChapterCreationResult,
+  ChapterCut,
   ChapterAnalysisResult,
   ChapterSummaryData,
 } from './ChapterService'
@@ -98,9 +98,15 @@ export {
   type MergeField,
   type FieldOrigin,
 } from './mergeEntities'
-export { LoreManagementCoordinator, isLoreManagementRunning } from './LoreManagementCoordinator'
+export {
+  LoreManagementCoordinator,
+  isLoreManagementRunning,
+  LORE_SESSION_BUSY,
+} from './LoreManagementCoordinator'
 export type {
   LoreManagementCallbacks,
+  LoreSessionWrites,
+  LoreSessionActivity,
   LoreManagementUICallbacks,
   LoreSessionInput,
   LoreManagementDependencies,
@@ -123,17 +129,26 @@ export type {
   BackgroundTaskDependencies,
   BackgroundTaskInput,
   BackgroundTaskResult,
+  ChapterCardReporting,
 } from './BackgroundTaskCoordinator'
 
 // World state translation service
-export { WorldStateTranslationService } from './WorldStateTranslationService'
+export {
+  WorldStateTranslationService,
+  CHARACTER_TEXT_FIELDS,
+  mergeWritten,
+  translationsToRestore,
+} from './WorldStateTranslationService'
 export type {
+  CharacterTextField,
+  CharacterTranslations,
   ClassificationNewEntities,
   WorldStateEntities,
   WorldStateTranslationCallbacks,
   WorldStateTranslationDependencies,
   WorldStateTranslationInput,
   WorldStateTranslationResult,
+  WrittenCharacter,
 } from './WorldStateTranslationService'
 
 // Suggestions refresh service

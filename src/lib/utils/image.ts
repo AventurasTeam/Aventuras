@@ -1,25 +1,37 @@
 import type { ImageGenerationMode, StorySettings } from '#lib/types/index.ts'
 
+// Whole base64 quanta; covers any real `ftyp` box. An APNG whose `acTL` sits further in labels as PNG, which renders the same.
+const LABEL_SNIFF_CHARS = 128
+const BASE64_MARKER = ';base64,'
+
+/**
+ * A displayable URL for stored image data, labelled by what the bytes are rather than by what
+ * was stored beside them. A recognised type replaces a mismatched `data:` label; bytes that
+ * match no signature keep their label, and bare base64 is read as PNG.
+ */
 export function normalizeImageDataUrl(imageData: string | null | undefined): string | null {
   if (!imageData) {
     return null
   }
-  if (
-    imageData.startsWith('data:image/') ||
-    imageData.startsWith('http://') ||
-    imageData.startsWith('https://')
-  ) {
+  if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
     return imageData
   }
-  // Backward compatibility: stored as raw base64 without a data URL prefix.
-  return `data:image/png;base64,${imageData}`
+  if (imageData.startsWith('data:')) {
+    const marker = imageData.indexOf(BASE64_MARKER)
+    if (marker === -1) return imageData
+    const bodyStart = marker + BASE64_MARKER.length
+    const mime = sniffImageMime(imageData.slice(bodyStart, bodyStart + LABEL_SNIFF_CHARS))
+    if (!mime || imageData.slice(5, marker) === mime) return imageData
+    return `data:${mime}${BASE64_MARKER}${imageData.slice(bodyStart)}`
+  }
+  return `data:${sniffImageMime(imageData.slice(0, LABEL_SNIFF_CHARS)) ?? 'image/png'};base64,${imageData}`
 }
 
 /**
  * Image size is stored as an intent — orientation + size tier — not as pixels.
  *
  * The backends disagree on what a size even is: Google takes an aspect ratio from a closed
- * list and has no pixel parameter, OpenRouter takes ratio + `1K`/`2K`/`4K`, NanoGPT
+ * list and has no pixel parameter, OpenRouter takes a ratio + a resolution tier, NanoGPT
  * publishes a per-model list of accepted values, and only ComfyUI/A1111/Pollinations take
  * arbitrary dimensions. There is no pixel size they all accept, so each adapter resolves
  * the intent into whatever its backend takes.
@@ -79,16 +91,116 @@ export function specToPixels(spec: ImageSpec): ImageResolution {
   return rw >= rh ? { width: long, height: short } : { width: short, height: long }
 }
 
+const isDimension = (value: number): boolean => Number.isFinite(value) && value > 0
+
+/** The dimensions in a `WIDTHxHEIGHT` string, when both are positive. */
+export function parseImageSize(size: string | undefined): ImageResolution | undefined {
+  const match = /^(\d+)x(\d+)$/.exec(size ?? '')
+  if (!match) return undefined
+  const [width, height] = [Number(match[1]), Number(match[2])]
+  return isDimension(width) && isDimension(height) ? { width, height } : undefined
+}
+
+export const isSizeString = (value: string | undefined): value is `${number}x${number}` =>
+  parseImageSize(value) !== undefined
+
+/** The size raised, ratio kept, to the smallest multiple-of-16 pair of at least `minPixels`. */
+export function atLeastMinPixels(
+  { width, height }: ImageResolution,
+  minPixels = 0,
+): ImageResolution {
+  const pixels = width * height
+  if (pixels >= minPixels) return { width, height }
+
+  const scale = Math.sqrt(minPixels / pixels)
+  const raise = (edge: number) => Math.ceil((edge * scale) / PIXEL_GRID) * PIXEL_GRID
+  return { width: raise(width), height: raise(height) }
+}
+
 /** `WIDTHxHEIGHT`, for the providers whose parameter is a string in that shape. */
-export function formatImageSize(res: ImageResolution): string {
+export function formatImageSize(res: ImageResolution): `${number}x${number}` {
   return `${res.width}x${res.height}`
 }
 
-/** MIME type of raw base64 image data, from its magic bytes. Unrecognised data is treated as PNG. */
-export function base64ImageMime(b64: string): 'image/png' | 'image/jpeg' | 'image/webp' {
-  if (b64.startsWith('/9j/')) return 'image/jpeg'
-  if (b64.startsWith('UklGR')) return 'image/webp'
+export type SniffedImageMime =
+  | 'image/png'
+  | 'image/apng'
+  | 'image/jpeg'
+  | 'image/gif'
+  | 'image/webp'
+  | 'image/avif'
+  | 'image/heic'
+  | 'image/heic-sequence'
+  | 'image/heif'
+  | 'image/heif-sequence'
+
+const SNIFF_BYTES = 64 * 1024
+// Whole base64 quanta, so the slice decodes. Must reach past a large `iCCP` profile to `acTL`.
+const SNIFF_PREFIX_CHARS = Math.ceil(SNIFF_BYTES / 3) * 4
+
+// Ordered: the first brand present anywhere in the `ftyp` box wins.
+const ISOBMFF_BRANDS: readonly (readonly [string, SniffedImageMime])[] = [
+  ['avif', 'image/avif'],
+  ['avis', 'image/avif'],
+  ['heic', 'image/heic'],
+  ['heix', 'image/heic'],
+  ['heim', 'image/heic'],
+  ['heis', 'image/heic'],
+  ['hevc', 'image/heic-sequence'],
+  ['hevx', 'image/heic-sequence'],
+  ['hevm', 'image/heic-sequence'],
+  ['hevs', 'image/heic-sequence'],
+  ['mif1', 'image/heif'],
+  ['msf1', 'image/heif-sequence'],
+]
+
+const ascii = (bytes: Uint8Array, start: number, length: number): string =>
+  String.fromCharCode(...bytes.subarray(start, start + length))
+
+const u32 = (bytes: Uint8Array, pos: number): number =>
+  new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(pos)
+
+/**
+ * MIME type of raw base64 image data, from its magic bytes, or `null` when it is not a
+ * recognised image. Nothing is assumed to be PNG.
+ */
+export function sniffImageMime(b64: string): SniffedImageMime | null {
+  let bytes: Uint8Array
+  try {
+    bytes = base64ToBytes(b64.slice(0, SNIFF_PREFIX_CHARS))
+  } catch {
+    return null
+  }
+
+  const head = ascii(bytes, 0, 12)
+  if (head.startsWith('\x89PNG\r\n\x1a\n')) return pngMime(bytes)
+  if (head.startsWith('\xff\xd8\xff')) return 'image/jpeg'
+  if (head.startsWith('GIF87a') || head.startsWith('GIF89a')) return 'image/gif'
+  if (head.startsWith('RIFF') && head.slice(8) === 'WEBP') return 'image/webp'
+  if (head.slice(4, 8) === 'ftyp') return isobmffMime(bytes)
+  return null
+}
+
+/** APNG is a PNG with an `acTL` chunk ahead of the first `IDAT`. */
+function pngMime(bytes: Uint8Array): SniffedImageMime {
+  let pos = 8
+  while (pos + 8 <= bytes.length) {
+    const type = ascii(bytes, pos + 4, 4)
+    if (type === 'acTL') return 'image/apng'
+    if (type === 'IDAT') return 'image/png'
+    pos += u32(bytes, pos) + 12
+  }
   return 'image/png'
+}
+
+/** Some encoders write `mif1` as the major brand and list `avif` or `heic` as compatible. */
+function isobmffMime(bytes: Uint8Array): SniffedImageMime | null {
+  // A box size of 0 means the box runs to the end of the file.
+  const size = u32(bytes, 0)
+  const end = size === 0 ? bytes.length : Math.min(size, bytes.length)
+  const brands = new Set([ascii(bytes, 8, 4)])
+  for (let pos = 16; pos + 4 <= end; pos += 4) brands.add(ascii(bytes, pos, 4))
+  return ISOBMFF_BRANDS.find(([brand]) => brands.has(brand))?.[1] ?? null
 }
 
 const BASE64_CHUNK = 0x8000
@@ -118,8 +230,14 @@ export function expectedPixels(size: ImageSpec | string | null | undefined): Ima
   return specToPixels(parseImageSpec(size))
 }
 
+export type AspectRatio = `${number}:${number}`
+
+// Keeps `w:h` ratios; catalogues also list values like `auto` and `match_input_image`.
+const ASPECT_RATIO = /^\d+(\.\d+)?:\d+(\.\d+)?$/
+export const isAspectRatio = (value: string): value is AspectRatio => ASPECT_RATIO.test(value)
+
 /** The canonical `w:h` for an orientation. */
-export function specToRatioString(spec: ImageSpec): string {
+export function specToRatioString(spec: ImageSpec): AspectRatio {
   const [w, h] = ORIENTATION_RATIO[spec.orientation]
   return `${w}:${h}`
 }
@@ -130,21 +248,26 @@ export function specToRatioString(spec: ImageSpec): string {
  * Falls back to the closest by shape rather than to `1:1`, so a landscape request that the
  * provider cannot serve exactly still comes back landscape. Compared in log space: on a
  * linear scale portrait ratios crowd into (0, 1] while landscape ones spread over [1, ∞),
- * which biases every near-miss towards square.
+ * which biases every near-miss towards square. `fallback` stands in for an empty `supported`.
  */
-export function specToAspectRatio(spec: ImageSpec, supported: readonly string[]): string {
+export function specToAspectRatio(
+  spec: ImageSpec,
+  supported: readonly string[],
+  fallback: readonly string[] = [],
+): AspectRatio {
+  const candidates = (supported.length ? supported : fallback).filter(isAspectRatio)
   const preferred = specToRatioString(spec)
-  if (supported.includes(preferred)) return preferred
+  if (candidates.includes(preferred)) return preferred
 
   const target = ratioValue(preferred)
   // Seeded with `preferred` so a wholly unparseable list yields a well-formed ratio.
   let best = preferred
   let bestDistance = Infinity
 
-  for (const candidate of supported) {
+  for (const candidate of candidates) {
     const value = ratioValue(candidate)
     if (!Number.isFinite(value) || value <= 0) continue
-    const distance = Math.abs(Math.log(value / target))
+    const distance = ratioDistance(value, target)
     if (distance < bestDistance) {
       bestDistance = distance
       best = candidate
@@ -157,6 +280,136 @@ export function specToAspectRatio(spec: ImageSpec, supported: readonly string[])
 function ratioValue(ratio: string): number {
   const [w, h] = ratio.split(':').map(Number)
   return h > 0 ? w / h : NaN
+}
+
+/** How far apart two width/height ratios are, in log space so 2:3 and 3:2 are equally far from 1:1. */
+const ratioDistance = (a: number, b: number): number => Math.abs(Math.log(a / b))
+
+/** Long edge in pixels of each resolution tier a ratio-plus-tier backend names. */
+const RESOLUTION_LONG_EDGE = new Map([
+  ['512', 512],
+  ['768', 768],
+  ['1K', 1024],
+  ['1.5K', 1536],
+  ['2K', 2048],
+  ['4K', 4096],
+])
+
+/**
+ * The model's smallest listed tier that covers the spec's long edge, else its largest; `undefined`
+ * when it lists none. A backend rejects a tier the model lists others without and ignores one on a
+ * model that lists none, so with nothing listed there is nothing to send. Tiers match in any case
+ * and come back as listed.
+ */
+export function pickResolution(
+  spec: ImageSpec,
+  listed: readonly string[] = [],
+): string | undefined {
+  const { width, height } = specToPixels(spec)
+  const want = Math.max(width, height)
+  const tiers = listed
+    .flatMap((tier) => {
+      const edge = RESOLUTION_LONG_EDGE.get(tier.toUpperCase())
+      return edge ? [{ tier, edge }] : []
+    })
+    .toSorted((a, b) => a.edge - b.edge)
+  return (tiers.find((t) => t.edge >= want) ?? tiers.at(-1))?.tier
+}
+
+/** Symbolic values some models use in place of dimensions, and what they mean. */
+const SYMBOLIC_SIZES: Record<string, ImageResolution> = {
+  square_hd: { width: 1024, height: 1024 },
+  square: { width: 512, height: 512 },
+  landscape_4_3: { width: 1024, height: 768 },
+  landscape_16_9: { width: 1024, height: 576 },
+  portrait_4_3: { width: 768, height: 1024 },
+  portrait_16_9: { width: 576, height: 1024 },
+}
+
+const SIZE_TOKENS: Record<string, number> = { '1k': 1024, '2k': 2048, '4k': 4096, '8k': 8192 }
+
+/** Log-ratio gap under which two listed shapes count as the same (1024x576 and 1000x562). */
+const SAME_RATIO_TOLERANCE = 0.02
+
+/** Long edge a bare `w:h` is scored at, since a ratio carries no size of its own. */
+const RATIO_REFERENCE_EDGE = 1024
+
+function listedSizeToPixels(option: string): ImageResolution | null {
+  const value = option.trim().toLowerCase()
+
+  const pixels = /^(\d+)\s*[x*]\s*(\d+)$/.exec(value)
+  if (pixels) {
+    const [width, height] = [Number(pixels[1]), Number(pixels[2])]
+    return isDimension(width) && isDimension(height) ? { width, height } : null
+  }
+
+  const ratio = /^(\d+):(\d+)$/.exec(value)
+  if (ratio) {
+    const w = Number(ratio[1])
+    const h = Number(ratio[2])
+    if (!isDimension(w) || !isDimension(h)) return null
+    const edge = RATIO_REFERENCE_EDGE
+    return w >= h
+      ? { width: edge, height: Math.round((edge * h) / w) }
+      : { width: Math.round((edge * w) / h), height: edge }
+  }
+
+  if (value in SYMBOLIC_SIZES) return SYMBOLIC_SIZES[value]
+  if (value in SIZE_TOKENS) return { width: SIZE_TOKENS[value], height: SIZE_TOKENS[value] }
+
+  return null
+}
+
+/**
+ * The listed size value to send for a spec; `undefined` when the model lists none.
+ *
+ * Models publish their own list of accepted values and they do not agree — some offer a
+ * single value, many use tokens that are not dimensions at all. Takes the closest aspect ratio
+ * first and the closest long edge among ratios that are about equal, so a model that cannot do
+ * landscape returns its widest option rather than a same-pixel portrait.
+ */
+export function pickSize(spec: ImageSpec, listed: readonly string[] = []): string | undefined {
+  if (listed.length <= 1) return listed[0]
+
+  const want = specToPixels(spec)
+  const wantRatio = want.width / want.height
+  const wantEdge = Math.max(want.width, want.height)
+  let best: string | undefined
+  let bestRatioMiss = Infinity
+  let bestEdgeMiss = Infinity
+  let firstUnreadable: string | undefined
+
+  for (const option of listed) {
+    const dims = listedSizeToPixels(option)
+    if (!dims) {
+      firstUnreadable ??= option
+      continue
+    }
+    const ratioMiss = ratioDistance(dims.width / dims.height, wantRatio)
+    const edgeMiss = Math.abs(Math.max(dims.width, dims.height) - wantEdge)
+    const closerRatio = ratioMiss < bestRatioMiss - SAME_RATIO_TOLERANCE
+    const sameRatio = Math.abs(ratioMiss - bestRatioMiss) <= SAME_RATIO_TOLERANCE
+    if (closerRatio || (sameRatio && edgeMiss < bestEdgeMiss)) {
+      best = option
+      bestRatioMiss = ratioMiss
+      bestEdgeMiss = edgeMiss
+    }
+  }
+
+  // `auto` and friends: usable, but only if nothing readable was on offer.
+  return best ?? firstUnreadable
+}
+
+/** The `WxH` to send: the model's own pick when it is one, else the canonical pixels raised to `minPixels`. */
+export function pickRequestSize(
+  spec: ImageSpec,
+  listed: readonly string[] | undefined,
+  minPixels?: number,
+): `${number}x${number}` {
+  const picked = pickSize(spec, listed)
+  return isSizeString(picked)
+    ? picked
+    : formatImageSize(atLeastMinPixels(specToPixels(spec), minPixels))
 }
 
 /**

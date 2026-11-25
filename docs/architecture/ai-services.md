@@ -50,6 +50,23 @@ on load, so the key is always present, and a fallback at the call site is a seco
 the number that nothing forces to agree. That form had put four stale values in the tree at
 once — a `maxIterations` of 50 in the store, 3 in a constructor, 50 again in the slider.
 
+## Base URLs
+
+A configured base URL (an API profile, an image profile, the TTS endpoint) is normalized once,
+with `normalizeBaseUrl` in `utils/url.ts`, where it becomes a request URL: the provider factories,
+`fetchModelsFromProvider`, `getEffectiveBaseUrl` and `TTSService.getEndpoint`. The forms and the
+store keep what the user typed, and code below those boundaries (`pingModel`, the `create*Image`
+clients) takes the URL as given. Defaults we own (`PROVIDERS`, and the image providers' `PROVIDER_BASE_URL` in
+`image/providers/baseUrls.ts`) are never normalized at runtime. Deciding whether an edit changed
+the URL (clearing a profile's health rows, reloading a model list) compares normalized values, so
+a trailing slash or stray space is not a change. `config.test.ts` and
+`baseUrls.test.ts` pin them instead. An image adapter resolves its URL with `resolveBaseUrl`, which
+falls back to that table's default.
+
+The image adapters build their discovery endpoints with `endpoint(baseUrl, 'models')`, which
+parses the normalized string and appends the path, so a malformed base URL throws one message
+before any request rather than failing inside a fetch. SDK `baseURL`s stay strings.
+
 ## Reasoning Effort
 
 Every question about thinking effort is answered by `src/lib/services/ai/core/reasoning.ts`, a
@@ -59,16 +76,24 @@ seven places, and the copies drifted.
 Three things about it are not obvious:
 
 - **The disabled level is `'none'`, and `'Off'` is not a value.** The levels are the AI SDK's
-  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. The old
-  spelling survives in exactly one place — `LEGACY_REASONING_OFF` in `settingsMigrations.ts` —
-  because installs older than that have the literal string on disk, and refusing to read it
-  would discard the user's setting and fall back to the legacy `enable_thinking` flag, which
-  means `'high'`.
-- **`'none'` is sent, not omitted.** It is the value that switches thinking off:
-  NanoGPT documents `reasoning_effort: "none"` as the way to disable reasoning, and
-  `@ai-sdk/openai-compatible` would _drop_ the parameter for `'none'` on its own `reasoning`
-  field. That is why the effort travels in provider options, which take precedence. Omitting
-  the parameter asks for the model's default instead — a different request.
+  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. `ReasoningEffort`
+  is derived from the SDK's union, so a level the SDK adds fails the build until
+  `REASONING_LEVELS` places it. `@openrouter/ai-sdk-provider` and `ai-sdk-pollinations` type their
+  effort without `'max'` although their APIs accept it, so `presetResolution.ts` widens those two
+  options locally. Migration 043
+  rewrote the old spelling on disk, and folded the legacy `enable_thinking` flag (`'true'` meant
+  `'high'`) into `main_reasoning_effort`, so neither exists in code. A stored level that is not
+  in `REASONING_LEVELS` is read as no stored choice.
+- **`'none'` is sent, not omitted.** It is the value that switches thinking off. Omitting the
+  parameter asks for the model's default instead — a different request. The effort travels in
+  the SDK's top-level `reasoning` option, and in provider options only where a provider does not
+  read that option: `@openrouter/ai-sdk-provider` and `ai-sdk-pollinations` take it from
+  `buildProviderOptions`, and Zhipu gets its `thinking` switch there. Both ways of losing the
+  effort have happened — `@ai-sdk/openai-compatible` once dropped `'none'`, and OpenRouter lost
+  every level when its provider options were removed — and neither shows in the options we build,
+  only in the request body. `sdk/reasoningWire.test.ts` therefore captures the body the real SDK
+  sends for every provider and compares levels against each other; a new provider gets a row
+  there. We do not stop a user picking a level their model rejects: they see the provider's error.
 - **Only NanoGPT's `:thinking` variants are `enforced`.** Those ids _are_ the reasoning model,
   so asking one for `'none'` is self-contradictory, and `clampReasoningToCapability` lifts it to
   `ENFORCED_REASONING_FLOOR` (`'medium'` — a floor, not a preference). Every other model that

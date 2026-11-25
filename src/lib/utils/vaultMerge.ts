@@ -1,4 +1,9 @@
-import type { VaultCharacter, VaultScenario } from '#lib/types/index.ts'
+import type {
+  VaultCharacterInput,
+  VaultPendingChange,
+  VaultScenarioInput,
+} from '#lib/services/ai/sdk/schemas/vault.ts'
+import type { VaultCharacter, VaultLorebookEntry, VaultScenario } from '#lib/types/index.ts'
 
 /**
  * Merge array changes from `prevArr` → `dataArr` onto `baseArr`.
@@ -184,69 +189,75 @@ function findReplacementIndex(
  * For array fields: compute additions/removals/replacements relative to
  * `previous`, then apply those to the live array.
  */
-export function mergeIntent(
-  data: Record<string, unknown> | undefined,
-  previous: Record<string, unknown> | undefined,
-  live: Record<string, unknown> | undefined,
-): Record<string, unknown> {
+export function mergeIntent<T extends object>(
+  data?: Partial<T>,
+  previous?: Partial<T>,
+  live?: Partial<T>,
+): Partial<T> {
   if (!data) return {}
-  if (!previous) return { ...data }
-  if (!live) return { ...data }
+  if (!previous || !live) return { ...data }
 
-  const delta: Record<string, unknown> = {}
-  for (const key of Object.keys(data)) {
-    const dataVal = data[key]
-    const prevVal = previous[key]
-
+  const delta: Partial<T> = {}
+  for (const [key, dataVal] of Object.entries(data)) {
+    const prevVal = Reflect.get(previous, key)
     if (JSON.stringify(dataVal) === JSON.stringify(prevVal)) continue
-
-    if (Array.isArray(dataVal) && Array.isArray(prevVal) && Array.isArray(live[key])) {
-      delta[key] = mergeArrayLists(
-        dataVal as unknown[],
-        prevVal as unknown[],
-        live[key] as unknown[],
-      )
-    } else {
-      delta[key] = dataVal
-    }
+    const liveVal = Reflect.get(live, key)
+    Reflect.set(
+      delta,
+      key,
+      Array.isArray(dataVal) && Array.isArray(prevVal) && Array.isArray(liveVal)
+        ? mergeArrayLists(dataVal, prevVal, liveVal)
+        : dataVal,
+    )
   }
   return delta
+}
+
+/** The fields of `source` that `keep` accepts. */
+export function filterFields<T extends object>(
+  source: Partial<T>,
+  keep: (key: string, value: unknown) => boolean,
+): Partial<T> {
+  const result: Partial<T> = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (keep(key, value)) Reflect.set(result, key, value)
+  }
+  return result
 }
 
 /**
  * Compute a partial update by comparing data against previous.
  * Only includes fields that actually changed.
  */
-export function computeDelta(
-  data: Record<string, unknown>,
-  previous: Record<string, unknown>,
-): Record<string, unknown> {
-  const delta: Record<string, unknown> = {}
-  for (const key of Object.keys(data)) {
-    if (JSON.stringify(data[key]) !== JSON.stringify(previous[key])) {
-      delta[key] = data[key]
-    }
-  }
-  return delta
+export function computeDelta<T extends object>(data: Partial<T>, previous: Partial<T>): Partial<T> {
+  return filterFields(
+    data,
+    (key, value) => JSON.stringify(value) !== JSON.stringify(Reflect.get(previous, key)),
+  )
 }
 
 /**
  * Apply pending changes onto a base record, using intent-based merging
  * for array fields so additions/removals accumulate correctly.
+ *
+ * The result is a shallow copy: nested values are shared with `base`.
  */
-export function composePendingOnto(
-  base: Record<string, unknown>,
-  changes: Array<{ data: Record<string, unknown>; previous: Record<string, unknown> }>,
-): Record<string, unknown> {
-  const result = JSON.parse(JSON.stringify(base)) as Record<string, unknown>
+export function composePendingOnto<T extends object>(
+  base: T,
+  changes: { data: Partial<T>; previous: Partial<T> }[],
+): T {
+  const result = { ...base }
   for (const c of changes) {
-    const delta = mergeIntent(c.data, c.previous, result)
-    Object.assign(result, delta)
+    Object.assign(result, mergeIntent(c.data, c.previous, result))
   }
   return result
 }
 
-export function scenarioToRecord(s: VaultScenario): Record<string, unknown> {
+export type EntityRecord = { character: VaultCharacterInput; scenario: VaultScenarioInput }
+export type EntityKind = keyof EntityRecord
+export type VaultEntity = { character: VaultCharacter; scenario: VaultScenario }
+
+export function scenarioToRecord(s: VaultScenario): VaultScenarioInput {
   return {
     name: s.name,
     description: s.description,
@@ -260,7 +271,7 @@ export function scenarioToRecord(s: VaultScenario): Record<string, unknown> {
   }
 }
 
-export function characterToRecord(c: VaultCharacter): Record<string, unknown> {
+export function characterToRecord(c: VaultCharacter): VaultCharacterInput {
   return {
     name: c.name,
     description: c.description,
@@ -270,4 +281,136 @@ export function characterToRecord(c: VaultCharacter): Record<string, unknown> {
     tags: c.tags,
     favorite: c.favorite,
   }
+}
+
+export const toEntityRecord: { [K in EntityKind]: (e: VaultEntity[K]) => EntityRecord[K] } = {
+  character: characterToRecord,
+  scenario: scenarioToRecord,
+}
+
+/** Edits typed into a view-mode panel and not saved yet. */
+export type ViewDraft<K extends EntityKind = EntityKind> = {
+  [P in K]: { entityType: P; entityId: string; data: EntityRecord[P]; previous: EntityRecord[P] }
+}[K]
+
+/** Whether the draft belongs to this entity. */
+export function isDraftFor<K extends EntityKind>(
+  draft: ViewDraft | null,
+  entityType: K,
+  entityId: string,
+): draft is ViewDraft & ViewDraft<K> {
+  return draft?.entityType === entityType && draft.entityId === entityId
+}
+
+/** An entity as the editor composes it: its kind and the record to show. */
+export type ComposedEntity = {
+  [K in EntityKind]: { entityType: K; data: EntityRecord[K] }
+}[EntityKind]
+
+export type EntityUpdate<K extends EntityKind> = VaultPendingChange & {
+  entityType: K
+  action: 'update'
+  data: Partial<EntityRecord[K]>
+  previous: EntityRecord[K]
+}
+
+/** The pending character / scenario updates that compose onto one entity, in proposal order. */
+export function entityUpdates<K extends EntityKind>(
+  pending: VaultPendingChange[],
+  entityType: K,
+  entityId: string,
+): EntityUpdate<K>[] {
+  return pending.filter(
+    (c): c is EntityUpdate<K> =>
+      c.action === 'update' &&
+      'entityId' in c &&
+      c.entityType === entityType &&
+      c.entityId === entityId,
+  )
+}
+
+type FieldUpdate = Extract<VaultPendingChange, { action: 'update' }>
+
+function sameTarget(a: FieldUpdate, b: FieldUpdate): boolean {
+  if (a.entityType === 'lorebook-entry') {
+    return (
+      b.entityType === 'lorebook-entry' &&
+      a.lorebookId === b.lorebookId &&
+      a.entryIndex === b.entryIndex
+    )
+  }
+  return b.entityType === a.entityType && a.entityId === b.entityId
+}
+
+function changedEntries(c: FieldUpdate): [string, unknown][] {
+  return Object.entries(computeDelta<object>(c.data, c.previous ?? {}))
+}
+
+/** Fields an update changes. Array fields are left out of a character, scenario or lorebook update: they merge by intent instead of overwriting. */
+function replacedFields(c: FieldUpdate): string[] {
+  return changedEntries(c)
+    .filter(([, value]) => c.entityType === 'lorebook-entry' || !Array.isArray(value))
+    .map(([key]) => key)
+}
+
+/**
+ * The update with `fields` taken out. A character or scenario update carries the whole record,
+ * so each field goes back to its `previous` value; the others only carry what changed.
+ */
+function withoutFields(change: FieldUpdate, fields: Set<string>): FieldUpdate {
+  switch (change.entityType) {
+    case 'character':
+    case 'scenario':
+      return {
+        ...change,
+        data: {
+          ...filterFields(change.data, (key) => !fields.has(key)),
+          ...filterFields(change.previous, (key) => fields.has(key)),
+        },
+      }
+    case 'lorebook':
+      return { ...change, data: filterFields(change.data, (key) => !fields.has(key)) }
+    case 'lorebook-entry':
+      return { ...change, data: filterFields(change.data, (key) => !fields.has(key)) }
+    default:
+      return change satisfies never
+  }
+}
+
+/**
+ * The earlier pending updates that an approval of `approved` overrides, each with its
+ * remaining fields (`narrowed`), or `null` when nothing is left to approve.
+ */
+export function supersededBy(
+  approved: VaultPendingChange,
+  earlier: VaultPendingChange[],
+): Array<{ change: VaultPendingChange; narrowed: VaultPendingChange | null }> {
+  if (approved.action !== 'update') return []
+  const replaced = new Set(replacedFields(approved))
+  if (replaced.size === 0) return []
+
+  const result: Array<{ change: VaultPendingChange; narrowed: VaultPendingChange | null }> = []
+  for (const change of earlier) {
+    if (change.action !== 'update' || change.id === approved.id || !sameTarget(approved, change)) {
+      continue
+    }
+    const changed = changedEntries(change).map(([key]) => key)
+    const overlap = changed.filter((k) => replaced.has(k))
+    if (overlap.length === 0) continue
+
+    if (overlap.length === changed.length) {
+      result.push({ change, narrowed: null })
+      continue
+    }
+    result.push({ change, narrowed: withoutFields(change, new Set(overlap)) })
+  }
+  return result
+}
+
+/** An entry with an update laid over it; empty strings are dropped so they cannot blank a field. */
+export function withEntryUpdate(
+  entry: VaultLorebookEntry,
+  data: Partial<VaultLorebookEntry>,
+): VaultLorebookEntry {
+  return { ...entry, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v !== '')) }
 }

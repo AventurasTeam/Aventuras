@@ -4,6 +4,7 @@ import type { ActivityTurn } from './types'
 
 const turn = (id: string): ActivityTurn => ({
   id,
+  kind: 'turn',
   entryId: `entry-${id}`,
   startedAt: 0,
   steps: [],
@@ -29,6 +30,13 @@ describe('retainTurns', () => {
 
   it('keeps nothing for a bound of zero', () => {
     expect(retainTurns([turn('1')], 0)).toEqual([])
+  })
+
+  it('neither counts nor discards chapter records', () => {
+    const chapter: ActivityTurn = { ...turn('c'), kind: 'chapter' }
+    const turns = [turn('1'), chapter, turn('2'), turn('3')]
+
+    expect(retainTurns(turns, 2).map((t) => t.id)).toEqual(['c', '2', '3'])
   })
 })
 

@@ -8,27 +8,33 @@ headers. The reasoning and the data are in
 
 ## Which helper
 
-| Job                                                      | Use                                                                                        |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| An AI SDK provider                                       | `createTimeoutFetch` (`services/ai/sdk/providers/fetch.ts`); `registry.ts` injects it      |
-| An image request to the configured server                | `imageFetch` (POST) or `imageGetFetch` (`services/ai/image/providers/fetchAdapter.ts`)     |
-| An image URL a model returned                            | `fetchImageBase64` (`fetchAdapter.ts`)                                                     |
-| A URL from a card or anywhere else the user did not type | `fetchPublicImageBase64`, which also checks each redirect hop against the public-host rule |
-| Card discovery and Fandom                                | `corsFetch` (`services/discovery/utils.ts`)                                                |
-| An SDK that takes no `fetch`                             | Patch its request method onto the plugin, as `comfy.ts` does with `fetchApi`               |
-| A WebSocket                                              | `tauri-plugin-websocket` (`tauriWebSocket.ts`)                                             |
+| Job                                                      | Use                                                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| An AI SDK provider                                       | `createTimeoutFetch` (`services/ai/sdk/providers/fetch.ts`); `registry.ts` injects it       |
+| An SDK image model                                       | `createSdkFetch` (`sdkFetch.ts`); a poll that should stay out of the log, `createPollSdkFetch` |
+| Image model discovery or a GET to the configured server  | `imageGetFetch` (`services/ai/image/providers/fetchAdapter.ts`)                             |
+| A URL from a card or anywhere else the user did not type | `fetchPublicImageBase64`, which also checks each redirect hop against the public-host rule  |
+| Card discovery, Fandom and other plain GETs              | `corsFetch` (`services/discovery/utils.ts`); it logs nothing unless passed `debug`          |
+| Any other request of the app's own                       | `loggedFetch` (`services/http/`), which the helpers above are built on                      |
 
-`createTimeoutFetch` reads the response as text before returning it, so it is for JSON and text
-APIs only. Binary bodies (audio, images) need the plugin's `fetch` or an image helper.
+`httpFetch` (`services/http/httpFetch.ts`) is the only way into the plugin, and an ESLint rule
+rejects any other import of its `fetch`: it drops the webview `Origin` that local servers reject.
+Call it directly only for a request that should not be logged, as `updater.ts` and the model-health
+ping do.
 
-## What the helpers do not do yet
+`createTimeoutFetch` buffers only a JSON success, to patch its usage; errors and streams go back to
+the SDK unread. Read every logged body with `readLoggedBody`, which never throws.
 
-- **An abort is not an `AbortError`.** Before the response the plugin rejects with a plain `Error`
-  or a bare string, depending on timing, and a stream that is cut errors with a bare string. The
-  messages are not spelled consistently (`Request cancelled`, `Request canceled`). Check
-  `signal.aborted` first; do not rely on `error.name`, the message, or `isAbortError` alone.
-- **The timeout stops at the response headers.** `llmTimeoutMs` and the image timeouts bound the
-  time to the first response, not a stream that stalls afterwards.
+## Aborts and timeouts
+
+- **A timeout makes an abort an `AbortError`.** `loggedFetch` given a `timeoutMs` wraps the request
+  in a request guard, which maps an abort to an `AbortError`. Without one, the plugin rejects with
+  a plain `Error` or a bare string, depending on timing, and a stream that is cut errors with a
+  bare string ([network-transport.md](../architecture/network-transport.md#how-the-two-differ)).
+  There, check `signal.aborted` first; do not rely on `error.name` or the message.
+- **The header timer stops at the headers; the idle timer bounds the body.** A non-streaming
+  completion sends its headers early and its body when generation finishes, so for it the idle
+  timer is the whole generation's deadline: the LLM timeout setting.
 
 ## Rust side
 

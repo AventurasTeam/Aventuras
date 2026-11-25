@@ -48,7 +48,7 @@ import {
 } from './phases/BackgroundImagePhase'
 import { mergeGenerators } from '#lib/utils/async.ts'
 import { NO_ACTIVITY, trackPhase, type ActivityReporter } from '#lib/services/activity/index.ts'
-import { sameEntityName } from '#lib/utils/text.ts'
+import { planCharacterResponse } from '#lib/services/ai/index.ts'
 
 export interface PipelineDependencies
   extends
@@ -348,15 +348,9 @@ export class GenerationPipeline {
     classification: ClassificationPhaseResult | null,
     translation: TranslationResult2,
   ) {
-    // Matched the way presence is matched everywhere else: an exact-string compare here
-    // dropped the portrait reference for any name the model spelled differently.
-    //
-    // The protagonist is added rather than looked for. They are in every scene by
-    // definition, so whether the classifier remembered to name them says nothing — and
-    // leaving them out costs the image prompt its `isProtagonist` reference.
-    const names = classification?.classificationResult?.scene?.presentCharacterNames ?? []
-    const presentCharacters: Character[] = ctx.worldState.characters.filter(
-      (c) => c.relationship === 'self' || names.some((name) => sameEntityName(c.name, name)),
+    const presentCharacters = presentInScene(
+      ctx.worldState.characters,
+      classification?.classificationResult,
     )
     return {
       storyId: ctx.story.id,
@@ -371,4 +365,32 @@ export class GenerationPipeline {
       abortSignal: ctx.abortSignal,
     }
   }
+}
+
+/**
+ * The characters the classification placed in the scene, as it leaves them, out of the cast from
+ * before it was applied. Resolved by the same plan the store applies, so a character renamed
+ * this turn is found under either name and comes back under its new one.
+ *
+ * The protagonist is added rather than looked for. They are in every scene by definition, so
+ * whether the classifier remembered to name them says nothing — and leaving them out costs the
+ * image prompt its `isProtagonist` reference.
+ */
+export function presentInScene(
+  characters: readonly Character[],
+  result: ClassificationPhaseResult['classificationResult'] | undefined,
+): Character[] {
+  const plan = planCharacterResponse(
+    characters,
+    {
+      updates: result?.entryUpdates?.characterUpdates ?? [],
+      newCharacters: result?.entryUpdates?.newCharacters ?? [],
+      presentNames: result?.scene?.presentCharacterNames ?? [],
+    },
+    result?._shownCharacters,
+  )
+  const changes = new Map(plan.updates.map((u) => [u.character.id, u.changes]))
+  return characters
+    .filter((c) => c.relationship === 'self' || plan.presentIds.includes(c.id))
+    .map((c) => ({ ...c, ...changes.get(c.id) }))
 }

@@ -6,6 +6,7 @@ import {
   type LoreManagementToolContext,
   type LorebookEntryToolContext,
 } from './lorebook'
+import type { PendingEntryStatus } from '../schemas/vault'
 
 const context: LoreManagementToolContext = {
   entries: [],
@@ -433,6 +434,131 @@ describe('list_entries, on the vault assistant that still has it', () => {
     }
 
     expect(result).toMatchObject({ availableTotal: 30, returnedCount: 5, hasMore: true })
+  })
+})
+
+describe('pending entry status on the vault assistant', () => {
+  type VaultTool = {
+    description?: string
+    execute?: (input: never, options: never) => Promise<unknown>
+  }
+  const entries = [entry('Kaelen'), entry('Mara'), entry('Tovin'), entry('Rusthaven')]
+  const status: PendingEntryStatus = {
+    byIndex: new Map([
+      [0, 'update'],
+      [1, 'delete'],
+      [2, 'merge'],
+    ]),
+    creates: [{ name: 'Brin', type: 'character' }],
+  }
+  const vaultTools = (withStatus: boolean) =>
+    createInteractiveVaultLorebookTools(
+      { lorebooks: () => [], generateId: () => 'c1' },
+      {
+        ...context,
+        entries: [],
+        getLorebookEntries: (id) => (id === 'lb1' ? entries : undefined),
+        ...(withStatus ? { pendingEntryStatus: () => status } : {}),
+      },
+    ) as unknown as Record<string, VaultTool>
+
+  it('flags entries with an unapproved change and lists the proposed new ones', async () => {
+    const result = (await vaultTools(true).list_entries.execute?.({} as never, {} as never)) as {
+      entries: { index: number; pending?: string }[]
+      pendingCreates?: unknown
+    }
+
+    expect(result.entries.map((e) => e.pending)).toEqual(['update', 'delete', 'merge', undefined])
+    expect(result.pendingCreates).toEqual(status.creates)
+  })
+
+  it('flags the entry read_entry returns', async () => {
+    const tools = vaultTools(true)
+
+    expect(await tools.read_entry.execute?.({ index: 1 } as never, {} as never)).toMatchObject({
+      pending: 'delete',
+    })
+    expect(await tools.read_entry.execute?.({ index: 3 } as never, {} as never)).not.toHaveProperty(
+      'pending',
+    )
+  })
+
+  it('says nothing about pending changes without a status provider', async () => {
+    const tools = vaultTools(false)
+
+    const listed = (await tools.list_entries.execute?.({} as never, {} as never)) as {
+      entries: object[]
+    }
+    expect(listed).not.toHaveProperty('pendingCreates')
+    expect(listed.entries.every((e) => !('pending' in e))).toBe(true)
+    expect(await tools.read_entry.execute?.({ index: 1 } as never, {} as never)).not.toHaveProperty(
+      'pending',
+    )
+    expect(tools.list_entries.description).not.toContain('pending')
+    expect(vaultTools(true).list_entries.description).toContain('pendingCreates')
+  })
+})
+
+describe('pending entry status in the lorebook summary tools', () => {
+  type VaultTool = {
+    description?: string
+    execute?: (input: never, options: never) => Promise<unknown>
+  }
+  const book = {
+    id: 'lb1',
+    name: 'Book',
+    description: null,
+    tags: [],
+    favorite: false,
+    source: 'manual',
+    entries: [entry('Kaelen'), entry('Mara')],
+  } as never
+  const status: PendingEntryStatus = {
+    byIndex: new Map([[1, 'delete']]),
+    creates: [{ name: 'Brin', type: 'character' }],
+  }
+  const tools = (withStatus: boolean) =>
+    createInteractiveVaultLorebookTools(
+      {
+        lorebooks: () => [book],
+        generateId: () => 'c1',
+        ...(withStatus ? { pendingEntryStatus: () => status } : {}),
+      },
+      { ...context, entries: [] },
+    ) as unknown as Record<string, VaultTool>
+
+  it('flags entries and lists proposed ones in read_lorebook_summary', async () => {
+    const result = (await tools(true).read_lorebook_summary.execute?.(
+      { lorebookId: 'lb1' } as never,
+      {} as never,
+    )) as {
+      lorebook: { entryCount: number; pendingCreates?: unknown; entries: { pending?: string }[] }
+    }
+
+    expect(result.lorebook.entryCount).toBe(2)
+    expect(result.lorebook.pendingCreates).toEqual(status.creates)
+    expect(result.lorebook.entries.map((e) => e.pending)).toEqual([undefined, 'delete'])
+  })
+
+  it('lists proposed entries per lorebook in list_lorebooks', async () => {
+    const result = (await tools(true).list_lorebooks.execute?.({} as never, {} as never)) as {
+      lorebooks: { pendingCreates?: unknown }[]
+    }
+
+    expect(result.lorebooks[0].pendingCreates).toEqual(status.creates)
+  })
+
+  it('stays silent and keeps the descriptions plain without a status provider', async () => {
+    const plain = tools(false)
+    const summary = await plain.read_lorebook_summary.execute?.(
+      { lorebookId: 'lb1' } as never,
+      {} as never,
+    )
+
+    expect(JSON.stringify(summary)).not.toContain('pending')
+    expect(plain.list_lorebooks.description).not.toContain('pending')
+    expect(tools(true).list_lorebooks.description).toContain('pendingCreates')
+    expect(tools(true).read_lorebook_summary.description).toContain('pendingCreates')
   })
 })
 

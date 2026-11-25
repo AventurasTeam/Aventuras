@@ -1,14 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }))
 
-// The real store is a rune module, which this suite cannot import.
-vi.mock('#lib/stores/debug.svelte.ts', () => ({
-  debug: { isActive: false, addDebugRequest: vi.fn(), addDebugResponse: vi.fn() },
-}))
-
+import { APICallError } from 'ai'
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
-import { fetchPublicImageBase64 } from './fetchAdapter'
+import { isAbortError } from '#lib/services/activity/describeError.ts'
+import { debugLog } from '#lib/stores/debugLog.ts'
+import { RequestTimeoutError } from '#lib/utils/error.ts'
+import { fetchPublicImageBase64, imageGetFetch } from './fetchAdapter'
 
 const mockFetch = vi.mocked(tauriHttpFetch)
 
@@ -86,8 +85,11 @@ describe('fetchPublicImageBase64', () => {
   })
 
   it('cancels the body of a redirect it follows', async () => {
-    const hop = new Response('moved', { status: 302, headers: { location: 'https://cdn.test/a' } })
-    const cancel = vi.spyOn(hop.body!, 'cancel')
+    const cancel = vi.fn()
+    const hop = new Response(new ReadableStream({ cancel }), {
+      status: 302,
+      headers: { location: 'https://cdn.test/a' },
+    })
     mockFetch.mockResolvedValueOnce(hop).mockResolvedValueOnce(image([0x68, 0x69]))
 
     await fetchPublicImageBase64('https://img.test/a.png')
@@ -100,5 +102,250 @@ describe('fetchPublicImageBase64', () => {
     await expect(fetchPublicImageBase64('https://img.test/a.png')).rejects.toThrow(
       'Image API error 404',
     )
+  })
+
+  it('fails a 429 with a plain Error, which the 429 middleware leaves alone', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('slow down', { status: 429 }))
+
+    const error = await fetchPublicImageBase64('https://img.test/a.png').catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(Error)
+    expect(APICallError.isInstance(error)).toBe(false)
+    expect(error).not.toHaveProperty('statusCode')
+  })
+})
+
+/** Like the plugin: stays pending, then rejects with a bare string when its signal aborts. */
+function pendingUntilAborted(_url: unknown, init?: { signal?: AbortSignal | null }) {
+  return new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject('Request canceled'))
+  })
+}
+
+describe('imageGetFetch abort handling', () => {
+  const what = 'Image fetch'
+  const run = (signal: AbortSignal | undefined, timeoutMs: number) =>
+    imageGetFetch('https://img.test/a.png', undefined, { signal, timeoutMs })
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(pendingUntilAborted)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('rejects a caller abort as an AbortError', async () => {
+    const caller = new AbortController()
+    const request = run(caller.signal, 60_000).catch((e: unknown) => e)
+
+    caller.abort()
+
+    const error = await request
+    expect(error).toMatchObject({ name: 'AbortError' })
+    expect(isAbortError(error)).toBe(true)
+  })
+
+  it('rejects a timeout as a RequestTimeoutError, not an abort', async () => {
+    vi.useFakeTimers()
+    const request = run(new AbortController().signal, 5_000).catch((e: unknown) => e)
+
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const error = await request
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: `${what} timed out after 5s` })
+    expect(isAbortError(error)).toBe(false)
+  })
+})
+
+describe('imageGetFetch debug log', () => {
+  const responses = () => debugLog.snapshot().filter((e) => e.type === 'response')
+  const json = (body: unknown, type = 'application/json') =>
+    new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': type } })
+
+  beforeEach(() => {
+    mockFetch.mockReset()
+    debugLog.reset()
+    debugLog.active = true
+  })
+
+  afterEach(() => {
+    debugLog.active = false
+    debugLog.reset()
+  })
+
+  it('logs a cancelled request as aborted', async () => {
+    mockFetch.mockImplementation(pendingUntilAborted)
+    const caller = new AbortController()
+    const request = imageGetFetch('https://img.test/a', undefined, {
+      signal: caller.signal,
+    }).catch((e: unknown) => e)
+
+    caller.abort()
+    await request
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ error: 'aborted' })
+  })
+
+  it('logs a failure that never got a response', async () => {
+    mockFetch.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Failed to fetch')
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ error: 'Failed to fetch' })
+  })
+
+  it('logs an error status once, with its body', async () => {
+    mockFetch.mockImplementation(async () => new Response('nope', { status: 500 }))
+
+    await expect(imageGetFetch('https://img.test/a')).rejects.toThrow('Image API error 500')
+
+    await vi.waitFor(() => expect(responses()).toHaveLength(1))
+    expect(responses()[0].data).toMatchObject({ status: 500, error: 'nope' })
+  })
+
+  it('logs a JSON body with its status, and still hands the caller the whole body', async () => {
+    mockFetch.mockImplementation(async () => json({ models: ['a', 'b'] }))
+
+    const response = await imageGetFetch('https://img.test/models')
+
+    await expect(response.json()).resolves.toEqual({ models: ['a', 'b'] })
+    await vi.waitFor(() => expect(responses()).toHaveLength(1))
+    expect(responses()[0].data).toMatchObject({ status: 200, body: { models: ['a', 'b'] } })
+  })
+
+  it('logs a text body that is not JSON as scrubbed text', async () => {
+    mockFetch.mockImplementation(async () => new Response('plain list', { status: 200 }))
+
+    await imageGetFetch('https://img.test/models')
+
+    await vi.waitFor(() => expect(responses()).toHaveLength(1))
+    expect(responses()[0].data).toMatchObject({ status: 200, body: 'plain list' })
+  })
+
+  it('logs an image by type and size, without a body', async () => {
+    mockFetch.mockImplementation(
+      async () =>
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'image/png', 'content-length': '3' },
+        }),
+    )
+
+    await imageGetFetch('https://img.test/a.png')
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ status: 200, contentType: 'image/png', size: 3 })
+  })
+
+  it('logs an untyped body as binary rather than reading it', async () => {
+    mockFetch.mockImplementation(async () => image([1, 2, 3]))
+
+    const response = await imageGetFetch('https://img.test/a')
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).not.toHaveProperty('body')
+    expect(responses()[0].data).toMatchObject({ status: 200 })
+    await response.body?.cancel()
+  })
+
+  it('logs only the status of a reply the caller will cancel', async () => {
+    mockFetch.mockImplementation(async () => new Response('missing', { status: 404 }))
+
+    const response = await imageGetFetch('https://img.test/a', undefined, { allowStatuses: [404] })
+    await response.body?.cancel()
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ status: 404 })
+  })
+
+  it('logs only the status of a redirect it was told not to follow', async () => {
+    mockFetch.mockImplementation(async () => redirect('https://img.test/b'))
+
+    const response = await imageGetFetch('https://img.test/a', undefined, {
+      followRedirects: false,
+    })
+    await response.body?.cancel()
+
+    expect(responses()).toHaveLength(1)
+    expect(responses()[0].data).toEqual({ status: 302 })
+  })
+
+  it('shows the request headers with the key redacted', async () => {
+    mockFetch.mockImplementation(async () => json({}))
+
+    await imageGetFetch('https://img.test/a', { Authorization: 'Bearer sk-1234567890' })
+
+    const request = debugLog.snapshot().find((e) => e.type === 'request')
+    expect(request?.data.headers).toEqual({ Authorization: 'Bear...7890' })
+  })
+})
+
+describe('imageGetFetch body timeout', () => {
+  const what = 'Image fetch'
+  const run = (timeoutMs: number) =>
+    imageGetFetch('https://img.test/a.png', undefined, { timeoutMs })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('errors a body that stalls after the headers with a RequestTimeoutError', async () => {
+    vi.useFakeTimers()
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async (_url, init) => {
+      const body = new ReadableStream<Uint8Array>({
+        start: (c) => init?.signal?.addEventListener('abort', () => c.error('Request cancelled')),
+      })
+      return new Response(body, { status: 200 })
+    })
+
+    const response = await run(5_000)
+    const read = response.arrayBuffer().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    const error = await read
+    expect(error).toBeInstanceOf(RequestTimeoutError)
+    expect(error).toMatchObject({ message: `${what} timed out after 5s` })
+  })
+})
+
+describe('imageGetFetch allowStatuses', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async () => new Response('missing', { status: 404 }))
+  })
+
+  it('returns a listed error status instead of throwing', async () => {
+    const response = await imageGetFetch('https://img.test/a', undefined, {
+      allowStatuses: [404],
+    })
+    expect(response.status).toBe(404)
+    await response.body?.cancel()
+  })
+
+  it('still throws on an error status that is not listed', async () => {
+    await expect(
+      imageGetFetch('https://img.test/a', undefined, { allowStatuses: [410] }),
+    ).rejects.toThrow('Image API error 404')
+  })
+})
+
+describe('request headers', () => {
+  beforeEach(() => {
+    mockFetch.mockReset()
+    mockFetch.mockImplementation(async () => new Response('{}', { status: 200 }))
+  })
+
+  it('imageGetFetch sends an empty Origin', async () => {
+    await imageGetFetch('https://img.test/a.png', { Authorization: 'Bearer key' })
+
+    const headers = new Headers(mockFetch.mock.calls[0][1]?.headers)
+    expect(headers.get('origin')).toBe('')
+    expect(headers.get('authorization')).toBe('Bearer key')
   })
 })

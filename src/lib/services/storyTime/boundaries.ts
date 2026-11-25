@@ -7,7 +7,7 @@
  */
 
 import type { StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
-import { toMinutes } from './minutes'
+import { normalizeTime, toMinutes } from './minutes'
 
 export type BoundaryKind = 'anchor' | 'story-start' | 'story-end' | 'fork'
 
@@ -104,6 +104,79 @@ export function selectableRanges(entries: StoryEntry[], boundaries: Boundary[]):
     })
   }
   return ranges
+}
+
+/** Times the reader states for a range's boundaries, for one reconciliation and nothing else. */
+export interface BoundaryRestatement {
+  from?: TimeTracker
+  to?: TimeTracker
+}
+
+/** The range's boundaries as the reconciliation reads them: restated where the reader said so. */
+export function restateBoundaries(
+  range: Pick<SelectableRange, 'from' | 'to'>,
+  restated: BoundaryRestatement = {},
+): { from: Boundary; to: Boundary } {
+  const restate = (boundary: Boundary, time: TimeTracker | undefined): Boundary =>
+    time ? { ...boundary, time: normalizeTime(time) } : boundary
+  return { from: restate(range.from, restated.from), to: restate(range.to, restated.to) }
+}
+
+/**
+ * Times the reader restated for a range's boundaries. An `edit` changes the boundary's anchor and is
+ * stored with the reconciliation, note included; an `assert` is never stored.
+ */
+export type BoundaryDrafts = Partial<
+  Record<'from' | 'to', { kind: 'edit' | 'assert'; time: TimeTracker; note?: string | null }>
+>
+
+/**
+ * The anchors a reconciliation stores: those the reader edited. Decided by the draft, not by the
+ * anchor found now, so an assertion never turns into an overwrite of an anchor added since.
+ */
+export function editedAnchors(
+  range: Pick<SelectableRange, 'from' | 'to'>,
+  drafts: BoundaryDrafts,
+  anchorFor: (entryId: string) => TimeAnchor | undefined,
+): TimeAnchor[] {
+  return (['from', 'to'] as const).flatMap((which) => {
+    const draft = drafts[which]
+    const existing = draft?.kind === 'edit' ? anchorFor(range[which].entryId) : undefined
+    if (!draft || !existing) return []
+    return [
+      {
+        ...existing,
+        assertedTime: normalizeTime(draft.time),
+        note: draft.note === undefined ? existing.note : draft.note,
+      },
+    ]
+  })
+}
+
+/**
+ * Whether a boundary may be restated. An earlier boundary only moves the baseline, so even a player
+ * action may be; a later one is written to its entry, and an action has no ending to write.
+ */
+export function canRestate(which: 'from' | 'to', entry: StoryEntry | undefined): boolean {
+  return !!entry && (which === 'from' || entry.type !== 'user_action')
+}
+
+/**
+ * Whether applying would move the time branches open on. Only a later boundary is written through
+ * to its entry, so only a later boundary can. Branches open on the checkpoint's clock, which can
+ * disagree with the entry's ending, and applying rewrites both.
+ */
+export function movesForkEnding(
+  entry: StoryEntry | undefined,
+  effectiveTime: TimeTracker | null,
+  forked: boolean,
+  checkpointClocks: (TimeTracker | null | undefined)[] = [],
+): boolean {
+  if (!forked || !entry || !effectiveTime) return false
+  const target = toMinutes(effectiveTime)
+  const recorded = entry.metadata?.timeEnd
+  if (!recorded || toMinutes(recorded) !== target) return true
+  return checkpointClocks.some((clock) => !!clock && toMinutes(clock) !== target)
 }
 
 export type RangeRefusal = {

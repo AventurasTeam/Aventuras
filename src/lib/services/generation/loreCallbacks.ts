@@ -11,12 +11,13 @@
  * is safe only because every access happens inside a callback, never at module scope.
  */
 
-import { story } from '#lib/stores/story.svelte.ts'
+import { story, type RecordOptions } from '#lib/stores/story.svelte.ts'
 import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
 import { ui } from '#lib/stores/ui.svelte.ts'
 import { aiService } from '#lib/services/ai/index.ts'
 import { database } from '#lib/services/database.ts'
 import { pairKeys, scopeToPool } from '#lib/services/duplicates/index.ts'
+import { activity } from '#lib/stores/activity.svelte.ts'
 import type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,
@@ -45,28 +46,19 @@ function assertScope(scope: LoreCallbackScope, action: string): void {
   )
 }
 
-export function buildLoreManagementCallbacks(scope: LoreCallbackScope): LoreManagementCallbacks {
+/**
+ * `record` says who the session's changes belong to: its origin and the entry they attach to. A
+ * function is read at each write, for a session whose chapter is cut after the callbacks exist.
+ */
+export function buildLoreManagementCallbacks(
+  scope: LoreCallbackScope,
+  recordOrResolve: RecordOptions | (() => RecordOptions),
+): LoreManagementCallbacks {
+  const resolve = typeof recordOrResolve === 'function' ? recordOrResolve : () => recordOrResolve
   return {
-    // `addLorebookEntry` assigns its own id, storyId and timestamps over whatever is
-    // passed, so handing it the entry whole is both shorter and safer than listing the
-    // fields to keep — a field added to `Entry` is carried without touching this.
-    onCreateEntry: async (entry) => {
-      assertScope(scope, `create "${entry.name}"`)
-      await story.addLorebookEntry(entry)
-    },
-    onUpdateEntry: async (id, updates) => {
-      assertScope(scope, `update entry ${id}`)
-      await story.updateLorebookEntry(id, updates)
-    },
-    onDeleteEntry: async (id) => {
-      assertScope(scope, `delete entry ${id}`)
-      await story.deleteLorebookEntry(id)
-    },
-    // Survivor first: deleting first loses every source if the insert then fails.
-    onMergeEntries: async (entryIds, mergedEntry) => {
-      assertScope(scope, `merge into "${mergedEntry.name}"`)
-      await story.addLorebookEntry(mergedEntry)
-      await story.deleteLorebookEntries(entryIds)
+    onSaveSession: async (writes) => {
+      assertScope(scope, 'save the lore management session')
+      await story.saveLoreSession(writes, resolve())
     },
     // The user's dismissals and the agent's are the same decision, so they share a table.
     // Addressed by scope directly: no store involved, so there is nothing to be stale.
@@ -78,16 +70,22 @@ export function buildLoreManagementCallbacks(scope: LoreCallbackScope): LoreMana
       await database.addKeptSeparate(scope.storyId, scope.branchId, 'lorebook', pairKeys(names))
     },
     // Guarded too: a chapter number resolves against whichever story's chapters are loaded.
-    onQueryChapter: async (chapterNumber, question) => {
+    // `activityParentId` is the read's own step: the answer's absorbed failure closes it.
+    onQueryChapter: async (chapterNumber, question, activityParentId) => {
       assertScope(scope, `read chapter ${chapterNumber}`)
-      return aiService.answerChapterQuestion(
+      const answer = await aiService.queryChapter(
         scope.storyId,
         chapterNumber,
         question,
         story.currentBranchChapters,
         story.getChapterEntries.bind(story),
         story.chapterReadBudget,
+        activityParentId,
       )
+      if (answer.failure && activityParentId) {
+        activity.endStep(activityParentId, 'failed', undefined, answer.failure)
+      }
+      return answer.answer
     },
   }
 }
@@ -111,12 +109,24 @@ export type LoreProgressTarget = 'panel' | { onStatus: (status: string | null) =
 export function buildLoreManagementUICallbacks(
   target: LoreProgressTarget = 'panel',
 ): LoreManagementUICallbacks {
+  const failed: LoreManagementUICallbacks['onError'] = (error, session) =>
+    ui.setLoreManagementError(
+      error,
+      session
+        ? {
+            storyId: session.chapter.storyId,
+            branchId: session.chapter.branchId ?? null,
+            chapterId: session.chapter.id,
+            readAfterChapter: session.readAfterChapter,
+          }
+        : null,
+    )
   if (target === 'panel') {
     return {
       onStart: ui.startLoreManagement.bind(ui),
       onProgress: ui.updateLoreManagementProgress.bind(ui),
       onSummary: ui.setLoreManagementSummary.bind(ui),
-      onError: ui.setLoreManagementError.bind(ui),
+      onError: failed,
       onComplete: ui.finishLoreManagement.bind(ui),
     }
   }
@@ -129,9 +139,9 @@ export function buildLoreManagementUICallbacks(
     // after this, and `onComplete` sets the status back to null in the same tick — so a
     // failure written only there is erased before anyone reads it. The stored error
     // outlives the run and is what the lorebook view shows.
-    onError: (err) => {
+    onError: (err, session) => {
       target.onStatus(`Lore management failed: ${err}`)
-      ui.setLoreManagementError(err)
+      failed(err, session)
     },
     onComplete: () => target.onStatus(null),
   }

@@ -1,76 +1,48 @@
-/**
- * OpenAI-compatible image request, shared by OpenAI, NanoGPT and Pollinations.
- * - no references: POST {baseUrl}/images/generations (JSON)
- * - references:    POST {baseUrl}/images/edits (multipart, `image` or repeated `image[]`)
- */
+// One request for every backend that speaks the OpenAI image API; `extraFields` join the body.
 
-import { base64ImageMime, base64ToBytes } from '#lib/utils/image.ts'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import type { JSONValue } from '@ai-sdk/provider'
 import type { ImageGenerateResult } from './types'
-import { fetchImageBase64, imageFetch } from './fetchAdapter'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
-const EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as const
+// Spread into the request body, which the SDK reads under its camelCase name.
+const PROVIDER_OPTIONS_KEY = 'openaiCompatible'
 
-interface OpenAICompatibleRequest {
+export async function generateOpenAICompatibleImage(options: {
   baseUrl: string
   apiKey?: string
+  serviceId: string
   model: string
   prompt: string
-  size: string
-  /** Raw base64, no `data:` prefix. */
+  size: `${number}x${number}`
   referenceImages?: string[]
-  /** Sent as JSON values on generations and as strings on edits. */
-  extraFields?: Record<string, string | number | boolean>
+  extraFields?: Record<string, JSONValue>
   signal?: AbortSignal
-  serviceId: string
-}
+}): Promise<ImageGenerateResult> {
+  const { baseUrl, apiKey, serviceId, model, prompt, size, referenceImages, extraFields, signal } =
+    options
 
-export async function generateOpenAICompatible(
-  request: OpenAICompatibleRequest,
-): Promise<ImageGenerateResult> {
-  const { baseUrl, apiKey, model, prompt, size, referenceImages, extraFields, signal, serviceId } =
-    request
-  const authorization: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
-  const fields = { model, prompt, size, n: 1, response_format: 'b64_json', ...extraFields }
-  const edit = !!referenceImages?.length
+  const provider = createOpenAICompatible({
+    name: PROVIDER_OPTIONS_KEY,
+    baseURL: baseUrl,
+    apiKey: apiKey || undefined,
+    fetch: createImageSdkFetch(serviceId),
+  })
 
-  const response = await imageFetch({
-    url: `${baseUrl}/images/${edit ? 'edits' : 'generations'}`,
-    // An edit sends no Content-Type: the FormData supplies it with its boundary.
-    headers: edit ? authorization : { 'Content-Type': 'application/json', ...authorization },
-    body: edit ? editForm(fields, referenceImages) : JSON.stringify(fields),
+  return generateSdkImage({
+    model: provider.imageModel(model),
+    prompt,
+    referenceImages,
+    size,
+    providerOptions: {
+      [PROVIDER_OPTIONS_KEY]: {
+        response_format: 'b64_json',
+        ...extraFields,
+        // The SDK writes its model id into every request and spreads these over it; an undefined
+        // value drops the key, so a host without a model gets its own default.
+        ...(!model && ({ model: undefined } as unknown as Record<string, JSONValue>)),
+      },
+    },
     signal,
-    serviceId: edit ? `${serviceId}-edit` : serviceId,
   })
-
-  const data = await response.json().catch(() => null)
-  const imageData = data?.data?.[0]
-
-  if (imageData?.b64_json) {
-    return { base64: imageData.b64_json, revisedPrompt: imageData.revised_prompt }
-  }
-  if (imageData?.url) {
-    const base64 = await fetchImageBase64(imageData.url, { signal, serviceId })
-    return { base64, revisedPrompt: imageData.revised_prompt }
-  }
-
-  throw new Error(`No image data in ${serviceId} response`)
-}
-
-function editForm(
-  fields: Record<string, string | number | boolean>,
-  references: string[],
-): FormData {
-  const form = new FormData()
-  for (const [key, value] of Object.entries(fields)) form.append(key, String(value))
-
-  const field = references.length > 1 ? 'image[]' : 'image'
-  references.forEach((b64, i) => {
-    const mime = base64ImageMime(b64)
-    form.append(
-      field,
-      new Blob([base64ToBytes(b64)], { type: mime }),
-      `reference-${i + 1}.${EXTENSIONS[mime]}`,
-    )
-  })
-  return form
 }

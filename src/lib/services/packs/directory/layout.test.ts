@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { PROMPT_TEMPLATES } from '#lib/services/prompts/templates/index.ts'
+import { UNGROUPED_GROUP, getTemplateGroups } from '#lib/components/vault/prompts/templateGroups.ts'
 import {
   ABOUT_FILE,
   GITATTRIBUTES_FILE,
@@ -43,6 +44,20 @@ describe('templatePath', () => {
     expect(templatePath('retired-prompt')).toBe(`${UNGROUPED_DIR}/retired-prompt.md`)
     expect(templateIdFromPath(templatePath('retired-prompt'))).toBe('retired-prompt')
   })
+
+  it('numbers a group folder by its position in the editor', () => {
+    expect(templatePath('adventure')).toBe('01 Story Generation/adventure.md')
+  })
+
+  it('sorts the folders in the editor’s order, the reserved folder last', () => {
+    const editorOrder = getTemplateGroups().map((group) => group.name)
+    const folders = [...new Set([...storedRowIds().map(groupFolderFor), UNGROUPED_DIR])].toSorted()
+
+    expect(folders.map((folder) => folder.replace(/^\d{2} /, ''))).toEqual([
+      ...editorOrder.filter((name) => name !== UNGROUPED_GROUP),
+      UNGROUPED_GROUP,
+    ])
+  })
 })
 
 describe('templateIdFromPath', () => {
@@ -50,6 +65,10 @@ describe('templateIdFromPath', () => {
     expect(templateIdFromPath('Analysis/classifier.md')).toBe('classifier')
     expect(templateIdFromPath('Memory/classifier.md')).toBe('classifier')
     expect(templateIdFromPath('somewhere/nested/deep/classifier.md')).toBe('classifier')
+  })
+
+  it('still reads a file in an unnumbered folder, as format 1 wrote them', () => {
+    expect(templateIdFromPath('Story Generation/adventure.md')).toBe('adventure')
   })
 
   it('accepts backslash separators', () => {

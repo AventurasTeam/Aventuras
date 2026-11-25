@@ -8,7 +8,7 @@
  * `svelte-check`.
  */
 
-import { toMinutes } from './minutes'
+import { normalizeTime, toMinutes } from './minutes'
 
 const MINUTES_PER = {
   y: 365 * 24 * 60,
@@ -135,6 +135,14 @@ export function formatStoryTime(time: {
 }): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `Y${(time.years ?? 0) + 1} D${(time.days ?? 0) + 1} ${pad(time.hours ?? 0)}:${pad(time.minutes ?? 0)}`
+}
+
+/** What a typed time is stored as, once carried over, when that differs from what was typed. */
+export function convertedStoryTime(text: string | null | undefined): string | null {
+  const parsed = parseStoryTime(text)
+  if (!parsed) return null
+  const stored = formatStoryTime(normalizeTime(parsed))
+  return stored === formatStoryTime(parsed) ? null : stored
 }
 
 /** True when something has been typed that is not a story time. */

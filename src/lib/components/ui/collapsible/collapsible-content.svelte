@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Collapsible as CollapsiblePrimitive } from 'bits-ui'
   import { cn } from '#lib/utils/cn.ts'
-  import type { ClassValue } from 'clsx'
+  import type { ClassValue } from 'svelte/elements'
 
   let {
     ref = $bindable(null),

@@ -114,8 +114,9 @@ against, so `build-desktop.yml`'s matrix pins its runners rather than tracking `
   a future move to a newer image is a deliberate version bump rather than a silent one.
 
 Android and the lint job stay on `ubuntu-latest`: their output doesn't depend on the host OS.
-iOS builds pin `macos-15` like the macOS desktop legs: the archive must be produced by a
-Xcode version the project is actually tested against.
+iOS builds pin `macos-15` like the macOS desktop legs, and select Xcode 26.3 on it: the
+background-generation plugin uses `BGContinuedProcessingTask`, which the default Xcode 16.4 SDK
+lacks.
 
 Dependabot (`.github/dependabot.yml`) opens one grouped PR a month for `github-actions` updates, so
 action versions don't drift the way the runner pins are meant to prevent.
@@ -289,6 +290,14 @@ install will see the new version. See [The Updater](#the-updater).
 ```bash
 npx tauri build
 ```
+
+On Windows, Defender's real-time scanning can grab a freshly written archive in
+`src-tauri\target` and fail the build with "failed to remove temporary directory … (os error 32)".
+`scripts\defender-build-exclusion.ps1 -Action Add` (or `-Action Remove`), run from an administrator
+PowerShell, excludes that checkout's build output only; sources, `node_modules` and the cargo
+registry stay scanned. Each worktree has its own `target`, so run the copy in each. `-Action Scan`
+lists every exclusion that is a `src-tauri\target` or has "Aventuras" in its path, and whether its
+checkout is a live worktree of this repository, another checkout, or gone with the rule left behind.
 
 ### Building iOS
 

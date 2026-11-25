@@ -20,10 +20,41 @@ const details = (overrides: Partial<StoryDetails> = {}): StoryDetails => ({
   genre: 'Fantasy',
   description: 'A kingdom without an heir.',
   genreColor: null,
+  pov: 'second',
+  tense: 'present',
   ...overrides,
 })
 
 describe('storyDetailsUpdate', () => {
+  it('writes a changed voice, keeping the rest of the settings', () => {
+    const stored = story({
+      settings: { pov: 'second', tense: 'present', genreColor: 'red', customSystemPrompt: 'keep' },
+    })
+
+    expect(
+      storyDetailsUpdate(stored, details({ pov: 'first', tense: 'past', genreColor: 'red' })),
+    ).toEqual({
+      settings: { pov: 'first', tense: 'past', genreColor: 'red', customSystemPrompt: 'keep' },
+    })
+  })
+
+  it('leaves an unset voice unset when it stays as the story reads it', () => {
+    const stored = story({ settings: { customSystemPrompt: 'keep' } })
+
+    expect(storyDetailsUpdate(stored, details({ pov: 'first' }))).toBeNull()
+  })
+
+  it('lets a Creative Writing story change its tense', () => {
+    const stored = story({
+      mode: 'creative-writing',
+      settings: { pov: 'second', tense: 'present' },
+    })
+
+    expect(storyDetailsUpdate(stored, details({ tense: 'past' }))).toEqual({
+      settings: { pov: 'second', tense: 'past' },
+    })
+  })
+
   it('writes nothing when nothing changed', () => {
     expect(storyDetailsUpdate(story(), details())).toBeNull()
   })
@@ -79,7 +110,9 @@ describe('storyDetailsUpdate', () => {
   it('carries the settings over for a story that has none', () => {
     const stored = story({ settings: null })
 
-    expect(storyDetailsUpdate(stored, details({ genreColor: 'pink' }))?.settings).toEqual({
+    expect(
+      storyDetailsUpdate(stored, details({ genreColor: 'pink', pov: 'first' }))?.settings,
+    ).toEqual({
       genreColor: 'pink',
     })
   })

@@ -21,8 +21,9 @@ class ImageExportService {
 
   async exportSingleImage(storyTitle: string, image: EmbeddedImageMeta): Promise<boolean> {
     try {
-      const target = await resolveSaveTarget(`${storyTitle}-image.png`, [
-        { name: 'PNG Image', extensions: ['png'] },
+      const ext = await invoke<string>('embedded_image_extension', { imageId: image.id })
+      const target = await resolveSaveTarget(`${storyTitle}-image.${ext}`, [
+        { name: `${ext.toUpperCase()} Image`, extensions: [ext] },
       ])
       if (!target) return false
 

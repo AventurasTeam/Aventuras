@@ -13,7 +13,13 @@ export {
   listBoundaries,
   selectableRanges,
   refuseRange,
+  restateBoundaries,
+  movesForkEnding,
+  editedAnchors,
+  canRestate,
   type Boundary,
+  type BoundaryDrafts,
+  type BoundaryRestatement,
   type BoundaryKind,
   type BoundaryInput,
   type SelectableRange,
@@ -35,10 +41,10 @@ export {
   fingerprintPreview,
   applyReconciliation,
   reconciliationStatements,
+  timeAnchorUpsert,
   type ReconciliationPlan,
   type PlanReconciliationInput,
   type ChapterSpanUpdate,
-  type DeltaUpdate,
   type ReconciliationWriteDeps,
 } from './reconciliation'
 export {
@@ -59,4 +65,5 @@ export {
   parseStoryTime,
   formatStoryTime,
   storyTimeIsInvalid,
+  convertedStoryTime,
 } from './duration'

@@ -243,8 +243,8 @@
   </div>
 
   <WritingStyleFields
-    selectedPOV={storySettings.pov ?? 'second'}
-    selectedTense={storySettings.tense ?? 'present'}
+    selectedPOV={story.pov}
+    selectedTense={story.tense}
     tone={storySettings.tone ?? ''}
     visualProseMode={storySettings.visualProseMode ?? false}
     imageGenerationEnabled={imageGenEnabled}
@@ -269,6 +269,7 @@
     narratorReinforcementDisabledReason={reinforcementUnavailableReason}
     disabledFields={{ pov: true, tense: true, visualProseMode: true }}
     disabledReason="Cannot be changed mid-story. Set during story creation."
+    voiceDisabledReason="Change it with Edit story, on the story's card in the library."
   />
 
   <!-- ── Custom System Prompt ─────────────────────────────────────────────── -->

@@ -11,10 +11,22 @@ The database, the native layer that moves bytes around it, and the settings blob
   directly — `backup.rs`, `avt_import.rs`, and the migration checksum patch in `lib.rs` — must use
   `app_config_dir()` for the same reason, or it silently operates on a database that does not exist.
 - **Migrations**: Sequentially numbered SQL files in `src-tauri/migrations/` (e.g. `001_initial.sql`,
-  `002_chapters_checkpoints.sql`, ...), applied in order at startup.
+  `002_chapters_checkpoints.sql`, ...), applied in order at startup, all pending ones before any
+  frontend code runs. A data conversion that must happen before a column goes is therefore SQL in
+  the same migration as the drop, as `041_retire_world_state_delta.sql` is. The list lives in
+  `migrations()` in `lib.rs`, which a `cargo test` can run against an in-memory database
+  (`world_state_delta_migration.rs`, `world_state_marks_migration.rs`).
 - **Line endings matter**: `sqlx` checksums each migration file to detect drift, so migrations must use LF
   line endings on every platform. This is enforced by `.gitattributes` (forces `eol=lf` for
   `src-tauri/migrations/*.sql`) and by the `check_migrations` pre-commit hook below.
+- **A migration that rewrites rows must hold `sync_suspend`.** Migration 045 put triggers on every
+  story, vault and pack table that count edits for sync and stamp `stories.updated_at`. A rewrite
+  would read as an edit on every device, so every synced item would show as changed on both after
+  the update. SQLite cannot disable a trigger, so each one checks that table: insert a row at the
+  start of the migration, delete it at the end, in the same file. A Rust data migration follows the
+  same rule. A migration that adds a table with a `story_id` or `pack_id` column must give it the
+  triggers or add it to the exclusion list in `sync/device.rs`, whose test fails otherwise. See
+  [sync.md](sync.md).
 - **Never `BEGIN` from the frontend**: `tauri-plugin-sql` runs every `execute()` on an arbitrary
   connection from an `sqlx` pool, and exposes no way to pin one (`Pool::connect` in the plugin's
   `wrapper.rs` takes no options). A `BEGIN` therefore opens a transaction that the following statements
@@ -26,6 +38,10 @@ The database, the native layer that moves bytes around it, and the settings blob
   rows affected by each statement back. Values travel as bound parameters — never interpolate into the
   SQL. Keep the SQL in `database.ts` rather than in components, as
   `deleteRuntimeVariableEverywhere` and its neighbours do.
+- **Entity writes exist as statements too.** Each write method for characters, locations, items,
+  story beats and lorebook entries has a `…Statement` builder beside it, so a write and the State
+  Tracking record describing it can share one `database.transaction()`; `world_state_changes` takes
+  its `seq` from a subquery in the same insert. See [state-tracking.md](state-tracking.md).
 - **A read the batch depends on belongs inside it**, as a subquery. The runtime-variable writes reach
   their rows through `SELECT id FROM stories WHERE pack_id = ?` rather than resolving the ids first:
   the batch is atomic, the round trip that fed it was not, and a story assigned to the pack in
@@ -46,7 +62,10 @@ The database, the native layer that moves bytes around it, and the settings blob
   alias is the cleaner's and the merge's to drop, not the writers'. A stored `injection` that is not
   an object reads as the default, and vault `entries` that are not a list read as `[]`.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
-  `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way.
+  `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way,
+  as did a character snapshot's `name`, `description` and `translations`. A restore leaves a
+  field the snapshot lacks as it is, and puts a saved translation back only with a text it
+  changes, so a translation that finished after the snapshot stays.
   `branchId` names the branch the snapshot was taken on, and a restore onto any other branch is
   refused. State written before it was recorded cannot be attributed to a branch, and is **discarded
   on load** rather than assumed to belong to main: the readers most likely to hold such state are
@@ -81,8 +100,9 @@ Rust owns the bytes**: only small parameters (paths, ids) cross the IPC bridge.
 
 `db.rs` (for `avt_import.rs`, `db_tx.rs` and `backup.rs`) and `migration_patch.rs` (via the
 `lib.rs` setup hook) open `sqlite:aventura.db` under Tauri's **app config dir** — see the
-migrations section for why that is not the app data dir. `sync/` never touches the database directly; it moves stories over the
-`tauri-plugin-sql` connection on the JS side.
+migrations section for why that is not the app data dir. `sync/` never touches the database directly: every listing and item is
+answered by the webview over the `tauri-plugin-sql` connection, and only `backup.rs` reaches into
+the sync tables, to give a restored database a new device ID. See [sync.md](sync.md).
 
 ## Settings Migrations
 
@@ -97,6 +117,14 @@ already labelled "Plot Suggestions". Two properties every migration there must h
   that keeps firing silently reverts whatever the user changed in between.
 - **Silent about untouched values**, because a stored value equal to the old default was never a
   choice, and carrying it across pins everyone who never opened the panel to a stale number.
+
+Image profiles are their own blob, the `image_profiles` setting, and its changes are SQL migrations
+rather than load-time functions. Migration 046 turns a ComfyUI custom workflow's single
+`positivePromptPath` and `negativePromptPath` into the lists `positivePromptPaths` and
+`negativePromptPaths` (an input in both stays only a prompt input), and points a `KSamplerAdvanced`
+seed path that named `seed` at `noise_seed`. Its rules are tested in `src-tauri/src/comfy_workflow_paths.rs`.
+An optional field added to a profile (such as the output formats in `capabilityOverride`) needs no
+migration: profiles are spread on load and written whole, and a profile without it reads as unset.
 
 ## Story Settings
 

@@ -17,16 +17,69 @@ import type {
   TimeTracker,
   TimeAnchor,
   PersistentCharacterSnapshot,
-  WorldStateDelta,
   WorldStateSnapshot,
-  CharacterBeforeState,
-  LocationBeforeState,
-  ItemBeforeState,
-  StoryBeatBeforeState,
+  ChangeOp,
+  ChangeOrigin,
+  TrackedEntityType,
+  WorldStateChangeRecord,
+  WorldStateHeaderRecord,
+  WorldStateMark,
+  WorldStateRecord,
 } from '#lib/types/index.ts'
-import { database } from '#lib/services/database.ts'
-import { rollbackService } from '#lib/services/rollbackService.ts'
+import { database, type DbStatement } from '#lib/services/database.ts'
+import { errMessage } from '#lib/utils/error.ts'
+import {
+  changeRecord,
+  clockAfter,
+  changedFields,
+  classifierView,
+  cloneState,
+  diffStates,
+  headerRecord,
+  isContinuous,
+  lastCompletedEntry,
+  KEEP_ALL,
+  KEEP_NONE,
+  pastQuery,
+  skippedSnapshots,
+  lastHeaderOnLine,
+  recordsHolder,
+  chapterMark,
+  loreOwners,
+  planChapterLoreRevert,
+  marksHolding,
+  planReversal,
+  refusalMessage,
+  resolveOverride,
+  resolveRun,
+  rowsOf,
+  type AnchorCandidate,
+  type ChapterLoreRefusal,
+  type ChapterLoreRevert,
+  type GapOverride,
+  type LoreChapter,
+  type PastSources,
+  type RevertKeep,
+  type RunResult,
+  type RunDiagnosis,
+  type RunGap,
+  type RunRefusal,
+  type RecordContext,
+  type ReversalPlan,
+  type TrackedRow,
+  type TrackedState,
+} from '#lib/services/stateTracking/index.ts'
+import {
+  DELETE_ROW,
+  MARK_ROW_DELETED,
+  addRowStatement,
+  chapterLoreStatements,
+  planRollback,
+  rollbackService,
+  type RollbackSummary,
+} from '#lib/services/rollbackService.ts'
 import { ui } from './ui.svelte'
+import { chapterCards } from './chapterCards.svelte'
 import {
   analyzeTimeline,
   applyReconciliation,
@@ -36,9 +89,12 @@ import {
   planReconciliation,
   reconcileRange,
   refuseRange,
+  restateBoundaries,
+  editedAnchors,
   selectableRanges,
   toMinutes,
   type Boundary,
+  type BoundaryDrafts,
   type DurationRequest,
   type RangeRefusal,
   type ReconcileResult,
@@ -59,7 +115,11 @@ export type TimelineReconciliationPreview =
       plan: ReconciliationPlan
       fingerprint: string
       /** What the reader supplied, so apply can recompute the same preview to revalidate it. */
-      inputs: { durations: Record<string, number>; intervals: Record<string, number> }
+      inputs: {
+        durations: Record<string, number>
+        intervals: Record<string, number>
+        boundaries: BoundaryDrafts
+      }
     }
 import { settings } from './settings.svelte'
 import { extractInlineCustomVars } from '#lib/services/ai/sdk/schemas/runtime-variables.ts'
@@ -87,25 +147,49 @@ import {
   buildLoreManagementCallbacks,
   buildLoreManagementUICallbacks,
   resolveCharacterPresence,
+  WorldStateTranslationService,
+  CHARACTER_TEXT_FIELDS,
+  mergeWritten,
+  translationsToRestore,
+  type WrittenCharacter,
+  type LoreSessionWrites,
   type WorldState,
 } from '#lib/services/generation/index.ts'
 import { createLogger } from '#lib/log.ts'
 import { withUniqueEntryTerms } from '#lib/utils/lorebookTerms.ts'
-import { applyTermChanges, sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
+import { sameEntityName, uniqueTerms } from '#lib/utils/text.ts'
 import { storyDetailsUpdate } from '#lib/utils/storyDetails.ts'
+import { storyPov, storyTense } from '#lib/utils/storySettings.ts'
 import { grammarService } from '#lib/services/grammar.ts'
-import { clearTier3SelectionCache } from '#lib/services/ai/index.ts'
+import {
+  clearTier3SelectionCache,
+  planCharacterResponse,
+  TranslationService,
+  type CharacterSource,
+} from '#lib/services/ai/index.ts'
 import { clearImageMarkerCache } from '#lib/services/image/index.ts'
 import { GenerationLease } from '#lib/utils/generationLease.ts'
 import { findLiveCharacter, sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
-import { checkpointDeletionBlocker } from '#lib/utils/storyNavigation.ts'
+import {
+  CLOSING_SNAPSHOT_PREFIX,
+  checkpointDeletionBlocker,
+  entryNumber,
+  needsStartCheckpoint,
+  startClock,
+  type SnapshotMark,
+} from '#lib/utils/storyNavigation.ts'
+import { IMPORTED_CHAT_SOURCE, OPENING_SOURCE } from '#lib/utils/storyEntries.ts'
 import {
   buildChapterBanners,
   lastResolvedChapterEnd,
   type ChapterBanner,
 } from '#lib/utils/chapterBanners.ts'
+import { retainBackgroundKeepAlive } from '#lib/utils/backgroundKeepAlive.ts'
 
 const log = createLogger('StoryStore')
+
+/** Characters per translation request after a chapterization, which can write the whole cast. */
+const CHARACTERS_PER_TRANSLATION = 10
 
 /**
  * Merge LLM-extracted inline runtime vars into entity metadata.runtimeVars.
@@ -137,6 +221,88 @@ function mergeRuntimeVars(
   }
 
   return { ...base, runtimeVars }
+}
+
+/** Who made a world-state write and which entry it belongs to; see `recordContext`. */
+export interface RecordOptions {
+  origin?: ChangeOrigin
+  entryId?: string
+}
+
+class RefusalError extends Error {
+  constructor(
+    readonly reason: RunRefusal,
+    readonly diagnosis: RunDiagnosis | null = null,
+  ) {
+    super(refusalMessage(reason))
+  }
+}
+
+/** A full state a past checkpoint can be built from, for the reader. */
+export interface AnchorLabel {
+  kind: AnchorCandidate['kind']
+  name: string | null
+  position: number
+}
+
+export interface PastCheckpointPreview {
+  refusal: string | null
+  reason: RunRefusal | null
+  /** On a refusal, what the rebuild had and lacked. */
+  diagnosis: {
+    target: RunDiagnosis['target']
+    anchor: AnchorLabel | null
+    gaps: RunGap[]
+  } | null
+  /** Manual changes the rebuild would undo; on a refusal, those of the `undoRecorded` override. */
+  manual: WorldStateChangeRecord[]
+  /** Changes from lore management the reader ran, likewise. */
+  tidy: WorldStateChangeRecord[]
+  /** The chapters whose lore management the rebuild undoes. */
+  lore: LoreChapter[]
+  /** Whether the rebuild undoes any of the classifier's changes. */
+  classifier: boolean
+  /** Without a refusal, the full state the rebuild starts from. */
+  source: AnchorLabel | null
+  /**
+   * Positions of the snapshots between the entry and the full state used (or diagnosed) that
+   * could not be used: saved without the lorebook, by an older build.
+   */
+  skipped: number[]
+  /** On a refusal, the full states the reader may build it from anyway. */
+  overrides: { next: AnchorLabel | null; previous: AnchorLabel | null } | null
+}
+
+export interface RevertPreview {
+  manual: WorldStateChangeRecord[]
+  tidy: WorldStateChangeRecord[]
+  /** The chapters whose lore management the revert undoes. */
+  lore: LoreChapter[]
+  /** Whether the revert undoes any of the classifier's changes. */
+  classifier: boolean
+}
+
+const NO_REVERT: RevertPreview = {
+  manual: [],
+  tidy: [],
+  lore: [],
+  classifier: false,
+}
+
+/** What deleting a chapter would undo of its lore management. */
+export interface ChapterLorePreview {
+  /** Why the lore cannot be undone with the chapter; null when it can. */
+  refusal: ChapterLoreRefusal | null
+  /** The chapter's own lorebook changes. */
+  undone: WorldStateChangeRecord[]
+  /** The reader's later changes to those entries, undone with the chapter's. */
+  manual: WorldStateChangeRecord[]
+  /** Later changes from lore management the reader ran, likewise. */
+  tidy: WorldStateChangeRecord[]
+  /** Later changes from the lore management of chapters since deleted, likewise. */
+  deletedChapters: WorldStateChangeRecord[]
+  /** Entry numbers of the snapshots the undo deletes, since they hold what it reverts. */
+  snapshots: number[]
 }
 
 // Story Store using Svelte 5 runes
@@ -214,27 +380,11 @@ class StoryStore {
   }
 
   get pov(): 'first' | 'second' | 'third' {
-    const mode = this.currentStory?.mode ?? 'adventure'
-    const stored = this.currentStory?.settings?.pov ?? null
-    // For creative-writing mode, respect the user's stored POV choice
-    // (wizard allows selecting first, second, or third person)
-    if (stored) {
-      return stored
-    }
-    // Default based on mode
-    if (mode === 'creative-writing') {
-      return 'third'
-    }
-    return 'first'
+    return storyPov(this.currentStory)
   }
 
   get tense(): 'past' | 'present' {
-    const mode = this.currentStory?.mode ?? 'adventure'
-    const stored = this.currentStory?.settings?.tense ?? null
-    if (mode === 'creative-writing') {
-      return 'past'
-    }
-    return stored ?? 'present'
+    return storyTense(this.currentStory)
   }
 
   get inventoryItems(): Item[] {
@@ -542,6 +692,7 @@ class StoryStore {
 
     if (chaptersToDelete.length > 0) {
       this.chapters = this.chapters.filter((ch) => !chaptersToDelete.includes(ch.id))
+      for (const id of chaptersToDelete) chapterCards.chapterDeleted(id)
       // Invalidate chapter cache after deletions
       this.invalidateChapterCache()
     }
@@ -796,37 +947,6 @@ class StoryStore {
     emitStoryLoaded(storyId, story.mode)
   }
 
-  // Create a new story
-  async createStory(
-    title: string,
-    templateId?: string,
-    genre?: string,
-    mode: StoryMode = 'adventure',
-  ): Promise<Story> {
-    const storyData = await database.createStory({
-      id: crypto.randomUUID(),
-      title,
-      description: null,
-      genre: genre ?? null,
-      templateId: templateId ?? null,
-      mode,
-      settings: null,
-      memoryConfig: DEFAULT_MEMORY_CONFIG,
-      retryState: null,
-      styleReviewState: null,
-      timeTracker: null,
-      currentBranchId: null,
-      currentBgImage: null,
-    })
-
-    this.allStories = [storyData, ...this.allStories]
-
-    // Emit event
-    eventBus.emit<StoryCreatedEvent>({ type: 'StoryCreated', storyId: storyData.id, mode })
-
-    return storyData
-  }
-
   /**
    * Import a SillyTavern chat into the current story, replacing all existing
    * main-branch entries. The current story must be loaded before calling this.
@@ -856,6 +976,7 @@ class StoryStore {
       droppedCheckpoints.map((cp) => cp.id),
     )
     this.forgetCheckpoints(droppedCheckpoints)
+    for (const ch of this.chapters) if (ch.branchId === null) chapterCards.chapterDeleted(ch.id)
     this.chapters = this.chapters.filter((ch) => ch.branchId !== null)
     this.invalidateChapterCache()
 
@@ -868,7 +989,7 @@ class StoryStore {
       content: msg.content,
       parentId: null,
       position: i,
-      metadata: { source: 'sillytavern_import' },
+      metadata: { source: IMPORTED_CHAT_SOURCE },
       branchId: null,
     }))
     await database.bulkInsertStoryEntries(entries)
@@ -879,6 +1000,17 @@ class StoryStore {
 
     // Reload entries into the store
     await this.reloadEntriesForCurrentBranch()
+    // Both describe entries the import replaced.
+    ui.clearRetryBackup(true)
+    this.invalidateRetrievalCache()
+
+    // The chat is the story's new start. What follows before the next turn — the world-state
+    // choice, batch chapterization — belongs to the last imported entry's state.
+    const last = this.entries[this.entries.length - 1]
+    if (last && settings.experimentalFeatures.stateTracking) {
+      const header = this.startHeader(storyId, last.id)
+      await database.transaction([database.worldStateRecordStatement(header)])
+    }
   }
 
   /**
@@ -1071,15 +1203,17 @@ class StoryStore {
     return false
   }
 
+  private forksAtOrAfter(branch: Branch, position: number): boolean {
+    return this.entries.some((e) => e.id === branch.forkEntryId && e.position >= position)
+  }
+
   /**
    * Every destructive operation that removes entries from a position onward runs this first,
    * before any rollback: a branch forked at or after that position would survive with a fork
    * point that no longer exists, and a rollback already applied cannot be taken back.
    */
   private assertNoBranchForkAtOrAfter(position: number): void {
-    const forked = this.branches.find((b) =>
-      this.entries.some((e) => e.id === b.forkEntryId && e.position >= position),
-    )
+    const forked = this.branches.find((b) => this.forksAtOrAfter(b, position))
     if (forked) {
       throw new Error(
         `Cannot remove these entries because branch "${forked.name}" forks from one of them. ` +
@@ -1112,15 +1246,6 @@ class StoryStore {
     log('Deleted checkpoints whose entry was removed:', removed.length)
   }
 
-  /** For the one caller whose entry delete cannot be joined into a single transaction. */
-  private async pruneCheckpointsForEntries(entryIds: Set<string>): Promise<void> {
-    const orphaned = this.checkpointsAnchoredTo(entryIds)
-    if (orphaned.length === 0) return
-
-    await database.deleteCheckpoints(orphaned.map((cp) => cp.id))
-    this.forgetCheckpoints(orphaned)
-  }
-
   /**
    * Common cleanup logic after an entry is deleted.
    * Restores suggested actions from the new last narration entry and invalidates the retry backup.
@@ -1128,6 +1253,11 @@ class StoryStore {
   private postDeleteCleanup(): void {
     this.restoreSuggestedActionsAfterDelete()
     ui.clearRetryBackup(true)
+  }
+
+  /** The latest entry that is not part of a turn still being generated. */
+  get lastCompletedEntryId(): string | null {
+    return lastCompletedEntry(this.entries, ui.isGenerating || !!this.generationLease)?.id ?? null
   }
 
   /**
@@ -1182,16 +1312,154 @@ class StoryStore {
     return entry
   }
 
+  /**
+   * Undoes the world state recorded for entries at or after `position` on this branch, applying
+   * the kept origins' changes again.
+   */
+  private async rollbackFrom(position: number, keep: RevertKeep): Promise<RollbackSummary> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    return rollbackService.rollbackFromPosition({
+      storyId: this.currentStory.id,
+      branchId: this.currentStory.currentBranchId ?? null,
+      fromPosition: position,
+      entries: this.entries,
+      state: this.trackedState(),
+      records: await this.lineRecords(undefined, position),
+      keep,
+    })
+  }
+
+  /**
+   * The reader's and Tidy's changes a revert-on-delete from this entry would undo, and those
+   * that could not be kept. Empty when the delete would not revert anything.
+   */
+  async previewRevert(entryId: string): Promise<RevertPreview> {
+    const entry = this.entries.find((e) => e.id === entryId)
+    const reverts =
+      settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
+    if (!entry || !reverts) return NO_REVERT
+    return this.previewRewind(entry.position)
+  }
+
+  /**
+   * What a regenerate rewinding from `position` would undo. A regenerate rewinds through the
+   * records whenever State Tracking is on, whatever Revert on Delete says.
+   */
+  async previewRegenerate(position: number): Promise<RevertPreview> {
+    if (!settings.experimentalFeatures.stateTracking) return NO_REVERT
+    return this.previewRewind(position)
+  }
+
+  private async previewRewind(position: number): Promise<RevertPreview> {
+    if (!this.currentStory) return NO_REVERT
+    const [records, marks] = await Promise.all([
+      this.lineRecords(undefined, position),
+      this.lineMarks(),
+    ])
+    const plan = planRollback({
+      storyId: this.currentStory.id,
+      branchId: this.currentStory.currentBranchId ?? null,
+      fromPosition: position,
+      entries: this.entries,
+      state: this.trackedState(),
+      records,
+      keep: KEEP_NONE,
+    })
+    return {
+      manual: plan.manual,
+      tidy: plan.tidy,
+      lore: this.loreChaptersFor(plan.chapter, marks),
+      classifier: plan.classifier,
+    }
+  }
+
+  private entryNumbers = $derived<Record<string, number>>(
+    Object.fromEntries(this.entries.map((e) => [e.id, entryNumber(e)])),
+  )
+
+  /** The number an entry on the open line is shown with, or null when it is not on it. */
+  entryNumberOf(entryId: string): number | null {
+    return this.entryNumbers[entryId] ?? null
+  }
+
+  /** The numbers of those of these entries on the open line. */
+  entryNumbersOf(entryIds: string[]): number[] {
+    return entryIds.flatMap((id) => {
+      const number = this.entryNumberOf(id)
+      return number === null ? [] : [number]
+    })
+  }
+
+  /**
+   * The chapters removing the entries from `position` on deletes with them: each one starting or
+   * ending on a removed entry, as `deleteEntriesFromPosition` drops them.
+   */
+  chaptersRemovedFrom(position: number): LoreChapter[] {
+    const removed = new Set(this.entries.filter((e) => e.position >= position).map((e) => e.id))
+    return this.chapters
+      .filter((ch) => removed.has(ch.startEntryId) || removed.has(ch.endEntryId))
+      .flatMap((ch): LoreChapter[] => {
+        const first = this.entryNumberOf(ch.startEntryId)
+        const last = this.entryNumberOf(ch.endEntryId)
+        return first !== null && last !== null ? [{ number: ch.number, first, last }] : []
+      })
+  }
+
+  /**
+   * Entry numbers of the branch's world-state snapshots that removing the entries from
+   * `position` on deletes with them, and of those at `entryId` alone, which deleting only that
+   * entry deletes.
+   */
+  async snapshotsRemovedFrom(
+    position: number,
+    entryId?: string,
+  ): Promise<{ fromHere: number[]; here: number[] }> {
+    if (!this.currentStory) return { fromHere: [], here: [] }
+    const snapshots = await database.getWorldStateSnapshotTimes(
+      this.currentStory.id,
+      this.currentStory.currentBranchId ?? null,
+    )
+    const numbers = (keep: (s: (typeof snapshots)[number]) => boolean) =>
+      this.entryNumbersOf(snapshots.filter(keep).map((s) => s.entryId))
+    return {
+      fromHere: numbers((s) => s.entryPosition >= position),
+      here: numbers((s) => s.entryId === entryId),
+    }
+  }
+
+  /** The chapters whose lore these records are, or the entry alone where a deleted one's is. */
+  private loreChaptersFor(
+    records: WorldStateChangeRecord[],
+    marks: WorldStateMark[],
+  ): LoreChapter[] {
+    return loreOwners(records, marks, this.chapters).flatMap(
+      ({ entryId, chapterId }): LoreChapter[] => {
+        const last = this.entryNumberOf(entryId)
+        const chapter = this.chapters.find((ch) => ch.id === chapterId)
+        if (last === null) return []
+        if (!chapter) return [{ number: null, first: last, last }]
+        const first = this.entryNumberOf(chapter.startEntryId) ?? last
+        return [{ number: chapter.number, first, last }]
+      },
+    )
+  }
+
   // Delete a story entry
-  async deleteEntry(entryId: string, holder?: GenerationLease): Promise<void> {
+  async deleteEntry(
+    entryId: string,
+    holder?: GenerationLease,
+    opts?: { keep?: RevertKeep; rollback?: boolean },
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existingEntry = this.assertEntryDeletable(entryId, holder)
-    const currentBranchId = this.currentStory.currentBranchId
 
-    // Phase 2: Rollback on delete — cascade delete from this position with world state undo
+    // Phase 2: Rollback on delete — cascade delete from this position with world state undo.
+    // `rollback: false` deletes only this entry, as with the feature off.
     const rollbackEnabled =
-      settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
+      settings.experimentalFeatures.stateTracking &&
+      settings.experimentalFeatures.rollbackOnDelete &&
+      (opts?.rollback ?? true)
 
     if (rollbackEnabled) {
       log('Rollback-on-delete: cascading from position', existingEntry.position)
@@ -1199,11 +1467,10 @@ class StoryStore {
       this.assertNoBranchForkAtOrAfter(existingEntry.position)
 
       // Run rollback to undo world state changes for this entry and all after it
-      const rollbackSummary = await rollbackService.rollbackFromPosition(
-        this.currentStory.id,
-        currentBranchId ?? null,
+      // The reader's and Tidy's changes are undone only when the reader chose so.
+      const rollbackSummary = await this.rollbackFrom(
         existingEntry.position,
-        this.entries,
+        opts?.keep ?? KEEP_ALL,
       )
 
       log('Rollback summary:', rollbackSummary)
@@ -1251,6 +1518,7 @@ class StoryStore {
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
+      recordsTo: recordsHolder(this.entries, existingEntry)?.id,
     })
     this.announceDroppedAnchors(droppedAnchors)
     this.forgetAnchors([entryId])
@@ -1278,19 +1546,18 @@ class StoryStore {
    * optional here.
    *
    * How much can actually be undone depends on what was recorded:
-   * - With `stateTracking` on, the entry carries a `worldStateDelta` and
-   *   `rollbackFromPosition` reverses created/updated entities and the time tracker.
-   * - Without it there is no delta and entity changes are unrecoverable -- but the time
-   *   tracker still is, from the entry's own `metadata.timeStart`, captured in `addEntry`
-   *   when the narration was appended and therefore *before* its classification ran
-   *   `applyTimeProgression`. That progression is applied unconditionally, so leaving it
-   *   in place would advance story time twice for one user action.
+   * - With `stateTracking` on, the entry's records are undone like a delete's, keeping the
+   *   reader's and Tidy's changes as `keep` says, and a revert that fails stops the regenerate.
+   * - Without it, entity changes are unrecoverable, but the clock is still put back to the end
+   *   time of the entry before (`clockAfter`): classification advances it unconditionally, so
+   *   leaving it would advance story time twice for one user action.
    *
    * Returns what was reversed so the caller can tell the user what it could not undo.
    */
   async undoNarrationForRegenerate(
     entryId: string,
     holder?: GenerationLease,
+    keep: RevertKeep = KEEP_ALL,
   ): Promise<{ entitiesUndone: boolean; timeUndone: boolean }> {
     if (!this.currentStory) throw new Error('No story loaded')
     this.assertNotBusy('regenerate', holder)
@@ -1324,22 +1591,19 @@ class StoryStore {
     let timeUndone = false
 
     try {
-      const summary = await rollbackService.rollbackFromPosition(
-        this.currentStory.id,
-        currentBranchId ?? null,
-        entry.position,
-        this.entries,
-      )
+      const summary = await this.rollbackFrom(entry.position, keep)
       log('Regenerate rollback summary:', summary)
-      entitiesUndone = summary.entriesWithDelta > 0
+      entitiesUndone = summary.entriesWithRecords > 0
       timeUndone = summary.restoredTimeTracker
     } catch (error) {
+      // With State Tracking on, the records are the whole rewind: without them, nothing moves.
+      if (settings.experimentalFeatures.stateTracking) throw error
       console.error('[StoryStore] Rollback failed before regenerate:', error)
     }
 
-    // Fallback for the no-delta case, and for a delta that recorded no time tracker.
-    if (!timeUndone && entry.metadata?.timeStart) {
-      await this.restoreTimeTrackerSnapshot(entry.metadata.timeStart)
+    // The rollback sets the clock; this covers one that failed.
+    if (!timeUndone) {
+      await this.restoreTimeTrackerSnapshot(clockAfter(this.entries, entry.position))
       timeUndone = true
     }
 
@@ -1578,9 +1842,14 @@ class StoryStore {
     range: SelectableRange,
     suppliedDurations: Record<string, number> = {},
     intervalWeights: Record<string, number> = {},
+    drafts: BoundaryDrafts = {},
   ): TimelineReconciliationPreview {
-    const refusal = refuseRange(range.from, range.to)
-    if (refusal) return { status: 'refused', refusal }
+    const { from, to } = restateBoundaries(range, {
+      from: drafts.from?.time,
+      to: drafts.to?.time,
+    })
+    const refusal = refuseRange(from, to)
+    if (refusal) return { status: 'refused', refusal, range }
 
     const byId = new Map(this.entries.map((entry) => [entry.id, entry]))
     const rangeEntries = range.entryIds
@@ -1592,8 +1861,8 @@ class StoryStore {
 
     const result = reconcileRange({
       entries: rangeEntries,
-      baseline: range.from.time!,
-      target: range.to.time!,
+      baseline: from.time!,
+      target: to.time!,
       previousEnd: before?.metadata?.timeEnd ?? null,
       nextStart: after?.metadata?.timeStart ?? null,
       suppliedDurations,
@@ -1603,7 +1872,7 @@ class StoryStore {
     if (result.status === 'refused') {
       return {
         status: 'refused',
-        refusal: { reason: 'backwards-span', boundaries: [range.from, range.to] },
+        refusal: { reason: 'backwards-span', boundaries: [from, to] },
         range,
       }
     }
@@ -1621,9 +1890,10 @@ class StoryStore {
         chapters: this.chapters,
         times: result.times,
         checkpoints: this.checkpoints,
+        anchors: editedAnchors(range, drafts, (entryId) => this.timeAnchorFor(entryId)),
       }),
       fingerprint: this.timelineFingerprint(range, rangeEntries),
-      inputs: { durations: suppliedDurations, intervals: intervalWeights },
+      inputs: { durations: suppliedDurations, intervals: intervalWeights, boundaries: drafts },
     }
   }
 
@@ -1637,6 +1907,10 @@ class StoryStore {
       // Every kind of boundary, not just anchors: a branch forked inside the range while the
       // preview is open splits it the same way an anchor does.
       boundaryEntryIds: this.timeBoundaries.map((boundary) => boundary.entryId),
+      endpointAnchors: {
+        from: this.timeAnchorFor(range.from.entryId),
+        to: this.timeAnchorFor(range.to.entryId),
+      },
     })
   }
 
@@ -1668,6 +1942,7 @@ class StoryStore {
       range,
       preview.inputs.durations,
       preview.inputs.intervals,
+      preview.inputs.boundaries,
     )
     if (fresh.status !== 'ok' || fresh.fingerprint !== preview.fingerprint) return 'stale'
 
@@ -1686,17 +1961,19 @@ class StoryStore {
 
   /** In-memory state after a reconciliation commits, shared by every path that plans one. */
   private publishReconciliation(plan: ReconciliationPlan): void {
+    if (plan.anchors.length > 0) {
+      const stored = new Set(plan.anchors.map((anchor) => anchor.entryId))
+      this.timeAnchors = [
+        ...this.timeAnchors.filter((anchor) => !stored.has(anchor.entryId)),
+        ...plan.anchors,
+      ]
+    }
+
     const times = new Map(plan.times.map((time) => [time.entryId, time]))
-    const deltas = new Map(plan.deltas.map((update) => [update.entryId, update.delta]))
     this.entries = this.entries.map((entry) => {
       const time = times.get(entry.id)
       if (!time) return entry
-      const delta = deltas.get(entry.id)
-      return {
-        ...entry,
-        metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end },
-        ...(delta ? { worldStateDelta: delta } : {}),
-      }
+      return { ...entry, metadata: { ...entry.metadata, timeStart: time.start, timeEnd: time.end } }
     })
 
     const spans = new Map(plan.chapterSpans.map((span) => [span.chapterId, span]))
@@ -1724,9 +2001,9 @@ class StoryStore {
    * Write one entry's own beginning and ending.
    *
    * Planned as a one-entry reconciliation rather than a bare metadata write, so it carries the same
-   * guarantees: chapter spans covering it are recomputed, the clock inside its delta follows,
-   * the keyframe it invalidates is discarded, and the story clock moves only when the entry is
-   * the last one. All of it commits together.
+   * guarantees: chapter spans covering it are recomputed, the clocks of the checkpoints and
+   * snapshots taken at it follow, and the story clock moves only when the entry is the last one.
+   * All of it commits together.
    */
   async setEntryTimes(entryId: string, start: TimeTracker, end: TimeTracker): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
@@ -1824,12 +2101,7 @@ class StoryStore {
 
     if (rollbackEnabled) {
       try {
-        const rollbackSummary = await rollbackService.rollbackFromPosition(
-          this.currentStory.id,
-          this.currentStory.currentBranchId ?? null,
-          position,
-          this.entries,
-        )
+        const rollbackSummary = await this.rollbackFrom(position, KEEP_ALL)
         log('Rollback before deleteEntriesFromPosition:', rollbackSummary)
       } catch (error) {
         console.error('[StoryStore] Rollback failed, proceeding with entry deletion:', error)
@@ -1875,6 +2147,7 @@ class StoryStore {
     this.forgetAnchors(entryIdsToDelete)
 
     this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
+    for (const chapter of chaptersToDelete) chapterCards.chapterDeleted(chapter.id)
     this.forgetCheckpoints(droppedCheckpoints)
 
     // Update in-memory state
@@ -1961,168 +2234,216 @@ class StoryStore {
     return !!this.currentStory?.currentBranchId && settings.experimentalFeatures.lightweightBranches
   }
 
+  // ===== State Tracking =====
+
+  /** Where a write is recorded, or null when State Tracking is off or there is no entry yet. */
+  private recordContext(opts?: RecordOptions): RecordContext | null {
+    if (!settings.experimentalFeatures.stateTracking || !this.currentStory) return null
+    // Never the turn in progress: a stop or retry would take the record with it.
+    const entryId = opts?.entryId ?? this.lastCompletedEntryId
+    if (!entryId) return null
+    return {
+      storyId: this.currentStory.id,
+      branchId: this.currentStory.currentBranchId ?? null,
+      entryId,
+      origin: opts?.origin ?? 'manual',
+    }
+  }
+
+  /** Writes and the records describing them land together or not at all. */
+  private async commit(
+    statements: (DbStatement | null)[],
+    records: (WorldStateRecord | null)[] = [],
+  ): Promise<void> {
+    const all = [
+      ...statements.filter((s): s is DbStatement => s !== null),
+      ...records
+        .filter((r): r is WorldStateRecord => r !== null)
+        .map((r) => database.worldStateRecordStatement(r)),
+    ]
+    if (all.length === 0) return
+    // One statement needs no transaction, and a transaction opens its own connection.
+    if (all.length === 1) await database.runStatement(all[0])
+    else await database.transaction(all)
+  }
+
+  private record(
+    ctx: RecordContext | null,
+    type: TrackedEntityType,
+    id: string,
+    op: ChangeOp,
+    before: object | null,
+    after: object | null,
+  ): WorldStateChangeRecord | null {
+    return ctx ? changeRecord(ctx, type, id, op, before, after) : null
+  }
+
+  private updateRecord(
+    ctx: RecordContext | null,
+    type: TrackedEntityType,
+    row: object & { id: string },
+    updates: object,
+  ): WorldStateChangeRecord | null {
+    const changed = ctx && changedFields(row, updates)
+    return changed ? changeRecord(ctx, type, row.id, 'update', changed.before, changed.after) : null
+  }
+
+  /** Main plus every branch the open one descends from. */
+  private lineBranchIds(): (string | null)[] {
+    const branchId = this.currentStory?.currentBranchId
+    return [null, ...(branchId ? this.buildBranchLineage(branchId).map((b) => b.id) : [])]
+  }
+
+  /** Marks on the open branch's line. */
+  private async lineMarks(): Promise<WorldStateMark[]> {
+    if (!this.currentStory) return []
+    return database.getWorldStateMarks(this.currentStory.id, this.lineBranchIds())
+  }
+
+  /** Records attached to entries visible on the open branch. */
+  private async lineRecords(
+    kinds?: WorldStateRecord['kind'][],
+    fromPosition?: number,
+    afterSeq?: number,
+  ): Promise<WorldStateRecord[]> {
+    if (!this.currentStory) return []
+    const records = await database.getWorldStateRecords(
+      this.currentStory.id,
+      this.lineBranchIds(),
+      kinds,
+      fromPosition,
+      afterSeq,
+    )
+    const onLine = new Set(this.entries.map((e) => e.id))
+    return records.filter((r) => onLine.has(r.entryId))
+  }
+
   /**
-   * Ensure a character is owned by the current branch (COW).
-   * If the character is inherited from a parent branch, creates an override.
-   * Returns the owned character (either the original or the new override).
+   * The header of an entry the story starts from — a wizard's opening, or the last entry of an
+   * imported chat. It has nothing to undo, and nothing tracked precedes it to interrupt.
    */
-  private async cowCharacter(
-    entity: Character,
+  private startHeader(storyId: string, entryId: string): WorldStateHeaderRecord {
+    return headerRecord({ storyId, branchId: null, entryId }, { continuous: true })
+  }
+
+  /** The current name of a tracked row, for showing a change to the reader. */
+  trackedName(type: TrackedEntityType, id: string): string | null {
+    const row = rowsOf(this.trackedState(), type).find((r) => r.id === id)
+    if (!row) return null
+    return 'title' in row ? row.title : row.name
+  }
+
+  private trackedState(): TrackedState {
+    return {
+      characters: this.characters,
+      locations: this.locations,
+      items: this.items,
+      storyBeats: this.storyBeats,
+      lorebookEntries: this.lorebookEntries,
+      timeTracker: this.currentStory?.timeTracker ?? null,
+    }
+  }
+
+  private replaceRow(type: TrackedEntityType, id: string, row: TrackedRow): void {
+    const swap = <T extends TrackedRow>(rows: T[]) =>
+      rows.map((r) => (r.id === id ? (row as T) : r))
+    switch (type) {
+      case 'character':
+        this.characters = swap(this.characters)
+        break
+      case 'location':
+        this.locations = swap(this.locations)
+        break
+      case 'item':
+        this.items = swap(this.items)
+        break
+      case 'story_beat':
+        this.storyBeats = swap(this.storyBeats)
+        break
+      case 'lorebook_entry':
+        this.lorebookEntries = swap(this.lorebookEntries)
+        break
+    }
+  }
+
+  /**
+   * What making a row owned by the current branch takes (copy-on-write): an override of an
+   * inherited row, to commit with the write that needs it, and `publish` once that commits.
+   */
+  private cowPlan<T extends TrackedRow>(
+    type: TrackedEntityType,
+    entity: T,
+    ctx: RecordContext | null,
     expected?: BranchScope,
-  ): Promise<{ entity: Character; wasCowed: boolean }> {
+  ): {
+    entity: T
+    wasCowed: boolean
+    statements: DbStatement[]
+    records: (WorldStateRecord | null)[]
+    publish: () => void
+  } {
     const branchId = expected ? expected.branchId : this.currentStory?.currentBranchId
     if (
       !branchId ||
       entity.branchId === branchId ||
       !settings.experimentalFeatures.lightweightBranches
     ) {
-      return { entity, wasCowed: false }
+      return { entity, wasCowed: false, statements: [], records: [], publish: () => {} }
     }
-
-    const override: Character = {
+    const override = {
       ...entity,
       id: crypto.randomUUID(),
       branchId,
       overridesId: entity.overridesId ?? entity.id,
+      ...(type === 'lorebook_entry' ? { updatedAt: Date.now() } : {}),
+    } as T
+    return {
+      entity: override,
+      wasCowed: true,
+      statements: [addRowStatement(type, override)],
+      records: [this.record(ctx, type, override.id, 'create', entity, override)],
+      publish: () => {
+        if (!expected || this.isOpen(expected)) this.replaceRow(type, entity.id, override)
+        log('COW: Created override', type, override.id, '→ overrides', override.overridesId)
+      },
     }
-    await database.addCharacter(override)
-    if (!expected || this.isOpen(expected)) {
-      this.characters = this.characters.map((c) => (c.id === entity.id ? override : c))
-    }
-    log(
-      'COW: Created character override',
-      override.name,
-      override.id,
-      '→ overrides',
-      override.overridesId,
-    )
-    return { entity: override, wasCowed: true }
+  }
+
+  /** Copy-on-write on its own, for the classifier's unrecorded writes. */
+  private async cowTracked<T extends TrackedRow>(
+    type: TrackedEntityType,
+    entity: T,
+  ): Promise<{ entity: T; wasCowed: boolean }> {
+    const cow = this.cowPlan(type, entity, null)
+    await this.commit(cow.statements)
+    cow.publish()
+    return cow
   }
 
   /**
-   * Ensure a location is owned by the current branch (COW).
+   * Deleting a tracked row the way the branch mode requires: a tombstone where lightweight
+   * branches are on (an override tombstone for an inherited row), a hard delete otherwise. The
+   * caller drops `existing` from memory once it commits.
    */
-  private async cowLocation(entity: Location): Promise<{ entity: Location; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
-    if (
-      !branchId ||
-      entity.branchId === branchId ||
-      !settings.experimentalFeatures.lightweightBranches
-    ) {
-      return { entity, wasCowed: false }
+  private deletePlan(
+    type: TrackedEntityType,
+    existing: TrackedRow,
+    ctx: RecordContext | null,
+  ): { statements: DbStatement[]; records: (WorldStateRecord | null)[] } {
+    if (!settings.experimentalFeatures.lightweightBranches) {
+      return {
+        statements: [DELETE_ROW[type](existing.id)],
+        records: [this.record(ctx, type, existing.id, 'delete', existing, null)],
+      }
     }
-
-    const override: Location = {
-      ...entity,
-      id: crypto.randomUUID(),
-      branchId,
-      overridesId: entity.overridesId ?? entity.id,
+    const cow = this.cowPlan(type, existing, ctx)
+    return {
+      statements: [...cow.statements, MARK_ROW_DELETED[type](cow.entity.id)],
+      records: [
+        ...cow.records,
+        this.record(ctx, type, cow.entity.id, 'softDelete', cow.entity, null),
+      ],
     }
-    await database.addLocation(override)
-    this.locations = this.locations.map((l) => (l.id === entity.id ? override : l))
-    log(
-      'COW: Created location override',
-      override.name,
-      override.id,
-      '→ overrides',
-      override.overridesId,
-    )
-    return { entity: override, wasCowed: true }
-  }
-
-  /**
-   * Ensure an item is owned by the current branch (COW).
-   */
-  private async cowItem(entity: Item): Promise<{ entity: Item; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
-    if (
-      !branchId ||
-      entity.branchId === branchId ||
-      !settings.experimentalFeatures.lightweightBranches
-    ) {
-      return { entity, wasCowed: false }
-    }
-
-    const override: Item = {
-      ...entity,
-      id: crypto.randomUUID(),
-      branchId,
-      overridesId: entity.overridesId ?? entity.id,
-    }
-    await database.addItem(override)
-    this.items = this.items.map((i) => (i.id === entity.id ? override : i))
-    log(
-      'COW: Created item override',
-      override.name,
-      override.id,
-      '→ overrides',
-      override.overridesId,
-    )
-    return { entity: override, wasCowed: true }
-  }
-
-  /**
-   * Ensure a story beat is owned by the current branch (COW).
-   */
-  private async cowStoryBeat(entity: StoryBeat): Promise<{ entity: StoryBeat; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
-    if (
-      !branchId ||
-      entity.branchId === branchId ||
-      !settings.experimentalFeatures.lightweightBranches
-    ) {
-      return { entity, wasCowed: false }
-    }
-
-    const override: StoryBeat = {
-      ...entity,
-      id: crypto.randomUUID(),
-      branchId,
-      overridesId: entity.overridesId ?? entity.id,
-    }
-    await database.addStoryBeat(override)
-    this.storyBeats = this.storyBeats.map((b) => (b.id === entity.id ? override : b))
-    log(
-      'COW: Created story beat override',
-      override.title,
-      override.id,
-      '→ overrides',
-      override.overridesId,
-    )
-    return { entity: override, wasCowed: true }
-  }
-
-  /**
-   * Ensure a lorebook entry is owned by the current branch (COW).
-   */
-  private async cowLorebookEntry(entity: Entry): Promise<{ entity: Entry; wasCowed: boolean }> {
-    const branchId = this.currentStory?.currentBranchId
-    if (
-      !branchId ||
-      entity.branchId === branchId ||
-      !settings.experimentalFeatures.lightweightBranches
-    ) {
-      return { entity, wasCowed: false }
-    }
-
-    const now = Date.now()
-    const override: Entry = {
-      ...entity,
-      id: crypto.randomUUID(),
-      branchId,
-      overridesId: entity.overridesId ?? entity.id,
-      updatedAt: now,
-    }
-    await database.addEntry(override)
-    this.lorebookEntries = this.lorebookEntries.map((e) => (e.id === entity.id ? override : e))
-    log(
-      'COW: Created lorebook entry override',
-      override.name,
-      override.id,
-      '→ overrides',
-      override.overridesId,
-    )
-    return { entity: override, wasCowed: true }
   }
 
   // Add a character
@@ -2130,6 +2451,7 @@ class StoryStore {
     name: string,
     description?: string,
     relationship?: string,
+    opts?: RecordOptions,
   ): Promise<Character> {
     if (!this.currentStory) throw new Error('No story loaded')
 
@@ -2147,7 +2469,11 @@ class StoryStore {
       branchId: this.currentStory.currentBranchId,
     }
 
-    await database.addCharacter(character)
+    const ctx = this.recordContext(opts)
+    await this.commit(
+      [database.addCharacterStatement(character)],
+      [this.record(ctx, 'character', character.id, 'create', null, character)],
+    )
     this.characters = [...this.characters, character]
     return character
   }
@@ -2158,6 +2484,7 @@ class StoryStore {
     id: string,
     changes: Partial<Character>,
     expected?: BranchScope,
+    opts?: RecordOptions,
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
@@ -2179,9 +2506,15 @@ class StoryStore {
       }
     }
 
+    const ctx = !expected || this.isOpen(expected) ? this.recordContext(opts) : null
     // COW: ensure entity is owned by current branch before updating
-    const { entity: owned } = await this.cowCharacter(existing, expected)
-    await database.updateCharacter(owned.id, updates)
+    const cow = this.cowPlan('character', existing, ctx, expected)
+    const owned = cow.entity
+    await this.commit(
+      [...cow.statements, database.updateCharacterStatement(owned.id, updates)],
+      [...cow.records, this.updateRecord(ctx, 'character', owned, updates)],
+    )
+    cow.publish()
     if (!expected || this.isOpen(expected)) {
       this.characters = this.characters.map((c) => (c.id === owned.id ? { ...c, ...updates } : c))
     }
@@ -2212,11 +2545,11 @@ class StoryStore {
       log('Portrait dropped: character already has one', { characterId: live.id })
       return
     }
-    await this.updateCharacter(live.id, { portrait }, scope)
+    await this.updateCharacter(live.id, { portrait }, scope, { origin: 'image' })
   }
 
   // Delete a character (protagonist cannot be deleted)
-  async deleteCharacter(id: string): Promise<void> {
+  async deleteCharacter(id: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.characters.find((c) => c.id === id)
@@ -2225,24 +2558,18 @@ class StoryStore {
       throw new Error('Swap protagonists before deleting the current one')
     }
 
-    if (settings.experimentalFeatures.lightweightBranches) {
-      // COD: tombstone instead of hard-deleting to preserve row for sibling/child branches
-      if (existing.branchId === this.currentStory.currentBranchId) {
-        // Entity is owned by current branch (or main) — mark deleted in place
-        await database.markCharacterDeleted(id)
-      } else {
-        // Entity is inherited from another branch — create tombstone override
-        const { entity: owned } = await this.cowCharacter(existing)
-        await database.markCharacterDeleted(owned.id)
-      }
-    } else {
-      await database.deleteCharacter(id)
-    }
+    const removal = this.deletePlan('character', existing, this.recordContext(opts))
+    await this.commit(removal.statements, removal.records)
     this.characters = this.characters.filter((c) => c.id !== id)
   }
 
   // Add a location
-  async addLocation(name: string, description?: string, makeCurrent = false): Promise<Location> {
+  async addLocation(
+    name: string,
+    description?: string,
+    makeCurrent = false,
+    opts?: RecordOptions,
+  ): Promise<Location> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const location: Location = {
@@ -2257,7 +2584,11 @@ class StoryStore {
       branchId: this.currentStory.currentBranchId,
     }
 
-    await database.addLocation(location)
+    const ctx = this.recordContext(opts)
+    await this.commit(
+      [database.addLocationStatement(location)],
+      [this.record(ctx, 'location', location.id, 'create', null, location)],
+    )
 
     if (makeCurrent) {
       // Update other locations to not be current
@@ -2268,116 +2599,146 @@ class StoryStore {
     return location
   }
 
+  /**
+   * Moves the scene to `existing`, copying it onto the branch first where needed. Off a
+   * lightweight branch the store-wide statement clears every other location; each location
+   * whose flags change is recorded. One commit for all of it.
+   */
+  private async moveCurrentLocation(
+    existing: Location,
+    extra: Partial<Location>,
+    ctx: RecordContext | null,
+  ): Promise<void> {
+    if (!this.currentStory) return
+    const cow = this.cowPlan('location', existing, ctx)
+    const owned = cow.entity
+    const target = { ...extra, current: true, visited: true }
+    if (this.isCowBranch()) {
+      // COW-aware: targeted updates instead of blanket clear
+      const prevCurrent = this.locations.find((l) => l.current && l.id !== existing.id)
+      const prev = prevCurrent ? this.cowPlan('location', prevCurrent, ctx) : null
+      await this.commit(
+        [
+          ...cow.statements,
+          ...(prev?.statements ?? []),
+          prev && database.updateLocationStatement(prev.entity.id, { current: false }),
+          database.updateLocationStatement(owned.id, target),
+        ],
+        [
+          ...cow.records,
+          ...(prev?.records ?? []),
+          prev && this.updateRecord(ctx, 'location', prev.entity, { current: false }),
+          this.updateRecord(ctx, 'location', owned, target),
+        ],
+      )
+      cow.publish()
+      prev?.publish()
+      this.locations = this.locations.map((l) =>
+        l.id === owned.id
+          ? { ...l, ...target }
+          : l.id === prev?.entity.id
+            ? { ...l, current: false }
+            : l,
+      )
+      return
+    }
+
+    const records = this.locations.map((l) =>
+      l.id === owned.id
+        ? this.updateRecord(ctx, 'location', l, target)
+        : this.updateRecord(ctx, 'location', l, { current: false }),
+    )
+    await this.commit(
+      [
+        database.updateLocationStatement(owned.id, extra),
+        ...database.setCurrentLocationStatements(this.currentStory.id, owned.id),
+      ],
+      records,
+    )
+    this.locations = this.locations.map((l) =>
+      l.id === owned.id ? { ...l, ...target } : { ...l, current: false },
+    )
+  }
+
   // Update a location's details
-  async updateLocation(id: string, updates: Partial<Location>): Promise<void> {
+  async updateLocation(
+    id: string,
+    updates: Partial<Location>,
+    opts?: RecordOptions,
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.locations.find((l) => l.id === id)
     if (!existing) throw new Error('Location not found')
 
-    // COW: ensure entity is owned by current branch before updating
-    const { entity: owned } = await this.cowLocation(existing)
-
+    const ctx = this.recordContext(opts)
     if (updates.current === true) {
-      if (this.isCowBranch()) {
-        // COW-aware: targeted updates instead of blanket clear
-        const prevCurrent = this.locations.find((l) => l.current && l.id !== owned.id)
-        if (prevCurrent) {
-          const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
-          await database.updateLocation(ownedPrev.id, { current: false })
-          this.locations = this.locations.map((l) =>
-            l.id === ownedPrev.id ? { ...l, current: false } : l,
-          )
-        }
-        await database.updateLocation(owned.id, { ...updates, visited: true })
-        this.locations = this.locations.map((l) =>
-          l.id === owned.id ? { ...l, ...updates, current: true, visited: true } : l,
-        )
-      } else {
-        await database.setCurrentLocation(this.currentStory.id, owned.id)
-        this.locations = this.locations.map((l) => ({
-          ...l,
-          current: l.id === owned.id,
-          visited: l.id === owned.id ? true : l.visited,
-        }))
-      }
+      const { current: _current, ...rest } = updates
+      await this.moveCurrentLocation(existing, rest, ctx)
     } else {
-      await database.updateLocation(owned.id, updates)
+      // COW: ensure entity is owned by current branch before updating
+      const cow = this.cowPlan('location', existing, ctx)
+      const owned = cow.entity
+      await this.commit(
+        [...cow.statements, database.updateLocationStatement(owned.id, updates)],
+        [...cow.records, this.updateRecord(ctx, 'location', owned, updates)],
+      )
+      cow.publish()
       this.locations = this.locations.map((l) => (l.id === owned.id ? { ...l, ...updates } : l))
     }
   }
 
   // Set current location
-  async setCurrentLocation(locationId: string): Promise<void> {
+  async setCurrentLocation(locationId: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    if (this.isCowBranch()) {
-      // COW-aware: targeted updates instead of blanket clear
-      const target = this.locations.find((l) => l.id === locationId)
-      const prevCurrent = this.locations.find((l) => l.current && l.id !== locationId)
-
-      if (target) {
-        const { entity: ownedTarget } = await this.cowLocation(target)
-        await database.updateLocation(ownedTarget.id, { current: true, visited: true })
-        this.locations = this.locations.map((l) =>
-          l.id === ownedTarget.id ? { ...l, current: true, visited: true } : l,
-        )
-      }
-      if (prevCurrent) {
-        const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
-        await database.updateLocation(ownedPrev.id, { current: false })
-        this.locations = this.locations.map((l) =>
-          l.id === ownedPrev.id ? { ...l, current: false } : l,
-        )
-      }
-    } else {
-      await database.setCurrentLocation(this.currentStory.id, locationId)
-      this.locations = this.locations.map((l) => ({
-        ...l,
-        current: l.id === locationId,
-        visited: l.id === locationId ? true : l.visited,
-      }))
-    }
+    const target = this.locations.find((l) => l.id === locationId)
+    if (!target) return
+    await this.moveCurrentLocation(target, {}, this.recordContext(opts))
   }
 
   // Toggle location visited status
-  async toggleLocationVisited(locationId: string): Promise<void> {
+  async toggleLocationVisited(locationId: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
     const newVisited = !location.visited
-    await database.updateLocation(locationId, { visited: newVisited })
+    const ctx = this.recordContext(opts)
+    const cow = this.cowPlan('location', location, ctx)
+    const owned = cow.entity
+    await this.commit(
+      [...cow.statements, database.updateLocationStatement(owned.id, { visited: newVisited })],
+      [...cow.records, this.updateRecord(ctx, 'location', owned, { visited: newVisited })],
+    )
+    cow.publish()
     this.locations = this.locations.map((l) =>
-      l.id === locationId ? { ...l, visited: newVisited } : l,
+      l.id === owned.id ? { ...l, visited: newVisited } : l,
     )
     log('Location visited toggled:', location.name, newVisited)
   }
 
   // Delete a location
-  async deleteLocation(locationId: string): Promise<void> {
+  async deleteLocation(locationId: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const location = this.locations.find((l) => l.id === locationId)
     if (!location) throw new Error('Location not found')
 
-    if (settings.experimentalFeatures.lightweightBranches) {
-      if (location.branchId === this.currentStory.currentBranchId) {
-        await database.markLocationDeleted(locationId)
-      } else {
-        const { entity: owned } = await this.cowLocation(location)
-        await database.markLocationDeleted(owned.id)
-      }
-    } else {
-      await database.deleteLocation(locationId)
-    }
+    const removal = this.deletePlan('location', location, this.recordContext(opts))
+    await this.commit(removal.statements, removal.records)
     this.locations = this.locations.filter((l) => l.id !== locationId)
     log('Location deleted:', location.name)
   }
 
   // Add an item to inventory
-  async addItem(name: string, description?: string, quantity = 1): Promise<Item> {
+  async addItem(
+    name: string,
+    description?: string,
+    quantity = 1,
+    opts?: RecordOptions,
+  ): Promise<Item> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const item: Item = {
@@ -2392,41 +2753,43 @@ class StoryStore {
       branchId: this.currentStory.currentBranchId,
     }
 
-    await database.addItem(item)
+    const ctx = this.recordContext(opts)
+    await this.commit(
+      [database.addItemStatement(item)],
+      [this.record(ctx, 'item', item.id, 'create', null, item)],
+    )
     this.items = [...this.items, item]
     return item
   }
 
   // Update an existing item
-  async updateItem(id: string, updates: Partial<Item>): Promise<void> {
+  async updateItem(id: string, updates: Partial<Item>, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.items.find((i) => i.id === id)
     if (!existing) throw new Error('Item not found')
 
+    const ctx = this.recordContext(opts)
     // COW: ensure entity is owned by current branch before updating
-    const { entity: owned } = await this.cowItem(existing)
-    await database.updateItem(owned.id, updates)
+    const cow = this.cowPlan('item', existing, ctx)
+    const owned = cow.entity
+    await this.commit(
+      [...cow.statements, database.updateItemStatement(owned.id, updates)],
+      [...cow.records, this.updateRecord(ctx, 'item', owned, updates)],
+    )
+    cow.publish()
     this.items = this.items.map((i) => (i.id === owned.id ? { ...i, ...updates } : i))
   }
 
   // Delete an item
-  async deleteItem(id: string): Promise<void> {
+  async deleteItem(id: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.items.find((i) => i.id === id)
     if (!existing) throw new Error('Item not found')
 
-    if (settings.experimentalFeatures.lightweightBranches) {
-      if (existing.branchId === this.currentStory.currentBranchId) {
-        await database.markItemDeleted(id)
-      } else {
-        const { entity: owned } = await this.cowItem(existing)
-        await database.markItemDeleted(owned.id)
-      }
-    } else {
-      await database.deleteItem(id)
-    }
+    const removal = this.deletePlan('item', existing, this.recordContext(opts))
+    await this.commit(removal.statements, removal.records)
     this.items = this.items.filter((i) => i.id !== id)
   }
 
@@ -2435,6 +2798,7 @@ class StoryStore {
     title: string,
     type: StoryBeat['type'],
     description?: string,
+    opts?: RecordOptions,
   ): Promise<StoryBeat> {
     if (!this.currentStory) throw new Error('No story loaded')
 
@@ -2451,13 +2815,21 @@ class StoryStore {
       branchId: this.currentStory.currentBranchId,
     }
 
-    await database.addStoryBeat(beat)
+    const ctx = this.recordContext(opts)
+    await this.commit(
+      [database.addStoryBeatStatement(beat)],
+      [this.record(ctx, 'story_beat', beat.id, 'create', null, beat)],
+    )
     this.storyBeats = [...this.storyBeats, beat]
     return beat
   }
 
   // Update a story beat
-  async updateStoryBeat(id: string, updates: Partial<StoryBeat>): Promise<void> {
+  async updateStoryBeat(
+    id: string,
+    updates: Partial<StoryBeat>,
+    opts?: RecordOptions,
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.storyBeats.find((b) => b.id === id)
@@ -2474,36 +2846,38 @@ class StoryStore {
       }
     }
 
+    const ctx = this.recordContext(opts)
     // COW: ensure entity is owned by current branch before updating
-    const { entity: owned } = await this.cowStoryBeat(existing)
-    await database.updateStoryBeat(owned.id, resolvedUpdates)
+    const cow = this.cowPlan('story_beat', existing, ctx)
+    const owned = cow.entity
+    await this.commit(
+      [...cow.statements, database.updateStoryBeatStatement(owned.id, resolvedUpdates)],
+      [...cow.records, this.updateRecord(ctx, 'story_beat', owned, resolvedUpdates)],
+    )
+    cow.publish()
     this.storyBeats = this.storyBeats.map((b) =>
       b.id === owned.id ? { ...b, ...resolvedUpdates } : b,
     )
   }
 
   // Delete a story beat
-  async deleteStoryBeat(id: string): Promise<void> {
+  async deleteStoryBeat(id: string, opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.storyBeats.find((b) => b.id === id)
     if (!existing) throw new Error('Story beat not found')
 
-    if (settings.experimentalFeatures.lightweightBranches) {
-      if (existing.branchId === this.currentStory.currentBranchId) {
-        await database.markStoryBeatDeleted(id)
-      } else {
-        const { entity: owned } = await this.cowStoryBeat(existing)
-        await database.markStoryBeatDeleted(owned.id)
-      }
-    } else {
-      await database.deleteStoryBeat(id)
-    }
+    const removal = this.deletePlan('story_beat', existing, this.recordContext(opts))
+    await this.commit(removal.statements, removal.records)
     this.storyBeats = this.storyBeats.filter((b) => b.id !== id)
   }
 
   // Swap the protagonist to another character, updating the old label
-  async setProtagonist(newCharacterId: string, previousRelationshipLabel?: string): Promise<void> {
+  async setProtagonist(
+    newCharacterId: string,
+    previousRelationshipLabel?: string,
+    opts?: RecordOptions,
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const currentProtagonist = this.characters.find((c) => c.relationship === 'self') ?? null
@@ -2512,35 +2886,39 @@ class StoryStore {
 
     if (currentProtagonist?.id === newCharacterId) return
 
+    const ctx = this.recordContext(opts)
     let label: string | null = null
     if (currentProtagonist) {
       label = previousRelationshipLabel?.trim() ?? null
       if (!label || label.toLowerCase() === 'self') {
         throw new Error('Provide a relationship label for the previous protagonist')
       }
-      // COW: ensure old protagonist is owned by current branch
-      const { entity: ownedOld } = await this.cowCharacter(currentProtagonist)
-      await database.updateCharacter(ownedOld.id, { relationship: label })
     }
 
-    // COW: ensure new protagonist is owned by current branch
-    const { entity: ownedNew } = await this.cowCharacter(newProtagonist)
-    await database.updateCharacter(ownedNew.id, { relationship: 'self' })
+    // COW: both protagonists must be owned by the current branch
+    const oldCow = currentProtagonist ? this.cowPlan('character', currentProtagonist, ctx) : null
+    const newCow = this.cowPlan('character', newProtagonist, ctx)
+    const demoted = label === null ? null : { relationship: label }
+    await this.commit(
+      [
+        ...(oldCow?.statements ?? []),
+        oldCow && demoted && database.updateCharacterStatement(oldCow.entity.id, demoted),
+        ...newCow.statements,
+        database.updateCharacterStatement(newCow.entity.id, { relationship: 'self' }),
+      ],
+      [
+        ...(oldCow?.records ?? []),
+        oldCow && demoted && this.updateRecord(ctx, 'character', oldCow.entity, demoted),
+        ...newCow.records,
+        this.updateRecord(ctx, 'character', newCow.entity, { relationship: 'self' }),
+      ],
+    )
+    oldCow?.publish()
+    newCow.publish()
 
     this.characters = this.characters.map((c) => {
-      if (
-        currentProtagonist &&
-        (c.overridesId === currentProtagonist.overridesId ||
-          c.overridesId === currentProtagonist.id ||
-          c.id === currentProtagonist.id)
-      ) {
-        // Find the current in-memory version that replaced the old protagonist
-        if (c.relationship !== 'self') return c
-        return { ...c, relationship: label! }
-      }
-      if (c.id === ownedNew.id) {
-        return { ...c, relationship: 'self' }
-      }
+      if (oldCow && demoted && c.id === oldCow.entity.id) return { ...c, ...demoted }
+      if (c.id === newCow.entity.id) return { ...c, relationship: 'self' }
       return c
     })
   }
@@ -2560,6 +2938,7 @@ class StoryStore {
       id?: string
       branchId?: string | null
     },
+    opts?: RecordOptions,
   ): Promise<Entry> {
     if (!this.currentStory) throw new Error('No story loaded')
 
@@ -2574,7 +2953,11 @@ class StoryStore {
       branchId: entryData.branchId ?? this.currentStory.currentBranchId,
     })
 
-    await database.addEntry(entry)
+    const ctx = this.recordContext(opts)
+    await this.commit(
+      [database.addEntryStatement(entry)],
+      [this.record(ctx, 'lorebook_entry', entry.id, 'create', null, entry)],
+    )
     this.lorebookEntries = [...this.lorebookEntries, entry]
     this.invalidateRetrievalCache()
     log('Lorebook entry added:', entry.name)
@@ -2583,6 +2966,7 @@ class StoryStore {
 
   async addLorebookEntries(
     entriesData: Omit<Entry, 'id' | 'storyId' | 'createdAt' | 'updatedAt' | 'branchId'>[],
+    opts?: RecordOptions,
   ): Promise<number> {
     if (!this.currentStory) throw new Error('No story loaded')
     if (entriesData.length === 0) return 0
@@ -2601,7 +2985,15 @@ class StoryStore {
       }),
     )
 
-    await database.bulkInsertEntries(entries)
+    const ctx = this.recordContext(opts)
+    if (ctx) {
+      await this.commit(
+        entries.map((e) => database.addEntryStatement(e)),
+        entries.map((e) => this.record(ctx, 'lorebook_entry', e.id, 'create', null, e)),
+      )
+    } else {
+      await database.bulkInsertEntries(entries)
+    }
     this.lorebookEntries = [...this.lorebookEntries, ...entries]
     this.invalidateRetrievalCache()
     log('Lorebook entries bulk added:', entries.length)
@@ -2612,33 +3004,48 @@ class StoryStore {
    * Shows rows already written for `expected`, skipping any a reload already brought in; a
    * no-op once another story or branch is open.
    */
-  appendImportedLorebookEntries(entries: Entry[], expected: BranchScope): void {
+  async appendImportedLorebookEntries(entries: Entry[], expected: BranchScope): Promise<void> {
     if (entries.length === 0 || !this.isOpen(expected)) return
     const shown = new Set(this.lorebookEntries.map((e) => e.id))
     const fresh = entries.filter((e) => !shown.has(e.id))
     if (fresh.length === 0) return
     this.lorebookEntries = [...this.lorebookEntries, ...fresh]
     this.invalidateRetrievalCache()
+    const ctx = this.recordContext()
+    await this.commit(
+      [],
+      fresh.map((e) => this.record(ctx, 'lorebook_entry', e.id, 'create', null, e)),
+    )
   }
 
   /**
    * Update a lorebook entry.
    */
-  async updateLorebookEntry(id: string, updates: Partial<Entry>): Promise<void> {
+  async updateLorebookEntry(
+    id: string,
+    updates: Partial<Entry>,
+    opts?: RecordOptions,
+  ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const existing = this.lorebookEntries.find((e) => e.id === id)
     if (!existing) throw new Error('Lorebook entry not found')
 
+    const ctx = this.recordContext(opts)
     // COW: ensure entity is owned by current branch before updating
-    const { entity: owned } = await this.cowLorebookEntry(existing)
+    const cow = this.cowPlan('lorebook_entry', existing, ctx)
+    const owned = cow.entity
 
     const updatesWithTimestamp = {
       ...withUniqueEntryTerms(updates),
       updatedAt: Date.now(),
     }
 
-    await database.updateEntry(owned.id, updatesWithTimestamp)
+    await this.commit(
+      [...cow.statements, database.updateEntryStatement(owned.id, updatesWithTimestamp)],
+      [...cow.records, this.updateRecord(ctx, 'lorebook_entry', owned, updates)],
+    )
+    cow.publish()
     this.lorebookEntries = this.lorebookEntries.map((e) =>
       e.id === owned.id ? { ...e, ...updatesWithTimestamp } : e,
     )
@@ -2649,56 +3056,128 @@ class StoryStore {
   /**
    * Delete a lorebook entry.
    */
-  async deleteLorebookEntry(id: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-
-    if (settings.experimentalFeatures.lightweightBranches) {
-      const existing = this.lorebookEntries.find((e) => e.id === id)
-      if (existing) {
-        if (existing.branchId === this.currentStory.currentBranchId) {
-          await database.markEntryDeleted(id)
-        } else {
-          const { entity: owned } = await this.cowLorebookEntry(existing)
-          await database.markEntryDeleted(owned.id)
-        }
-      } else {
-        await database.deleteEntry(id)
-      }
-    } else {
-      await database.deleteEntry(id)
-    }
-    this.lorebookEntries = this.lorebookEntries.filter((e) => e.id !== id)
-    this.invalidateRetrievalCache()
-    log('Lorebook entry deleted:', id)
+  async deleteLorebookEntry(id: string, opts?: RecordOptions): Promise<void> {
+    await this.deleteLorebookEntries([id], opts)
   }
 
   /**
    * Delete multiple lorebook entries (bulk operation).
    */
-  async deleteLorebookEntries(ids: string[]): Promise<void> {
+  async deleteLorebookEntries(ids: string[], opts?: RecordOptions): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    if (settings.experimentalFeatures.lightweightBranches) {
-      // COD: process each entry individually for correct tombstone handling
-      for (const id of ids) {
-        const existing = this.lorebookEntries.find((e) => e.id === id)
-        if (existing) {
-          if (existing.branchId === this.currentStory.currentBranchId) {
-            await database.markEntryDeleted(id)
-          } else {
-            const { entity: owned } = await this.cowLorebookEntry(existing)
-            await database.markEntryDeleted(owned.id)
-          }
-        } else {
-          await database.deleteEntry(id)
-        }
-      }
-    } else {
-      await Promise.all(ids.map((id) => database.deleteEntry(id)))
-    }
+    const ctx = this.recordContext(opts)
+    const removals = ids.map((id) => {
+      const existing = this.lorebookEntries.find((e) => e.id === id)
+      return existing
+        ? this.deletePlan('lorebook_entry', existing, ctx)
+        : { statements: [database.deleteEntryStatement(id)], records: [] }
+    })
+    await this.commit(
+      removals.flatMap((r) => r.statements),
+      removals.flatMap((r) => r.records),
+    )
     this.lorebookEntries = this.lorebookEntries.filter((e) => !ids.includes(e.id))
     this.invalidateRetrievalCache()
     log('Lorebook entries deleted:', ids.length)
+  }
+
+  /**
+   * Writes an approved lore management session in one transaction with its records: creates,
+   * updates, merges (the survivor, then its sources) and deletes, each planned against the
+   * lorebook the ones before it leave. Nothing is written or shown unless all of it commits.
+   */
+  async saveLoreSession(writes: LoreSessionWrites, opts?: RecordOptions): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    const storyId = this.currentStory.id
+    const branchId = this.currentStory.currentBranchId
+    const ctx = this.recordContext(opts)
+    const statements: DbStatement[] = []
+    const records: (WorldStateRecord | null)[] = []
+    const before = this.lorebookEntries
+    let rows = [...before]
+    const find = (id: string) => rows.find((e) => e.id === id)
+
+    const add = (data: Entry) => {
+      const now = Date.now()
+      const entry: Entry = withUniqueEntryTerms({
+        ...data,
+        storyId,
+        createdAt: now,
+        updatedAt: now,
+        branchId: data.branchId ?? branchId,
+      })
+      statements.push(database.addEntryStatement(entry))
+      records.push(this.record(ctx, 'lorebook_entry', entry.id, 'create', null, entry))
+      rows = [...rows, entry]
+    }
+    // `into`: the survivor a merge folds this entry into, kept on its delete record so an undo
+    // can follow the merge to the entry that holds its text.
+    const remove = (id: string, into?: string) => {
+      const existing = find(id)
+      if (!existing) return
+      const removal = this.deletePlan('lorebook_entry', existing, ctx)
+      statements.push(...removal.statements)
+      records.push(
+        ...removal.records.map((r) =>
+          r?.kind === 'change' && into && (r.op === 'delete' || r.op === 'softDelete')
+            ? { ...r, after: { mergedInto: into } }
+            : r,
+        ),
+      )
+      rows = rows.filter((e) => e.id !== existing.id)
+    }
+
+    for (const entry of writes.creates) add(entry)
+    for (const entry of writes.updates) {
+      const existing = find(entry.id)
+      if (!existing) throw new Error(`Lorebook entry not found: ${entry.name}`)
+      const cow = this.cowPlan('lorebook_entry', existing, ctx)
+      const owned = cow.entity
+      // Which row this is stays the row's own; the session hands over whole entries.
+      const {
+        id: _id,
+        storyId: _storyId,
+        branchId: _branchId,
+        overridesId: _overridesId,
+        createdAt: _createdAt,
+        deleted: _deleted,
+        ...fields
+      } = entry
+      const updates = { ...withUniqueEntryTerms(fields), updatedAt: Date.now() }
+      statements.push(...cow.statements, database.updateEntryStatement(owned.id, updates))
+      records.push(...cow.records, this.updateRecord(ctx, 'lorebook_entry', owned, fields))
+      rows = rows.map((e) => (e.id === existing.id ? { ...owned, ...updates } : e))
+    }
+    // The survivor first: a source deleted before it would be lost if the insert failed.
+    for (const { sourceIds, merged } of writes.merges) {
+      add(merged)
+      for (const id of sourceIds) remove(id, merged.id)
+    }
+    for (const id of writes.deletes) remove(id)
+
+    await this.commit(statements, records)
+    // Another story or branch opened meanwhile loads its own lorebook, this save included.
+    if (!this.isOpen({ storyId, branchId: branchId ?? null })) return
+    // Applied to the lorebook as it is now, not the copy taken before the await.
+    const unchanged = new Set(before)
+    const changed: Record<string, Entry> = Object.fromEntries(
+      rows.filter((e) => !unchanged.has(e)).map((e) => [e.id, e]),
+    )
+    const kept = new Set(rows.map((e) => e.id))
+    const removed = new Set(before.filter((e) => !kept.has(e.id)).map((e) => e.id))
+    const current = new Set(this.lorebookEntries.map((e) => e.id))
+    this.lorebookEntries = [
+      ...this.lorebookEntries.filter((e) => !removed.has(e.id)).map((e) => changed[e.id] ?? e),
+      ...Object.values(changed).filter((c) => !current.has(c.id)),
+    ]
+    this.invalidateRetrievalCache()
+    log('Lore session saved:', {
+      created: writes.creates.length,
+      updated: writes.updates.length,
+      merged: writes.merges.length,
+      deleted: writes.deletes.length,
+    })
   }
 
   /**
@@ -2734,10 +3213,13 @@ class StoryStore {
    * Apply classification results to update world state.
    * This is Phase 4 of the processing pipeline per design doc.
    */
-  async applyClassificationResult(result: ClassificationResult, entryId?: string): Promise<void> {
+  async applyClassificationResult(
+    result: ClassificationResult,
+    entryId?: string,
+  ): Promise<WrittenCharacter[]> {
     if (!this.currentStory) {
       log('applyClassificationResult: No story loaded, skipping')
-      return
+      return []
     }
 
     log('applyClassificationResult called', {
@@ -2761,193 +3243,70 @@ class StoryStore {
       runtimeVarDefs?.map((d) => [d.variableName, d]) ?? [],
     )
 
-    // Phase 1: Capture before-state for entities that will be modified
-    const charactersBefore: CharacterBeforeState[] = []
-    const locationsBefore: LocationBeforeState[] = []
-    const itemsBefore: ItemBeforeState[] = []
-    const storyBeatsBefore: StoryBeatBeforeState[] = []
-    const createdCharacterIds: string[] = []
+    // Locations this run created; a new-location entry merges into one of them.
     const createdLocationIds: string[] = []
-    const createdItemIds: string[] = []
-    const createdStoryBeatIds: string[] = []
-    let currentLocationIdBefore: string | null = null
-    let timeTrackerBefore: TimeTracker | null = null
+    const recordCtx = entryId ? this.recordContext({ origin: 'classifier', entryId }) : null
+    const stateBefore = recordCtx ? cloneState(classifierView(this.trackedState())) : null
 
-    if (trackingEnabled) {
-      // Snapshot current location
-      const currentLoc = this.locations.find((l) => l.current)
-      currentLocationIdBefore = currentLoc?.id ?? null
+    const plan = planCharacterResponse(
+      this.characters,
+      {
+        updates: result.entryUpdates.characterUpdates,
+        newCharacters: result.entryUpdates.newCharacters,
+        presentNames: result.scene.presentCharacterNames ?? [],
+      },
+      result._shownCharacters,
+    )
+    for (const refused of plan.refusedRenames) log('Ignored character rename:', refused)
+    const withRuntimeVars = (
+      metadata: Record<string, unknown> | null,
+      sources: readonly CharacterSource[],
+    ) =>
+      sources.reduce((merged, source) => {
+        const vars = extractInlineCustomVars(
+          source as unknown as Record<string, unknown>,
+          defsByName,
+        )
+        return Object.keys(vars).length > 0 ? mergeRuntimeVars(merged, vars, defsByName) : merged
+      }, metadata)
+    const written: WrittenCharacter[] = []
 
-      // Snapshot time tracker
-      timeTrackerBefore = this.currentStory.timeTracker
-        ? { ...this.currentStory.timeTracker }
-        : null
-
-      // Snapshot characters that will be updated
-      for (const update of result.entryUpdates.characterUpdates) {
-        const existing = this.characters.find((c) => sameEntityName(c.name, update.name))
-        if (existing) {
-          charactersBefore.push({
-            id: existing.id,
-            name: existing.name,
-            status: existing.status,
-            relationship: existing.relationship,
-            traits: [...existing.traits],
-            visualDescriptors: { ...existing.visualDescriptors },
-            metadata: existing.metadata ? { ...existing.metadata } : null,
-          })
-        }
-      }
-
-      // Snapshot locations that will be updated
-      for (const update of result.entryUpdates.locationUpdates) {
-        const existing = this.locations.find((l) => sameEntityName(l.name, update.name))
-        if (existing) {
-          locationsBefore.push({
-            id: existing.id,
-            name: existing.name,
-            visited: existing.visited,
-            current: existing.current,
-            description: existing.description,
-            metadata: existing.metadata ? { ...existing.metadata } : null,
-          })
-        }
-      }
-
-      // Snapshot items that will be updated
-      for (const update of result.entryUpdates.itemUpdates) {
-        const existing = this.items.find((i) => sameEntityName(i.name, update.name))
-        if (existing) {
-          itemsBefore.push({
-            id: existing.id,
-            name: existing.name,
-            quantity: existing.quantity,
-            equipped: existing.equipped,
-            location: existing.location,
-            metadata: existing.metadata ? { ...existing.metadata } : null,
-          })
-        }
-      }
-
-      // Snapshot story beats that will be updated
-      for (const update of result.entryUpdates.storyBeatUpdates) {
-        const existing = this.storyBeats.find((b) => sameEntityName(b.title, update.title))
-        if (existing) {
-          storyBeatsBefore.push({
-            id: existing.id,
-            title: existing.title,
-            status: existing.status,
-            description: existing.description,
-            resolvedAt: existing.resolvedAt ?? null,
-            metadata: existing.metadata ? { ...existing.metadata } : null,
-          })
-        }
-      }
-
-      // Also snapshot locations that might be affected by currentLocationName scene change
-      if (result.scene.currentLocationName) {
-        const locationName = result.scene.currentLocationName
-        const loc = this.locations.find((l) => sameEntityName(l.name, locationName))
-        if (loc && !locationsBefore.some((lb) => lb.id === loc.id)) {
-          locationsBefore.push({
-            id: loc.id,
-            name: loc.name,
-            visited: loc.visited,
-            current: loc.current,
-            description: loc.description,
-            metadata: loc.metadata ? { ...loc.metadata } : null,
-          })
-        }
-      }
+    for (const { character, changes, ignored, sources } of plan.updates) {
+      await this.wrapUpdate('Update character', character.name, async () => {
+        if (ignored.length > 0) log('Ignored character rewrites:', character.name, ignored)
+        const existing = this.characters.find((c) => c.id === character.id)
+        if (!existing) return
+        const metadata = withRuntimeVars(existing.metadata, sources)
+        const update = metadata === existing.metadata ? changes : { ...changes, metadata }
+        if (Object.keys(update).length === 0) return
+        log('Updating character:', character.name, update)
+        // COW: ensure entity is owned by current branch before updating
+        const { entity: ownedChar } = await this.cowTracked('character', existing)
+        await database.updateCharacter(ownedChar.id, update)
+        this.characters = this.characters.map((c) =>
+          c.id === ownedChar.id ? { ...c, ...update } : c,
+        )
+        written.push({
+          id: ownedChar.id,
+          fields: CHARACTER_TEXT_FIELDS.filter((field) => field in changes),
+        })
+      })
     }
 
-    // Apply character updates
-    for (const update of result.entryUpdates.characterUpdates) {
-      await this.wrapUpdate('Update character', update.name, async () => {
-        let existing = this.characters.find((c) => sameEntityName(c.name, update.name))
-
-        // If character doesn't exist yet, create it first
-        if (!existing) {
-          const newCharData = result.entryUpdates.newCharacters.find((nc) =>
-            sameEntityName(nc.name, update.name),
-          )
-          log('Creating character from update (not found):', update.name)
-          const charMetadata: Record<string, unknown> = { source: 'classifier' }
-          if (newCharData) {
-            const newCharInlineVars = extractInlineCustomVars(
-              newCharData as unknown as Record<string, unknown>,
-              defsByName,
-            )
-            if (Object.keys(newCharInlineVars).length > 0) {
-              Object.assign(charMetadata, mergeRuntimeVars(null, newCharInlineVars, defsByName))
-            }
-          }
-          const character: Character = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newCharData?.name ?? update.name,
-            description: newCharData?.description ?? null,
-            relationship: newCharData?.relationship ?? null,
-            traits: uniqueTerms(newCharData?.traits ?? []),
-            visualDescriptors: newCharData?.visualDescriptors ?? {},
-            status: (newCharData?.status as Character['status']) ?? 'active',
-            metadata: charMetadata,
-            portrait: null,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addCharacter(character)
-          this.characters = [...this.characters, character]
-          if (trackingEnabled) createdCharacterIds.push(character.id)
-          existing = character
+    for (const { fields, sources } of plan.creates) {
+      await this.wrapUpdate('Add character', fields.name, async () => {
+        log('Adding new character:', fields.name)
+        const character: Character = {
+          id: crypto.randomUUID(),
+          storyId,
+          ...fields,
+          metadata: withRuntimeVars({ source: 'classifier' }, sources),
+          portrait: null,
+          branchId: this.currentStory?.currentBranchId ?? null,
         }
-
-        if (existing) {
-          log('Updating character:', update.name, update.changes)
-          const changes: Partial<Character> = {}
-          if (update.changes.status) changes.status = update.changes.status
-          if (update.changes.relationship) {
-            if (existing.relationship === 'self') {
-              // Preserve protagonist relationship; only set via explicit swap.
-            } else if (update.changes.relationship !== 'self') {
-              changes.relationship = update.changes.relationship
-            }
-          }
-          if (update.changes.newTraits?.length || update.changes.removeTraits?.length) {
-            changes.traits = applyTermChanges(
-              existing.traits,
-              update.changes.newTraits,
-              update.changes.removeTraits,
-            )
-          }
-          // Handle visual descriptor updates for image generation
-          // New format: visualDescriptors is a structured object that replaces entirely
-          if (
-            update.changes.visualDescriptors &&
-            Object.keys(update.changes.visualDescriptors).length > 0
-          ) {
-            changes.visualDescriptors = update.changes.visualDescriptors
-          }
-          // Merge inline runtime variable values into metadata if present
-          const charInlineVars = extractInlineCustomVars(
-            update.changes as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(charInlineVars).length > 0) {
-            changes.metadata = mergeRuntimeVars(existing.metadata, charInlineVars, defsByName)
-          }
-          // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedChar, wasCowed: charWasCowed } = await this.cowCharacter(existing)
-          await database.updateCharacter(ownedChar.id, changes)
-          this.characters = this.characters.map((c) =>
-            c.id === ownedChar.id ? { ...c, ...changes } : c,
-          )
-          // If COW'd, track override as created (rollback = delete override)
-          if (charWasCowed && trackingEnabled) {
-            createdCharacterIds.push(ownedChar.id)
-            const idx = charactersBefore.findIndex((cb) => cb.id === existing.id)
-            if (idx !== -1) charactersBefore.splice(idx, 1)
-          }
-        }
+        await database.addCharacter(character)
+        this.characters = [...this.characters, character]
+        written.push({ id: character.id, fields: 'all' })
       })
     }
 
@@ -3017,14 +3376,15 @@ class StoryStore {
           }
 
           // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedLoc, wasCowed: locWasCowed } = await this.cowLocation(existing)
+          const { entity: ownedLoc, wasCowed: locWasCowed } = await this.cowTracked(
+            'location',
+            existing,
+          )
 
           if (Object.keys(changes).length === 0) {
             // Even if no changes, track COW if it happened
             if (locWasCowed && trackingEnabled) {
               createdLocationIds.push(ownedLoc.id)
-              const idx = locationsBefore.findIndex((lb) => lb.id === existing.id)
-              if (idx !== -1) locationsBefore.splice(idx, 1)
             }
             return
           }
@@ -3034,8 +3394,6 @@ class StoryStore {
           )
           if (locWasCowed && trackingEnabled) {
             createdLocationIds.push(ownedLoc.id)
-            const idx = locationsBefore.findIndex((lb) => lb.id === existing.id)
-            if (idx !== -1) locationsBefore.splice(idx, 1)
           }
         }
       })
@@ -3075,7 +3433,6 @@ class StoryStore {
           }
           await database.addItem(item)
           this.items = [...this.items, item]
-          if (trackingEnabled) createdItemIds.push(item.id)
           existing = item
         }
 
@@ -3094,14 +3451,9 @@ class StoryStore {
             changes.metadata = mergeRuntimeVars(existing.metadata, itemInlineVars, defsByName)
           }
           // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedItem, wasCowed: itemWasCowed } = await this.cowItem(existing)
+          const { entity: ownedItem } = await this.cowTracked('item', existing)
           await database.updateItem(ownedItem.id, changes)
           this.items = this.items.map((i) => (i.id === ownedItem.id ? { ...i, ...changes } : i))
-          if (itemWasCowed && trackingEnabled) {
-            createdItemIds.push(ownedItem.id)
-            const idx = itemsBefore.findIndex((ib) => ib.id === existing.id)
-            if (idx !== -1) itemsBefore.splice(idx, 1)
-          }
         }
       })
     }
@@ -3140,7 +3492,6 @@ class StoryStore {
           }
           await database.addStoryBeat(beat)
           this.storyBeats = [...this.storyBeats, beat]
-          if (trackingEnabled) createdStoryBeatIds.push(beat.id)
           existing = beat
         }
 
@@ -3164,50 +3515,11 @@ class StoryStore {
             changes.metadata = mergeRuntimeVars(existing.metadata, beatInlineVars, defsByName)
           }
           // COW: ensure entity is owned by current branch before updating
-          const { entity: ownedBeat, wasCowed: beatWasCowed } = await this.cowStoryBeat(existing)
+          const { entity: ownedBeat } = await this.cowTracked('story_beat', existing)
           await database.updateStoryBeat(ownedBeat.id, changes)
           this.storyBeats = this.storyBeats.map((b) =>
             b.id === ownedBeat.id ? { ...b, ...changes } : b,
           )
-          if (beatWasCowed && trackingEnabled) {
-            createdStoryBeatIds.push(ownedBeat.id)
-            const idx = storyBeatsBefore.findIndex((sb) => sb.id === existing.id)
-            if (idx !== -1) storyBeatsBefore.splice(idx, 1)
-          }
-        }
-      })
-    }
-
-    // Add new characters (check for duplicates)
-    for (const newChar of result.entryUpdates.newCharacters) {
-      await this.wrapUpdate('Add character', newChar.name, async () => {
-        const exists = this.characters.some((c) => sameEntityName(c.name, newChar.name))
-        if (!exists) {
-          log('Adding new character:', newChar.name)
-          const charMetadata: Record<string, unknown> = { source: 'classifier' }
-          const newCharInlineVars = extractInlineCustomVars(
-            newChar as unknown as Record<string, unknown>,
-            defsByName,
-          )
-          if (Object.keys(newCharInlineVars).length > 0) {
-            Object.assign(charMetadata, mergeRuntimeVars(null, newCharInlineVars, defsByName))
-          }
-          const character: Character = {
-            id: crypto.randomUUID(),
-            storyId,
-            name: newChar.name,
-            description: newChar.description ?? null,
-            relationship: newChar.relationship ?? null,
-            traits: uniqueTerms(newChar.traits ?? []),
-            visualDescriptors: newChar.visualDescriptors ?? {},
-            status: 'active',
-            metadata: charMetadata,
-            portrait: null,
-            branchId: this.currentStory?.currentBranchId ?? null,
-          }
-          await database.addCharacter(character)
-          this.characters = [...this.characters, character]
-          if (trackingEnabled) createdCharacterIds.push(character.id)
         }
       })
     }
@@ -3246,20 +3558,22 @@ class StoryStore {
           log('Setting current location from scene:', currentLoc.name)
           if (this.isCowBranch()) {
             // COW-aware: targeted updates
-            const { entity: ownedTarget, wasCowed: targetWasCowed } =
-              await this.cowLocation(currentLoc)
+            const { entity: ownedTarget, wasCowed: targetWasCowed } = await this.cowTracked(
+              'location',
+              currentLoc,
+            )
             const prevCurrent = this.locations.find((l) => l.current && l.id !== ownedTarget.id)
             if (prevCurrent) {
-              const { entity: ownedPrev, wasCowed: prevWasCowed } =
-                await this.cowLocation(prevCurrent)
+              const { entity: ownedPrev, wasCowed: prevWasCowed } = await this.cowTracked(
+                'location',
+                prevCurrent,
+              )
               await database.updateLocation(ownedPrev.id, { current: false })
               this.locations = this.locations.map((l) =>
                 l.id === ownedPrev.id ? { ...l, current: false } : l,
               )
               if (prevWasCowed && trackingEnabled) {
                 createdLocationIds.push(ownedPrev.id)
-                const idx = locationsBefore.findIndex((lb) => lb.id === prevCurrent.id)
-                if (idx !== -1) locationsBefore.splice(idx, 1)
               }
             }
             await database.updateLocation(ownedTarget.id, { current: true, visited: true })
@@ -3268,8 +3582,6 @@ class StoryStore {
             )
             if (targetWasCowed && trackingEnabled) {
               createdLocationIds.push(ownedTarget.id)
-              const idx = locationsBefore.findIndex((lb) => lb.id === currentLoc!.id)
-              if (idx !== -1) locationsBefore.splice(idx, 1)
             }
           } else {
             await database.setCurrentLocation(storyId, currentLoc.id)
@@ -3368,7 +3680,6 @@ class StoryStore {
           }
           await database.addItem(item)
           this.items = [...this.items, item]
-          if (trackingEnabled) createdItemIds.push(item.id)
         }
       })
     }
@@ -3400,7 +3711,6 @@ class StoryStore {
           }
           await database.addStoryBeat(beat)
           this.storyBeats = [...this.storyBeats, beat]
-          if (trackingEnabled) createdStoryBeatIds.push(beat.id)
         }
       })
     }
@@ -3409,11 +3719,9 @@ class StoryStore {
     // are already in `this.characters` and the explicit updates above have had their say.
     const presenceChanges = resolveCharacterPresence({
       characters: this.characters,
-      presentNames: result.scene.presentCharacterNames ?? [],
-      newNames: result.entryUpdates.newCharacters.map((c) => c.name),
-      explicitStatusNames: result.entryUpdates.characterUpdates
-        .filter((u) => u.changes.status !== undefined)
-        .map((u) => u.name),
+      presentNames: plan.presentNames,
+      newNames: plan.newNames,
+      explicitStatusNames: plan.explicitStatusNames,
       hadError: !!result._error,
     })
 
@@ -3425,29 +3733,11 @@ class StoryStore {
         change.to === 'active' ? 'Character enters scene' : 'Character leaves scene',
         char.name,
         async () => {
-          if (trackingEnabled && !charactersBefore.some((cb) => cb.id === char.id)) {
-            charactersBefore.push({
-              id: char.id,
-              name: char.name,
-              status: char.status,
-              relationship: char.relationship,
-              traits: [...char.traits],
-              visualDescriptors: { ...char.visualDescriptors },
-              metadata: char.metadata ? { ...char.metadata } : null,
-            })
-          }
-
-          const { entity: ownedChar, wasCowed } = await this.cowCharacter(char)
+          const { entity: ownedChar } = await this.cowTracked('character', char)
           await database.updateCharacter(ownedChar.id, { status: change.to })
           this.characters = this.characters.map((c) =>
             c.id === ownedChar.id ? { ...c, status: change.to } : c,
           )
-
-          if (wasCowed && trackingEnabled) {
-            createdCharacterIds.push(ownedChar.id)
-            const idx = charactersBefore.findIndex((cb) => cb.id === char.id)
-            if (idx !== -1) charactersBefore.splice(idx, 1)
-          }
         },
       )
     }
@@ -3457,49 +3747,31 @@ class StoryStore {
       await this.applyTimeProgression(result.scene.timeProgression)
     }
 
-    // Phase 1: Save world state delta on the entry
-    if (trackingEnabled && entryId) {
+    if (recordCtx && stateBefore && this.currentStory) {
       try {
-        const delta: WorldStateDelta = {
-          classificationResult: result as unknown as Record<string, unknown>,
-          previousState: {
-            characters: charactersBefore,
-            locations: locationsBefore,
-            items: itemsBefore,
-            storyBeats: storyBeatsBefore,
-            currentLocationId: currentLocationIdBefore,
-            timeTracker: timeTrackerBefore,
-          },
-          createdEntities: {
-            characterIds: createdCharacterIds,
-            locationIds: createdLocationIds,
-            itemIds: createdItemIds,
-            storyBeatIds: createdStoryBeatIds,
-          },
-        }
-
-        await database.updateStoryEntry(entryId, { worldStateDelta: delta })
-        // Update in-memory entry
-        this.entries = this.entries.map((e) =>
-          e.id === entryId ? { ...e, worldStateDelta: delta } : e,
+        const markers = await this.lineRecords(['header', 'break'])
+        const entry = this.entries.find((e) => e.id === recordCtx.entryId)
+        const { header: previous, breakSince } = lastHeaderOnLine(
+          markers,
+          new Map(this.entries.map((e) => [e.id, e.position])),
+          entry?.position ?? Infinity,
         )
-
-        log('World state delta saved for entry', {
-          entryId,
-          updatedCharacters: charactersBefore.length,
-          updatedLocations: locationsBefore.length,
-          updatedItems: itemsBefore.length,
-          updatedStoryBeats: storyBeatsBefore.length,
-          createdCharacters: createdCharacterIds.length,
-          createdLocations: createdLocationIds.length,
-          createdItems: createdItemIds.length,
-          createdStoryBeats: createdStoryBeatIds.length,
+        const header = headerRecord(recordCtx, {
+          continuous: isContinuous(
+            previous,
+            settings.experimentalFeatures.trackingEnabledSince,
+            breakSince,
+            this.currentStory.createdAt,
+          ),
         })
+        const records = diffStates(stateBefore, classifierView(this.trackedState()), recordCtx)
+        await this.commit([], [header, ...records])
+        log('World state recorded for entry', { entryId, changes: records.length })
 
         // Auto-snapshot if interval reached
-        await this.maybeCreateAutoSnapshot(entryId)
+        await this.maybeCreateAutoSnapshot(recordCtx.entryId)
       } catch (error) {
-        console.error('[StoryStore] Failed to save world state delta:', error)
+        console.error('[StoryStore] Failed to record world state changes:', error)
         // Non-fatal - don't break the main flow
       }
     }
@@ -3538,6 +3810,7 @@ class StoryStore {
           result.entryUpdates.newStoryBeats.length + result.entryUpdates.storyBeatUpdates.length,
       })
     }
+    return written
   }
 
   // Clear current story (when switching or closing)
@@ -3574,10 +3847,18 @@ class StoryStore {
   }
 
   // Add a chapter
-  async addChapter(chapter: Chapter): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+  /**
+   * `scope`: the story and branch the chapter was built for. The row is always written, since it
+   * carries its own story and branch; the loaded list only takes it while that scope is open.
+   */
+  async addChapter(chapter: Chapter, scope?: BranchScope): Promise<void> {
+    if (!scope && !this.currentStory) throw new Error('No story loaded')
 
     await database.addChapter(chapter)
+    if (scope && !this.isOpen(scope)) {
+      log('Chapter added to a branch that is not open:', chapter.number, scope)
+      return
+    }
     this.chapters = [...this.chapters, chapter]
 
     // Invalidate chapter cache
@@ -3587,6 +3868,15 @@ class StoryStore {
 
     // Emit event
     emitChapterCreated(chapter.id, chapter.number, chapter.title)
+  }
+
+  /**
+   * The last entry of the newest chapter on the open branch. A chapter's lore is attached there:
+   * the chapter exists from that entry on, for a revert, a past checkpoint and a branch alike.
+   */
+  latestChapterEndEntryId(): string | undefined {
+    const newest = [...this.currentBranchChapters].sort((a, b) => b.createdAt - a.createdAt)[0]
+    return newest?.endEntryId
   }
 
   // Get the next chapter number from the database (handles deletions correctly)
@@ -3659,16 +3949,169 @@ class StoryStore {
   }
 
   // Delete a chapter
-  async deleteChapter(chapterId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
+  /**
+   * Why a chapter cannot be cut by hand now, or null: one cut over a range still being cut, or
+   * while a lore session holds the branch, would overlap it or lose its own lore session.
+   */
+  manualChapterBlock(): string | null {
+    if (!this.currentStory) return null
+    const { id, currentBranchId } = this.currentStory
+    const busy = chapterCards.busyReason(id, currentBranchId ?? null)
+    if (busy) return busy
+    if (ui.backgroundTasksActiveFor(id, currentBranchId)) {
+      return "This turn's background tasks are still running."
+    }
+    return null
+  }
 
-    await database.deleteChapter(chapterId)
+  /** Bumped when snapshots go without an entry going: what lists them reads it. */
+  snapshotsRevision = $state(0)
+
+  /** Whether the open branch cut this chapter itself, rather than inheriting it. */
+  ownsChapter(chapterId: string): boolean {
+    const chapter = this.chapters.find((ch) => ch.id === chapterId)
+    return !!chapter && (chapter.branchId ?? null) === (this.currentStory?.currentBranchId ?? null)
+  }
+
+  /**
+   * Whether this is the open branch's last chapter, the only one that can be deleted: the next
+   * chapter starts where the last one ends, so deleting an earlier one leaves its entries uncut.
+   */
+  isLastChapter(chapterId: string): boolean {
+    const chapters = this.currentBranchChapters
+    const last = chapters.reduce<Chapter | null>(
+      (best, ch) => (!best || ch.number > best.number ? ch : best),
+      null,
+    )
+    return last?.id === chapterId
+  }
+
+  /**
+   * Refuses, with a toast, any chapter but the open branch's last, and any while chapter work on
+   * the branch runs: a chapter being cut starts where the last one ends, and would leave the
+   * deleted one's entries uncut. With `undoLore`, the lore its sessions recorded is undone in the
+   * same transaction.
+   */
+  async deleteChapter(chapterId: string, opts: { undoLore?: boolean } = {}): Promise<boolean> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    // The chapter's own branch too: a child branch shows a parent's chapter as its own.
+    const owner = this.chapters.find((ch) => ch.id === chapterId)?.branchId ?? null
+    const busy =
+      chapterCards.busyReason(this.currentStory.id, this.currentStory.currentBranchId ?? null) ??
+      chapterCards.busyReason(this.currentStory.id, owner)
+    if (busy) {
+      log('Chapter work in flight, refusing to delete a chapter:', chapterId)
+      ui.showToast(`${busy} Try again once it is done.`, 'warning')
+      return false
+    }
+    if (!this.isLastChapter(chapterId)) {
+      log('Refusing to delete a chapter that is not the last:', chapterId)
+      ui.showToast('Only the last chapter can be deleted.', 'warning')
+      return false
+    }
+    // The row is the parent's: deleting it here would take it from the parent and every branch.
+    if (!this.ownsChapter(chapterId)) {
+      log('Refusing to delete a chapter inherited from another branch:', chapterId)
+      ui.showToast('This chapter was cut on another branch. Delete it there.', 'warning')
+      return false
+    }
+
+    const chapter = this.chapters.find((ch) => ch.id === chapterId)
+    if (opts.undoLore && chapter) {
+      const undo = await this.chapterLoreUndo(chapter)
+      if (!undo.revert.ok) throw new Error("This chapter's lore can no longer be undone.")
+      const { revert } = undo
+      await database.transaction([
+        database.deleteChapterStatement(chapterId),
+        ...chapterLoreStatements({
+          storyId: this.currentStory.id,
+          plan: revert.plan,
+          reverted: revert.reverted,
+          snapshotIds: undo.snapshots.map((m) => m.entityId),
+          checkpointMarkIds: undo.checkpoints.map((m) => m.id),
+        }),
+      ])
+      this.lorebookEntries = revert.plan.state.lorebookEntries
+      if (undo.snapshots.length > 0) this.snapshotsRevision++
+      this.invalidateRetrievalCache()
+    } else {
+      await database.deleteChapter(chapterId)
+    }
     this.chapters = this.chapters.filter((ch) => ch.id !== chapterId)
 
     // Invalidate chapter cache
     this.invalidateChapterCache()
 
     log('Chapter deleted:', chapterId)
+    chapterCards.chapterDeleted(chapterId)
+    return true
+  }
+
+  /**
+   * What undoing a chapter's lore does, as its delete runs it and its confirmation shows it: the
+   * plan, and the snapshots and checkpoints on the open line whose saved state holds what it
+   * reverts. A chapter inherited from the branch it was cut on is refused: the records reached
+   * through the line are that branch's, and would revert its lorebook, not this one's.
+   */
+  private async chapterLoreUndo(chapter: Chapter): Promise<{
+    revert: ChapterLoreRevert
+    snapshots: WorldStateMark[]
+    checkpoints: WorldStateMark[]
+  }> {
+    const none = { snapshots: [], checkpoints: [] }
+    if (!this.ownsChapter(chapter.id)) {
+      return { revert: { ok: false, reason: 'inherited' }, ...none }
+    }
+    // A branch forked after the chapter inherits its lore and the history that records it.
+    const end = this.entries.find((e) => e.id === chapter.endEntryId)
+    if (end && this.branches.some((b) => this.forksAtOrAfter(b, end.position))) {
+      return { revert: { ok: false, reason: 'forked' }, ...none }
+    }
+    // Its records come after its mark; nothing before is read.
+    const marks = await this.lineMarks()
+    const chapterSeq = chapterMark(marks, chapter.id)
+    const records = await this.lineRecords(
+      undefined,
+      undefined,
+      chapterSeq === -Infinity ? undefined : chapterSeq,
+    )
+    const revert = planChapterLoreRevert({
+      endEntryId: chapter.endEntryId,
+      chapterSeq,
+      records,
+      entryPositions: new Map(this.entries.map((e) => [e.id, e.position])),
+      state: this.trackedState(),
+      tracking: {
+        on: settings.experimentalFeatures.stateTracking,
+        enabledSince: settings.experimentalFeatures.trackingEnabledSince,
+      },
+    })
+    if (!revert.ok) return { revert, ...none }
+    const scope = {
+      branchId: this.currentStory?.currentBranchId ?? null,
+      lineEntryIds: new Set(this.entries.map((e) => e.id)),
+    }
+    return {
+      revert,
+      snapshots: marksHolding(marks, revert.reverted, scope, 'snapshot'),
+      checkpoints: marksHolding(marks, revert.reverted, scope, 'checkpoint'),
+    }
+  }
+
+  async previewChapterLoreUndo(chapterId: string): Promise<ChapterLorePreview> {
+    const chapter = this.chapters.find((ch) => ch.id === chapterId)
+    const none = { undone: [], manual: [], tidy: [], deletedChapters: [], snapshots: [] }
+    if (!chapter || !this.currentStory) return { refusal: 'nothing', ...none }
+    const { revert, snapshots } = await this.chapterLoreUndo(chapter)
+    if (!revert.ok) return { refusal: revert.reason, ...none }
+    return {
+      refusal: null,
+      undone: revert.undone,
+      manual: revert.plan.manual,
+      tidy: revert.plan.tidy,
+      deletedChapters: revert.deletedChapters,
+      snapshots: this.entryNumbersOf(snapshots.map((m) => m.entryId)),
+    }
   }
 
   // Update memory configuration (partial updates)
@@ -3865,7 +4308,11 @@ class StoryStore {
    * deterministic boundary and a single summarizeChapter call, never
    * analyzeForChapter.
    */
-  private async buildAndSaveChapter(startIndex: number, endIndex: number): Promise<Chapter> {
+  private async buildAndSaveChapter(
+    startIndex: number,
+    endIndex: number,
+    signal?: AbortSignal,
+  ): Promise<Chapter> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     const chapterEntries = this.entries.slice(startIndex, endIndex)
@@ -3885,7 +4332,11 @@ class StoryStore {
       this.pov,
       this.tense,
       this.memoryConfig.summaryDetail,
+      undefined,
+      signal,
     )
+    // A Stop that lands after the summary has returned must still save nothing.
+    signal?.throwIfAborted()
 
     // Get the next chapter number
     const chapterNumber = await this.getNextChapterNumber()
@@ -3923,21 +4374,20 @@ class StoryStore {
 
   // Create a manual chapter at a specific entry index
   /** @returns the chapter written; null is a refusal, not a failure. */
-  async createManualChapter(endEntryIndex: number): Promise<Chapter | null> {
+  async createManualChapter(endEntryIndex: number, signal?: AbortSignal): Promise<Chapter | null> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // The button is disabled while a turn's background tasks run, but that is the visible
     // half: the check that has to hold is here, because both paths call
     // `buildAndSaveChapter` over `lastChapterEndIndex`, and two of them racing produce two
     // chapters covering the same entries.
-    if (ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId)) {
+    // A card's retried summary runs outside the turn's background tasks, so it is checked too.
+    const blocked = this.manualChapterBlock()
+    if (blocked) {
       log('Background chapter work in flight, refusing manual chapter creation')
       // Said out loud as well as returned: the caller closes the modal either way, so a
       // silent refusal looks exactly like a chapter that was created.
-      ui.showToast(
-        'A chapter is already being written for this turn. Try again once it is done.',
-        'warning',
-      )
+      ui.showToast(`${blocked} Try again once it is done.`, 'warning')
       return null
     }
 
@@ -3949,7 +4399,7 @@ class StoryStore {
       throw new Error('Invalid entry index for chapter creation')
     }
 
-    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex)
+    const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex, signal)
     log('Manual chapter created:', chapter.number, chapter.title)
     return chapter
   }
@@ -3973,6 +4423,8 @@ class StoryStore {
     this.chapterizationCancelRequested = false
     this.chapterizationProgress = { current: 0, total: 0 }
 
+    // The characters each chapter's classification wrote, translated once at the end.
+    const written: WrittenCharacter[] = []
     try {
       const service = new ChapterBatchService({
         buildAndSaveChapter: this.buildAndSaveChapter.bind(this),
@@ -3992,7 +4444,9 @@ class StoryStore {
             undefined, // no "recent chat history" framing — the chapter content IS the input
             currentTime,
           ),
-        applyClassificationResult: (result) => this.applyClassificationResult(result),
+        applyClassificationResult: async (result) => {
+          written.push(...(await this.applyClassificationResult(result)))
+        },
       })
 
       const result = await service.run(
@@ -4022,10 +4476,11 @@ class StoryStore {
           onClassificationProgress: (current, total) => {
             this.chapterizationClassificationProgress = { current, total }
           },
-          loreCallbacks: buildLoreManagementCallbacks({
-            storyId: this.currentStory.id,
-            branchId: this.currentStory.currentBranchId,
-          }),
+          loreCallbacks: buildLoreManagementCallbacks(
+            { storyId: this.currentStory.id, branchId: this.currentStory.currentBranchId },
+            // One pass over the whole batch, attached with its last chapter.
+            () => ({ origin: 'chapter', entryId: this.latestChapterEndEntryId() }),
+          ),
           loreUICallbacks: buildLoreManagementUICallbacks({
             onStatus: (status) => {
               this.chapterizationStatus = status
@@ -4045,6 +4500,55 @@ class StoryStore {
       this.chapterizationTimelineProgress = null
       this.chapterizationClassificationProgress = null
       this.chapterizationStatus = null
+      void this.translateWrittenCharacters(mergeWritten(written))
+    }
+  }
+
+  /**
+   * Translates the character fields a classification wrote, when world state is translated, a
+   * batch of characters per request so one failure loses only its batch.
+   */
+  private async translateWrittenCharacters(characters: WrittenCharacter[]): Promise<void> {
+    const translation = settings.translationSettings
+    const storyId = this.currentStory?.id
+    if (!storyId || characters.length === 0) return
+    if (!TranslationService.shouldTranslateWorldState(translation)) return
+    const service = new WorldStateTranslationService({
+      translateUIElements: aiService.translateUIElements.bind(aiService),
+    })
+    const release = retainBackgroundKeepAlive()
+    try {
+      for (let i = 0; i < characters.length; i += CHARACTERS_PER_TRANSLATION) {
+        if (this.currentStory?.id !== storyId) return
+        try {
+          await service.translateEntities(
+            {
+              storyId,
+              classificationResult: { newLocations: [], newItems: [], newStoryBeats: [] },
+              worldState: {
+                characters: this.characters,
+                locations: this.locations,
+                items: this.items,
+                storyBeats: this.storyBeats,
+              },
+              targetLanguage: translation.targetLanguage,
+              characters: characters.slice(i, i + CHARACTERS_PER_TRANSLATION),
+            },
+            {
+              updateCharacter: (id, data) => database.updateCharacter(id, data),
+              getCharacter: (id) => this.characters.find((c) => c.id === id),
+              updateLocation: (id, data) => database.updateLocation(id, data),
+              updateItem: (id, data) => database.updateItem(id, data),
+              updateStoryBeat: (id, data) => database.updateStoryBeat(id, data),
+              refreshWorldState: this.refreshWorldState.bind(this),
+            },
+          )
+        } catch (error) {
+          log('Character translation failed (non-fatal)', error)
+        }
+      }
+    } finally {
+      release()
     }
   }
 
@@ -4055,13 +4559,14 @@ class StoryStore {
   }
 
   // Create a checkpoint (snapshot of current state)
-  async createCheckpoint(name: string): Promise<Checkpoint> {
+  async createCheckpoint(name: string, holder?: GenerationLease): Promise<Checkpoint> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // A checkpoint is a full snapshot, and a branch created from one copies it wholesale. Taken
     // mid-turn it would freeze a half-written turn — the user action in, the narration or its
-    // world state not yet — and hand that to every branch made from it afterwards.
-    this.assertNotBusy('create a checkpoint')
+    // world state not yet — and hand that to every branch made from it afterwards. `holder` is
+    // a turn's own lease, taken before the turn writes anything.
+    this.assertNotBusy('create a checkpoint', holder)
 
     const lastEntry = this.entries[this.entries.length - 1]
     if (!lastEntry) throw new Error('No entries to checkpoint')
@@ -4086,7 +4591,10 @@ class StoryStore {
       createdAt: Date.now(),
     }
 
-    await database.createCheckpoint(record)
+    // Marked on the open branch: its last entry can be inherited, and the state is this branch's.
+    await database.createCheckpoint(record, {
+      branchId: this.currentStory.currentBranchId ?? null,
+    })
 
     const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
     const checkpoint: Checkpoint = {
@@ -4116,6 +4624,266 @@ class StoryStore {
       name,
     })
 
+    return checkpoint
+  }
+
+  /**
+   * Checkpoints the story as it was created or imported, on its first turn and before that turn
+   * writes anything, so a branch can always go back to the start.
+   */
+  async ensureStartCheckpoint(lease: GenerationLease): Promise<void> {
+    if (!needsStartCheckpoint(this.entries, this.checkpoints)) return
+    try {
+      await this.createCheckpoint('Story start', lease)
+    } catch (error) {
+      log('Start checkpoint not created', error)
+    }
+  }
+
+  /** The snapshots of the branch being read, for listing; their contents are not loaded. */
+  async snapshotMarks(): Promise<SnapshotMark[]> {
+    if (!this.currentStory) return []
+    const times = await database.getWorldStateSnapshotTimes(
+      this.currentStory.id,
+      this.currentStory.currentBranchId ?? null,
+    )
+    return times.map((t) => ({ id: t.id, entryId: t.entryId }))
+  }
+
+  /** The entry a past checkpoint is asked for, if one can be built there at all. */
+  private pastTarget(entryId: string): StoryEntry {
+    if (!this.currentStory) throw new Error('No story loaded')
+    if (!settings.experimentalFeatures.stateTracking) {
+      throw new Error('A checkpoint at a past entry needs State Tracking')
+    }
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!entry) throw new Error('Entry not found')
+    if (entry.type !== 'narration') {
+      throw new Error('A checkpoint at a past entry can only be created on a narration')
+    }
+    if ((entry.branchId ?? null) !== (this.currentStory.currentBranchId ?? null)) {
+      throw new Error('A checkpoint can only be created on an entry this branch owns')
+    }
+    return entry
+  }
+
+  private async pastSources(): Promise<PastSources> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    const [records, marks, snapshots] = await Promise.all([
+      this.lineRecords(),
+      this.lineMarks(),
+      database.getWorldStateSnapshotTimes(
+        this.currentStory.id,
+        this.currentStory.currentBranchId ?? null,
+      ),
+    ])
+    return {
+      entries: this.entries,
+      records,
+      marks,
+      snapshots: snapshots.map((s) => ({
+        ...s,
+        closing: s.id.startsWith(CLOSING_SNAPSHOT_PREFIX),
+      })),
+      checkpoints: this.checkpoints.map((cp) => ({
+        id: cp.id,
+        lastEntryId: cp.lastEntryId,
+        createdAt: cp.createdAt,
+        anchored: cp.anchored,
+        branchId: cp.branchId ?? null,
+        complete: !!cp.lorebookEntriesSnapshot,
+      })),
+      lineBranchIds: this.lineBranchIds(),
+      tracking: {
+        on: settings.experimentalFeatures.stateTracking,
+        enabledSince: settings.experimentalFeatures.trackingEnabledSince,
+      },
+      now: Date.now(),
+    }
+  }
+
+  /**
+   * The state at `entry`, from a resolved run: the anchor's state with the run undone, the
+   * reader's and Tidy's changes included.
+   */
+  private async planPast(
+    entry: StoryEntry,
+    run: Extract<RunResult, { ok: true }>,
+  ): Promise<ReversalPlan> {
+    return planReversal({
+      state: await this.anchorState(run.anchor),
+      records: run.records,
+      late: run.late,
+      entryPositions: new Map(this.entries.map((e) => [e.id, e.position])),
+      keep: KEEP_NONE,
+      // Never the anchor's clock: the entry's own end time.
+      clock: clockAfter(this.entries, entry.position + 1),
+    })
+  }
+
+  /**
+   * The state at a past entry, rebuilt from the nearest full state after it. Refuses with the
+   * reader-facing reason when the history in between cannot be rebuilt.
+   */
+  private async rebuildPastState(
+    entryId: string,
+    override?: GapOverride,
+  ): Promise<{ entry: StoryEntry; plan: ReversalPlan; anchor: AnchorCandidate }> {
+    const entry = this.pastTarget(entryId)
+    const query = pastQuery(await this.pastSources(), entry.position)
+    const run = override ? resolveOverride(query, override) : resolveRun(query)
+    if (!run.ok) throw new RefusalError(run.reason, run.diagnosis)
+    return { entry, plan: await this.planPast(entry, run), anchor: run.anchor }
+  }
+
+  private async anchorState(anchor: AnchorCandidate): Promise<TrackedState> {
+    if (anchor.kind === 'live') return this.trackedState()
+    if (anchor.kind === 'checkpoint') {
+      const cp = this.checkpoints.find((c) => c.id === anchor.id)
+      if (!cp?.lorebookEntriesSnapshot) throw new RefusalError('noAnchor')
+      return {
+        characters: cp.charactersSnapshot,
+        locations: cp.locationsSnapshot,
+        items: cp.itemsSnapshot,
+        storyBeats: cp.storyBeatsSnapshot,
+        lorebookEntries: cp.lorebookEntriesSnapshot,
+        timeTracker: cp.timeTrackerSnapshot ?? null,
+      }
+    }
+    const snapshot = anchor.id ? await database.getWorldStateSnapshot(anchor.id) : null
+    if (!snapshot?.lorebookEntriesSnapshot) throw new RefusalError('noAnchor')
+    return {
+      characters: snapshot.charactersSnapshot,
+      locations: snapshot.locationsSnapshot,
+      items: snapshot.itemsSnapshot,
+      storyBeats: snapshot.storyBeatsSnapshot,
+      lorebookEntries: snapshot.lorebookEntriesSnapshot,
+      timeTracker: snapshot.timeTrackerSnapshot,
+    }
+  }
+
+  /**
+   * Whether a checkpoint can be created at a past entry, and which manual changes building it
+   * would undo. `refusal` is the reason it cannot, for the reader.
+   */
+  async previewCheckpointAt(entryId: string): Promise<PastCheckpointPreview> {
+    const refused = (refusal: string): PastCheckpointPreview => ({
+      refusal,
+      reason: null,
+      diagnosis: null,
+      manual: [],
+      tidy: [],
+      lore: [],
+      classifier: false,
+      source: null,
+      skipped: [],
+      overrides: null,
+    })
+    let entry: StoryEntry
+    try {
+      entry = this.pastTarget(entryId)
+    } catch (error) {
+      return refused(errMessage(error))
+    }
+    const src = await this.pastSources()
+    const query = pastQuery(src, entry.position)
+    const run = resolveRun(query)
+
+    if (run.ok) {
+      const plan = await this.planPast(entry, run)
+      return {
+        ...refused(''),
+        refusal: null,
+        manual: plan.manual,
+        tidy: plan.tidy,
+        lore: this.loreChaptersFor(plan.chapter, src.marks),
+        classifier: plan.classifier,
+        source: this.anchorLabel(run.anchor),
+        skipped: skippedSnapshots(src, entry.position, run.anchor.position),
+      }
+    }
+
+    const found = run.diagnosis
+    const diagnosis = found && {
+      target: found.target,
+      anchor: found.anchor && this.anchorLabel(found.anchor),
+      gaps: found.gaps,
+    }
+    const skipped = skippedSnapshots(src, entry.position, found?.anchor?.position ?? Infinity)
+    const next = resolveOverride(query, 'nextAsIs')
+    const previous = resolveOverride(query, 'previousAsIs')
+    const undo = resolveOverride(query, 'undoRecorded')
+    const undoPlan = undo.ok ? await this.planPast(entry, undo).catch(() => null) : null
+    return {
+      ...refused(refusalMessage(run.reason)),
+      reason: run.reason,
+      diagnosis: diagnosis ?? null,
+      manual: undoPlan?.manual ?? [],
+      tidy: undoPlan?.tidy ?? [],
+      lore: undoPlan ? this.loreChaptersFor(undoPlan.chapter, src.marks) : [],
+      classifier: undoPlan?.classifier ?? false,
+      skipped,
+      overrides:
+        next.ok || previous.ok
+          ? {
+              next: next.ok ? this.anchorLabel(next.anchor) : null,
+              previous: previous.ok ? this.anchorLabel(previous.anchor) : null,
+            }
+          : null,
+    }
+  }
+
+  private anchorLabel(anchor: AnchorCandidate): AnchorLabel {
+    const name =
+      anchor.kind === 'checkpoint'
+        ? (this.checkpoints.find((cp) => cp.id === anchor.id)?.name ?? null)
+        : null
+    return { kind: anchor.kind, name, position: anchor.position }
+  }
+
+  /** A checkpoint at a past entry, holding the state as it was there. The story is unchanged. */
+  async createCheckpointAt(
+    entryId: string,
+    name: string,
+    opts: { override?: GapOverride } = {},
+  ): Promise<Checkpoint> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    this.assertNotBusy('create a checkpoint')
+    if (this.checkpoints.some((cp) => cp.lastEntryId === entryId)) {
+      throw new Error('This entry already has a checkpoint')
+    }
+
+    const { entry, plan } = await this.rebuildPastState(entryId, opts.override)
+    const entries = this.entries.filter((e) => e.position <= entry.position)
+    const kept = new Set(entries.map((e) => e.id))
+    const record: CheckpointRecord = {
+      id: crypto.randomUUID(),
+      storyId: this.currentStory.id,
+      name,
+      lastEntryId: entry.id,
+      lastEntryPreview: entry.content.substring(0, 100),
+      entryCount: entries.length,
+      entriesSnapshot: entries,
+      charactersSnapshot: plan.state.characters,
+      locationsSnapshot: plan.state.locations,
+      itemsSnapshot: plan.state.items,
+      storyBeatsSnapshot: plan.state.storyBeats,
+      chaptersSnapshot: this.chapters.filter((ch) => kept.has(ch.endEntryId)),
+      timeTrackerSnapshot: plan.state.timeTracker,
+      lorebookEntriesSnapshot: plan.state.lorebookEntries,
+      createdAt: Date.now(),
+    }
+    await database.createCheckpoint(record)
+
+    const { entriesSnapshot: _entriesSnapshot, ...loaded } = record
+    const checkpoint: Checkpoint = { ...loaded, branchId: entry.branchId, anchored: true }
+    this.checkpoints = [checkpoint, ...this.checkpoints]
+    log('Checkpoint created at past entry:', name, entry.position, opts.override ?? '')
+    eventBus.emit<CheckpointCreatedEvent>({
+      type: 'CheckpointCreated',
+      checkpointId: checkpoint.id,
+      name,
+    })
     return checkpoint
   }
 
@@ -4176,7 +4944,7 @@ class StoryStore {
     // Creating a branch ends by switching to it, so it is a branch switch with a write in
     // front. Refused before that write: the alternative leaves the branch created and the
     // story still on the old one.
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(
         'Cannot create a branch while a generation is in progress: creating one switches to it.',
       )
@@ -4460,9 +5228,9 @@ class StoryStore {
     return branch
   }
 
-  private buildBranchLineage(branchId: string): Branch[] {
+  private buildBranchLineage(branchId: string, branches: Branch[] = this.branches): Branch[] {
     const lineage: Branch[] = []
-    let current: Branch | null = this.branches.find((b) => b.id === branchId) ?? null
+    let current: Branch | null = branches.find((b) => b.id === branchId) ?? null
     const visited = new SvelteSet<string>()
 
     while (current) {
@@ -4471,7 +5239,7 @@ class StoryStore {
       lineage.unshift(current)
       const parentId = current.parentBranchId
       if (!parentId) break
-      current = this.branches.find((b) => b.id === parentId) ?? null
+      current = branches.find((b) => b.id === parentId) ?? null
     }
 
     return lineage
@@ -4502,6 +5270,11 @@ class StoryStore {
   /** True from a branch switch or creation being requested until it has fully settled. */
   get isSwitchingBranch(): boolean {
     return this.pendingBranchSwitches > 0
+  }
+
+  /** A pressed Regenerate claims the branch before its lease, while it previews the revert. */
+  private get isGenerationClaimed(): boolean {
+    return this.generationLease !== null || ui.regeneratePending
   }
 
   /** True while a generation holds the branch. Drives the switch affordances. */
@@ -4542,7 +5315,7 @@ class StoryStore {
    * otherwise have begun.
    */
   acquireGenerationLease(): GenerationLease {
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(this.generationBusyMessage('start a generation'))
     }
     if (this.pendingBranchSwitches > 0) {
@@ -4560,11 +5333,6 @@ class StoryStore {
     this.generationLease = lease
     log('Generation lease acquired', { storyId: lease.storyId, branchId: lease.branchId })
     return lease
-  }
-
-  /** The lease a stop or a late write must check itself against, if one is held. */
-  get currentGenerationLease(): GenerationLease | null {
-    return this.generationLease
   }
 
   /**
@@ -4623,7 +5391,7 @@ class StoryStore {
     // reaches this point after a generation has begun. Stands in for world-state application
     // being unable to target a branch other than the one loaded — see "The generation lease"
     // in docs/architecture/overview.md for why, and for when this can be lifted.
-    if (this.generationLease) {
+    if (this.isGenerationClaimed) {
       throw new Error(this.generationBusyMessage('switch branches'))
     }
 
@@ -4671,6 +5439,100 @@ class StoryStore {
   }
 
   /**
+   * The visible world state of a branch, read from the database. COW branches resolve through
+   * their lineage unless they hold a complete snapshot; full-copy branches load directly.
+   */
+  private async loadBranchWorldState(
+    storyId: string,
+    branchId: string | null,
+    branches: Branch[],
+  ): Promise<Omit<TrackedState, 'timeTracker'>> {
+    const lightweight = settings.experimentalFeatures.lightweightBranches
+    const direct = async () => {
+      const [characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
+        database.getCharactersForBranch(storyId, branchId),
+        database.getLocationsForBranch(storyId, branchId),
+        database.getItemsForBranch(storyId, branchId),
+        database.getStoryBeatsForBranch(storyId, branchId),
+        database.getEntriesForBranch(storyId, branchId),
+      ])
+      if (!lightweight) return { characters, locations, items, storyBeats, lorebookEntries }
+      return {
+        characters: characters.filter((c) => !c.deleted),
+        locations: locations.filter((l) => !l.deleted),
+        items: items.filter((i) => !i.deleted),
+        storyBeats: storyBeats.filter((b) => !b.deleted),
+        lorebookEntries: lorebookEntries.filter((e) => !e.deleted),
+      }
+    }
+
+    // Main, a full-copy branch, or a COW branch holding its own complete entity set.
+    if (branchId === null || !lightweight) return direct()
+    if (branches.find((b) => b.id === branchId)?.snapshotComplete) return direct()
+
+    // Legacy COW: resolve through lineage (pre-snapshot branches)
+    const lineage = this.buildBranchLineage(branchId, branches)
+    const [characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
+      database.getCharactersResolved(storyId, lineage),
+      database.getLocationsResolved(storyId, lineage),
+      database.getItemsResolved(storyId, lineage),
+      database.getStoryBeatsResolved(storyId, lineage),
+      database.getLorebookEntriesResolved(storyId, lineage),
+    ])
+    return { characters, locations, items, storyBeats, lorebookEntries }
+  }
+
+  /**
+   * Snapshots every branch written to since State Tracking was turned on, so a run that ends
+   * here can still be the base of a past checkpoint. Call before turning the feature off.
+   */
+  async takeClosingSnapshots(): Promise<number> {
+    const since = settings.experimentalFeatures.trackingEnabledSince
+    if (!settings.experimentalFeatures.stateTracking || since === null) return 0
+
+    let taken = 0
+    for (const { storyId, branchId } of await database.getBranchesRecordedSince(since)) {
+      const open =
+        this.currentStory?.id === storyId &&
+        (this.currentStory.currentBranchId ?? null) === branchId
+      let world: Omit<TrackedState, 'timeTracker'>
+      let entry: StoryEntry | null
+      let timeTracker: TimeTracker | null
+      if (open) {
+        world = this.trackedState()
+        entry = this.entries[this.entries.length - 1] ?? null
+        timeTracker = this.currentStory?.timeTracker ?? null
+      } else {
+        const branches = await database.getBranches(storyId)
+        world = await this.loadBranchWorldState(storyId, branchId, branches)
+        const own = await database.getStoryEntriesForBranch(storyId, branchId)
+        const fork = branches.find((b) => b.id === branchId)?.forkEntryId
+        entry = own[own.length - 1] ?? (fork ? await database.getStoryEntry(fork) : null)
+        timeTracker = (entry?.metadata?.timeEnd as TimeTracker | undefined) ?? null
+      }
+      if (!entry) continue
+
+      await database.createWorldStateSnapshot({
+        id: `${CLOSING_SNAPSHOT_PREFIX}${crypto.randomUUID()}`,
+        storyId,
+        branchId,
+        entryId: entry.id,
+        entryPosition: entry.position,
+        charactersSnapshot: world.characters.map((c) => ({ ...c })),
+        locationsSnapshot: world.locations.map((l) => ({ ...l })),
+        itemsSnapshot: world.items.map((i) => ({ ...i })),
+        storyBeatsSnapshot: world.storyBeats.map((b) => ({ ...b })),
+        lorebookEntriesSnapshot: world.lorebookEntries.map((e) => ({ ...e })),
+        timeTrackerSnapshot: timeTracker ? { ...timeTracker } : null,
+        createdAt: Date.now(),
+      })
+      taken++
+    }
+    log('Closing snapshots taken:', taken)
+    return taken
+  }
+
+  /**
    * Reload entries and world state from database for the current branch.
    * World state is now persisted per-branch in the database via branch_id columns.
    * - For main branch: loads only items with null branch_id
@@ -4683,33 +5545,19 @@ class StoryStore {
 
     if (branchId === null) {
       // Main branch: load all data with null branch_id
-      const [entries, chapters, characters, locations, items, storyBeats, lorebookEntries] =
-        await Promise.all([
-          database.getStoryEntriesForBranch(this.currentStory.id, null),
-          database.getChaptersForBranch(this.currentStory.id, null),
-          database.getCharactersForBranch(this.currentStory.id, null),
-          database.getLocationsForBranch(this.currentStory.id, null),
-          database.getItemsForBranch(this.currentStory.id, null),
-          database.getStoryBeatsForBranch(this.currentStory.id, null),
-          database.getEntriesForBranch(this.currentStory.id, null),
-        ])
+      const [entries, chapters, world] = await Promise.all([
+        database.getStoryEntriesForBranch(this.currentStory.id, null),
+        database.getChaptersForBranch(this.currentStory.id, null),
+        this.loadBranchWorldState(this.currentStory.id, null, this.branches),
+      ])
 
       this.entries = entries
       this.chapters = chapters
-      this.characters = characters
-      this.locations = locations
-      this.items = items
-      this.storyBeats = storyBeats
-      this.lorebookEntries = lorebookEntries
-
-      // Filter out tombstoned entities when COW is enabled
-      if (settings.experimentalFeatures.lightweightBranches) {
-        this.characters = this.characters.filter((c) => !c.deleted)
-        this.locations = this.locations.filter((l) => !l.deleted)
-        this.items = this.items.filter((i) => !i.deleted)
-        this.storyBeats = this.storyBeats.filter((b) => !b.deleted)
-        this.lorebookEntries = this.lorebookEntries.filter((e) => !e.deleted)
-      }
+      this.characters = world.characters
+      this.locations = world.locations
+      this.items = world.items
+      this.storyBeats = world.storyBeats
+      this.lorebookEntries = world.lorebookEntries
     } else {
       // Non-main branch: load entries across branch lineage (main -> ancestors -> current)
       const lineage = this.buildBranchLineage(branchId)
@@ -4776,66 +5624,8 @@ class StoryStore {
 
       this.chapters = chapters.sort((a, b) => a.number - b.number)
 
-      // Load world state from database
-      // COW branches use resolved loading (walks lineage), legacy branches use direct loading
-      let characters: Character[]
-      let locations: Location[]
-      let items: Item[]
-      let storyBeats: StoryBeat[]
-      let lorebookEntries: Entry[]
-
-      if (settings.experimentalFeatures.lightweightBranches) {
-        const currentBranchInfo = this.branches.find((b) => b.id === branchId)
-        if (currentBranchInfo?.snapshotComplete) {
-          // Snapshot isolation: branch has its own complete entity set
-          ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersForBranch(this.currentStory.id, branchId),
-            database.getLocationsForBranch(this.currentStory.id, branchId),
-            database.getItemsForBranch(this.currentStory.id, branchId),
-            database.getStoryBeatsForBranch(this.currentStory.id, branchId),
-            database.getEntriesForBranch(this.currentStory.id, branchId),
-          ])
-          // Filter out tombstoned entities
-          characters = characters.filter((c) => !c.deleted)
-          locations = locations.filter((l) => !l.deleted)
-          items = items.filter((i) => !i.deleted)
-          storyBeats = storyBeats.filter((b) => !b.deleted)
-          lorebookEntries = lorebookEntries.filter((e) => !e.deleted)
-          log('Snapshot isolation: loaded entities for branch:', branchId, {
-            characters: characters.length,
-            locations: locations.length,
-            items: items.length,
-            storyBeats: storyBeats.length,
-            lorebookEntries: lorebookEntries.length,
-          })
-        } else {
-          // Legacy COW: resolve through lineage (pre-snapshot branches)
-          ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-            database.getCharactersResolved(this.currentStory.id, lineage),
-            database.getLocationsResolved(this.currentStory.id, lineage),
-            database.getItemsResolved(this.currentStory.id, lineage),
-            database.getStoryBeatsResolved(this.currentStory.id, lineage),
-            database.getLorebookEntriesResolved(this.currentStory.id, lineage),
-          ])
-          log('COW: Resolved world state through lineage for branch:', branchId, {
-            lineageDepth: lineage.length,
-            characters: characters.length,
-            locations: locations.length,
-            items: items.length,
-            storyBeats: storyBeats.length,
-            lorebookEntries: lorebookEntries.length,
-          })
-        }
-      } else {
-        // Legacy path: direct branch loading (entities were fully copied at branch creation)
-        ;[characters, locations, items, storyBeats, lorebookEntries] = await Promise.all([
-          database.getCharactersForBranch(this.currentStory.id, branchId),
-          database.getLocationsForBranch(this.currentStory.id, branchId),
-          database.getItemsForBranch(this.currentStory.id, branchId),
-          database.getStoryBeatsForBranch(this.currentStory.id, branchId),
-          database.getEntriesForBranch(this.currentStory.id, branchId),
-        ])
-      }
+      const { characters, locations, items, storyBeats, lorebookEntries } =
+        await this.loadBranchWorldState(this.currentStory.id, branchId, this.branches)
 
       this.characters = characters
       this.locations = locations
@@ -4863,30 +5653,37 @@ class StoryStore {
   }
 
   /**
-   * Restore time tracker from the last entry's timeEnd metadata.
+   * Restore time tracker from the start checkpoint's clock when the branch ends on a story-start
+   * entry, otherwise from the last entry's timeEnd metadata.
    * Called after loading entries for a branch to ensure time consistency.
    */
   private async restoreTimeFromLastEntry(): Promise<void> {
     if (!this.currentStory || this.entries.length === 0) return
 
     const lastEntry = this.entries[this.entries.length - 1]
-    const timeEnd = lastEntry.metadata?.timeEnd
 
-    if (timeEnd && typeof timeEnd === 'object') {
-      const newTime = timeEnd as TimeTracker
-      // Only update if different to avoid unnecessary DB writes
-      const current = this.currentStory.timeTracker
-      if (
-        !current ||
-        current.years !== newTime.years ||
-        current.days !== newTime.days ||
-        current.hours !== newTime.hours ||
-        current.minutes !== newTime.minutes
-      ) {
-        this.currentStory = { ...this.currentStory, timeTracker: newTime }
-        await database.updateStory(this.currentStory.id, { timeTracker: newTime })
-        log('Time tracker restored from last entry:', newTime)
-      }
+    const start = startClock(lastEntry, this.checkpoints)
+    if (start !== undefined) {
+      await this.restoreTimeTrackerSnapshot(start)
+      return
+    }
+
+    const timeEnd = lastEntry.metadata?.timeEnd
+    if (!timeEnd || typeof timeEnd !== 'object') return
+
+    const newTime = timeEnd as TimeTracker
+    // Only update if different to avoid unnecessary DB writes
+    const current = this.currentStory.timeTracker
+    if (
+      !current ||
+      current.years !== newTime.years ||
+      current.days !== newTime.days ||
+      current.hours !== newTime.hours ||
+      current.minutes !== newTime.minutes
+    ) {
+      this.currentStory = { ...this.currentStory, timeTracker: newTime }
+      await database.updateStory(this.currentStory.id, { timeTracker: newTime })
+      log('Time tracker restored from last entry:', newTime)
     }
   }
 
@@ -4923,7 +5720,11 @@ class StoryStore {
 
     // Delete the branch and all of its owned data in one persistence transaction, which selects
     // the branch's checkpoints itself rather than trusting this list to be complete.
+    const storyId = this.currentStory.id
     await database.deleteBranch(branchId)
+
+    // The branch's images went with its entries, and an open gallery is showing them.
+    ui.clearGalleryImages(storyId)
 
     // Update in-memory state only after the persistence transaction commits.
     this.checkpoints = this.checkpoints.filter((checkpoint) => checkpoint.branchId !== branchId)
@@ -5008,6 +5809,23 @@ class StoryStore {
   }
 
   /**
+   * A retry's rewind while State Tracking is on: the delete path, through the records, from the
+   * position before the retried action. A failed revert throws before any entry is removed.
+   */
+  async rewindForRetry(position: number, keep: RevertKeep): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    this.assertNoBranchForkAtOrAfter(position)
+    const summary = await this.rollbackFrom(position, keep)
+    log('Retry rollback summary:', summary)
+    await this.deleteEntriesFromPosition(position, { skipRollback: true })
+    await this.reloadEntriesForCurrentBranch()
+    const freshStory = await database.getStory(this.currentStory.id)
+    if (freshStory) {
+      this.currentStory = { ...this.currentStory, timeTracker: freshStory.timeTracker }
+    }
+  }
+
+  /**
    * Restore story state from a retry backup.
    * Used by the "retry last message" feature to restore state before a user action
    * and allow regeneration.
@@ -5020,7 +5838,6 @@ class StoryStore {
     locations: Location[]
     items: Item[]
     storyBeats: StoryBeat[]
-    lorebookEntries?: Entry[] // Optional - lorebook entries persist across retry operations
     timeTracker?: TimeTracker | null
     entryCountBeforeAction: number
   }): Promise<void> {
@@ -5028,8 +5845,7 @@ class StoryStore {
 
     // Backstop for a caller that bypasses RetryService: this deletes the active branch's
     // world state and re-inserts the snapshot's rows. The story is checked as well as the
-    // branch — a deferred rewind runs after Stop, by which time another story may be open,
-    // and two stories' main branches are both null.
+    // branch: two stories' main branches are both null.
     const scope = { storyId: backup.storyId, branchId: backup.branchId ?? null }
     if (!this.isOpen(scope)) {
       throw new Error('Cannot restore a retry backup taken in another story or branch')
@@ -5068,9 +5884,11 @@ class StoryStore {
 
       this.assertNoBranchForkAtOrAfter(backup.entryCountBeforeAction)
 
+      // The delete path removes the entries, so the chapters and checkpoints on them go too.
+      await this.deleteEntriesFromPosition(backup.entryCountBeforeAction, { skipRollback: true })
+
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
-        entryIdsToDelete,
         scope.storyId,
         scope.branchId,
         backup.characters,
@@ -5078,8 +5896,6 @@ class StoryStore {
         backup.items,
         backup.storyBeats,
       )
-
-      await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Reload from database using branch-aware method for clean state
       await this.reloadEntriesForCurrentBranch()
@@ -5164,54 +5980,41 @@ class StoryStore {
     }
 
     const snapshotById = new Map(snapshots.map((snapshot) => [snapshot.id, snapshot]))
-    const updates: Array<{ id: string; updates: Partial<Character> }> = []
+    const updates = new Map(
+      this.characters.flatMap((character): Array<[string, Partial<Character>]> => {
+        const snapshot = snapshotById.get(character.id)
+        if (!snapshot) return []
 
-    for (const character of this.characters) {
-      const snapshot = snapshotById.get(character.id)
-      if (!snapshot) continue
+        let relationship = snapshot.relationship ?? character.relationship
+        if (character.relationship === 'self' && relationship !== 'self') {
+          relationship = 'self'
+        }
 
-      let relationship = snapshot.relationship ?? character.relationship
-      if (character.relationship === 'self' && relationship !== 'self') {
-        relationship = 'self'
-      }
-
-      updates.push({
-        id: character.id,
-        updates: {
-          traits: snapshot.traits ?? [],
+        const restored: Partial<Character> = {
+          ...(snapshot.name !== undefined && { name: snapshot.name }),
+          ...(snapshot.description !== undefined && { description: snapshot.description }),
+          traits: uniqueTerms(snapshot.traits ?? []),
           status: snapshot.status ?? character.status,
           relationship,
           visualDescriptors: snapshot.visualDescriptors ?? {},
-          portrait: snapshot.portrait,
-        },
-      })
-    }
+          portrait: snapshot.portrait, // null means no portrait
+        }
+        const translations = translationsToRestore(character, restored, snapshot.translations)
+        return [[character.id, { ...restored, ...translations }]]
+      }),
+    )
 
-    for (const update of updates) {
-      await database.updateCharacter(update.id, update.updates)
+    for (const [id, update] of updates) {
+      await database.updateCharacter(id, update)
     }
 
     this.characters = this.characters.map((character) => {
-      const snapshot = snapshotById.get(character.id)
-      if (!snapshot) return character
-
-      let relationship = snapshot.relationship ?? character.relationship
-      if (character.relationship === 'self' && relationship !== 'self') {
-        relationship = 'self'
-      }
-
-      return {
-        ...character,
-        traits: snapshot.traits ? uniqueTerms(snapshot.traits) : character.traits,
-        status: snapshot.status ?? character.status,
-        relationship,
-        visualDescriptors: snapshot.visualDescriptors ?? character.visualDescriptors,
-        portrait: snapshot.portrait, // Use snapshot value directly (null means no portrait)
-      }
+      const update = updates.get(character.id)
+      return update ? { ...character, ...update } : character
     })
 
     log('restoreCharacterSnapshots complete', {
-      updatedCount: updates.length,
+      updatedCount: updates.size,
       finalCharacters: this.characters.map((c) => ({
         id: c.id,
         name: c.name,
@@ -5231,8 +6034,8 @@ class StoryStore {
   }
 
   /**
-   * Save the library card's edit dialog: title, genre, description and the genre badge colour,
-   * in one write. Blank genre or description clears it; a blank title is refused. Nothing is
+   * Save the library card's edit dialog: title, genre, description, the genre badge colour and
+   * the narrative voice, in one write. Blank genre or description clears it; a blank title is refused. Nothing is
    * written when nothing changed, so opening and saving the dialog does not bump the story up
    * the library.
    */
@@ -5453,7 +6256,7 @@ class StoryStore {
         parentId: null,
         position: 0,
         metadata: {
-          source: 'wizard',
+          source: OPENING_SOURCE,
           tokenCount,
           timeStart: { ...baseTime },
           timeEnd: { ...baseTime },
@@ -5465,6 +6268,11 @@ class StoryStore {
           : null,
       })
       log('Added opening scene')
+
+      if (settings.experimentalFeatures.stateTracking) {
+        const header = this.startHeader(storyId, openingEntry.id)
+        await database.transaction([database.worldStateRecordStatement(header)])
+      }
     }
 
     // Add imported lorebook entries

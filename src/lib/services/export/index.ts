@@ -10,5 +10,7 @@ export type { AventuraExport } from '../export'
 export {
   exportCoordinationService,
   gatherStoryData,
+  NOT_VOUCHED,
+  type ExportTracking,
   type StoryExportData,
 } from './ExportCoordinationService'

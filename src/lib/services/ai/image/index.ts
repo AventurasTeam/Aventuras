@@ -19,22 +19,66 @@ export { ImageAnalysisService, type ImageAnalysisContext } from './ImageAnalysis
 // Provider registry (replaces modelListing.ts)
 export {
   generateImage,
-  listImageModelsByProvider,
+  supportsReferenceImages,
+  toRawBase64,
+  listImageModels,
+  evictReplacedModelList,
   getProviderSamplerInfo,
   listLoras,
-  requiresApiKey,
+  getProviderClipTypes,
+  isLocalServer,
+  referenceLimit,
+  providerNeedsModel,
+  referenceBlocker,
+  takesCapabilityOverride,
+  IMAGE_PROVIDER_LABELS,
+  IMAGE_PROVIDER_OPTIONS,
   type ImageModelInfo,
 } from './providers/registry'
+
+export { resolveBaseUrl } from './providers/baseUrls'
+
+export {
+  baseUrlMode,
+  imageConnectionFor,
+  keyProvider,
+  modelListKey,
+  requiresApiKey,
+} from './providers/connection'
+
+export {
+  applyCapabilityOverride,
+  canonicalModelId,
+  findListedModel,
+  overriddenFields,
+  overrideConflicts,
+} from './providers/modelCapabilities'
+
+export {
+  LOADED_LIST_LABELS,
+  groupLoadFailures,
+  sortLoadFailures,
+  type LoadFailure,
+  type LoadedList,
+} from './loadFailures'
 
 // Image generation utilities
 export {
   isImageGenerationEnabled,
   hasRequiredCredentials,
+  missingCredential,
+  warmSlotCapabilities,
+  portraitCredentialError,
+  imageSetupMessage,
+  MISSING_CREDENTIAL_REASONS,
+  type MissingCredential,
   type ImageProfileSlot,
   getProviderDisplayName,
   retryImageGeneration,
   generatePortrait,
   runImageGeneration,
+  beginImageAttempt,
+  cancelImageGeneration,
 } from './imageUtils'
 
 // Portrait lookups for reference-mode scenes
@@ -54,4 +98,18 @@ export { resolveStylePrompt, resolveStylePromptForPack } from './stylePrompt'
 // Constants
 export { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 // Provider types
-export { ComfyMode } from './providers/comfy'
+export {
+  ComfyMode,
+  detectWorkflowFields,
+  isWorkflowComplete,
+  listNodes,
+  loadImageInputs,
+  pickInputs,
+  referenceInputsOf,
+  suggestReferenceInputs,
+  validateApiWorkflow,
+  workflowInputs,
+  workflowProblems,
+  type WorkflowInput,
+} from './providers/comfy'
+export type { ComfyCustomWorkflow } from './providers/types'

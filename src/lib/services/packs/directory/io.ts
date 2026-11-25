@@ -7,9 +7,17 @@
  */
 
 import { open } from '@tauri-apps/plugin-dialog'
-import { mkdir, readDir, readTextFile, remove, writeTextFile } from '@tauri-apps/plugin-fs'
+import {
+  exists,
+  mkdir,
+  readDir,
+  readTextFile,
+  remove,
+  rename,
+  writeTextFile,
+} from '@tauri-apps/plugin-fs'
 import { classifyPath } from './layout'
-import type { Tree } from './tree'
+import { emptiedFolderCandidates, holdsOnlyOsClutter, type FolderChanges, type Tree } from './tree'
 
 /** Ask for a directory, adding it to the fs scope. `null` if the user cancelled. */
 export async function pickDirectory(title: string): Promise<string | null> {
@@ -32,32 +40,42 @@ function isSkippedDirectory(name: string): boolean {
   return name.startsWith('.') || name === 'node_modules'
 }
 
-/** Every file below `root`, as paths relative to it. */
-export async function listFiles(root: string, relativeDir = ''): Promise<string[]> {
+interface Listing {
+  files: string[]
+  directories: string[]
+}
+
+/** Every file and folder below `root`, as paths relative to it. */
+async function listEntries(
+  root: string,
+  relativeDir = '',
+  listing: Listing = { files: [], directories: [] },
+): Promise<Listing> {
   const entries = await readDir(relativeDir ? joinPath(root, relativeDir) : root)
-  const files: string[] = []
 
   for (const entry of entries) {
     const relative = relativeDir ? `${relativeDir}/${entry.name}` : entry.name
     if (entry.isDirectory) {
-      if (isSkippedDirectory(entry.name)) continue
-      files.push(...(await listFiles(root, relative)))
-    } else if (entry.isFile) files.push(relative)
+      listing.directories.push(relative)
+      if (!isSkippedDirectory(entry.name)) await listEntries(root, relative, listing)
+    } else if (entry.isFile) listing.files.push(relative)
   }
 
-  return files
+  return listing
 }
 
 export interface ReadTree {
   /** Every file found, whether or not the import reads it. Needed to plan a prune. */
   allPaths: string[]
+  /** Every folder found, so a rename does not pick a name a folder already has. */
+  directoryPaths: string[]
   /** Only the files an import reads, by relative path. */
   contents: Map<string, string>
 }
 
 /** Read a tree, loading only the files an import actually reads. */
 export async function readTree(root: string): Promise<ReadTree> {
-  const allPaths = await listFiles(root)
+  const { files: allPaths, directories: directoryPaths } = await listEntries(root)
   const contents = new Map<string, string>()
 
   for (const path of allPaths) {
@@ -65,11 +83,26 @@ export async function readTree(root: string): Promise<ReadTree> {
     contents.set(path, await readTextFile(joinPath(root, path)))
   }
 
-  return { allPaths, contents }
+  return { allPaths, directoryPaths, contents }
 }
 
-/** Write every file of `tree`, creating folders as needed, then remove `prunePaths`. */
-export async function writeTree(root: string, tree: Tree, prunePaths: string[]): Promise<void> {
+/** Apply `renames`, write every file of `tree`, creating folders as needed, then prune. */
+export async function writeTree(
+  root: string,
+  tree: Tree,
+  { prunePaths, renames }: FolderChanges,
+): Promise<void> {
+  // First: a renamed file can share a name with one the tree is about to write. The plan waited
+  // on the confirmation, so a target that appeared since stops the export rather than being lost.
+  for (const { to } of renames) {
+    if (await exists(joinPath(root, to))) {
+      throw new Error(`${to} appeared in the folder since the export was planned. Export again.`)
+    }
+  }
+  for (const { from, to } of renames) {
+    await rename(joinPath(root, from), joinPath(root, to))
+  }
+
   const directories = new Set<string>()
   for (const path of tree.keys()) {
     const lastSlash = path.lastIndexOf('/')
@@ -86,5 +119,19 @@ export async function writeTree(root: string, tree: Tree, prunePaths: string[]):
 
   for (const path of prunePaths) {
     await remove(joinPath(root, path))
+  }
+
+  // Only folders the prune emptied: one the user left empty themselves is not touched.
+  for (const folder of emptiedFolderCandidates(prunePaths)) {
+    const entries = await readDir(joinPath(root, folder))
+    const files = entries.filter((entry) => entry.isFile).map((entry) => entry.name)
+    if (files.length !== entries.length || !holdsOnlyOsClutter(files)) continue
+    for (const name of files) await remove(joinPath(root, `${folder}/${name}`))
+    // Not recursive: a file that arrived since the listing keeps the folder, and the export.
+    try {
+      await remove(joinPath(root, folder))
+    } catch (e) {
+      console.warn(`[directory] Left ${folder} in place:`, e)
+    }
   }
 }

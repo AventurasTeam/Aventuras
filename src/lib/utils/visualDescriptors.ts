@@ -7,7 +7,7 @@
 
 import type { VisualDescriptors } from '#lib/types/index.ts'
 
-const CATEGORY_ORDER: (keyof VisualDescriptors)[] = [
+export const DESCRIPTOR_CATEGORIES: readonly (keyof VisualDescriptors)[] = [
   'face',
   'hair',
   'eyes',
@@ -34,7 +34,7 @@ export function descriptorsToString(descriptors: VisualDescriptors | null | unde
   if (!descriptors) return ''
 
   const parts: string[] = []
-  for (const key of CATEGORY_ORDER) {
+  for (const key of DESCRIPTOR_CATEGORIES) {
     if (descriptors[key]) {
       parts.push(`${CATEGORY_LABELS[key]}: ${descriptors[key]}`)
     }

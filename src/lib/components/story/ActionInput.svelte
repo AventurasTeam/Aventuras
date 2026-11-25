@@ -2,6 +2,7 @@
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '#lib/stores/ui.svelte.ts'
   import { activity } from '#lib/stores/activity.svelte.ts'
+  import { chapterCards } from '#lib/stores/chapterCards.svelte.ts'
   import {
     describeActivityError,
     trackStep,
@@ -13,6 +14,7 @@
   import { joinPromptBlocks } from '#lib/utils/promptBlocks.ts'
   import { countTokens } from '#lib/services/tokenizer.ts'
   import { story } from '#lib/stores/story.svelte.ts'
+  import type { RevertKeep } from '#lib/services/stateTracking/index.ts'
   import { settings } from '#lib/stores/settings.svelte.ts'
   import type { EntryMetadata, Story } from '#lib/types/index.ts'
   import { aiService } from '#lib/services/ai/index.ts'
@@ -32,9 +34,21 @@
     type ClassificationCompleteEvent,
   } from '#lib/services/events.ts'
   import { isTouchDevice } from '#lib/utils/swipe.ts'
-  import { isAndroid } from '#lib/utils/platform.ts'
-  import { findPrecedingUserAction, GENERATION_ERROR_SOURCE } from '#lib/utils/storyEntries.ts'
+  import { isIos } from '#lib/utils/platform.ts'
+  import {
+    afterBackgroundKeepAlive,
+    holdBackgroundKeepAlive,
+    retainBackgroundKeepAlive,
+    setKeepAliveStage,
+    supportsBackgroundGeneration,
+  } from '#lib/utils/backgroundKeepAlive.ts'
+  import {
+    findPrecedingUserAction,
+    GENERATION_ERROR_SOURCE,
+    trailingAction,
+  } from '#lib/utils/storyEntries.ts'
   import { errMessage } from '#lib/utils/error.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import {
     GenerationPipeline,
     retryService,
@@ -49,13 +63,13 @@
     type GenerationContext,
     type RetrievalResult,
     type BackgroundTaskDependencies,
+    type WrittenCharacter,
     type BackgroundTaskInput,
     type PipelineUICallbacks,
     type PipelineEventState,
-    type RestoreResult,
   } from '#lib/services/generation/index.ts'
   import { InlineImageTracker } from '#lib/services/ai/image/index.ts'
-  import type { BranchScope } from '#lib/utils/branchScope.ts'
+  import { sameBranchScope, type BranchScope } from '#lib/utils/branchScope.ts'
   import type { GenerationLease } from '#lib/utils/generationLease.ts'
   import { storyImageMode } from '#lib/utils/image.ts'
 
@@ -128,7 +142,8 @@
   let isRawActionChoice = $state(false)
   let stopRequested = false
   let activeAbortController: AbortController | null = null
-  // Set once the narration is saved: what follows does not honour the abort, so Stop cannot end it.
+  // Set once the narration is complete: what follows does not honour the abort, and a Stop
+  // past this point would leave a saved narration without its world update.
   let stopUnavailable = $state(false)
   let textareaRef: HTMLTextAreaElement | null = $state(null)
 
@@ -144,6 +159,11 @@
 
   // Block generation when any service is missing a model or has an invalid profile
   const blockGeneration = $derived(settings.hasGenerationConfigIssues)
+
+  // A second action would bury the first: nothing answers an action once another follows it.
+  const awaitingAnswer = $derived(!!trailingAction(story.entries))
+  const SEND_WAITS =
+    'Generate a response to the action above, or delete it, before sending another.'
 
   // ============================================================================
   // Action Type Configuration
@@ -233,6 +253,11 @@
   $effect(() => {
     ui.setRegenerateNarrationCallback(handleRegenerateNarration)
     return () => ui.setRegenerateNarrationCallback(null)
+  })
+
+  $effect(() => {
+    ui.setGenerateFromActionCallback(handleGenerateFromAction)
+    return () => ui.setGenerateFromActionCallback(null)
   })
 
   $effect(() => {
@@ -332,15 +357,22 @@
       chapterService: {
         analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
         summarizeChapter: aiService.summarizeChapter.bind(aiService),
-        getNextChapterNumber: story.getNextChapterNumber.bind(story),
         addChapter: story.addChapter.bind(story),
       },
       loreManagement: {
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
       },
       styleReview: {
-        analyzeStyle: (entries, mode, pov, tense, recentEntriesCount) =>
-          aiService.analyzeStyle(storyId, entries, mode, pov, tense, recentEntriesCount),
+        analyzeStyle: (entries, mode, pov, tense, recentEntriesCount, activityParentId) =>
+          aiService.analyzeStyle(
+            storyId,
+            entries,
+            mode,
+            pov,
+            tense,
+            recentEntriesCount,
+            activityParentId,
+          ),
       },
     }
   }
@@ -390,19 +422,30 @@
       // A thunk: read when the session starts, after the classifier and the chapter check
       // have run. See BackgroundTaskInput.loreSession. The scope is the turn's, matching the
       // callbacks below, so a story switch refuses the session instead of misdirecting it.
-      loreSession: () => ({
-        storyId,
-        currentBranchId: branchId,
-        lorebookEntries: story.lorebookEntries,
-        chapters: story.currentBranchChapters,
-        recentEntries: story.getUnchapterizedEntries(),
-        mode,
-        pov: story.pov,
-        tense: story.tense,
-        tokenThreshold: story.memoryConfig.tokenThreshold,
-        chapterBuffer: story.memoryConfig.chapterBuffer,
-      }),
-      loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
+      loreSession: () => {
+        const open = story.currentScope
+        if (!open || !sameBranchScope(open, { storyId, branchId })) {
+          throw new Error('The story or branch this chapter belongs to is no longer open')
+        }
+        return {
+          storyId,
+          currentBranchId: branchId,
+          lorebookEntries: story.lorebookEntries,
+          chapters: story.currentBranchChapters,
+          recentEntries: story.getUnchapterizedEntries(),
+          mode,
+          pov: story.pov,
+          tense: story.tense,
+          tokenThreshold: story.memoryConfig.tokenThreshold,
+          chapterBuffer: story.memoryConfig.chapterBuffer,
+        }
+      },
+      // Built once the narration is in, so the session's changes attach to this turn.
+      loreCallbacks: buildLoreManagementCallbacks(
+        { storyId, branchId },
+        // The chapter is cut after this is built; its lore lands on the chapter's last entry.
+        () => ({ origin: 'chapter', entryId: story.latestChapterEndEntryId() }),
+      ),
       loreUICallbacks: buildLoreManagementUICallbacks(),
     }
   }
@@ -447,10 +490,24 @@
     }
   }
 
+  /** Run once the app is in front, so a toast raised in the background is seen. */
+  function whenVisible(run: () => void) {
+    if (!document.hidden) return run()
+    const onChange = () => {
+      if (document.hidden) return
+      document.removeEventListener('visibilitychange', onChange)
+      run()
+    }
+    document.addEventListener('visibilitychange', onChange)
+  }
+
   /** Send a failure notification if the user was backgrounded during this generation. */
-  async function notifyFailureIfBackgrounded() {
+  async function notifyFailureIfBackgrounded(keepAliveEnded = false) {
+    // After the OS ended the keep-alive, the native side has already posted its own notice.
     if (
+      !keepAliveEnded &&
       ui.wasBackgroundedDuringGeneration &&
+      ui.isAppBackgrounded &&
       settings.experimentalFeatures.generationNotifications
     ) {
       await sendGenerationNotification('', false)
@@ -466,6 +523,12 @@
    * (retry, regenerate) has already put it there. Called any earlier it computes a position
    * one lower than the stored key and can never match.
    */
+  /** Only right once the story is where retrieval ran: the key carries the position. */
+  function cachedRetrievalFor(actionContent: string): RetrievalResult | null {
+    const key = retrievalKeyFor(actionContent)
+    return key ? ui.retrievalResultFor(key) : null
+  }
+
   function retrievalKeyFor(actionContent: string): RetrievalCacheKey | null {
     const current = story.currentStory
     if (!current) return null
@@ -499,7 +562,7 @@
     try {
       await run(lease)
     } finally {
-      await lease.finish()
+      lease.finish()
     }
   }
 
@@ -565,25 +628,37 @@
       )
     }
 
-    // Android: start foreground service to keep process alive when backgrounded
-    const useBackgroundService = isAndroid() && settings.experimentalFeatures.backgroundGeneration
-    if (useBackgroundService) {
-      try {
-        window.AndroidBridge?.startGenerationService()
-      } catch (e) {
-        console.warn('[ActionInput] Failed to start generation foreground service:', e)
-      }
-    }
+    // Keeps the process alive when backgrounded: a foreground service on Android, a continued
+    // processing task on iOS. The OS may end the iOS allowance early; see the expiry callback below.
+    const useBackgroundService =
+      supportsBackgroundGeneration() && settings.experimentalFeatures.backgroundGeneration
+    // Set when the OS ends the keep-alive (the Dynamic Island's Stop, or a system cutoff). The
+    // native side has already posted the "interrupted" notice, so no completion notice follows.
+    let keepAliveEnded = false
+    // A cutoff after the narration keeps it; this says whether its world update ran.
+    let worldUpdated = false
+    // Before the hold's await, which an app switch can land in.
     ui.resetBackgroundedFlag()
-
     // What the turn ran into, for the outcome its record closes with.
     const ending: Omit<TurnEnding, 'stopRequested'> = {}
+    const releaseKeepAlive = useBackgroundService
+      ? await holdBackgroundKeepAlive(() => {
+          keepAliveEnded = true
+          // Before the narration is complete, end the turn like the in-app Stop; from then on,
+          // its save included, only the later phases are cut short.
+          activeAbortController?.abort()
+          if (!stopUnavailable) handleStopGeneration()
+        }, settings.experimentalFeatures.generationNotifications)
+      : () => {}
+    let turnRecordId = ''
+    // Set once the background work is handed off: the record then ends when that work does.
+    let turnEndsLater = false
 
     try {
       // Inside the try: only its `finally` closes the turn, and a throw before that point
       // would leave a record nothing can close.
       const inputTranslation = options?.inputTranslation
-      activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
+      turnRecordId = activity.startTurn(narrationEntryId, inputTranslation?.startedAt)
       if (inputTranslation) {
         activity.recordStep('Translating input', {
           isLLM: true,
@@ -709,6 +784,8 @@
       for await (const event of pipeline.execute(ctx, cfg)) {
         if (stopRequested) break
 
+        if (event.type === 'phase_start' && event.phase === 'narrative')
+          setKeepAliveStage('writing')
         handleEvent(event, eventState, eventCallbacks)
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
@@ -749,6 +826,8 @@
 
         if (event.type === 'phase_complete' && event.phase === 'narrative' && fullResponse.trim()) {
           generationMeta.generationTime = Date.now() - generationStartedAt
+          // Before the await: a Stop during the save would end the turn short of its world update.
+          stopUnavailable = true
           narrationEntry = await story.addEntry(
             'narration',
             fullResponse,
@@ -758,13 +837,14 @@
             narrationEntryId,
           )
           ui.endStreaming()
-          stopUnavailable = true
           ending.narrationSaved = true
+          setKeepAliveStage('world')
           emitNarrativeResponse(narrationEntry.id, fullResponse)
           if (inlineImageTracker?.hasPendingImages) await inlineImageTracker.flushToDatabase()
         }
 
         if (event.type === 'classification_complete' && narrationEntry) {
+          worldUpdated = true
           eventBus.emit<ClassificationCompleteEvent>({
             type: 'ClassificationComplete',
             messageId: narrationEntry.id,
@@ -783,8 +863,9 @@
           }
           const entryId = narrationEntry.id
           const { _error, _salvaged } = event.result
+          let written: WrittenCharacter[] = []
           // A failed result still runs the entry's bookkeeping: its end time, and with state
-          // tracking an empty delta and maybe a snapshot.
+          // tracking its header and maybe a snapshot.
           await trackStep(
             activity,
             'Updating world',
@@ -797,7 +878,7 @@
                   : 'fallback bookkeeping only',
             },
             async () => {
-              await story.applyClassificationResult(event.result, entryId)
+              written = await story.applyClassificationResult(event.result, entryId)
               await story.updateEntryTimeEnd(entryId)
             },
           )
@@ -807,12 +888,12 @@
             const translationService = new WorldStateTranslationService({
               translateUIElements: aiService.translateUIElements.bind(aiService),
             })
+            const releaseTranslation = retainBackgroundKeepAlive()
             translationService
               .translateEntities(
                 {
                   storyId: currentStoryRef.id,
                   classificationResult: {
-                    newCharacters: event.result.entryUpdates.newCharacters,
                     newLocations: event.result.entryUpdates.newLocations,
                     newItems: event.result.entryUpdates.newItems,
                     newStoryBeats: event.result.entryUpdates.newStoryBeats,
@@ -824,9 +905,11 @@
                     storyBeats: story.storyBeats,
                   },
                   targetLanguage: translationSettings.targetLanguage,
+                  characters: written,
                 },
                 {
-                  updateCharacter: (id, data) => database.updateCharacter(id, data as any),
+                  updateCharacter: (id, data) => database.updateCharacter(id, data),
+                  getCharacter: (id) => story.characters.find((c) => c.id === id),
                   updateLocation: (id, data) => database.updateLocation(id, data as any),
                   updateItem: (id, data) => database.updateItem(id, data as any),
                   updateStoryBeat: (id, data) => database.updateStoryBeat(id, data as any),
@@ -834,6 +917,7 @@
                 },
               )
               .catch((err) => log('World state translation failed (non-fatal)', err))
+              .finally(releaseTranslation)
           }
         }
 
@@ -870,8 +954,9 @@
         }
       }
 
-      ui.updateActivationData(activationTracker, currentStoryRef.id)
+      // Before the activations are kept: an abandoned turn leaves nothing sticky.
       if (stopRequested) return
+      ui.updateActivationData(activationTracker, currentStoryRef.id)
 
       if (!fullResponse.trim()) {
         // The reason when the pipeline gave one: with reporting off, nothing else shows it.
@@ -890,7 +975,21 @@
           timestamp: Date.now(),
         })
 
-        await notifyFailureIfBackgrounded()
+        await notifyFailureIfBackgrounded(keepAliveEnded)
+        return
+      }
+
+      // The user stopped it from the Island: the story is saved, and no speech or other work is started.
+      if (keepAliveEnded) {
+        if (ending.narrationSaved && !worldUpdated) {
+          whenVisible(() =>
+            ui.showToast(
+              'Background time ran out before the world update for the last response. ' +
+                'Regenerate it to apply its changes.',
+              'warning',
+            ),
+          )
+        }
         return
       }
 
@@ -906,26 +1005,72 @@
         buildBackgroundTaskDependencies(currentStoryRef.id),
       )
       const input = buildBackgroundTaskInput(currentStoryRef, countStyleReview, styleReviewSource)
-      if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
-      // Deliberately not awaited — but the flag has to outlive the call, or the Memory
-      // view will offer to create a chapter while this one is being created.
       const bgStoryId = currentStoryRef.id
       const bgBranchId = leasedBranchId
+      // Another chapter still being created, or another lore run holding the branch, would
+      // have this turn cut a second chapter whose own lore management is then refused.
+      if (!story.memoryConfig.autoSummarize || chapterCards.busy(bgStoryId, bgBranchId)) {
+        input.chapterCheck.tokensOutsideBuffer = 0
+      }
+      const afterTurnId = activity.startStep('After the turn', { recordId: turnRecordId })
+      input.activity = activity
+      input.activityParentId = afterTurnId
+      input.onTurnWorkEnded = (recordedAnything) => {
+        if (recordedAnything) activity.endStep(afterTurnId)
+        else activity.discardStep(afterTurnId)
+        activity.endRecord(turnRecordId)
+      }
+      input.onChapterCheck = (active) => ui.setChapterCheckActive(bgStoryId, bgBranchId, active)
+      input.chapterCard = {
+        cards: chapterCards.cards,
+        anchorEntryId: narrationEntryId,
+        openRecord: (key) => activity.startRecord(key, 'chapter'),
+        reopenRecord: (key) => activity.reopenRecord(key),
+        closeRecord: (id) => activity.endRecord(id),
+        cutState: (cut) => {
+          const open = story.currentScope
+          if (!open || !sameBranchScope(open, { storyId: bgStoryId, branchId: bgBranchId })) {
+            return 'closed'
+          }
+          if (chapterCards.busy(bgStoryId, bgBranchId)) return 'busy'
+          const start = story.lastChapterEndIndex
+          // The same text too, not only the same entries: an edit would leave the summary stale.
+          const unchanged = cut.entries.every((entry, i) => {
+            const live = story.entries[start + i]
+            return live?.id === entry.id && live.content === entry.content
+          })
+          return unchanged ? 'open' : 'closed'
+        },
+      }
+      turnEndsLater = true
+      // Deliberately not awaited — but the flag has to outlive the call, or the Memory
+      // view will offer to create a chapter while this one is being created.
       ui.setBackgroundTasksActive(bgStoryId, bgBranchId, true)
+      const releaseBackgroundTasks = retainBackgroundKeepAlive()
+      setKeepAliveStage('finishing')
       coordinator
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
-        .finally(() => ui.setBackgroundTasksActive(bgStoryId, bgBranchId, false))
+        .finally(() => {
+          ui.setBackgroundTasksActive(bgStoryId, bgBranchId, false)
+          releaseBackgroundTasks()
+        })
 
-      // Android: notify user that generation completed while app is still backgrounded.
-      // Awaited so the foreground service isn't torn down before the notification fires.
-      if (
-        ui.wasBackgroundedDuringGeneration &&
-        ui.isAppBackgrounded &&
-        settings.experimentalFeatures.generationNotifications
-      ) {
-        await sendGenerationNotification(fullResponse, true)
+      // Notify the user that generation completed while the app is still backgrounded. On iOS it
+      // waits for the keep-alive to go idle, so it lands with the Dynamic Island's "complete" and
+      // the task is not torn down first; Android has no such display and notifies at once.
+      const notifyCompletion = async () => {
+        if (
+          !keepAliveEnded &&
+          ui.wasBackgroundedDuringGeneration &&
+          ui.isAppBackgrounded &&
+          settings.experimentalFeatures.generationNotifications
+        ) {
+          await sendGenerationNotification(fullResponse, true)
+        }
       }
+      if (useBackgroundService && isIos()) afterBackgroundKeepAlive(notifyCompletion)
+      else await notifyCompletion()
     } catch (error) {
       // Only suppress handling when the user explicitly requested a stop.
       // An AbortError that arrives with stopRequested=false means the request
@@ -963,25 +1108,27 @@
         ui.showToast(errorMessage, 'error')
       }
 
-      await notifyFailureIfBackgrounded()
+      await notifyFailureIfBackgrounded(keepAliveEnded)
     } finally {
+      inlineImageTracker?.abandon()
       ui.endStreaming()
       ui.setGenerating(false)
       ui.setGenerationStatus('')
       // Closes the turn even when a step was left running, so the record is bounded.
-      const { outcome, error } = turnOutcome({ ...ending, stopRequested })
-      activity.endTurn(outcome, error)
+      if (!turnEndsLater) {
+        const { outcome, error } = turnOutcome({ ...ending, stopRequested })
+        activity.endRecord(turnRecordId, outcome, error)
+      }
       activeAbortController = null
       stopUnavailable = false
 
-      // Android: always stop the foreground service when generation ends
-      if (useBackgroundService) {
-        try {
-          window.AndroidBridge?.stopGenerationService()
-        } catch (e) {
-          console.warn('[ActionInput] Failed to stop generation foreground service:', e)
-        }
-      }
+      releaseKeepAlive(
+        ending.fatalError || ending.caughtError || ending.emptyResponse
+          ? 'failed'
+          : stopRequested
+            ? 'stopped'
+            : 'done',
+      )
     }
   }
 
@@ -1112,7 +1259,11 @@
   }
 
   async function handleSubmit() {
-    if (!inputValue.trim() || ui.isGenerating || !story.currentStory) return
+    if (!inputValue.trim() || ui.isGenerating || ui.regeneratePending || !story.currentStory) return
+    if (awaitingAnswer) {
+      ui.showToast(SEND_WAITS, 'info')
+      return
+    }
     const currentStory = story.currentStory
 
     await withGenerationLease(async (lease) => {
@@ -1132,6 +1283,8 @@
       inputValue = ''
       if (textareaRef) textareaRef.scrollTop = 0
 
+      await story.ensureStartCheckpoint(lease)
+
       const embeddedImageIds = await database.getEmbeddedImageIdsForStory(currentStory.id)
       ui.createRetryBackup(
         currentStory.id,
@@ -1147,6 +1300,7 @@
         actionType,
         wasRawActionChoice,
         currentStory.timeTracker,
+        settings.experimentalFeatures.stateTracking,
       )
 
       const {
@@ -1173,96 +1327,23 @@
     })
   }
 
-  // A retry runs its own rewind, which a Stop part way through would contend with.
   const stopBlockedBy = $derived(
-    ui.isRetryingLastMessage
-      ? 'Stop is not available during a retry.'
-      : stopUnavailable
-        ? 'Stop is not available at the moment: the turn is finishing steps that cannot be interrupted.'
-        : null,
+    stopUnavailable
+      ? 'Stop is not available at the moment: the turn is finishing steps that cannot be interrupted.'
+      : null,
   )
 
-  async function handleStopGeneration() {
+  // Abandons the request and leaves the action in place, for the reader to generate from or edit.
+  function handleStopGeneration() {
     if (stopRequested || stopBlockedBy) return
 
     stopRequested = true
     activeAbortController?.abort()
     ui.endStreaming()
     ui.setGenerating(false)
-
-    const backup = ui.retryBackup
-    if (!backup || !story.currentStory || backup.storyId !== story.currentStory.id) {
-      if (backup) ui.clearRetryBackup()
-      return
-    }
-
-    // Read when the rewind actually runs, not now: it is deferred until the generation
-    // drains, and another story can be opened in between. Capturing here would hand the
-    // service a scope that was true only at the moment Stop was pressed.
-    const activeScope = () => ({
-      storyId: story.currentStory?.id ?? '',
-      branchId: story.currentStory?.currentBranchId ?? null,
-    })
-    const runRestore = () =>
-      retryService.handleStopGeneration(
-        backup,
-        {
-          restoreFromRetryBackup: story.restoreFromRetryBackup.bind(story),
-          deleteEntriesFromPosition: story.deleteEntriesFromPosition.bind(story),
-          deleteEntitiesCreatedAfterBackup: story.deleteEntitiesCreatedAfterBackup.bind(story),
-          restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
-          restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
-          assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
-          lockRetryInProgress: story.lockRetryInProgress.bind(story),
-          unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
-          restoreActivationData: ui.restoreActivationData.bind(ui),
-          clearActivationData: () => ui.clearActivationData(),
-          setLastLorebookRetrieval: ui.setLastLorebookRetrieval.bind(ui),
-        },
-        {
-          clearGenerationError: () => ui.clearGenerationError(),
-          clearSuggestions: () => ui.clearSuggestions(story.currentStory!.id),
-          clearActionChoices: () => ui.clearActionChoices(story.currentStory!.id),
-        },
-        activeScope(),
-      )
-
-    // Aborting the request is not the end of the generation's writes: a classification
-    // already entered keeps going. Hand the rewind to the lease, which runs it once those
-    // have drained and only then gives the branch up. The lease's holder releases, not this.
-    let result: RestoreResult
-    const lease = story.currentGenerationLease
-    if (lease) {
-      let deferred: RestoreResult | undefined
-      const settled = lease.deferRestore(async () => {
-        deferred = await runRestore()
-      })
-      if (settled) {
-        await settled
-        result = deferred ?? { success: false, error: 'The restore did not run' }
-      } else {
-        result = await runRestore()
-      }
-    } else {
-      result = await runRestore()
-    }
-
-    if (!result.success) {
-      // The backup is the only way back to the pre-action story, so a refused restore keeps it.
-      ui.showToast(result.error ?? 'Could not restore the story', 'error')
-      return
-    }
-
-    // Cleared only now: a refused restore leaves the story untouched, so wiping lorebook
-    // stickiness and the retrieval cache on the way in would be the one thing preflight
-    // exists to prevent. RetryService clears the lorebook debug state itself once it commits.
+    // The stopped turn kept none of its activations, so the next one runs retrieval again.
     ui.setLastRetrievalResult(null)
-
-    await tick()
-    actionType = (result.restoredActionType as ActionType) ?? actionType
-    isRawActionChoice = result.restoredWasRawActionChoice ?? false
-    inputValue = result.restoredRawInput ?? ''
-    ui.clearRetryBackup(true)
+    ui.setLastLorebookRetrieval(null)
   }
 
   async function handleRetry() {
@@ -1307,7 +1388,7 @@
    * classification stay applied while the replacement's was added on top: story time
    * advanced twice for one user action, and entities it invented outlived it.
    */
-  async function handleRegenerateNarration(entryId: string) {
+  async function handleRegenerateNarration(entryId: string, keep?: RevertKeep) {
     if (ui.isGenerating) return
 
     const userActionEntry = findPrecedingUserAction(story.entries, entryId)
@@ -1318,14 +1399,14 @@
     await withGenerationLease(async (lease) => {
       let undo: { entitiesUndone: boolean; timeUndone: boolean }
       try {
-        undo = await story.undoNarrationForRegenerate(entryId, lease)
+        undo = await story.undoNarrationForRegenerate(entryId, lease, keep)
       } catch (error) {
         ui.showToast(errMessage(error), 'error')
         return
       }
 
-      // Entity changes are only reversible when stateTracking recorded a delta for the
-      // entry. Say so rather than leaving the user to notice a stray character later.
+      // Entity changes are only reversible when State Tracking recorded the entry's changes.
+      // Say so rather than leaving the user to notice a stray character later.
       if (!undo.entitiesUndone) {
         ui.showToast(
           'Regenerating: story time was restored, but characters, locations or items the ' +
@@ -1335,19 +1416,40 @@
         )
       }
 
+      // After the undo: a regenerated imported reply is the story's first turn, and a checkpoint
+      // on that reply would go with it.
+      await story.ensureStartCheckpoint(lease)
+
       // The rewind above put the story back exactly where the previous turn's retrieval was
       // computed, so that result is still the right one — same branch, same position, same
       // action. Read after the undo, since the key is position-sensitive.
-      const cachedRetrieval = retrievalKeyFor(userActionEntry.content)
       await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
         countStyleReview: false,
         styleReviewSource: 'regenerate',
-        cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
+        cachedRetrievalResult: cachedRetrievalFor(userActionEntry.content),
       })
     })
   }
 
-  async function handleRetryLastMessage() {
+  /** Answer an action that ends the story: nothing to undo, so the turn starts from there. */
+  async function handleGenerateFromAction(entryId: string) {
+    if (ui.isGenerating || story.isGenerationLeaseHeld || !story.currentStory) return
+
+    const userActionEntry = trailingAction(story.entries)
+    if (userActionEntry?.id !== entryId) return
+    const storyId = story.currentStory.id
+
+    await withGenerationLease(async (lease) => {
+      ui.clearSuggestions(storyId)
+      await story.ensureStartCheckpoint(lease)
+      await generateResponse(lease, userActionEntry.id, userActionEntry.content, {
+        styleReviewSource: 'generate-from-action',
+        cachedRetrievalResult: cachedRetrievalFor(userActionEntry.content),
+      })
+    })
+  }
+
+  async function handleRetryLastMessage(keep: RevertKeep) {
     const backup = ui.retryBackup
     console.log('[handleRetryLastMessage] called', {
       hasBackup: !!backup,
@@ -1373,6 +1475,7 @@
           restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
           restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
           assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
+          rewindThroughRecords: (position) => story.rewindForRetry(position, keep),
           lockRetryInProgress: story.lockRetryInProgress.bind(story),
           unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
           restoreActivationData: ui.restoreActivationData.bind(ui),
@@ -1411,19 +1514,13 @@
 
       // Read here rather than before the rewind: the key carries the position, so it only
       // matches once the restore has put the story back where retrieval ran.
-      const cacheKey = retrievalKeyFor(promptContent)
 
-      ui.setRetryingLastMessage(true)
-      try {
-        await generateResponse(lease, userActionEntry.id, promptContent, {
-          countStyleReview: false,
-          styleReviewSource: 'retry-last-message',
-          cachedRetrievalResult: cacheKey ? ui.retrievalResultFor(cacheKey) : null,
-          inputTranslation,
-        })
-      } finally {
-        ui.setRetryingLastMessage(false)
-      }
+      await generateResponse(lease, userActionEntry.id, promptContent, {
+        countStyleReview: false,
+        styleReviewSource: 'retry-last-message',
+        cachedRetrievalResult: cachedRetrievalFor(promptContent),
+        inputTranslation,
+      })
     })
   }
 
@@ -1508,10 +1605,16 @@
         {:else}<button
             onclick={handleSubmit}
             disabled={!inputValue.trim() || blockGeneration}
-            class="text-accent-400 hover:text-accent-300 hover:bg-accent-500/10 flex h-11 w-11 flex-shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0"
+            aria-disabled={awaitingAnswer}
+            class={cn(
+              'text-accent-400 hover:text-accent-300 hover:bg-accent-500/10 flex size-11 shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0',
+              awaitingAnswer && 'cursor-not-allowed opacity-50',
+            )}
             title={blockGeneration
               ? 'AI configuration incomplete — check Settings'
-              : `Send direction (${sendKeyHint})`}><Send class="h-6 w-6" /></button
+              : awaitingAnswer
+                ? SEND_WAITS
+                : `Send direction (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>
@@ -1578,12 +1681,17 @@
         {:else}<button
             onclick={handleSubmit}
             disabled={!inputValue.trim() || blockGeneration}
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 {actionButtonStyles[
-              actionType
-            ]} -translate-y-0.5 sm:translate-y-0"
+            aria-disabled={awaitingAnswer}
+            class={cn(
+              'flex size-11 shrink-0 -translate-y-0.5 items-center justify-center rounded-lg p-0 transition-all active:scale-95 disabled:opacity-50 sm:translate-y-0',
+              actionButtonStyles[actionType],
+              awaitingAnswer && 'cursor-not-allowed opacity-50',
+            )}
             title={blockGeneration
               ? 'AI configuration incomplete — check Settings'
-              : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
+              : awaitingAnswer
+                ? SEND_WAITS
+                : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
     </div>

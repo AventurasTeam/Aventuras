@@ -2,18 +2,11 @@
  * Turning a reconciliation into the writes that commit with it.
  *
  * Reconciling is not only entry times: chapter spans covering those entries are copies that go
- * stale, a delta's recorded clock would otherwise restore an earlier value on rollback, and a
- * range reaching the end of the branch moves the story clock. All of it lands together or
- * not at all.
+ * stale, and a range reaching the end of the branch moves the story clock. All of it lands
+ * together or not at all.
  */
 
-import type {
-  Chapter,
-  Checkpoint,
-  StoryEntry,
-  TimeTracker,
-  WorldStateDelta,
-} from '#lib/types/index.ts'
+import type { Chapter, Checkpoint, StoryEntry, TimeAnchor, TimeTracker } from '#lib/types/index.ts'
 import type { ReconciledTime } from './reconcile'
 import type { Boundary } from './boundaries'
 import { toMinutes } from './minutes'
@@ -24,20 +17,19 @@ export interface ChapterSpanUpdate {
   endTime: TimeTracker | null
 }
 
-export interface DeltaUpdate {
-  entryId: string
-  delta: WorldStateDelta
-}
-
 export interface CheckpointClockUpdate {
   checkpointId: string
+  timeTracker: TimeTracker
+}
+
+export interface SnapshotClockUpdate {
+  entryId: string
   timeTracker: TimeTracker
 }
 
 export interface ReconciliationPlan {
   times: ReconciledTime[]
   chapterSpans: ChapterSpanUpdate[]
-  deltas: DeltaUpdate[]
   /**
    * The story clock afterwards, or null to leave it alone.
    *
@@ -54,12 +46,12 @@ export interface ReconciliationPlan {
    */
   checkpointClocks: CheckpointClockUpdate[]
   /**
-   * Entries whose automatic world-state keyframes this reconciliation invalidates.
-   *
-   * A keyframe is a cache taken wherever the snapshot interval fell, so it can be neither
-   * pinned nor rewritten with confidence, and is discarded the way a rollback discards it.
+   * World-state snapshots taken at a rewritten entry, given that entry's new ending. They are
+   * kept: past states are rebuilt from them, and a closing one shows a run was tracked.
    */
-  keyframeEntryIds: string[]
+  snapshotClocks: SnapshotClockUpdate[]
+  /** Anchors the reader edited for this reconciliation, stored with it and nothing more. */
+  anchors: TimeAnchor[]
 }
 
 export interface PlanReconciliationInput {
@@ -69,10 +61,11 @@ export interface PlanReconciliationInput {
   /** The reconciliation's output for the entries inside the range. */
   times: ReconciledTime[]
   checkpoints?: Checkpoint[]
+  anchors?: TimeAnchor[]
 }
 
 export function planReconciliation(input: PlanReconciliationInput): ReconciliationPlan {
-  const { entries, chapters, times, checkpoints = [] } = input
+  const { entries, chapters, times, checkpoints = [], anchors = [] } = input
   const reconciled = new Map(times.map((time) => [time.entryId, time]))
 
   const startOf = (entry: StoryEntry) =>
@@ -101,21 +94,6 @@ export function planReconciliation(input: PlanReconciliationInput): Reconciliati
     })
   }
 
-  // A delta records the clock as it stood before its entry was classified, which is that
-  // entry's beginning. Everything else in the delta is left exactly as it was.
-  const deltas: DeltaUpdate[] = []
-  for (const time of times) {
-    const entry = entries[indexById.get(time.entryId) ?? -1]
-    if (!entry?.worldStateDelta) continue
-    deltas.push({
-      entryId: entry.id,
-      delta: {
-        ...entry.worldStateDelta,
-        previousState: { ...entry.worldStateDelta.previousState, timeTracker: time.start },
-      },
-    })
-  }
-
   const reachesEnd = lastReconciled === entries.length - 1
   const clock = reachesEnd ? (times[times.length - 1]?.end ?? null) : null
 
@@ -131,10 +109,10 @@ export function planReconciliation(input: PlanReconciliationInput): Reconciliati
   return {
     times,
     chapterSpans,
-    deltas,
     clock,
     checkpointClocks,
-    keyframeEntryIds: times.map((time) => time.entryId),
+    snapshotClocks: times.map((time) => ({ entryId: time.entryId, timeTracker: time.end })),
+    anchors,
   }
 }
 
@@ -153,8 +131,10 @@ export function fingerprintPreview(input: {
   to: Boundary
   rangeEntries: StoryEntry[]
   boundaryEntryIds: string[]
+  /** The endpoints' anchors: an edited one is written whole, so its note must not have moved. */
+  endpointAnchors?: { from?: TimeAnchor; to?: TimeAnchor }
 }): string {
-  const { storyId, branchId, from, to, rangeEntries, boundaryEntryIds } = input
+  const { storyId, branchId, from, to, rangeEntries, boundaryEntryIds, endpointAnchors } = input
   const stamp = (time: TimeTracker | null) => (time ? String(toMinutes(time)) : 'none')
   const inRange = new Set(rangeEntries.map((entry) => entry.id))
 
@@ -167,6 +147,9 @@ export function fingerprintPreview(input: {
     // Excludes the later boundary, which is a boundary by definition: it bounds the range
     // rather than sitting inside it.
     boundariesInside: boundaryEntryIds.filter((id) => inRange.has(id) && id !== to.entryId).sort(),
+    anchors: [endpointAnchors?.from, endpointAnchors?.to].map((anchor) =>
+      anchor ? [anchor.id, anchor.note] : null,
+    ),
   })
 }
 
@@ -175,6 +158,23 @@ export interface ReconciliationWriteDeps {
   transaction: (statements: { sql: string; params?: unknown[] }[]) => Promise<unknown>
   /** In-memory state, published only after the commit succeeds. */
   publish: (plan: ReconciliationPlan) => void
+}
+
+/** Storing an anchor, replacing any the entry already carries. */
+export function timeAnchorUpsert(anchor: TimeAnchor): { sql: string; params: unknown[] } {
+  return {
+    sql: `INSERT INTO time_anchors (id, story_id, entry_id, asserted_time, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(entry_id) DO UPDATE SET asserted_time = excluded.asserted_time, note = excluded.note`,
+    params: [
+      anchor.id,
+      anchor.storyId,
+      anchor.entryId,
+      JSON.stringify(anchor.assertedTime),
+      anchor.note,
+      anchor.createdAt,
+    ],
+  }
 }
 
 /** The statements a plan writes, in the order they are applied. */
@@ -193,6 +193,8 @@ export function reconciliationStatements(
     })
   }
 
+  for (const anchor of plan.anchors) statements.push(timeAnchorUpsert(anchor))
+
   for (const span of plan.chapterSpans) {
     statements.push({
       sql: 'UPDATE chapters SET start_time = ?, end_time = ? WHERE id = ?',
@@ -204,13 +206,6 @@ export function reconciliationStatements(
     })
   }
 
-  for (const delta of plan.deltas) {
-    statements.push({
-      sql: 'UPDATE story_entries SET world_state_delta = ? WHERE id = ?',
-      params: [JSON.stringify(delta.delta), delta.entryId],
-    })
-  }
-
   for (const update of plan.checkpointClocks) {
     statements.push({
       sql: 'UPDATE checkpoints SET time_tracker_snapshot = ? WHERE id = ?',
@@ -218,12 +213,17 @@ export function reconciliationStatements(
     })
   }
 
-  // Chunked like the database service's deletes, to stay under SQLite's bound-parameter limit.
-  for (let i = 0; i < plan.keyframeEntryIds.length; i += 500) {
-    const slice = plan.keyframeEntryIds.slice(i, i + 500)
+  // One statement per chunk, touching only the entries that have a snapshot.
+  for (let i = 0; i < plan.snapshotClocks.length; i += 300) {
+    const chunk = plan.snapshotClocks.slice(i, i + 300)
     statements.push({
-      sql: `DELETE FROM world_state_snapshots WHERE entry_id IN (${slice.map(() => '?').join(', ')})`,
-      params: slice,
+      sql: `UPDATE world_state_snapshots SET time_tracker_snapshot = CASE entry_id
+              ${chunk.map(() => 'WHEN ? THEN ?').join(' ')} END
+            WHERE entry_id IN (${chunk.map(() => '?').join(', ')})`,
+      params: [
+        ...chunk.flatMap((u) => [u.entryId, JSON.stringify(u.timeTracker)]),
+        ...chunk.map((u) => u.entryId),
+      ],
     })
   }
 

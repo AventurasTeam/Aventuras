@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { Chapter, Entry, LoreManagementResult } from '#lib/types/index.ts'
+import { ActivityRecorder } from '#lib/services/activity/index.ts'
 import {
+  LORE_SESSION_BUSY,
   LoreManagementCoordinator,
   isLoreManagementRunning,
   type LoreManagementCallbacks,
@@ -27,10 +29,7 @@ const input = (over: Partial<LoreSessionInput> = {}): LoreSessionInput => ({
 })
 
 const callbacks = (): LoreManagementCallbacks => ({
-  onCreateEntry: vi.fn(async () => {}),
-  onUpdateEntry: vi.fn(async () => {}),
-  onDeleteEntry: vi.fn(async () => {}),
-  onMergeEntries: vi.fn(async () => {}),
+  onSaveSession: vi.fn(async () => {}),
 })
 
 /** A coordinator whose run resolves only when the returned `finish` is called. */
@@ -114,19 +113,49 @@ describe('the per-branch lock', () => {
     expect(result.skipped).toBeUndefined()
     expect(isLoreManagementRunning('story-2', null)).toBe(false)
   })
+
+  it("names the failed session's chapter, so a retry runs it for that chapter", async () => {
+    const chapter = { id: 'ch-1', number: 3 } as unknown as Chapter
+    const coordinator = new LoreManagementCoordinator({
+      runLoreManagement: vi.fn(async () => {
+        throw new Error('branch switched')
+      }),
+    })
+    const ui = { onStart: vi.fn(), onProgress: vi.fn(), onComplete: vi.fn(), onError: vi.fn() }
+
+    await coordinator.runSession(
+      input({ storyId: 'story-9', newChapter: { chapter, entries: [] } }),
+      callbacks(),
+      ui,
+    )
+    await coordinator.runSession(input({ storyId: 'story-9' }), callbacks(), ui)
+
+    expect(ui.onError.mock.calls).toEqual([
+      ['branch switched', { chapter, readAfterChapter: true }],
+      ['branch switched', undefined],
+    ])
+  })
 })
 
 describe('progress reporting', () => {
-  it('counts each applied change once, through the wrapper and not the callbacks', async () => {
+  it('counts a saved session once, through the wrapper and not the callbacks', async () => {
     const created: string[] = []
     const coordinator = new LoreManagementCoordinator({
       runLoreManagement: async (_s, _b, _e, _r, _c, cb) => {
-        await cb.onCreateEntry({ id: 'a', name: 'Kaelen' } as Entry)
-        await cb.onCreateEntry({ id: 'b', name: 'Liora' } as Entry)
+        await cb.onSaveSession({
+          creates: [{ id: 'a', name: 'Kaelen' } as Entry, { id: 'b', name: 'Liora' } as Entry],
+          updates: [],
+          merges: [],
+          deletes: [],
+        })
         return { changes: [{ type: 'create' }, { type: 'create' }], summary: 'two', sessionId: 's' }
       },
     })
-    const cbs = { ...callbacks(), onCreateEntry: async (e: Entry) => void created.push(e.name) }
+    const cbs = {
+      ...callbacks(),
+      onSaveSession: async (w: { creates: Entry[] }) =>
+        void created.push(...w.creates.map((e) => e.name)),
+    }
     const progress: number[] = []
 
     await coordinator.runSession(input({ storyId: 'story-3' }), cbs, {
@@ -136,8 +165,8 @@ describe('progress reporting', () => {
     })
 
     expect(created).toEqual(['Kaelen', 'Liora'])
-    // Two increments while running, then the final total.
-    expect(progress).toEqual([1, 2, 2])
+    // Nothing counted until the save lands, then the session at once, then the final total.
+    expect(progress).toEqual([0, 2, 2])
   })
 
   it('hands the summary over separately, since progress is wiped seconds later', async () => {
@@ -206,5 +235,78 @@ describe('chapterBuffer forwarding', () => {
 
     const options = vi.mocked(deps.runLoreManagement).mock.calls[0][6]
     expect(options?.chapterBuffer).toBeUndefined()
+  })
+})
+
+describe('the recorded step', () => {
+  function recorded() {
+    const recorder = new ActivityRecorder()
+    recorder.setReporting('tree')
+    const recordId = recorder.startRecord('chapter:card', 'chapter')
+    return { recorder, reporting: { activity: recorder, placement: { recordId } } }
+  }
+  const stepsOf = (recorder: ActivityRecorder) => recorder.find('chapter:card')!.steps
+
+  it('closes done with the change count, and is the parent the run records under', async () => {
+    const { recorder, reporting } = recorded()
+    const runLoreManagement = vi.fn(async () => ({
+      ...emptyResult(),
+      changes: [{ type: 'create' as const }, { type: 'update' as const }],
+    }))
+
+    const result = await new LoreManagementCoordinator({ runLoreManagement }).runSession(
+      input(),
+      callbacks(),
+      undefined,
+      reporting,
+    )
+
+    const [step] = stepsOf(recorder)
+    expect(step).toMatchObject({ label: 'Lore management', status: 'done', detail: '2 changes' })
+    expect(runLoreManagement.mock.calls[0]).toContain(step.id)
+    expect(result).toMatchObject({ completed: true, changeCount: 2 })
+  })
+
+  it('fails with the reason, and the result carries it', async () => {
+    const { recorder, reporting } = recorded()
+    const runLoreManagement = vi.fn(async () => {
+      throw new Error('context overflow')
+    })
+
+    const result = await new LoreManagementCoordinator({ runLoreManagement }).runSession(
+      input(),
+      callbacks(),
+      undefined,
+      reporting,
+    )
+
+    expect(stepsOf(recorder)[0]).toMatchObject({ status: 'failed', error: 'context overflow' })
+    expect(result).toMatchObject({ completed: false, error: 'context overflow' })
+  })
+
+  it('is skipped with the lock as its reason when another session holds the branch', async () => {
+    const { recorder, reporting } = recorded()
+    const first = gatedCoordinator()
+    const running = first.coordinator.runSession(input(), callbacks())
+
+    const result = await gatedCoordinator().coordinator.runSession(
+      input(),
+      callbacks(),
+      undefined,
+      reporting,
+    )
+    first.finish()
+    await running
+
+    expect(stepsOf(recorder)[0]).toMatchObject({ status: 'skipped', detail: LORE_SESSION_BUSY })
+    expect(result).toMatchObject({ completed: false, skipped: true, error: LORE_SESSION_BUSY })
+  })
+
+  it('records nothing without reporting', async () => {
+    const runLoreManagement = vi.fn(async (..._args: unknown[]) => emptyResult())
+
+    await new LoreManagementCoordinator({ runLoreManagement }).runSession(input(), callbacks())
+
+    expect(runLoreManagement.mock.calls[0][7]).toBeUndefined()
   })
 })

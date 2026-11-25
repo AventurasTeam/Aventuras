@@ -6,7 +6,10 @@
  * - Models:  GET  /sdapi/v1/sd-models
  */
 
-import { specToPixels } from '#lib/utils/image.ts'
+import * as z from 'zod'
+import { formatImageSize, specToPixels } from '#lib/utils/image.ts'
+import { endpoint } from '#lib/utils/url.ts'
+import { resolveBaseUrl } from './baseUrls'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -15,122 +18,110 @@ import type {
   ImageModelInfo,
   ComfySamplerInfo,
 } from './types'
-import { imageFetch, imageGetFetch } from './fetchAdapter'
+import { bearerHeaders, imageDiscoveryFetch, imageGetFetchOptional } from './discoveryFetch'
+import { optionalString } from './modelCatalogue'
+import { parseModelList } from './parseModelList'
+import { createA1111Image } from './a1111Image'
+import { createImageSdkFetch, generateSdkImage } from './sdkImage'
 
-const DEFAULT_BASE_URL = 'http://localhost:7860'
+const SdModel = z
+  .object({
+    title: optionalString,
+    model_name: optionalString,
+    name: optionalString,
+  })
+  .refine((m) => !!(m.title || m.model_name || m.name))
+const NamedEntry = z.object({ name: z.string() })
+
+/** The first release with `/sdapi/v1/schedulers`. */
+export const MIN_A1111_SCHEDULERS_VERSION = '1.9.1'
+
+const SCHEDULERS_UNAVAILABLE = `This server has no /sdapi/v1/schedulers. Listing schedulers needs A1111 ${MIN_A1111_SCHEDULERS_VERSION} or newer.`
+
+/** A1111 sends references only when the profile opts in: sd.cpp and KoboldCpp read `extra_images`. */
+export const a1111ReferenceLimit = (
+  providerOptions: Record<string, unknown> | undefined,
+): number => (providerOptions?.takesReferences === true ? Infinity : 0)
 
 export function createA1111Provider(config: ImageProviderConfig): ImageProvider {
-  const baseUrl = config.baseUrl?.trim().replace(/\/$/, '') || DEFAULT_BASE_URL
+  const baseUrl = resolveBaseUrl('a1111', config.baseUrl)
+  const a1111 = createA1111Image({
+    baseURL: baseUrl,
+    apiKey: config.apiKey,
+    fetch: createImageSdkFetch('a1111-image'),
+  })
 
   return {
     id: 'a1111',
     name: 'A1111 / SD WebUI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, spec, signal, providerOptions } = options
-      const { width, height } = specToPixels(spec)
+      const { model, prompt, spec, referenceImages, signal, providerOptions } = options
 
       const opts = providerOptions ?? config.providerOptions ?? {}
-      const steps = Number(opts.steps) || 20
-      const cfgScale = Number(opts.cfg) || 7
-      const sampler = (opts.sampler as string) || 'Euler a'
       const scheduler = (opts.scheduler as string) || undefined
-      const negativePrompt = (opts.negativePrompt as string) || ''
 
-      const body: Record<string, unknown> = {
+      return generateSdkImage({
+        model: a1111.imageModel(model),
         prompt,
-        negative_prompt: negativePrompt,
-        width,
-        height,
-        steps,
-        cfg_scale: cfgScale,
-        sampler_name: sampler,
-        batch_size: 1,
-        n_iter: 1,
-        seed: -1,
-      }
-
-      if (scheduler) body.scheduler = scheduler
-
-      if (model) {
-        body.override_settings = { sd_model_checkpoint: model }
-        body.override_settings_restore_afterwards = true
-      }
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`
-
-      const response = await imageFetch({
-        url: `${baseUrl}/sdapi/v1/txt2img`,
-        headers,
-        body: JSON.stringify(body),
+        referenceImages,
+        size: formatImageSize(specToPixels(spec)),
+        providerOptions: {
+          a1111: {
+            negative_prompt: (opts.negativePrompt as string) || '',
+            steps: Number(opts.steps) || 20,
+            cfg_scale: Number(opts.cfg) || 7,
+            sampler_name: (opts.sampler as string) || 'Euler a',
+            ...(scheduler && { scheduler }),
+          },
+        },
         signal,
-        serviceId: 'a1111-image',
       })
-
-      const data = await response.json()
-      const base64 = data?.images?.[0]
-      if (!base64) throw new Error('No image data in A1111 response')
-
-      return { base64 }
     },
 
-    async listModels(apiKey: string): Promise<ImageModelInfo[]> {
-      const headers: Record<string, string> = {}
-      if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-
-      try {
-        const response = await imageGetFetch(`${baseUrl}/sdapi/v1/sd-models`, headers, {
+    async listModels(signal?: AbortSignal): Promise<ImageModelInfo[]> {
+      const response = await imageDiscoveryFetch(
+        endpoint(baseUrl, 'sdapi/v1/sd-models'),
+        bearerHeaders(config.apiKey),
+        {
           serviceId: 'a1111-models',
-        })
-        const data: { title?: string; model_name?: string; name?: string }[] = await response.json()
+          signal,
+        },
+      )
+      const entries = parseModelList(await response.json(), SdModel, 'A1111 /sdapi/v1/sd-models')
 
-        return (Array.isArray(data) ? data : []).map((m) => ({
-          id: m.title || m.model_name || m.name || '',
-          name: m.title || m.model_name || m.name || '',
-          supportsImg2Img: false,
-        }))
-      } catch {
-        return []
-      }
+      return entries.map((m) => {
+        const id = m.title || m.model_name || m.name || ''
+        return { id, name: id }
+      })
     },
 
-    async getSamplerInfo(): Promise<ComfySamplerInfo> {
-      const authHeaders: Record<string, string> | undefined = config.apiKey
-        ? { Authorization: `Bearer ${config.apiKey}` }
-        : undefined
+    async getSamplerInfo(signal?: AbortSignal): Promise<ComfySamplerInfo> {
+      const readNames = async (
+        path: string,
+        serviceId: string,
+        absentStatuses?: number[],
+      ): Promise<string[] | undefined> => {
+        const response = await imageGetFetchOptional(
+          endpoint(baseUrl, `sdapi/v1/${path}`),
+          bearerHeaders(config.apiKey),
+          { serviceId, absentStatuses, signal },
+        )
+        if (!response) return undefined
+        return parseModelList(await response.json(), NamedEntry, `A1111 /sdapi/v1/${path}`)
+          .map((s) => s.name)
+          .filter(Boolean)
+      }
 
-      const [samplersRes, schedulersRes] = await Promise.allSettled([
-        imageGetFetch(`${baseUrl}/sdapi/v1/samplers`, authHeaders, {
-          serviceId: 'a1111-samplers',
-        }),
-        imageGetFetch(`${baseUrl}/sdapi/v1/schedulers`, authHeaders, {
-          serviceId: 'a1111-schedulers',
-        }),
+      const [samplers, schedulers] = await Promise.all([
+        readNames('samplers', 'a1111-samplers'),
+        readNames('schedulers', 'a1111-schedulers', [404]),
       ])
-
-      const toNames = (data: unknown): string[] =>
-        Array.isArray(data)
-          ? (data as { name?: string }[]).map((s) => s.name ?? '').filter(Boolean)
-          : []
-
-      const samplers: string[] =
-        samplersRes.status === 'fulfilled'
-          ? await samplersRes.value
-              .json()
-              .then(toNames)
-              .catch(() => [])
-          : []
-
-      const schedulers: string[] =
-        schedulersRes.status === 'fulfilled'
-          ? await schedulersRes.value
-              .json()
-              .then(toNames)
-              .catch(() => [])
-          : []
-
-      return { samplers, schedulers }
+      return {
+        samplers: samplers ?? [],
+        schedulers: schedulers ?? [],
+        ...(schedulers === undefined && { schedulersUnavailable: SCHEDULERS_UNAVAILABLE }),
+      }
     },
   }
 }

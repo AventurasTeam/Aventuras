@@ -111,20 +111,6 @@ export class NarrativeStore {
 
   constructor(packId: () => string | undefined) {
     this.packId = packId
-    // Update default POV and tense when mode changes
-    // $effect(() => {
-    //   if (this.selectedMode === "creative-writing") {
-    //     if (this.selectedPOV === "first" || this.selectedPOV === "second") {
-    //       this.selectedTense = "past";
-    //     } else {
-    //       this.selectedPOV = "third";
-    //       this.selectedTense = "past";
-    //     }
-    //   } else {
-    //     this.selectedPOV = "first";
-    //     this.selectedTense = "present";
-    //   }
-    // });
   }
 
   // Genre Actions

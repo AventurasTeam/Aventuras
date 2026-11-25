@@ -1,79 +1,23 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
-  import { countRequests, debug, type DebugLogEntry } from '#lib/stores/debug.svelte.ts'
+  import { debug } from '#lib/stores/debug.svelte.ts'
   import { ExternalLink, RefreshCcw } from '@lucide/svelte'
   import * as ResponsiveModal from '#lib/components/ui/responsive-modal/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import DebugLogView from './DebugLogView.svelte'
   import { MODAL_CLOSE_TRANSITION_MS } from '#lib/constants/layout.ts'
 
-  /** Throttle window. The snapshot is a whole copy of the log, so this is not free. */
-  const THROTTLE_MS = 1200
-
-  // Throttled snapshot of logs - only refreshed every THROTTLE_MS while the modal is open
-  let throttledLogs = $state<DebugLogEntry[]>([])
-  let lastUpdateTime = 0
-  let pendingUpdate: ReturnType<typeof setTimeout> | null = null
-  let releaseTimer: ReturnType<typeof setTimeout> | null = null
   let showContent = $state(false)
 
-  // Single effect to handle both modal opening and log updates
   $effect(() => {
-    // Early exit if modal is closed or window is popped out
-    if (!debug.debugModalOpen || debug.debugWindowActive) {
-      if (pendingUpdate) {
-        clearTimeout(pendingUpdate)
-        pendingUpdate = null
-      }
-      // The DOM has to stay put through the close transition, so the snapshot is dropped
-      // after it rather than here — it is every request and response of the session, and on
-      // Android the WebView heap is a hard cap. Re-checked in case the panel reopened.
-      if (releaseTimer) clearTimeout(releaseTimer)
-      releaseTimer = setTimeout(() => {
-        releaseTimer = null
-        if (debug.debugModalOpen) return
-        throttledLogs = []
-        showContent = false
-      }, MODAL_CLOSE_TRANSITION_MS)
-
-      lastUpdateTime = 0
+    if (debug.debugModalOpen && !debug.debugWindowActive) {
+      showContent = true
       return
     }
 
-    if (releaseTimer) {
-      clearTimeout(releaseTimer)
-      releaseTimer = null
-    }
-
-    // Track logsVersion to know when logs change
-    void debug.logsVersion
-
-    const now = Date.now()
-    const timeSinceLastUpdate = now - lastUpdateTime
-
-    // Immediate update if: first open (lastUpdateTime === 0) or the throttle window elapsed
-    if (lastUpdateTime === 0 || timeSinceLastUpdate >= THROTTLE_MS) {
-      throttledLogs = debug.getSnapshot()
-      lastUpdateTime = now
-      if (pendingUpdate) {
-        clearTimeout(pendingUpdate)
-        pendingUpdate = null
-      }
-
-      if (untrack(() => !showContent)) {
-        showContent = true
-      }
-    } else if (!pendingUpdate) {
-      // Schedule update for remaining throttle time
-      pendingUpdate = setTimeout(() => {
-        // Cleared before the early return: leaving it set wedges the throttle, since the
-        // branch that schedules a refresh is guarded on it being null.
-        pendingUpdate = null
-        if (!debug.debugModalOpen) return
-        throttledLogs = debug.getSnapshot()
-        lastUpdateTime = Date.now()
-      }, THROTTLE_MS - timeSinceLastUpdate)
-    }
+    // Unmount the log view after the close transition: it holds the whole session's log, and
+    // the Android WebView heap is a hard cap.
+    const timer = setTimeout(() => (showContent = false), MODAL_CLOSE_TRANSITION_MS)
+    return () => clearTimeout(timer)
   })
 
   function handleClearLogs() {
@@ -90,28 +34,23 @@
 </script>
 
 <ResponsiveModal.Root bind:open={debug.debugModalOpen}>
-  <ResponsiveModal.Content class="flex h-[85vh] max-h-[85vh] flex-col gap-0 p-0 sm:max-w-4xl">
+  <ResponsiveModal.Content class="flex h-[85dvh] max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-4xl">
     <ResponsiveModal.Header class="border-border border-b px-6 py-4">
       <div class="flex w-full items-center justify-between">
         <div class="flex flex-1 items-center gap-4">
           <div class="flex items-center gap-2">
             <ResponsiveModal.Title>API Debug Logs</ResponsiveModal.Title>
-            <span
-              class="bg-secondary text-secondary-foreground rounded px-2 py-0.5 font-mono text-xs"
-            >
-              {countRequests(throttledLogs)}
-            </span>
           </div>
 
           {#if !debug.debugWindowActive}
             <Button
               variant="ghost"
               size="icon"
-              class="text-muted-foreground hover:text-foreground hidden h-8 w-8 md:inline-flex"
+              class="text-muted-foreground hover:text-foreground hidden size-8 md:inline-flex"
               onclick={handlePopOut}
               title="Pop out to separate window"
             >
-              <ExternalLink class="h-4 w-4" />
+              <ExternalLink class="size-4" />
             </Button>
           {/if}
         </div>
@@ -125,7 +64,7 @@
       {#if debug.debugWindowActive}
         <div class="flex flex-1 flex-col items-center justify-center space-y-4 p-8 text-center">
           <div class="rounded-full bg-blue-500/10 p-4 text-blue-400">
-            <ExternalLink class="h-8 w-8" />
+            <ExternalLink class="size-8" />
           </div>
           <div class="space-y-2">
             <h3 class="text-lg font-medium">Logs are in an external window</h3>
@@ -135,20 +74,14 @@
             </p>
           </div>
           <Button variant="outline" class="gap-2" onclick={handlePopIn}>
-            <RefreshCcw class="h-4 w-4" />
+            <RefreshCcw class="size-4" />
             Bring Back to Modal
           </Button>
         </div>
-      {:else if !showContent}
-        <div class="flex flex-1 flex-col items-center justify-center p-8">
-          <div class="text-muted-foreground animate-pulse text-sm">Loading logs...</div>
-        </div>
-      {:else}
+      {:else if showContent}
         <DebugLogView
-          logs={throttledLogs}
           onClear={handleClearLogs}
-          renderNewlines={debug.debugRenderNewlines}
-          onToggleRenderNewlines={() => debug.toggleDebugRenderNewlines()}
+          onToggleReadableView={() => debug.toggleReadableView()}
         />
       {/if}
     </div>

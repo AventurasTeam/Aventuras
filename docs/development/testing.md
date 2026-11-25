@@ -60,9 +60,8 @@ It listens on `http://localhost:4010/v1`; `npm run fake-provider -- 4020` picks 
    the schema travels inside the prompt. One on `ok` for every task; one on `ok-fill` for **Image
    Gen** and **BG Image generation analyzer**, so scenes are found and the background is judged
    changed; one whose model is set to the failure under test, to move a single task onto.
-3. Settings → Images: a profile with provider _OpenAI_, the same base URL, model `img-ok`, and **any
-   API key** — the OpenAI image provider requires one even with a custom URL, and without it every
-   story's image settings stay on Text Only.
+3. Settings → Images: a profile with provider _OpenAI Compatible_, the same base URL and model
+   `img-ok`. No API key is needed; without a profile every story's image settings stay on Text Only.
 
 **Chat models.** Append `-slow` to any of them for a 4 s delay before the answer starts.
 
@@ -85,6 +84,7 @@ It listens on `http://localhost:4010/v1`; `npm run fake-provider -- 4020` picks 
 | `fail-hang`              | never answers                                                                     |
 | `stream-connection-lost` | streaming only: some text, then the connection drops                              |
 | `stream-cut-error`       | streaming only: some text, then an error event in the stream, as OpenRouter sends |
+| `stream-stall`           | streaming only: some text, then silence with the connection open                  |
 
 The narration is always _The dragon fell from the sky, and the valley was quiet again._, and every
 scene's quote is _The dragon fell from the sky_, so images land in the text — including the part a

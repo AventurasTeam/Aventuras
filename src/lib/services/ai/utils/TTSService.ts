@@ -8,11 +8,14 @@ import { PROVIDERS } from '../sdk/providers/config'
 import { corsFetch } from '#lib/services/discovery/utils.ts'
 import { SPEAKABLE, supportsVolumeOverride } from './ttsText'
 import { isIos } from '#lib/utils/platform.ts'
+import { normalizeBaseUrl } from '#lib/utils/url.ts'
 
 // Constants
 export const DEFAULT_SPEECH_RATE = 1.0
 export const DEFAULT_PITCH = 1.0
 export const DEFAULT_VOLUME = 1.0
+
+const SPEECH_PATH = '/audio/speech'
 
 // TTS Configuration - matches TTSServiceSettings in settings.svelte.ts
 export interface TTSSettings {
@@ -735,17 +738,10 @@ export class OpenAICompatibleTTSProvider extends TTSProvider {
     return 300
   }
 
-  /**
-   * Get endpoint URL
-   */
   private getEndpoint(): string {
-    // If no custom endpoint, use OpenRouter default
-    if (!this.settings.endpoint) {
-      return `${PROVIDERS.openrouter.baseUrl}/audio/speech`
-    }
-    // Ensure endpoint ends with /audio/speech
-    const url = this.settings.endpoint.replace(/\/$/, '')
-    return url.endsWith('/audio/speech') ? url : `${url}/audio/speech`
+    const url = normalizeBaseUrl(this.settings.endpoint)
+    if (!url) return PROVIDERS.openrouter.baseUrl + SPEECH_PATH
+    return url.endsWith(SPEECH_PATH) ? url : url + SPEECH_PATH
   }
 
   /**
@@ -796,7 +792,7 @@ export class OpenAICompatibleTTSProvider extends TTSProvider {
 
     // Try to fetch custom voices from provider (optional)
     try {
-      const response = await fetch(`${endpoint.replace('/audio/speech', '')}/models`, {
+      const response = await fetch(`${endpoint.slice(0, -SPEECH_PATH.length)}/models`, {
         headers: this.getHeaders(),
       })
 

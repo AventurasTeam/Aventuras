@@ -16,6 +16,7 @@ import type {
   PersistentCharacterSnapshot,
 } from '#lib/types/index.ts'
 import * as z from 'zod'
+import type { BranchScope } from '#lib/utils/branchScope.ts'
 import type { ActionChoice } from '#lib/services/ai/sdk/schemas/actionchoices.ts'
 import type { Suggestion } from '#lib/services/ai/sdk/schemas/suggestions.ts'
 import { actionChoiceSchema, suggestionSchema } from '#lib/services/ai/sdk/schemas/index.ts'
@@ -45,6 +46,7 @@ import { StreamingHtmlRenderer } from '#lib/utils/htmlStreaming.ts'
 import { countTokens } from '#lib/services/tokenizer.ts'
 import { branchScopeKey } from '#lib/utils/branchScope.ts'
 import type { LandmarkFilterGroup } from '#lib/utils/storyNavigation.ts'
+import type { RevertKeep } from '#lib/services/stateTracking/index.ts'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -63,6 +65,8 @@ export interface RetryBackup {
   locations: Location[]
   items: Item[]
   storyBeats: StoryBeat[]
+  // Taken while State Tracking was on: no world state is copied, a retry rewinds the records
+  throughRecords: boolean
   // The user's input to re-trigger
   userActionContent: string
   rawInput: string
@@ -122,12 +126,49 @@ export const NAV_FILTER_SETTING: Record<LandmarkFilterGroup, string> = {
   checkpoints: 'nav_show_checkpoints',
 }
 
+/** A chapter's failed lore management session, to run again as it was. */
+export interface LoreRetry extends BranchScope {
+  chapterId: string
+  readAfterChapter: boolean
+}
+
+/** Prefixes the setting each `shared/ExplanationFold` saves its state under. */
+export const EXPLANATION_FOLD_PREFIX = 'explanation_folded:'
+
+/** One per explanation: each names its own saved fold state. */
+export const EXPLANATION_FOLD_IDS = [
+  'checkpoint_help',
+  'story_edit_help',
+  'pack_refresh_help',
+  'pack_update_help',
+  'entry_time_help',
+  'time_anchor_help',
+] as const
+export type ExplanationFoldId = (typeof EXPLANATION_FOLD_IDS)[number]
+
+export function isExplanationFoldId(id: string): id is ExplanationFoldId {
+  return (EXPLANATION_FOLD_IDS as readonly string[]).includes(id)
+}
+
+/** `retry` restores the backup taken before the last action; otherwise the narration alone. */
+export interface RegenerateRequest {
+  entryId: string
+  retry: boolean
+}
 class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
   // Held here rather than in the panel so it survives closing and reopening, as the sidebar's
   // does. It opens on Navigation until the reader leaves it somewhere else.
   navPanelTab = $state<NavPanelTab>('navigation')
+  // The story-level entry modals, each opened for one entry at a time.
+  checkpointFormEntryId = $state<string | null>(null)
+  deleteEntryId = $state<string | null>(null)
+  deleteChapterId = $state<string | null>(null)
+  regenerateRequest = $state<RegenerateRequest | null>(null)
+  // From the press until its generation holds the lease or the reader cancels.
+  regeneratePending = $state(false)
+  branchCheckpointId = $state<string | null>(null)
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
   // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
   // reader opts into, not an ambient reference the way the sidebar is.
@@ -137,7 +178,6 @@ class UIStore {
   restoreComplete = $state(false)
   restoreCloseHint = $state<string | null>(null)
   isGenerating = $state(false)
-  isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
   vaultTab = $state<VaultTab>('characters')
 
   // Image generation state. Both are counts, because the narration analysis and the
@@ -162,6 +202,10 @@ class UIStore {
     chapters: true,
     checkpoints: true,
   })
+  /** Whether the landmark list shows snapshots. Kept for the session only, not saved. */
+  navShowSnapshots = $state(false)
+  /** Which folding explanations are folded; an id missing here is open. */
+  explanationFolded = new SvelteMap<ExplanationFoldId, boolean>()
 
   // Streaming state
   streamingContent = $state('')
@@ -318,6 +362,8 @@ class UIStore {
    * cleared by whichever finished first, marking the branch idle with work still in flight.
    */
   backgroundTaskBranches = $state<SvelteMap<string, number>>(new SvelteMap())
+  /** Branches whose chapter check is asking the model, after the turn that started it. */
+  chapterCheckBranches = $state<SvelteMap<string, number>>(new SvelteMap())
   loreManagementActive = $state(false)
   loreManagementProgress = $state('')
   loreManagementChanges = $state<number>(0)
@@ -330,6 +376,8 @@ class UIStore {
   lastLoreManagementSummary = $state<string | null>(null)
   lastLoreManagementChanges = $state<number>(0)
   loreManagementError = $state<string | null>(null)
+  /** The chapter whose session failed, which Retry runs again; null to run Tidy. */
+  loreManagementRetry = $state<LoreRetry | null>(null)
 
   // Lorebook activation tracking for stickiness
   // Maps entry ID -> last activation position (story entry index)
@@ -340,12 +388,16 @@ class UIStore {
   private retryCallback: (() => Promise<void>) | null = null
 
   // Retry last message callback - set by ActionInput for edit-and-retry feature
-  private retryLastMessageCallback: (() => Promise<void>) | null = null
+  private retryLastMessageCallback: ((keep: RevertKeep) => Promise<void>) | null = null
 
   // Regenerate narration callback - set by ActionInput. Lighter-weight fallback used when
   // no full retry backup is available (e.g. the latest narration survived a manual delete
   // of the entries that came after it).
-  private regenerateNarrationCallback: ((entryId: string) => Promise<void>) | null = null
+  private regenerateNarrationCallback:
+    ((entryId: string, keep?: RevertKeep) => Promise<void>) | null = null
+
+  // Generate from action callback - set by ActionInput, for an action nothing answers.
+  private generateFromActionCallback: ((entryId: string) => Promise<void>) | null = null
 
   // Reasoning block state persistence
   streamingReasoningExpanded = $state(false)
@@ -407,6 +459,38 @@ class UIStore {
     this.navPanelTab = tab
   }
 
+  requestCheckpointForm(entryId: string | null) {
+    this.checkpointFormEntryId = entryId
+  }
+
+  requestEntryDelete(entryId: string | null) {
+    this.deleteEntryId = entryId
+  }
+
+  requestChapterDelete(chapterId: string | null) {
+    this.deleteChapterId = chapterId
+  }
+
+  requestRegenerate(request: RegenerateRequest) {
+    if (this.regeneratePending) return
+    this.regeneratePending = true
+    this.regenerateRequest = request
+  }
+
+  takeRegenerateRequest(): RegenerateRequest | null {
+    const request = this.regenerateRequest
+    this.regenerateRequest = null
+    return request
+  }
+
+  settleRegenerate() {
+    this.regeneratePending = false
+  }
+
+  requestBranchFrom(checkpointId: string | null) {
+    this.branchCheckpointId = checkpointId
+  }
+
   setVaultTab(tab: VaultTab) {
     this.vaultTab = tab
   }
@@ -429,6 +513,13 @@ class UIStore {
     return database
       .setSetting('gallery_newest_first', newestFirst.toString())
       .catch((err) => console.warn('[UI] Failed to persist gallery order:', err))
+  }
+
+  setExplanationFolded(id: ExplanationFoldId, folded: boolean): Promise<void> {
+    this.explanationFolded.set(id, folded)
+    return database
+      .setSetting(EXPLANATION_FOLD_PREFIX + id, folded.toString())
+      .catch((err) => console.warn(`[UI] Failed to persist the ${id} fold:`, err))
   }
 
   setNavFilter(group: LandmarkFilterGroup, show: boolean): Promise<void> {
@@ -574,10 +665,6 @@ class UIStore {
 
   setGenerationStatus(status: string) {
     this.generationStatus = status
-  }
-
-  setRetryingLastMessage(value: boolean) {
-    this.isRetryingLastMessage = value
   }
 
   /**
@@ -755,8 +842,10 @@ class UIStore {
     actionType: ActionInputType,
     wasRawActionChoice: boolean,
     timeTracker: TimeTracker | null,
+    throughRecords: boolean,
   ) {
     const timestamp = Date.now()
+    const copiesWorld = !throughRecords
     const nextEntryPosition =
       entries.reduce((max, entry) => Math.max(max, entry.position ?? -1), -1) + 1
 
@@ -767,11 +856,22 @@ class UIStore {
     const storyBeatIds = storyBeats.map((sb) => sb.id)
     const characterSnapshots: PersistentCharacterSnapshot[] = characters.map((c) => ({
       id: c.id,
+      name: c.name,
+      description: c.description ?? null,
       traits: [...(c.traits ?? [])],
       status: c.status,
       relationship: c.relationship ?? null,
       visualDescriptors: { ...(c.visualDescriptors ?? {}) },
       portrait: c.portrait,
+      translations: {
+        translatedName: c.translatedName ?? null,
+        translatedDescription: c.translatedDescription ?? null,
+        translatedRelationship: c.translatedRelationship ?? null,
+        translatedTraits: c.translatedTraits ? [...c.translatedTraits] : null,
+        translatedVisualDescriptors: c.translatedVisualDescriptors
+          ? { ...c.translatedVisualDescriptors }
+          : null,
+      },
     }))
 
     // Create new backup and store by story ID
@@ -812,10 +912,11 @@ class UIStore {
       // Large data - shallow copy to break potential proxy chains
       entries: [...entries],
       // Smaller data - shallow copy to break proxy chains
-      characters: copyCharacters(characters),
-      locations: copyLocations(locations),
-      items: shallowCopyArray(items),
-      storyBeats: shallowCopyArray(storyBeats),
+      characters: copiesWorld ? copyCharacters(characters) : [],
+      locations: copiesWorld ? copyLocations(locations) : [],
+      items: copiesWorld ? shallowCopyArray(items) : [],
+      storyBeats: copiesWorld ? shallowCopyArray(storyBeats) : [],
+      throughRecords,
       characterSnapshots,
       userActionContent,
       rawInput,
@@ -827,7 +928,7 @@ class UIStore {
       storyPosition: this.currentStoryPosition,
       // New fields for persistent retry
       entryCountBeforeAction: nextEntryPosition,
-      hasFullState: true,
+      hasFullState: copiesWorld,
       hasEntityIds: true,
       // Entity IDs for persistent restore
       characterIds,
@@ -891,11 +992,13 @@ class UIStore {
           timeTracker: timeTracker ? { ...timeTracker } : null,
           activationData: Object.fromEntries(Object.entries(this.activationData)),
           storyPosition: this.currentStoryPosition,
+          throughRecords,
         }),
       'persist',
     )
 
-    console.log('[UI] *** IN-MEMORY BACKUP CREATED (hasFullState: true) ***', {
+    console.log('[UI] *** IN-MEMORY BACKUP CREATED ***', {
+      hasFullState: copiesWorld,
       storyId,
       entriesCount: entries.length,
       charactersCount: characters.length,
@@ -980,6 +1083,7 @@ class UIStore {
       activationData?: Record<string, number>
       storyPosition?: number
       branchId?: string | null
+      throughRecords?: boolean
     },
   ) {
     // State written before the branch was recorded cannot be attributed to one, and a wrong
@@ -1050,6 +1154,7 @@ class UIStore {
       // Persistent retry fields
       entryCountBeforeAction: retryState.entryCountBeforeAction,
       hasFullState: false, // Indicates ID-based restore
+      throughRecords: retryState.throughRecords ?? false,
       hasEntityIds,
       // Entity IDs for restore - delete any entities not in these lists
       characterIds: retryState.characterIds ?? [],
@@ -1397,16 +1502,16 @@ class UIStore {
   }
 
   // Retry last message callback management (for edit-and-retry feature)
-  setRetryLastMessageCallback(callback: (() => Promise<void>) | null) {
+  setRetryLastMessageCallback(callback: ((keep: RevertKeep) => Promise<void>) | null) {
     this.retryLastMessageCallback = callback
   }
 
-  async triggerRetryLastMessage() {
+  async triggerRetryLastMessage(keep: RevertKeep) {
     console.log('[UI] triggerRetryLastMessage called', {
       hasCallback: !!this.retryLastMessageCallback,
     })
     if (this.retryLastMessageCallback) {
-      await this.retryLastMessageCallback()
+      await this.retryLastMessageCallback(keep)
       console.log('[UI] retryLastMessageCallback completed')
     } else {
       console.log('[UI] No retry last message callback registered!')
@@ -1414,16 +1519,26 @@ class UIStore {
   }
 
   // Regenerate narration callback management (fallback when no retry backup exists)
-  setRegenerateNarrationCallback(callback: ((entryId: string) => Promise<void>) | null) {
+  setRegenerateNarrationCallback(
+    callback: ((entryId: string, keep?: RevertKeep) => Promise<void>) | null,
+  ) {
     this.regenerateNarrationCallback = callback
   }
 
-  async triggerRegenerateNarration(entryId: string) {
+  async triggerRegenerateNarration(entryId: string, keep?: RevertKeep) {
     if (this.regenerateNarrationCallback) {
-      await this.regenerateNarrationCallback(entryId)
+      await this.regenerateNarrationCallback(entryId, keep)
     } else {
       console.log('[UI] No regenerate narration callback registered!')
     }
+  }
+
+  setGenerateFromActionCallback(callback: ((entryId: string) => Promise<void>) | null) {
+    this.generateFromActionCallback = callback
+  }
+
+  async triggerGenerateFromAction(entryId: string) {
+    await this.generateFromActionCallback?.(entryId)
   }
 
   // Style reviewer methods
@@ -1665,6 +1780,18 @@ class UIStore {
     return (this.backgroundTaskBranches.get(branchScopeKey(storyId, branchId)) ?? 0) > 0
   }
 
+  chapterCheckActiveFor(storyId: string, branchId: string | null): boolean {
+    return (this.chapterCheckBranches.get(branchScopeKey(storyId, branchId)) ?? 0) > 0
+  }
+
+  setChapterCheckActive(storyId: string, branchId: string | null, active: boolean) {
+    const key = branchScopeKey(storyId, branchId)
+    const running = this.chapterCheckBranches.get(key) ?? 0
+    if (active) this.chapterCheckBranches.set(key, running + 1)
+    else if (running <= 1) this.chapterCheckBranches.delete(key)
+    else this.chapterCheckBranches.set(key, running - 1)
+  }
+
   setBackgroundTasksActive(storyId: string, branchId: string | null, active: boolean) {
     const key = branchScopeKey(storyId, branchId)
     const running = this.backgroundTaskBranches.get(key) ?? 0
@@ -1678,6 +1805,7 @@ class UIStore {
     this.loreManagementProgress = 'Analyzing story content...'
     this.loreManagementChanges = 0
     this.loreManagementError = null
+    this.loreManagementRetry = null
     // The previous run's account stops being true the moment a new one starts writing.
     this.lastLoreManagementSummary = null
     // Close any open modals/edit modes since user can't edit during lore management
@@ -1699,12 +1827,14 @@ class UIStore {
     this.lastLoreManagementChanges = changeCount
   }
 
-  setLoreManagementError(error: string | null) {
+  setLoreManagementError(error: string | null, retry: LoreRetry | null = null) {
     this.loreManagementError = error
+    this.loreManagementRetry = retry
   }
 
   clearLoreManagementError() {
     this.loreManagementError = null
+    this.loreManagementRetry = null
   }
 
   finishLoreManagement() {

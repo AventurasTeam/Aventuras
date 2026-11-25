@@ -54,6 +54,7 @@ export {
   TimelineFillService,
   type TimelineFillResult,
   type TimelineQueryResult,
+  type TimelineAnswer,
 } from './TimelineFillService'
 
 // How the agent's own event record reads in the activity timeline.

@@ -40,6 +40,8 @@ own PR. Delete this section when the last one has.
 | [dialogue-and-tts.md](architecture/dialogue-and-tts.md)     | `utils/dialogue.ts`, dialogue highlighting, or the TTS pipeline                                                                         |
 | [story-time.md](architecture/story-time.md)                 | `services/storyTime/`, time anchors, timeline anomalies, reconciliation, or a new story's starting time                                 |
 | [exchange-format.md](architecture/exchange-format.md)       | `services/exchange/`, exporting or importing a vault character, scenario or lorebook, the Aventura JSON format                          |
+| [state-tracking.md](architecture/state-tracking.md) | `services/stateTracking/`, `rollbackService`, the store's write methods, checkpoints at past entries, the Labs State Tracking switch |
+| [sync.md](architecture/sync.md) | `services/sync/`, `src-tauri/src/sync/`, version vectors, the edit triggers |
 | [narration-cleaning.md](architecture/narration-cleaning.md) | `utils/narrationClean.ts`, or sending story entries to a model that should not read `<pic>` tags, HTML or layout markup                 |
 | [network-transport.md](architecture/network-transport.md)   | Tauri's HTTP plugin, its Cargo features, the capability URL scopes, or the case for the WebView's `fetch`                               |
 

@@ -183,7 +183,7 @@ Your tools are organized into categories that you load on demand using \`load_to
 | **characters** | List, view, create, update, and delete characters ({{characterCount}} in vault). Characters have names, descriptions, personality traits, visual descriptors, and tags. |
 | **lorebooks** | Browse lorebooks, manage entries (CRUD + merge), create lorebooks, and link characters to lorebook entries ({{lorebookCount}} lorebooks, {{totalEntryCount}} total entries). Entries describe characters, locations, items, factions, concepts, and events for story context. |
 | **scenarios** | List, view, create, update, and delete scenarios ({{scenarioCount}} in vault). Scenarios define story settings with NPCs, a protagonist, and opening messages. Includes NPC sub-operations. |
-| **images** | Generate character portraits (from visual descriptors) and general images. Set generated images as character portraits. Always assume generation succeeded; never retry unless asked. |
+| **images** | Generate character portraits (from visual descriptors) and general images, or edit an existing image (a generated one or a character's current portrait) through the Reference profile. Set generated images as character portraits. A success result means the user can see the image; on failure, tell the user and don't retry unless asked. |
 | **fandom** | Search and import lore from Fandom wikis (e.g., harrypotter, starwars, elderscrolls). |
 
 The \`show_entity\` tool is always available for opening entities in the editor.
@@ -200,7 +200,7 @@ The \`show_entity\` tool is always available for opening entities in the editor.
 The user opened this assistant from the {{ focusedEntityType }} editor for {{ focusedEntityName | json }} (ID: \`{{ focusedEntityId }}\`). The \`{{ focusedEntityType }}s\` toolset is pre-loaded. When the user refers to "this character", "this lorebook", "this scenario", or uses pronouns referencing an entity without naming it, assume they mean this one.{% endif %}`,
   userContent: `{% if focusedEntityRemoved %}The {{ focusedEntityType }} from the Active Context is no longer in the vault.
 
-{% endif %}{% if focusedEntityRecord != blank %}Current state of the entity from the Active Context (sent again whenever it changes{% if focusedEntityType == 'lorebook' %}; its entries are not included, so use \`list_entries\` and \`read_entry\` for those{% else %}, so you don't need to read it first{% endif %}):
+{% endif %}{% if focusedEntityRecord != blank %}Current state of the entity from the Active Context, as the editor shows it: changes you proposed that are not approved yet and edits the user has not saved are already applied, and an \`unsavedFields\` key lists the fields that differ from the saved version (sent again whenever it changes{% if focusedEntityType == 'lorebook' %}; its entries are not included, so use \`list_entries\` and \`read_entry\` for those, and \`entryCount\` leaves out proposed new entries, which are listed under \`pendingCreates\`{% else %}, so you don't need to read it first{% endif %}):
 \`\`\`json
 {{ focusedEntityRecord }}
 \`\`\`
