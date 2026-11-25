@@ -5,6 +5,7 @@ import {
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   buildStorySettings,
+  clearSwapTargetOp,
   compositeText,
   execRaw,
   setSwapTargetOp,
@@ -39,8 +40,10 @@ import {
   cancelStorySwap,
   composeRetrievalEmbedDeps,
   embedClassifierDescriptions,
+  isStorySwapPending,
   setDrainStatusSink,
   makeCallbackGuards,
+  readStorySwapPending,
   reindexStoryNow,
   RelabelBlockedError,
   relabelStory,
@@ -727,6 +730,88 @@ describe('resolveDrainConfig swap guards', () => {
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
 
     expect(resolveDrainConfig('s1')).toEqual({ ok: false, reason: 'no-model' })
+  })
+})
+
+describe('readStorySwapPending', () => {
+  const definition = storyDefinitionSchema.parse({
+    mode: 'adventure',
+    narration: 'first',
+    genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+    tone: { label: 'Wry', promptBody: 'wry' },
+    setting: 'A keep on a hill.',
+    calendarSystemId: 'gregorian',
+    worldTimeOrigin: { year: 0 },
+  })
+  const settings = storySettings({ embeddingBackend: 'local' }, MINILM, null)
+
+  // Raw inserts: a corrupt blob can't go through drizzle's JSON column.
+  async function seedStories(blobs: Record<string, string>): Promise<DbCtx> {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    const insert = sqlite.prepare(
+      'INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)',
+    )
+    for (const [id, blob] of Object.entries(blobs)) insert.run(id, id, blob, 1000, 1000)
+    return { db, runInTransaction }
+  }
+
+  // The engine's own marker write.
+  const storeMarker = (ctx: DbCtx, storyId: string) =>
+    ctx.runInTransaction([setSwapTargetOp(storyId, { modelId: MINILM, backend: 'local' }, 2000)])
+
+  it('reads a stored marker on a story the open-story store does not hold', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings), s2: JSON.stringify(settings) })
+    await storeMarker(ctx, 's1')
+    currentStoryStore.set({ storyId: 's2', branchId: 'b9', definition, settings })
+
+    expect(isStorySwapPending('s1')).toBe(false)
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+    await expect(readStorySwapPending(ctx.db, 's2')).resolves.toBe(false)
+  })
+
+  it('reads a stored marker with no story open', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    await storeMarker(ctx, 's1')
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+
+    expect(isStorySwapPending('s1')).toBe(false)
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+  })
+
+  it('reads false for a story with no marker, and once a marker is cleared', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+
+    await storeMarker(ctx, 's1')
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+    await ctx.runInTransaction([clearSwapTargetOp('s1', 3000)])
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+  })
+
+  it('reads a corrupt settings blob as no marker, without throwing', async () => {
+    const ctx = await seedStories({ s1: '{not json' })
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+  })
+
+  it('reads false for a story with no row', async () => {
+    const ctx = await seedStories({})
+    await expect(readStorySwapPending(ctx.db, 'missing')).resolves.toBe(false)
+  })
+
+  it('reads a swap in flight before any marker is stored, and not once it settles', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = runExclusive('s1', () => gate)
+    try {
+      await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+    } finally {
+      release()
+      await held
+    }
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
   })
 })
 

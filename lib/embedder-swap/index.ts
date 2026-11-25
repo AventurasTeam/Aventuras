@@ -19,6 +19,7 @@ export {
   embedClassifierDescriptions,
   EMBEDDER_SWAP_REFUSAL,
   isStorySwapPending,
+  readStorySwapPending,
   refreshEmbeddingStatus,
   reindexStoryNow,
   relabelStory,
