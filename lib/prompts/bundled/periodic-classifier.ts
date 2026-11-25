@@ -105,15 +105,16 @@ Threads, same ID rule — each with its status:
 {%- unless threads and threads.size > 0 %}
 (none)
 {%- endunless %}
+{%- assign leadMarked = turns | where: 'leadMark' %}
 {%- if lead %}
 
-The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
+The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead{% if leadMarked.size > 0 %}, except where a turn names another{% endif %}.
 {%- endif %}
 
-Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, {% if leadMarked.size > 0 %}a turn where the lead changes says who "I" and "you" are from that turn until the next turn that says so, outside quoted speech; {% endif %}a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
 {%- for turn in turns %}
 {%- assign sep = ' ' %}
-[{{ turn.handle }}]{% if turn.kind == 'user_action' %}{{ sep }}the user's turn{% assign sep = '; ' %}{% endif %}{% if turn.scene.size > 0 %}{{ sep }}scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% assign sep = '; ' %}{% endif %}{% if turn.location %}{{ sep }}location: [{{ turn.location }}]{% endif %}
+[{{ turn.handle }}]{% if turn.leadMark %}{{ sep }}from this turn on, {% if turn.leadMark.gone %}"I" and "you" are a character no longer in the story and none of those named here, so credit what they do to no one{% elsif turn.leadMark.none %}the story had no lead{% else %}"I" and "you" are [{{ turn.leadMark.id }}] {{ turn.leadMark.name }}{% endif %}{% assign sep = '; ' %}{% endif %}{% if turn.kind == 'user_action' %}{{ sep }}the user's turn{% assign sep = '; ' %}{% endif %}{% if turn.scene.size > 0 %}{{ sep }}scene: {% for sceneId in turn.scene %}[{{ sceneId }}]{% unless forloop.last %}, {% endunless %}{% endfor %}{% assign sep = '; ' %}{% endif %}{% if turn.location %}{{ sep }}location: [{{ turn.location }}]{% endif %}
 {{ turn.content }}
 {%- endfor %}`,
 }

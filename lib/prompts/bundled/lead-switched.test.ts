@@ -375,3 +375,114 @@ describe('the fallback classifier', () => {
     expect(fallback(marked).user).toMatchSnapshot()
   })
 })
+
+// architecture.md → System and user halves: the periodic classifier prints a mark in its turn
+// header; its turn intro and lead line speak of marks only when a turn holds one.
+describe('the periodic classifier, switched', () => {
+  type Mark = { id: string; name: string } | { gone: true } | { none: true }
+  const row = (id: string, name: string) => ({
+    id,
+    name,
+    kind: 'character',
+    status: 'active',
+    description: null,
+    keywords: [],
+    faction: null,
+    standing: null,
+  })
+  const turn = (
+    handle: string,
+    kind: 'opening' | 'user_action' | 'ai_reply',
+    content: string,
+    over: { scene?: string[]; leadMark?: Mark } = {},
+  ) => ({ handle, kind, content, scene: [] as string[], location: null, ...over })
+  const context = (
+    turns: readonly ReturnType<typeof turn>[],
+    lead: { id: string; name: string } | null = { id: 'c2', name: 'Bael' },
+  ) => ({
+    mode: 'adventure',
+    mentionedPlaces: false,
+    entities: [row('c1', 'Aefre'), row('c2', 'Bael')],
+    places: [],
+    placesUnplaced: [],
+    relationships: [],
+    happenings: [],
+    threads: [],
+    lead,
+    turns,
+  })
+  // Aefre's run, then Bael's, Bael the lead: as the builder emits it after substitution.
+  const SWITCHED = [
+    turn('t1', 'ai_reply', 'The gate groans open.', { leadMark: { id: 'c1', name: 'Aefre' } }),
+    turn('t2', 'user_action', 'I step into the yard.', { scene: ['c1'] }),
+    turn('t3', 'user_action', 'I bar the gate behind me.', {
+      scene: ['c1'],
+      leadMark: { id: 'c2', name: 'Bael' },
+    }),
+    turn('t4', 'ai_reply', 'The yard is silent.'),
+  ]
+  const INTRO =
+    'After the handle, a turn where the lead changes says who "I" and "you" are from that turn until the next turn that says so, outside quoted speech; a turn the user wrote is marked as the user\'s'
+  const CLAUSE = ', except where a turn names another'
+
+  it("prints each run's mark after its handle, by placeholder and name, and no other turn's", () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(SWITCHED))
+    expect(user).toContain(
+      '\n[t1] from this turn on, "I" and "you" are [c1] Aefre\nThe gate groans open.\n',
+    )
+    expect(user).toContain("\n[t2] the user's turn; scene: [c1]\nI step into the yard.\n")
+    expect(user).toContain(
+      '\n[t3] from this turn on, "I" and "you" are [c2] Bael; the user\'s turn; scene: [c1]\nI bar the gate behind me.\n',
+    )
+    expect(user.endsWith('\n[t4]\nThe yard is silent.')).toBe(true)
+  })
+
+  it('explains the marks in the turn intro and adds the clause to the lead line, in the user half', () => {
+    const prompt = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(SWITCHED))
+    expect(prompt.user).toContain(
+      `\nThe story's lead is [c2] Bael. Outside quoted speech, "I" and "you" in the turns are the lead${CLAUSE}.\n\nTurns to classify.`,
+    )
+    expect(prompt.user).toContain(INTRO)
+    expect(prompt.system).not.toContain('from this turn on')
+    expect(prompt.system).not.toContain(CLAUSE)
+    expect(prompt).toMatchSnapshot()
+  })
+
+  it('names someone no longer in the story, and a run with no lead, with no id', () => {
+    const prompt = renderTemplate(
+      TEMPLATE_IDS.periodicClassifier,
+      context([
+        turn('t1', 'ai_reply', 'A stranger speaks.', { leadMark: { gone: true } }),
+        turn('t2', 'user_action', 'I answer him.', { leadMark: { none: true } }),
+        turn('t3', 'ai_reply', 'The yard is silent.', { leadMark: { id: 'c2', name: 'Bael' } }),
+      ]),
+    )
+    expect(prompt.user).toContain(
+      '\n[t1] from this turn on, "I" and "you" are a character no longer in the story and none of those named here, so credit what they do to no one\nA stranger speaks.\n',
+    )
+    expect(prompt.user).toContain(
+      "\n[t2] from this turn on, the story had no lead; the user's turn\nI answer him.\n",
+    )
+    expect(prompt.user).toContain(CLAUSE)
+    expect(prompt).toMatchSnapshot()
+  })
+
+  // A creative story after an unset: no lead line, its older turns still marked.
+  it('explains the marks with no lead line on a branch with no lead', () => {
+    const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(SWITCHED, null))
+    expect(user).not.toContain("The story's lead")
+    expect(user).not.toContain(CLAUSE)
+    expect(user).toContain(INTRO)
+    expect(user).toContain('\n[t1] from this turn on, "I" and "you" are [c1] Aefre\n')
+  })
+
+  it('says nothing of marks when no turn holds one', () => {
+    const unmarked = SWITCHED.map(({ leadMark, ...rest }) => rest)
+    const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(unmarked))
+    expect(user).not.toContain('from this turn on')
+    expect(user).not.toContain(CLAUSE)
+    expect(user).toContain(
+      'Outside quoted speech, "I" and "you" in the turns are the lead.\n\nTurns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user\'s',
+    )
+  })
+})

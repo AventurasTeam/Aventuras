@@ -223,3 +223,44 @@ it('the switch window credits the break-in by awareness as by involvement', () =
   expect(isWennas(breakInKnownTo('char_wenna'))).toBe(true)
   expect(notDaces(breakInKnownTo('char_dace'))).toBe(false)
 })
+
+// architecture.md → System and user halves: a window whose lead never changed renders no mark.
+const LEAD_MARK = 'from this turn on, '
+const LEAD_CLAUSE = 'except where a turn names another'
+
+describe.each(EVAL_WINDOWS.filter((w) => w.name !== 'switch').map((w) => [w.name, w] as const))(
+  'eval window %s, never switched',
+  (_, w) => {
+    it('renders no lead mark, no explanation of marks and no clause', () => {
+      const { prompt } = renderWindow(w, MAX_ENTRIES)
+      expect(prompt.user).not.toContain(LEAD_MARK)
+      expect(prompt.user).not.toContain('a turn where the lead changes')
+      expect(prompt.user).not.toContain(LEAD_CLAUSE)
+    })
+  },
+)
+
+// Turns 1–2 under the former lead, 3–4 under the lead: t1 differs from the lead the prompt names.
+it('the switch window marks t1 with its former lead and t3 with its lead, and no other turn', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const lead = w.lead!
+  const former = w.entries[0]!.metadata!.leadId!
+  expect(former).not.toBe(lead)
+  expect(w.entries.map((e) => e.metadata?.leadId)).toEqual([former, former, lead, lead])
+
+  const { prompt, legend } = renderWindow(w, MAX_ENTRIES)
+  const nameOf = (id: string) => w.entities.find((e) => e.id === id)!.name
+  const header = (handle: string) =>
+    prompt.user.split('\n').find((line) => line.startsWith(`[${handle}]`))!
+  const marked = (handle: string, id: string) => {
+    expect(legend.get(id)).toMatch(/^c\d+$/)
+    const expected = `[${handle}] ${LEAD_MARK}"I" and "you" are [${legend.get(id)}] ${nameOf(id)}`
+    expect(header(handle).slice(0, expected.length)).toBe(expected)
+  }
+
+  marked('t1', former)
+  expect(header('t2')).not.toContain(LEAD_MARK)
+  marked('t3', lead)
+  expect(header('t4')).not.toContain(LEAD_MARK)
+  expect(prompt.user).toContain(LEAD_CLAUSE)
+})
