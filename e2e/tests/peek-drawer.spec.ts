@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { currentBranchId, queryApp } from '../harness/db'
+import { currentBranchId, flaggedLeads, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -41,15 +41,6 @@ async function entityId(page: Page, branchId: string, name: string): Promise<str
     name,
   ])
   return id as string
-}
-
-async function flaggedLeads(page: Page, branchId: string): Promise<unknown[]> {
-  const rows = await queryApp(
-    page,
-    `SELECT id FROM entities WHERE branch_id = ? AND is_lead = 1 ORDER BY id`,
-    [branchId],
-  )
-  return rows.map(([id]) => id)
 }
 
 async function countOf(page: Page, sql: string, params: unknown[]): Promise<number> {

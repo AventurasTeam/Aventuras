@@ -160,6 +160,16 @@ export async function entityState(
   return typeof raw === 'string' ? (JSON.parse(raw) as Record<string, unknown>) : null
 }
 
+/** The ids of the branch's rows that carry the lead flag, sorted. */
+export async function flaggedLeads(page: Page, branchId: string): Promise<string[]> {
+  const rows = await queryApp(
+    page,
+    `SELECT id FROM entities WHERE branch_id = ? AND is_lead = 1 ORDER BY id`,
+    [branchId],
+  )
+  return rows.map(([id]) => id as string)
+}
+
 // The migrations' 384 family plus an 8-dim one seedVectors creates, so a sweep "in every dim
 // family" is checked across more than the one a fresh DB has.
 export const SEEDED_VEC_DIMS = [384, 8] as const
