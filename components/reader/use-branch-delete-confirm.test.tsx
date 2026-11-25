@@ -15,6 +15,8 @@ vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn() } }))
 type Count = (branchId: string) => Promise<number>
 type Remove = (branchId: string) => Promise<DeleteBranchResult>
 type Hook = ReturnType<typeof useBranchDeleteConfirm>
+// The route's inputs a test changes; the swap reads false unless given.
+type HostProps = { active: boolean; swapPending?: boolean }
 
 const READ_FAILED = "Couldn't read the branch. Please try again."
 const IN_FLIGHT = 'Generation is in flight. Cancel to edit.'
@@ -32,23 +34,24 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function setup() {
+function setup(swapPending = false) {
   const count = vi.fn<Count>(async () => 5)
   const remove = vi.fn<Remove>(async () => ({ status: 'deleted' }))
   const refresh = vi.fn(async (): Promise<void> => {})
   const row = document.createElement('div')
   const focusAfterDelete = { current: row }
-  const { result, rerender, unmount } = renderHook(
-    ({ active }: { active: boolean }) =>
+  const { result, rerender, unmount } = renderHook<Hook, HostProps>(
+    ({ active, swapPending: swapping = false }) =>
       useBranchDeleteConfirm({
         storyId: 'story_1',
         active,
+        swapPending: swapping,
         count,
         remove,
         refresh,
         focusAfterDelete,
       }),
-    { initialProps: { active: true } },
+    { initialProps: { active: true, swapPending } },
   )
   return { result, rerender, unmount, count, remove, refresh, row }
 }
@@ -195,6 +198,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
       const hook = useBranchDeleteConfirm({
         storyId: 'story_1',
         active: true,
+        swapPending: false,
         count: async () => 5,
         remove: async () => ({ status: 'deleted' }),
         refresh: async () => {},
@@ -279,6 +283,27 @@ describe('useBranchDeleteConfirm: the delete', () => {
     remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
     await confirmOn(result)
     act(() => generationStore.setReversalInProgress(false))
+    expect(result.current.refusal).toBe('swap-pending')
+  })
+
+  it('lets a swap refusal go once the swap the reader saw ends, so Delete branch is live again', async () => {
+    const { result, rerender, remove } = setup(true)
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
+    await confirmOn(result)
+    rerender({ active: true, swapPending: true })
+    expect(result.current.refusal).toBe('swap-pending')
+    rerender({ active: true, swapPending: false })
+    expect(result.current.refusal).toBeNull()
+    expect(result.current.target).toEqual(FORK)
+  })
+
+  it('keeps a swap refusal from a marker the reader never saw pending', async () => {
+    const { result, rerender, remove } = setup(false)
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
+    await confirmOn(result)
+    rerender({ active: true, swapPending: false })
     expect(result.current.refusal).toBe('swap-pending')
   })
 

@@ -43,6 +43,7 @@ export function branchDeleteBlockedReason(input: {
 export function useBranchDeleteConfirm({
   storyId,
   active,
+  swapPending,
   count,
   remove,
   refresh,
@@ -51,6 +52,8 @@ export function useBranchDeleteConfirm({
   storyId: string
   /** The reader has focus; losing it dismisses the confirm unless a delete is running. */
   active: boolean
+  /** The reader's live swap state: a swap refusal lasts until this goes false. */
+  swapPending: boolean
   count: (branchId: string) => Promise<number>
   remove: (branchId: string) => Promise<DeleteBranchResult>
   refresh: () => Promise<void>
@@ -85,6 +88,12 @@ export function useBranchDeleteConfirm({
   // A gate refusal lasts while the gate holds: once it opens, `Delete branch` is live again.
   const gateClosed = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   if (refusal === 'gated' && !gateClosed) setRefusal(null)
+  // On the edge only: a marker the reader never saw pending keeps its refusal.
+  const [swapSeen, setSwapSeen] = useState(swapPending)
+  if (swapSeen !== swapPending) {
+    setSwapSeen(swapPending)
+    if (!swapPending && refusal === 'swap-pending') setRefusal(null)
+  }
 
   const open = useCallback(
     async (branchId: string, name: string) => {

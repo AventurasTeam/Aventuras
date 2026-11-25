@@ -1803,6 +1803,7 @@ function ReaderComposerBody({
     // Logs only: the navigator, and so the confirm, mounts once the story has hydrated.
     storyId: storyId ?? '',
     active: isFocused,
+    swapPending,
     count: countBranchOnly,
     remove: removeBranch,
     refresh: refreshStoryBranches,
