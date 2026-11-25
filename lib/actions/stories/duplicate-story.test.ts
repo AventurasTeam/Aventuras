@@ -68,9 +68,8 @@ const swap = vi.hoisted(() => ({
   pending: new Set<string>(),
 }))
 
-// The copier's real ops; `afterCall` runs once each call's own reads have resolved, given the
-// call's 1-based count, so a test can write between the copier's reads and the re-check that
-// follows them.
+// The copier's real ops; `afterCall(call)` runs once that 1-based call's reads resolve, so a test
+// can write between the copier's reads and the re-check after them.
 const copier = vi.hoisted(() => ({
   calls: 0,
   afterCall: null as ((call: number) => void) | null,

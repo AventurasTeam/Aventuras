@@ -102,8 +102,7 @@ export async function checkStoryDuplicate(
   const runRegistered = () => runOnStory(generationStore.getTxState(), storyId, onStory)
   if (runRegistered()) return refused(DUPLICATE_REFUSAL.runRegistered)
   if (hold != null) {
-    // A run stores its end before it leaves the store, so one gone now may have ended after the
-    // read: read again, then look for a run with no await between.
+    // A run stores its end before leaving the store: re-read, then check runs, no await between.
     hold = await readStoredHold(copied, ctx)
     if (runRegistered()) return refused(DUPLICATE_REFUSAL.runRegistered)
   }
@@ -246,8 +245,8 @@ export async function duplicateStory(
   ]
   for (const { row, to } of copies)
     ops.push(...(await branchCopyOps(ctx.db, { from: row.id, to, mode: 'duplicate' })))
-  // Checked again so a refusal landing during the copier's reads gets its line; the title guard
-  // fails one landing later.
+  // Re-check: a refusal landing in the copier's reads gets its line; a later one fails the
+  // title guard.
   const rechecked = await checkStoryDuplicate(storyId, branch, ctx)
   if (rechecked.status === 'rejected') return rechecked
 

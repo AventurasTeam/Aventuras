@@ -253,7 +253,7 @@ export const FocusStaysWhenBlocked: Story = {
   play: async ({ args }) => expectFocusKeptWhenDeleteDisables(args),
 }
 
-/** The press starts the delete and both buttons disable: with no control left, the dialog keeps focus. */
+/** Delete starts and both buttons disable: with no control left, the dialog keeps focus. */
 export const FocusStaysWhenPending: Story = {
   render: (args) => <FlipOnDelete {...args} flip="pending" />,
   play: async ({ args }) => expectFocusKeptWhenDeleteDisables(args),
