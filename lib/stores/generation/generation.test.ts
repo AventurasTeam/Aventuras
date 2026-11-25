@@ -689,42 +689,79 @@ describe('dropBranchRecords', () => {
     generationStore.__reset()
   })
 
-  it("drops the branch's deferral and pick in one update", () => {
-    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-    deferOn('b1', 'pass')
-    deferOn('b1', 'close')
-    const seen: ReturnType<typeof recordsOn>[] = []
+  // Holds `branchId` the one way production does: a re-run whose abort's reversal didn't commit.
+  function holdOn(branchId: string): void {
+    const runId = `run_held_${branchId}`
+    generationStore.startRun(rerunRun(runId, { branchId }))
+    generationStore.abortRun(runId, 'aborted', { unreversed: true })
+  }
+
+  // The hold goes first: a pass's or a close's end clears its branch's re-run record.
+  function seedAllFour(branchId: string): void {
+    holdOn(branchId)
+    deferOn(branchId, 'pass')
+    deferOn(branchId, 'close')
+    generationStore.setPendingClose(branchId, { endEntryId: `e_${branchId}` })
+    generationStore.setPendingRerun(branchId, { chapterId: `chap_${branchId}` })
+  }
+
+  function allRecordsOn(branchId: string) {
+    const { deferred, pendingClose, pendingRerun, heldBranches } = generationStore.getTxState()
+    return {
+      deferred: deferred.get(branchId),
+      pick: pendingClose.get(branchId),
+      rerun: pendingRerun.get(branchId),
+      held: heldBranches.get(branchId),
+    }
+  }
+
+  const NONE = { deferred: undefined, pick: undefined, rerun: undefined, held: undefined }
+
+  const allFour = (branchId: string) => ({
+    deferred: { pass: true, close: true },
+    pick: { endEntryId: `e_${branchId}` },
+    rerun: { chapterId: `chap_${branchId}` },
+    held: { storyId: 's1' },
+  })
+
+  it("drops the branch's four records in one update", () => {
+    seedAllFour('b1')
+    expect(allRecordsOn('b1')).toEqual(allFour('b1'))
+    const seen: ReturnType<typeof allRecordsOn>[] = []
     const off = generationStore.subscribe(() => {
-      seen.push(recordsOn('b1'))
+      seen.push(allRecordsOn('b1'))
     })
     try {
       generationStore.dropBranchRecords('b1')
     } finally {
       off()
     }
-    expect(seen).toEqual([{ pick: undefined, deferred: undefined }])
+    expect(seen).toEqual([NONE])
   })
 
-  it("leaves another branch's records", () => {
-    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-    generationStore.setPendingClose('b2', { endEntryId: 'e4' })
-    deferOn('b1', 'close')
-    deferOn('b2', 'close')
+  it("leaves another branch's four records", () => {
+    seedAllFour('b1')
+    seedAllFour('b2')
     generationStore.dropBranchRecords('b1')
-    expect(recordsOn('b2')).toEqual({ pick: { endEntryId: 'e4' }, deferred: { close: true } })
+    expect(allRecordsOn('b1')).toEqual(NONE)
+    expect(allRecordsOn('b2')).toEqual(allFour('b2'))
   })
 
-  it('drops a branch holding only one of the two', () => {
-    generationStore.setPendingClose('b1', { endEntryId: 'e9' })
-    deferOn('b2', 'pass')
-    generationStore.dropBranchRecords('b1')
-    generationStore.dropBranchRecords('b2')
-    expect(recordsOn('b1')).toEqual({ pick: undefined, deferred: undefined })
-    expect(recordsOn('b2')).toEqual({ pick: undefined, deferred: undefined })
+  it.each<[string, (branchId: string) => void]>([
+    ['deferral', (branchId) => deferOn(branchId, 'pass')],
+    ['close pick', (branchId) => generationStore.setPendingClose(branchId, { endEntryId: 'e9' })],
+    ['re-run', (branchId) => generationStore.setPendingRerun(branchId, { chapterId: 'chap_1' })],
+    ['hold', (branchId) => holdOn(branchId)],
+  ])('drops a branch holding only its %s, notifying once', (_label, seed) => {
+    seed('b1')
+    const held = Object.values(allRecordsOn('b1')).filter((record) => record !== undefined)
+    expect(held).toHaveLength(1)
+    expect(notificationsDuring(() => generationStore.dropBranchRecords('b1'))).toBe(1)
+    expect(allRecordsOn('b1')).toEqual(NONE)
   })
 
-  it('leaves the state as it was for a branch with no record', () => {
-    generationStore.setPendingClose('b2', { endEntryId: 'e4' })
+  it('leaves the state as it was for a branch with none of the four', () => {
+    seedAllFour('b2')
     const before = generationStore.getTxState()
     expect(notificationsDuring(() => generationStore.dropBranchRecords('b1'))).toBe(0)
     expect(generationStore.getTxState()).toBe(before)

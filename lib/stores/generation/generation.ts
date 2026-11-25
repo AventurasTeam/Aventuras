@@ -57,7 +57,8 @@ export type PendingClose = { readonly endEntryId: string }
 /** A close's re-run, held for its chain's life (generation-pipeline.md → Multi-run txState). */
 export type PendingRerun = { readonly chapterId: string }
 
-/** A branch whose re-run's abort couldn't take itself back: held until a restart's boot recovery. */
+/** A branch whose re-run's abort couldn't take itself back: held until a restart's boot recovery,
+ * or until a delete of the branch or its story. */
 export type HeldBranch = { readonly storyId: string | null }
 
 /** RejectedStart.blockedBy for a start on a held branch, and the gate kind its controls name. */
@@ -74,9 +75,10 @@ export type TxState = {
   deferred: ReadonlyMap<string, DeferredWork>
   /** In memory only. */
   pendingClose: ReadonlyMap<string, PendingClose>
-  /** In memory only; cleared in the update that ends the re-run's chain. */
+  /** In memory only; cleared in the update that ends the re-run's chain, or by a delete of its
+   * branch or its story. */
   pendingRerun: ReadonlyMap<string, PendingRerun>
-  /** In memory only, so a restart drops it; nothing else clears it. */
+  /** In memory only, so a restart drops it; else only its branch's or story's delete clears it. */
   heldBranches: ReadonlyMap<string, HeldBranch>
 }
 
@@ -107,7 +109,8 @@ export function runBlocksHeadReversal(run: RunState, branchId: string): boolean 
 
 // Pending turns and reversals hold no run yet, so leaving the story waits on them too; a start
 // holding its own mark (`ownMark`) skips that one, never another on the branch. A held branch
-// isn't busy: leaving waits on this, and only a restart ends a hold.
+// isn't busy: leaving waits on this, and a hold ends only with a restart or a delete of its
+// branch or story.
 export function isStoryBusy(
   txState: TxState,
   storyId: string,
@@ -190,7 +193,7 @@ type GenerationState = {
   clearPendingRerun: (branchId: string) => void
   /** Removes only `deferred.close`; a deferred pass stays. */
   clearDeferredClose: (branchId: string) => void
-  /** Drops both records in one update, so no subscriber sees one without the other. */
+  /** Drops all four records in one update, so no subscriber sees some without the others. */
   dropBranchRecords: (branchId: string) => void
   /** C6: replaces the stored run with a copy carrying `progress`; no-op for an unknown run. */
   setCloseProgress: (runId: string, progress: CloseProgress) => void
@@ -325,8 +328,16 @@ const store = createStore<GenerationState>()((set) => ({
     set((s) => {
       const deferred = withoutBranch(s.txState.deferred, branchId)
       const pendingClose = withoutBranch(s.txState.pendingClose, branchId)
-      if (deferred === s.txState.deferred && pendingClose === s.txState.pendingClose) return s
-      return { txState: { ...s.txState, deferred, pendingClose } }
+      const pendingRerun = withoutBranch(s.txState.pendingRerun, branchId)
+      const heldBranches = withoutBranch(s.txState.heldBranches, branchId)
+      if (
+        deferred === s.txState.deferred &&
+        pendingClose === s.txState.pendingClose &&
+        pendingRerun === s.txState.pendingRerun &&
+        heldBranches === s.txState.heldBranches
+      )
+        return s
+      return { txState: { ...s.txState, deferred, pendingClose, pendingRerun, heldBranches } }
     }),
   setCloseProgress: (runId, progress) =>
     set((s) => {
