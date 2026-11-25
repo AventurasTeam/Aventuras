@@ -1,4 +1,4 @@
-import { and, eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, sql, type SQL } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { branchCopyOps, branches, stories, type SqlOp } from '@/lib/db'
@@ -75,7 +75,7 @@ export async function checkStoryDuplicate(
   const copied = branch === 'all' ? onStory : onStory.filter(({ id }) => id === branch.branchId)
   if (copied.length === 0) return refused(DUPLICATE_REFUSAL.missing)
   if (story.status === 'draft') return refused(DUPLICATE_REFUSAL.draft)
-  // isStorySwapPending sees a stored marker on the open story alone; the list asks about any.
+  // The marker as stored, for any story: the in-memory read sees only the open story's.
   if (await readStorySwapPending(ctx.db, storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
   const branchIds = onStory.map(({ id }) => id)
   if (runOnStory(generationStore.getTxState(), storyId, branchIds))
@@ -158,9 +158,16 @@ export async function duplicateStory(
   const now = Date.now()
   const parentOf = (row: BranchRow): SQL =>
     sql`${row.parentBranchId == null ? null : (toOf.get(row.parentBranchId) ?? null)}`
+  // For a tree, the story row alone would let a copy land with no branch once all its sources went.
   const sourceHeld =
     branch === 'all'
-      ? sql`select 1 from ${stories} where ${eq(stories.id, storyId)}`
+      ? sql`select 1 from ${branches} where ${and(
+          eq(branches.storyId, storyId),
+          inArray(
+            branches.id,
+            copies.map(({ row }) => row.id),
+          ),
+        )}`
       : sql`select 1 from ${branches} where ${and(eq(branches.id, branch.branchId), eq(branches.storyId, storyId))}`
   const inserted = (branchId: string): SQL =>
     sql`(select ${branches.id} from ${branches} where ${eq(branches.id, branchId)})`

@@ -314,13 +314,10 @@ describe('checkStoryDuplicate', () => {
   it.each([
     ['its story', { storyId: STORY, branchId: 'br_gone' }, { branchId: B }],
     ['its branch alone', { storyId: null, branchId: B }, { branchId: A }],
-  ] as const)(
-    'refuses a run registered on any branch of the story, matched by %s',
-    async (_, run, branch) => {
-      registerRun(run)
-      await expectRefused(branch, DUPLICATE_REFUSAL.runRegistered)
-    },
-  )
+  ] as const)('refuses a registered run, matched by %s', async (_, run, branch) => {
+    registerRun(run)
+    await expectRefused(branch, DUPLICATE_REFUSAL.runRegistered)
+  })
 
   it("passes while another story's run is registered", async () => {
     registerRun({ storyId: OTHER_STORY, branchId: OTHER_BRANCH })
@@ -983,6 +980,24 @@ describe('duplicateStory', () => {
     ).rejects.toThrow('NOT NULL constraint failed: stories.title')
 
     expect(countWhere('stories', 'id = ?', STORY)).toBe(0)
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it('fails the batch, writing nothing, when every branch it copies goes while the story stays', async () => {
+    const D = 'br_d'
+    const race = racing(async () => {
+      cloneBranch(t.sqlite, B, D)
+      t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(D, STORY)
+      await t.runInTransaction(await branchDeleteOps(A))
+      await t.runInTransaction(await branchDeleteOps(B))
+    })
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(countWhere('branches', 'story_id = ?', STORY)).toBe(1)
+    expect(countWhere('stories', 'id = ?', STORY)).toBe(1)
     expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
   })
 
