@@ -8,14 +8,14 @@ headers. The reasoning and the data are in
 
 ## Which helper
 
-| Job                                                      | Use                                                                                         |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| An AI SDK provider                                       | `createTimeoutFetch` (`services/ai/sdk/providers/fetch.ts`); `registry.ts` injects it       |
-| An SDK image model                                       | `createSdkFetch` (`sdkFetch.ts`); a poll that should stay out of the log, `createPollSdkFetch` |
-| Image model discovery or a GET to the configured server  | `imageGetFetch` (`services/ai/image/providers/fetchAdapter.ts`)                             |
-| A URL from a card or anywhere else the user did not type | `fetchPublicImageBase64`, which also checks each redirect hop against the public-host rule  |
-| Card discovery, Fandom and other plain GETs              | `corsFetch` (`services/discovery/utils.ts`); it logs nothing unless passed `debug`          |
-| Any other request of the app's own                       | `loggedFetch` (`services/http/`), which the helpers above are built on                      |
+| Job                                                      | Use                                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| An AI SDK provider                                       | `createTimeoutFetch` (`services/ai/sdk/providers/fetch.ts`); `registry.ts` injects it                  |
+| An SDK image model                                       | `createSdkFetch` (`sdkFetch.ts`); a poll, `createPollSdkFetch`, which logs it as one entry             |
+| Image model discovery or a GET to the configured server  | `imageGetFetch` (`services/ai/image/providers/fetchAdapter.ts`)                                        |
+| A URL from a card or anywhere else the user did not type | `fetchPublicImageBase64`, which also checks each redirect hop against the public-host rule             |
+| Card discovery, Fandom and other plain GETs              | `corsFetch` (`services/discovery/utils.ts`); it logs nothing unless passed `debug`                     |
+| Any other request of the app's own                       | `loggedFetch` (`services/http/`), which the helpers above are built on (`corsFetch` only with `debug`) |
 
 `httpFetch` (`services/http/httpFetch.ts`) is the only way into the plugin, and an ESLint rule
 rejects any other import of its `fetch`: it drops the webview `Origin` that local servers reject.
@@ -28,7 +28,8 @@ the SDK unread. Read every logged body with `readLoggedBody`, which never throws
 ## Aborts and timeouts
 
 - **A timeout makes an abort an `AbortError`.** `loggedFetch` given a `timeoutMs` wraps the request
-  in a request guard, which maps an abort to an `AbortError`. Without one, the plugin rejects with
+  in a request guard, which maps a caller's abort to an `AbortError` and its own timeout to a
+  `RequestTimeoutError`. Without one, the plugin rejects with
   a plain `Error` or a bare string, depending on timing, and a stream that is cut errors with a
   bare string ([network-transport.md](../architecture/network-transport.md#how-the-two-differ)).
   There, check `signal.aborted` first; do not rely on `error.name` or the message.
