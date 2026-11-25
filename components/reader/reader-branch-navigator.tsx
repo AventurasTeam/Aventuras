@@ -39,11 +39,10 @@ export type ReaderBranchNavigatorProps = {
   paused: boolean
   onSwitch: (branchId: string) => void
   onRename: (branchId: string, name: string) => Promise<unknown>
-  /** Absent while lifecycle ops pause or a swap is pending: no row then shows a delete control. */
+  /** Absent: no row shows a delete control. */
   onDelete?: (branchId: string) => void
   /** While a confirm sits above the navigator, an outside focus or press doesn't close it. */
   holdOpen?: boolean
-  /** Bound to the current branch's row. */
   currentRowRef?: RefObject<View | null>
   ref?: Ref<ReaderBranchNavigatorHandle>
 }
