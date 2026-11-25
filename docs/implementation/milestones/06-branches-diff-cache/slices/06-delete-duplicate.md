@@ -199,7 +199,8 @@ state, and closes through `AlertDialogAction` before an async confirm
 settles (`components/compounds/delete-confirm-dialog.tsx:57-61`).
 
 - Props: `open`, `onOpenChange`, `name`, `count`, `blockedReason?`,
-  `pending?`, `failed?`, `portalHost?`, `returnFocusTo?`, `onDelete()`.
+  `phase?` (`idle`, `pending` or `failed`), `portalHost?`,
+  `returnFocusTo?`, `onDelete()`.
 - Copy per canon, all inside `AlertDialogDescription`: the title,
   `Delete <name>?`; the count line, canon's `<N> entries` sentence with
   its singular, or its zero wording; the last line, that the branch's
@@ -347,7 +348,8 @@ and the branch are one cluster with a submit button, so they use
   (`app/index.tsx:229`), and its `open` is gated on `isFocused`: a toast's
   `Open` can push a reader while a second dialog is up.
 - On done: the dialog closes; the stories store has re-read inside the
-  action; the chapter numbers re-read; then a success toast,
+  action; the chapter numbers re-read; then an info toast, as
+  [`toast.md`](../../../../ui/patterns/toast.md) has it,
   `Duplicated as "<name>"`, whose `Open` calls `attemptOpenStory` with
   the new id (`app/index.tsx:158-182`). The user stays on the list.
 - The chapter numbers need the explicit re-read. The hook's key,
@@ -365,7 +367,8 @@ and the branch are one cluster with a submit button, so they use
   re-hydrates (C5). So the host keeps the toast's id, dismisses the toast
   (`toast.dismiss`) when the list loses focus, and the `Open` handler
   does nothing unless the list is focused at the press, for a press that
-  lands as focus leaves. Both live in one hook,
+  lands as focus leaves, and no list confirm is up: on native the toast
+  sits above one. Both live in one hook,
   `components/story/use-duplicate-done-toast.ts`.
 
 **Cost.** A full duplicate of the dataset story (`pnpm db:seed:dataset`,
@@ -589,7 +592,7 @@ pass hasn't already made it. The rest are this slice's own.
   disables `Duplicate`; a `Copying` story disables the fields and `Cancel`
   and stays open on Escape; a `Failed` story shows the inline line.
 - `components/story/use-duplicate-done-toast.test.tsx` (jsdom, mocked
-  `toast` and open): a done shows the success toast with `Open`; focus
+  `toast` and open): a done shows the info toast with `Open`; focus
   going false dismisses it by its id; an `Open` pressed while the list is
   unfocused opens nothing; one pressed while focused opens the copy.
 - `e2e/tests/story-duplicate.spec.ts`, on the seeded hero story:
@@ -754,7 +757,8 @@ change amends the scope above.
   them". No behavior differs: each vector statement copies only rows
   its own branch's tables already copied. The same paragraph names the
   `UPDATE stories SET current_branch_id` the batch posts after the
-  branch rows, and that a source gone before the batch fails it.
+  branch rows, and that a source gone before the batch, or a refusal
+  stored after the check, fails it.
 - **A source changing mid-duplicate holds its invariant.** The slice's
   default accepted a source branch deleted between the reads and the
   batch, on the premise that nothing partial lands either way. The
