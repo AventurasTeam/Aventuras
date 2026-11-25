@@ -680,7 +680,9 @@ branch, finished or not, and the branch's vec0 rows by their
 when it had none, then deletes the `branches` row. No DB-level
 `ON DELETE` cascade exists. A child's `fork_entry_id` stays: the child
 holds that entry itself, copied with its id. The removed
-`entry_assets` rows trash their assets under the cross-story count
+`entry_assets` rows go and trash no asset: the refcount trash that
+reclaims an asset no story references isn't built yet (M9.3), and
+nothing writes assets yet
 ([Assets](#assets-images--future-media)). The branch's in-memory
 records go with it: `generationStore`'s `deferred`, `pendingClose`,
 `pendingRerun` and `heldBranches`, and its redo stack. The delete
@@ -1685,11 +1687,12 @@ pending on the story; or when a run is registered on any of its branches.
 
 **One transaction, no lock.** One `runInTransaction` batch of
 `INSERT … SELECT`: the `stories` row, then `branches` in `created_at` order
-(parents before children), then each branch-scoped table, then `*_vec` last.
-A full duplicate's branches share the batch, so a failure writes nothing. A
-fork holds the parent's exclusive write lock because it plans its rewind
-outside its transaction; a duplicate plans nothing, and one batch reads one
-consistent snapshot of the source. The copy needs the fork's composite
+(parents before children), then an `UPDATE stories SET current_branch_id`
+that points the copy at its current branch, then each copied branch's tables,
+its `*_vec` after them. A source that vanished before the batch ran fails it. A full duplicate's branches share the batch, so a failure
+writes nothing. A fork holds the parent's exclusive write lock because it
+plans its rewind outside its transaction; a duplicate plans nothing, and
+one batch reads one consistent snapshot of the source. The copy needs the fork's composite
 `deltas` key and the same `vec0` self-insert, or its fallback.
 
 **Not undoable.** A duplicate writes no deltas, like a story delete; deleting

@@ -37,6 +37,13 @@ with `document.elementFromPoint` at the content's centre and require the
 result to be inside the content. That catches any stacking cause, not
 just the one you guessed. See `OverAModal` in
 [`components/ui/popover.stories.tsx`](../../../components/ui/popover.stories.tsx).
+Under an open modal the check can't fail as written: Radix sets every
+lower layer to `pointer-events: none`, which `elementFromPoint` skips,
+so the hit lands on the modal whatever paints above it. Give the lower
+layer its pointer events back for the probe, confirm the point belongs
+to it, then hit-test it, as `HoldOpenUnderConfirm` in
+[`components/reader/branch-navigator.stories.tsx`](../../../components/reader/branch-navigator.stories.tsx)
+does.
 
 Found 2026-09-02 building the world-state panel's scene editor — the
 first consumer to open a Popover from inside a Dialog.
