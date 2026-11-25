@@ -676,3 +676,12 @@ run; the answers are under Implementation notes.
   `Re-run on new branch` from the Timeline forks at `N`, lands on the
   new branch's reader with the Lore banner running, commits the re-run
   there and leaves the parent's entries, report and lore unchanged.
+- On the slot AVD (`Aventuras_Slot_1`, Android, x86_64 dev client),
+  `⎇` on a reply in the native document opens the modal with the input
+  focused, and `Create` lands the reader on the new branch at its
+  bottom, on the fork entry; Back reaches the Story List. The pending
+  spinner never paints: after the press the modal keeps its enabled
+  `Create` for about 0.5–0.7 s while the fork's batch holds the JS
+  thread, then the stack transition takes it away and the new reader
+  shows `Loading story…` for about 0.7 s (2026-11-25, forks at entries
+  71 and 23 of the hero story).
