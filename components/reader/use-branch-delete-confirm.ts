@@ -159,7 +159,9 @@ export function useBranchDeleteConfirm({
       setRefusal(result.code)
       return
     }
-    // A stale row: its branch is gone or became the current one, and a re-read drops it.
+    logger.warn('app.branch_delete_refused', { storyId, branchId, code: result.code })
+    // A stale row: a re-read drops a gone branch, but a current one's row stays and needs a signal.
+    if (result.code === 'current') toast.error(t('reader:branches.deleteConfirm.failed'))
     setTarget(null)
     void attempt(() => latest.current.refresh())
   }, [storyId, target])

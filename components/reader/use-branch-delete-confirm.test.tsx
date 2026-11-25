@@ -19,6 +19,7 @@ type Hook = ReturnType<typeof useBranchDeleteConfirm>
 type HostProps = { active: boolean; swapPending?: boolean }
 
 const READ_FAILED = "Couldn't read the branch. Please try again."
+const FAILED = "Couldn't delete the branch."
 const IN_FLIGHT = 'Generation is in flight. Cancel to edit.'
 const UPDATING_MEMORY = 'Updating memory. Cancel to edit.'
 const SWAPPING = 'Unavailable while the embedder switch finishes.'
@@ -77,6 +78,7 @@ beforeEach(() => {
   generationStore.__reset()
   vi.mocked(toast.error).mockClear()
   vi.spyOn(logger, 'error').mockImplementation(() => {})
+  vi.spyOn(logger, 'warn').mockImplementation(() => {})
 })
 afterEach(() => {
   cleanup()
@@ -234,7 +236,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
   })
 
   it.each(['missing', 'current'] as const)(
-    'closes on a %s refusal and refreshes the rows',
+    'closes on a %s refusal, logs it and refreshes the rows',
     async (code) => {
       const { result, remove, refresh } = setup()
       await openOn(result)
@@ -244,9 +246,29 @@ describe('useBranchDeleteConfirm: the delete', () => {
       expect(result.current.refusal).toBeNull()
       expect(result.current.returnFocusTo.current).toBeNull()
       expect(refresh).toHaveBeenCalledTimes(1)
-      expect(toast.error).not.toHaveBeenCalled()
+      expect(logger.warn).toHaveBeenCalledWith('app.branch_delete_refused', {
+        storyId: 'story_1',
+        branchId: 'br_fork',
+        code,
+      })
     },
   )
+
+  it("toasts a current refusal: the re-read keeps the row, so the press isn't silent", async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'current' })
+    await confirmOn(result)
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('toasts nothing on a missing refusal: the re-read drops its row', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'missing' })
+    await confirmOn(result)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
 
   it.each(['gated', 'swap-pending'] as const)(
     'keeps the confirm on a %s refusal, holding the code for its line',
