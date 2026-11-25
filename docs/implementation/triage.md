@@ -740,29 +740,6 @@ slice-planning gate forces its resolution before that slice is planned.
   rule that resolves the binding, would close it.
   Found during Slice 6.6.
 
-- **The toast doc puts the Toaster above an AlertDialog; on web it may
-  sit below one.** `docs/ui/patterns/toast.md:260-264` says the Toaster
-  renders at z-100, above AlertDialog. `<Toaster />` mounts inside the RN
-  root `View` (`app/_layout.tsx:115`), whose stacking context
-  (per [RN-Web Views are stacking contexts](./lessons-learned/rnweb-view-stacking-context.md))
-  likely caps its z-index below a body-portalled AlertDialog, so a toast
-  fired under an open confirm could paint beneath it. Inferred, not run.
-  Probe it with a toast over an open AlertDialog in a browser story; the
-  fix is either to portal the Toaster to the body or to correct the doc.
-  Found during Slice 6.6.
-
-- **Radix logs "Missing `Description` or `aria-describedby`" for five
-  dialogs.** `DuplicateStoryDialog` and four existing ones open with
-  the warning: `components/chapters/review-window.tsx:124`,
-  `components/compounds/import-dialog.tsx:197`,
-  `components/compounds/embedder-download-dialog.tsx:96` and
-  `components/compounds/entry-card.tsx:297,385`. Canon
-  (`docs/ui/patterns/overlays.md:317`) calls a description rarely
-  needed, so the warning is noise on dialogs that are fine as written.
-  One decision at the `DialogContent` primitive (`aria-describedby`
-  set to `undefined` when no Description renders) would silence them
-  all. Found during Slice 6.6.
-
 - **`deleteStory`'s comment says assets are "handled by a separate GC",
   but none exists yet.** `lib/actions/stories/delete-story.ts:33` leaves
   `assets` out of `BRANCH_SCOPED` on that ground, and no asset GC exists
@@ -782,3 +759,20 @@ slice-planning gate forces its resolution before that slice is planned.
   `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
   read an index probe; it's a schema change, so it waits for an owner.
   Found during Slice 6.6.
+
+- **A held Enter on a button that opens or closes a dialog repeats
+  the press on whatever takes focus.** Chromium clicks a focused
+  `<button>` on every Enter keydown, repeats included, so once a press
+  moves focus the repeats land on the new target
+  ([a keydown that moves focus hands off its auto-repeat](./lessons-learned/keydown-focus-move-hands-off-key-repeat.md)).
+  Two instances, traced in code, not run: holding Enter on a navigator
+  row's `×` opens the branch delete confirm with focus on `Cancel`, a
+  repeat clicks `Cancel`, focus returns to `×` and the next repeat
+  reopens it, flipping until the key is released; holding Enter on
+  `Delete branch` puts focus on the current branch's row once the delete
+  lands, and a repeat presses that row, which closes the navigator that
+  canon keeps open. Any dialog opened or closed from a focused button
+  likely does the same; `swallowKeyRepeats` is used only in
+  `SearchableOverlayList`. The fix is app-wide, the button or the
+  dialog swallowing a keyboard press's repeats, so it waits for an
+  owner. Found by Slice 6.6's slice review (2026-11-26).
