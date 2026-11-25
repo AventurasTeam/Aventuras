@@ -780,12 +780,15 @@ change amends the scope above.
   branch follows the pointer read before the batch, not the source's at
   batch time.
 - **The batch is the authority at commit.** The same title subquery
-  also fails the batch when a copied branch holds an unfinished
-  `pipeline_runs` row or a `classifier_status` reading `running`
-  (malformed, too, checked with `json_valid` first), so every DB-backed
-  refusal holds at commit with no lock: a vanished source, an unfinished
-  run row, a running classifier. The checks before the post give the
-  refusal lines; the guard makes them hold.
+  also fails the batch when the source story is a draft or holds a
+  stored swap marker (read as `readStorySwapPending` reads it, so a
+  malformed `settings` blob holds none and copies whole), or when a
+  copied branch holds an unfinished `pipeline_runs` row or a
+  `classifier_status` reading `running` (malformed, too, checked with
+  `json_valid` first). So every DB-backed refusal holds at commit with
+  no lock: a vanished source, a draft, a stored swap marker, an
+  unfinished run row, a running classifier. The checks before the post
+  give the refusal lines; the guard makes them hold.
 - **A switch racing the delete.** A branch switch writes the story's
   pointer before it publishes the open story, so it can name the branch
   after the delete's read of the pointer. The delete's batch now opens

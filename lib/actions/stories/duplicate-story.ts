@@ -3,7 +3,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { branchCopyOps, branches, pipelineRuns, stories, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
+import { isStorySwapPending, readStorySwapPending, storedSwapTarget } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
   generationStore,
@@ -194,7 +194,9 @@ export async function duplicateStory(
       {
         id: sql`${newStoryId}`,
         // A source gone, or one the check would now refuse, yields a NULL title, failing the batch.
+        // `stories` here is the joined source row.
         title: sql`(select ${title} where exists (${sourceHeld})
+          and ${stories.status} <> 'draft' and ${storedSwapTarget} is null
           and not exists (${runUnfinished}) and not exists (${classifierRefused}))`,
         status: sql`'active'`,
         favorite: sql`0`,

@@ -1160,6 +1160,40 @@ describe('duplicateStory', () => {
     expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
   })
 
+  it('fails the batch, writing nothing, when a swap marker is stored on the source before it', async () => {
+    const race = racing(async () => markSwap(STORY))
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it('fails the batch, writing nothing, when the source turns draft before it', async () => {
+    const race = racing(async () => {
+      t.sqlite.prepare("UPDATE stories SET status = 'draft' WHERE id = ?").run(STORY)
+    })
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it('copies a source whose settings turn malformed before its batch, as the check reads no marker there', async () => {
+    const race = racing(async () => {
+      t.sqlite.prepare('UPDATE stories SET settings = ? WHERE id = ?').run('{not json', STORY)
+    })
+
+    const copy = copyOf(
+      await duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    )
+
+    expect(storyRow(copy.storyId).settings).toBe('{not json')
+  })
+
   it("copies one branch while the story's other branch's classifier runs at its batch", async () => {
     const race = racing(async () => setClassifierState(B, 'running'))
 

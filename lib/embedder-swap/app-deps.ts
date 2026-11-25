@@ -169,7 +169,8 @@ export function isStorySwapPending(storyId: string): boolean {
 }
 
 // json_valid first: a bare json_extract raises on a malformed blob and would fail the read.
-const storedSwapTarget = sql<
+// A correlated reference to `stories`, so a query over the story's row can read it too.
+export const storedSwapTarget = sql<
   string | null
 >`CASE WHEN json_valid(${stories.settings}) THEN json_extract(${stories.settings}, '$.embedding_swap_target') END`
 
