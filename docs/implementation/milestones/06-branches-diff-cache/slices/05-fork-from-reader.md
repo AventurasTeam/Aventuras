@@ -619,9 +619,11 @@ run; the answers are under Implementation notes.
   `useInertMouseBack`, that cancels the Back and Forward buttons'
   `mouseup` while either path is pending; on success the old reader's
   unmount releases it. The in-place re-run never navigates and isn't
-  blocked. The mechanism is provisional: the alternative routes the
-  mouse's Back through the guarded in-app back across the app, which
-  would make this narrow block unnecessary.
+  blocked. The developer chose this narrow block for the slice (Q17,
+  2026-11-25). The app-wide mouse-Back hole is filed in
+  [`triage.md`](../../../triage.md) for its own fix, routing the mouse's
+  Back through the guarded in-app back, which would make this block
+  unnecessary.
 - **The name is trimmed in the action (IC1).** `forkBranch` stores it
   trimmed, as `renameBranch` does; there is no empty-name refusal (the
   modal gates an empty name and the auto-name is never empty).
