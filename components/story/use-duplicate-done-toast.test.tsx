@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { toast } from '@/lib/toast'
@@ -92,6 +93,37 @@ describe('useDuplicateDoneToast', () => {
     })
     unmount()
     expect(toast.dismiss).toHaveBeenCalledWith('toast-1')
+  })
+
+  it('shows nothing for a copy that lands after the list unmounts', () => {
+    const { result, unmount } = setup()
+    const show = result.current
+    unmount()
+    show(COPIED)
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it("opens nothing when a kept toast's Open is pressed after the list unmounts", () => {
+    const { result, unmount, open } = setup()
+    act(() => {
+      result.current(COPIED)
+    })
+    unmount()
+    pressOpen()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('shows the toast and opens the copy under StrictMode', () => {
+    const open = vi.fn<(storyId: string) => void>()
+    const { result } = renderHook(() => useDuplicateDoneToast({ focused: true, open }), {
+      wrapper: StrictMode,
+    })
+    act(() => {
+      result.current(COPIED)
+    })
+    expect(toast.success).toHaveBeenCalledTimes(1)
+    pressOpen()
+    expect(open).toHaveBeenCalledWith('story_copy')
   })
 
   it('replaces an earlier done toast with the newer one', () => {
