@@ -32,6 +32,7 @@ import {
 import {
   applyDeltaActionGroup,
   DELTA_REJECTION,
+  settleUserWrites,
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
@@ -223,6 +224,8 @@ async function commitMerge(
           COLLISION_REJECTION.leadEntity,
           'an entry on the branch is stamped with the losing row as its lead',
         )
+      // The build reads the flag off the store, which a dispatched set patches once it commits.
+      await settleUserWrites()
       const story = storyPlaceOf({ tail: head?.tail, sceneSource })
       return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
     },

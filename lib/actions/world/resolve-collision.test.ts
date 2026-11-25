@@ -55,6 +55,7 @@ import { selectReversalSet } from '../delta/row-closure'
 import { rowLock } from '../delta/row-locks'
 import { userOwnsPin } from '../delta/user-precedence'
 import { deleteEntityRow } from '../row-delete/delete-entity'
+import { setBranchLead } from '../stories/set-lead'
 import type { loadHeadTurn as LoadHeadTurn } from '../story-entries/head-turn'
 import { updateEntrySceneFields } from '../story-entries/scene-fields'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
@@ -687,6 +688,29 @@ describe('resolveCollision — merge', () => {
 
     expect(await worldSnapshot()).toEqual(before)
     expect(await deltaRows()).toEqual([])
+  })
+
+  it('waits out a lead set onto the loser still committing, then refuses lead-entity', async () => {
+    await ctx.db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await setLeadFlag('char_lead')
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // The set has dispatched but can't commit, so the store still reads the loser unflagged.
+    const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_b' }), () => gate)
+    const setting = setBranchLead('b1', 'char_b', ctx)
+    await flush()
+    const merging = resolveCollision('b1', MERGE_B_INTO_A, ctx)
+    await flush()
+    expect(entitiesStore.getEntities('b1').get('char_b')?.isLead).toBe(0)
+    release()
+    await held
+
+    expect(await setting).toEqual({ status: 'ok' })
+    expect(await merging).toMatchObject({ status: 'rejected', code: 'lead-entity' })
+    expect(await entityRow('char_b')).toMatchObject({ isLead: 1 })
+    expect(await flaggedLeads()).toEqual(['char_b'])
   })
 
   it('merges a loser a stamp names only on another branch', async () => {
