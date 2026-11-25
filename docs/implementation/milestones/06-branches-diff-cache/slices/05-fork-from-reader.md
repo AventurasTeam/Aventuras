@@ -597,8 +597,8 @@ run; the answers are under Implementation notes.
   live under a swap: no branch-only prop on `EntryCard`.
 - **A blocked navigation after the fork commits (D2).** When
   `showBranch`'s stack reset doesn't take, it puts
-  `stories.current_branch_id` back on the branch the reader shows
-  (`fromBranchId`) through the switch's own restore and its one retry,
+  `stories.current_branch_id` back on the branch the reader shows (the
+  hold's branch) through the switch's own restore and its one retry,
   before it releases the hold. Both callers keep the new branch,
   refresh the branch list, close the modal or the re-run confirm (the
   request with `reopen: false`) and show a warning toast; the re-run
