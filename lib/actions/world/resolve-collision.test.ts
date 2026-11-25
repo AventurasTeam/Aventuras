@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { desc, eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import {
   branches,
@@ -697,6 +697,8 @@ describe('resolveCollision — merge', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
+    // A failed assertion would leave the row lock held for every later test on that key.
+    onTestFinished(() => release())
     // The set has dispatched but can't commit, so the store still reads the loser unflagged.
     const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_b' }), () => gate)
     const setting = setBranchLead('b1', 'char_b', ctx)
@@ -720,6 +722,8 @@ describe('resolveCollision — merge', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve
     })
+    // A failed assertion would leave the row lock held for every later test on that key.
+    onTestFinished(() => release())
     // The merge's group queues behind this edit on the loser's row; the set comes after the build.
     const held = withKeyLock(rowLock('entities')({ branchId: 'b1', id: 'char_b' }), () => gate)
     const editing = applyDeltaAction(
