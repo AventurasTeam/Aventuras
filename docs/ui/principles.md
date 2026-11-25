@@ -904,16 +904,15 @@ as is the regenerate confirm's button; Save & regenerate saves before
 it runs, so a refusal only at dispatch would keep the edit and drop
 the run. Rollback (`×`) starts no turn, and a pass's or a close's
 Retry runs regardless, so those stay live. A visible reason line
-under the composer (not
-just a web tooltip, since Android has none) reads the
-`reader:composerLeadMissing` copy: "This story needs a lead on this
-branch before it can continue. Set one in World." In adventure the
-mode picker also disables and shows `Free`, since a third-person wrap
-names the lead (`Aria reaches for the blade`). When the whole composer
-is disabled (the story still loading, or an embedder swap pending),
-that reason wins the reason line; while a turn is generating, the
-lead-missing line stays. A creative third-person branch with no lead
-needs none and runs as usual.
+under the composer (not just a web tooltip, since Android has none)
+reads the `reader:composerLeadMissing` copy: "This story needs a lead
+on this branch before it can continue. Set one in World." In
+adventure the mode picker also disables and shows `Free`, since a
+third-person wrap names the lead (`Aria reaches for the blade`). When
+the whole composer is disabled (the story still loading, or an
+embedder swap pending), that reason wins the reason line; while a
+turn is generating, the lead-missing line stays. A creative
+third-person branch with no lead needs none and runs as usual.
 
 **The mode resets to `Free` while the lead is missing.** The selected
 mode isn't kept under the disabled picker: when the lead resolves
