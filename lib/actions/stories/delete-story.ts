@@ -29,7 +29,7 @@ import { embedderSwapStore, generationStore, rehydrateStories, undoRedoStore } f
 
 import type { DbCtx } from '../types'
 
-// Branch-scoped owned tables for story delete cascade.
+// Branch-scoped owned tables, cleared with a branch or a whole story.
 // assets excluded as they are handled by a separate GC
 export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   storyEntries,
@@ -50,7 +50,7 @@ export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
   pipelineRuns,
 ]
 
-/** Story delete's cascade over branch-scoped tables and vec families, for the given branches. */
+/** The delete over branch-scoped tables and vec families for the given branches, story or branch. */
 export function branchRowDeleteOps(
   db: DbCtx['db'],
   branchIds: readonly string[],
