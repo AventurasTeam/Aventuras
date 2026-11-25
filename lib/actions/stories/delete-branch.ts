@@ -88,6 +88,13 @@ export async function deleteBranch(branchId: string, ctx: DbCtx): Promise<Delete
   if (swapStored || isStorySwapPending(storyId)) return refused(DELETE_BRANCH_REFUSAL.swapPending)
 
   await ctx.runInTransaction([
+    // A switch can point the story here after the read above: the NULL title fails the batch then,
+    // and matches no row otherwise.
+    ctx.db
+      .update(stories)
+      .set({ title: sql`null` })
+      .where(and(eq(stories.id, storyId), eq(stories.currentBranchId, branchId)))
+      .toSQL(),
     ...branchRowDeleteOps(ctx.db, [branchId], vecTables),
     reparentChildrenOp(ctx.db, branchId),
     ctx.db.delete(branches).where(eq(branches.id, branchId)).toSQL(),

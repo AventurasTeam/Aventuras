@@ -780,6 +780,13 @@ change amends the scope above.
   branch follows the pointer read before the batch, not the source's at
   batch time.
 
+- **A switch racing the delete.** A branch switch writes the story's
+  pointer before it publishes the open story, so it can name the branch
+  after the delete's read of the pointer. The delete's batch now opens
+  with a guard that fails it, writing nothing, when the story's pointer
+  names the branch at commit; on a delete that lands it matches no row.
+  No lock is taken, and the host shows the failure.
+
 **Deviations from the brief.**
 
 - **Refusal codes.** `deleteBranch` refuses `missing`, `current`,

@@ -657,6 +657,36 @@ describe('deleteBranch after its commit', () => {
     expect(branchRow(B)).toBeDefined()
   })
 
+  it('fails the batch, writing nothing, when a switch points the story at the branch before it', async () => {
+    seedRecords(B)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(B))
+    let switched: Record<string, string[]> = {}
+    const racing: DbCtx = {
+      db: ctx.db,
+      runInTransaction: async (ops) => {
+        t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(B, STORY)
+        switched = dbState()
+        await t.runInTransaction(ops)
+      },
+    }
+
+    await expect(deleteBranch(B, racing)).rejects.toThrow(/NOT NULL constraint failed/)
+
+    expect(currentBranchOf(STORY)).toBe(B)
+    expect(Object.keys(switched).length).toBeGreaterThan(0)
+    expect(dbState()).toEqual(switched)
+    expect(recordsOf(B)).toEqual(ALL_RECORDS)
+    expect(undoRedoStore.hasRedo(B)).toBe(true)
+  })
+
+  it("leaves the story's row as it was on a delete that lands", async () => {
+    const before = t.sqlite.prepare('SELECT * FROM stories WHERE id = ?').get(STORY)
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(t.sqlite.prepare('SELECT * FROM stories WHERE id = ?').get(STORY)).toEqual(before)
+  })
+
   it("re-reads the open story's branch list without the branch", async () => {
     openStory(STORY, C)
     branchesStore.hydrate(STORY, await readStoryBranches(ctx.db, STORY))
