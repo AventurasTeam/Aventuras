@@ -653,7 +653,7 @@ export function retireSeededCharacter(
 }
 
 /** Before launch: unflags every row on `branchId`, then flags the one named `pick.name` (the
- * newest by `created_at` when `pick.newest`; asserts exactly one match). */
+ * newest by `created_at` when `pick.newest`, else asserts exactly one match). */
 export function flagSeededLead(
   dbPath: string,
   branchId: string,

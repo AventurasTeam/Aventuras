@@ -140,8 +140,8 @@ export const LeadMissing: Story = {
     const send = screen.getByRole('button', { name: t('reader:send') })
     expect(send).toBeDisabled()
     expect(send.parentElement?.getAttribute('title')).toBe(LEAD_MISSING_REASON)
-    // userEvent won't press through pointer-events: none; fireEvent does, so this pins that Send is
-    // disabled, not just styled.
+    // userEvent won't press through pointer-events: none; fireEvent does, and Send must still drop
+    // it (the disabled control or handleSubmit's backstop).
     fireEvent.click(send)
     expect(args.onSend).not.toHaveBeenCalled()
     expect(input.value).toBe('draw my blade')
