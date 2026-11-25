@@ -1,13 +1,13 @@
 # Testing
 
-Vitest (`vitest.config.ts`), covering targeted units under `src/lib/` — not a full-coverage suite. Run
-with `npm test`.
+Vitest (`vitest.config.ts`), covering targeted units, mostly under `src/lib/` with a few under `scripts/` — not a
+full-coverage suite. Run with `npm test`.
 
 **Rune modules cannot be imported by tests.** `vitest.config.ts` deliberately omits the SvelteKit plugin
-to keep the suite fast and stable, so any `*.svelte.ts` file fails at import with `$state is not defined`.
+to keep the suite fast, so any `*.svelte.ts` file fails at import with `$state is not defined`.
 Services reach the stores through `vi.mock('#lib/stores/….svelte.ts')`, a path TypeScript does not check
-but `local/lib-import-exists` does ([why](../architecture/overview.md#importing-srclib)); logic that needs testing on its own is
-extracted into a plain `.ts` module instead (`settingsMigrations.ts`, `advancedPanelView.ts`,
+but `local/lib-import-exists` does ([why](../architecture/overview.md#importing-srclib)); logic that needs
+testing on its own is extracted into a plain `.ts` module instead (`settingsMigrations.ts`, `advancedPanelView.ts`,
 `stickiness.ts`, `recentTail.ts` are all this pattern). Those modules are production code with real
 callers, not test scaffolding.
 
@@ -15,7 +15,7 @@ The default environment is `node`, with no DOM, and no test renders a component.
 a `bind:` to an undefined value, for instance — passes `check`, `lint` and the whole suite, and only
 fails when the app runs.
 
-A test whose code under test parses HTML with the DOM (`utils/narrationClean.ts`) opts in per file with
+A test that reaches code parsing HTML with the DOM (`utils/narrationClean.ts`) opts in per file with
 `// @vitest-environment jsdom` as its first line. `jsdom` is a devDependency only, and every other file
 stays on `node`.
 
@@ -25,8 +25,8 @@ The discovery provider unit tests mock `corsFetch` with representative upstream 
 CI contract for request construction, result mapping, and card downloads; they do not depend on remote
 services remaining available or preserving their current catalog.
 
-An opt-in smoke suite exercises public search and download paths against every registered discovery
-provider:
+An opt-in smoke suite exercises public search and download paths against every registered character
+discovery provider:
 
 ```powershell
 $env:AVENTURAS_LIVE_DISCOVERY='1'; npx vitest run src/lib/services/discovery/providers/providers.live.test.ts
@@ -53,7 +53,7 @@ It listens on `http://localhost:4010/v1`; `npm run fake-provider -- 4020` picks 
 
 **Setup in the app**
 
-1. Settings → API Connection: add a profile, provider _OpenAI Compatible_, base URL
+1. Settings → API: add a profile, provider _OpenAI Compatible_, base URL
    `http://localhost:4010/v1`, any API key. Make it the main narrative profile, model `ok`.
 2. Settings → Generation → Agent Profiles: profiles on that API profile, all with **Structured Output
    on** — the fake builds structured answers from the request's JSON schema, which it cannot see when
