@@ -165,6 +165,8 @@ type ReaderRowProps = {
   editDisabled: boolean
   reversalDisabled: boolean
   disabledReason?: string
+  /** The branch can't start a turn: this row's ↻, Save & regenerate and Retry wait on it. */
+  turnStartReason?: string
   /** Another entry's editor is open: this row's actions wait on it. */
   held: boolean
   systemFixLabel?: string
@@ -215,6 +217,7 @@ const ReaderRow = memo(function ReaderRow({
   editDisabled,
   reversalDisabled,
   disabledReason,
+  turnStartReason,
   held,
   systemFixLabel,
   cutOffFixLabel,
@@ -287,6 +290,7 @@ const ReaderRow = memo(function ReaderRow({
       disabledReason={disabledReason}
       editDisabled={editDisabled}
       reversalDisabled={reversalDisabled}
+      turnStartReason={turnStartReason}
       held={held}
       heldReason={held ? t('reader:editFocus.held') : undefined}
       editing={editing}
@@ -389,6 +393,8 @@ export function ReaderSurface({
     editGate,
     gateReason,
     stampedReversalsHeld = false,
+    turnStartReason,
+    systemRetryStartsTurn = false,
     jumpButtonEnabled,
     systemFixLabel,
     cutOffFixLabel,
@@ -1324,6 +1330,9 @@ export function ReaderSurface({
               reversalHeld: stampedReversalsHeld && row.chapterId != null,
             })
             const chapterBreak = chapterBreaks[row.id]
+            // One Retry serves every system entry; only a turn failure's starts a turn.
+            const rowTurnStartReason =
+              row.kind === 'system' && !systemRetryStartsTurn ? undefined : turnStartReason
             return (
               <Fragment key={row.id}>
                 <div
@@ -1341,6 +1350,7 @@ export function ReaderSurface({
                     editDisabled={flags.editDisabled}
                     reversalDisabled={flags.reversalDisabled}
                     disabledReason={gateReason}
+                    turnStartReason={rowTurnStartReason}
                     held={editingId != null && editingId !== row.id}
                     systemFixLabel={systemFixLabel}
                     cutOffFixLabel={cutOffFixLabel}

@@ -60,7 +60,7 @@ import {
 } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
-import { heldControl } from './entry-card-hold'
+import { heldControl, turnStartControl } from './entry-card-hold'
 import { DetailsDisclosure, HeldTextQuote } from './entry-card-system'
 import {
   hasTokenBreakdown,
@@ -192,9 +192,14 @@ type EntryCardProps = {
   /** Gates ↻, × and Save & regenerate (with `editDisabled`); falls back to `disabled`. */
   reversalDisabled?: boolean
   /**
+   * The branch can't start a turn: ↻, Save & regenerate and Retry disable with this reason, after
+   * the gate's and before edit focus's. × and the rest stay as the gate leaves them.
+   */
+  turnStartReason?: string
+  /**
    * Edit-mode focus on another entry: holds the action cluster and a system entry's Retry, never
    * Dismiss, copy, a fix or the scene and time editors. A control its own gate flag also holds
-   * keeps `disabledReason`; the rest show `heldReason`.
+   * keeps `disabledReason`, one `turnStartReason` holds keeps that; the rest show `heldReason`.
    */
   held?: boolean
   heldReason?: string
@@ -1054,6 +1059,7 @@ export function EntryCard({
   disabledReason,
   editDisabled,
   reversalDisabled,
+  turnStartReason,
   held,
   heldReason,
   editing,
@@ -1078,11 +1084,16 @@ export function EntryCard({
   const editOff = editDisabled ?? disabled
   const reversalOff = reversalDisabled ?? disabled
   const reasons = { gate: disabledReason, held: heldReason }
+  const turnStartReasons = { ...reasons, turnStart: turnStartReason }
   const editHold = heldControl(editOff, held, reasons)
   const reversalHold = heldControl(reversalOff, held, reasons)
+  // ↻ starts a turn; × rolls back, which doesn't.
+  const regenHold = turnStartControl(reversalOff, held, turnStartReasons)
   const clusterHold = heldControl(disabled, held, reasons)
+  const retryHold = turnStartControl(disabled, held, turnStartReasons)
   // A clean draft holds Save & regenerate too, and no gate is why.
-  const saveAndRegenReason = editOff === true || reversalOff === true ? disabledReason : undefined
+  const saveAndRegenGated = editOff === true || reversalOff === true
+  const saveAndRegenReason = saveAndRegenGated ? disabledReason : turnStartReason
 
   // Carries the narrowed values rather than a bare boolean so the footer can
   // forward them without a non-null assertion.
@@ -1299,7 +1310,7 @@ export function EntryCard({
                 variant="secondary"
                 size="sm"
                 onPress={onCommitEditAndRegen}
-                disabled={editOff || reversalOff || !editDirty}
+                disabled={saveAndRegenGated || turnStartReason != null || !editDirty}
                 disabledReason={saveAndRegenReason}
               >
                 <Icon as={RefreshCw} size="sm" />
@@ -1338,8 +1349,8 @@ export function EntryCard({
                   variant="secondary"
                   size="sm"
                   onPress={onRetry}
-                  disabled={clusterHold.disabled}
-                  disabledReason={clusterHold.reason}
+                  disabled={retryHold.disabled}
+                  disabledReason={retryHold.reason}
                 >
                   <Icon as={RefreshCw} size="sm" />
                   <Text>{t('reader:systemEntry.retry')}</Text>
@@ -1391,8 +1402,8 @@ export function EntryCard({
               label={t('reader:entryCard.regenerate')}
               size="sm"
               onPress={onRegen}
-              disabled={reversalHold.disabled}
-              disabledReason={reversalHold.reason}
+              disabled={regenHold.disabled}
+              disabledReason={regenHold.reason}
             />
           ) : null}
           {cluster.branch ? (

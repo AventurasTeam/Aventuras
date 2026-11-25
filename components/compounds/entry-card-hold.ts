@@ -14,3 +14,17 @@ export function heldControl(
   if (held === true) return { disabled: true, reason: reasons.held }
   return { disabled: false, reason: reasons.gate }
 }
+
+/**
+ * A control that starts a turn (↻, Save & regenerate, a turn failure's Retry): the gate's reason
+ * first, then the turn-start refusal, then edit focus elsewhere, which cancelling the edit frees.
+ */
+export function turnStartControl(
+  gated: boolean | undefined,
+  held: boolean | undefined,
+  reasons: { gate: string | undefined; turnStart: string | undefined; held: string | undefined },
+): HeldControl {
+  if (gated === true) return { disabled: true, reason: reasons.gate }
+  if (reasons.turnStart != null) return { disabled: true, reason: reasons.turnStart }
+  return heldControl(false, held, reasons)
+}
