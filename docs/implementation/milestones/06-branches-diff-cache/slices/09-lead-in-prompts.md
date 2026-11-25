@@ -267,6 +267,11 @@ never "I" or "you" outside quoted speech. It goes in:
   (`periodic-classifier.ts:17`);
 - the close's composite description (`close-happenings.ts:12`).
 
+The periodic classifier's rule is the shorter wording: it drops "naming
+each character as the prose does" and keeps the lead included and
+"whatever person the story is narrated in". The summaries and the close
+keep the full wording.
+
 **The registry** (`lib/prompts/templateContextMap.ts`):
 
 - `leadMark` documented on `generationContext`'s `entries` and

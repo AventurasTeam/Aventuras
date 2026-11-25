@@ -7,6 +7,10 @@ import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '..'
 const RULE =
   'Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.'
 
+// classifier.md → What the classifier writes: the periodic classifier's own wording.
+const CLASSIFIER_RULE =
+  'Tell it in the third person, the lead included: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.'
+
 const LEAD = { id: 'c1', name: 'Jim' }
 
 const CHAPTER = {
@@ -71,6 +75,7 @@ type Case = [
   context: Record<string, unknown>,
   half: Half,
   expected: string,
+  rule?: string,
 ]
 
 const CASES: Case[] = [
@@ -100,7 +105,8 @@ const CASES: Case[] = [
     TEMPLATE_IDS.periodicClassifier,
     PERIODIC,
     'system',
-    `so that a character recalling it later has the scene to recall. ${RULE} Another event is another happening: one at another time or place, or one the turns only recount.\n`,
+    `so that a character recalling it later has the scene to recall. ${CLASSIFIER_RULE} Another event is another happening: one at another time or place, or one the turns only recount.\n`,
+    CLASSIFIER_RULE,
   ],
   [
     'the Happenings task',
@@ -120,9 +126,27 @@ describe('the third-person rule', () => {
   )
 
   // A close task's shared instructions stay free of it: other tasks' system halves are unchanged.
-  it.each(CASES)('%s keeps it out of its other half', (_name, id, context, half) => {
-    const other: Half = half === 'system' ? 'user' : 'system'
-    expect(renderTemplate(id, context)[other]).not.toContain(RULE)
+  it.each(CASES)(
+    '%s keeps it out of its other half',
+    (_name, id, context, half, _expected, rule) => {
+      const other: Half = half === 'system' ? 'user' : 'system'
+      expect(renderTemplate(id, context)[other]).not.toContain(rule ?? RULE)
+    },
+  )
+
+  it.each(CASES)(
+    "%s keeps its own rule out of the other rule's place",
+    (_name, id, context, half, _expected, rule) => {
+      const text = renderTemplate(id, context)[half]
+      expect(text.includes(RULE)).toBe(rule === undefined)
+      expect(text.includes(CLASSIFIER_RULE)).toBe(rule !== undefined)
+    },
+  )
+
+  it('does not ask the periodic classifier to name each character as the prose does', () => {
+    expect(renderTemplate(TEMPLATE_IDS.periodicClassifier, PERIODIC).system).not.toContain(
+      'naming each character',
+    )
   })
 
   it.each(CASES)("%s no longer tells it in the narration's person", (_name, id, context) => {
