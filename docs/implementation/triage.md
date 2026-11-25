@@ -732,3 +732,10 @@ slice-planning gate forces its resolution before that slice is planned.
   the third person; rebuilding the seed with `pnpm dataset:chapter`
   reverts it. The drive should pick first person in the wizard. Found
   by Slice 6.9's planning (2026-11-25).
+
+- **A stranded comment above `leadOf`.**
+  `lib/pipeline/definitions/classifier-context.ts` opens `leadOf` with
+  "classifier.md → Mentioned places. Retired places keep their id: a
+  happening can name one.", which is about `placeRow` below it. It
+  predates Slice 6.9 (`a6d81c572`). Found by Slice 6.9's Task 9 review
+  (2026-11-25).
