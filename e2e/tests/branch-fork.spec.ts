@@ -35,7 +35,7 @@ const HERO_STORY = 'story_hero'
 const TYPED_NAME = '  Side quest  '
 const STORED_NAME = 'Side quest'
 const PARENT_EDIT = 'E2E-FORK-EDIT the reply was rewritten before the fork.'
-// By title, never by position (milestone C8): the hero's latest close, with turns after it.
+// By title, never by position (M5 C8): the hero's latest close, with turns after it.
 const RERUN_CHAPTER = 'The Keep Leans Closer'
 const FORK_LORE = {
   title: 'The Ferry Toll Ledger',
@@ -188,7 +188,7 @@ test.describe.serial('⎇ — a branch from the reader', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('⎇ on a reply forks there and lands on the new branch; the parent keeps every row', async () => {
+  test('⎇ on a reply forks there and lands on the new branch; the parent keeps its entries and chapters', async () => {
     test.setTimeout(120_000)
     const page = app.window
     title = await heroTitle(page)

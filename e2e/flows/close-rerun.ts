@@ -6,7 +6,7 @@ import type { MockLlm } from '../harness/mock-llm'
 /** memory/chapter-close.md → Run order: Lore's tools key its lane; every other lane ends its task. */
 export const LORE_TOOLS = ['read_row', 'create_lore', 'update_lore'] as const
 
-/** A re-run makes no call in boundary or metadata (C2): neither lane is asked. */
+/** A re-run makes no call in boundary or metadata (M5 C2): neither lane is asked. */
 export const UNASKED_LANES: readonly string[] = ['chapter-boundary', 'chapter-metadata']
 
 const call = (name: string, args: Record<string, unknown>) => ({ toolCalls: [{ name, args }] })
