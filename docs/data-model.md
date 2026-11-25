@@ -1563,7 +1563,8 @@ the generation, classifier and chapter contexts read through it and
 hand the lead to templates as `lead`, absent when the branch has none
 ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
 `readBranchLead` (`lib/db`) reads the table for a caller with no
-store, the turn actions, and logs a double as
+store, the turn actions and the chapter close (its tasks' lead reads
+and `read_turns`, through `readCloseLead`), and logs a double as
 `action_layer.branch_lead_double`.
 A fork copies entity rows, and its rewind restores the flag as of the
 fork entry ([Branch model](#branch-model)), so the branch-copy manifest

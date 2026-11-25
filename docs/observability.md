@@ -248,7 +248,10 @@ convention, and the expectation that subsystems route through
   the table read a turn or a regenerate takes its lead from found two
   flagged characters, with `branchId` and the `ids`; the turn reads
   the branch as having no lead. A set or an unset logs it too when the
-  flagged rows it reads to turn off number more than one),
+  flagged rows it reads to turn off number more than one, and a
+  chapter close's reads do at each task's start and each `read_turns`
+  call, which then read the branch as having no lead: the task names
+  none, and its marks count from none),
   `entity_delete_rejected` /
   `lore_delete_rejected` / `thread_delete_rejected` /
   `happening_delete_rejected` (warn: a confirmed delete refused —

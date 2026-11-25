@@ -337,18 +337,39 @@ renders, starting from the lead the prompt names, and gives a turn
 `leadMark` when its lead differs from the previous turn's (the first
 turn's from the named lead's): `{ id, name }`, the id in the prompt's
 own scheme; `{ gone: true }` for a character no longer in the story; or
-`{ none: true }` for a run written with no lead. `macro_story_entry`
+`{ none: true }` for a run written with no lead. The chapter metadata
+call, whole or by part, renders with no id map, so a mark naming a
+character there is `{ name }` with no id, and the lead its context
+names is a name alone: an id there would be a raw entity id reaching
+the pack. A namesake switch reads ambiguously there, which a summary
+that names its characters anyway can bear. `macro_story_entry`
 prints a marked turn's mark on a line before it, saying who "I" and
-"you" are from there; its `ids` flag adds the id, which the fallback
-classifier and a close's turns turn on and the narrator's history, the
-suggestion refresh and the chapter metadata calls leave off. A `{ gone }`
+"you" are from there; its `ids` argument, which every include passes,
+sets the id's form: bracketed (`[c1] Name`) in the fallback
+classifier, after the name (`Name (c1)`) in a close's turns, as the
+close's own lists write it, and none in the narrator's history,
+the suggestion refresh and the chapter metadata calls. A `{ gone }`
 run's "I" names no row, so a model writes no fact about it rather than
 crediting the lead of today. The periodic classifier prints the
-mark in its turn header. A line naming the lead ("'I' and 'you' in the
+mark in its turn header, and its turn intro explains marks only when a
+turn is marked. A line naming the lead ("'I' and 'you' in the
 turns are the lead") sits in a user half, and adds "except where a turn
 names another" only when a turn in the prompt is marked. A story whose lead never changed
 gets no marks and renders as before; one that changed gets a mark per
 run, not per turn.
+
+**The narrator's and the refresh's histories explain their marks.**
+Neither holds a lead line. The narrator names the lead in its standing
+instructions, a system half that can't take a per-call clause, and
+both name it in the suggestion voice, for the next turn's voice, which
+is always today's lead's and so takes no clause. When a turn in Story
+so far is marked, one line opens it instead: a note before a turn says
+who "I" and "you" are from that turn to the next note, over the
+instructions, and the turns before the first note were written under
+the lead the prompt names, or with none when it names none. The line
+never says the last run is today's lead's: after a switch with no turn
+since, every turn is the former lead's, and the only mark is on the
+first. Unmarked, it doesn't render, and neither system half changes.
 
 ### Prompt sections
 

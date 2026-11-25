@@ -171,7 +171,14 @@ the review shows. Only chapters too big to send whole pay this.
   unread: a high-frequency awareness row can come from any chapter.
   Citations stay inside the chapter. A turn of an earlier chapter is
   readable once a listed row's learned-at turn names it, which gives
-  it a handle.
+  it a handle. An answer's marks count from the lead the task names
+  over the answer's own turns in position order, a mark naming its
+  character by handle, and an answer holding a marked turn opens with
+  a note on reading them: a mark says who "I" and "you" are from its
+  turn to the next mark, over the task's lead line, and the turns
+  before the first mark were written under the lead the task names,
+  or with none when it names none. An answer with no marked turn has
+  no note.
 
 Every write carries `turns`, the cited turn ids, and `why`, one sentence
 the review shows. The latest cited turn anchors the write's
@@ -510,7 +517,7 @@ seeing a field's current value before it writes it
 
 - Closed range entries (the chapter's content), or a [part](#parts)'s
   for a task that runs per part.
-- The branch's lead by handle and name, and the narration.
+- The branch's lead by handle and name.
 - Existing lore rows — titles, bodies on request.
 - The entities the part touches, with their state, and the rest of
   the world on request: places, items and factions off the scene.
