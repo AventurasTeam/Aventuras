@@ -1,5 +1,6 @@
 import { MACRO_IDS } from '../ids'
 import type { TemplateSources } from '../types'
+import { CLOSE_LEAD_LINE } from './close-instructions'
 
 // memory/chapter-close.md → 3e. Happenings reads no prose (C3): its system half is the shared
 // instructions alone, and a turn is read through read_turns.
@@ -16,7 +17,7 @@ Code found the clusters of happenings below. Every happening in a cluster passed
 - Lean toward merging. Every cluster already passed the three checks, so take them as given; a duplicate left now stays for good, and a composite keeps the facts. When you are unsure whether happenings belong together, keep them apart.
 - One call per event. Merge everything that records one event in one call, never in a chain. If you missed one, a happening a merge kept can be kept again, but never absorbed. keep and absorb come from the same cluster.
 - What a merge does. keep takes the earliest turn among the merged happenings, everyone involved in any of them and each character's knowledge of any of them; if any was common knowledge, keep becomes so. The absorbed happenings are deleted.
-- Turn ids. Never write a turn id such as t3 into a title or a description: cite turns only in "turns", and cite the turns the merged happenings occurred at.
+- Turn ids. Never write a turn id such as t3 into a title or a description: cite turns only in "turns", and cite the turns the merged happenings occurred at.${CLOSE_LEAD_LINE}
 
 Each happening below shows its title, the turn it occurred at, its cast, who knows it and its description as they stand: "" is blank. One marked common knowledge is known to every character.
 

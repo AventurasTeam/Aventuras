@@ -1,5 +1,6 @@
 import { MACRO_IDS } from '../ids'
 import type { TemplateSources } from '../types'
+import { CLOSE_LEAD_LINE } from './close-instructions'
 
 // memory/chapter-close.md → 3d. No prose (C3): system is the shared instructions alone, a prefix of
 // every prose task's; rows, chapter and writes so far go in user, no retrieval count anywhere.
@@ -13,7 +14,7 @@ Each row below is what one character knows of a happening, with its pin: decay_r
 - Rows that keep coming up: from any chapter, recalled often while this chapter was played. Raise a pin when the happening still carries that character's story; otherwise leave it. Never lower one of these: a lower value is refused.
 - Raise a pin by at most 0.2 above the pin shown, in one close, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.
 - A row already pinned where it belongs needs no call: one near 1 that keeps coming up is already doing its job.
-- Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, {{ closeChapterTurns.first }} to {{ closeChapterTurns.last }}. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.
+- Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, {{ closeChapterTurns.first }} to {{ closeChapterTurns.last }}. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.${CLOSE_LEAD_LINE}
 {%- if closeChapterSummary != blank %}
 
 # This chapter

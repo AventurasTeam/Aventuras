@@ -18,7 +18,7 @@ import { readRowTool, refsIn } from './read-tools'
 import { readTurnsTool } from './read-turns'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { storyModeOf } from './turns'
+import { readCloseLead, showLead, storyModeOf } from './turns'
 import { closeClustersOf } from '../close-intermediates'
 
 /** C11: the fields Happenings' start shows, so read_row returns the same and its rows count as read. */
@@ -40,7 +40,12 @@ export type HappeningClusterRow = {
   commonKnowledge: boolean
 }
 
-type HappeningsShow = { clusters: HappeningClusterRow[][]; mode: StoryMode }
+type HappeningsShow = {
+  clusters: HappeningClusterRow[][]
+  mode: StoryMode
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: { id: string; name: string } | null
+}
 
 type EntityLinks = {
   table: SQLiteTable
@@ -121,6 +126,7 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
     ctx,
     rows.map((row) => [row.title, row.description]),
   )
+  const lead = await readCloseLead(ctx)
   const handled = (value: string): string => ctx.ids.withHandles(value)
   const named = (member: NamedEntity): NamedEntity => ({
     id: ctx.ids.show(member.id, member.name),
@@ -142,6 +148,8 @@ async function startHappenings(ctx: TaskPromptContext): Promise<TaskStart<Happen
           }),
         ),
       ),
+      // Last: the rows above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     // C11: the start shows every field merge_happenings writes on a happening.
     seeds: rows.map((row): GuardRow => ({ table: 'happenings', id: row.id })),
@@ -156,6 +164,7 @@ function renderHappenings(
     mode: show.mode,
     closeHappeningClusters: show.clusters,
     closeWritesSoFar: ctx.writesSoFar,
+    lead: show.lead,
   })
 }
 

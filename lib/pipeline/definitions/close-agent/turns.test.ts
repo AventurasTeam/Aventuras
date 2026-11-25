@@ -9,6 +9,14 @@ import { TEMPLATE_IDS } from '@/lib/prompts'
 import { resetAllStores } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
+import {
+  ARIA as AWARENESS_ARIA,
+  promptContextFor as awarenessContextFor,
+  seedAwarenessWorld,
+} from './__tests__/close-awareness-fixture'
+import { seedCharacter, seedHappening } from './__tests__/happening-tools-fixture'
+import { awarenessTask } from './close-awareness'
+import { happeningsTask } from './happenings'
 import { IDENTITY_READ_FIELDS, identityTask } from './identity'
 import { CloseIds } from './ids'
 import { lifecycleTask } from './lifecycle'
@@ -21,9 +29,11 @@ import {
   flagLead,
   openCloseFixture,
   putEntityRow,
+  setSceneOf,
   stampLead,
   type CloseFixture,
 } from '../__tests__/close-fixture'
+import { setCloseClusters } from '../close-intermediates'
 
 const { countTokensSpy } = vi.hoisted(() => ({
   countTokensSpy: vi.fn<(text: string) => number>(),
@@ -43,6 +53,19 @@ const WREN = 'char_00000000-0000-4000-8000-00000000c001'
 const ARIA = 'char_00000000-0000-4000-8000-00000000c00a'
 // Stamped on entries, never written as a row: a character since deleted.
 const GONE = 'char_00000000-0000-4000-8000-00000000c0ff'
+const MARA = 'char_00000000-0000-4000-8000-00000000c003'
+const LIGHT = 'hap_00000000-0000-4000-8000-00000000c101'
+const SIGNAL = 'hap_00000000-0000-4000-8000-00000000c102'
+
+// Two of Mara's happenings in one cluster, as the range embed leaves them for Happenings.
+async function happeningsContextFor(fx: CloseFixture): Promise<TaskPromptContext> {
+  await seedCharacter(fx, MARA, 'Mara')
+  await seedHappening(fx, { id: LIGHT, title: 'A light on the far bank', at: 2, cast: [MARA] })
+  await seedHappening(fx, { id: SIGNAL, title: 'Mara signals from the bank', at: 4, cast: [MARA] })
+  const ctx = taskContextFor(fx)
+  setCloseClusters(ctx.phase.intermediates, [[LIGHT, SIGNAL]])
+  return ctx
+}
 
 const idsOf = (fx: CloseFixture, from: number, to?: number): string[] =>
   fx.entries.slice(from, to).map(({ id }) => id)
@@ -375,5 +398,139 @@ describe("the close tasks' starts and renders", () => {
     expect(systems[0]).toContain('Aria (c1)')
     expect(systems[0]).toContain('Wren (c2)')
     expect(ctx.ids.handleOf(GONE)).toBeUndefined()
+  })
+
+  // memory/chapter-close.md → Conversations: each task's user half names the lead by handle and
+  // name, read from the table; a close loads no story's stores.
+  it.each(PROSE_TASKS)(
+    '%s names the lead by handle and name in its user half, read from the table with no store loaded',
+    async (_name, def) => {
+      const fx = await openCloseFixture()
+      await seedStartRows(fx)
+      await flagLead(fx, WREN)
+      await stampLead(fx, idsOf(fx, 0), WREN)
+      resetAllStores()
+      const ctx = taskContextFor(fx)
+
+      const start = await def.start(ctx)
+      expect(start).not.toBeNull()
+      const { system, user } = def.render(start!, { ...ctx, writesSoFar: '' })
+
+      expect(user).toContain(
+        'The story\'s lead is Wren (c1). Outside quoted speech, "I" and "you" in the turns are the lead.',
+      )
+      expect(user).not.toContain('except where a turn names another')
+      expect(system).not.toContain("The story's lead")
+      expect(ctx.ids.idOf('c1')).toBe(WREN)
+    },
+  )
+
+  it.each(PROSE_TASKS)(
+    '%s names no lead on a branch with none, and still starts',
+    async (_name, def) => {
+      const fx = await openCloseFixture()
+      await seedStartRows(fx)
+      const ctx = taskContextFor(fx)
+
+      const start = await def.start(ctx)
+
+      expect(start).not.toBeNull()
+      expect(def.render(start!, { ...ctx, writesSoFar: '' }).user).not.toContain("The story's lead")
+    },
+  )
+
+  it('shows the lead after the rows, so Identity keeps its characters in their numbering', async () => {
+    const fx = await openCloseFixture()
+    await seedStartRows(fx)
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await setSceneOf(fx, fx.entries[0]!.id, [WREN, ARIA])
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0), WREN)
+    const ctx = taskContextFor(fx)
+
+    const start = await identityTask.start(ctx)
+    const { user } = identityTask.render(start!, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain('## c1: Aria')
+    expect(user).toContain('## c2: Wren')
+    expect(user).toContain(
+      'The story\'s lead is Wren (c2). Outside quoted speech, "I" and "you" in the turns are the lead.',
+    )
+  })
+
+  it("adds the clause to a prose task's lead line when its part's turns are marked", async () => {
+    const fx = await openCloseFixture()
+    await seedStartRows(fx)
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 2), ARIA)
+    await stampLead(fx, idsOf(fx, 2), WREN)
+    const ctx = taskContextFor(fx)
+
+    const start = await loreTask.start(ctx)
+    const { user } = loreTask.render(start!, { ...ctx, writesSoFar: '' })
+
+    // The marks show Aria c1 and Wren c2 as the turns are built, before the lead line.
+    expect(user).toContain(
+      'The story\'s lead is Wren (c2). Outside quoted speech, "I" and "you" in the turns are the lead, except where a turn names another.',
+    )
+  })
+
+  it('Happenings names the lead in its user half, read from the table with no store loaded', async () => {
+    const fx = await openCloseFixture()
+    const ctx = await happeningsContextFor(fx)
+    await flagLead(fx, MARA)
+    resetAllStores()
+
+    const start = await happeningsTask.start(ctx)
+    expect(start).not.toBeNull()
+    const { system, user } = happeningsTask.render(start!, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain(
+      'The story\'s lead is Mara (c1). Outside quoted speech, "I" and "you" in the turns are the lead.',
+    )
+    expect(system).not.toContain("The story's lead")
+  })
+
+  it('Happenings names no lead on a branch with none, and still starts', async () => {
+    const fx = await openCloseFixture()
+    const ctx = await happeningsContextFor(fx)
+
+    const start = await happeningsTask.start(ctx)
+
+    expect(start).not.toBeNull()
+    expect(happeningsTask.render(start!, { ...ctx, writesSoFar: '' }).user).not.toContain(
+      "The story's lead",
+    )
+  })
+
+  it('Awareness names the lead in its user half, read from the table with no store loaded', async () => {
+    const fx = await openCloseFixture()
+    await seedAwarenessWorld(fx)
+    await flagLead(fx, AWARENESS_ARIA)
+    resetAllStores()
+    const ctx = awarenessContextFor(fx)
+
+    const start = await awarenessTask.start(ctx)
+    expect(start).not.toBeNull()
+    const { system, user } = awarenessTask.render(start!, { ...ctx, writesSoFar: '' })
+
+    expect(user).toContain(
+      'The story\'s lead is Aria (c1). Outside quoted speech, "I" and "you" in the turns are the lead.',
+    )
+    expect(system).not.toContain("The story's lead")
+  })
+
+  it('Awareness names no lead on a branch with none, and still starts', async () => {
+    const fx = await openCloseFixture()
+    await seedAwarenessWorld(fx)
+    const ctx = awarenessContextFor(fx)
+
+    const start = await awarenessTask.start(ctx)
+
+    expect(start).not.toBeNull()
+    expect(awarenessTask.render(start!, { ...ctx, writesSoFar: '' }).user).not.toContain(
+      "The story's lead",
+    )
   })
 })

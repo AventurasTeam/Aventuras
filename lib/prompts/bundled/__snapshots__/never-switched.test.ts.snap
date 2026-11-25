@@ -218,6 +218,8 @@ Each row below is what one character knows of a happening, with its pin: decay_r
 - A row already pinned where it belongs needs no call: one near 1 that keeps coming up is already doing its job.
 - Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, t1 to t5. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.
 
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
 # This chapter
 Kael wades toward the Drowned Keep and loses the sigil to the current; Mora watches from the stair.
 
@@ -294,6 +296,8 @@ Code found the clusters of happenings below. Every happening in a cluster passed
 - One call per event. Merge everything that records one event in one call, never in a chain. If you missed one, a happening a merge kept can be kept again, but never absorbed. keep and absorb come from the same cluster.
 - What a merge does. keep takes the earliest turn among the merged happenings, everyone involved in any of them and each character's knowledge of any of them; if any was common knowledge, keep becomes so. The absorbed happenings are deleted.
 - Turn ids. Never write a turn id such as t3 into a title or a description: cite turns only in "turns", and cite the turns the merged happenings occurred at.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
 
 Each happening below shows its title, the turn it occurred at, its cast, who knows it and its description as they stand: "" is blank. One marked common knowledge is known to every character.
 
@@ -419,6 +423,8 @@ Keep who the characters and factions below are true to this chapter, with update
 - Descriptions. Rewrite a description only when the chapter materially changes who or what the row is (the stable boy who became the king's champion), never for detail its other fields already carry.
 - Blank fields. A blank description, voice or standing may be filled when the cited turns show it.
 - Other rows. For a character or faction the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
 
 The rows below show the fields you may write, as they stand: "" is blank and [] an empty list.
 
@@ -570,6 +576,8 @@ Check the characters, items and factions below against this chapter. Most need n
 - Duplicates. With flag_duplicate, flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), naming the row and the one it is the same as. The user decides whether to merge them; you never merge. A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so a pair is refused when both rows' flags already name other rows, and so is a pair the user already kept apart.
 - Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
 
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
 The rows below show the fields you may write, as they stand: "" is blank. A row's flag names the row it was flagged with, by id and name, and why; a dormant flag no longer holds and counts as none.
 
 # Rows
@@ -713,6 +721,8 @@ Keep the story's lore true to this chapter, with create_lore and update_lore. A 
 - Keywords. Give a new row the names and terms the prose uses for it. update_lore takes keywords as add and remove: add a term the chapter uses for the row, and remove only one that no longer fits. You can't see who added a term; removing one the user added is refused, and that call's keyword adds with it.
 - Turn ids. Never write a turn id such as t3 into a title, body, category or keyword: cite turns only in "turns".
 
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
 # Lore rows
 - lo1: The drowned sigils
 - lo2: The Reed Runners’ charter",
@@ -824,6 +834,8 @@ Keep the story's open threads true to this chapter. An active thread is carried 
 - Status. With update_thread, set "resolved" when the chapter achieves a thread, or "failed" when it makes the thread impossible or plainly abandons it, citing the turns that settle it.
 - Descriptions. Bring a thread's description up to date when the chapter moves it on.
 - Titles. A thread's title changes only in a merge.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
 
 The threads below show their titles, statuses and descriptions as they stand: "" is blank. A thread the user set to always (the narrator shows it every turn) or disabled (never shown) carries that injection mode after its status.
 
@@ -945,6 +957,8 @@ Keep the world's places, items and keywords true to this chapter, with update_pl
 - Common knowledge. Mark a happening with mark_common_knowledge only when the turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it.
 - Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
 - Turn ids. Never write a turn id such as t3 into a condition, a description or a keyword: cite turns only in "turns".
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
 
 The rows below show the fields you may write, as they stand: "" is blank and [] an empty list. A place's placement is the place it sits inside, top level, or unplaced: known to exist, not where.
 

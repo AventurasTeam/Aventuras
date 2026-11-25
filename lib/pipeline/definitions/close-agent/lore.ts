@@ -9,7 +9,14 @@ import { createLoreTool, LORE_BODY_LIMIT, LORE_CREATE_CAP, updateLoreTool } from
 import { readRowTool, refsIn } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
+import {
+  hasTurns,
+  readTaskTurns,
+  renderClosePrompt,
+  showLead,
+  storyModeOf,
+  type CloseTurns,
+} from './turns'
 
 /** C11: a lore row's fields, which read_row returns; the start shows only titles. */
 export const LORE_READ_FIELDS: ReadFields = { lore: ['title', 'body', 'category', 'keywords'] }
@@ -22,12 +29,14 @@ export type LoreShow = {
   /** Every lore row on the branch: `id` is its handle. */
   lore: { id: string; title: string }[]
   limits: { creates: number; left: number; bodyChars: number }
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: { id: string; name: string } | null
 }
 
 // memory/chapter-close.md → Run order: the lore titles; starts whenever the part has turns, so a
 // story with no lore can still get its first row.
 async function startLore(ctx: TaskPromptContext): Promise<TaskStart<LoreShow> | null> {
-  const { closeTurns, proseTokens } = await readTaskTurns(ctx)
+  const { closeTurns, proseTokens, lead } = await readTaskTurns(ctx)
   if (!hasTurns(closeTurns)) return null
   const rows = await ctx.db
     .select({ id: lore.id, title: lore.title })
@@ -52,6 +61,8 @@ async function startLore(ctx: TaskPromptContext): Promise<TaskStart<LoreShow> | 
         left: Math.max(0, LORE_CREATE_CAP - ctx.landedCalls(createLoreTool)),
         bodyChars: LORE_BODY_LIMIT,
       },
+      // Last: the rows above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     // C11: titles alone are not every field update_lore writes, so a row takes a read_row first.
     seeds: [],
@@ -70,6 +81,7 @@ function renderLore(
       closeLore: show.lore,
       closeLoreLimits: show.limits,
       closeWritesSoFar: ctx.writesSoFar,
+      lead: show.lead,
     },
     show.proseTokens,
   )

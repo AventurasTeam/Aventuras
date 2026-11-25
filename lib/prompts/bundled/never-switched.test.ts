@@ -403,8 +403,8 @@ const CHAPTER_MERGE_NO_LEAD: Context = {
 }
 
 // The story every close task reads: a later variable of the story joins these two.
-const CLOSE_STORY_WITH_LEAD: Context = { mode: 'adventure' }
-const CLOSE_STORY_NO_LEAD: Context = { mode: 'creative' }
+const CLOSE_STORY_WITH_LEAD: Context = { mode: 'adventure', lead: { id: 'c1', name: 'Kael' } }
+const CLOSE_STORY_NO_LEAD: Context = { mode: 'creative', lead: null }
 
 // The five prose tasks hold the chapter's turns in their system half.
 const CLOSE_PROSE_WITH_LEAD: Context = { ...CLOSE_STORY_WITH_LEAD, closeTurns: handled(LEAD_TURNS) }

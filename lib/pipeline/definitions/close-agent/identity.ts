@@ -11,7 +11,14 @@ import { readRowTool, refsIn, searchWorldTool } from './read-tools'
 import { byNameThenId, stateOf, strings, text } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
+import {
+  hasTurns,
+  readTaskTurns,
+  renderClosePrompt,
+  showLead,
+  storyModeOf,
+  type CloseTurns,
+} from './turns'
 import type { CloseTurn } from '../chapter-context'
 
 /** C11: the fields Identity's tools write, which its start shows and read_row returns. */
@@ -45,6 +52,8 @@ export type IdentityShow = {
   proseTokens: number
   characters: IdentityCharacter[]
   factions: IdentityFaction[]
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: { id: string; name: string } | null
 }
 
 // Any status: canon names the entities the chapter touches, and a retired one was still there.
@@ -100,7 +109,7 @@ const shownText = (row: Entity): unknown => {
 }
 
 async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<IdentityShow> | null> {
-  const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
+  const { entries, closeTurns, proseTokens, lead } = await readTaskTurns(ctx)
   if (!hasTurns(closeTurns)) return null
   const sceneIds = new Set(entries.flatMap((entry) => strings(entry.metadata?.sceneEntities)))
   const characters = await sceneCharacters(ctx, [...sceneIds])
@@ -139,6 +148,8 @@ async function startIdentity(ctx: TaskPromptContext): Promise<TaskStart<Identity
           agenda: strings(state.agenda).map(handled),
         }
       }),
+      // Last: the rows above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     seeds: [...characters, ...factions].map(({ id }) => ({ table: 'entities', id })),
   }
@@ -157,6 +168,7 @@ function renderIdentity(
       closeFactions: show.factions,
       closeWritesSoFar: ctx.writesSoFar,
       closeSoftCaps: { ...CAST_SOFT_CAPS },
+      lead: show.lead,
     },
     show.proseTokens,
   )

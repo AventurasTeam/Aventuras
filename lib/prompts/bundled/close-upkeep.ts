@@ -1,5 +1,5 @@
 import type { TemplateSources } from '../types'
-import { CLOSE_TASK_SYSTEM } from './close-instructions'
+import { CLOSE_PROSE_LEAD_LINE, CLOSE_TASK_SYSTEM } from './close-instructions'
 
 // memory/chapter-close.md → 3f, and 3b's bar on a description. Every row shows the fields its tools
 // write, so the start counts them as read (C11).
@@ -16,7 +16,7 @@ Keep the world's places, items and keywords true to this chapter, with update_pl
 - Placement. With update_place, set a place's parent when the chapter places it or moves it, or send top: true for an unplaced place that nothing on the map could contain. Read a parent with read_row before naming it.
 - Common knowledge. Mark a happening with mark_common_knowledge only when the turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it.
 - Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
-- Turn ids. Never write a turn id such as t3 into a condition, a description or a keyword: cite turns only in "turns".
+- Turn ids. Never write a turn id such as t3 into a condition, a description or a keyword: cite turns only in "turns".${CLOSE_PROSE_LEAD_LINE}
 
 The rows below show the fields you may write, as they stand: "" is blank and [] an empty list. A place's placement is the place it sits inside, top level, or unplaced: known to exist, not where.
 

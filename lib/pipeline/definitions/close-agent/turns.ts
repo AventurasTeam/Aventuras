@@ -17,6 +17,7 @@ import { renderTemplate, type TemplateId } from '@/lib/prompts'
 import { oneLine } from '@/lib/text'
 import { leadStampOf } from '@/lib/world'
 
+import type { CloseIds } from './ids'
 import type { TaskPromptContext } from './task'
 import { buildCloseTurns, type CloseRangeEntry, type CloseTurn } from '../chapter-context'
 import { storedProseTokens } from '../entry-reads'
@@ -57,6 +58,17 @@ export async function readStampedNames(
     const name = names.get(id)
     return name === undefined ? undefined : oneLine(name)
   }
+}
+
+/**
+ * The lead a task's user half names (VARIABLES.chapter → lead), under its handle. A start calls it
+ * after it shows its rows, so they keep their numbering; null with no lead.
+ */
+export function showLead(
+  ids: CloseIds,
+  lead: { id: string; name: string } | null,
+): { id: string; name: string } | null {
+  return lead === null ? null : { id: ids.show(lead.id, lead.name), name: lead.name }
 }
 
 /** The entries the task was shown (`taskEntryIds`), in position order, under their turn handles. */

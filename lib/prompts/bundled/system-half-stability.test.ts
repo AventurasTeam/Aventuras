@@ -330,6 +330,7 @@ const CLOSE_B: Record<string, unknown> = {
 
 // Two Happenings calls of one story: the clusters and the writes so far differ; the mode doesn't.
 const HAPPENINGS_A: Record<string, unknown> = {
+  lead: { id: 'c1', name: 'Kael' },
   closeHappeningClusters: [
     [
       {
@@ -356,6 +357,7 @@ const HAPPENINGS_A: Record<string, unknown> = {
 }
 
 const HAPPENINGS_B: Record<string, unknown> = {
+  lead: { id: 'c1', name: 'Kael' },
   closeHappeningClusters: [
     [
       {
@@ -383,6 +385,7 @@ const HAPPENINGS_B: Record<string, unknown> = {
 
 // Two closes' Awareness tasks: rows, summary, turns and writes so far all differ.
 const AWARENESS_A: Record<string, unknown> = {
+  lead: { id: 'c1', name: 'Kael' },
   closeAwarenessRows: [
     {
       happening: { id: 'hp1', title: 'The siege' },
@@ -404,6 +407,7 @@ const AWARENESS_A: Record<string, unknown> = {
 }
 
 const AWARENESS_B: Record<string, unknown> = {
+  lead: { id: 'c1', name: 'Kael' },
   closeAwarenessRows: [
     {
       happening: { id: 'hp2', title: 'The debt' },
@@ -598,6 +602,26 @@ describe('bundled system halves read only what the story fixes', () => {
     expect(perCall(MACRO_IDS.closeProse)).toEqual(['closeTurns'])
   })
 
+  // STABLE_SYSTEM_VARIABLES lets lead and narration through, so the macro's own reads are checked.
+  it("keeps the lead and the narration out of the close's shared instructions", () => {
+    const reads = macroGlobals(engine, MACRO_IDS.closeInstructions)
+
+    expect(reads.has('mode')).toBe(true)
+    expect(reads.has('lead')).toBe(false)
+    expect(reads.has('narration')).toBe(false)
+  })
+
+  // They show no turns: reading closeTurns would make them read a variable their calls never set.
+  it.each([TEMPLATE_IDS.closeHappenings, TEMPLATE_IDS.closeAwareness])(
+    '%s reads the lead but never the turns',
+    (templateId) => {
+      const reads = templateGlobals(engine, templateId)
+
+      expect(reads.has('lead')).toBe(true)
+      expect(reads.has('closeTurns')).toBe(false)
+    },
+  )
+
   // Positive control: the empty list above isn't the half-scoped read seeing nothing.
   it("reports a system half's reads", () => {
     const reads = [...templateGlobals(engine, TEMPLATE_IDS.perTurnNarrative, 'system')]
@@ -649,7 +673,11 @@ describe("a close's task templates share one system half", () => {
       content: 'The cold takes your breath, and the sigil with it.',
     },
   ]
-  const SHARED = { mode: 'adventure', closeTurns: CLOSE_TASK_TURNS }
+  const SHARED = {
+    mode: 'adventure',
+    closeTurns: CLOSE_TASK_TURNS,
+    lead: { id: 'c1', name: 'Kael' },
+  }
   const TASK_CONTEXTS: Readonly<Record<string, Record<string, unknown>>> = {
     [TEMPLATE_IDS.closeLore]: {
       closeLore: [
@@ -769,6 +797,16 @@ describe("a close's task templates share one system half", () => {
     expect(user(TEMPLATE_IDS.closeThreads)).toContain('## th1: Find the heir (active, always)')
     expect(user(TEMPLATE_IDS.closeUpkeep)).toContain('## i1: a rusted lantern (item, in the scene)')
     expect(user(TEMPLATE_IDS.closeLifecycle)).toContain('- flag: f2 "The Ebb Wardens" (duplicate)')
+  })
+
+  it("names the lead in each task's user half, never in the shared system half", () => {
+    for (const id of CLOSE_TASK_TEMPLATES) {
+      const { system, user } = renderTemplate(id, { ...SHARED, ...TASK_CONTEXTS[id] })
+      expect(user).toContain(
+        'The story\'s lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.',
+      )
+      expect(system).not.toContain("The story's lead")
+    }
   })
 
   it("renders the same system half under one context holding every task's variables", () => {

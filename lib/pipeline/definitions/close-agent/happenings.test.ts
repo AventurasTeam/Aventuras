@@ -193,6 +193,7 @@ describe('happeningsTask', () => {
 
     expect(start?.show).toEqual({
       mode: 'creative',
+      lead: null,
       clusters: [
         [
           {

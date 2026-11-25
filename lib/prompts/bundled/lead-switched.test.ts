@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { macroGlobals, renderWith } from '../engine'
-import { bundledPack, MACRO_IDS, renderTemplate, TEMPLATE_IDS, type Pack } from '../index'
+import {
+  bundledPack,
+  MACRO_IDS,
+  renderTemplate,
+  TEMPLATE_IDS,
+  type Pack,
+  type TemplateId,
+} from '../index'
 import { loadPack } from '../load-pack'
 
 // The shared switched fixture: four turns stamped Mara, Mara, Jorin, Jorin, Jorin the lead the
@@ -650,5 +657,114 @@ describe('close prose: lead marks', () => {
     expect(system).toContain(
       "## t2 (the user's turn)\n<user_turn>\nI wait for the ferry.\n</user_turn>",
     )
+  })
+})
+
+// memory/chapter-close.md → Conversations: each task's user half names the lead between its
+// instructions and its rows; a prose task's line takes the clause when a turn of its part is
+// marked, Happenings' and Awareness's never.
+describe("a close task's lead line", () => {
+  const LEAD = { id: 'c1', name: 'Wren' }
+  const MARKED_TURNS = [
+    {
+      handle: 't1',
+      kind: 'opening',
+      content: 'Rain on the river.',
+      leadMark: { id: 'c2', name: 'Aria' },
+    },
+    { handle: 't2', kind: 'user_action', content: 'I wait for the ferry.' },
+    {
+      handle: 't3',
+      kind: 'ai_reply',
+      content: 'Tobin poles across.',
+      leadMark: { id: 'c1', name: 'Wren' },
+    },
+  ]
+  const UNMARKED_TURNS = MARKED_TURNS.map(({ handle, kind, content }) => ({
+    handle,
+    kind,
+    content,
+  }))
+  const FLAT_LINE =
+    'The story\'s lead is Wren (c1). Outside quoted speech, "I" and "you" in the turns are the lead.'
+  const CLAUSE_LINE =
+    'The story\'s lead is Wren (c1). Outside quoted speech, "I" and "you" in the turns are the lead, except where a turn names another.'
+
+  // [template, the instructions' last words, the text that opens the rows]
+  const PROSE: readonly (readonly [TemplateId, string, string])[] = [
+    [TEMPLATE_IDS.closeLore, 'cite turns only in "turns".', '# Lore rows'],
+    [
+      TEMPLATE_IDS.closeIdentity,
+      'read it with read_row before writing to it.',
+      'The rows below show the fields you may write',
+    ],
+    [
+      TEMPLATE_IDS.closeThreads,
+      "A thread's title changes only in a merge.",
+      'The threads below show',
+    ],
+    [
+      TEMPLATE_IDS.closeUpkeep,
+      'cite turns only in "turns".',
+      'The rows below show the fields you may write',
+    ],
+    [
+      TEMPLATE_IDS.closeLifecycle,
+      'read it with read_row before writing to it.',
+      'The rows below show the fields you may write',
+    ],
+  ]
+  const FLAT: readonly (readonly [TemplateId, string, string])[] = [
+    [
+      TEMPLATE_IDS.closeHappenings,
+      'cite the turns the merged happenings occurred at.',
+      'Each happening below shows',
+    ],
+    [TEMPLATE_IDS.closeAwareness, 'read it with read_turns, never cite it.', '# This chapter'],
+  ]
+  const userOf = (templateId: TemplateId, vars: Record<string, unknown>): string =>
+    renderTemplate(templateId, {
+      mode: 'adventure',
+      closeWritesSoFar: '',
+      closeChapterSummary: 'Wren crossed at night.',
+      ...vars,
+    }).user
+
+  it.each(PROSE)('%s adds the clause when a turn of its part is marked', (id, before, after) => {
+    expect(userOf(id, { lead: LEAD, closeTurns: MARKED_TURNS })).toContain(
+      `${before}\n\n${CLAUSE_LINE}\n\n${after}`,
+    )
+  })
+
+  it.each(PROSE)('%s leaves the clause out when no turn is marked', (id, before, after) => {
+    const user = userOf(id, { lead: LEAD, closeTurns: UNMARKED_TURNS })
+
+    expect(user).toContain(`${before}\n\n${FLAT_LINE}\n\n${after}`)
+    expect(user).not.toContain('except where a turn names another')
+  })
+
+  it.each([...PROSE, ...FLAT])('%s names no lead when the branch has none', (id, before, after) => {
+    const user = userOf(id, { lead: null, closeTurns: MARKED_TURNS })
+
+    expect(user).toContain(`${before}\n\n${after}`)
+    expect(user).not.toContain("The story's lead")
+  })
+
+  it.each(FLAT)('%s keeps its line flat, whatever turns the context holds', (id, before, after) => {
+    const user = userOf(id, { lead: LEAD, closeTurns: MARKED_TURNS })
+
+    expect(user).toContain(`${before}\n\n${FLAT_LINE}\n\n${after}`)
+    expect(user).not.toContain('except where a turn names another')
+  })
+
+  it.each([...PROSE, ...FLAT])('%s keeps the lead out of its system half', (id) => {
+    const { system } = renderTemplate(id, {
+      mode: 'adventure',
+      lead: LEAD,
+      closeTurns: MARKED_TURNS,
+      closeWritesSoFar: '',
+    })
+
+    expect(system).not.toContain("The story's lead")
   })
 })

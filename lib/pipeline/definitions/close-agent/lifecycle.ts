@@ -14,7 +14,14 @@ import { readRowTool, refsIn, searchWorldTool } from './read-tools'
 import { byNameThenId, strings } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
+import {
+  hasTurns,
+  readTaskTurns,
+  renderClosePrompt,
+  showLead,
+  storyModeOf,
+  type CloseTurns,
+} from './turns'
 
 const LIFECYCLE_PATHS = [
   'status',
@@ -57,6 +64,8 @@ export type LifecycleShow = {
   /** readTaskTurns' stored count of the turns, which primes the system half's count. */
   proseTokens: number
   rows: LifecycleRow[]
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: { id: string; name: string } | null
 }
 
 const KIND_ORDER: readonly LifecycleKind[] = ['character', 'item', 'faction']
@@ -112,7 +121,7 @@ function collisionOf(row: Entity, partners: ReadonlyMap<string, Entity>, ids: Cl
 // memory/chapter-close.md → Run order: the part's active characters and items in scene, the active
 // rows its prose names and those characters' factions, less a character a reply past the part shows.
 async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<LifecycleShow> | null> {
-  const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
+  const { entries, closeTurns, proseTokens, lead } = await readTaskTurns(ctx)
   if (!hasTurns(closeTurns)) return null
   const sceneIds = new Set(entries.flatMap((entry) => strings(entry.metadata?.sceneEntities)))
   const prose = closeTurns.map((turn) => turn.content).join('\n\n')
@@ -170,6 +179,8 @@ async function startLifecycle(ctx: TaskPromptContext): Promise<TaskStart<Lifecyc
         retiredReason: handled(shownReason(row)),
         collision: collisionOf(row, partners, ctx.ids),
       })),
+      // Last: the rows above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     seeds: held.map(({ id }) => ({ table: 'entities', id })),
   }
@@ -182,7 +193,12 @@ function renderLifecycle(
   return renderClosePrompt(
     TEMPLATE_IDS.closeLifecycle,
     show.closeTurns,
-    { mode: show.mode, closeLifecycleRows: show.rows, closeWritesSoFar: ctx.writesSoFar },
+    {
+      mode: show.mode,
+      closeLifecycleRows: show.rows,
+      closeWritesSoFar: ctx.writesSoFar,
+      lead: show.lead,
+    },
     show.proseTokens,
   )
 }

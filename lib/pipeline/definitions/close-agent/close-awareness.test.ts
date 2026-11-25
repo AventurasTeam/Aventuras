@@ -121,6 +121,7 @@ describe('the Awareness start', () => {
         ],
         summary: SUMMARY,
         mode: 'creative',
+        lead: null,
       },
       seeds: [
         { table: 'happening_awareness', id: A_CHAPTER },
