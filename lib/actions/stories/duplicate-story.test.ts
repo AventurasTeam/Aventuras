@@ -327,6 +327,24 @@ describe('checkStoryDuplicate', () => {
     expect(await check({ branchId: A })).toEqual({ status: 'ok' })
   })
 
+  it("parses no classifier status off a branch it doesn't copy", async () => {
+    t.sqlite.prepare('UPDATE branches SET classifier_status = ? WHERE id = ?').run('{not json', B)
+    expect(await check({ branchId: A })).toEqual({ status: 'ok' })
+    const result = await duplicateStory(
+      { storyId: STORY, title: 'Copy', branch: { branchId: A } },
+      ctx,
+    )
+    expect(result).toEqual({ status: 'duplicated', storyId: expect.any(String) })
+    // A copied branch's malformed status still fails the check rather than passing unread.
+    const failure = (branch: DuplicateBranch) =>
+      check(branch).then(
+        () => 'passed',
+        (error: Error) => (error.cause as Error).message,
+      )
+    expect(await failure({ branchId: B })).toBe('malformed JSON')
+    expect(await failure('all')).toBe('malformed JSON')
+  })
+
   it('refuses a copied branch with an unfinished run row, judging only the copied ones', async () => {
     // Not vacuous: A's finished row is a run row too, and must not refuse.
     const finished = t.sqlite

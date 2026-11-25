@@ -65,10 +65,15 @@ export async function checkStoryDuplicate(
     .from(stories)
     .where(eq(stories.id, storyId))
   if (story == null) return refused(DUPLICATE_REFUSAL.missing)
+  const state = sql<string | null>`json_extract(${branches.classifierStatus}, '$.state')`
+  // Parsed on the copied branches only: a sibling's malformed status can't fail this copy.
   const onStory = await ctx.db
     .select({
       id: branches.id,
-      state: sql<string | null>`json_extract(${branches.classifierStatus}, '$.state')`,
+      state:
+        branch === 'all'
+          ? state
+          : sql<string | null>`CASE WHEN ${eq(branches.id, branch.branchId)} THEN ${state} END`,
     })
     .from(branches)
     .where(eq(branches.storyId, storyId))
