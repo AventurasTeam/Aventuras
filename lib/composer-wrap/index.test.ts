@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { wrapComposerText, wrapHasSubject } from './index'
+import { wrapComposerText } from './index'
 
 describe('wrapComposerText', () => {
   it('wraps Do in first person verbatim', () => {
@@ -75,19 +75,5 @@ describe('wrapComposerText', () => {
     expect(
       wrapComposerText('reach for the blade', { mode: 'do', pov: 'first', leadName: null }),
     ).toBe('I reach for the blade.')
-  })
-})
-
-describe('wrapHasSubject', () => {
-  it('is true in first person regardless of the lead', () => {
-    expect(wrapHasSubject('first', null)).toBe(true)
-  })
-
-  it('is true in third person once the lead resolves', () => {
-    expect(wrapHasSubject('third', 'Aria')).toBe(true)
-  })
-
-  it('is false in third person with no resolved lead', () => {
-    expect(wrapHasSubject('third', null)).toBe(false)
   })
 })

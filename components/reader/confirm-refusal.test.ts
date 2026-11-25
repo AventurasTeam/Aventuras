@@ -4,6 +4,7 @@ import { STORY_ENTRY_REJECTION, type RollbackCounts } from '@/lib/actions'
 
 import {
   confirmAfterImmediateRefusal,
+  confirmBlockedReason,
   countsAfterRefusal,
   keepsConfirmOpen,
   regenerateRefusalCopy,
@@ -302,5 +303,29 @@ describe('reopenAfterRefusal on an in-flight refusal', () => {
         stillOnBranch: true,
       }),
     ).toEqual(CONFIRMED)
+  })
+})
+
+describe('confirmBlockedReason', () => {
+  const LEAD = 'This story needs a lead on this branch before it can continue. Set one in World.'
+  const GATE = 'Unavailable while generating.'
+
+  it('holds a regenerate confirm on the turn-start reason', () => {
+    expect(confirmBlockedReason('regenerate', { gate: undefined, turnStart: LEAD })).toBe(LEAD)
+  })
+
+  it('leaves a rollback confirm alone: a rollback starts no turn', () => {
+    expect(confirmBlockedReason('rollback', { gate: undefined, turnStart: LEAD })).toBeUndefined()
+  })
+
+  it('names the gate first when both hold, on either confirm', () => {
+    expect(confirmBlockedReason('regenerate', { gate: GATE, turnStart: LEAD })).toBe(GATE)
+    expect(confirmBlockedReason('rollback', { gate: GATE, turnStart: LEAD })).toBe(GATE)
+  })
+
+  it('holds nothing with neither', () => {
+    expect(
+      confirmBlockedReason('regenerate', { gate: undefined, turnStart: undefined }),
+    ).toBeUndefined()
   })
 })

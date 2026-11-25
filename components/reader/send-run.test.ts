@@ -24,6 +24,7 @@ import {
   closeRefusalOf,
   composerShowsCancel,
   findSendRun,
+  leadRefusalOf,
   passRefusalOf,
   reportSendThrow,
   pillRunOf,
@@ -474,6 +475,29 @@ describe('passRefusalOf', () => {
     expect(
       passRefusalOf({ ...ran, outcome: 'failed', beforeTurn: true, work: 'close', error }),
     ).toBeNull()
+  })
+})
+
+describe('leadRefusalOf', () => {
+  const ran = { runId: 'run_1', actionId: 'act_1' }
+
+  it("reads the missing lead's refusal", () => {
+    expect(leadRefusalOf({ outcome: 'rejected', blockedBy: 'lead-missing', converged: true })).toBe(
+      true,
+    )
+  })
+
+  it('leaves any other refusal, a failure and a landed turn alone', () => {
+    expect(
+      leadRefusalOf({ outcome: 'rejected', blockedBy: CLASSIFIER_HELD, converged: true }),
+    ).toBe(false)
+    expect(
+      leadRefusalOf({ outcome: 'rejected', blockedBy: 'embedder-swap', converged: true }),
+    ).toBe(false)
+    expect(
+      leadRefusalOf({ ...ran, outcome: 'failed', error: { kind: 'orchestrator', detail: 'x' } }),
+    ).toBe(false)
+    expect(leadRefusalOf({ ...ran, outcome: 'completed' })).toBe(false)
   })
 })
 

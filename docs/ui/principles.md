@@ -898,7 +898,13 @@ story needs a lead and the branch has none
 lead deleted, or a mode or narration change that left this branch
 without one — every action that starts a turn refuses: Send,
 regenerate, a failed turn's Retry and Save & regenerate. The draft
-stays in the composer. A visible reason line under the composer (not
+stays in the composer. `↻`, a failed turn's Retry and Save &
+regenerate are disabled with the lead-missing copy as their reason,
+as is the regenerate confirm's button; Save & regenerate saves before
+it runs, so a refusal only at dispatch would keep the edit and drop
+the run. Rollback (`×`) starts no turn, and a pass's or a close's
+Retry runs regardless, so those stay live. A visible reason line
+under the composer (not
 just a web tooltip, since Android has none) reads the
 `reader:composerLeadMissing` copy: "This story needs a lead on this
 branch before it can continue. Set one in World." In adventure the

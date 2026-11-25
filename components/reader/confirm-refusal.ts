@@ -115,3 +115,12 @@ export function confirmAfterImmediateRefusal(args: {
   if (refusal.code !== STORY_ENTRY_REJECTION.countsChanged) return current
   return { mode: 'regenerate', ...opened, counts: refusal.counts }
 }
+
+/** The open confirm's held reason: the gate's first; a regenerate starts a turn, so it also waits
+ * on the turn-start reason, which leaves a rollback alone. */
+export function confirmBlockedReason(
+  mode: ConfirmState['mode'],
+  reasons: { gate: string | undefined; turnStart: string | undefined },
+): string | undefined {
+  return reasons.gate ?? (mode === 'regenerate' ? reasons.turnStart : undefined)
+}

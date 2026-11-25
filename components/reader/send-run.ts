@@ -1,4 +1,4 @@
-import type { SubmitTurnResult } from '@/lib/actions'
+import { LEAD_MISSING, type SubmitTurnResult } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import {
   CLASSIFIER_HELD,
@@ -118,6 +118,12 @@ export function closeRefusalOf(result: SubmitTurnResult): { error: PipelineError
   if (result.outcome === 'failed' && result.beforeTurn === true && result.work === 'close')
     return { error: result.error }
   return null
+}
+
+/** A Send refused because the branch needs a lead and has none: the reader puts the tail and
+ * the draft back and writes no failure entry. */
+export function leadRefusalOf(result: SubmitTurnResult): boolean {
+  return result.outcome === 'rejected' && result.blockedBy === LEAD_MISSING
 }
 
 /**
