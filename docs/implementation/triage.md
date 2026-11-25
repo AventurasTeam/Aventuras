@@ -740,14 +740,6 @@ slice-planning gate forces its resolution before that slice is planned.
   rule that resolves the binding, would close it.
   Found during Slice 6.6.
 
-- **`deleteStory`'s comment says assets are "handled by a separate GC",
-  but none exists yet.** `lib/actions/stories/delete-story.ts:33` leaves
-  `assets` out of `BRANCH_SCOPED` on that ground, and no asset GC exists
-  until M9.3, so a deleted story's or branch's assets stay in the table
-  until then. Reword the comment to name the missing capability and its
-  milestone, or route the orphan check to M9.3's slice. Found during
-  Slice 6.6.
-
 - **The unfinished-run reads scan `pipeline_runs` whole.** The table
   has no index on `branch_id` (`lib/db/system/system.table.ts`), and
   nothing prunes finished rows short of a story delete, so it grows with
