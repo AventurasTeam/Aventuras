@@ -44,10 +44,12 @@ const VALUES: Values = { title: 'Copy' }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
     resolve = res
+    reject = rej
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 // Runs every step an open, a check or a copy awaits, inside act.
@@ -475,12 +477,48 @@ describe('useStoryDuplicate: submitting', () => {
       storyId: 'story_a',
       error: 'disk full',
     })
+    expect(toast.error).not.toHaveBeenCalled()
     expect(onDone).not.toHaveBeenCalled()
 
     await submitOn(result)
     expect(duplicate).toHaveBeenCalledTimes(2)
     expect(result.current.dialog).toBeNull()
     expect(onDone).toHaveBeenCalledWith({ storyId: 'story_copy', title: 'Copy' })
+  })
+
+  it('toasts a thrown copy when the list lost focus during it', async () => {
+    const { result, rerender, duplicate } = setup()
+    await openOn(result)
+    const copy = deferred<DuplicateStoryResult>()
+    duplicate.mockReturnValueOnce(copy.promise)
+    let submitting: Promise<void> = Promise.resolve()
+    act(() => {
+      submitting = result.current.submit(VALUES)
+    })
+    rerender({ focused: false, blocked: false })
+    await act(async () => {
+      copy.reject(new Error('disk full'))
+      await submitting
+    })
+    expect(result.current.dialog).toBeNull()
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('toasts a thrown copy that lands after the list unmounts', async () => {
+    const { result, unmount, duplicate } = setup()
+    await openOn(result)
+    const copy = deferred<DuplicateStoryResult>()
+    duplicate.mockReturnValueOnce(copy.promise)
+    let submitting: Promise<void> = Promise.resolve()
+    act(() => {
+      submitting = result.current.submit(VALUES)
+    })
+    unmount()
+    copy.reject(new Error('disk full'))
+    await submitting
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
   })
 
   it('does nothing while a check runs or a refusal shows', async () => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useAliveRef } from '@/components/reader/use-alive-ref'
 import type {
   DuplicateBranch,
   DuplicateCheck,
@@ -82,9 +83,10 @@ export function useStoryDuplicate({
   const openRequest = useRef(0)
   const checkRequest = useRef(0)
   const openSeq = useRef(0)
-  const latest = useRef({ blocked, readBranches, check, duplicate, onDone })
+  const alive = useAliveRef()
+  const latest = useRef({ focused, blocked, readBranches, check, duplicate, onDone })
   useEffect(() => {
-    latest.current = { blocked, readBranches, check, duplicate, onDone }
+    latest.current = { focused, blocked, readBranches, check, duplicate, onDone }
   })
 
   const setDialog = useCallback((next: StoryDuplicateDialogModel | null) => {
@@ -176,6 +178,8 @@ export function useStoryDuplicate({
       const copied = await attempt(() => latest.current.duplicate({ storyId, title, branch }))
       if (!copied.ok) {
         logger.error('app.story_duplicate_threw', { storyId, error: messageOf(copied.error) })
+        // An unfocused or unmounted list shows no dialog to carry the line.
+        if (!alive.current || !latest.current.focused) toast.error(t('landing:duplicate.failed'))
         setState(seq, { kind: 'failed' })
         return
       }
@@ -187,7 +191,7 @@ export function useStoryDuplicate({
       if (dialogRef.current?.openSeq === seq) setDialog(null)
       latest.current.onDone({ storyId: result.storyId, title: title.trim() })
     },
-    [setDialog, setState],
+    [alive, setDialog, setState],
   )
 
   const dismiss = useCallback(() => {
