@@ -1,5 +1,14 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest'
 
 import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import {
@@ -611,6 +620,11 @@ describe('runCloseRerunOnBranch', () => {
     })
     replaceStack.mockClear()
     closeRequest.mockReset()
+  })
+
+  it('types every step before the commit as a refusal: the check ends no chain', () => {
+    type Step = Awaited<ReturnType<typeof runCloseRerunOnBranch>>
+    expectTypeOf<Extract<Step, { step: 'ended' }>>().toBeNever()
   })
 
   it("takes the parent reader's hold before its first await and keeps it to the tail", async () => {

@@ -52,14 +52,22 @@ const ctx = { db, runInTransaction }
 
 export type RerunNotice = { severity: 'info' | 'warning' | 'error'; message: string }
 
-/** What the open confirm does once the start resolves; its notice, if any, has already shown. */
-export type RerunStartStep =
-  | { step: 'ended' }
+/** What the open confirm does on a refusal: nothing ran. */
+export type RerunRefusalStep =
   | { step: 'replace'; preview: CloseRerunPreview }
   | { step: 'keep-open' }
   | { step: 'refused' }
 
-type Outcome = { step: RerunStartStep; notice: RerunNotice | null; logCode: string | null }
+/** What the open confirm does once the start resolves; its notice, if any, has already shown. */
+export type RerunStartStep = { step: 'ended' } | RerunRefusalStep
+
+type Outcome<Step extends RerunStartStep = RerunStartStep> = {
+  step: Step
+  notice: RerunNotice | null
+  logCode: string | null
+}
+
+type Refusal = Outcome<RerunRefusalStep>
 
 const shownShortcut = ({ targetEntryId, counts }: CloseRerunShortcut) => ({ targetEntryId, counts })
 
@@ -100,13 +108,13 @@ export function rerunEndNotice(end: ChainEnd, chapterNumber: number): RerunNotic
   }
 }
 
-const refusedWith = (message: string, logCode: string | null): Outcome => ({
+const refusedWith = (message: string, logCode: string | null): Refusal => ({
   step: { step: 'refused' },
   notice: { severity: 'error', message },
   logCode,
 })
 
-const startFailed = (logCode: string): Outcome =>
+const startFailed = (logCode: string): Refusal =>
   refusedWith(t('chapters:rerunNotice.startFailed'), logCode)
 
 // A swap or a held branch outlasts the press, so the re-run says what the manual close does.
@@ -117,7 +125,7 @@ const LASTING_REFUSALS: ReadonlySet<string> = new Set([
 
 // As the delete and rollback confirms: it stays open and says why nothing ran; the host holds its
 // actions while the story stays busy.
-const keepOpen = (): Outcome => ({
+const keepOpen = (): Refusal => ({
   step: { step: 'keep-open' },
   notice: { severity: 'error', message: t('reader:actions.blockedWhileGenerating') },
   logCode: null,
@@ -129,6 +137,11 @@ const keepOpen = (): Outcome => ({
 export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number): Outcome {
   if ('result' in start)
     return { step: { step: 'ended' }, notice: rerunEndNotice(start, chapterNumber), logCode: null }
+  return startRefusalOutcome(start)
+}
+
+// The parent check refuses as the in-place start does, and never ends a chain.
+function startRefusalOutcome(start: Exclude<CloseRerunStart, ChainEnd>): Refusal {
   if ('outcome' in start) {
     if (start.outcome === 'preflight-failed') {
       // A catch-up pass's settings failed it: the memory pass's own copy names its agent.
@@ -171,11 +184,11 @@ export function rerunStartOutcome(start: CloseRerunStart, chapterNumber: number)
 
 type At = { branchId: string; chapterId: string }
 
-function speak(
-  outcome: Outcome,
+function speak<Step extends RerunStartStep>(
+  outcome: Outcome<Step>,
   kind: 'app.close_rerun_start_refused' | 'app.close_rerun_fork_refused',
   at: At,
-): RerunStartStep {
+): Step {
   if (outcome.logCode != null) logger.warn(kind, { ...at, code: outcome.logCode })
   if (outcome.notice != null) toast[outcome.notice.severity](outcome.notice.message)
   return outcome.step
@@ -231,8 +244,8 @@ export async function runCloseRerun(args: {
   })
 }
 
-/** A step before the fork commits, or `forked` once the sequence past it has run. */
-export type RerunOnBranchStep = RerunStartStep | { step: 'forked' }
+/** A refusal before the fork commits, or `forked` once the sequence past it has run. */
+export type RerunOnBranchStep = RerunRefusalStep | { step: 'forked' }
 
 type RerunOnBranchArgs = Parameters<typeof runCloseRerunOnBranch>[0]
 
@@ -245,7 +258,7 @@ const isClear = (check: CloseRerunParentCheck): check is ParentClear =>
   'status' in check && check.status === 'clear'
 
 // chapter-timeline.md → Re-run a close: the fork refuses before any write, onto the mounted confirm.
-function forkRefusalOutcome(refusal: ForkRefusal): Outcome {
+function forkRefusalOutcome(refusal: ForkRefusal): Refusal {
   switch (refusal.code) {
     case FORK_REFUSAL.gated:
       return keepOpen()
@@ -261,14 +274,14 @@ function forkRefusalOutcome(refusal: ForkRefusal): Outcome {
   }
 }
 
-function forkThrew(at: At, step: 'check' | 'fork', error: unknown): RerunStartStep {
+function forkThrew(at: At, step: 'check' | 'fork', error: unknown): RerunRefusalStep {
   logger.error('app.close_rerun_fork_threw', { ...at, step, error: messageOf(error) })
   toast.error(t('chapters:rerunNotice.startFailed'))
   return { step: 'refused' }
 }
 
 // No pending mark spans the check and the fork: forkBranch's gate counts every pending turn.
-async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunStartStep | Forked> {
+async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunRefusalStep | Forked> {
   const { branchId, chapterId, preview } = args
   const at = { branchId, chapterId }
   let check: CloseRerunParentCheck
@@ -277,12 +290,7 @@ async function checkAndFork(args: RerunOnBranchArgs): Promise<RerunStartStep | F
   } catch (error) {
     return forkThrew(at, 'check', error)
   }
-  if (!isClear(check))
-    return speak(
-      rerunStartOutcome(check, preview.chapterNumber),
-      'app.close_rerun_start_refused',
-      at,
-    )
+  if (!isClear(check)) return speak(startRefusalOutcome(check), 'app.close_rerun_start_refused', at)
   const { forkPoint } = check.preview.shortcut
   const number = preview.chapterNumber
   const name = t('chapters:rerunConfirm.autoName', { number })
