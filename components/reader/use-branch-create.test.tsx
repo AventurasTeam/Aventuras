@@ -762,3 +762,72 @@ describe('useBranchCreate — a log that throws while a throw is handled', () =>
     expect(actions.fork).toHaveBeenCalledTimes(2)
   })
 })
+
+// Electron goes back or forward in history on these buttons' mouseup unless it's cancelled.
+function mouseUp(button: number): boolean {
+  const event = new MouseEvent('mouseup', { button, bubbles: true, cancelable: true })
+  document.body.dispatchEvent(event)
+  return event.defaultPrevented
+}
+
+describe("useBranchCreate — the mouse's Back and Forward buttons", () => {
+  it.each([3, 4])(
+    'button %s does nothing from Create to the fork settling, and navigates before and after',
+    async (button) => {
+      const forked = deferred<ForkResult>()
+      actions.fork.mockReturnValue(forked.promise)
+      const hook = renderCreate()
+      await openModal(hook)
+      expect(mouseUp(button)).toBe(false)
+      press(hook, 'Side quest')
+      expect(mouseUp(button)).toBe(true)
+      await act(async () =>
+        forked.resolve({ status: 'rejected', code: FORK_REFUSAL.unfinishedRun, reason: 'x' }),
+      )
+      await settle()
+      expect(modal(hook).phase).toStrictEqual(idle(COPY.unfinishedRun))
+      expect(mouseUp(button)).toBe(false)
+    },
+  )
+
+  it('stays inert through the tail and after its navigation, until the reader unmounts', async () => {
+    const tail = deferred<ShowBranchResult>()
+    actions.show.mockReturnValue(tail.promise)
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    await settle()
+    expect(actions.show).toHaveBeenCalledTimes(1)
+    expect(mouseUp(3)).toBe(true)
+    await act(async () => tail.resolve({ status: 'ok' }))
+    await settle()
+    expect(mouseUp(3)).toBe(true)
+    hook.unmount()
+    expect(mouseUp(3)).toBe(false)
+  })
+
+  it.each([
+    ['a fork that throws', () => actions.fork.mockRejectedValue(new Error('disk'))],
+    [
+      "a tail that can't navigate",
+      () => actions.show.mockResolvedValue({ status: 'navigation-blocked' }),
+    ],
+    ['a tail that throws past its reset', () => actions.show.mockRejectedValue(new Error('disk'))],
+    [
+      'a story left by the commit',
+      () =>
+        actions.fork.mockImplementation(async () => {
+          currentStoryStore.clear()
+          return { status: 'ok', branchId: CHILD }
+        }),
+    ],
+  ] as const)('navigates again after %s', async (_name, arrange) => {
+    arrange()
+    const hook = renderCreate()
+    await openModal(hook)
+    press(hook, 'Side quest')
+    expect(mouseUp(3)).toBe(true)
+    await settle()
+    expect(mouseUp(3)).toBe(false)
+  })
+})

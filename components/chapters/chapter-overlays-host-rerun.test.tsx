@@ -245,6 +245,13 @@ function markPendingTurn(): { end: () => Promise<void> } {
   }
 }
 
+// Electron goes back or forward in history on these buttons' mouseup unless it's cancelled.
+function mouseUp(button: number): boolean {
+  const event = new MouseEvent('mouseup', { button, bubbles: true, cancelable: true })
+  document.body.dispatchEvent(event)
+  return event.defaultPrevented
+}
+
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve: (value: T) => void = () => {}
   const promise = new Promise<T>((settle) => {
@@ -1045,5 +1052,86 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(nav.refresh).toHaveBeenCalledExactlyOnceWith({}, 'story_1')
     expect(actions.startOnFork).not.toHaveBeenCalled()
     expect(readerHoldStore.isHeld('br_1')).toBe(false)
+  })
+
+  it.each([3, 4])(
+    "the mouse's button %s does nothing from the press to the publish, and navigates before and after",
+    async (button) => {
+      const forked = deferred<ForkResult>()
+      actions.fork.mockReturnValue(forked.promise)
+      renderHost()
+      openRerun()
+      const props = await confirmShown()
+      expect(mouseUp(button)).toBe(false)
+      act(() => props.onConfirmOnBranch(WITH_TURNS))
+      expect(mouseUp(button)).toBe(true)
+      await act(async () => forked.resolve({ status: 'ok', branchId: 'br_child' }))
+      await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+      expect(mouseUp(button)).toBe(false)
+    },
+  )
+
+  const pressEnded = () => confirmView.props?.pending === false
+  const confirmClosed = () => chapterOverlaysStore.getState().rerunConfirm == null
+
+  it.each([
+    [
+      'a fork refused by the gate',
+      () => actions.fork.mockResolvedValue({ status: 'rejected', code: 'gated', reason: 'x' }),
+      pressEnded,
+    ],
+    [
+      'a check that finds the counts moved',
+      () =>
+        actions.check.mockResolvedValue({
+          status: 'rejected',
+          code: 'counts-changed',
+          reason: 'x',
+          preview: WITH_TURNS,
+        }),
+      pressEnded,
+    ],
+    [
+      "a tail that can't navigate",
+      () => actions.show.mockResolvedValue({ status: 'navigation-blocked' }),
+      confirmClosed,
+    ],
+  ] as const)("the mouse's Back navigates again after %s", async (_name, arrange, settled) => {
+    vi.spyOn(toast, 'error').mockReturnValue('')
+    vi.spyOn(toast, 'warning').mockReturnValue('')
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    arrange()
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
+    expect(mouseUp(3)).toBe(true)
+    await waitFor(() => expect(settled()).toBe(true))
+    expect(mouseUp(3)).toBe(false)
+  })
+
+  it("the mouse's Back navigates again after a sequence that throws past its own catches", async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => {
+      throw new Error('toast broke')
+    })
+    vi.spyOn(logger, 'error').mockImplementation(() => {})
+    actions.check.mockRejectedValue(new Error('disk'))
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
+    expect(mouseUp(3)).toBe(true)
+    await waitFor(() => expect(confirmView.props?.pending).toBe(false))
+    expect(mouseUp(3)).toBe(false)
+  })
+
+  it("leaves the mouse's Back alone while the in-place re-run starts: nothing navigates on that path", async () => {
+    actions.start.mockReturnValue(new Promise(() => {}))
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirm())
+    expect(confirmView.props?.pending).toBe(true)
+    expect(mouseUp(3)).toBe(false)
   })
 })

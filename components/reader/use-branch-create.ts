@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
+import { useInertMouseBack } from '@/hooks/use-inert-mouse-back'
 import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import {
   FORK_REFUSAL,
@@ -108,6 +109,7 @@ export function useBranchCreate({
   const [request, setRequest] = useState<ForkRequest | null>(null)
   // Read synchronously, so a second press returns before it reaches forkBranch.
   const pendingRef = useRef(false)
+  useInertMouseBack(request?.phase.kind === 'pending')
 
   // On native a rejection would re-reject inside the WebView, unlogged.
   const onBranch = useCallback(

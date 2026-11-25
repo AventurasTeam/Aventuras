@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 
 import { readerHref } from '@/components/reader/reader-href'
 import { useEntryIndex } from '@/hooks/use-entry-index'
+import { useInertMouseBack } from '@/hooks/use-inert-mouse-back'
 import { useReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { useSurfaceNavigate } from '@/hooks/use-surface-navigate'
 import {
@@ -414,7 +415,9 @@ function RerunConfirmHost({
     if (opened && target == null) chapterOverlaysStore.closeRerunConfirm({ reopen: false })
   }, [opened, target])
 
-  const [pending, setPending] = useState(false)
+  const [pending, setPending] = useState<'in-place' | 'fork' | null>(null)
+  // Only the fork's tail navigates.
+  useInertMouseBack(pending === 'fork')
   // An in-flight refusal holds the confirm actions while the story is busy: a pending turn's mark
   // can end with no run, and so with no settle.
   const [heldInFlight, setHeldInFlight] = useState(false)
@@ -430,11 +433,11 @@ function RerunConfirmHost({
   }
 
   // Read from the store, not the render: the rendered story lags a switch by a render.
-  const begin = (): OpenStory | null => {
+  const begin = (kind: 'in-place' | 'fork'): OpenStory | null => {
     const open = currentStoryStore.getCurrentStory()
     if (pendingRef.current || open == null || open.branchId !== branchId) return null
     pendingRef.current = true
-    setPending(true)
+    setPending(kind)
     setHeldInFlight(false)
     onStarting(request, true)
     return open
@@ -442,7 +445,7 @@ function RerunConfirmHost({
 
   const afterStart = (step: RerunStartStep) => {
     pendingRef.current = false
-    setPending(false)
+    setPending(null)
     switch (step.step) {
       case 'replace':
         replace(step.preview)
@@ -457,7 +460,7 @@ function RerunConfirmHost({
   }
 
   const confirm = () => {
-    if (begin() == null) return
+    if (begin('in-place') == null) return
     // Once the chain's first run reserves every refusal is past, and the banner speaks.
     void runCloseRerun({ branchId, chapterId, preview, onStarted: closeOwn }).then((step) => {
       onStarting(request, false)
@@ -466,7 +469,7 @@ function RerunConfirmHost({
   }
 
   const confirmOnBranch = (withTurns: CloseRerunForkPreview) => {
-    const open = begin()
+    const open = begin('fork')
     if (open == null) return
     void runCloseRerunOnBranch({
       storyId: open.storyId,
@@ -485,7 +488,7 @@ function RerunConfirmHost({
         // A pending confirm can't be cancelled: clear pending before the log, which can throw too.
         onStarting(request, false)
         pendingRef.current = false
-        setPending(false)
+        setPending(null)
         logger.error('app.close_rerun_on_branch_threw', {
           branchId,
           chapterId,
@@ -504,7 +507,7 @@ function RerunConfirmHost({
       open
       preview={preview}
       blockedReason={rerunReason ?? held}
-      pending={pending}
+      pending={pending != null}
       onCancel={cancel}
       onConfirm={confirm}
       onConfirmOnBranch={confirmOnBranch}
