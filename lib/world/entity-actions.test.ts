@@ -44,6 +44,7 @@ const KAEL: Entity = {
   keywords: ['the courier', 'The Courier'],
   priority: 30,
   embeddingStale: 0,
+  isLead: 0,
   createdAt: 1,
   updatedAt: 1,
 }
@@ -766,6 +767,7 @@ describe('collision flags a re-parent breaks', () => {
     keywords: [],
     priority: 0,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
@@ -877,6 +879,7 @@ describe("entityActions — a place's placement", () => {
     keywords: [],
     priority: 0,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }
@@ -941,6 +944,7 @@ describe('retiring a place', () => {
     keywords: [],
     priority: 0,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   })

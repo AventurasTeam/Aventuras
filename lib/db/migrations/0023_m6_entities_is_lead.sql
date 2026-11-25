@@ -1,0 +1,1 @@
+ALTER TABLE `entities` ADD `is_lead` integer DEFAULT 0 NOT NULL;

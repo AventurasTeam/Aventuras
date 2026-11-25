@@ -107,6 +107,7 @@ describe('lib/stores public surface', () => {
       state: null,
       tags: [],
       embeddingStale: 0,
+      isLead: 0,
       createdAt: 1,
       updatedAt: 1,
     }

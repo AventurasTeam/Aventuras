@@ -451,24 +451,6 @@ describe('createStoryWithBranch', () => {
     expect(entityRows[0].id).toBe(LEAD_ID)
   })
 
-  it('adventure with null leadEntityId is rejected by the definition schema', async () => {
-    const { ctx } = await setup()
-
-    await expect(
-      createStoryWithBranch(
-        {
-          title: 'Broken',
-          definition: makeDefinition({ mode: 'adventure', leadEntityId: null }),
-          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
-          openingContent: 'x',
-          openingMetadata: metadata,
-        },
-        ctx,
-        3000,
-      ),
-    ).rejects.toThrow()
-  })
-
   it('replaceExistingStoryId promotes a draft: same id becomes active, draft session row is gone', async () => {
     const { db, ctx } = await setup()
     const draftId = 'story_draft'

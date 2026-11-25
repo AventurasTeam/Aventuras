@@ -26,6 +26,7 @@ const ENTITY: Labels = {
   tags: () => t('history:field.tags'),
   keywords: () => t('history:field.keywords'),
   priority: () => t('history:field.priority'),
+  isLead: () => t('history:field.lead'),
   nameCollisionFlag: () => t('history:field.nameCollisionFlag'),
   nameCollisionPartnerId: () => t('history:field.nameCollisionFlag'),
   nameCollisionReason: () => t('history:field.nameCollisionFlag'),

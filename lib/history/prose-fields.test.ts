@@ -27,6 +27,7 @@ const KIND_TABLE: readonly [DiffTable, string, ProseFieldKind][] = [
   ['entities', 'status', 'enum'],
   ['entities', 'injectionMode', 'enum'],
   ['entities', 'priority', 'number'],
+  ['entities', 'isLead', 'flag'],
   ['entities', 'tags', 'termList'],
   ['entities', 'keywords', 'termList'],
   ['entities', 'state.traits', 'termList'],

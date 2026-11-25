@@ -86,6 +86,7 @@ const entityRow = (
   keywords: opts.keywords ?? [],
   priority: 0,
   embeddingStale: 0,
+  isLead: 0,
   createdAt: AT,
   updatedAt: AT,
 })

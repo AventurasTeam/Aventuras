@@ -60,6 +60,7 @@ type EntityColumnPatch = Partial<{
   keywords: string[]
   priority: number
   state: EntityState
+  isLead: 0 | 1
 }>
 
 /** Clears a collision flag with its partner and reason, all three in one write. */
@@ -114,6 +115,7 @@ export const UPDATABLE = [
   'nameCollisionFlag',
   'nameCollisionPartnerId',
   'nameCollisionReason',
+  'isLead',
 ] as const
 void (true satisfies PatchMatchesColumns<EntityUpdatePatch, typeof UPDATABLE>)
 
@@ -140,6 +142,7 @@ function fullRow(entry: NewEntity): Entity {
     // A new row has no vector by definition — default dirty. Clearing happens via a
     // same-batch stale-clear op once the embed lands, never via an explicit 0.
     embeddingStale: entry.embeddingStale ?? 1,
+    isLead: entry.isLead ?? 0,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
@@ -222,6 +225,9 @@ const createHandler: ActionHandler = async (action, branchId, ctx) => {
   const scalars = entityWriteSchema.safeParse(row)
   if (!scalars.success)
     return { status: 'rejected', reason: `invalid entity: ${scalars.error.message}` }
+  // data-model.md → The lead: story creation flags its lead outside the log; no logged create does.
+  if (row.isLead !== 0)
+    return { status: 'rejected', reason: 'invalid entity: a create never sets isLead' }
   const flagIssue = flagTripleIssue(row)
   if (flagIssue != null) return { status: 'rejected', reason: `invalid entity: ${flagIssue}` }
   const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
@@ -250,6 +256,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   const { branchId: bid, id, patch } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  // data-model.md → The lead: no machine writer touches the flag.
+  if ('isLead' in patch && !isUserOriginatedSource(action.source))
+    return { status: 'rejected', reason: 'invalid entity patch: only a user edit writes isLead' }
   const [current] = await ctx.db
     .select()
     .from(entities)
@@ -269,6 +278,9 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     return { status: 'rejected', reason: `invalid entity patch: ${scalars.error.message}` }
   const flagIssue = flagPatchIssue(patch, current)
   if (flagIssue != null) return { status: 'rejected', reason: `invalid entity patch: ${flagIssue}` }
+  // Refused here rather than failing as the entities_lead_character CHECK.
+  if (patch.isLead === 1 && current.kind !== 'character')
+    return { status: 'rejected', reason: 'invalid entity patch: only a character can be the lead' }
 
   if (patch.state !== undefined) {
     const parsed = entityStateSchemaForKind(current.kind).safeParse(patch.state)

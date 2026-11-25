@@ -53,6 +53,7 @@ function entity(id: string, branchId = 'b1'): Entity {
     injectionMode: 'auto',
     state: null,
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }

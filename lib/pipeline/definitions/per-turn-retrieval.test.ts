@@ -173,6 +173,7 @@ function entity(id: string, kind: Entity['kind'], name: string): Entity {
     state: null,
     tags: [],
     embeddingStale: 0,
+    isLead: 0,
     createdAt: 1,
     updatedAt: 1,
   }

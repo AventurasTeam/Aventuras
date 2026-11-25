@@ -7667,6 +7667,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911880170,
       "updatedAt": 1793911880170
     },
@@ -7698,6 +7699,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911880170,
       "updatedAt": 1793911880170
     },
@@ -7729,6 +7731,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909486660,
       "updatedAt": 1793909486660
     },
@@ -7760,6 +7763,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910508677,
       "updatedAt": 1793910508677
     },
@@ -7803,6 +7807,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907193448,
       "updatedAt": 1793907193448
     },
@@ -7837,6 +7842,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911387764,
       "updatedAt": 1793911387764
     },
@@ -7869,6 +7875,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911387764,
       "updatedAt": 1793911387764
     },
@@ -7908,6 +7915,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907854316,
       "updatedAt": 1793907854316
     },
@@ -7939,6 +7947,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910508677,
       "updatedAt": 1793910508677
     },
@@ -7976,6 +7985,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911135603,
       "updatedAt": 1793911135603
     },
@@ -8011,6 +8021,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910508677,
       "updatedAt": 1793910508677
     },
@@ -8046,6 +8057,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909486660,
       "updatedAt": 1793909486660
     },
@@ -8077,6 +8089,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910147482,
       "updatedAt": 1793910147482
     },
@@ -8124,6 +8137,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911387764,
       "updatedAt": 1793911387764
     },
@@ -8169,6 +8183,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907589841,
       "updatedAt": 1793907589841
     },
@@ -8200,6 +8215,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911387764,
       "updatedAt": 1793911387764
     },
@@ -8236,6 +8252,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910508677,
       "updatedAt": 1793910508677
     },
@@ -8267,6 +8284,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910147482,
       "updatedAt": 1793910147482
     },
@@ -8305,6 +8323,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911387764,
       "updatedAt": 1793911387764
     },
@@ -8343,6 +8362,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911880169,
       "updatedAt": 1793911880169
     },
@@ -8374,6 +8394,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793912284050,
       "updatedAt": 1793912284050
     },
@@ -8425,6 +8446,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909261636,
       "updatedAt": 1793909261636
     },
@@ -8460,6 +8482,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910508677,
       "updatedAt": 1793910508677
     },
@@ -8491,6 +8514,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910508677,
       "updatedAt": 1793910508677
     },
@@ -8550,6 +8574,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907370566,
       "updatedAt": 1793907370566
     },
@@ -8575,6 +8600,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910147482,
       "updatedAt": 1793910147482
     },
@@ -8597,6 +8623,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909622060,
       "updatedAt": 1793909622060
     },
@@ -8619,6 +8646,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909545557,
       "updatedAt": 1793909545557
     },
@@ -8643,6 +8671,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910836624,
       "updatedAt": 1793910836624
     },
@@ -8665,6 +8694,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793908250186,
       "updatedAt": 1793908250186
     },
@@ -8687,6 +8717,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909421609,
       "updatedAt": 1793909421609
     },
@@ -8709,6 +8740,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793908129428,
       "updatedAt": 1793908129428
     },
@@ -8731,6 +8763,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909190379,
       "updatedAt": 1793909190379
     },
@@ -8753,6 +8786,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909545557,
       "updatedAt": 1793909545557
     },
@@ -8777,6 +8811,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909795383,
       "updatedAt": 1793909795383
     },
@@ -8799,6 +8834,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911554661,
       "updatedAt": 1793911554661
     },
@@ -8821,6 +8857,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910973154,
       "updatedAt": 1793910973154
     },
@@ -8845,6 +8882,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909622060,
       "updatedAt": 1793909622060
     },
@@ -8869,6 +8907,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910759311,
       "updatedAt": 1793910759311
     },
@@ -8891,6 +8930,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907645457,
       "updatedAt": 1793907645457
     },
@@ -8914,6 +8954,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907525115,
       "updatedAt": 1793907525115
     },
@@ -8936,6 +8977,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793912346911,
       "updatedAt": 1793912346911
     },
@@ -8958,6 +9000,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909873336,
       "updatedAt": 1793909873336
     },
@@ -8980,6 +9023,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793908460572,
       "updatedAt": 1793908460572
     },
@@ -9002,6 +9046,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911993569,
       "updatedAt": 1793911993569
     },
@@ -9024,6 +9069,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911458192,
       "updatedAt": 1793911458192
     },
@@ -9049,6 +9095,7 @@
       ],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911554661,
       "updatedAt": 1793911554661
     },
@@ -9072,6 +9119,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793907259741,
       "updatedAt": 1793907259741
     },
@@ -9094,6 +9142,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909795383,
       "updatedAt": 1793909795383
     },
@@ -9116,6 +9165,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793911494379,
       "updatedAt": 1793911494379
     },
@@ -9138,6 +9188,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793909353970,
       "updatedAt": 1793909353970
     },
@@ -9160,6 +9211,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793912128509,
       "updatedAt": 1793912128509
     },
@@ -9182,6 +9234,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793908129427,
       "updatedAt": 1793908129427
     },
@@ -9204,6 +9257,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910335872,
       "updatedAt": 1793910335872
     },
@@ -9226,6 +9280,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910224335,
       "updatedAt": 1793910224335
     },
@@ -9248,6 +9303,7 @@
       "keywords": [],
       "priority": 0,
       "embeddingStale": 1,
+      "isLead": 0,
       "createdAt": 1793910973154,
       "updatedAt": 1793910973154
     }
