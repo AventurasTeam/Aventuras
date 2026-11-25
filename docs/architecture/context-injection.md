@@ -4,10 +4,15 @@ What the narrator is given each turn, and who decides it.
 
 ## Selection: Entry Retrieval and World State Injection
 
-Two independent services select what gets injected into the narrator prompt each turn — the split is crucial because they operate on completely distinct data domain boundaries:
+Two independent services select what gets injected into the narrator prompt each turn. They are
+split because they operate on distinct data:
 
-- **Entry Retrieval** (`src/lib/services/ai/retrieval/EntryRetrievalService.ts`) — operates on static, authored **Lorebook** `Entry[]` records (characters, locations, items, factions, concepts, events).
-- **World State Injection** (`src/lib/services/ai/generation/WorldStateInjector.ts`) — operates on **live-tracked** `Character[]`/`Location[]`/`Item[]`/`StoryBeat[]` entities that the classifier updates dynamically after every turn (present characters, current location, inventory, active quests/milestones). Runs on every narrator call regardless of retrieval mode.
+- **Entry Retrieval** (`src/lib/services/ai/retrieval/EntryRetrievalService.ts`) — static, authored
+  **Lorebook** `Entry[]` records (characters, locations, items, factions, concepts, events).
+- **World State Injection** (`src/lib/services/ai/generation/WorldStateInjector.ts`) — **live-tracked**
+  `Character[]`/`Location[]`/`Item[]`/`StoryBeat[]` entities that the classifier updates after every
+  turn (present characters, current location, inventory, active quests/milestones). Runs on every
+  narrator call regardless of retrieval mode.
 
 The world-state block's sections split on **two different axes**, and tier is not one of them.
 `[PROTAGONIST]`, `[CURRENT LOCATION]`, `[CHARACTERS PRESENT]`, `[INVENTORY]` and `[ACTIVE THREADS]`
@@ -44,7 +49,7 @@ record, recording it would make the entire pool sticky on every turn of any stor
 so Tier 1 would absorb it and stickiness would never expire. Both services exclude it.
 
 **World-state characters are the one Tier 1 type that records an activation**, and the exception is
-the point: an `active` character _is_ a character in the scene, so Tier 1 membership is the presence
+the point: a non-sticky Tier 1 character _is_ a character in the scene, so Tier 1 membership is the presence
 signal. Without it a character has no activation to fade from, and the turn the classifier marks them
 away they leave the prompt outright instead of receding through `[RECENTLY DEPARTED]`.
 
@@ -58,8 +63,9 @@ as scene state would have the narrator acting on characters who are not there. I
 seed rather than a first-pass one because a lore entry that matched only because someone is standing
 in the room is relevance at one remove, and ranking it with a word the player typed made it
 indistinguishable from one. Governed by **Match Against What Is in the Scene** (on by default): the
-seed set is every active character, item, quest and the current location, which on a mature story is
-most of what a lorebook is about.
+seed set is the world state's Tier 1 + Tier 2 — protagonist, active characters, inventory, active
+quests, current location, the sticky carry-over and name matches — which on a mature story is most
+of what a lorebook is about.
 
 **A pass normalizes its haystack once.** `entityNameMatches` reads both sides through `termKey`, and
 a pass calls it for every name, alias and keyword against one haystack, so the haystack's `termKey`
@@ -69,7 +75,7 @@ Lorebook or World state step, whose detail gives the checks, the measured time, 
 haystack was normalized, and an estimate of what the memo saved.
 
 `tier3Selection.ts` caches the last selection per caller. The key is complete by content — caller,
-candidate pool in order, player action, and the ids of the recent entries the prompt was built from
+story, candidate pool in order, player action, and the ids of the recent entries the prompt was built from
 — because two situations sharing a repeated action and an unmoved pool are otherwise the same
 question as far as a cache can see, which is reachable across consecutive turns and across a branch
 switch. It is also cleared on story load and branch switch.
@@ -90,8 +96,8 @@ Unlike the other two, memory contributes nothing to the tier sections: it select
 **Agentic Retrieval** (`src/lib/services/ai/retrieval/AgenticRetrievalService.ts`) is an alternative
 to the static chapter memory fill (`TimelineFillService`). Which one runs is decided by
 `timelineFill.mode` (`'static' | 'agentic'`) via `aiService.shouldUseAgenticRetrieval` — the setting
-is surfaced as the **Memory** mode in Advanced Settings, and the current default for a fresh install
-is `'agentic'`.
+is surfaced as **Retrieval Mode** under **Memory Retrieval** in Advanced Settings, and the current
+default for a fresh install is `'agentic'`.
 
 It runs an agent loop (Vercel AI SDK) whose tools are built by
 `src/lib/services/ai/sdk/tools/retrieval.ts`:
@@ -141,18 +147,17 @@ agent's own troubles. Grep excerpts are never carried out of the run.
 
 It **selects nothing**. The agent reads lore to reason about the past and returns a prose summary; which
 Lorebook entries reach the narrator is decided by Entry Retrieval, in every mode. Both selection services
-above therefore run on every narrator turn regardless of retrieval mode — Agentic Retrieval never sees
-live `WorldState` at all, so it cannot stand in for either of them.
+above therefore run on every narrator turn regardless of retrieval mode — Agentic Retrieval can read
+live `WorldState` through `inspect_world_state`, but injects none of it, so it cannot stand in for
+either of them.
 
 **A tool's registration condition and the prompt text describing it must be the same expression.** Two
 tools are conditional — `grep_chapters` on `agenticRetrieval.grepEnabled` (on by default) and
 `inspect_world_state` on there being any live state — and both once had the condition written twice, so
 the flag reached the template while the tool list ignored it. The model was handed a callable tool its
 instructions denied existed. Both conditions are now single exported predicates, `canGrepChapters` and
-`hasLiveWorldState`, read by the tool registration, the prompt template, and the tail split alike.
-
-Each tool is built by its own factory (`createSearchEntriesTool`, `createGrepChaptersTool`, …); what they
-share is a small `RunState` holding the grep result cache and the `query_chapter` counter.
+`hasLiveWorldState`, read by the tool registration and the prompt template alike (`canGrepChapters`
+also gates the recent-tail split).
 
 `grep_chapters` is a **literal substring** search over the raw story text, not a keyword search: a
 multi-word query only matches where those words appear consecutively. It reports per-chapter match counts
@@ -240,22 +245,24 @@ Two properties of that path are worth knowing before tuning it:
   **Only while the wider group fits the budget.** "A subset is answerable from the superset's
   content" holds only if that content is sent whole, and the read above is cut from its highest
   chapter down — so a question about chapter 19 folded into {17,18,19} could be answered from a
-  text that stops inside chapter 18, where alone it would have had the entire budget for chapter 19. `runTimelineFill` therefore passes a predicate: a candidate host whose own chapters exceed
+  text that stops inside chapter 18, where alone it would have had the entire budget for chapter 19.
+  `runTimelineFill` therefore passes a predicate: a candidate host whose own chapters exceed
   `maxChapterTokens` stops absorbing narrower questions. Identical sets still fold either way —
   they get the same truncation whether they share a call or not, and two open-ended questions
   both resolve to every chapter.
 
-- **An unanswered question does not reach the narrator.** `answerQuestionWithContent` returns
-  `confidence: 0` for both give-up paths (a failed call, and no chapters resolved), and
-  `runTimelineFill` drops those responses — otherwise `buildChapterSummariesBlock` writes them into
-  the prompt as `A: Unable to answer the question.` under a heading claiming the material is
-  relevant to the current scene.
+- **An unanswered question does not reach the narrator.** Every give-up path sets `confidence: 0`
+  (a failed call in `answerQuestionWithContent`, no chapters resolved in `answerQuestion`), and
+  `runTimelineFill` drops those responses and skips groups that resolved no chapters — otherwise
+  `buildChapterSummariesBlock` writes them into the prompt as `A: Unable to answer the question.`
+  under a heading claiming the material is relevant to the current scene.
 
 ## Activation Tracking and Stickiness
 
 Both selection services carry an entity forward for a few story positions after it was last
 activated, so context does not vanish the instant its "always include" condition stops holding.
-The fading priority band is shared (`retrieval/stickiness.ts`); the durations per type are not.
+The fading priority band is shared (`retrieval/stickiness.ts`); the durations are not — each
+service has its own, and only the lorebook's vary by type.
 
 The unit is **story positions, not turns** — positions come from `story.entries.length`, and a
 turn appends both an action and a narration, so a duration of N covers roughly N/2 turns. The UI
