@@ -2,6 +2,7 @@ import type { ClassifierExtraction } from '@/lib/classifier'
 import { nameBasis } from '@/lib/world'
 
 import type { Check, EvalWindow } from './fixture'
+import { personWords } from './person'
 
 type ReplyHappening = ClassifierExtraction['happenings'][number]
 
@@ -94,5 +95,15 @@ export const refsResolve = (w: Pick<EvalWindow, 'entities' | 'happenings' | 'thr
       ])
       return referencesOf(r).every((ref) => listed.has(ref) || declared.has(ref))
     },
+  }
+}
+
+/** Avoid, rule: every happening description is told in the third person outside quoted speech. */
+export function toldInThirdPerson(): Check {
+  return {
+    name: 'happening descriptions in the third person',
+    kind: 'avoid',
+    basis: 'rule',
+    holds: (r) => r.happenings.every((h) => personWords(h.description ?? '').length === 0),
   }
 }

@@ -138,7 +138,7 @@ We push off into the fog with the tide under us. Halfway across, the lamp on the
     happenings: [
       {
         title: 'Dace steals the Calder Shoals chart',
-        description: 'Dace picks the archive lock, cuts his palm and takes the chart.',
+        description: 'I pick the archive lock, cut my palm and take the chart.',
         involvements: [{ ref: DACE, role: 'actor' }],
         awareness: [],
         sourceTurn: 't2',

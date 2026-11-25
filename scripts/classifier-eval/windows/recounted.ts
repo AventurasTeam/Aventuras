@@ -181,6 +181,7 @@ Nessa folded the page into her coat. She would take it to the magistrates' court
       },
       {
         title: 'Brannoc tells Nessa the truth of the Marigold',
+        description: 'I tell Nessa how the Marigold was wrecked.',
         involvements: [
           { ref: 'char_brannoc', role: 'actor' },
           { ref: 'char_nessa', role: 'target' },
