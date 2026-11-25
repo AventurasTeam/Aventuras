@@ -19,7 +19,6 @@ import {
 import { toast } from '@/lib/toast'
 
 import type { BranchCreateModalProps } from './branch-create-modal'
-import { switchGateReason } from './switch-result-notice'
 import { useBranchCreate, type BranchCreate, type UseBranchCreateArgs } from './use-branch-create'
 import { useReaderDispatch, type ReaderDispatch } from './use-reader-dispatch'
 
@@ -49,6 +48,7 @@ const ENTRY = 'entry_47'
 const CTX = { db: {}, runInTransaction: expect.any(Function) }
 const COPY = {
   gate: 'Generation is in flight. Cancel to edit.',
+  memoryGate: 'Updating memory. Cancel to edit.',
   closeGate: 'Chapter close in progress. Cancel to edit.',
   swap: 'Unavailable while the embedder switch finishes.',
   unfinishedRun:
@@ -100,7 +100,7 @@ function passRun(): RunState {
     runId: 'run_pass',
     kind: PERIODIC_CLASSIFIER_KIND,
     gateBehavior: 'no-gate',
-    interruptible: null,
+    interruptible: 'pass',
     beforeTurn: false,
     actionId: 'act_pass',
     storyId: STORY,
@@ -120,6 +120,7 @@ function closeRun(): RunState {
     runId: 'run_close',
     kind: CHAPTER_CLOSE_KIND,
     gateBehavior: 'hard-gate',
+    interruptible: 'close',
     actionId: 'act_close',
   }
 }
@@ -452,11 +453,10 @@ describe('useBranchCreate — Create', () => {
     const hook = renderCreate()
     await openModal(hook)
     act(() => generationStore.startRun(passRun()))
-    const line = switchGateReason(generationStore.getTxState(), STORY)
     press(hook, 'Side quest')
     await settle()
     expect(actions.fork).not.toHaveBeenCalled()
-    expect(modal(hook).phase).toStrictEqual(idle(line))
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.memoryGate))
     expect(readerHoldStore.isHeld(BRANCH)).toBe(false)
   })
 
