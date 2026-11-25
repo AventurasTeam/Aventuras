@@ -9,6 +9,8 @@ import {
   isVecFamilyTable,
   packFloat32,
   pipelineRuns,
+  queryRows,
+  SOURCE_TABLES,
   sourceHash,
   stories,
   STORY_SETTINGS_DEFAULTS,
@@ -26,11 +28,16 @@ import {
 } from '@/lib/db/__tests__/two-branch'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
 import { logger } from '@/lib/diagnostics'
-import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
+import {
+  isStorySwapPending,
+  readStorySwapPending,
+  refreshEmbeddingStatus,
+} from '@/lib/embedder-swap'
 import { PER_TURN_KIND, recoverInFlightRuns } from '@/lib/pipeline'
 import {
   branchesStore,
   currentStoryStore,
+  embeddingStatusStore,
   generationStore,
   isBranchHeld,
   readStoryBranches,
@@ -65,6 +72,13 @@ vi.mock('@/lib/embedder-swap', async (importOriginal) => {
   }>()
   return { ...actual, readStorySwapPending: vi.fn(actual.readStorySwapPending) }
 })
+// The stale-row recount reads through the platform bridge, which a test has none of.
+vi.mock('@/lib/db', async (importOriginal) => {
+  const actual = await importOriginal<{
+    queryRows: (sql: string, params: unknown[]) => Promise<unknown[][]>
+  }>()
+  return { ...actual, queryRows: vi.fn(actual.queryRows) }
+})
 
 const STORY: CopyFixture['storyId'] = 's_two'
 // seedCopyFixture's branch: an opening, a user action and a reply, then a system line. B is a copy
@@ -93,6 +107,12 @@ beforeEach(async () => {
   vi.mocked(readStorySwapPending).mockReset()
   t = await createTestDb()
   ctx = { db: t.db, runInTransaction: t.runInTransaction }
+  // Positional value arrays, the bridge's row shape.
+  vi.mocked(queryRows).mockImplementation(async (sql, params) =>
+    (t.sqlite.prepare(sql).all(...(params as never[])) as Record<string, unknown>[]).map((row) =>
+      Object.values(row),
+    ),
+  )
   fx = await seedCopyFixture(t)
   cloneBranch(t.sqlite, A, B)
 })
@@ -454,6 +474,20 @@ async function storeSwapMarker(): Promise<void> {
     .where(eq(stories.id, STORY))
 }
 
+// Settings the recount can parse, and the branch's entities the story's only stale rows.
+async function markStaleOnlyOn(branchId: string): Promise<number> {
+  await t.db.update(stories).set({ settings: STORY_SETTINGS_DEFAULTS }).where(eq(stories.id, STORY))
+  for (const table of Object.values(SOURCE_TABLES))
+    t.sqlite.exec(`UPDATE "${table}" SET embedding_stale = 0`)
+  const { changes } = t.sqlite
+    .prepare('UPDATE entities SET embedding_stale = 1 WHERE branch_id = ?')
+    .run(branchId)
+  return Number(changes)
+}
+
+const staleShownFor = (storyId: string): number =>
+  embeddingStatusStore.staleTotalFor(embeddingStatusStore.getState(), storyId)
+
 // A re-run whose abort's reversal didn't commit holds its branch.
 function hold(branchId: string): void {
   const rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, branchId, 'rerun')
@@ -708,6 +742,31 @@ describe('deleteBranch after its commit', () => {
 
     expect(vi.mocked(refreshBranches)).not.toHaveBeenCalled()
     expect(branchesStore.getBranches(OTHER_STORY)).toBe(held)
+  })
+
+  it("recounts the open story's stale rows without the branch's", async () => {
+    openStory(STORY, C)
+    const staleOnB = await markStaleOnlyOn(B)
+    await refreshEmbeddingStatus(STORY, ctx)
+    expect(staleOnB).toBeGreaterThan(0)
+    expect(staleShownFor(STORY)).toBe(staleOnB)
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(staleShownFor(STORY)).toBe(0)
+  })
+
+  it('leaves the stale count to a story opened while the branch list re-reads', async () => {
+    openStory(STORY, C)
+    await markStaleOnlyOn(B)
+    vi.mocked(refreshBranches).mockImplementationOnce(async () => {
+      openStory(OTHER_STORY, OTHER_BRANCH)
+      embeddingStatusStore.setStatus(OTHER_STORY, 7)
+    })
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(embeddingStatusStore.getState().status).toEqual({ storyId: OTHER_STORY, staleTotal: 7 })
   })
 
   it('logs a refresh that rejects and still returns deleted, its drops made', async () => {

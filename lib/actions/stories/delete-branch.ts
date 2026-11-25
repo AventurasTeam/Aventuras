@@ -3,7 +3,11 @@ import { alias } from 'drizzle-orm/sqlite-core'
 
 import { branches, listVecFamilyTables, stories, storyEntries, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
+import {
+  isStorySwapPending,
+  readStorySwapPending,
+  refreshEmbeddingStatus,
+} from '@/lib/embedder-swap'
 import {
   currentStoryStore,
   generationStore,
@@ -109,6 +113,9 @@ export async function deleteBranch(branchId: string, ctx: DbCtx): Promise<Delete
       // It logs its own read failures; the delete has landed, and a stale row refuses `missing`.
       logger.warn('app.branch_delete_refresh_failed', { storyId, branchId, error: messageOf(err) })
     }
+    // Read again: a story opened during the refresh owns the stale count's single slot.
+    if (currentStoryStore.getCurrentStory()?.storyId === storyId)
+      await refreshEmbeddingStatus(storyId, ctx)
   }
   return { status: 'deleted' }
 }
