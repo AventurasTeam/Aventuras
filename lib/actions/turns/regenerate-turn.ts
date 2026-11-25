@@ -13,6 +13,7 @@ import {
 } from '@/lib/pipeline'
 import { entriesStore, generationStore, rerunHoldsReversal, undoRedoStore } from '@/lib/stores'
 
+import { settleUserWrites } from '../delta/apply-delta-action'
 import {
   DeltaReplayError,
   ReversalIntegrityError,
@@ -194,6 +195,8 @@ export async function regenerateTurn(
         return withPendingTurn(ids.branchId, async (startTurn) => {
           // Before the sweep, on the lead the branch has now, as the reader's gate reads it: a lead
           // set after this reply passes here, the sweep reverses it, and the run goes without one.
+          // The mark keeps new user writes out; a dispatched one lands first, or it reads as no lead.
+          await settleUserWrites()
           if ((await turnLeadOf(ids, ctx)).missing) return LEAD_MISSING_REJECTION
           let swept: Swept
           try {

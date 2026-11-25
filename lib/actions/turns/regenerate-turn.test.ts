@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { idleStatus, PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
@@ -75,6 +75,23 @@ vi.mock('@/lib/retrieval', async (importOriginal) => {
 vi.mock('../embedder-swap/engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
+})
+
+// Lets a test observe the regenerate reaching the settle boundary; the real settle still runs.
+const settleProbe = vi.hoisted(() => ({ onEnter: null as (() => void) | null }))
+vi.mock('../delta/apply-delta-action', async (importOriginal) => {
+  const actual = await importOriginal<
+    Record<string, unknown> & { settleUserWrites: () => Promise<void> }
+  >()
+  return {
+    ...actual,
+    settleUserWrites: () => {
+      const enter = settleProbe.onEnter
+      settleProbe.onEnter = null
+      enter?.()
+      return actual.settleUserWrites()
+    },
+  }
 })
 
 // Seam into one sweep inside the real regenerateTurn flow, to observe sweep order or fail one sweep
@@ -498,6 +515,80 @@ describe('regenerateTurn', () => {
     const reply = branchEntries('b1').sort((a, b) => a.position - b.position)[4]
     expect(reply?.content).toBe('A new take.')
     expect(reply?.metadata?.leadId).toBeUndefined()
+  })
+
+  it('waits for a lead set still writing before judging the lead, refusing nothing for it', async () => {
+    const MIRA = 'char_00000000-0000-4000-8000-000000000002'
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await openStory(db, 's1', 'b1', { lead: false })
+    await db.insert(entities).values({
+      id: MIRA,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Mira',
+      status: 'active',
+      injectionMode: 'auto',
+      state: emptyEntityState('character'),
+      isLead: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    // The set passed its gate before the regenerate and its transaction hasn't opened; the test
+    // opens it once the regenerate is blocked on the settle, the only thing holding its lead read.
+    let dispatched!: () => void
+    const hasDispatched = new Promise<void>((resolve) => {
+      dispatched = resolve
+    })
+    let release!: () => void
+    const released = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // A failed or timed-out test still frees the gated write, or its row lock outlives the test.
+    onTestFinished(() => {
+      settleProbe.onEnter = null
+      release()
+    })
+    const setCtx: typeof ctx = {
+      ...ctx,
+      runInTransaction: async (fn) => {
+        dispatched()
+        await released
+        return ctx.runInTransaction(fn)
+      },
+    }
+    let written = false
+    const setting = setBranchLead('b1', MIRA, setCtx).then((result) => {
+      written = true
+      return result
+    })
+    await hasDispatched
+    let atSettle = false
+    const reachedSettle = new Promise<void>((resolve) => {
+      settleProbe.onEnter = () => {
+        atSettle = true
+        resolve()
+      }
+    })
+
+    const regenerating = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+    // Raced with the regenerate so a dropped settle fails the assertions below instead of hanging.
+    await Promise.race([reachedSettle, regenerating])
+    expect(atSettle).toBe(true)
+    expect(written).toBe(false)
+    release()
+
+    expect(await setting).toEqual({ status: 'ok' })
+    const regen = await regenerating
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
   })
 
   it('cancel mid-regen: aborted outcome also unwinds the standing user action', async () => {
