@@ -305,9 +305,10 @@ change, or a merge could remove the lead.
   unavailable with a line saying so, and Rename and Keep as distinct
   stay. A double, both rows flagged, is the same case until a set
   repairs it. `useCollisionResolve` reads the flag off the pair's own
-  rows and runs the stamp read when it opens the pair. A pair with
-  neither row held keeps today's picker. The wording follows the design
-  pass's `world.md → Merge` where it gives one.
+  rows and runs the stamp read when it opens a pair of characters, the
+  only kind a stamp names. A pair with neither row held keeps today's
+  picker. The wording follows the design pass's `world.md → Merge`
+  where it gives one.
 - **The merge writes no flag.** `entityMergeActions`
   (`lib/world/entity-merge.ts:263-338`) is unchanged: `MERGE_SCALARS` is
   a fixed list without `isLead`, so a lead kept as the canonical keeps
