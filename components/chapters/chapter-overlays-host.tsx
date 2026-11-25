@@ -483,15 +483,15 @@ function RerunConfirmHost({
         if (step.step !== 'forked') afterStart(step)
       })
       .catch((error: unknown) => {
-        // A pending confirm can't be closed, so a throw past the sequence's own catches ends it.
+        // A pending confirm can't be cancelled: clear pending before the log, which can throw too.
+        onStarting(request, false)
+        pendingRef.current = false
+        setPending(false)
         logger.error('app.close_rerun_on_branch_threw', {
           branchId,
           chapterId,
           error: messageOf(error),
         })
-        onStarting(request, false)
-        pendingRef.current = false
-        setPending(false)
       })
   }
 

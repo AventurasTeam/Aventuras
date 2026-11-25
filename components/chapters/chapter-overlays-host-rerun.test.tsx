@@ -932,6 +932,41 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
   })
 
+  describe('with the log of that throw throwing too', () => {
+    // A listener of our own makes vitest leave the expected rejection to the test.
+    const rejections: unknown[] = []
+    const onRejection = (reason: unknown) => {
+      rejections.push(reason)
+    }
+    beforeEach(() => {
+      rejections.length = 0
+      process.on('unhandledRejection', onRejection)
+    })
+    afterEach(() => {
+      process.off('unhandledRejection', onRejection)
+    })
+
+    it('still ends the press first, so Cancel closes the confirm', async () => {
+      vi.spyOn(toast, 'error').mockImplementation(() => {
+        throw new Error('toast broke')
+      })
+      const logBroke = new Error('log broke')
+      vi.spyOn(logger, 'error').mockImplementation((kind) => {
+        if (kind === 'app.close_rerun_on_branch_threw') throw logBroke
+      })
+      actions.check.mockRejectedValue(new Error('disk'))
+      renderHost()
+      openRerun()
+      const props = await confirmShown()
+      act(() => props.onConfirmOnBranch(WITH_TURNS))
+      await waitFor(() => expect(rejections).toEqual([logBroke]))
+      await waitFor(() => expect(confirmView.props?.pending).toBe(false))
+      expect(readerHoldStore.isHeld('br_1')).toBe(false)
+      act(() => confirmView.props?.onCancel())
+      expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+    })
+  })
+
   // A regenerate's follow-up sweep: a turn body with no run or mark, which the check refuses on.
   it("a check refused on the parent's turn body holds the actions until the body settles", async () => {
     vi.spyOn(toast, 'error').mockReturnValue('')
