@@ -310,10 +310,11 @@ Transition rules:
   The chips are derived in the view, not stored: `mergedTerms` of
   the two rows with nothing dropped, so they show in the order the
   merge writes ([Resolution shape](#resolution-shape)).
-- **`reset`** — re-initializes on entity-input change, and when the
-  held row changes, to the new `defaultCanonicalId`. Defensive; in
-  practice the dialog is keyed by entity ids so unmount handles most
-  cases.
+- **`reset`** — re-initializes when the pair's ids change, and when
+  the held row changes, to the new `defaultCanonicalId`. Each open
+  mounts the dialog fresh, since World mounts it only once that
+  open's held read resolves, so in practice the reset fires on a held
+  change while the dialog stands: a lead set or unset under it.
 
 Initial state: `canonicalId` = `defaultCanonicalId` (the held row
 when one row is held, else A), `fromOther` empty, and
