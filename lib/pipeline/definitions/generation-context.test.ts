@@ -2377,3 +2377,199 @@ describe('buildGenerationContext — entity state', () => {
     })
   })
 })
+
+// architecture.md → System and user halves: every history marks where the lead changes, walked
+// from the lead the prompt names; a mark's id is the roster's placeholder, never the raw stamp.
+describe('buildGenerationContext — lead marks', () => {
+  const JORIN = 'char_00000000-0000-4000-8000-0000000000c1'
+  const MARA = 'char_00000000-0000-4000-8000-0000000000c2'
+  const GONE = 'char_00000000-0000-4000-8000-0000000000c9'
+  // keywords and state: the fallback's named-characters read and the entity views walk both.
+  const character = (id: string, name: string, over: object = {}) => ({
+    id,
+    kind: 'character',
+    name,
+    description: null,
+    status: 'active',
+    injectionMode: 'auto',
+    isLead: 0,
+    keywords: [],
+    state: emptyEntityState('character'),
+    ...over,
+  })
+  // The roster numbers Jorin, the lead, c1 and Mara c2.
+  const CAST = [character(JORIN, 'Jorin', { isLead: 1 }), character(MARA, 'Mara\nof the Well')]
+  // Every turn in the buffer and in lastTurns.
+  const WIDE = storySettings({
+    partialChapterBuffer: 10,
+    protectedBuffer: 0,
+    classifierContextEntries: 10,
+  })
+  const FALLBACK = TEMPLATE_IDS.piggybackFallbackClassifier
+
+  /** One turn per stamp, in position order, odd positions replies; undefined leaves it unstamped. */
+  const stampedTurns = (...stamps: (string | undefined)[]): StoryEntry[] =>
+    stamps.map((leadId, i) => ({
+      id: `entry_${i + 1}`,
+      branchId: 'b1',
+      position: i + 1,
+      kind: i % 2 === 0 ? 'ai_reply' : 'user_action',
+      content: `turn ${i + 1}`,
+      contentTokens: null,
+      chapterId: null,
+      metadata: {
+        sceneEntities: [],
+        currentLocationId: null,
+        worldTime: i,
+        ...(leadId === undefined ? {} : { leadId }),
+      },
+      createdAt: i + 1,
+    }))
+
+  /** A turn as the context projects it, with no `leadMark` key. */
+  const projected = (position: number) => ({
+    position,
+    kind: position % 2 === 1 ? 'ai_reply' : 'user_action',
+    content: `turn ${position}`,
+  })
+  const marked = (position: number, leadMark: object) => ({ ...projected(position), leadMark })
+
+  // toStrictEqual throughout: an unmarked turn lacks the key, so it is key for key what it was.
+  it('marks no entry and no last turn when every stamp is the named lead', async () => {
+    const entries = stampedTurns(JORIN, JORIN, JORIN)
+    const narrative = await buildContext({ entities: CAST, entries, settings: WIDE })
+    const fallback = await buildContext({
+      entities: CAST,
+      entries,
+      settings: WIDE,
+      templateId: FALLBACK,
+    })
+
+    expect(narrative.entries).toStrictEqual([projected(1), projected(2), projected(3)])
+    expect(fallback.lastTurns).toStrictEqual([projected(1), projected(2), projected(3)])
+  })
+
+  it("marks each run's first turn with the placeholder the roster gives its lead", async () => {
+    const ctx = await buildContext({
+      entities: CAST,
+      entries: stampedTurns(MARA, MARA, JORIN, JORIN),
+      settings: WIDE,
+    })
+
+    expect(ctx.entries).toStrictEqual([
+      marked(1, { id: 'c2', name: 'Mara of the Well' }),
+      projected(2),
+      marked(3, { id: 'c1', name: 'Jorin' }),
+      projected(4),
+    ])
+    // Walked after the roster, so Mara keeps the number `entities` gives her.
+    expect((ctx.entities as { id: string; name: string }[]).map((e) => [e.id, e.name])).toEqual([
+      ['c1', 'Jorin'],
+      ['c2', 'Mara\nof the Well'],
+    ])
+    expect(ctx.lead).toEqual({ id: 'c1', name: 'Jorin' })
+  })
+
+  it('walks lastTurns on its own, so a window that opens on the named lead carries no mark', async () => {
+    const entries = stampedTurns(MARA, JORIN, JORIN, JORIN)
+    const narrative = await buildContext({ entities: CAST, entries, settings: WIDE })
+    const narrow = await buildContext({
+      entities: CAST,
+      entries,
+      settings: storySettings({ ...WIDE, classifierContextEntries: 3 }),
+      templateId: FALLBACK,
+    })
+
+    expect(narrative.entries).toStrictEqual([
+      marked(1, { id: 'c2', name: 'Mara of the Well' }),
+      marked(2, { id: 'c1', name: 'Jorin' }),
+      projected(3),
+      projected(4),
+    ])
+    expect(narrow.lastTurns).toStrictEqual([projected(2), projected(3), projected(4)])
+  })
+
+  // The fallback splits lastTurns into earlier turns and the action-plus-reply pair; the list is
+  // walked once, so a run reaching into the pair is marked where it starts and not again.
+  it('marks a run that reaches into the action-plus-reply pair once', async () => {
+    const ctx = await buildContext({
+      entities: CAST,
+      entries: stampedTurns(MARA, JORIN, JORIN, JORIN),
+      settings: WIDE,
+      templateId: FALLBACK,
+    })
+
+    expect(ctx.lastTurns).toStrictEqual([
+      marked(1, { id: 'c2', name: 'Mara of the Well' }),
+      marked(2, { id: 'c1', name: 'Jorin' }),
+      projected(3),
+      projected(4),
+    ])
+  })
+
+  it('gives a deleted former lead { gone }, and allocates no placeholder for its id', async () => {
+    const load = await buildLoad({
+      entities: CAST,
+      entries: stampedTurns(GONE, GONE, JORIN),
+      settings: WIDE,
+    })
+
+    expect(load.context.entries).toStrictEqual([
+      marked(1, { gone: true }),
+      projected(2),
+      marked(3, { id: 'c1', name: 'Jorin' }),
+    ])
+    expect(load.idMap.getPlaceholderFor(GONE)).toBeUndefined()
+  })
+
+  it('gives a run written with no lead { none }', async () => {
+    const ctx = await buildContext({
+      entities: CAST,
+      entries: stampedTurns(undefined, JORIN, JORIN),
+      settings: WIDE,
+    })
+
+    expect(ctx.entries).toStrictEqual([
+      marked(1, { none: true }),
+      marked(2, { id: 'c1', name: 'Jorin' }),
+      projected(3),
+    ])
+  })
+
+  // A retired former lead still names a row, so its mark carries the placeholder `entities` gives it.
+  it('marks a retired former lead by its placeholder', async () => {
+    const cast = [
+      character(JORIN, 'Jorin', { isLead: 1 }),
+      character(MARA, 'Mara', { status: 'retired' }),
+    ]
+    const ctx = await buildContext({
+      entities: cast,
+      entries: stampedTurns(MARA, JORIN),
+      settings: WIDE,
+    })
+
+    expect(ctx.entries).toStrictEqual([
+      marked(1, { id: 'c2', name: 'Mara' }),
+      marked(2, { id: 'c1', name: 'Jorin' }),
+    ])
+  })
+
+  // A creative story after Unset: the walk starts from no lead and marks the first stamped run.
+  it('walks from no lead on a branch with none', async () => {
+    const ctx = await buildContext({
+      entities: [character(MARA, 'Mara')],
+      entries: stampedTurns(MARA, MARA),
+      settings: WIDE,
+    })
+
+    expect(ctx.lead).toBeNull()
+    expect(ctx.entries).toStrictEqual([marked(1, { id: 'c1', name: 'Mara' }), projected(2)])
+  })
+
+  it('documents leadMark on entries and lastTurns, and the lead as the flag reads it', () => {
+    const def = (name: string) => VARIABLES.generationContext.find((v) => v.name === name)
+    expect(def('entries')?.infoFields?.map((f) => f.name)).toContain('leadMark')
+    expect(def('lastTurns')?.infoFields?.map((f) => f.name)).toContain('leadMark')
+    expect(def('lead')?.description).not.toContain('dangles')
+  })
+})

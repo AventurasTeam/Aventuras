@@ -26,11 +26,14 @@ import { oneLine } from '@/lib/text'
 import {
   buildEntityViews,
   byName,
+  leadMarks,
+  leadStampOf,
   listedAncestorNames,
   locationMapView,
   resolveLeadLogged,
   type EntityViews,
   type KindedView,
+  type LeadMark,
 } from '@/lib/world'
 
 import { readLastTurns, readSceneSource, storedProseTokens } from './entry-reads'
@@ -312,12 +315,17 @@ function currentTimeOf(
 }
 
 /**
- * Prose, position and kind only: substituting `metadata`'s historical scene rosters would map
- * long-deleted entities, which resolveRef reads as shown to the model. No `id`: `entry_` would leak
- * raw, since it doesn't substitute.
+ * Prose, position, kind and the turn's lead mark only: substituting `metadata`'s historical scene
+ * rosters, or its raw lead stamp, would map long-deleted entities, which resolveRef reads as shown
+ * to the model. No `id`: `entry_` would leak raw, since it doesn't substitute. `leadMark` is set
+ * only on a marked turn, so an unmarked one is key for key what it was.
  */
-function promptEntry(entry: StoryEntry) {
-  return { position: entry.position, kind: entry.kind, content: promptProse(entry) }
+function promptEntry(
+  entry: StoryEntry,
+  leadMark?: LeadMark,
+): { position: number; kind: StoryEntry['kind']; content: string; leadMark?: LeadMark } {
+  const projected = { position: entry.position, kind: entry.kind, content: promptProse(entry) }
+  return leadMark === undefined ? projected : { ...projected, leadMark }
 }
 
 function readRetrievalOutcome(
@@ -495,14 +503,17 @@ export async function buildGenerationContext(
     branchId,
     'generation-context',
   )
+  const nameOf = (id: string): string | undefined => {
+    const row = branchById.get(id)
+    return row?.kind === 'character' ? oneLine(row.name) : undefined
+  }
+  // Each list is walked on its own from the lead the prompt names (architecture.md → System and
+  // user halves). A `{ gone }` or `{ none }` mark carries no id, so it allocates no placeholder.
+  const withLeadMarks = (turns: readonly StoryEntry[]) => {
+    const marks = leadMarks(turns.map(leadStampOf), lead?.id ?? null, nameOf)
+    return turns.map((entry, i) => promptEntry(entry, marks[i]))
+  }
   const context = {
-    // cadence.md → Composition rule: the two-mode window plus its
-    // protectedBuffer spillover is not expressible as a template `| recent: N`.
-    entries: buffer.map(promptEntry),
-    // Read whenever `worldTimeDeltaBasis` is asked for, but exposed only when the
-    // template names it: the read is a means to the basis, not an entitlement to
-    // the rows.
-    lastTurns: reads.has('lastTurns') ? lastTurns.map(promptEntry) : [],
     entities: branchEntities.map((e) => promptEntity(e, views)),
     sceneEntities: scene.sceneEntities,
     currentLocationId: scene.currentLocationId,
@@ -512,6 +523,14 @@ export async function buildGenerationContext(
     // architecture.md → System and user halves: a system half names the lead and never brackets
     // its id, which is allocated per call. After `entities`, so the id numbers as it does there.
     lead: lead == null ? null : { id: lead.id, name: oneLine(lead.name) },
+    // After `entities` too, so a mark's id numbers as the roster does.
+    // cadence.md → Composition rule: the two-mode window plus its
+    // protectedBuffer spillover is not expressible as a template `| recent: N`.
+    entries: withLeadMarks(buffer),
+    // Read whenever `worldTimeDeltaBasis` is asked for, but exposed only when the
+    // template names it: the read is a means to the basis, not an entitlement to
+    // the rows.
+    lastTurns: reads.has('lastTurns') ? withLeadMarks(lastTurns) : [],
     calendarVocabulary: describeCalendarVocabulary(calendar),
     currentTime: currentTimeOf(lastTurns.at(-1), calendar, definition.worldTimeOrigin),
     userSettings: {

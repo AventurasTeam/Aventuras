@@ -88,6 +88,15 @@ const FLOOR_ENTITY_INFO: readonly InfoField[] = ENTITY_FIELDS_INFO.filter(
   (f) => f.name !== 'injectionMode',
 )
 
+// architecture.md → System and user halves: every history marks where the lead changes.
+const GENERATION_LEAD_MARK_INFO: readonly InfoField[] = [
+  field(
+    'leadMark',
+    '{ id, name } | { gone: true } | { none: true }',
+    "Set only on the first turn of a run written under another lead than the turn before it, the list's first turn compared with `lead`; absent on every other turn. `{ id, name }` is that character, `id` its placeholder as `entities` numbers it and `name` on one line; `{ gone }` a character since deleted, which names no row; `{ none }` a run written with no lead. Each list is walked on its own. macro_story_entry prints it on a line before the turn.",
+  ),
+]
+
 // buildGenerationContext must emit these exact names; generation-context.test.ts pins the parity.
 // Entity fields follow the drizzle row (camelCase); `state` is a per-kind view, not the column.
 export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
@@ -97,7 +106,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Render it whole.",
+        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, and `leadMark` on the first turn of each run written under another lead; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry), as they print a `leadMark`. Render it whole.",
+      infoFields: GENERATION_LEAD_MARK_INFO,
       required: true,
     },
     {
@@ -105,7 +115,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it, shaped like `entries`. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it, shaped like `entries`, its `leadMark`s walked over this list on its own. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+      infoFields: GENERATION_LEAD_MARK_INFO,
       required: true,
     },
     {
@@ -217,7 +228,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, name } | null',
       category: 'Entities',
       description:
-        "The story's lead as `entities` lists it, its name on one line. Null when the story has no lead, or its lead dangles on this branch. A system half reads `lead.name` only: the id is a placeholder allocated per call, so it would change the half every call.",
+        "The branch's lead, the character row flagged as it, as `entities` lists it, its name on one line. Null when the branch has no lead; two flagged rows read as none. A system half reads `lead.name` only: the id is a placeholder allocated per call, so it would change the half every call.",
       required: true,
     },
     {
