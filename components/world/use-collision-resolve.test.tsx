@@ -831,7 +831,7 @@ describe('useCollisionResolve → held rows', () => {
     expect(readStampedLeadIds).toHaveBeenCalledTimes(2)
   })
 
-  it('closes the request and toasts when the stamp read fails, never marking held ready', async () => {
+  it('closes the request and toasts when the stamp read fails, held failed and never ready', async () => {
     readStampedLeadIds.mockRejectedValueOnce(new Error('SQLITE_BUSY: database is locked'))
     const statuses: CollisionHeld['status'][] = []
     const { result } = renderHook(() => {
@@ -843,6 +843,7 @@ describe('useCollisionResolve → held rows', () => {
 
     await waitFor(() => expect(result.current.pair).toBeNull())
     expect(result.current.held).toEqual({ status: 'idle' })
+    expect(statuses).toContain('failed')
     expect(statuses).not.toContain('ready')
     expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.error).toHaveBeenCalledWith(HELD_FAILED_TEXT)
