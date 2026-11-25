@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   CHAPTER_CLOSE_KIND,
@@ -28,8 +29,10 @@ import {
   passRefusalOf,
   reportSendThrow,
   pillRunOf,
+  retryStartsTurn,
   sendGapOpen,
   sendRunStreams,
+  settleLeadRefusal,
 } from './send-run'
 
 // Spies that run the real thing, so a test can read either the call or the store it moved.
@@ -498,6 +501,94 @@ describe('leadRefusalOf', () => {
       leadRefusalOf({ ...ran, outcome: 'failed', error: { kind: 'orchestrator', detail: 'x' } }),
     ).toBe(false)
     expect(leadRefusalOf({ ...ran, outcome: 'completed' })).toBe(false)
+  })
+})
+
+describe('settleLeadRefusal', () => {
+  const SENT_TAIL: { content: string; failure: SystemFailureMeta } = {
+    content: 'The pass failed.',
+    failure: {
+      kind: 'pass',
+      pass: 'failed',
+      submission: { content: 'I wait.', composerMode: 'free' },
+    },
+  }
+
+  function harness(over: { stillOnBranch?: boolean; draftEmpty?: boolean } = {}) {
+    const calls: unknown[][] = []
+    const deps = {
+      dropped: SENT_TAIL as typeof SENT_TAIL | null,
+      restoreTail: vi.fn(async (tail: unknown) => {
+        calls.push(['restoreTail', tail])
+      }),
+      stillOnBranch: () => over.stillOnBranch ?? true,
+      draftEmpty: () => over.draftEmpty ?? true,
+      keepSubmission: (submission: unknown) => calls.push(['keepSubmission', submission]),
+      restoreSent: () => calls.push(['restoreSent']),
+      notifyDraftKept: () => calls.push(['notifyDraftKept']),
+      notifyRefused: () => calls.push(['notifyRefused']),
+    }
+    return { calls, deps }
+  }
+
+  it("puts the dropped entry back with its own Retry and the Send's text in the empty composer", async () => {
+    const { calls, deps } = harness()
+    await settleLeadRefusal(deps)
+    expect(calls).toEqual([
+      ['restoreTail', SENT_TAIL],
+      ['keepSubmission', { content: 'I wait.', composerMode: 'free' }],
+      ['restoreSent'],
+      ['notifyRefused'],
+    ])
+  })
+
+  it("keeps a draft the composer holds and says the Send's text wasn't restored", async () => {
+    const { calls, deps } = harness({ draftEmpty: false })
+    await settleLeadRefusal(deps)
+    expect(calls).toEqual([
+      ['restoreTail', SENT_TAIL],
+      ['keepSubmission', { content: 'I wait.', composerMode: 'free' }],
+      ['notifyDraftKept'],
+      ['notifyRefused'],
+    ])
+  })
+
+  it('clears the Retry text when the Send dropped no entry', async () => {
+    const { calls, deps } = harness()
+    await settleLeadRefusal({ ...deps, dropped: null })
+    expect(calls).toEqual([
+      ['restoreTail', null],
+      ['keepSubmission', null],
+      ['restoreSent'],
+      ['notifyRefused'],
+    ])
+  })
+
+  it('puts the entry back and touches nothing else once the user left the branch', async () => {
+    const { calls, deps } = harness({ stillOnBranch: false })
+    await settleLeadRefusal(deps)
+    expect(calls).toEqual([['restoreTail', SENT_TAIL]])
+  })
+})
+
+describe('retryStartsTurn', () => {
+  it("starts a turn from a turn's failure entry", () => {
+    expect(retryStartsTurn({ kind: 'provider' })).toBe(true)
+  })
+
+  it("reruns a failed pass or close's work, not a turn", () => {
+    expect(retryStartsTurn({ kind: 'provider', pass: 'failed' })).toBe(false)
+    expect(retryStartsTurn({ kind: 'provider', close: 'failed' })).toBe(false)
+  })
+
+  it('starts a turn from a held or resolved entry, whose Retry resends the text', () => {
+    expect(retryStartsTurn({ kind: 'provider', pass: 'held' })).toBe(true)
+    expect(retryStartsTurn({ kind: 'provider', pass: 'resolved' })).toBe(true)
+    expect(retryStartsTurn({ kind: 'provider', close: 'resolved' })).toBe(true)
+  })
+
+  it('starts a turn with no failure entry on the branch', () => {
+    expect(retryStartsTurn(undefined)).toBe(true)
   })
 })
 

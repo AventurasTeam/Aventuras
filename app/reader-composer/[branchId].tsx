@@ -95,8 +95,10 @@ import {
   passRefusalOf,
   pillRunOf,
   reportSendThrow,
+  retryStartsTurn,
   sendGapOpen,
   sendRunStreams,
+  settleLeadRefusal,
   type PassRefusal,
 } from '@/components/reader/send-run'
 import {
@@ -999,15 +1001,17 @@ function ReaderComposerBody({
             }),
           )
         } else if (leadRefusalOf(result)) {
-          // Refused before any write (principles.md → Composer mode): the entry the Send dropped goes
-          // back with its own Retry, and the text to an empty composer, as a Cancel before the turn.
-          await restoreSystemTail(dropped)
-          if (branchUnchanged(branchId)) {
-            setLastSubmission(dropped?.failure?.submission ?? null)
-            if (isDraftEmpty(composerRef.current?.getDraft())) restoreSent()
+          await settleLeadRefusal({
+            dropped,
+            restoreTail: restoreSystemTail,
+            stillOnBranch: () => branchUnchanged(branchId),
+            draftEmpty: () => isDraftEmpty(composerRef.current?.getDraft()),
+            keepSubmission: (kept) => setLastSubmission(kept ?? null),
+            restoreSent,
+            notifyDraftKept: () => toast.info(t('reader:leadRefusedDraftKept')),
             // The action's read and this reader's store disagree, so the reason line may not show.
-            toast.error(t('reader:composerLeadMissing'))
-          }
+            notifyRefused: () => toast.error(t('reader:composerLeadMissing')),
+          })
         } else if (result.outcome === 'rejected')
           await showTurnFailure(
             {
@@ -1373,23 +1377,22 @@ function ReaderComposerBody({
   const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
     systemFailure,
     () => {
+      if (retryStartsTurn(systemFailure)) {
+        const submission = lastSubmission ?? systemFailure?.submission
+        if (submission) void runSubmit(submission.content, submission.composerMode)
+        return
+      }
       // A pass-failure entry's Retry runs the pass alone (classifier.md → Failure policy).
-      if (systemFailure?.pass === 'failed') {
+      if (systemFailure?.pass === 'failed')
         runAction(retryPass(), {
           event: 'reader.pass_retry_failed',
           toastMessage: t('reader:passRetryFinishFailed'),
         })
-        return
-      }
-      if (systemFailure?.close === 'failed') {
+      else
         runAction(retryClose(), {
           event: 'reader.close_retry_failed',
           toastMessage: t('reader:closeRetryFinishFailed'),
         })
-        return
-      }
-      const submission = lastSubmission ?? systemFailure?.submission
-      if (submission) void runSubmit(submission.content, submission.composerMode)
     },
     storyId,
     guardLeave,
@@ -1958,8 +1961,7 @@ function ReaderComposerBody({
     gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
     stampedReversalsHeld: rerunRunning,
     turnStartReason: leadMissingReason,
-    // One Retry serves every failure entry: a pass's or a close's reruns that work, not a turn.
-    systemRetryStartsTurn: systemFailure?.pass !== 'failed' && systemFailure?.close !== 'failed',
+    systemRetryStartsTurn: retryStartsTurn(systemFailure),
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     cutOffFixLabel: cutOffFix?.label,

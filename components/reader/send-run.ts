@@ -1,4 +1,5 @@
 import { LEAD_MISSING, type SubmitTurnResult } from '@/lib/actions'
+import type { SystemFailureMeta } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   CLASSIFIER_HELD,
@@ -120,10 +121,37 @@ export function closeRefusalOf(result: SubmitTurnResult): { error: PipelineError
   return null
 }
 
-/** A Send refused because the branch needs a lead and has none: the reader puts the tail and
- * the draft back and writes no failure entry. */
+/** A Send refused because the branch needs a lead and has none: settleLeadRefusal's to settle. */
 export function leadRefusalOf(result: SubmitTurnResult): boolean {
   return result.outcome === 'rejected' && result.blockedBy === LEAD_MISSING
+}
+
+/**
+ * Refused before any write (principles.md → Composer mode), so it writes no failure entry: the
+ * entry the Send dropped goes back with its own Retry, and the text to an empty composer, as a
+ * Cancel before the turn. A draft the composer holds wins, and the user hears the text stayed out.
+ */
+export async function settleLeadRefusal<Tail extends { failure?: SystemFailureMeta } | null>(deps: {
+  dropped: Tail
+  restoreTail: (tail: Tail) => Promise<void>
+  stillOnBranch: () => boolean
+  draftEmpty: () => boolean
+  keepSubmission: (submission: SystemFailureMeta['submission'] | null) => void
+  restoreSent: () => void
+  notifyDraftKept: () => void
+  notifyRefused: () => void
+}): Promise<void> {
+  await deps.restoreTail(deps.dropped)
+  if (!deps.stillOnBranch()) return
+  deps.keepSubmission(deps.dropped?.failure?.submission ?? null)
+  if (deps.draftEmpty()) deps.restoreSent()
+  else deps.notifyDraftKept()
+  deps.notifyRefused()
+}
+
+/** Whether the system entry's Retry starts a turn: a failed pass's or close's reruns that work. */
+export function retryStartsTurn(failure: SystemFailureMeta | undefined): boolean {
+  return failure?.pass !== 'failed' && failure?.close !== 'failed'
 }
 
 /**
