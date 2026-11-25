@@ -510,6 +510,19 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
     await home.openStory(app.window, 'The Veilstone Courier').click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
     const branchId = await currentBranchId(app.window, 'story_hero')
+    // The harness stamps each filler with the branch's lead, as a turn would: Kael, as seeded.
+    const [[kael]] = await queryApp(
+      app.window,
+      `SELECT id FROM entities WHERE branch_id = ? AND name = 'Kael'`,
+      [branchId],
+    )
+    const fillerLeads = await queryApp(
+      app.window,
+      `SELECT json_extract(metadata, '$.leadId'), count(*) FROM story_entries
+        WHERE branch_id = ? AND id LIKE 'e2e_filler_%' GROUP BY 1`,
+      [branchId],
+    )
+    expect(fillerLeads.map(([lead, n]) => [lead, Number(n)])).toEqual([[kael, 80]])
     const watermark = async () =>
       (
         await queryApp(

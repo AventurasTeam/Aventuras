@@ -64,6 +64,10 @@ function chapterListCopy(numbers: readonly number[]): string {
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
   send: (page: Page): Locator => page.getByRole('button', { name: t('reader:send') }),
+  // The composer's lead-missing reason line (composer.tsx). The composer's box scopes it: a gated
+  // ↻ takes the same copy as its accessible name.
+  leadMissingLine: (page: Page): Locator =>
+    page.getByTestId('composer').getByText(t('reader:composerLeadMissing'), { exact: true }),
   // Send swaps to Cancel mid-run, and the memory banner's Cancel shares the name, so the
   // composer's box scopes it (docs/testing.md → Tier 3).
   cancel: (page: Page): Locator =>
