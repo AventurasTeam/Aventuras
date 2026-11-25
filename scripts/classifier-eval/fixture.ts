@@ -28,7 +28,8 @@ export type Check = {
 export type EvalWindow = {
   name: string
   about: string
-  /** The branch's lead: its row carries the flag, and `entries()` stamps every turn with it. */
+  /** The branch's lead: its row carries the flag, and `entries()` stamps every turn that names no
+   *  lead of its own with it. */
   lead?: string
   /** The story's mode; adventure when left out. */
   mode?: StoryMode
@@ -179,23 +180,33 @@ export const relationship = (
   updatedAt: AT,
 })
 
-type Turn = { kind: 'user_action' | 'ai_reply'; prose: string; scene?: string[]; location?: string }
+type Turn = {
+  kind: 'user_action' | 'ai_reply'
+  prose: string
+  scene?: string[]
+  location?: string
+  /** Stamps this turn with another lead than the window's (a switch); left out, the window's. */
+  lead?: string
+}
 
-export const action = (prose: string, scene?: Pick<Turn, 'scene' | 'location'>): Turn => ({
+export const action = (prose: string, scene?: Pick<Turn, 'scene' | 'location' | 'lead'>): Turn => ({
   kind: 'user_action',
   prose,
   ...scene,
 })
 
-export const narration = (prose: string, scene?: Pick<Turn, 'scene' | 'location'>): Turn => ({
+export const narration = (
+  prose: string,
+  scene?: Pick<Turn, 'scene' | 'location' | 'lead'>,
+): Turn => ({
   kind: 'ai_reply',
   prose,
   ...scene,
 })
 
 /**
- * Entries from position 1: each turn's scene defaults to the window's, each stamped with `lead`;
- * ids follow the window's row scheme.
+ * Entries from position 1: each turn's scene defaults to the window's, and each is stamped with its
+ * own lead or else `lead`, unstamped when it has neither; ids follow the window's row scheme.
  */
 export function entries(
   window: string,
@@ -203,20 +214,23 @@ export function entries(
   turns: readonly Turn[],
   lead: string | undefined,
 ): StoryEntry[] {
-  return turns.map((turn, i) => ({
-    id: `entry_${window}_${i + 1}`,
-    branchId: BRANCH,
-    position: i + 1,
-    kind: turn.kind,
-    content: turn.prose,
-    contentTokens: null,
-    chapterId: null,
-    metadata: entryMetadataSchema.parse({
-      sceneEntities: turn.scene ?? scene.scene,
-      currentLocationId: turn.location ?? scene.location ?? null,
-      worldTime: i + 1,
-      ...(lead !== undefined ? { leadId: lead } : {}),
-    }),
-    createdAt: AT + i,
-  }))
+  return turns.map((turn, i) => {
+    const stamp = turn.lead ?? lead
+    return {
+      id: `entry_${window}_${i + 1}`,
+      branchId: BRANCH,
+      position: i + 1,
+      kind: turn.kind,
+      content: turn.prose,
+      contentTokens: null,
+      chapterId: null,
+      metadata: entryMetadataSchema.parse({
+        sceneEntities: turn.scene ?? scene.scene,
+        currentLocationId: turn.location ?? scene.location ?? null,
+        worldTime: i + 1,
+        ...(stamp !== undefined ? { leadId: stamp } : {}),
+      }),
+      createdAt: AT + i,
+    }
+  })
 }

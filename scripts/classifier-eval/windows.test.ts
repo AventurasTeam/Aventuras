@@ -23,11 +23,10 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     expect(failing('avoid', w.bad, true)).toEqual([])
   })
 
-  it('flags its lead and stamps every turn with it, or flags and stamps nothing', () => {
+  it('flags its lead, or nothing', () => {
     expect(w.entities.filter((e) => e.isLead === 1).map((e) => e.id)).toEqual(
       w.lead == null ? [] : [w.lead],
     )
-    expect(w.entries.map((e) => e.metadata?.leadId)).toEqual(w.entries.map(() => w.lead))
   })
 
   it('fails no check on a blank-named new character, which the planner never creates', () => {
@@ -71,6 +70,28 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     const { reply: back } = read(schema.parse(bracketed))
     expect(back).toEqual(w.ideal)
   })
+})
+
+// Every window but the switch is written under one lead, or none.
+describe.each(EVAL_WINDOWS.filter((w) => w.name !== 'switch').map((w) => [w.name, w] as const))(
+  'eval window %s, written under one lead or none',
+  (_, w) => {
+    it('stamps every turn with its lead, or stamps nothing', () => {
+      expect(w.entries.map((e) => e.metadata?.leadId)).toEqual(w.entries.map(() => w.lead))
+    })
+  },
+)
+
+it('the switch window stamps its first two turns with Wenna, its last two with Dace, and flags Dace alone', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  expect(w.lead).toBe('char_dace')
+  expect(w.entities.filter((e) => e.isLead === 1).map((e) => e.id)).toEqual(['char_dace'])
+  expect(w.entries.map((e) => e.metadata?.leadId)).toEqual([
+    'char_wenna',
+    'char_wenna',
+    'char_dace',
+    'char_dace',
+  ])
 })
 
 it('the ambush window leads with Tobin on all four turns; the direction window has no lead', () => {

@@ -7,6 +7,7 @@ import { learning } from './windows/learning'
 import { namedrops } from './windows/namedrops'
 import { recounted } from './windows/recounted'
 import { reveal } from './windows/reveal'
+import { switchWindow } from './windows/switch'
 
 export type { Check, EvalWindow } from './fixture'
 export { renderWindow } from './render'
@@ -22,4 +23,5 @@ export const EVAL_WINDOWS: readonly EvalWindow[] = [
   learning,
   namedrops,
   direction,
+  switchWindow,
 ].map((w) => ({ ...w, checks: [...w.checks, refsResolve(w)] }))
