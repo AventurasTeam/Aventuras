@@ -768,3 +768,22 @@ slice-planning gate forces its resolution before that slice is planned.
   `SearchableOverlayList`. The fix is app-wide, the button or the
   dialog swallowing a keyboard press's repeats, so it waits for an
   owner. Found by Slice 6.6's slice review (2026-11-26).
+
+- **Eighteen test files each define the same `deferred<T>()`
+  helper.** A promise with its `resolve` and `reject` exposed, written
+  out per file (`grep -rln 'function deferred<' components lib hooks`):
+  the two new hook tests of Slice 6.6 (`use-branch-delete-confirm`,
+  `use-story-duplicate`) and sixteen older ones. One shared test util
+  would serve them all; it needs a home the unit project's files can
+  import, and moving it edits files across the tree. Found by Slice
+  6.6's slice review (2026-11-26).
+
+- **Five dialogs write out the same inline status and alert lines.**
+  The blocked or refused line (`role="status"`) and the failed line
+  (`role="alert"`, `accessibilityLiveRegion="assertive"`, `text-danger`)
+  repeat in `branch-delete-confirm.tsx`, `duplicate-story-dialog.tsx`,
+  `branch-create-modal.tsx`, `scene-edit-form.tsx` and
+  `world-time-edit-form.tsx`. A shared compound in
+  `components/compounds/` would keep their roles and live regions in
+  step; it touches files outside any one slice. Found by Slice 6.6's
+  slice review (2026-11-26).
