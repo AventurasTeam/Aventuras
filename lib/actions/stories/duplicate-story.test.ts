@@ -237,7 +237,7 @@ describe('checkStoryDuplicate', () => {
   })
 
   it.each([
-    ['its story', { storyId: STORY, branchId: A }, { branchId: B }],
+    ['its story', { storyId: STORY, branchId: 'br_gone' }, { branchId: B }],
     ['its branch alone', { storyId: null, branchId: B }, { branchId: A }],
   ] as const)(
     'refuses a run registered on any branch of the story, matched by %s',
