@@ -128,6 +128,13 @@ export {
 } from './stories/create-story'
 export { deleteStory } from './stories/delete-story'
 export {
+  countBranchOnlyEntries,
+  deleteBranch,
+  DELETE_BRANCH_REFUSAL,
+  type DeleteBranchRefusalCode,
+  type DeleteBranchResult,
+} from './stories/delete-branch'
+export {
   declineEmbeddingUpgrade,
   type DeclineEmbeddingUpgradeFn,
 } from './stories/embedding-upgrade'

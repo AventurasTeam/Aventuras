@@ -1,7 +1,17 @@
 import { and, count, eq, inArray, ne, notExists, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 
-import { branches, listVecFamilyTables, storyEntries, type SqlOp } from '@/lib/db'
+import { branches, listVecFamilyTables, stories, storyEntries, type SqlOp } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
+import {
+  currentStoryStore,
+  generationStore,
+  isUserEditBlocked,
+  refreshBranches,
+  undoRedoStore,
+} from '@/lib/stores'
+import { messageOf } from '@/lib/thrown'
 
 import type { DbCtx } from '../types'
 import { branchRowDeleteOps } from './delete-story'
@@ -58,17 +68,41 @@ const refused = (code: DeleteBranchRefusalCode): DeleteBranchResult => ({
 /** data-model.md → Branch model, Deleting a branch. Writes no delta, takes no lock, evicts nothing. */
 export async function deleteBranch(branchId: string, ctx: DbCtx): Promise<DeleteBranchResult> {
   const [branch] = await ctx.db
-    .select({ storyId: branches.storyId })
+    .select({ storyId: branches.storyId, currentBranchId: stories.currentBranchId })
     .from(branches)
+    .innerJoin(stories, eq(stories.id, branches.storyId))
     .where(eq(branches.id, branchId))
   if (!branch) return refused(DELETE_BRANCH_REFUSAL.missing)
+  const { storyId } = branch
   const vecTables = await listVecFamilyTables(ctx.db)
+  // The marker as stored, for any story: the in-memory read below sees only the open story's.
+  const swapStored = await readStorySwapPending(ctx.db, storyId)
+
+  // No await from here to the batch's post, so nothing registers between a check and the write.
+  const openBranchId = currentStoryStore.getCurrentStory()?.branchId
+  if (branchId === branch.currentBranchId || branchId === openBranchId)
+    return refused(DELETE_BRANCH_REFUSAL.current)
+  // No branch: a hold, on this branch or the open one, refuses nothing.
+  if (isUserEditBlocked(generationStore.getTxState())) return refused(DELETE_BRANCH_REFUSAL.gated)
+  // Read again in memory: a swap admitted during the reads above is in flight by now.
+  if (swapStored || isStorySwapPending(storyId)) return refused(DELETE_BRANCH_REFUSAL.swapPending)
 
   await ctx.runInTransaction([
     ...branchRowDeleteOps(ctx.db, [branchId], vecTables),
     reparentChildrenOp(ctx.db, branchId),
     ctx.db.delete(branches).where(eq(branches.id, branchId)).toSQL(),
   ])
+  generationStore.dropBranchRecords(branchId)
+  undoRedoStore.drop(branchId)
+  // A refresh replaces the store's story, so only the open story's list re-reads.
+  if (currentStoryStore.getCurrentStory()?.storyId === storyId) {
+    try {
+      await refreshBranches(ctx.db, storyId)
+    } catch (err) {
+      // It logs its own read failures; the delete has landed, and a stale row refuses `missing`.
+      logger.warn('app.branch_delete_refresh_failed', { storyId, branchId, error: messageOf(err) })
+    }
+  }
   return { status: 'deleted' }
 }
 

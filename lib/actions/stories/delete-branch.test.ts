@@ -1,7 +1,8 @@
-import { getTableName } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { eq, getTableName } from 'drizzle-orm'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   branches,
   ensureVecTablesSql,
@@ -10,6 +11,8 @@ import {
   pipelineRuns,
   sourceHash,
   stories,
+  STORY_SETTINGS_DEFAULTS,
+  storyDefinitionSchema,
   storyEntries,
   type DbCtx,
 } from '@/lib/db'
@@ -22,13 +25,46 @@ import {
   type TestDb,
 } from '@/lib/db/__tests__/two-branch'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
+import { logger } from '@/lib/diagnostics'
+import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
 import { PER_TURN_KIND, recoverInFlightRuns } from '@/lib/pipeline'
-import { resetAllStores } from '@/lib/stores'
+import {
+  branchesStore,
+  currentStoryStore,
+  generationStore,
+  isBranchHeld,
+  readStoryBranches,
+  refreshBranches,
+  resetAllStores,
+  undoRedoStore,
+} from '@/lib/stores'
 
-import { countBranchOnlyEntries, deleteBranch } from './delete-branch'
+import {
+  countBranchOnlyEntries,
+  deleteBranch,
+  type DeleteBranchRefusalCode,
+  type DeleteBranchResult,
+} from './delete-branch'
 import { BRANCH_SCOPED, branchRowDeleteOps } from './delete-story'
+import { __redoGroupForTest } from '../delta/redo'
 import { readUnfinishedRuns } from '../delta/unfinished-runs'
 import { writeSystemEntry } from '../story-entries/system-entry'
+import { registerStoreOnlyRun } from '../turns/__tests__/stand-in-pass'
+
+// Call-through spies: a test can reject the branch-list refresh, or act during the swap read, the
+// last await before the batch.
+vi.mock('@/lib/stores', async (importOriginal) => {
+  const actual = await importOriginal<{
+    refreshBranches: (db: DbCtx['db'], storyId: string) => Promise<void>
+  }>()
+  return { ...actual, refreshBranches: vi.fn(actual.refreshBranches) }
+})
+vi.mock('@/lib/embedder-swap', async (importOriginal) => {
+  const actual = await importOriginal<{
+    readStorySwapPending: (db: DbCtx['db'], storyId: string) => Promise<boolean>
+  }>()
+  return { ...actual, readStorySwapPending: vi.fn(actual.readStorySwapPending) }
+})
 
 const STORY: CopyFixture['storyId'] = 's_two'
 // seedCopyFixture's branch: an opening, a user action and a reply, then a system line. B is a copy
@@ -52,10 +88,17 @@ let fx: CopyFixture
 
 beforeEach(async () => {
   resetAllStores()
+  // mockReset puts back the call-through each vi.fn was built with, and drops a leftover Once.
+  vi.mocked(refreshBranches).mockReset()
+  vi.mocked(readStorySwapPending).mockReset()
   t = await createTestDb()
   ctx = { db: t.db, runInTransaction: t.runInTransaction }
   fx = await seedCopyFixture(t)
   cloneBranch(t.sqlite, A, B)
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 // Two entries of B's own after the history it shares with A, then a system line of its own:
@@ -372,5 +415,294 @@ describe('deleteBranch', () => {
 
     expect(await recoverInFlightRuns(ctx)).toEqual({ reversed: [], failures: [] })
     expect(stateOf(A)).toEqual(before)
+  })
+})
+
+const DEFINITION = storyDefinitionSchema.parse({
+  mode: 'adventure',
+  narration: 'first',
+  genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+  tone: { label: 'Wry', promptBody: 'wry' },
+  setting: 'A ford on a river in spate.',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+})
+
+type Records = { deferred: boolean; pendingClose: boolean; pendingRerun: boolean; held: boolean }
+const ALL_RECORDS: Records = { deferred: true, pendingClose: true, pendingRerun: true, held: true }
+const NO_RECORDS: Records = {
+  deferred: false,
+  pendingClose: false,
+  pendingRerun: false,
+  held: false,
+}
+
+function openStory(storyId: string, branchId: string): void {
+  currentStoryStore.open({
+    storyId,
+    branchId,
+    definition: DEFINITION,
+    settings: STORY_SETTINGS_DEFAULTS,
+  })
+}
+
+// The marker a swap leaves on the story's row; no store holds it until the story is opened.
+async function storeSwapMarker(): Promise<void> {
+  await t.db
+    .update(stories)
+    .set({ settings: { ...STORY_SETTINGS_DEFAULTS, embedding_swap_target: 'next-embedder' } })
+    .where(eq(stories.id, STORY))
+}
+
+// A re-run whose abort's reversal didn't commit holds its branch.
+function hold(branchId: string): void {
+  const rerun = registerStoreOnlyRun(CHAPTER_CLOSE_KIND, branchId, 'rerun')
+  generationStore.abortRun(rerun.runId, 'failed', { unreversed: true })
+  expect(isBranchHeld(generationStore.getTxState(), branchId)).toBe(true)
+}
+
+// One of each record a branch can hold: a hold, a deferred pass, a close pick and a re-run.
+function seedRecords(branchId: string): void {
+  hold(branchId)
+  const pass = registerStoreOnlyRun(PERIODIC_CLASSIFIER_KIND, branchId, 'pass')
+  generationStore.abortRun(pass.runId, 'aborted')
+  generationStore.setPendingClose(branchId, { endEntryId: `ent_${branchId}_end` })
+  generationStore.setPendingRerun(branchId, { chapterId: `chap_${branchId}` })
+}
+
+function recordsOf(branchId: string): Records {
+  const tx = generationStore.getTxState()
+  return {
+    deferred: tx.deferred.has(branchId),
+    pendingClose: tx.pendingClose.has(branchId),
+    pendingRerun: tx.pendingRerun.has(branchId),
+    held: tx.heldBranches.has(branchId),
+  }
+}
+
+const rowJson = (row: Record<string, unknown>): string =>
+  JSON.stringify(row, (_key, value: unknown) =>
+    value instanceof Uint8Array
+      ? Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join('')
+      : value,
+  )
+
+// Every ordinary table's rows as sorted JSON. vec0's shadow tables hold its vectors, so they stand
+// in for the virtual tables.
+function dbState(): Record<string, string[]> {
+  const tables = t.sqlite
+    .prepare("SELECT name, sql AS ddl FROM sqlite_master WHERE type = 'table' ORDER BY name")
+    .all() as { name: string; ddl: string }[]
+  const state: Record<string, string[]> = {}
+  for (const { name, ddl } of tables) {
+    if (/^CREATE VIRTUAL TABLE/i.test(ddl)) continue
+    const rows = t.sqlite.prepare(`SELECT * FROM "${name}"`).all() as Record<string, unknown>[]
+    state[name] = rows.map(rowJson).sort()
+  }
+  return state
+}
+
+// A refusal writes nothing and drops nothing: every table as it was, the branch's redo kept.
+async function expectRefused(
+  code: DeleteBranchRefusalCode,
+  branchId: string,
+  run: () => Promise<DeleteBranchResult> = () => deleteBranch(branchId, ctx),
+): Promise<void> {
+  undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId))
+  const before = dbState()
+
+  expect(await run()).toEqual({ status: 'rejected', code })
+
+  expect(dbState(), 'the database').toEqual(before)
+  expect(undoRedoStore.hasRedo(branchId), "the branch's redo stack").toBe(true)
+}
+
+describe('deleteBranch refusals', () => {
+  beforeEach(async () => {
+    await seedTree()
+  })
+
+  it("refuses the story's current branch", async () => {
+    expect(currentBranchOf(STORY)).toBe(C)
+
+    await expectRefused('current', C)
+  })
+
+  it("refuses the open branch when the story's pointer names another", async () => {
+    openStory(STORY, B)
+    expect(currentBranchOf(STORY)).toBe(C)
+
+    await expectRefused('current', B)
+  })
+
+  it('refuses a branch that does not exist', async () => {
+    await expectRefused('missing', 'br_gone')
+  })
+
+  it('refuses while a hard-gate run holds another story', async () => {
+    registerStoreOnlyRun(PER_TURN_KIND, 'br_elsewhere')
+
+    await expectRefused('gated', B)
+  })
+
+  it('refuses while a turn is pending on another branch', async () => {
+    await expectRefused('gated', B, () =>
+      generationStore.bracketPendingTurn('br_elsewhere', () => deleteBranch(B, ctx)),
+    )
+  })
+
+  it('refuses while a prose reversal is in progress', async () => {
+    generationStore.setReversalInProgress(true)
+
+    await expectRefused('gated', B)
+  })
+
+  it('refuses a run that registers while its reads are in flight', async () => {
+    vi.mocked(readStorySwapPending).mockImplementationOnce(async () => {
+      registerStoreOnlyRun(PER_TURN_KIND, 'br_elsewhere')
+      return false
+    })
+
+    await expectRefused('gated', B)
+  })
+
+  it('refuses on a swap marker stored on the story while another story is open', async () => {
+    await storeSwapMarker()
+    openStory(OTHER_STORY, OTHER_BRANCH)
+    expect(isStorySwapPending(STORY)).toBe(false)
+
+    await expectRefused('swap-pending', B)
+  })
+
+  it('refuses on a swap marker stored on the story with no story open', async () => {
+    await storeSwapMarker()
+
+    await expectRefused('swap-pending', B)
+  })
+
+  it('refuses a swap that turns pending on the open story while its reads are in flight', async () => {
+    openStory(STORY, C)
+    vi.mocked(readStorySwapPending).mockImplementationOnce(async () => {
+      const open = currentStoryStore.getCurrentStory()!
+      currentStoryStore.set({
+        ...open,
+        settings: { ...open.settings, embedding_swap_target: 'next-embedder' },
+      })
+      return false
+    })
+
+    await expectRefused('swap-pending', B)
+  })
+})
+
+describe('deleteBranch and held branches', () => {
+  beforeEach(async () => {
+    await seedTree()
+  })
+
+  it('deletes another branch while the current branch is held', async () => {
+    openStory(STORY, C)
+    hold(C)
+    // The store's convenience read counts the open branch's hold, so it would refuse here.
+    expect(generationStore.isUserEditBlocked()).toBe(true)
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(branchRow(B)).toBeUndefined()
+    expect(isBranchHeld(generationStore.getTxState(), C)).toBe(true)
+  })
+
+  it('deletes a held branch and drops its hold', async () => {
+    hold(B)
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(branchRow(B)).toBeUndefined()
+    expect(isBranchHeld(generationStore.getTxState(), B)).toBe(false)
+  })
+})
+
+describe('deleteBranch after its commit', () => {
+  beforeEach(async () => {
+    await seedTree()
+  })
+
+  it("drops the branch's four records and its redo stack, and keeps another branch's", async () => {
+    for (const branchId of [A, B]) {
+      seedRecords(branchId)
+      undoRedoStore.pushRedoGroup(__redoGroupForTest(branchId))
+    }
+    expect(recordsOf(B)).toEqual(ALL_RECORDS)
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(recordsOf(B)).toEqual(NO_RECORDS)
+    expect(undoRedoStore.hasRedo(B)).toBe(false)
+    expect(recordsOf(A)).toEqual(ALL_RECORDS)
+    expect(undoRedoStore.hasRedo(A)).toBe(true)
+  })
+
+  it('keeps every record and the redo stack when the batch fails', async () => {
+    seedRecords(B)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(B))
+    const failing: DbCtx = {
+      db: ctx.db,
+      runInTransaction: () => Promise.reject(new Error('write failed')),
+    }
+
+    await expect(deleteBranch(B, failing)).rejects.toThrow('write failed')
+
+    expect(recordsOf(B)).toEqual(ALL_RECORDS)
+    expect(undoRedoStore.hasRedo(B)).toBe(true)
+    expect(branchRow(B)).toBeDefined()
+  })
+
+  it("re-reads the open story's branch list without the branch", async () => {
+    openStory(STORY, C)
+    branchesStore.hydrate(STORY, await readStoryBranches(ctx.db, STORY))
+    expect(branchesStore.getBranches(STORY).map(({ id }) => id)).toEqual([A, B, C])
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(branchesStore.getBranches(STORY).map(({ id }) => id)).toEqual([A, C])
+  })
+
+  it('leaves the branch list alone while another story is open', async () => {
+    openStory(OTHER_STORY, OTHER_BRANCH)
+    const held = [
+      { id: OTHER_BRANCH, name: 'main', parentBranchId: null, forkEntryId: null, createdAt: AT },
+    ]
+    branchesStore.hydrate(OTHER_STORY, held)
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(vi.mocked(refreshBranches)).not.toHaveBeenCalled()
+    expect(branchesStore.getBranches(OTHER_STORY)).toBe(held)
+  })
+
+  it('logs a refresh that rejects and still returns deleted, its drops made', async () => {
+    openStory(STORY, C)
+    seedRecords(B)
+    undoRedoStore.pushRedoGroup(__redoGroupForTest(B))
+    vi.mocked(refreshBranches).mockRejectedValueOnce(new Error('disk gone'))
+    const warn = vi.spyOn(logger, 'warn')
+
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(vi.mocked(refreshBranches)).toHaveBeenCalledWith(ctx.db, STORY)
+    expect(warn).toHaveBeenCalledWith('app.branch_delete_refresh_failed', {
+      storyId: STORY,
+      branchId: B,
+      error: 'disk gone',
+    })
+    expect(recordsOf(B)).toEqual(NO_RECORDS)
+    expect(undoRedoStore.hasRedo(B)).toBe(false)
+  })
+
+  it('refuses a branch already gone, as a stale navigator row would, writing nothing', async () => {
+    expect(await deleteBranch(B, ctx)).toEqual({ status: 'deleted' })
+
+    expect(await countBranchOnlyEntries(B, ctx)).toBe(0)
+    await expectRefused('missing', B)
   })
 })
