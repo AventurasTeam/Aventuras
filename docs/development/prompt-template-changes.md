@@ -5,10 +5,12 @@ Templates live in `src/lib/services/prompts/templates/*.ts`: `content` is the Sy
 ones and custom or imported packs never do, so a template change needs instructions for applying
 it by hand.
 
-On startup `backfillMissingTemplates` inserts any template id a pack lacks, so a new template
-needs none. A User part added to an existing template does, since the user may have written their
-own. So does a change to what a service passes to `ctx.add(…)` for a template: a variable added,
-renamed or removed, or its contents moved into another.
+On startup `backfillMissingTemplates` inserts any template id a pack lacks, including the
+`<id>-user` row for a User part added to an existing template, so neither needs instructions on its
+own. It never overwrites, so a User part added alongside an edit to the System part (text moved
+from one to the other) still needs instructions for the System edit. So does a change to what a
+service passes to `ctx.add(…)` for a template: a variable added, renamed or removed, or its
+contents moved into another.
 
 A PR that needs them gets `## Updating your prompt pack` directly after `## Summary`:
 
