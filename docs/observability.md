@@ -578,10 +578,13 @@ convention, and the expectation that subsystems route through
   the fork threw and wrote nothing, with `branchId`, `entryId` and
   `error`; the modal shows the failed line), `branch_create_refused`
   (warn: the fork refused for a reason the modal has no line of its own
-  for, with `branchId`, `entryId` and the `code`),
-  `branch_create_not_opened` (warn: the fork committed but the story's
-  screens couldn't be replaced, so the pointer went back to the parent
-  and a warning toast says so, with `branchId` and `newBranchId`),
+  for, with `branchId`, `entryId`, the `code` and the refusal's
+  `reason`),
+  `branch_create_not_opened` (warn: the fork committed but the new
+  branch was never shown, with `branchId` and `newBranchId`: either the
+  story's screens couldn't be replaced, so the pointer went back to the
+  parent and a warning toast says so, or the story had been left first,
+  with `cause` `story-left` and no toast),
   `branch_create_show_threw` (error: showing the new branch threw after
   its navigation, with `branchId`, `newBranchId` and `error`; the new
   reader's own load reports the failure) and `branch_create_threw`
