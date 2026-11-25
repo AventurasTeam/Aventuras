@@ -250,7 +250,10 @@ type Held = {
 function heldOf(entityA: EntitySummary, entityB: EntitySummary, heldIds: readonly string[]): Held {
   const a = heldIds.includes(entityA.id)
   const b = heldIds.includes(entityB.id)
-  return { fixedId: a === b ? undefined : a ? entityA.id : entityB.id, both: a && b }
+  let fixedId: string | undefined
+  if (a && !b) fixedId = entityA.id
+  else if (b && !a) fixedId = entityB.id
+  return { fixedId, both: a && b }
 }
 
 export function CollisionResolveDialog({

@@ -160,8 +160,7 @@ export function useCollisionResolve(
   // Bumped per request, so a reopen never shows the last open's read: the dialog's mode is set
   // at mount.
   const [openSeq, setOpenSeq] = useState(0)
-  // Read after the action settles: a request closed meanwhile has no dialog left to show an
-  // error.
+  // Read after the action settles: a request closed meanwhile has no dialog left to show an error.
   const requestedRef = useRef(requested)
   const setRequested = useCallback((next: readonly [string, string] | null) => {
     requestedRef.current = next
