@@ -189,10 +189,6 @@ export default function Index() {
   }
 
   const queryClient = useQueryClient()
-  const showDuplicated = useDuplicateDoneToast({
-    focused: isFocused,
-    open: (storyId) => attemptOpenStory(storyId),
-  })
   const storyDuplicate = useStoryDuplicate({
     focused: isFocused,
     readBranches: async (storyId) => ({
@@ -210,6 +206,14 @@ export default function Index() {
     },
   })
   const duplicateDialog = storyDuplicate.dialog
+  // A confirm to answer before navigating away.
+  const listBlocked =
+    prompt != null || storyRecovery != null || pendingDelete != null || duplicateDialog != null
+  const showDuplicated = useDuplicateDoneToast({
+    focused: isFocused,
+    blocked: listBlocked,
+    open: (storyId) => attemptOpenStory(storyId),
+  })
 
   const cardHandlers = (storyId: string): StoryCardHandlers => {
     const row = rows.find((r) => r.id === storyId)
@@ -258,17 +262,7 @@ export default function Index() {
       variant="app-root"
       title={<Text className="font-semibold">{t('landing:title')}</Text>}
       onOpenAppSettings={() => router.push('/settings')}
-      actions={
-        <AppActionsMenu
-          beforeLeaveStory={null}
-          blocked={
-            prompt != null ||
-            storyRecovery != null ||
-            pendingDelete != null ||
-            duplicateDialog != null
-          }
-        />
-      }
+      actions={<AppActionsMenu beforeLeaveStory={null} blocked={listBlocked} />}
     >
       <StoryList
         cards={cards}

@@ -6,22 +6,25 @@ import { toast } from '@/lib/toast'
 
 /**
  * story-list.md → Duplicate a story, Done: the toast's `Open` belongs to the list. It acts only
- * while the list has focus, and the toast goes when focus leaves.
+ * while the list has focus and no list confirm is up, and the toast goes when focus leaves.
  */
 export function useDuplicateDoneToast({
   focused,
+  blocked,
   open,
 }: {
   focused: boolean
+  /** A list confirm is up: on native the toast sits above it. */
+  blocked: boolean
   open: (storyId: string) => void
 }): (copy: { storyId: string; title: string }) => void {
   const toastId = useRef<string | null>(null)
   // A copy can land after the list unmounts.
   const mountedRef = useAliveRef()
   // Read at the press: the toast is mounted at the root and outlives the list's focus.
-  const live = useRef({ focused, open })
+  const live = useRef({ focused, blocked, open })
   useEffect(() => {
-    live.current = { focused, open }
+    live.current = { focused, blocked, open }
   })
 
   const dismissShown = useCallback(() => {
@@ -43,7 +46,8 @@ export function useDuplicateDoneToast({
         action: {
           label: t('landing:duplicate.open'),
           onPress: () => {
-            if (mountedRef.current && live.current.focused) live.current.open(storyId)
+            const { focused: isFocused, blocked: isBlocked, open: openCopy } = live.current
+            if (mountedRef.current && isFocused && !isBlocked) openCopy(storyId)
           },
         },
       })

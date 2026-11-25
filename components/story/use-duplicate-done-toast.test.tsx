@@ -25,13 +25,13 @@ afterEach(() => {
   cleanup()
 })
 
+type Props = { focused: boolean; blocked: boolean }
+
 function setup(focused = true) {
   const open = vi.fn<(storyId: string) => void>()
-  const hook = renderHook(
-    ({ focused: isFocused }: { focused: boolean }) =>
-      useDuplicateDoneToast({ focused: isFocused, open }),
-    { initialProps: { focused } },
-  )
+  const hook = renderHook((props: Props) => useDuplicateDoneToast({ ...props, open }), {
+    initialProps: { focused, blocked: false },
+  })
   return { ...hook, open }
 }
 
@@ -70,7 +70,17 @@ describe('useDuplicateDoneToast', () => {
     act(() => {
       result.current(COPIED)
     })
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
+    pressOpen()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('opens nothing when Open is pressed while a list confirm is up', () => {
+    const { result, rerender, open } = setup()
+    act(() => {
+      result.current(COPIED)
+    })
+    rerender({ focused: true, blocked: true })
     pressOpen()
     expect(open).not.toHaveBeenCalled()
   })
@@ -81,7 +91,7 @@ describe('useDuplicateDoneToast', () => {
       result.current(COPIED)
     })
     expect(toast.dismiss).not.toHaveBeenCalled()
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
     expect(toast.dismiss).toHaveBeenCalledTimes(1)
     expect(toast.dismiss).toHaveBeenCalledWith('toast-1')
   })
@@ -115,9 +125,10 @@ describe('useDuplicateDoneToast', () => {
 
   it('shows the toast and opens the copy under StrictMode', () => {
     const open = vi.fn<(storyId: string) => void>()
-    const { result } = renderHook(() => useDuplicateDoneToast({ focused: true, open }), {
-      wrapper: StrictMode,
-    })
+    const { result } = renderHook(
+      () => useDuplicateDoneToast({ focused: true, blocked: false, open }),
+      { wrapper: StrictMode },
+    )
     act(() => {
       result.current(COPIED)
     })
@@ -136,7 +147,7 @@ describe('useDuplicateDoneToast', () => {
     })
     expect(toast.dismiss).toHaveBeenCalledWith('toast-1')
     expect(toast.success).toHaveBeenLastCalledWith('Duplicated as "Second"', expect.anything())
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
     expect(toast.dismiss).toHaveBeenLastCalledWith('toast-2')
   })
 
@@ -150,7 +161,7 @@ describe('useDuplicateDoneToast', () => {
 
   it('dismisses nothing when it never showed a toast', () => {
     const { rerender, unmount } = setup()
-    rerender({ focused: false })
+    rerender({ focused: false, blocked: false })
     unmount()
     expect(toast.dismiss).not.toHaveBeenCalled()
   })
