@@ -38,7 +38,7 @@ const RUNNING = 'A run is still going on this story.'
 const MAIN: DuplicateBranchOption = { id: 'br_main', name: 'main' }
 const FORK: DuplicateBranchOption = { id: 'br_fork', name: 'fork' }
 const OK: DuplicateCheck = { status: 'ok' }
-const COPIED: DuplicateStoryResult = { status: 'duplicated', storyId: 'story_copy' }
+const COPIED: DuplicateStoryResult = { status: 'duplicated', storyId: 'story_copy', title: 'Copy' }
 const SIDE: DuplicateBranchOption = { id: 'br_side', name: 'side' }
 const VALUES: Values = { title: 'Copy', branch: { branchId: FORK.id } }
 
@@ -418,9 +418,11 @@ describe('useStoryDuplicate: submitting', () => {
     expect(onDone).toHaveBeenCalledTimes(1)
   })
 
-  it('closes on a copy and reports it under the stored, trimmed title', async () => {
+  it('closes on a copy and reports it under the title the action stored', async () => {
     const { result, duplicate, onDone } = setup()
     await openOn(result)
+    // Not the submitted name trimmed: the toast names the copy as stored.
+    duplicate.mockResolvedValueOnce({ status: 'duplicated', storyId: 'story_copy', title: 'Ash' })
     await submitOn(result, { title: '  Ashes  ', branch: { branchId: FORK.id } })
     expect(duplicate).toHaveBeenCalledWith({
       storyId: 'story_a',
@@ -429,7 +431,7 @@ describe('useStoryDuplicate: submitting', () => {
     })
     expect(result.current.dialog).toBeNull()
     expect(onDone).toHaveBeenCalledTimes(1)
-    expect(onDone).toHaveBeenCalledWith({ storyId: 'story_copy', title: 'Ashes' })
+    expect(onDone).toHaveBeenCalledWith({ storyId: 'story_copy', title: 'Ash' })
   })
 
   it('copies the selection its check approved', async () => {

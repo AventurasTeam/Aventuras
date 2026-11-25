@@ -199,7 +199,7 @@ export function useStoryDuplicate({
         return
       }
       if (dialogRef.current?.openSeq === seq) setDialog(null)
-      latest.current.onDone({ storyId: result.storyId, title: title.trim() })
+      latest.current.onDone({ storyId: result.storyId, title: result.title })
     },
     [alive, setBranch, setDialog, setState],
   )

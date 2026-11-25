@@ -358,7 +358,7 @@ describe('checkStoryDuplicate', () => {
       { storyId: STORY, title: 'Copy', branch: { branchId: A } },
       ctx,
     )
-    expect(result).toEqual({ status: 'duplicated', storyId: expect.any(String) })
+    expect(result).toEqual({ status: 'duplicated', storyId: expect.any(String), title: 'Copy' })
     // A copied branch's malformed status still fails the check rather than passing unread.
     const failure = (branch: DuplicateBranch) =>
       check(branch).then(
@@ -854,12 +854,14 @@ describe('duplicateStory', () => {
     expect(storiesStore.getStories().rows.map(({ id }) => id)).toContain(copy.storyId)
   })
 
-  it('stores the title trimmed', async () => {
+  it('stores the title trimmed, and returns it as stored', async () => {
     const result = await duplicateStory(
       { storyId: STORY, title: '  The Ford, again \n', branch: { branchId: A } },
       ctx,
     )
-    expect(storyRow(copyOf(result).storyId).title).toBe('The Ford, again')
+    const stored = storyRow(copyOf(result).storyId).title
+    expect(stored).toBe('The Ford, again')
+    expect(result).toMatchObject({ title: stored })
   })
 
   it.each(['', '   \n'])('refuses the empty title %j, writing nothing', async (title) => {

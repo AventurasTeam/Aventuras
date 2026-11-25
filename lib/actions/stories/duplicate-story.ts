@@ -37,7 +37,8 @@ export type DuplicateStoryInput = {
   readonly branch: DuplicateBranch
 }
 export type DuplicateStoryResult =
-  | { status: 'duplicated'; storyId: string }
+  /** `title` as stored: the input's, trimmed. */
+  | { status: 'duplicated'; storyId: string; title: string }
   | { status: 'rejected'; code: DuplicateRefusalCode }
 
 type CheckRefusal = Extract<DuplicateCheck, { status: 'rejected' }>
@@ -272,5 +273,5 @@ export async function duplicateStory(
     durationMs: Date.now() - started,
   })
   await rehydrateStories(ctx.db)
-  return { status: 'duplicated', storyId: newStoryId }
+  return { status: 'duplicated', storyId: newStoryId, title }
 }
