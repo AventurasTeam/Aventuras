@@ -90,6 +90,27 @@ vi.mock('@/lib/db', async (importOriginal) => {
   }
 })
 
+// The unfinished-run read's call-through, `afterCall` as the copier's.
+const unfinishedRead = vi.hoisted(() => ({
+  calls: 0,
+  afterCall: null as ((call: number) => void) | null,
+}))
+
+vi.mock('../delta/unfinished-runs', async (importOriginal) => {
+  const actual = await importOriginal<{
+    readUnfinishedRuns: (branchId: string, ctx: Pick<DbCtx, 'db'>) => Promise<unknown[]>
+  }>()
+  return {
+    ...actual,
+    readUnfinishedRuns: async (branchId: string, ctx: Pick<DbCtx, 'db'>) => {
+      const runs = await actual.readUnfinishedRuns(branchId, ctx)
+      unfinishedRead.calls += 1
+      unfinishedRead.afterCall?.(unfinishedRead.calls)
+      return runs
+    },
+  }
+})
+
 vi.mock('@/lib/embedder-swap', async (importOriginal) => {
   const actual = await importOriginal<{
     isStorySwapPending: (storyId: string) => boolean
@@ -131,6 +152,8 @@ beforeEach(async () => {
   swap.pending.clear()
   copier.calls = 0
   copier.afterCall = null
+  unfinishedRead.calls = 0
+  unfinishedRead.afterCall = null
   t = await createTestDb()
   posted = vi.fn(t.runInTransaction)
   ctx = { db: t.db, runInTransaction: posted }
@@ -821,24 +844,68 @@ describe('duplicateStory', () => {
     expect(copier.calls).toBe(2)
   })
 
-  it('refuses a swap marker stored during its last read, with no swap in flight', async () => {
-    let marked: Record<string, unknown[]> = {}
-    copier.afterCall = (call) => {
-      if (call !== 2) return
-      markSwap(STORY)
-      marked = everyRow(t.sqlite)
+  /** A full duplicate where `write` lands at `hook`'s call `call`: refused, every table as written. */
+  async function expectRefusedAfterWrite(
+    hook: { afterCall: ((call: number) => void) | null },
+    call: number,
+    write: () => void,
+    code: DuplicateRefusalCode,
+  ): Promise<void> {
+    let written: Record<string, unknown[]> = {}
+    hook.afterCall = (n) => {
+      if (n !== call) return
+      write()
+      written = everyRow(t.sqlite)
     }
-    // Not vacuous: no story is open, so only the stored marker can refuse.
-    expect(currentStoryStore.getCurrentStory()).toBeNull()
 
     expect(await duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, ctx)).toEqual({
       status: 'rejected',
-      code: DUPLICATE_REFUSAL.swapPending,
+      code,
     })
-    expect(copier.calls).toBe(2)
+
     expect(posted).not.toHaveBeenCalled()
-    expect(Object.keys(marked).length).toBeGreaterThan(0)
-    expect(everyRow(t.sqlite)).toEqual(marked)
+    expect(Object.keys(written).length).toBeGreaterThan(0)
+    expect(everyRow(t.sqlite)).toEqual(written)
+  }
+
+  it('refuses a swap marker stored during its last copier read, with no swap in flight', async () => {
+    // Not vacuous: no story is open, so only the stored marker can refuse.
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+    await expectRefusedAfterWrite(copier, 2, () => markSwap(STORY), DUPLICATE_REFUSAL.swapPending)
+    expect(copier.calls).toBe(2)
+  })
+
+  it('refuses an unfinished run row written on a copied branch during its last copier read', async () => {
+    // Synchronous, so the row stands before the action's next read.
+    const openRow = () =>
+      t.sqlite
+        .prepare(
+          'INSERT INTO pipeline_runs (run_id, kind, action_id, story_id, branch_id, started_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run('run_open_b', 'per-turn', 'act_open_b', STORY, B, AT)
+    await expectRefusedAfterWrite(copier, 2, openRow, DUPLICATE_REFUSAL.unfinishedRun)
+    expect(copier.calls).toBe(2)
+  })
+
+  it('refuses a copied branch whose classifier starts running during its last copier read', async () => {
+    await expectRefusedAfterWrite(
+      copier,
+      2,
+      () => setClassifierState(B, 'running'),
+      DUPLICATE_REFUSAL.branchHeld,
+    )
+    expect(copier.calls).toBe(2)
+  })
+
+  // A and B, read by the check and again before the post: the fourth read is the last await.
+  it('refuses a swap marker stored during its last unfinished-run read', async () => {
+    await expectRefusedAfterWrite(
+      unfinishedRead,
+      4,
+      () => markSwap(STORY),
+      DUPLICATE_REFUSAL.swapPending,
+    )
+    expect(unfinishedRead.calls).toBe(4)
   })
 
   it('refuses a run registered during its last read, read with no await before the post', async () => {

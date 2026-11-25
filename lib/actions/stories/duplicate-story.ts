@@ -80,17 +80,21 @@ export async function checkStoryDuplicate(
   const copied = branch === 'all' ? onStory : onStory.filter(({ id }) => id === branch.branchId)
   if (copied.length === 0) return refused(DUPLICATE_REFUSAL.missing)
   if (story.status === 'draft') return refused(DUPLICATE_REFUSAL.draft)
-  // The marker as stored, for any story: the in-memory read sees only the open story's.
+  // pipeline_runs never copies: an unfinished run's writes would land with no marker to recover.
+  let unfinished = false
+  for (const { id } of copied) {
+    unfinished = (await readUnfinishedRuns(id, ctx)).length > 0
+    if (unfinished) break
+  }
+  // Read last, so a marker stored during the reads above counts. The marker as stored, for any
+  // story: the in-memory read sees only the open story's.
   if (await readStorySwapPending(ctx.db, storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
   const branchIds = onStory.map(({ id }) => id)
   if (runOnStory(generationStore.getTxState(), storyId, branchIds))
     return refused(DUPLICATE_REFUSAL.runRegistered)
   // The copy takes classifier_status verbatim, so it would inherit the hold.
   if (copied.some(({ state }) => state === 'running')) return refused(DUPLICATE_REFUSAL.branchHeld)
-  // pipeline_runs never copies: an unfinished run's writes would land with no marker to recover.
-  for (const { id } of copied)
-    if ((await readUnfinishedRuns(id, ctx)).length > 0)
-      return refused(DUPLICATE_REFUSAL.unfinishedRun)
+  if (unfinished) return refused(DUPLICATE_REFUSAL.unfinishedRun)
   return { status: 'ok' }
 }
 
@@ -220,11 +224,12 @@ export async function duplicateStory(
   ]
   for (const { row, to } of copies)
     ops.push(...(await branchCopyOps(ctx.db, { from: row.id, to, mode: 'duplicate' })))
-  // Read again: a swap can store its marker, then fail out of flight, during the copier's reads.
-  const swapStored = await readStorySwapPending(ctx.db, storyId)
+  // Checked again: a swap's marker, a run row or a hold can land during the copier's reads.
+  const rechecked = await checkStoryDuplicate(storyId, branch, ctx)
+  if (rechecked.status === 'rejected') return rechecked
 
   // No await from here to the post: a swap or a run admitted during the reads above refuses.
-  if (swapStored || isStorySwapPending(storyId))
+  if (isStorySwapPending(storyId))
     return { status: 'rejected', code: DUPLICATE_REFUSAL.swapPending }
   if (
     runOnStory(
