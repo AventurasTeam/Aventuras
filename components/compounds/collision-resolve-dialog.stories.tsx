@@ -662,8 +662,8 @@ export const HeldNewerRowSurvives: Story = {
       expect(canonicalRadio(side)).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText(HELD_ONE_LINE)).toBeInTheDocument()
 
-    // userEvent honours the disabled radio's blocked pointer events; fireEvent forces the press,
-    // which the disabled radio drops. The submit below would name the older row had it moved.
+    // fireEvent forces the press userEvent won't make; whether the radio or the dialog's fixed-row
+    // guard drops it, this can't tell. The submit below would name the older row had it moved.
     fireEvent.click(canonicalRadio('Older'))
     await userEvent.click(screen.getByRole('button', { name: /^Merge into / }))
 
