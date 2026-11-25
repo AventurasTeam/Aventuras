@@ -61,15 +61,16 @@ import { __resetBranchWriteLocks } from '../delta/branch-write-lock'
 import { __redoGroupForTest } from '../delta/redo'
 import { redoLastAction, undoLastAction } from '../story-entries/undo'
 
-// In-flight = the embedder's in-process lock, taken only by a running swap (read's case:
-// lib/embedder-swap/app-deps.test.ts). `pending` also reads pending to the synchronous check.
+// `inFlight` stands in for the embedder's in-process lock and reaches only the async read (its own
+// case: lib/embedder-swap/app-deps.test.ts); `pending` reaches only the synchronous check.
 const swap = vi.hoisted(() => ({
   inFlight: new Set<string>(),
   pending: new Set<string>(),
 }))
 
 // The copier's real ops; `afterCall` runs once each call's own reads have resolved, given the
-// call's 1-based count, so a test can admit a swap or a run during the action's last await.
+// call's 1-based count, so a test can write between the copier's reads and the re-check that
+// follows them.
 const copier = vi.hoisted(() => ({
   calls: 0,
   afterCall: null as ((call: number) => void) | null,
@@ -870,8 +871,8 @@ describe('duplicateStory', () => {
     await expectRefusedWritingNothing({ title: TITLE, branch: 'all' }, DUPLICATE_REFUSAL.draft)
   })
 
-  // A and B copy, so the second copier call is the action's last await before the post.
-  it('refuses a swap admitted during its last read, read with no await before the post', async () => {
+  // A and B copy, so the second copier call is the last; the re-check after it can't see `pending`.
+  it('refuses a swap admitted during its last copier read, at the synchronous check before the post', async () => {
     copier.afterCall = (call) => {
       if (call === 2) swap.pending.add(STORY)
     }
@@ -935,7 +936,8 @@ describe('duplicateStory', () => {
     expect(copier.calls).toBe(2)
   })
 
-  // A and B, read by the check and again before the post: the fourth read is the last await.
+  // A and B, read by the check and again by the re-check: the fourth is the re-check's last, before
+  // its swap read.
   it('refuses a swap marker stored during its last unfinished-run read', async () => {
     await expectRefusedAfterWrite(
       unfinishedRead,
@@ -946,7 +948,7 @@ describe('duplicateStory', () => {
     expect(unfinishedRead.calls).toBe(4)
   })
 
-  it('refuses a run registered during its last read, read with no await before the post', async () => {
+  it('refuses a run registered during its last copier read, at the re-check or the check before the post', async () => {
     copier.afterCall = (call) => {
       if (call === 2) registerRun({ storyId: STORY, branchId: A })
     }
@@ -955,6 +957,30 @@ describe('duplicateStory', () => {
       DUPLICATE_REFUSAL.runRegistered,
     )
     expect(copier.calls).toBe(2)
+  })
+
+  it('refuses a run registered after the re-check returns, at the synchronous check before the post', async () => {
+    const readTxState = generationStore.getTxState
+    let armed = false
+    // After the copier's last call, the store's first read is the re-check's run check.
+    vi.spyOn(generationStore, 'getTxState').mockImplementation(() => {
+      if (armed) {
+        armed = false
+        queueMicrotask(() => registerRun({ storyId: STORY, branchId: A }))
+      }
+      return readTxState()
+    })
+    copier.afterCall = (call) => {
+      if (call === 2) armed = true
+    }
+
+    await expectRefusedWritingNothing(
+      { title: TITLE, branch: 'all' },
+      DUPLICATE_REFUSAL.runRegistered,
+    )
+
+    expect(copier.calls).toBe(2)
+    expect(readTxState().runs.has('run_dup_test')).toBe(true)
   })
 
   it("copies one branch while the story's other branch holds an unfinished run, carrying no run row", async () => {
