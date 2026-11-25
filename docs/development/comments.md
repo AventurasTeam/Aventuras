@@ -10,8 +10,9 @@ has to keep true.
 - **History**: "used to be X", "the first version did Y", "this was a bug where…". Git has
   it, and the reader is looking at the present code.
 - **Measurements or anecdotes**: "38 rows for 31 people on a 41-chapter save", "a measured
-  run spent two of five steps…". These belong in `docs/`, where they are the argument for a
-  design, not scattered over the implementation.
+  run spent two of five steps…". These belong in `docs/evidence/`, linked from the ADR they
+  argue for (or in the area doc, until that area moves into decisions), not scattered over the
+  implementation.
 - **Self-referential prose**: "this file exists because…", "the whole reason this function
   is here…", "deliberately not X". Say the rule, not the story of the rule.
 - **Restatements**: a comment that repeats the line under it, or a docblock listing
@@ -20,7 +21,9 @@ has to keep true.
 ## Length
 
 Prefer one line to three. If the explanation genuinely needs a paragraph, it is design
-rationale: put it in the relevant `docs/architecture/*.md` and, at most, point at it.
+rationale: record it as an ADR in `docs/decisions/` (or the relevant `docs/architecture/*.md`
+until that area moves into decisions) and leave at most a short `ADR(slug)` comment pointing at
+it.
 
 ```ts
 // Good
