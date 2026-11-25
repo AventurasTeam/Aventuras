@@ -51,6 +51,29 @@ function runOnStory(txState: TxState, storyId: string, branchIds: readonly strin
   )
 }
 
+type StoredHold = typeof DUPLICATE_REFUSAL.branchHeld | typeof DUPLICATE_REFUSAL.unfinishedRun
+
+/** The first hold a copied branch stores, or null. */
+async function readStoredHold(
+  copied: readonly string[],
+  ctx: Pick<DbCtx, 'db'>,
+): Promise<StoredHold | null> {
+  // Parsed on the copied branches only: a sibling's malformed status can't fail this copy.
+  const states = await ctx.db
+    .select({ state: sql<string | null>`json_extract(${branches.classifierStatus}, '$.state')` })
+    .from(branches)
+    .where(inArray(branches.id, copied))
+  // pipeline_runs never copies: an unfinished run's writes would land with no marker to recover.
+  let unfinished = false
+  for (const id of copied) {
+    unfinished = (await readUnfinishedRuns(id, ctx)).length > 0
+    if (unfinished) break
+  }
+  // The copy takes classifier_status verbatim, so it would inherit the hold.
+  if (states.some(({ state }) => state === 'running')) return DUPLICATE_REFUSAL.branchHeld
+  return unfinished ? DUPLICATE_REFUSAL.unfinishedRun : null
+}
+
 /**
  * data-model.md → Story duplicate, Refused before any write: the first refusal for copying
  * `branch`, or ok. `missing`: no such story, or no branch of it to copy.
@@ -65,37 +88,25 @@ export async function checkStoryDuplicate(
     .from(stories)
     .where(eq(stories.id, storyId))
   if (story == null) return refused(DUPLICATE_REFUSAL.missing)
-  const state = sql<string | null>`json_extract(${branches.classifierStatus}, '$.state')`
-  // Parsed on the copied branches only: a sibling's malformed status can't fail this copy.
-  const onStory = await ctx.db
-    .select({
-      id: branches.id,
-      state:
-        branch === 'all'
-          ? state
-          : sql<string | null>`CASE WHEN ${eq(branches.id, branch.branchId)} THEN ${state} END`,
-    })
-    .from(branches)
-    .where(eq(branches.storyId, storyId))
-  const copied = branch === 'all' ? onStory : onStory.filter(({ id }) => id === branch.branchId)
+  const onStory = (
+    await ctx.db.select({ id: branches.id }).from(branches).where(eq(branches.storyId, storyId))
+  ).map(({ id }) => id)
+  const copied = branch === 'all' ? onStory : onStory.filter((id) => id === branch.branchId)
   if (copied.length === 0) return refused(DUPLICATE_REFUSAL.missing)
   if (story.status === 'draft') return refused(DUPLICATE_REFUSAL.draft)
-  // pipeline_runs never copies: an unfinished run's writes would land with no marker to recover.
-  let unfinished = false
-  for (const { id } of copied) {
-    unfinished = (await readUnfinishedRuns(id, ctx)).length > 0
-    if (unfinished) break
-  }
+  let hold = await readStoredHold(copied, ctx)
   // Read last, so a marker stored during the reads above counts. The marker as stored, for any
   // story: the in-memory read sees only the open story's.
   if (await readStorySwapPending(ctx.db, storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
-  const branchIds = onStory.map(({ id }) => id)
-  if (runOnStory(generationStore.getTxState(), storyId, branchIds))
-    return refused(DUPLICATE_REFUSAL.runRegistered)
-  // The copy takes classifier_status verbatim, so it would inherit the hold.
-  if (copied.some(({ state }) => state === 'running')) return refused(DUPLICATE_REFUSAL.branchHeld)
-  if (unfinished) return refused(DUPLICATE_REFUSAL.unfinishedRun)
-  return { status: 'ok' }
+  const runRegistered = () => runOnStory(generationStore.getTxState(), storyId, onStory)
+  if (runRegistered()) return refused(DUPLICATE_REFUSAL.runRegistered)
+  if (hold != null) {
+    // A run stores its end before it leaves the store, so one gone now may have ended after the
+    // read: read again, then look for a run with no await between.
+    hold = await readStoredHold(copied, ctx)
+    if (runRegistered()) return refused(DUPLICATE_REFUSAL.runRegistered)
+  }
+  return hold == null ? { status: 'ok' } : refused(hold)
 }
 
 type ColumnSet<T extends SQLiteTable> = { readonly [K in keyof T['_']['columns']]?: SQL }

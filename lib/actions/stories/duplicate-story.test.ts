@@ -382,6 +382,44 @@ describe('checkStoryDuplicate', () => {
     expect(await check({ branchId: A })).toEqual({ status: 'ok' })
   })
 
+  // A run ends as the orchestrator ends it: its row's finished_at first, then out of the store.
+  it.each([
+    [
+      'its run row',
+      () => openRunRow(A),
+      () =>
+        t.sqlite
+          .prepare('UPDATE pipeline_runs SET finished_at = ? WHERE run_id = ?')
+          .run(AT + 1, `run_open_${A}`),
+    ],
+    [
+      'its classifier',
+      async () => setClassifierState(A, 'running'),
+      () => setClassifierState(A, 'idle'),
+    ],
+  ] as const)(
+    'passes a copied branch whose run ends during the unfinished-run read, releasing %s',
+    async (_, hold, release) => {
+      registerRun({ storyId: STORY, branchId: A })
+      await hold()
+      unfinishedRead.afterCall = (call) => {
+        if (call !== 1) return
+        release()
+        generationStore.finishRun('run_dup_test')
+      }
+
+      expect(await check({ branchId: A })).toEqual({ status: 'ok' })
+    },
+  )
+
+  it('refuses a run registered while it reads a stored hold again', async () => {
+    await openRunRow(A)
+    unfinishedRead.afterCall = (call) => {
+      if (call === 2) registerRun({ storyId: STORY, branchId: A })
+    }
+    await expectRefused({ branchId: A }, DUPLICATE_REFUSAL.runRegistered)
+  })
+
   it('reports the first refusal in canon order', async () => {
     t.sqlite.prepare("UPDATE stories SET status = 'draft' WHERE id = ?").run(STORY)
     markSwap(STORY)
