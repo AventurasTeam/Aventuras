@@ -571,7 +571,6 @@ describe('store refresh on every engine exit', () => {
 
   const definition = storyDefinitionSchema.parse({
     mode: 'adventure',
-    leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
     narration: 'first',
     genre: { label: 'Fantasy', promptBody: 'high fantasy' },
     tone: { label: 'Wry', promptBody: 'wry' },
@@ -689,7 +688,6 @@ describe('cancelStorySwap outcome', () => {
 describe('resolveDrainConfig swap guards', () => {
   const definition = storyDefinitionSchema.parse({
     mode: 'adventure',
-    leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
     narration: 'first',
     genre: { label: 'Fantasy', promptBody: 'high fantasy' },
     tone: { label: 'Wry', promptBody: 'wry' },
@@ -1117,7 +1115,6 @@ describe('embedClassifierDescriptions', () => {
   const signal = new AbortController().signal
   const definition = storyDefinitionSchema.parse({
     mode: 'adventure',
-    leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
     narration: 'first',
     genre: { label: 'Fantasy', promptBody: 'high fantasy' },
     tone: { label: 'Wry', promptBody: 'wry' },

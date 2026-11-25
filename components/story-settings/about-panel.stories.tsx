@@ -24,7 +24,6 @@ const STORY: StoryInfo = {
 
 const DEFINITION: StoryDefinition = {
   mode: 'adventure',
-  leadEntityId: 'ent-lead',
   narration: 'third',
   genre: { label: 'Noir', promptBody: '' },
   tone: { label: 'Bleak', promptBody: '' },

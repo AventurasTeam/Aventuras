@@ -134,7 +134,6 @@ function openStory(over: { branchId?: string; mode?: 'adventure' | 'creative' })
     branchId: over.branchId ?? 'br_1',
     definition: storyDefinitionSchema.parse({
       mode: over.mode ?? 'adventure',
-      leadEntityId: 'char_kael',
       narration: 'second',
       genre: { label: 'Fantasy', promptBody: '' },
       tone: { label: 'Wry', promptBody: '' },

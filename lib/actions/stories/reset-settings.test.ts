@@ -21,7 +21,6 @@ import { StorySettingsStaleStoreError } from './update-story-settings'
 
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
-  leadEntityId: 'entity_1',
   narration: 'third',
   genre: { label: 'Fantasy', promptBody: 'high fantasy' },
   tone: { label: 'Wry', promptBody: 'wry' },
@@ -32,7 +31,6 @@ const STORY_DEFINITION = storyDefinitionSchema.parse({
 
 const HEALTHY_STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'creative',
-  leadEntityId: null,
   narration: 'third',
   genre: { label: 'Mystery', promptBody: 'cozy mystery' },
   tone: { label: 'Warm', promptBody: 'warm' },

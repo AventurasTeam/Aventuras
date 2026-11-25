@@ -431,15 +431,15 @@ describe('overflow menu', () => {
     expect(lore.filter((e) => e.opensSheet === true).map((e) => e.key)).toEqual(['json'])
   })
 
-  it('disables delete with its reason when the row is the lead', () => {
+  it("passes the remove entry's disabled reason through to the delete entry", () => {
     const entries = entityMenuEntries('character', {
       onViewJson: noop,
       onExport: noop,
-      remove: { onDelete: noop, disabledReason: "The story's lead can't be deleted" },
+      remove: { onDelete: noop, disabledReason: 'Generation is in flight. Cancel to edit.' },
     })
     const remove = entries.find((e) => e.key === 'delete')
     expect(remove?.disabled).toBe(true)
-    expect(remove?.disabledReason).toBe("The story's lead can't be deleted")
+    expect(remove?.disabledReason).toBe('Generation is in flight. Cancel to edit.')
   })
 
   it('offers lore no Set as lead: Export live, View raw JSON, and Delete', () => {

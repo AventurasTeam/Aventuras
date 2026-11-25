@@ -37,7 +37,6 @@ import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 
 const definition = {
   mode: 'adventure' as const,
-  leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
   narration: 'first' as const,
   genre: { label: 'Fantasy', promptBody: 'High fantasy realm.' },
   tone: { label: 'Wry', promptBody: '   ' }, // whitespace-only: must NOT leak a Tone header

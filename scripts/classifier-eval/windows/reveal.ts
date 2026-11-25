@@ -16,26 +16,31 @@ export const reveal: EvalWindow = {
   happenings: [],
   relationships: [],
   threads: [],
-  entries: entries('reveal', { scene: ['char_corwin', 'char_grey'], location: 'loc_market' }, [
-    action(
-      'Corwin doubles back through the stalls and corners the woman in grey behind the candle-maker’s awning.',
-    ),
-    narration(
-      `She didn't run, which annoyed him more than if she had. She let him back her against the awning post, glanced at the knife in his hand as if it were a poor attempt at conversation, and pushed back her hood.
+  entries: entries(
+    'reveal',
+    { scene: ['char_corwin', 'char_grey'], location: 'loc_market' },
+    [
+      action(
+        'Corwin doubles back through the stalls and corners the woman in grey behind the candle-maker’s awning.',
+      ),
+      narration(
+        `She didn't run, which annoyed him more than if she had. She let him back her against the awning post, glanced at the knife in his hand as if it were a poor attempt at conversation, and pushed back her hood.
 
 She was younger than he'd guessed, with ink-stained fingers and a nose that had been broken at least once. "You can stop thinking of me as the woman in grey," she said. "My name is Ilse Marrow. Down on the wharves they call me the Heron, but only people who owe me money, so I'd rather you didn't."
 
 "Why are you following me?"
 
 "Because you're wearing something I've been paid to find." Her eyes went to his hand, to the ring with its chip of green stone.`,
-    ),
-    action('Corwin hides his hand and asks who paid her.'),
-    narration(
-      `Ilse didn't answer. A fishmonger was pushing his barrow down the row toward them, and she stepped out to meet him with a sudden widow's stoop and a quaver in her voice. "Mistress Penn, sir, from Tanner's Row. Have you any eel left?" While the man fussed over his ice she palmed a folded note into Corwin's pocket.
+      ),
+      action('Corwin hides his hand and asks who paid her.'),
+      narration(
+        `Ilse didn't answer. A fishmonger was pushing his barrow down the row toward them, and she stepped out to meet him with a sudden widow's stoop and a quaver in her voice. "Mistress Penn, sir, from Tanner's Row. Have you any eel left?" While the man fussed over his ice she palmed a folded note into Corwin's pocket.
 
 By the time the barrow had passed she was straight-backed again and twenty paces off. The note said only: The ring was never your mother's. Ask your father whose it was.`,
-    ),
-  ]),
+      ),
+    ],
+    undefined,
+  ),
   checks: [
     {
       name: 'the woman in grey is renamed Ilse Marrow',

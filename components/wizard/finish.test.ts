@@ -337,7 +337,7 @@ describe('finishWizard', () => {
     expect(storyRow.description).toBeNull()
   })
 
-  it('adventure+first: writes the lead entity, definition.leadEntityId, and opening refs to one id', async () => {
+  it('adventure+first: writes the lead entity flagged, and opening refs to one id', async () => {
     const { db, ctx } = await setup()
     const navigate = vi.fn()
 
@@ -366,7 +366,7 @@ describe('finishWizard', () => {
     const storyId = result.status === 'ok' ? result.storyId : ''
 
     const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
-    expect(storyRow.definition!.leadEntityId).toBe(LEAD_ID)
+    expect(storyRow.definition).not.toHaveProperty('leadEntityId')
 
     const entityRows = await db.select().from(entities)
     expect(entityRows).toHaveLength(1)
@@ -385,14 +385,13 @@ describe('finishWizard', () => {
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
     expect(entryRows[0].metadata!.model).toBe('gpt-x')
-    // The opening carried a location id that no cast row materializes — it must
-    // not commit as a ref to a row that will never exist.
+    // A location id no cast row materializes must not commit as a dangling ref.
     expect(entryRows[0].metadata!.currentLocationId).toBeNull()
 
-    // The load-bearing id-consistency invariant: the committed opening ref, the
-    // lead entities row, and definition.leadEntityId are all the SAME real id.
+    // Invariant: the opening ref, its lead stamp and the flagged lead row share ONE real id.
     expect(entityRows[0].id).toBe(entryRows[0].metadata!.sceneEntities[0])
-    expect(entityRows[0].id).toBe(storyRow.definition!.leadEntityId)
+    expect(entityRows[0].isLead).toBe(1)
+    expect(entryRows[0].metadata!.leadId).toBe(entityRows[0].id)
 
     expect(await db.select().from(deltas)).toHaveLength(0)
     expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
@@ -453,9 +452,8 @@ describe('finishWizard', () => {
   it('drops opening refs pointing at rows the commit never materializes', async () => {
     const { db, ctx } = await setup()
 
-    // creative+third with an empty cast, but the opening carries a ref minted on
-    // an earlier pass — the commit must not persist a dangling entity ref, and
-    // the unresolvable leadEntityId must not reach stories.definition.
+    // Empty cast but the opening carries a ref minted on an earlier pass: no dangling
+    // entity ref may persist, and the unresolvable lead flags and stamps nothing.
     const result = await finishWizard(
       makeState({
         title: 'Reframed',
@@ -472,7 +470,7 @@ describe('finishWizard', () => {
     expect(result.status).toBe('ok')
     const storyId = result.status === 'ok' ? result.storyId : ''
     const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
-    expect(storyRow.definition!.leadEntityId).toBeNull()
+    expect(storyRow.definition).not.toHaveProperty('leadEntityId')
     expect(await db.select().from(entities)).toHaveLength(0)
 
     const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
@@ -481,6 +479,7 @@ describe('finishWizard', () => {
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([])
+    expect(entryRows[0].metadata!.leadId).toBeUndefined()
   })
 
   it('maps each cast kind onto its authored EntityState, leaving classifier slots empty', async () => {
@@ -963,7 +962,11 @@ describe('finishWizard', () => {
     expect(result.status).toBe('ok')
     const storyId = result.status === 'ok' ? result.storyId : ''
     const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
-    expect(storyRow.definition!.leadEntityId).toBe(newLeadId)
+    expect(storyRow.definition).not.toHaveProperty('leadEntityId')
+    const flagged = (await db.select().from(entities))
+      .filter((row) => row.isLead === 1)
+      .map((row) => row.id)
+    expect(flagged).toEqual([newLeadId])
 
     const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
     const entryRows = await db
@@ -976,10 +979,8 @@ describe('finishWizard', () => {
   it('creative+third commits a starred lead even though the path does not require one', async () => {
     const { db, ctx } = await setup()
 
-    // Deliberate: `⭐ Set as lead` gates on canSetLead (kind + status), not on
-    // needsLead, so a creative-mode author can star a character and Finish must
-    // honor it. storyDefinitionSchema permits a lead on a lead-less path, and
-    // definition.leadEntityId feeds the opening prompt's lead line.
+    // `⭐ Set as lead` gates on canSetLead, not needsLead, so a creative author can
+    // star a character and Finish must flag it.
     const result = await finishWizard(
       makeState({
         title: 'Creative With A Lead',
@@ -998,7 +999,11 @@ describe('finishWizard', () => {
     const storyId = result.status === 'ok' ? result.storyId : ''
     const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
     expect(storyRow.definition!.mode).toBe('creative')
-    expect(storyRow.definition!.leadEntityId).toBe(LEAD_ID)
+    expect(storyRow.definition).not.toHaveProperty('leadEntityId')
+    const flagged = (await db.select().from(entities))
+      .filter((row) => row.isLead === 1)
+      .map((row) => row.id)
+    expect(flagged).toEqual([LEAD_ID])
 
     const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
     const entryRows = await db

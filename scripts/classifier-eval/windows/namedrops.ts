@@ -13,18 +13,23 @@ export const namedrops: EvalWindow = {
   happenings: [],
   relationships: [],
   threads: [],
-  entries: entries('namedrops', { scene: ['char_wren', 'char_odo'], location: 'loc_lantern' }, [
-    action('Wren asks Odo whether anyone has come asking for her.'),
-    narration(
-      `Odo wiped the same tankard for the third time. "By Saint Aldric's bones, I'd never seen him before," he said. "Tall, grey coat, asked twice whether you'd come through. As old King Harrow used to say, a man who asks twice already knows the answer."
+  entries: entries(
+    'namedrops',
+    { scene: ['char_wren', 'char_odo'], location: 'loc_lantern' },
+    [
+      action('Wren asks Odo whether anyone has come asking for her.'),
+      narration(
+        `Odo wiped the same tankard for the third time. "By Saint Aldric's bones, I'd never seen him before," he said. "Tall, grey coat, asked twice whether you'd come through. As old King Harrow used to say, a man who asks twice already knows the answer."
 
 He set the tankard down. "He gave his name as Jorun Vask. Said you'd find him at the Copper Bell by the north gate, when you were ready to talk."`,
-    ),
-    action('Wren decides to go to the Copper Bell tonight and find Jorun Vask.'),
-    narration(
-      `Wren finished her cider while the fiddler in the corner worked through Merrit's ballad of the drowned bells, the one every inn on the coast knew by heart. She left a coin on the bar, and her room key beside it.`,
-    ),
-  ]),
+      ),
+      action('Wren decides to go to the Copper Bell tonight and find Jorun Vask.'),
+      narration(
+        `Wren finished her cider while the fiddler in the corner worked through Merrit's ballad of the drowned bells, the one every inn on the coast knew by heart. She left a coin on the bar, and her room key beside it.`,
+      ),
+    ],
+    undefined,
+  ),
   checks: [
     {
       name: 'Jorun Vask, whom Wren sets out to find, is a new character',

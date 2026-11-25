@@ -58,7 +58,6 @@ const WIRED_CONFIG = {
 
 const DEFINITION = storyDefinitionSchema.parse({
   mode: 'creative',
-  leadEntityId: null,
   narration: 'third',
   genre: { label: 'Fantasy', promptBody: '' },
   tone: { label: 'Wry', promptBody: '' },

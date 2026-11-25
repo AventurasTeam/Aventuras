@@ -181,8 +181,7 @@
     },
     "done": "Deleted {{name}}.",
     "failed": "Couldn't delete that.",
-    "inFlight": "Couldn't delete while generation is in flight.",
-    "leadReason": "The story's lead can't be deleted — set another character as lead first."
+    "inFlight": "Couldn't delete while generation is in flight."
   },
   "fields": {
     "name": "Name",

@@ -357,3 +357,91 @@ describe('the lead migration steps on disk', () => {
     }
   })
 })
+
+// AC3: story open parses each definition the chain leaves, the adventure story whose branch it
+// can't flag and the draft included.
+describe.each(RUNNERS)(
+  'stored definitions after the lead steps, migrated as %s does',
+  (_name, migrate) => {
+    const AT = 1_767_225_600_000
+    const definitionOf = (mode: string, narration: string, leadEntityId: string | null) => ({
+      mode,
+      leadEntityId,
+      narration,
+      genre: { label: 'Fantasy', promptBody: 'High fantasy.' },
+      tone: { label: 'Wry', promptBody: 'Dry humor.' },
+      setting: 'A keep on a hill.',
+      calendarSystemId: 'gregorian',
+      worldTimeOrigin: { year: 1 },
+    })
+    const STORIES = [
+      {
+        id: 's_led',
+        status: 'active',
+        definition: definitionOf('adventure', 'second', 'char_led'),
+      },
+      {
+        id: 's_unflagged',
+        status: 'active',
+        definition: definitionOf('adventure', 'third', 'char_gone'),
+      },
+      { id: 's_ensemble', status: 'active', definition: definitionOf('creative', 'third', null) },
+      {
+        id: 's_draft',
+        status: 'draft',
+        definition: definitionOf('adventure', 'first', 'char_unsaved'),
+      },
+    ]
+    let sqlite: DatabaseSync
+    let stored: Map<string, unknown>
+
+    beforeAll(() => {
+      const tags = migrationTags()
+      const at = tags.indexOf(tagEnding('_m6_entities_is_lead'))
+      sqlite = openMigratedTo(tags.slice(0, at))
+      const story = sqlite.prepare(
+        'INSERT INTO stories (id, title, status, definition, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      )
+      for (const s of STORIES) story.run(s.id, s.id, s.status, JSON.stringify(s.definition), AT, AT)
+      const branch = sqlite.prepare(
+        'INSERT INTO branches (id, story_id, name, created_at) VALUES (?, ?, ?, ?)',
+      )
+      branch.run('br_led', 's_led', 'main', AT)
+      branch.run('br_unflagged', 's_unflagged', 'main', AT)
+      branch.run('br_ensemble', 's_ensemble', 'main', AT)
+      const character = sqlite.prepare(
+        `INSERT INTO entities (id, branch_id, kind, name, status, injection_mode, created_at, updated_at)
+         VALUES (?, ?, 'character', ?, 'active', 'auto', ?, ?)`,
+      )
+      character.run('char_led', 'br_led', 'Led', AT, AT)
+      character.run('char_bystander', 'br_unflagged', 'Bystander', AT, AT)
+      migrate(sqlite, tags.slice(at))
+      const rows = sqlite.prepare('SELECT id, definition FROM stories').all() as {
+        id: string
+        definition: string
+      }[]
+      stored = new Map(rows.map((row) => [row.id, JSON.parse(row.definition) as unknown]))
+    })
+
+    afterAll(() => {
+      sqlite.close()
+    })
+
+    it('flags no row on the branch whose stored lead names no character', () => {
+      expect(
+        sqlite
+          .prepare("SELECT id FROM entities WHERE branch_id = 'br_unflagged' AND is_lead = 1")
+          .all(),
+      ).toEqual([])
+    })
+
+    it.each(STORIES.map((s) => s.id))(
+      'stores %s as a definition story open parses unchanged',
+      (id) => {
+        const definition = stored.get(id)
+        expect(definition).toBeDefined()
+        expect(storyDefinitionSchema.parse(definition)).toEqual(definition)
+      },
+    )
+  },
+)

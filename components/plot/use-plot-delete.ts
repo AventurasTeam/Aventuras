@@ -76,7 +76,6 @@ export function freshDeleteTarget(
 // Exhaustive: a new RowDeleteRejectionCode fails typecheck until it has text here.
 const DELETE_REJECTION_TEXT: Record<RowDeleteRejectionCode, () => string> = {
   [ROW_DELETE_REJECTION.inFlight]: () => t('plot:delete.inFlight'),
-  [ROW_DELETE_REJECTION.leadEntity]: () => t('plot:delete.failed'),
   [ROW_DELETE_REJECTION.notFound]: () => t('plot:delete.failed'),
   [ROW_DELETE_REJECTION.failed]: () => t('plot:delete.failed'),
 }

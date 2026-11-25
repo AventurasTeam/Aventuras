@@ -26,7 +26,6 @@ import {
   type EntryMetadata,
   type LocationState,
   type NewEntity,
-  type StoryDefinition,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { plantVec } from '@/lib/db/__tests__/vec-fixtures'
@@ -203,6 +202,18 @@ async function setFlag(
   await hydrateStores()
 }
 
+async function setLeadFlag(id: string): Promise<void> {
+  await ctx.db.update(entities).set({ isLead: 1 }).where(eq(entities.id, id))
+  await hydrateStores()
+}
+
+async function flaggedLeads(): Promise<string[]> {
+  return (await ctx.db.select().from(entities))
+    .filter((e) => e.isLead === 1)
+    .map((e) => e.id)
+    .sort()
+}
+
 async function entityRow(id: string): Promise<Entity | undefined> {
   const [found] = await ctx.db.select().from(entities).where(eq(entities.id, id))
   return found as Entity | undefined
@@ -301,7 +312,6 @@ beforeEach(async () => {
   await db.insert(stories).values({
     id: 's1',
     title: 'T',
-    definition: { leadEntityId: 'char_lead' } as StoryDefinition,
     createdAt: 1,
     updatedAt: 1,
   })
@@ -631,15 +641,21 @@ describe('resolveCollision — merge', () => {
     expect((await entityRow('loc_b'))?.nameCollisionFlag).toBe(1)
   })
 
-  it('refuses a merge whose loser is the lead with lead-entity, before any write', async () => {
-    expect(await resolveCollision('b1', mergeInto('char_kael2', 'char_lead'), ctx)).toMatchObject({
+  it('refuses a merge whose loser is the flagged lead with lead-entity, writing nothing', async () => {
+    await setLeadFlag('char_b')
+    const before = await worldSnapshot()
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toMatchObject({
       status: 'rejected',
       code: 'lead-entity',
     })
+
+    expect(await worldSnapshot()).toEqual(before)
     expect(await deltaRows()).toEqual([])
   })
 
-  it('merges a namesake into the lead: the loser goes, the lead stays and loses its flag', async () => {
+  it('merges a namesake into the lead: the loser goes, the lead stays the only flagged row', async () => {
+    await setLeadFlag('char_lead')
     await setFlag('char_lead', 'char_kael2')
 
     expect(await resolveCollision('b1', mergeInto('char_lead', 'char_kael2'), ctx)).toEqual({
@@ -648,6 +664,46 @@ describe('resolveCollision — merge', () => {
 
     expect(await entityRow('char_kael2')).toBeUndefined()
     expect(await entityRow('char_lead')).toMatchObject({ name: 'Kael', nameCollisionFlag: 0 })
+    expect(await flaggedLeads()).toEqual(['char_lead'])
+  })
+
+  it('refuses a merge whose loser a stamp on this branch names, a former lead, writing nothing', async () => {
+    const stamped: EntryMetadata = {
+      sceneEntities: ['char_b', 'char_o'],
+      currentLocationId: 'loc_b',
+      worldTime: 0,
+      leadId: 'char_b',
+    }
+    await ctx.db
+      .update(storyEntries)
+      .set({ metadata: stamped })
+      .where(eq(storyEntries.id, 'entry_1'))
+    const before = await worldSnapshot()
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toMatchObject({
+      status: 'rejected',
+      code: 'lead-entity',
+    })
+
+    expect(await worldSnapshot()).toEqual(before)
+    expect(await deltaRows()).toEqual([])
+  })
+
+  it('merges a loser a stamp names only on another branch', async () => {
+    await ctx.db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'other', createdAt: 1 })
+    await ctx.db.insert(storyEntries).values({
+      id: 'entry_b2',
+      branchId: 'b2',
+      position: 1,
+      kind: 'ai_reply',
+      content: 'Elsewhere.',
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0, leadId: 'char_b' },
+      createdAt: 1,
+    })
+
+    expect(await resolveCollision('b1', MERGE_B_INTO_A, ctx)).toEqual({ status: 'ok' })
+
+    expect(await entityRow('char_b')).toBeUndefined()
   })
 
   it('refuses parent-cycle when the canonical descends from the loser', async () => {

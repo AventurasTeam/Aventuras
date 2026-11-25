@@ -11,7 +11,6 @@ import {
 
 const BASE_DEFINITION = {
   mode: 'creative' as const,
-  leadEntityId: null,
   narration: 'third' as const,
   genre: { label: 'Cozy fantasy', promptBody: 'Warm, low-stakes fantasy.' },
   tone: { label: 'Gentle', promptBody: 'Kind and reassuring.' },
@@ -83,9 +82,12 @@ describe('storyDefinitionSchema and the lead', () => {
       worldTimeOrigin: BASE_DEFINITION.worldTimeOrigin,
     }
     expect(storyDefinitionSchema.safeParse(definition).success).toBe(true)
-    expect(storyDefinitionSchema.safeParse({ ...definition, leadEntityId: null }).success).toBe(
-      true,
-    )
+  })
+
+  it('drops a stored leadEntityId, as story open reads an old definition', () => {
+    const parsed = storyDefinitionSchema.parse({ ...BASE_DEFINITION, leadEntityId: 'char_x' })
+    expect(parsed).not.toHaveProperty('leadEntityId')
+    expect(parsed).toEqual(BASE_DEFINITION)
   })
 })
 
@@ -270,15 +272,10 @@ describe('storySettingsPartialSchema', () => {
 })
 
 describe('isStoryMode', () => {
-  // Lead supplied because adventure mode refines on it; the point here is the
-  // enum, not that cross-field rule.
   it('accepts every mode the schema enum accepts', () => {
     for (const mode of STORY_MODES) {
       expect(isStoryMode(mode)).toBe(true)
-      expect(
-        storyDefinitionSchema.safeParse({ ...BASE_DEFINITION, mode, leadEntityId: 'ent-lead' })
-          .success,
-      ).toBe(true)
+      expect(storyDefinitionSchema.safeParse({ ...BASE_DEFINITION, mode }).success).toBe(true)
     }
   })
 

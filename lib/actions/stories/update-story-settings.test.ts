@@ -29,7 +29,6 @@ import {
 
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
-  leadEntityId: 'entity_1',
   narration: 'third',
   genre: { label: 'Fantasy', promptBody: 'high fantasy' },
   tone: { label: 'Wry', promptBody: 'wry' },

@@ -1,4 +1,4 @@
-import type { StoryEntry } from '@/lib/db'
+import { readStampedLeadIds, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import type { HeadTurn } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
@@ -35,7 +35,6 @@ import {
   type DeltaGroupResult,
 } from '../delta/apply-delta-action'
 import { TARGET_NOT_FOUND } from '../delta/registry'
-import { ENTITY_DELETE_REJECTION } from '../entities/register'
 import { ROW_SAVE_REJECTION } from '../row-save/commit-row-save'
 import { withTailMetadataLock } from '../story-entries/entry-metadata-lock'
 import type { DbCtx, PipelineAction } from '../types'
@@ -43,7 +42,7 @@ import type { DbCtx, PipelineAction } from '../types'
 export const COLLISION_REJECTION = {
   inFlight: ROW_SAVE_REJECTION.inFlight,
   notFound: TARGET_NOT_FOUND,
-  leadEntity: ENTITY_DELETE_REJECTION.leadEntity,
+  leadEntity: 'lead-entity',
   parentCycle: PARENT_CYCLE,
   parentChainBroken: PARENT_CHAIN_BROKEN,
   storyInside: PLACE_REFUSAL.storyInside,
@@ -146,6 +145,10 @@ function buildResolution(
   const { pair } = lookup
   switch (resolution.mode) {
     case 'merge': {
+      const loser = pair.find((e) => e.id === resolution.loserId)
+      // world.md → Merge: the backstop to the fixed picker, from the pair this tick reads.
+      if (loser?.isLead === 1)
+        return refusal(COLLISION_REJECTION.leadEntity, "the losing row is the branch's lead")
       const tail = deleteTailOf(head)
       const actions = entityMergeActions({
         branchId,
@@ -166,7 +169,6 @@ function buildResolution(
         newId: generateId,
       })
       const canonical = pair.find((e) => e.id === resolution.canonicalId)
-      const loser = pair.find((e) => e.id === resolution.loserId)
       if (canonical?.kind === 'location' && loser !== undefined) {
         // world.md → Merge: the checks a Save runs, on the place the merge would leave.
         const code = mergePlaceRefusal({
@@ -210,7 +212,17 @@ async function commitMerge(
     branchId,
     ctx,
     async (head) => {
-      const sceneSource = await readSceneSource(ctx.db, branchId)
+      // Stamp reach, read before the build; a newer entry is stamped with the flagged lead,
+      // which the build's own check sees.
+      const [sceneSource, stamped] = await Promise.all([
+        readSceneSource(ctx.db, branchId),
+        readStampedLeadIds(branchId, [resolution.loserId], ctx.db),
+      ])
+      if (stamped.has(resolution.loserId))
+        return refusal(
+          COLLISION_REJECTION.leadEntity,
+          'an entry on the branch is stamped with the losing row as its lead',
+        )
       const story = storyPlaceOf({ tail: head?.tail, sceneSource })
       return commit(branchId, () => buildResolution(branchId, resolution, head, story), ctx)
     },

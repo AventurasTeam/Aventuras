@@ -56,6 +56,7 @@ He pressed it into her palm and closed her fingers over it. "I've been afraid fo
 Nessa folded the page into her coat. She would take it to the magistrates' court in Ostmark, she told him, and she would make them read it aloud.`,
       ),
     ],
+    undefined,
   ),
   checks: [
     {
