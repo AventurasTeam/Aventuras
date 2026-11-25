@@ -129,8 +129,8 @@ describe('the third-person rule', () => {
   it.each(CASES)("%s no longer tells it in the narration's person", (_name, id, context) => {
     const { system, user } = renderTemplate(id, context)
     for (const half of [system, user]) {
-      expect(half).not.toContain("narration's own person")
-      expect(half).not.toContain('keep the person they are told in')
+      expect(half).not.toContain('own person')
+      expect(half).not.toContain('person they are told in')
       expect(half).not.toContain('so does the summary')
     }
   })
