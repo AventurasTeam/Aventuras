@@ -886,6 +886,37 @@ export const TurnStartRefusedHoldsSaveAndRegenerate: StoryT = {
   },
 }
 
+/** The gate outranks the turn-start reason on Save & regenerate too: it names the gate's run. */
+export const GateReasonWinsOverTurnStartOnSaveAndRegenerate: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'user_action',
+    content: 'I draw my sword and step toward the figure in the doorway.',
+    editing: true,
+    disabled: true,
+    disabledReason: PASS_REASON,
+    editDisabled: false,
+    reversalDisabled: true,
+    turnStartReason: LEAD_REASON,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCommitEditAndRegen: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    const saveAndRegen = await screen.findByRole('button', {
+      name: t('reader:entryCard.saveAndRegenerate'),
+    })
+    expect(saveAndRegen).toBeDisabled()
+    const tooltips = screen.getAllByTitle(PASS_REASON)
+    expect(tooltips).toHaveLength(1)
+    expect(tooltips[0]).toContainElement(saveAndRegen)
+    expect(screen.queryByTitle(LEAD_REASON)).toBeNull()
+    expect(screen.queryByRole('button', { name: LEAD_REASON })).not.toBeInTheDocument()
+  },
+}
+
 /** A turn failure's Retry resubmits a turn, so it waits on the reason; Dismiss stays live. */
 export const TurnStartRefusedHoldsRetry: StoryT = {
   ...wrap,
