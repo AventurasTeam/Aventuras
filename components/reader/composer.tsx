@@ -35,14 +35,13 @@ type ComposerProps = {
    */
   sendBlocked?: boolean
   /**
-   * Rendered under the composer when `disabled`; the Send hint in either case. Wins over
-   * `leadMissingReason` in the reason line when both are set.
+   * Reason line under the composer when `disabled`; the Send hint either way. Wins over
+   * `leadMissingReason`.
    */
   disabledReason?: string
   /**
-   * The branch needs a lead and has none: Send refuses with the draft kept, the picker disables on
-   * Free (the mode stays Free once the lead is back), and this is the reason line (Android has no
-   * tooltip).
+   * The branch needs a lead and has none: Send refuses (draft kept), the picker disables on Free
+   * (stays Free once the lead is back); shown as the reason line, as Android has no tooltip.
    */
   leadMissingReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
@@ -158,7 +157,8 @@ export const Composer = forwardRef(function Composer(
         : undefined
 
   function handleSubmit() {
-    // Send's own disabled value: a press that refuses keeps the draft, which clears only after onSend.
+    // Backstop: a disabled Send drops presses before they get here; this guards any other caller.
+    // Keeps the draft, which clears only after onSend.
     if (sendDisabled) return
     // Dismissing also blurs (`keepFocus` defaults false): on Android a focused
     // input under a hidden keyboard is the state a tap won't reopen. The guard

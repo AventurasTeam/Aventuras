@@ -126,11 +126,10 @@ export async function submitTurn(
         // Before the user_action's write: its turn's run would be refused, and its reversal could
         // fail on the held branch too.
         if (isBranchHeld(generationStore.getTxState(), ids.branchId)) return RERUN_HELD_REJECTION
-        // The mark keeps new user writes out; waiting first lets one already dispatched land, so the
-        // lead read below holds through the run's own read.
+        // The mark keeps new user writes out; waiting first lets a dispatched one land, so no write
+        // moves the flag between the lead read below, the stamp and the run's own read.
         await settleUserWrites()
-        // Before the owed work, which a turn this branch can't take would run for nothing. The mark
-        // holds the edit gate, so no write moves the flag before the stamp below reads this lead.
+        // Before the owed work, which a turn this branch can't take would run for nothing.
         const turnLead = await turnLeadOf(ids, ctx)
         if (turnLead.missing) return LEAD_MISSING_REJECTION
         // Under the turn's mark, so no reversal interrupts Send's own work. Only a chain that

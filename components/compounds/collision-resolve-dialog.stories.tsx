@@ -694,8 +694,8 @@ export const BothHeldOpensOnRename: Story = {
     expect(screen.getByText(HELD_BOTH_LINE)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Merge into / })).toBeNull()
 
-    // The disabled option drops the forced press: the rename below would find no inputs had
-    // Merge opened.
+    // Forced press on the disabled Merge: the dialog stays on Rename. shownMode maps merge to rename
+    // while both are held, so this can't tell a dropped press from an opened one.
     fireEvent.click(merge)
     const inputs = await screen.findAllByRole('textbox')
     await userEvent.clear(inputs[1])

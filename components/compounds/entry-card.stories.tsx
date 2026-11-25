@@ -796,7 +796,7 @@ export const EditDuringRunNamesTheGate: StoryT = {
 const LEAD_REASON = t('reader:composerLeadMissing')
 const EDIT_FOCUS_REASON = t('reader:editFocus.held')
 
-/** The branch can't start a turn: ↻ waits with the reason; × and the rest aren't turns and stay live. */
+/** The branch can't start a turn: ↻ waits with the reason; × and the non-turn actions stay live. */
 export const TurnStartRefusedHoldsRegenerate: StoryT = {
   ...wrap,
   args: { ...baseProps, ...aiEntry, turnStartReason: LEAD_REASON },
@@ -839,7 +839,7 @@ export const GateReasonWinsOverTurnStart: StoryT = {
   },
 }
 
-/** Edit focus elsewhere yields to the turn-start reason, which cancelling the edit wouldn't clear. */
+/** Edit focus elsewhere yields to the turn-start reason; cancelling the edit wouldn't clear it. */
 export const TurnStartOutranksEditFocus: StoryT = {
   ...wrap,
   args: {
@@ -856,7 +856,7 @@ export const TurnStartOutranksEditFocus: StoryT = {
   },
 }
 
-/** Save & regenerate starts a turn: it waits on the reason before it saves anything; Save stays live. */
+/** Save & regenerate starts a turn, so it waits on the reason before saving; Save stays live. */
 export const TurnStartRefusedHoldsSaveAndRegenerate: StoryT = {
   ...wrap,
   args: {

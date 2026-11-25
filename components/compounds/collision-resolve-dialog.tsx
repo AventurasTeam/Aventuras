@@ -543,7 +543,8 @@ function MergeBody({
           options={canonicalOptions}
           value={state.canonicalId}
           onValueChange={(id) => {
-            // Select's disabled items already drop a press; this holds if the primitive stops doing so.
+            // Select's disabled items already drop a press; this holds if the primitive
+            // stops doing so.
             if (fixedId == null) choose({ type: 'pick-canonical', id })
           }}
           // Segment options are one fixed-height row; a phone's half-width label wraps and clips.

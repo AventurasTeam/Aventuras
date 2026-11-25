@@ -131,10 +131,8 @@ function turnLead(branchId: string): Entity {
   return makeEntity({ id: TURN_LEAD_ID, branchId, kind: 'character', name: 'Aria', isLead: 1 })
 }
 
-// narrativePhase (per-turn.ts) reads the open story from currentStoryStore, not
-// from the run's own storyId/branchId — mirrors the real app opening a story
-// before the composer can submit a turn. storiesStore is populated from the same
-// committed row because the retrieval phase resolves the embedder config there.
+// narrativePhase reads the open story from currentStoryStore, not the run's ids; storiesStore comes
+// from the same row because retrieval resolves the embedder config there.
 // `lead: false` opens the branch with no lead, which a turn on this story refuses.
 export async function openStory(
   db: Awaited<ReturnType<typeof makeHarness>>['db'],
