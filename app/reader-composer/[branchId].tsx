@@ -75,6 +75,7 @@ import {
   settleRegenerateArm,
   settleWithDroppedHandback,
 } from '@/components/reader/regenerate-outcome'
+import { retryStartsTurn } from '@/components/reader/retry-starts-turn'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import {
   editGateOf,
@@ -95,7 +96,6 @@ import {
   passRefusalOf,
   pillRunOf,
   reportSendThrow,
-  retryStartsTurn,
   sendGapOpen,
   sendRunStreams,
   settleLeadRefusal,
@@ -1961,7 +1961,6 @@ function ReaderComposerBody({
     gateReason: rowGateReason(editGate, { gate: gateReason, headReversal: headReversalReason }),
     stampedReversalsHeld: rerunRunning,
     turnStartReason: leadMissingReason,
-    systemRetryStartsTurn: retryStartsTurn(systemFailure),
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     cutOffFixLabel: cutOffFix?.label,

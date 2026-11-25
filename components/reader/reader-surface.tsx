@@ -52,6 +52,7 @@ import type {
   ReaderSurfaceProps,
 } from './reader-document-types'
 import { SLICE_CAP } from './reader-slice'
+import { retryStartsTurn } from './retry-starts-turn'
 import { headTurnIdsOf, rowReversalFlags } from './row-reversal-flags'
 import { resolveSaveAndRegenTurn } from './save-and-regen'
 import type { ResolvedEntity } from './scene-editing'
@@ -394,7 +395,6 @@ export function ReaderSurface({
     gateReason,
     stampedReversalsHeld = false,
     turnStartReason,
-    systemRetryStartsTurn = false,
     jumpButtonEnabled,
     systemFixLabel,
     cutOffFixLabel,
@@ -1332,7 +1332,9 @@ export function ReaderSurface({
             const chapterBreak = chapterBreaks[row.id]
             // One Retry serves every system entry; only a turn failure's starts a turn.
             const rowTurnStartReason =
-              row.kind === 'system' && !systemRetryStartsTurn ? undefined : turnStartReason
+              row.kind === 'system' && !retryStartsTurn(row.metadata?.systemFailure)
+                ? undefined
+                : turnStartReason
             return (
               <Fragment key={row.id}>
                 <div

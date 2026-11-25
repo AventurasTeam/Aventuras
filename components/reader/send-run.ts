@@ -149,11 +149,6 @@ export async function settleLeadRefusal<Tail extends { failure?: SystemFailureMe
   deps.notifyRefused()
 }
 
-/** Whether the system entry's Retry starts a turn: a failed pass's or close's reruns that work. */
-export function retryStartsTurn(failure: SystemFailureMeta | undefined): boolean {
-  return failure?.pass !== 'failed' && failure?.close !== 'failed'
-}
-
 /**
  * A Send that threw: logs it and writes its failure entry. When that write throws too, the text
  * goes back to the composer rather than leave no card and no draft. Never rejects.

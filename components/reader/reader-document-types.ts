@@ -88,10 +88,8 @@ export type ReaderSurfaceProps = {
    * `gateReason` whatever `editGate` allows. */
   stampedReversalsHeld?: boolean
   /** The branch can't start a turn (it needs a lead and has none): ↻ and Save & regenerate disable
-   * with it, and the system entry's Retry when `systemRetryStartsTurn`. */
+   * with it, and the system entry's Retry when it starts a turn (`retryStartsTurn`). */
   turnStartReason?: string
-  /** The tail system entry's Retry resubmits a turn (not a pass's or a close's). */
-  systemRetryStartsTurn?: boolean
   jumpButtonEnabled: boolean
   /** Present when the system entry has a kind-specific fix route (host-derived label). */
   systemFixLabel?: string

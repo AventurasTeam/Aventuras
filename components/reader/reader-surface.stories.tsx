@@ -1832,7 +1832,6 @@ export const TurnStartRefusedHoldsTheTurnControls: Story = {
   args: {
     rows: TURN_FAILURE_ROWS,
     turnStartReason: LEAD_REASON,
-    systemRetryStartsTurn: true,
     onRequestRollback: fn(async () => {}),
     onRetrySystemEntry: fn(async () => {}),
   },
@@ -1858,7 +1857,6 @@ export const TurnStartRefusedLeavesAPassRetry: Story = {
       toPassFailureMeta({ held: false, error: FAILED_PASS_ERROR }, undefined),
     ),
     turnStartReason: LEAD_REASON,
-    systemRetryStartsTurn: false,
     onRetrySystemEntry: fn(async () => {}),
   },
   play: async ({ args }) => {
