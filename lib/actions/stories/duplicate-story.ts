@@ -1,8 +1,17 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
+import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
-import { branches, stories } from '@/lib/db'
-import { readStorySwapPending } from '@/lib/embedder-swap'
-import { generationStore, type TxState } from '@/lib/stores'
+import { branchCopyOps, branches, stories, type SqlOp } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { isStorySwapPending, readStorySwapPending } from '@/lib/embedder-swap'
+import { generateId } from '@/lib/ids'
+import {
+  generationStore,
+  readStoryBranches,
+  rehydrateStories,
+  type BranchRow,
+  type TxState,
+} from '@/lib/stores'
 
 import { readUnfinishedRuns } from '../delta/unfinished-runs'
 import type { DbCtx } from '../types'
@@ -22,6 +31,14 @@ export type DuplicateBranch = 'all' | { readonly branchId: string }
 export type DuplicateCheck =
   | { status: 'ok' }
   | { status: 'rejected'; code: Exclude<DuplicateRefusalCode, 'empty'> }
+export type DuplicateStoryInput = {
+  readonly storyId: string
+  readonly title: string
+  readonly branch: DuplicateBranch
+}
+export type DuplicateStoryResult =
+  | { status: 'duplicated'; storyId: string }
+  | { status: 'rejected'; code: DuplicateRefusalCode }
 
 type CheckRefusal = Extract<DuplicateCheck, { status: 'rejected' }>
 
@@ -70,4 +87,132 @@ export async function checkStoryDuplicate(
     if ((await readUnfinishedRuns(id, ctx)).length > 0)
       return refused(DUPLICATE_REFUSAL.unfinishedRun)
   return { status: 'ok' }
+}
+
+type ColumnSet<T extends SQLiteTable> = { readonly [K in keyof T['_']['columns']]?: SQL }
+
+// In SQL, as the copier does: a JS round trip would re-serialize the JSON columns copied verbatim.
+function copyRowOp<T extends SQLiteTable>(
+  db: DbCtx['db'],
+  table: T,
+  set: ColumnSet<T>,
+  where: SQL,
+): SqlOp {
+  const given: { readonly [key: string]: SQL | undefined } = set
+  const columns = Object.entries(getTableColumns(table)).map(
+    ([key, column]) => given[key] ?? sql`${column}`,
+  )
+  return db
+    .insert(table)
+    .select(sql`select ${sql.join(columns, sql`, `)} from ${table} where ${where}`)
+    .toSQL()
+}
+
+/** Parents before children, since the self-FK is immediate; `created_at, id` within a level. */
+function parentsFirst(rows: readonly BranchRow[]): BranchRow[] {
+  const onStory = new Set(rows.map(({ id }) => id))
+  const placed = new Set<string>()
+  const ordered: BranchRow[] = []
+  let level = rows.filter(
+    ({ parentBranchId }) => parentBranchId == null || !onStory.has(parentBranchId),
+  )
+  while (level.length > 0) {
+    for (const { id } of level) placed.add(id)
+    ordered.push(...level)
+    level = rows.filter(
+      ({ id, parentBranchId }) =>
+        !placed.has(id) && parentBranchId != null && placed.has(parentBranchId),
+    )
+  }
+  if (ordered.length < rows.length) throw new Error('duplicateStory: the branches form a cycle')
+  return ordered
+}
+
+/** data-model.md → Story duplicate. One batch; no lock, no deltas; throws a failed batch. */
+export async function duplicateStory(
+  input: DuplicateStoryInput,
+  ctx: DbCtx,
+): Promise<DuplicateStoryResult> {
+  const title = input.title.trim()
+  if (title === '') return { status: 'rejected', code: DUPLICATE_REFUSAL.empty }
+  const { storyId, branch } = input
+  const checked = await checkStoryDuplicate(storyId, branch, ctx)
+  if (checked.status === 'rejected') return checked
+
+  const [source] = await ctx.db
+    .select({ currentBranchId: stories.currentBranchId })
+    .from(stories)
+    .where(eq(stories.id, storyId))
+  const onStory = await readStoryBranches(ctx.db, storyId)
+  const copied =
+    branch === 'all' ? parentsFirst(onStory) : onStory.filter(({ id }) => id === branch.branchId)
+  const copies = copied.map((row) => ({ row, to: generateId('br') }))
+  const [first] = copies
+  // Gone since the check.
+  if (source == null || first == null)
+    return { status: 'rejected', code: DUPLICATE_REFUSAL.missing }
+  const toOf = new Map(copies.map(({ row, to }) => [row.id, to]))
+  const currentBranchId =
+    (source.currentBranchId == null ? undefined : toOf.get(source.currentBranchId)) ?? first.to
+  const newStoryId = generateId('story')
+  const now = Date.now()
+  const parentOf = (row: BranchRow): SQL =>
+    sql`${row.parentBranchId == null ? null : (toOf.get(row.parentBranchId) ?? null)}`
+
+  const ops: SqlOp[] = [
+    copyRowOp(
+      ctx.db,
+      stories,
+      {
+        id: sql`${newStoryId}`,
+        title: sql`${title}`,
+        status: sql`'active'`,
+        favorite: sql`0`,
+        lastOpenedAt: sql`null`,
+        createdAt: sql`${now}`,
+        updatedAt: sql`${now}`,
+        currentBranchId: sql`${currentBranchId}`,
+      },
+      eq(stories.id, storyId),
+    ),
+    ...copies.map(({ row, to }) =>
+      copyRowOp(
+        ctx.db,
+        branches,
+        {
+          id: sql`${to}`,
+          storyId: sql`${newStoryId}`,
+          ...(branch === 'all'
+            ? { parentBranchId: parentOf(row) }
+            : { parentBranchId: sql`null`, forkEntryId: sql`null` }),
+        },
+        eq(branches.id, row.id),
+      ),
+    ),
+  ]
+  for (const { row, to } of copies)
+    ops.push(...(await branchCopyOps(ctx.db, { from: row.id, to, mode: 'duplicate' })))
+
+  // No await from here to the post: a swap or a run admitted during the reads above refuses.
+  if (isStorySwapPending(storyId))
+    return { status: 'rejected', code: DUPLICATE_REFUSAL.swapPending }
+  if (
+    runOnStory(
+      generationStore.getTxState(),
+      storyId,
+      onStory.map(({ id }) => id),
+    )
+  )
+    return { status: 'rejected', code: DUPLICATE_REFUSAL.runRegistered }
+  const started = Date.now()
+  await ctx.runInTransaction(ops)
+  logger.debug('action_layer.story_duplicated', {
+    storyId,
+    newStoryId,
+    branches: copies.length,
+    ops: ops.length,
+    durationMs: Date.now() - started,
+  })
+  await rehydrateStories(ctx.db)
+  return { status: 'duplicated', storyId: newStoryId }
 }
