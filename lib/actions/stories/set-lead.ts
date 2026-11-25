@@ -61,7 +61,10 @@ async function flaggedIds(branchId: string, ctx: DbCtx): Promise<string[]> {
     .from(entities)
     .where(and(eq(entities.branchId, branchId), eq(entities.isLead, 1)))
     .orderBy(asc(entities.createdAt), asc(entities.id))
-  return rows.map((row) => row.id)
+  const ids = rows.map((row) => row.id)
+  // C10: logged here too, as the reader refuses a turn on a double before the turn's read logs it.
+  if (ids.length > 1) logger.error('action_layer.branch_lead_double', { branchId, ids })
+  return ids
 }
 
 function leadWrite(branchId: string, id: string, isLead: 0 | 1): PipelineAction {

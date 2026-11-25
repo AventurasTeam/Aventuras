@@ -311,6 +311,29 @@ describe('setBranchLead', () => {
     ])
   })
 
+  // data-model.md → The lead: a reader outside the render path that finds two logs the error.
+  it('logs the double it reads once, with both ids, and still repairs it', async () => {
+    await setFlag('char_vorne', 1)
+    const error = vi.spyOn(logger, 'error')
+
+    expect(await setBranchLead('br_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
+
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: 'br_1',
+      ids: ['char_kael', 'char_vorne'],
+    })
+    expect(await flagged('br_1')).toEqual(['char_mira'])
+  })
+
+  it('logs nothing on a branch with one flagged row', async () => {
+    const error = vi.spyOn(logger, 'error')
+
+    expect(await setBranchLead('br_1', 'char_mira', ctx)).toEqual({ status: 'ok' })
+
+    expect(error).not.toHaveBeenCalled()
+  })
+
   it('clears the other flagged rows oldest first', async () => {
     await ctx.db.insert(entities).values(entity('char_ash', 'br_1', { isLead: 1, createdAt: 5 }))
     await hydrateMain()
@@ -511,6 +534,20 @@ describe('unsetBranchLead', () => {
 
     expect(await undoLastAction('br_1', ctx)).toEqual({ status: 'ok' })
     expect(await flagged('br_1')).toEqual(['char_kael', 'char_vorne'])
+  })
+
+  it('logs the double it reads once, with both ids, and still clears both', async () => {
+    await setFlag('char_vorne', 1)
+    const error = vi.spyOn(logger, 'error')
+
+    expect(await unsetBranchLead('br_1', ctx)).toEqual({ status: 'ok' })
+
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: 'br_1',
+      ids: ['char_kael', 'char_vorne'],
+    })
+    expect(await flagged('br_1')).toEqual([])
   })
 
   it('writes nothing and keeps redo when the branch has no lead', async () => {
