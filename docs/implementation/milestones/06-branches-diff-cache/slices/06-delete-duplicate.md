@@ -812,6 +812,11 @@ change amends the scope above.
   Sheet has no focus-outside dismiss; the Android smoke confirmed back
   closes only the confirm. `branch-delete.spec.ts` holds the navigator
   open on Electron.
+- **`Cancel` is the `AlertDialogCancel`.** Scope has both buttons plain.
+  Radix focuses an AlertDialog through its Cancel as it opens, so a
+  plain `Cancel` would leave focus behind the modal; `Cancel` is
+  `AlertDialogCancel asChild` over a `Button`, and only `Delete branch`
+  is a plain button, which keeps the confirm up until the host closes it.
 - **The confirm above the held Popover.** `AlertDialogContent` gained
   `aboveOpenPopover`: on web the dialog's overlay takes `zIndex` 110,
   above the Popover overlay's 100, so the navigator under it never
