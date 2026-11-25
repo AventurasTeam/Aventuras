@@ -36,6 +36,7 @@ const COPY = {
 const LORE_LINE = /lore rows? removed/
 const OTHER_LINE = /other changes? reversed/
 const TURNS_LINE = /followed this close/
+const FORK_LINE = /keeps them on/
 
 const SHORTCUT_COUNTS: RollbackCounts = {
   entries: 6,
@@ -137,6 +138,22 @@ export const TurnsFollowed: Story = {
   },
 }
 
+/** A system entry stands just before the turns since: the sentence names N below it, not B − 1. */
+export const ForkPointBelowSystemEntry: Story = {
+  args: {
+    preview: {
+      ...PREVIEW,
+      shortcut: { ...PREVIEW.shortcut!, forkPoint: { entryId: 'ent_89', position: 89 } },
+    },
+  },
+  play: async () => {
+    const dialog = await findDialog()
+    await expectDescription(dialog, [
+      'Re-run on new branch keeps them on Main and branches from entry 89 as "Ch. 5 re-run".',
+    ])
+  },
+}
+
 /** No turn followed: no block, and `Cancel` and `Re-run close`. */
 export const NoTurnsSince: Story = {
   args: { preview: NO_TURNS },
@@ -145,7 +162,7 @@ export const NoTurnsSince: Story = {
     await expectDescription(
       dialog,
       [COPY.framing, COPY.loreEdited, COPY.otherChanges, COPY.cost, COPY.undoLine],
-      [TURNS_LINE, COPY.forkSentence, COPY.rollbackWarning],
+      [TURNS_LINE, FORK_LINE, COPY.rollbackWarning],
     )
     expect(button(COPY.cancel)).toBeInTheDocument()
     expect(button(COPY.rerun)).not.toHaveAttribute('aria-disabled', 'true')
