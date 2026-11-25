@@ -154,10 +154,7 @@ test.describe.serial('branch delete — the confirm, the cascade and the chip', 
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     // No embedder: nothing drains, so vectors move only through the delete (seedVectors' terms).
-    runId = insertFinishedRun(seeded.dbPath, {
-      storyId: HERO_STORY,
-      branchId: forkIdOnDisk(seeded.dbPath),
-    })
+    runId = insertFinishedRun(seeded.dbPath, forkIdOnDisk(seeded.dbPath))
     app = await launchApp({ userDataDir, cleanupUserData: true })
     await expect(home.newStory(app.window)).toBeVisible({ timeout: 20_000 })
     hero = await readHero(app.window)

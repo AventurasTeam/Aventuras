@@ -451,27 +451,23 @@ export function seedUnplacedPlace(dbPath: string, branchId: string, name: string
   return id
 }
 
-/** A finished pipeline_runs row on a branch, before launch (boot recovery takes unfinished ones). */
-export function insertFinishedRun(
-  dbPath: string,
-  run: { storyId: string; branchId: string },
-): string {
-  const runId = `run_${seedUuid(`run:finished:${run.branchId}`)}`
+/**
+ * A finished pipeline_runs row on a branch, under the branch's own story; a missing branch throws.
+ * Runs before launch (boot recovery takes unfinished ones).
+ */
+export function insertFinishedRun(dbPath: string, branchId: string): string {
+  const runId = `run_${seedUuid(`run:finished:${branchId}`)}`
   const db = new DatabaseSync(dbPath)
   try {
     db.exec('PRAGMA busy_timeout = 10000')
-    // A branch of another story would leave the row where no assertion on this one reaches it.
-    const owner = db
-      .prepare(`SELECT story_id AS storyId FROM branches WHERE id = ?`)
-      .get(run.branchId) as { storyId: string } | undefined
-    if (owner?.storyId !== run.storyId) {
-      throw new Error(`cannot seed a run: ${run.branchId} is not a branch of ${run.storyId}`)
-    }
     // Nothing reads a finished row's kind; a turn's is the commonest finished row.
-    db.prepare(
-      `INSERT INTO pipeline_runs (run_id, kind, action_id, story_id, branch_id, started_at, finished_at, outcome)
-       VALUES (?, 'per-turn', ?, ?, ?, 1, 2, 'completed')`,
-    ).run(runId, `act_${seedUuid(`act:finished:${run.branchId}`)}`, run.storyId, run.branchId)
+    const { changes } = db
+      .prepare(
+        `INSERT INTO pipeline_runs (run_id, kind, action_id, story_id, branch_id, started_at, finished_at, outcome)
+         SELECT ?, 'per-turn', ?, story_id, id, 1, 2, 'completed' FROM branches WHERE id = ?`,
+      )
+      .run(runId, `act_${seedUuid(`act:finished:${branchId}`)}`, branchId)
+    if (changes !== 1) throw new Error(`cannot seed a run: no branch ${branchId}`)
   } finally {
     db.close()
   }
