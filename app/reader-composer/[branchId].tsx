@@ -1001,6 +1001,7 @@ function ReaderComposerBody({
             }),
           )
         } else if (leadRefusalOf(result)) {
+          logger.warn('pipeline.submit_lead_refused', { branchId })
           await settleLeadRefusal({
             dropped,
             restoreTail: restoreSystemTail,
