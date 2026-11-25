@@ -135,6 +135,13 @@ export {
   type DeleteBranchResult,
 } from './stories/delete-branch'
 export {
+  checkStoryDuplicate,
+  DUPLICATE_REFUSAL,
+  type DuplicateBranch,
+  type DuplicateCheck,
+  type DuplicateRefusalCode,
+} from './stories/duplicate-story'
+export {
   declineEmbeddingUpgrade,
   type DeclineEmbeddingUpgradeFn,
 } from './stories/embedding-upgrade'
