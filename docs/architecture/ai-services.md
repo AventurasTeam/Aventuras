@@ -4,17 +4,12 @@ How a task picks its model, and where the numbers that govern it live.
 
 ## Agent Profiles and Service Resolution
 
-Every AI task is a `ServiceId` — the keys of `DEFAULT_SERVICE_PRESET_ASSIGNMENTS` in
-`src/lib/stores/settings.svelte.ts`: `classifier`, `lorebookClassifier`, `entryRetrieval`,
-`worldStateInjection`, `characterCardImport`, `memory`, `chapterQuery`, `timelineFill`,
-`suggestions`, `actionChoices`, `styleReviewer`, `loreManagement`, `agenticRetrieval`,
-`interactiveVault`, `imageGeneration`, `bgImageGeneration`, plus the namespaced
-`wizard:*` and `translation:*` families.
+Every AI task is a `ServiceId`: a key of `DEFAULT_SERVICE_PRESET_ASSIGNMENTS` in
+`src/lib/stores/settings.svelte.ts`, including the namespaced `wizard:*` and `translation:*` families.
 
-The translation family is one `ServiceId` per surface — `translation:narration`,
-`translation:input`, `translation:ui`, `translation:suggestions`, `translation:actionChoices`,
-`translation:wizard` — so each can run on its own model. Translation is non-fatal throughout: a
-failed call leaves the original text in place.
+The translation family is one `ServiceId` per surface (`translation:narration`, `translation:ui`, …), so each
+can run on its own model. Translation is non-fatal throughout: a failed call, other than an abort, leaves the
+original text in place.
 
 Resolution is two hops, and conflating them is the usual source of confusion:
 
@@ -28,14 +23,15 @@ classification-shaped points at the `classification` preset, the memory pipeline
 so on — so retargeting one profile moves every service assigned to it. An assignment to a
 preset that no longer exists shows as Unassigned, and is cleared to Unassigned at load.
 
-Most services extend `BaseAIService`, which does nothing but hold the `ServiceId` and expose
-`presetId`; the model is never hardcoded. **`narrative` is a preset id, not a `ServiceId`** —
+Most services extend `BaseAIService`, which holds the `ServiceId`, exposes `presetId` and wraps
+structured generation; the model is never hardcoded. **`narrative` is a preset id, not a `ServiceId`** —
 `NarrativeService` does not extend `BaseAIService` and streams through `generate.ts` with
 `presetId: 'narrative'` directly.
 
-`ServiceFactory` is the only place services are constructed, so a new task needs a `ServiceId`
-(i.e. an entry in `DEFAULT_SERVICE_PRESET_ASSIGNMENTS`), a factory method, and a settings entry,
-in that order.
+Most services are constructed in `ServiceFactory` (`core/factory.ts`); a few are built directly where they
+run (`MemoryService` and `EntryRetrievalService` in `services/ai/index.ts`, the vault assistant, the lorebook
+and character-card importers). A new task needs a `ServiceId` (an entry in
+`DEFAULT_SERVICE_PRESET_ASSIGNMENTS`), a factory method, and a settings entry, in that order.
 
 Defaults that both the settings store and `AI_CONFIG` need live in
 `src/lib/services/ai/core/defaults.ts`, a leaf module that imports nothing — `core/config.ts`
@@ -45,8 +41,8 @@ imports the settings store, so the store cannot import back from it.
 a control in Advanced Settings — goes there as a named `*_DEFAULTS` object; a constant that
 guards a failure mode and has no control (`GREP_NOISE_RATIO`, `MAX_LIST_ENTRIES`,
 `MAX_CHAPTER_QUERIES_*`) stays next to the code it protects, where the reasoning lives. And
-**a consumer never writes `?? <default>`**: the store merges every block over its defaults
-on load, so the key is always present, and a fallback at the call site is a second copy of
+**a consumer never writes `?? <default>`**: the store merges each system-services block over
+its defaults on load, so the key is always present, and a fallback at the call site is a second copy of
 the number that nothing forces to agree. That form had put four stale values in the tree at
 once — a `maxIterations` of 50 in the store, 3 in a constructor, 50 again in the slider.
 
@@ -54,14 +50,14 @@ once — a `maxIterations` of 50 in the store, 3 in a constructor, 50 again in t
 
 A configured base URL (an API profile, an image profile, the TTS endpoint) is normalized once,
 with `normalizeBaseUrl` in `utils/url.ts`, where it becomes a request URL: the provider factories,
-`fetchModelsFromProvider`, `getEffectiveBaseUrl` and `TTSService.getEndpoint`. The forms and the
-store keep what the user typed, and code below those boundaries (`pingModel`, the `create*Image`
-clients) takes the URL as given. Defaults we own (`PROVIDERS`, and the image providers' `PROVIDER_BASE_URL` in
-`image/providers/baseUrls.ts`) are never normalized at runtime. Deciding whether an edit changed
-the URL (clearing a profile's health rows, reloading a model list) compares normalized values, so
-a trailing slash or stray space is not a change. `config.test.ts` and
-`baseUrls.test.ts` pin them instead. An image adapter resolves its URL with `resolveBaseUrl`, which
-falls back to that table's default.
+`fetchModelsFromProvider`, `getEffectiveBaseUrl`, `TTSService.getEndpoint`, and the image adapters'
+`resolveBaseUrl` (which falls back to the default table below). The forms and the store keep what the user
+typed, and code below those boundaries (`pingModel`, the `create*Image` clients) takes the URL as given.
+
+Defaults we own (`PROVIDERS`, and the image providers' `PROVIDER_BASE_URL` in `image/providers/baseUrls.ts`)
+are never normalized at runtime; `config.test.ts` and `baseUrls.test.ts` pin them as already normalized
+instead. Deciding whether an edit changed the URL (clearing a profile's health rows, reloading a model list)
+compares normalized values, so a trailing slash or stray space is not a change.
 
 The image adapters build their discovery endpoints with `endpoint(baseUrl, 'models')`, which
 parses the normalized string and appends the path, so a malformed base URL throws one message
@@ -77,7 +73,7 @@ Three things about it are not obvious:
 
 - **The disabled level is `'none'`, and `'Off'` is not a value.** The levels are the AI SDK's
   own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. `ReasoningEffort`
-  is derived from the SDK's union, so a level the SDK adds fails the build until
+  is derived from the SDK's union, so a level the SDK adds fails the type check until
   `REASONING_LEVELS` places it. `@openrouter/ai-sdk-provider` and `ai-sdk-pollinations` type their
   effort without `'max'` although their APIs accept it, so `presetResolution.ts` widens those two
   options locally. Migration 043
@@ -92,8 +88,8 @@ Three things about it are not obvious:
   effort have happened — `@ai-sdk/openai-compatible` once dropped `'none'`, and OpenRouter lost
   every level when its provider options were removed — and neither shows in the options we build,
   only in the request body. `sdk/reasoningWire.test.ts` therefore captures the body the real SDK
-  sends for every provider and compares levels against each other; a new provider gets a row
-  there. We do not stop a user picking a level their model rejects: they see the provider's error.
+  sends for every provider; where the field is not model-gated it compares levels against each
+  other, and elsewhere it checks that the setting reaches the request. A new provider gets a row there. We do not stop a user picking a level their model rejects: they see the provider's error.
 - **Only NanoGPT's `:thinking` variants are `enforced`.** Those ids _are_ the reasoning model,
   so asking one for `'none'` is self-contradictory, and `clampReasoningToCapability` lifts it to
   `ENFORCED_REASONING_FLOOR` (`'medium'` — a floor, not a preference). Every other model that
@@ -104,9 +100,9 @@ Three things about it are not obvious:
 `clampReasoningToCapability` is the single rule for what a capability does to a chosen level,
 which is what keeps the settings effect that applies it two lines long and testable.
 
-Alongside it, `sdk/presetResolution.ts` resolves preset → profile → model for all three
-callers — the services, the narrator and the agent factory — plus `buildProviderOptions`,
-`resolveStructuredOutputs` and `thinkingNudgeApplies`. Each of those was previously written
+Alongside it, `sdk/presetResolution.ts` holds `resolvePresetModel` (preset → profile → model, for the
+services and the agent factory), `buildProviderOptions` (also used by the narrator, which builds its own
+model), `resolveStructuredOutputs` and `thinkingNudgeApplies`. Each of those was previously written
 per-caller. The **Thinking nudge** setting needs all three of a think-tag provider, reasoning
 on, and no native structured output; the UI asks the same predicate before offering the toggle,
 so it cannot be switched on where it does nothing.
