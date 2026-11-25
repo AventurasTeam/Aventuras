@@ -136,7 +136,7 @@ export async function settleLeadRefusal<Tail extends { failure?: SystemFailureMe
   restoreTail: (tail: Tail) => Promise<void>
   stillOnBranch: () => boolean
   draftEmpty: () => boolean
-  keepSubmission: (submission: SystemFailureMeta['submission'] | null) => void
+  keepSubmission: (submission: NonNullable<SystemFailureMeta['submission']> | null) => void
   restoreSent: () => void
   notifyDraftKept: () => void
   notifyRefused: () => void

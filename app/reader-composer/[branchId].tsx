@@ -1006,7 +1006,7 @@ function ReaderComposerBody({
             restoreTail: restoreSystemTail,
             stillOnBranch: () => branchUnchanged(branchId),
             draftEmpty: () => isDraftEmpty(composerRef.current?.getDraft()),
-            keepSubmission: (kept) => setLastSubmission(kept ?? null),
+            keepSubmission: setLastSubmission,
             restoreSent,
             notifyDraftKept: () => toast.info(t('reader:leadRefusedDraftKept')),
             // The action's read and this reader's store disagree, so the reason line may not show.

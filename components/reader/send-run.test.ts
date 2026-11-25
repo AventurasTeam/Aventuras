@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { SystemFailureMeta } from '@/lib/db'
@@ -567,6 +567,13 @@ describe('settleLeadRefusal', () => {
     const { calls, deps } = harness({ stillOnBranch: false })
     await settleLeadRefusal(deps)
     expect(calls).toEqual([['restoreTail', SENT_TAIL]])
+  })
+
+  it('hands keepSubmission a kept submission or null, never undefined', () => {
+    type Deps = Parameters<typeof settleLeadRefusal>[0]
+    expectTypeOf<Deps['keepSubmission']>()
+      .parameter(0)
+      .toEqualTypeOf<NonNullable<SystemFailureMeta['submission']> | null>()
   })
 })
 
