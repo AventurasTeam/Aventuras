@@ -41,7 +41,7 @@ import {
   type RunState,
 } from '@/lib/stores'
 
-import { BRANCH_SCOPED } from './delete-story'
+import { BRANCH_SCOPED, deleteStory } from './delete-story'
 import {
   checkStoryDuplicate,
   DUPLICATE_REFUSAL,
@@ -934,6 +934,62 @@ describe('duplicateStory', () => {
 
     expect(Object.keys(afterDelete).length).toBeGreaterThan(0)
     expect(everyRow(t.sqlite)).toEqual(afterDelete)
+  })
+
+  /** A ctx whose batch runs after `write`, which stands in for one landing after the reads. */
+  function racing(write: () => Promise<void>) {
+    let afterWrite: Record<string, unknown[]> = {}
+    const ctx: DbCtx = {
+      db: t.db,
+      runInTransaction: async (ops) => {
+        await write()
+        afterWrite = everyRow(t.sqlite)
+        await t.runInTransaction(ops)
+      },
+    }
+    return { ctx, afterWrite: () => afterWrite }
+  }
+
+  it('fails the batch, writing nothing, when the one branch it copies goes between its reads and its batch', async () => {
+    const race = racing(async () => t.runInTransaction(await branchDeleteOps(B)))
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: { branchId: B } }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(countWhere('branches', 'id = ?', B)).toBe(0)
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it('fails the batch, writing nothing, when the story goes between its reads and its batch', async () => {
+    const race = racing(() =>
+      deleteStory(STORY, { db: t.db, runInTransaction: t.runInTransaction }, () =>
+        listVecFamilyTables(t.db),
+      ),
+    )
+
+    await expect(
+      duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    ).rejects.toThrow('NOT NULL constraint failed: stories.title')
+
+    expect(countWhere('stories', 'id = ?', STORY)).toBe(0)
+    expect(everyRow(t.sqlite)).toEqual(race.afterWrite())
+  })
+
+  it("makes the copy's root current when the current leaf is switched off and deleted before its batch", async () => {
+    seedTree()
+    t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(C, STORY)
+    const race = racing(async () => {
+      t.sqlite.prepare('UPDATE stories SET current_branch_id = ? WHERE id = ?').run(B, STORY)
+      await t.runInTransaction(await branchDeleteOps(C))
+    })
+
+    const copy = copyOf(
+      await duplicateStory({ storyId: STORY, title: TITLE, branch: 'all' }, race.ctx),
+    )
+
+    expect(copy.branches.map(({ name }) => name).sort()).toEqual([B_NAME, 'main'].sort())
+    expect(storyRow(copy.storyId).current_branch_id).toBe(named(copy, 'main').id)
   })
 
   it('throws a failed batch, writing nothing and re-reading no store', async () => {

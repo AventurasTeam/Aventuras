@@ -1,4 +1,4 @@
-import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
+import { and, eq, getTableColumns, sql, type SQL } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { branchCopyOps, branches, stories, type SqlOp } from '@/lib/db'
@@ -96,7 +96,7 @@ function copyRowOp<T extends SQLiteTable>(
   db: DbCtx['db'],
   table: T,
   set: ColumnSet<T>,
-  where: SQL,
+  from: SQL,
 ): SqlOp {
   const given: { readonly [key: string]: SQL | undefined } = set
   const columns = Object.entries(getTableColumns(table)).map(
@@ -104,7 +104,7 @@ function copyRowOp<T extends SQLiteTable>(
   )
   return db
     .insert(table)
-    .select(sql`select ${sql.join(columns, sql`, `)} from ${table} where ${where}`)
+    .select(sql`select ${sql.join(columns, sql`, `)} from ${from}`)
     .toSQL()
 }
 
@@ -158,6 +158,12 @@ export async function duplicateStory(
   const now = Date.now()
   const parentOf = (row: BranchRow): SQL =>
     sql`${row.parentBranchId == null ? null : (toOf.get(row.parentBranchId) ?? null)}`
+  const sourceHeld =
+    branch === 'all'
+      ? sql`select 1 from ${stories} where ${eq(stories.id, storyId)}`
+      : sql`select 1 from ${branches} where ${and(eq(branches.id, branch.branchId), eq(branches.storyId, storyId))}`
+  const inserted = (branchId: string): SQL =>
+    sql`(select ${branches.id} from ${branches} where ${eq(branches.id, branchId)})`
 
   const ops: SqlOp[] = [
     copyRowOp(
@@ -165,15 +171,16 @@ export async function duplicateStory(
       stories,
       {
         id: sql`${newStoryId}`,
-        title: sql`${title}`,
+        // A source gone since the reads yields a row with a NULL title, failing the batch.
+        title: sql`(select ${title} where exists (${sourceHeld}))`,
         status: sql`'active'`,
         favorite: sql`0`,
         lastOpenedAt: sql`null`,
         createdAt: sql`${now}`,
         updatedAt: sql`${now}`,
-        currentBranchId: sql`${currentBranchId}`,
+        currentBranchId: sql`null`,
       },
-      eq(stories.id, storyId),
+      sql`(select 1) left join ${stories} on ${eq(stories.id, storyId)}`,
     ),
     ...copies.map(({ row, to }) =>
       copyRowOp(
@@ -186,9 +193,20 @@ export async function duplicateStory(
             ? { parentBranchId: parentOf(row) }
             : { parentBranchId: sql`null`, forkEntryId: sql`null` }),
         },
-        eq(branches.id, row.id),
+        sql`${branches} where ${eq(branches.id, row.id)}`,
       ),
     ),
+    // The intended copy if it landed, else the first that did, a root by the walk.
+    ctx.db
+      .update(stories)
+      .set({
+        currentBranchId: sql`coalesce(${sql.join(
+          [currentBranchId, ...copies.map(({ to }) => to)].map(inserted),
+          sql`, `,
+        )})`,
+      })
+      .where(eq(stories.id, newStoryId))
+      .toSQL(),
   ]
   for (const { row, to } of copies)
     ops.push(...(await branchCopyOps(ctx.db, { from: row.id, to, mode: 'duplicate' })))
