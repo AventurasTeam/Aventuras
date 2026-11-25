@@ -3,7 +3,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { currentBranchId, queryApp, queryScalar } from '../harness/db'
 import { escapeRegExp, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { createSeededUserDataDir, markSwapPending, removeUserDataDir } from '../harness/seed'
+import {
+  createSeededUserDataDir,
+  markSwapPending,
+  otherBranchId,
+  removeUserDataDir,
+  setCurrentBranch,
+} from '../harness/seed'
 import { chrome } from '../locators/chrome'
 import { duplicateStory } from '../locators/duplicate-story'
 import { home } from '../locators/home'
@@ -119,6 +125,26 @@ async function expectTopToBottom(locators: readonly Locator[], what: string): Pr
   expect(tops, what).toEqual([...tops].sort((a, b) => a - b))
 }
 
+// With the Select open: the current branch first with its mark, the other after, All branches last.
+async function expectCurrentFirst(
+  page: Page,
+  current: BranchRow,
+  other: BranchRow,
+  count: number,
+): Promise<void> {
+  const currentMark = t('landing:duplicate.currentMark')
+  await expect(duplicateStory.branchOption(page, current.name)).toContainText(currentMark)
+  await expect(duplicateStory.branchOption(page, other.name)).not.toContainText(currentMark)
+  await expectTopToBottom(
+    [
+      duplicateStory.branchOption(page, current.name),
+      duplicateStory.branchOption(page, other.name),
+      duplicateStory.allBranches(page, count),
+    ],
+    'the current branch first, All branches last',
+  )
+}
+
 async function openDuplicate(page: Page, title: string): Promise<void> {
   await home.storyActionsExact(page, title).click()
   await home.duplicate(page).click()
@@ -184,17 +210,7 @@ test.describe.serial('story duplicate — one branch, every branch, and undo in 
     await expect(duplicateStory.nameInput(page)).toHaveValue(copyTitle)
     await expect(duplicateStory.confirm(page)).toBeEnabled()
     await duplicateStory.branchSelect(page).click()
-    const currentMark = t('landing:duplicate.currentMark')
-    await expect(duplicateStory.branchOption(page, main.name)).toContainText(currentMark)
-    await expect(duplicateStory.branchOption(page, fork.name)).not.toContainText(currentMark)
-    await expectTopToBottom(
-      [
-        duplicateStory.branchOption(page, main.name),
-        duplicateStory.branchOption(page, fork.name),
-        duplicateStory.allBranches(page, count),
-      ],
-      'the current branch first, All branches last',
-    )
+    await expectCurrentFirst(page, main, fork, count)
     // Esc closes the Select alone; its default, the current branch, stays picked.
     await page.keyboard.press('Escape')
     await expect(duplicateStory.allBranches(page, count)).toHaveCount(0)
@@ -308,6 +324,8 @@ test.describe('story duplicate — refused under a pending swap', () => {
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     markSwapPending(seeded.dbPath, HERO_STORY, SWAP_TARGET)
+    // Makes current the newer branch, so creation order can't pass for the current-first order.
+    setCurrentBranch(seeded.dbPath, otherBranchId(seeded.dbPath, HERO_STORY))
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
@@ -316,15 +334,24 @@ test.describe('story duplicate — refused under a pending swap', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('the dialog shows the swap line, and nothing copies', async () => {
+  test('the current fork leads the Select, the swap line shows, and nothing copies', async () => {
     const page = app.window
     await expect(home.newStory(page)).toBeVisible({ timeout: 20_000 })
-    const [[title]] = await queryApp(page, `SELECT title FROM stories WHERE id = ?`, [HERO_STORY])
+    const source = await readSource(page)
+    expect(source.branches, 'the hero story holds two branches').toHaveLength(2)
+    const [oldest, newest] = source.branches
+    expect(newest.id, 'the current branch, newer than the other').toBe(source.currentId)
+    const count = source.branches.length
     const storiesBefore = await queryScalar(page, `SELECT count(*) FROM stories`)
 
-    await openDuplicate(page, title as string)
+    await openDuplicate(page, source.title)
     await expect(duplicateStory.refusal(page, 'swapPending')).toBeVisible()
     await expect(duplicateStory.confirm(page)).toBeDisabled()
+    await duplicateStory.branchSelect(page).click()
+    await expectCurrentFirst(page, newest, oldest, count)
+    await page.keyboard.press('Escape')
+    await expect(duplicateStory.allBranches(page, count)).toHaveCount(0)
+    await expect(duplicateStory.refusal(page, 'swapPending')).toBeVisible()
     await duplicateStory.nameInput(page).press('Enter')
     // A copy would land well inside this; a refusal writes nothing at all.
     await page.waitForTimeout(1_000)

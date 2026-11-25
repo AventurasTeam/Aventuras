@@ -276,6 +276,45 @@ export function markSwapPending(dbPath: string, storyId: string, targetModelId: 
   }
 }
 
+/** The story's one branch beside its current one; none or several throws. Runs before launch. */
+export function otherBranchId(dbPath: string, storyId: string): string {
+  const db = new DatabaseSync(dbPath, { readOnly: true })
+  try {
+    const story = db
+      .prepare(`SELECT current_branch_id AS currentId FROM stories WHERE id = ?`)
+      .get(storyId) as { currentId: string } | undefined
+    if (story === undefined) throw new Error(`${storyId} is missing from the fixture`)
+    const others = db
+      .prepare(`SELECT id FROM branches WHERE story_id = ? AND id <> ?`)
+      .all(storyId, story.currentId) as { id: string }[]
+    if (others.length !== 1) {
+      throw new Error(`expected one branch beside ${story.currentId}: ${others.length}`)
+    }
+    return others[0].id
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * Point the branch's own story at it, the one story column a switch writes; a missing branch
+ * throws. Runs before launch.
+ */
+export function setCurrentBranch(dbPath: string, branchId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const { changes } = db
+      .prepare(
+        `UPDATE stories SET current_branch_id = ?
+          WHERE id = (SELECT story_id FROM branches WHERE id = ?)`,
+      )
+      .run(branchId, branchId)
+    if (changes !== 1) throw new Error(`cannot make ${branchId} current: no such branch`)
+  } finally {
+    db.close()
+  }
+}
+
 // A story missing from the fixture throws here; markSwapPending's json_patch would match no row.
 function setStorySetting(dbPath: string, storyId: string, key: string, value: unknown): void {
   const db = new DatabaseSync(dbPath)

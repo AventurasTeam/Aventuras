@@ -2,14 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import { VEC_FAMILIES } from '@/lib/db'
 
-import {
-  currentBranchId,
-  FixtureDb,
-  queryApp,
-  queryScalar,
-  seedVectors,
-  vecCounts,
-} from '../harness/db'
+import { currentBranchId, queryApp, queryScalar, seedVectors, vecCounts } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -17,6 +10,7 @@ import {
   createSeededUserDataDir,
   insertFinishedRun,
   markSwapPending,
+  otherBranchId,
   removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
@@ -40,29 +34,6 @@ const VEC_TABLE = new RegExp(`^(?:${Object.values(VEC_FAMILIES).join('|')})_[1-9
 
 type BranchFacts = { id: string; name: string }
 type Hero = { title: string; main: BranchFacts; fork: BranchFacts }
-
-// Read from the seeded file: the run row goes in before launch, while the harness may write it.
-function forkIdOnDisk(dbPath: string): string {
-  const db = new FixtureDb(dbPath)
-  try {
-    const story = db.get<{ currentId: string }>(
-      `SELECT current_branch_id AS currentId FROM stories WHERE id = ?`,
-      HERO_STORY,
-    )
-    if (story === undefined) throw new Error(`${HERO_STORY} is missing from the fixture`)
-    const others = db.all<{ id: string }>(
-      `SELECT id FROM branches WHERE story_id = ? AND id <> ?`,
-      HERO_STORY,
-      story.currentId,
-    )
-    if (others.length !== 1) {
-      throw new Error(`expected one branch beside ${story.currentId}: ${others.length}`)
-    }
-    return others[0].id
-  } finally {
-    db.close()
-  }
-}
 
 // The branch the story points at on launch is the current one; the story's other branch is the fork.
 async function readHero(page: Page): Promise<Hero> {
@@ -154,7 +125,8 @@ test.describe.serial('branch delete — the confirm, the cascade and the chip', 
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     // No embedder: nothing drains, so vectors move only through the delete (seedVectors' terms).
-    runId = insertFinishedRun(seeded.dbPath, forkIdOnDisk(seeded.dbPath))
+    // Read from the seeded file: the run row goes in before launch, while the harness may write it.
+    runId = insertFinishedRun(seeded.dbPath, otherBranchId(seeded.dbPath, HERO_STORY))
     app = await launchApp({ userDataDir, cleanupUserData: true })
     await expect(home.newStory(app.window)).toBeVisible({ timeout: 20_000 })
     hero = await readHero(app.window)
