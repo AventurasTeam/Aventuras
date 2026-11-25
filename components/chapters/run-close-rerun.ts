@@ -317,38 +317,53 @@ function refreshAfterFork(storyId: string): void {
   )
 }
 
-function forkStartFailed(
-  args: RerunOnBranchArgs,
-  forked: Forked,
-  cause: string,
-): RerunOnBranchStep {
-  logger.warn('app.close_rerun_fork_start_failed', {
-    branchId: args.branchId,
-    newBranchId: forked.newBranchId,
-    chapterId: args.chapterId,
-    cause,
-  })
+const forkedAt = (args: RerunOnBranchArgs, forked: Forked) => ({
+  branchId: args.branchId,
+  newBranchId: forked.newBranchId,
+  chapterId: args.chapterId,
+})
+
+function warnStartFailed(forked: Forked): RerunOnBranchStep {
   toast.warning(
     t('chapters:rerunNotice.forkStartFailed', { name: forked.name, position: forked.position }),
   )
   return { step: 'forked' }
 }
 
+function forkStartFailed(
+  args: RerunOnBranchArgs,
+  forked: Forked,
+  cause: string,
+): RerunOnBranchStep {
+  logger.warn('app.close_rerun_fork_start_failed', { ...forkedAt(args, forked), cause })
+  return warnStartFailed(forked)
+}
+
+function threwAfterFork(
+  args: RerunOnBranchArgs,
+  forked: Forked,
+  step: 'show' | 'start',
+  error: unknown,
+): RerunOnBranchStep {
+  logger.error('app.close_rerun_fork_threw', {
+    ...forkedAt(args, forked),
+    step,
+    error: messageOf(error),
+  })
+  return warnStartFailed(forked)
+}
+
 // The new branch may never have published, and only a publish's prune would close the request.
-function notShown(args: RerunOnBranchArgs, forked: Forked, cause: string): RerunOnBranchStep {
+function closeUnshown(args: RerunOnBranchArgs): void {
   refreshAfterFork(args.storyId)
   args.closeRequest()
-  return forkStartFailed(args, forked, cause)
 }
 
 // The new branch was never shown: the user switches to it before retrying from its Timeline.
 function notOpened(args: RerunOnBranchArgs, forked: Forked, cause?: string): RerunOnBranchStep {
-  refreshAfterFork(args.storyId)
-  args.closeRequest()
+  closeUnshown(args)
   logger.warn('app.close_rerun_fork_not_opened', {
-    branchId: args.branchId,
-    newBranchId: forked.newBranchId,
-    chapterId: args.chapterId,
+    ...forkedAt(args, forked),
     ...(cause == null ? {} : { cause }),
   })
   toast.warning(
@@ -373,7 +388,7 @@ async function startOnChild(args: RerunOnBranchArgs, forked: Forked): Promise<Re
       },
     })
   } catch (error) {
-    return forkStartFailed(args, forked, messageOf(error))
+    return threwAfterFork(args, forked, 'start', error)
   }
   if (!('result' in start)) return forkStartFailed(args, forked, refusalCause(start))
   const notice = rerunEndNotice(start, number)
@@ -401,14 +416,18 @@ async function showThenStart(
     )
   } catch (error) {
     readerHoldStore.release(hold)
-    return notShown(args, forked, messageOf(error))
+    closeUnshown(args)
+    return threwAfterFork(args, forked, 'show', error)
   }
   // Idempotent: showBranch releases it on every path too.
   readerHoldStore.release(hold)
   // showBranch put the pointer back on the parent; the new branch stays, and the chip lists it.
   if (shown.status === 'navigation-blocked') return notOpened(args, forked)
   // Nothing published: the new branch isn't the open one, so a start would only refuse it.
-  if (shown.status === 'shown-unloaded') return notShown(args, forked, shown.status)
+  if (shown.status === 'shown-unloaded') {
+    closeUnshown(args)
+    return forkStartFailed(args, forked, shown.status)
+  }
   refreshAfterFork(storyId)
   return startOnChild(args, forked)
 }

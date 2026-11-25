@@ -581,6 +581,19 @@ describe('runCloseRerunOnBranch', () => {
   let pendingAtFork: number[]
   let heldAt: Record<string, boolean>
 
+  type Logged = readonly ['warn' | 'error', string, Readonly<Record<string, string>>]
+
+  // One log for the event: a refusal warns, a throw is an error.
+  function expectLoggedOnce([level, kind, detail]: Logged): void {
+    const [used, unused] = level === 'warn' ? [logWarn, logError] : [logError, logWarn]
+    expect(used).toHaveBeenCalledExactlyOnceWith(kind, {
+      ...AT,
+      newBranchId: 'br_child',
+      ...detail,
+    })
+    expect(unused).not.toHaveBeenCalled()
+  }
+
   function expectNothingAfterTheCheck(): void {
     expect(actions.show).not.toHaveBeenCalled()
     expect(branchList.refresh).not.toHaveBeenCalled()
@@ -891,23 +904,23 @@ describe('runCloseRerunOnBranch', () => {
     [
       'navigated with nothing loaded',
       () => actions.show.mockResolvedValue({ status: 'shown-unloaded' }),
-      'shown-unloaded',
+      ['warn', 'app.close_rerun_fork_start_failed', { cause: 'shown-unloaded' }],
     ],
-    ['threw', () => actions.show.mockRejectedValue(new Error('disk')), 'disk'],
+    [
+      'threw',
+      () => actions.show.mockRejectedValue(new Error('disk')),
+      ['error', 'app.close_rerun_fork_threw', { step: 'show', error: 'disk' }],
+    ],
   ] as const)(
     'after the commit, a tail that %s starts nothing, closes the request and warns',
-    async (_name, fail, cause) => {
+    async (_name, fail, logged) => {
       fail()
       expect(await onBranch()).toStrictEqual({ step: 'forked' })
       expect(actions.show).toHaveBeenCalledTimes(1)
       expect(branchList.refresh).toHaveBeenCalledExactlyOnceWith(db, 'story_1')
       expect(closeRequest).toHaveBeenCalledTimes(1)
       expect(warning).toHaveBeenCalledExactlyOnceWith(START_FAILED)
-      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_start_failed', {
-        ...AT,
-        newBranchId: 'br_child',
-        cause,
-      })
+      expectLoggedOnce(logged)
       expect(actions.startOnFork).not.toHaveBeenCalled()
       expect(readerHoldStore.isHeld('br_1')).toBe(false)
     },
@@ -922,7 +935,7 @@ describe('runCloseRerunOnBranch', () => {
           code: CLOSE_RERUN_TURNS_FOLLOWED,
           reason: 'x',
         }),
-      'turns-followed',
+      ['warn', 'app.close_rerun_fork_start_failed', { cause: 'turns-followed' }],
     ],
     [
       'refuses a busy story',
@@ -931,20 +944,20 @@ describe('runCloseRerunOnBranch', () => {
           outcome: 'rejected',
           blockedBy: MANUAL_CLOSE_REFUSAL.busy,
         }),
-      MANUAL_CLOSE_REFUSAL.busy,
+      ['warn', 'app.close_rerun_fork_start_failed', { cause: 'story-busy' }],
     ],
-    ['throws', () => actions.startOnFork.mockRejectedValue(new Error('disk')), 'disk'],
+    [
+      'throws',
+      () => actions.startOnFork.mockRejectedValue(new Error('disk')),
+      ['error', 'app.close_rerun_fork_threw', { step: 'start', error: 'disk' }],
+    ],
   ] as const)(
     'a start on the new branch that %s ends the sequence with the warning',
-    async (_name, fail, cause) => {
+    async (_name, fail, logged) => {
       fail()
       expect(await onBranch()).toStrictEqual({ step: 'forked' })
       expect(warning).toHaveBeenCalledExactlyOnceWith(START_FAILED)
-      expect(logWarn).toHaveBeenCalledExactlyOnceWith('app.close_rerun_fork_start_failed', {
-        ...AT,
-        newBranchId: 'br_child',
-        cause,
-      })
+      expectLoggedOnce(logged)
       expect(info).not.toHaveBeenCalled()
       // The tail ran once and nothing writes the pointer after it.
       expect(actions.show).toHaveBeenCalledTimes(1)
