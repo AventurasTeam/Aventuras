@@ -555,3 +555,25 @@ slice-planning gate forces its resolution before that slice is planned.
   (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
   with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`. Found by Slice
   6.5's task review (2026-11-24).
+
+- **The observability inventory lacks the branch switch's kinds.**
+  `docs/observability.md → Subsystem emission inventory` names no
+  `action_layer.branch_switch_*` (`_navigation_blocked`,
+  `_restore_retried`, `_restore_failed`, `_restore_reread_failed`,
+  `_failed`) or `action_layer.branch_show_*` kind
+  (`lib/actions/stories/switch-branch.ts`), nor
+  `app.branches_refresh_failed` (`lib/stores/branches/branches.ts`).
+  Slice 6.5's blocked-navigation restore now emits the restore kinds
+  from the fork paths too. The inventory calls itself illustrative, so
+  this is drift, not a contract break. Found by Slice 6.5's final
+  review (2026-11-25).
+
+- **The in-place re-run confirm can strand pending on a throw.**
+  `RerunConfirmHost`'s `Roll back & re-run` press
+  (`components/chapters/chapter-overlays-host.tsx`, `confirm`) chains
+  `runCloseRerun(...).then(...)` with no `.catch`, and the run's
+  refusal mapping (`speak`, `rerunStartOutcome`) sits outside its own
+  `try`: a throw there leaves the confirm pending with no way to close
+  it. Slice 6.5 gave the fork press a `.catch` that ends pending; the
+  in-place press predates the slice. Found by Slice 6.5's final review
+  (2026-11-25).
