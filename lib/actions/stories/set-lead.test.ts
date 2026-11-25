@@ -590,6 +590,17 @@ describe('unsetBranchLead', () => {
     expect(await flagged('br_1')).toEqual(['char_kael'])
   })
 
+  it('queues behind a set fired with it on one branch: the unset clears the set’s new lead', async () => {
+    const [set, unset] = await Promise.all([
+      setBranchLead('br_1', 'char_mira', ctx),
+      unsetBranchLead('br_1', ctx),
+    ])
+
+    expect(set).toEqual({ status: 'ok' })
+    expect(unset).toEqual({ status: 'ok' })
+    expect(await flagged('br_1')).toEqual([])
+  })
+
   it('refuses in-flight while a hard-gate run holds the gate', async () => {
     startHardGateRun()
 
