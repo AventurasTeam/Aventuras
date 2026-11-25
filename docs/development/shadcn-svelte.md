@@ -57,7 +57,7 @@ fails this repo's checks:
 - **Imports don't lint.** Registry files carry placeholders such as `"$UTILS$.js"`, and
   `utils/transformers/transform-imports.ts` swaps in the alias text, which gives
   `#lib/utils/cn.js` and `#lib/components/ui/button/index.js`. `local/lib-import-exists` requires
-  the real `.ts` file ([overview.md](../architecture/overview.md#importing-srclib)), and the rule
+  the file's real extension, here `.ts` ([overview.md](../architecture/overview.md#importing-srclib)), and the rule
   has no fixer.
 - **Imports don't typecheck.** Current registry components import
   `{ cn, type WithElementRef } from "$UTILS$.js"`. `kbd` and `button` in the `vega` style both do.
@@ -65,8 +65,8 @@ fails this repo's checks:
   `export { cn } from "cn"`, the four type helpers, and a new `cn@^0.3.0` dependency. bits-ui 2
   already exports the same four helpers.
 - **Some items edit `src/app.css`.** Items that declare `cssVars` (`sidebar`, `chart`) write into
-  the Tailwind CSS file. This repo's file is laid out by hand and imports 26 theme files from
-  `src/themes/`.
+  the Tailwind CSS file. This repo's file is laid out by hand and pulls in the 26 theme files under
+  `src/themes/` through `src/themes/index.css`.
 
 Alias resolution is not a problem. `utils/resolve-imports.ts` resolves `#`-prefixed aliases
 through `package.json` `imports`, so `#lib/*` → `./src/lib/*` works without tsconfig `paths`.
@@ -74,7 +74,7 @@ through `package.json` `imports`, so `#lib/*` → `./src/lib/*` works without ts
 ## The output no longer matches the components
 
 - **The components predate Tailwind 4.** Every generated folder in `components/ui/` was added
-  between 2026-01-21 and 2026-02-07, across 10 commits, from the Tailwind 3 registry. None of the
+  between 2026-01-21 and 2026-01-26, across 9 commits, from the Tailwind 3 registry. None of the
   101 `.svelte` files there has a `data-slot` attribute, which every current registry primitive
   that renders an element carries.
 - **Some components are hand-written.** `autocomplete`, `empty-state`, `responsive-modal`,
@@ -92,10 +92,9 @@ through `package.json` `imports`, so `#lib/*` → `./src/lib/*` works without ts
 registry component. That replaces each file outright:
 
 - Local edits since January are lost, with no merge.
-- The props, exports and markup differ from the Tailwind 3 snapshots in places, and about 90 files
+- The props, exports and markup differ from the Tailwind 3 snapshots in places, and about 140 files
   import from `components/ui/`. `check` catches type breaks. Markup and behaviour changes only
-  show up when the app runs, because the test environment has no DOM
-  ([testing.md](testing.md)).
+  show up when the app runs, because no test renders a component ([testing.md](testing.md)).
 - New components use tokens and opacity forms the 26 themes may not define (`--sidebar-*`,
   `--chart-*`, `ring-ring/50`). Each theme needs a look.
 
