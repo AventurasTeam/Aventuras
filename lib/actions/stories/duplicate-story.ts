@@ -204,8 +204,8 @@ export async function duplicateStory(
       stories,
       {
         id: sql`${newStoryId}`,
-        // A source gone, or one the check would now refuse, yields a NULL title, failing the batch.
-        // `stories` here is the joined source row.
+        // A source gone, or a stored refusal now on it (draft, swap marker, unfinished run, running
+        // classifier), yields a NULL title, failing the batch. `stories` is the joined source row.
         title: sql`(select ${title} where exists (${sourceHeld})
           and ${stories.status} <> 'draft' and ${storedSwapTarget} is null
           and not exists (${runUnfinished}) and not exists (${classifierRefused}))`,
@@ -232,8 +232,8 @@ export async function duplicateStory(
         sql`${branches} where ${eq(branches.id, row.id)}`,
       ),
     ),
-    // The intended copy if it landed, else the walk's first that did: a lost parent fails the
-    // batch, so that is the landed root first on `created_at, id`.
+    // The intended copy if it landed, else a landed root, first on the copy's created_at, id; a
+    // lost parent fails the batch.
     ctx.db
       .update(stories)
       .set({
@@ -246,7 +246,8 @@ export async function duplicateStory(
   ]
   for (const { row, to } of copies)
     ops.push(...(await branchCopyOps(ctx.db, { from: row.id, to, mode: 'duplicate' })))
-  // Checked again: a swap's marker, a run row or a hold can land during the copier's reads.
+  // Checked again so a refusal landing during the copier's reads gets its line; the title guard
+  // fails one landing later.
   const rechecked = await checkStoryDuplicate(storyId, branch, ctx)
   if (rechecked.status === 'rejected') return rechecked
 
