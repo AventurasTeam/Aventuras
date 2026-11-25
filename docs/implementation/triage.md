@@ -542,3 +542,28 @@ slice-planning gate forces its resolution before that slice is planned.
   table-generic typing the per-suite readers don't need. Slice 6.10's
   simplifier left them, since the move needs a new home. Found by
   Slice 6.10's slice review (2026-11-24).
+
+- **An unguarded `json_extract` on entry metadata.**
+  `lib/db/story-entries/chapter-time-ranges.ts:10` runs `json_extract`
+  over `story_entries.metadata` with no `json_valid` guard. A branch
+  holding malformed metadata, which the M6 lead backfill leaves as it
+  was, makes that read throw `malformed JSON`. Slice 6.8 guarded its
+  own stamp read (`lib/db/story-entries/lead-stamps.ts`); this one is
+  older. Found in Slice 6.8's reviews (2026-11-24).
+
+- **State-patch writes take any entity column.**
+  `columnsWriteOutcome` in `lib/actions/entities/state-patch-actions.ts`
+  writes any `Partial<Entity>` with no allowlist. Every caller names
+  its columns today, but nothing stops a later state-patch handler from
+  writing `isLead`, which the register's source rule guards only in
+  `updateEntity`. Found in Slice 6.8's reviews (2026-11-24).
+
+- **The collision dialog's `GATED` comment may be over-broad.**
+  `components/compounds/collision-resolve-dialog.tsx` says rn-primitives
+  doesn't gate disabled clicks on web, and its plain radio items carry
+  an inline `pointerEvents: 'none'` for it. Slice 6.8's review showed
+  the dialog's `Select` items drop a disabled press already (an RN-Web
+  `Pressable` under the rn-primitives item), and read the same item
+  under the plain radios. Unverified for those by mutation; if it
+  holds, the inline style and the lesson behind it are narrower than
+  stated. Found in Slice 6.8's reviews (2026-11-25).

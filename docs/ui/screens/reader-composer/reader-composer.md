@@ -953,7 +953,7 @@ it dropped instead, since the Send's own text supersedes the entry's.
 A Send the turn refuses for a missing lead
 ([`principles.md → Composer mode`](../../principles.md#composer-mode--send-time-transform-narration-aware))
 wrote nothing either, so it puts the entry back, and its text into
-an empty composer.
+an empty composer (else a toast says the draft was kept).
 The quote shows whether text is kept, so a held entry's copy
 no longer mentions it and reads the same either way. The notice a
 committed pass `Retry` leaves still says why it stands: "Memory
