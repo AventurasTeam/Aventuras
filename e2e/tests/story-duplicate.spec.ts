@@ -249,7 +249,7 @@ test.describe.serial('story duplicate — one branch, every branch, and undo in 
     await expect(duplicateStory.allBranches(page, count)).toHaveCount(0)
     await expect(duplicateStory.confirm(page)).toBeEnabled()
     await duplicateStory.confirm(page).click()
-    // A success toast leaves after 3 s, so Open is pressed as it shows and the DB read after.
+    // The toast dismisses itself, so Open is pressed as it shows and the DB read comes after.
     await toast
       .action(page, t('landing:duplicate.done', { name: ALL_TITLE }), t('landing:duplicate.open'))
       .click()

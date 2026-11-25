@@ -41,7 +41,7 @@ const VEC_TABLE = new RegExp(`^(?:${Object.values(VEC_FAMILIES).join('|')})_[1-9
 type BranchFacts = { id: string; name: string }
 type Hero = { title: string; main: BranchFacts; fork: BranchFacts }
 
-// Read from the seeded file, before launch: the run row has to be there when boot reads the DB.
+// Read from the seeded file: the run row goes in before launch, while the harness may write it.
 function forkIdOnDisk(dbPath: string): string {
   const db = new FixtureDb(dbPath)
   try {
