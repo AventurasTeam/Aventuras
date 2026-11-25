@@ -19,7 +19,7 @@ export type EntityTier = (typeof ENTITY_TIERS)[number]
 
 export type ListQuery<Filter extends string> = { search: string; filter: Filter }
 
-/** `leadId` comes from the story definition; `inScene` comes from lib/row-signals. */
+/** `leadId` is the branch's flagged lead (resolveLead); `inScene` comes from lib/row-signals. */
 export type EntityListSignals = { leadId: string | null; inScene: ReadonlySet<string> }
 
 export type ListGroup<Row, Key extends string = string> = { key: Key; rows: Row[] }

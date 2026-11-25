@@ -2,22 +2,24 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { LEAD_REJECTION, type SetStoryLeadResult } from '@/lib/actions'
+import { LEAD_REJECTION, type SetLeadResult } from '@/lib/actions'
 import { logger } from '@/lib/diagnostics'
 import { toast } from '@/lib/toast'
 
 import type { PeekLeadControl } from './peek-model'
 import { usePeekLeadControl, useSetLead } from './use-set-lead'
 
-const setStoryLead = vi.hoisted(() => vi.fn())
+const setBranchLead = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/actions', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  setStoryLead,
+  setBranchLead,
 }))
 vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-const STORY = 'story_1'
+// Not the story's main branch: the peek writes the branch its host reads.
+const BRANCH = 'br_fork'
+const ANY_CTX = expect.objectContaining({ runInTransaction: expect.any(Function) })
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -29,7 +31,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  setStoryLead.mockReset()
+  setBranchLead.mockReset()
 })
 
 afterEach(() => {
@@ -38,30 +40,26 @@ afterEach(() => {
 })
 
 describe('useSetLead', () => {
-  it('writes the lead and shows no toast on success', async () => {
-    setStoryLead.mockResolvedValue({ status: 'ok' } satisfies SetStoryLeadResult)
-    const { result } = renderHook(() => useSetLead(STORY))
+  it('writes the lead on its branch and shows no toast on success', async () => {
+    setBranchLead.mockResolvedValue({ status: 'ok' } satisfies SetLeadResult)
+    const { result } = renderHook(() => useSetLead(BRANCH))
 
     act(() => result.current.setLead('char_mira'))
     expect(result.current.pending).toBe(true)
     await waitFor(() => expect(result.current.pending).toBe(false))
 
-    expect(setStoryLead).toHaveBeenCalledTimes(1)
-    expect(setStoryLead).toHaveBeenCalledWith(
-      STORY,
-      'char_mira',
-      expect.objectContaining({ runInTransaction: expect.any(Function) }),
-    )
+    expect(setBranchLead).toHaveBeenCalledTimes(1)
+    expect(setBranchLead).toHaveBeenCalledWith(BRANCH, 'char_mira', ANY_CTX)
     expect(toast.success).not.toHaveBeenCalled()
     expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('toasts the refusal when the action refuses', async () => {
-    setStoryLead.mockResolvedValue({
+    setBranchLead.mockResolvedValue({
       status: 'rejected',
       code: LEAD_REJECTION.notActive,
-    } satisfies SetStoryLeadResult)
-    const { result } = renderHook(() => useSetLead(STORY))
+    } satisfies SetLeadResult)
+    const { result } = renderHook(() => useSetLead(BRANCH))
 
     act(() => result.current.setLead('char_vorne'))
     await waitFor(() => expect(result.current.pending).toBe(false))
@@ -72,23 +70,23 @@ describe('useSetLead', () => {
 
     // A lock left held after the refusal would make this press a silent no-op.
     act(() => result.current.setLead('char_mira'))
-    expect(setStoryLead).toHaveBeenCalledTimes(2)
-    expect(setStoryLead).toHaveBeenLastCalledWith(STORY, 'char_mira', expect.anything())
+    expect(setBranchLead).toHaveBeenCalledTimes(2)
+    expect(setBranchLead).toHaveBeenLastCalledWith(BRANCH, 'char_mira', expect.anything())
     await waitFor(() => expect(result.current.pending).toBe(false))
   })
 
   it('logs and toasts when the action throws', async () => {
-    setStoryLead
+    setBranchLead
       .mockRejectedValueOnce(new Error('disk full'))
-      .mockResolvedValue({ status: 'ok' } satisfies SetStoryLeadResult)
+      .mockResolvedValue({ status: 'ok' } satisfies SetLeadResult)
     const error = vi.spyOn(logger, 'error')
-    const { result } = renderHook(() => useSetLead(STORY))
+    const { result } = renderHook(() => useSetLead(BRANCH))
 
     act(() => result.current.setLead('char_mira'))
     await waitFor(() => expect(result.current.pending).toBe(false))
 
     expect(error).toHaveBeenCalledWith('reader.peek_set_lead_failed', {
-      storyId: STORY,
+      branchId: BRANCH,
       entityId: 'char_mira',
       error: 'disk full',
     })
@@ -96,15 +94,15 @@ describe('useSetLead', () => {
 
     // A lock left held after the throw would make this press a silent no-op.
     act(() => result.current.setLead('char_vorne'))
-    expect(setStoryLead).toHaveBeenCalledTimes(2)
-    expect(setStoryLead).toHaveBeenLastCalledWith(STORY, 'char_vorne', expect.anything())
+    expect(setBranchLead).toHaveBeenCalledTimes(2)
+    expect(setBranchLead).toHaveBeenLastCalledWith(BRANCH, 'char_vorne', expect.anything())
     await waitFor(() => expect(result.current.pending).toBe(false))
   })
 
   it('ignores a press while a call is in flight, then takes the next', async () => {
-    const first = deferred<SetStoryLeadResult>()
-    setStoryLead.mockReturnValueOnce(first.promise).mockResolvedValue({ status: 'ok' })
-    const { result } = renderHook(() => useSetLead(STORY))
+    const first = deferred<SetLeadResult>()
+    setBranchLead.mockReturnValueOnce(first.promise).mockResolvedValue({ status: 'ok' })
+    const { result } = renderHook(() => useSetLead(BRANCH))
 
     // Both in one act: the second press lands before the pending render.
     act(() => {
@@ -113,8 +111,8 @@ describe('useSetLead', () => {
     })
     expect(result.current.pending).toBe(true)
     act(() => result.current.setLead('char_kael'))
-    expect(setStoryLead).toHaveBeenCalledTimes(1)
-    expect(setStoryLead).toHaveBeenLastCalledWith(STORY, 'char_mira', expect.anything())
+    expect(setBranchLead).toHaveBeenCalledTimes(1)
+    expect(setBranchLead).toHaveBeenLastCalledWith(BRANCH, 'char_mira', expect.anything())
 
     await act(async () => {
       first.resolve({ status: 'ok' })
@@ -123,24 +121,24 @@ describe('useSetLead', () => {
     await waitFor(() => expect(result.current.pending).toBe(false))
 
     act(() => result.current.setLead('char_kael'))
-    expect(setStoryLead).toHaveBeenCalledTimes(2)
-    expect(setStoryLead).toHaveBeenLastCalledWith(STORY, 'char_kael', expect.anything())
+    expect(setBranchLead).toHaveBeenCalledTimes(2)
+    expect(setBranchLead).toHaveBeenLastCalledWith(BRANCH, 'char_kael', expect.anything())
     await waitFor(() => expect(result.current.pending).toBe(false))
   })
 
-  it('logs and toasts instead of writing without a story id', () => {
-    setStoryLead.mockResolvedValue({ status: 'ok' } satisfies SetStoryLeadResult)
+  it('logs and toasts instead of writing without a branch id', () => {
+    setBranchLead.mockResolvedValue({ status: 'ok' } satisfies SetLeadResult)
     const error = vi.spyOn(logger, 'error')
     const { result } = renderHook(() => useSetLead(null))
 
     act(() => result.current.setLead('char_mira'))
 
-    expect(setStoryLead).not.toHaveBeenCalled()
+    expect(setBranchLead).not.toHaveBeenCalled()
     expect(result.current.pending).toBe(false)
     expect(error).toHaveBeenCalledWith('reader.peek_set_lead_failed', {
-      storyId: null,
+      branchId: null,
       entityId: 'char_mira',
-      error: 'no story id',
+      error: 'no branch id',
     })
     expect(toast.error).toHaveBeenCalledTimes(1)
     expect(toast.error).toHaveBeenCalledWith("Couldn't change the lead.")
@@ -152,7 +150,7 @@ describe('usePeekLeadControl', () => {
     const { result, rerender } = renderHook<
       PeekLeadControl,
       { blocked: boolean; reason: string | undefined }
-    >(({ blocked, reason }) => usePeekLeadControl(STORY, blocked, reason), {
+    >(({ blocked, reason }) => usePeekLeadControl(BRANCH, blocked, reason), {
       initialProps: { blocked: true, reason: 'Chapter close in progress.' },
     })
     expect(result.current).toMatchObject({
@@ -166,30 +164,32 @@ describe('usePeekLeadControl', () => {
   })
 
   it('keeps one control object while nothing it carries changes', () => {
-    const { result, rerender } = renderHook(() => usePeekLeadControl(STORY, false, undefined))
+    const { result, rerender } = renderHook(() => usePeekLeadControl(BRANCH, false, undefined))
     const first = result.current
     rerender()
     expect(result.current).toBe(first)
   })
 
-  it('sets the lead on the story and reports the call as pending until it settles', async () => {
-    const call = deferred<SetStoryLeadResult>()
-    setStoryLead.mockReturnValueOnce(call.promise)
-    const { result } = renderHook(() => usePeekLeadControl(STORY, false, undefined))
+  it('sets the lead on the branch its host gives it, and follows the host to another branch', async () => {
+    const call = deferred<SetLeadResult>()
+    setBranchLead.mockReturnValueOnce(call.promise).mockResolvedValue({ status: 'ok' })
+    const { result, rerender } = renderHook<PeekLeadControl, { branchId: string }>(
+      ({ branchId }) => usePeekLeadControl(branchId, false, undefined),
+      { initialProps: { branchId: 'br_main' } },
+    )
 
     act(() => result.current.onSetLead('char_mira'))
-    expect(setStoryLead).toHaveBeenCalledTimes(1)
-    expect(setStoryLead).toHaveBeenCalledWith(
-      STORY,
-      'char_mira',
-      expect.objectContaining({ runInTransaction: expect.any(Function) }),
-    )
+    expect(setBranchLead).toHaveBeenCalledWith('br_main', 'char_mira', ANY_CTX)
     expect(result.current.pending).toBe(true)
-
     await act(async () => {
       call.resolve({ status: 'ok' })
       await call.promise
     })
+    await waitFor(() => expect(result.current.pending).toBe(false))
+
+    rerender({ branchId: BRANCH })
+    act(() => result.current.onSetLead('char_mira'))
+    expect(setBranchLead).toHaveBeenLastCalledWith(BRANCH, 'char_mira', ANY_CTX)
     await waitFor(() => expect(result.current.pending).toBe(false))
   })
 })

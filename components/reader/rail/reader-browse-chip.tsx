@@ -10,7 +10,6 @@ import { railChipTintOf, type RailData } from './use-rail-data'
 
 export type ReaderBrowseChipProps = {
   data: RailData
-  storyId: string | null
   blocked: boolean
   blockedReason: string | undefined
   /** Routes after the Sheet has started closing. */
@@ -19,7 +18,6 @@ export type ReaderBrowseChipProps = {
 
 export function ReaderBrowseChip({
   data,
-  storyId,
   blocked,
   blockedReason,
   onNavigate,
@@ -49,7 +47,6 @@ export function ReaderBrowseChip({
           <RailSheetPeek
             peek={peek}
             data={data}
-            storyId={storyId}
             blocked={blocked}
             blockedReason={blockedReason}
             onBack={back}

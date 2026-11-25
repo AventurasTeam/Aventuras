@@ -51,7 +51,6 @@ function ConnectedHarness({ isFocused }: { isFocused: boolean }) {
             <ReaderPeekDrawer
               data={DATA}
               isFocused={isFocused}
-              storyId={null}
               blocked={false}
               blockedReason={undefined}
               onNavigate={navigate}

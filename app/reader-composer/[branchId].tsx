@@ -395,10 +395,9 @@ function ReaderComposerBody({
   const storyId = hydrated?.storyId ?? null
   const { guardLeave, dialog: storyLeaveDialog } = useStoryLeaveGuard(storyId, branchId)
   const openForBranch = hydrationSucceeded && open?.branchId === branchId ? open : null
-  const leadEntityId = openForBranch?.definition.leadEntityId ?? null
   const leadName = entitiesStore.useEntities(
     branchId,
-    (m) => resolveLead(leadEntityId, m, branchId)?.name ?? null,
+    (m) => resolveLead(m, branchId)?.name ?? null,
   )
   const modesEnabled =
     openForBranch?.settings.composerModesEnabled === true &&
@@ -2010,7 +2009,6 @@ function ReaderComposerBody({
         tier === 'phone' ? (
           <ReaderBrowseChip
             data={railData}
-            storyId={storyId}
             blocked={actionsBlocked}
             blockedReason={gateReason}
             onNavigate={navigateGuarded}
@@ -2132,7 +2130,6 @@ function ReaderComposerBody({
             <ReaderPeekDrawer
               data={railData}
               isFocused={isFocused}
-              storyId={storyId}
               blocked={actionsBlocked}
               blockedReason={gateReason}
               onNavigate={navigateGuarded}

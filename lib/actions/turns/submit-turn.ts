@@ -1,7 +1,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata, readBranchLead, storyEntries, type EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, withTurnAdmission, EMBEDDER_SWAP_REFUSAL } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
@@ -19,7 +19,7 @@ import {
 } from '@/lib/pipeline'
 import { generationStore, isBranchHeld, RERUN_HELD, type DeferredWorkKind } from '@/lib/stores'
 
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaAction, settleUserWrites } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
 import { withBranchQueue, withPendingTurn } from './branch-queue'
@@ -151,10 +151,17 @@ export async function submitTurn(
           .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
           .orderBy(desc(storyEntries.position))
           .limit(1)
+        // The mark keeps new user writes out; waiting first lets one already dispatched land, so the
+        // lead read here holds through the run's own read.
+        await settleUserWrites()
+        const lead = await readBranchLead(ids.branchId, ctx.db)
         const position = (tail?.position ?? 0) + 1
         const entryId = generateId('entry')
         const createdAt = Date.now()
-        const metadata: EntryMetadata = inheritedEntryMetadata(sceneTail?.metadata)
+        const metadata: EntryMetadata = {
+          ...inheritedEntryMetadata(sceneTail?.metadata),
+          ...(lead == null ? {} : { leadId: lead.id }),
+        }
 
         const result = await applyDeltaAction(
           {

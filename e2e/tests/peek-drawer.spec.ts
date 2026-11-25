@@ -43,13 +43,13 @@ async function entityId(page: Page, branchId: string, name: string): Promise<str
   return id as string
 }
 
-async function leadEntityId(page: Page): Promise<unknown> {
-  const [[id]] = await queryApp(
+async function flaggedLeads(page: Page, branchId: string): Promise<unknown[]> {
+  const rows = await queryApp(
     page,
-    `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE id = ?`,
-    [HERO_STORY],
+    `SELECT id FROM entities WHERE branch_id = ? AND is_lead = 1 ORDER BY id`,
+    [branchId],
   )
-  return id
+  return rows.map(([id]) => id)
 }
 
 async function countOf(page: Page, sql: string, params: unknown[]): Promise<number> {
@@ -98,11 +98,13 @@ test.describe.serial('Peek drawer', () => {
   test('Set as lead writes the lead in one press, and the rail badge moves', async () => {
     const page = app.window
     const mira = await entityId(page, branchId, NEW_LEAD)
-    expect(await leadEntityId(page)).toBe(await entityId(page, branchId, SEEDED_LEAD))
+    expect(await flaggedLeads(page, branchId)).toEqual([
+      await entityId(page, branchId, SEEDED_LEAD),
+    ])
 
     // One press and no confirm: a confirm would hold the write, and the drawer stays on the row.
     await peek.setLead(page, NEW_LEAD).click()
-    await expect.poll(() => leadEntityId(page)).toBe(mira)
+    await expect.poll(() => flaggedLeads(page, branchId)).toEqual([mira])
     await expect(peek.drawer(page, NEW_LEAD)).toBeVisible()
     await expect(peek.leadTag(page, NEW_LEAD)).toBeVisible()
     await expect(peek.setLead(page, NEW_LEAD)).toHaveCount(0)

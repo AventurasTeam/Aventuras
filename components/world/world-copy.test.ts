@@ -374,6 +374,8 @@ describe('leadRejectionText', () => {
     )
     expect(leadRejectionText('not-active')).toBe('Only an active character can be the lead.')
     expect(leadRejectionText('wrong-branch')).toBe("Couldn't change the lead.")
+    expect(leadRejectionText('needs-lead')).toBe("Couldn't change the lead.")
+    expect(leadRejectionText('failed')).toBe("Couldn't change the lead.")
   })
 })
 

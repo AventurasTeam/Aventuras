@@ -1,8 +1,17 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { branches, deltas, storyEntries, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  emptyEntityState,
+  entities,
+  stories,
+  storyEntries,
+  type NewEntity,
+  type StoryEntry,
+} from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { startStorySwap } from '@/lib/embedder-swap'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
@@ -10,6 +19,7 @@ import { runRetrieval } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
+  entitiesStore,
   entriesStore,
   generationStore,
   hydrateAppSettings,
@@ -20,12 +30,14 @@ import {
   branchEntries,
   openStory,
   sseFetch,
+  STORY_DEFINITION,
   STORY_SETTINGS,
   WORKING_CONFIG,
 } from './__tests__/fixtures'
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
 import { __redoGroupForTest } from '../delta/redo'
+import { setBranchLead } from '../stories/set-lead'
 
 // The retrieval phase's own coverage lives in per-turn-retrieval.test.ts; here
 // it only has to let the turn through, and its real pass would reach for a DB
@@ -38,6 +50,24 @@ vi.mock('@/lib/retrieval', async (importOriginal) => {
 vi.mock('../embedder-swap/engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
+})
+
+// Lets a test observe the turn reaching the settle boundary; the real settle still runs.
+const settleProbe = vi.hoisted(() => ({ onEnter: null as (() => void) | null }))
+
+vi.mock('../delta/apply-delta-action', async (importOriginal) => {
+  const actual = await importOriginal<
+    Record<string, unknown> & { settleUserWrites: () => Promise<void> }
+  >()
+  return {
+    ...actual,
+    settleUserWrites: () => {
+      const enter = settleProbe.onEnter
+      settleProbe.onEnter = null
+      enter?.()
+      return actual.settleUserWrites()
+    },
+  }
 })
 
 const OK_RETRIEVAL = retrievalSuccess()
@@ -294,6 +324,194 @@ describe('submitTurn', () => {
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, 'user_action')))
     expect(ua?.metadata?.worldTime).toBe(5)
     expect(ua?.position).toBe(3)
+  })
+
+  describe('the lead stamp', () => {
+    const KAEL = 'char_00000000-0000-4000-8000-000000000001'
+    const MIRA = 'char_00000000-0000-4000-8000-000000000002'
+
+    function character(id: string, name: string, isLead: 0 | 1): NewEntity {
+      return {
+        id,
+        branchId: 'b1',
+        kind: 'character',
+        name,
+        status: 'active',
+        injectionMode: 'auto',
+        state: emptyEntityState('character'),
+        isLead,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    }
+
+    async function seedCast(
+      db: Awaited<ReturnType<typeof makeHarness>>['db'],
+      lead: string | null,
+    ): Promise<void> {
+      await db
+        .insert(entities)
+        .values([
+          character(KAEL, 'Kael', lead === KAEL ? 1 : 0),
+          character(MIRA, 'Mira', lead === MIRA ? 1 : 0),
+        ])
+      entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+    }
+
+    async function entryOfKind(
+      db: Awaited<ReturnType<typeof makeHarness>>['db'],
+      kind: 'user_action' | 'ai_reply',
+    ) {
+      const [row] = await db
+        .select()
+        .from(storyEntries)
+        .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.kind, kind)))
+      return row
+    }
+
+    it("stamps the user action, and its reply, with the branch's flagged lead", async () => {
+      const { ctx, db } = await makeHarness()
+      await openStory(db, 's1', 'b1')
+      await seedCast(db, MIRA)
+      entriesStore.hydrate('b1', [])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'I look around.', composerMode: 'do' },
+          ctx,
+        ),
+      )
+
+      expect((await entryOfKind(db, 'user_action'))?.metadata?.leadId).toBe(MIRA)
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
+    })
+
+    it('stamps the user action and its reply alike when a lead set is still writing at Send', async () => {
+      const { ctx, db } = await makeHarness()
+      await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+      await openStory(db, 's1', 'b1')
+      await seedCast(db, KAEL)
+      entriesStore.hydrate('b1', [])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      // The set passed its gate before Send and its transaction hasn't opened; the test opens it
+      // once Send is blocked on the settle, which is the only thing holding the user_action's read.
+      let dispatched!: () => void
+      const hasDispatched = new Promise<void>((resolve) => {
+        dispatched = resolve
+      })
+      let release!: () => void
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      // A failed or timed-out test still frees the gated write, or its row lock outlives the test.
+      onTestFinished(() => {
+        settleProbe.onEnter = null
+        release()
+      })
+      const setCtx: typeof ctx = {
+        ...ctx,
+        runInTransaction: async (fn) => {
+          dispatched()
+          await released
+          return ctx.runInTransaction(fn)
+        },
+      }
+      let written = false
+      const setting = setBranchLead('b1', MIRA, setCtx).then((result) => {
+        written = true
+        return result
+      })
+      await hasDispatched
+      let atSettle = false
+      const reachedSettle = new Promise<void>((resolve) => {
+        settleProbe.onEnter = () => {
+          atSettle = true
+          resolve()
+        }
+      })
+
+      const turning = submitTurn(
+        { storyId: 's1', branchId: 'b1' },
+        { content: 'I look around.', composerMode: 'do' },
+        ctx,
+      )
+      // Raced with the turn so a dropped settle fails the assertions below instead of hanging.
+      await Promise.race([reachedSettle, turning])
+      expect(atSettle).toBe(true)
+      expect(written).toBe(false)
+      release()
+
+      expect(await setting).toEqual({ status: 'ok' })
+      expectRan(await turning)
+      expect((await entryOfKind(db, 'user_action'))?.metadata?.leadId).toBe(MIRA)
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata?.leadId).toBe(MIRA)
+    })
+
+    it("authors the stamp: a branch with no lead doesn't carry the stamped tail's", async () => {
+      const { ctx, db } = await makeHarness()
+      const tail: StoryEntry = {
+        id: 'seed-stamped',
+        branchId: 'b1',
+        position: 1,
+        kind: 'opening',
+        content: 'The keep looms over the valley.',
+        contentTokens: null,
+        chapterId: null,
+        metadata: { sceneEntities: [KAEL], currentLocationId: null, worldTime: 5, leadId: KAEL },
+        createdAt: 1,
+      }
+      await ctx.db.insert(storyEntries).values(tail)
+      await openStory(db, 's1', 'b1')
+      await seedCast(db, null)
+      entriesStore.hydrate('b1', [tail])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'I look around.', composerMode: 'do' },
+          ctx,
+        ),
+      )
+
+      expect((await entryOfKind(db, 'user_action'))?.metadata).toMatchObject({ worldTime: 5 })
+      expect((await entryOfKind(db, 'user_action'))?.metadata).not.toHaveProperty('leadId')
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata).not.toHaveProperty('leadId')
+    })
+
+    it('leaves the stamp absent on a creative third-person branch with no lead', async () => {
+      const { ctx, db } = await makeHarness()
+      await openStory(db, 's1', 'b1')
+      const creativeThird = {
+        ...STORY_DEFINITION,
+        mode: 'creative' as const,
+        narration: 'third' as const,
+      }
+      await db.update(stories).set({ definition: creativeThird }).where(eq(stories.id, 's1'))
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition: creativeThird,
+        settings: STORY_SETTINGS,
+      })
+      await seedCast(db, null)
+      entriesStore.hydrate('b1', [])
+      await hydrateAppSettings(async () => WORKING_CONFIG)
+
+      expectRan(
+        await submitTurn(
+          { storyId: 's1', branchId: 'b1' },
+          { content: 'The rain keeps on.', composerMode: 'free' },
+          ctx,
+        ),
+      )
+
+      expect((await entryOfKind(db, 'user_action'))?.metadata).not.toHaveProperty('leadId')
+      expect((await entryOfKind(db, 'ai_reply'))?.metadata).not.toHaveProperty('leadId')
+    })
   })
 
   it('positions the new user action at MAX(position)+1, not the store row count', async () => {

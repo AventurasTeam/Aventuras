@@ -9,7 +9,6 @@ import { PeekDrawer } from './peek-drawer'
 export type ReaderPeekDrawerProps = {
   data: RailData
   isFocused: boolean
-  storyId: string | null
   blocked: boolean
   blockedReason: string | undefined
   /** Routes after the peek has closed. */
@@ -20,7 +19,6 @@ export type ReaderPeekDrawerProps = {
 export function ReaderPeekDrawer({
   data,
   isFocused,
-  storyId,
   blocked,
   blockedReason,
   onNavigate,
@@ -43,7 +41,6 @@ export function ReaderPeekDrawer({
       data={data}
       visible={isFocused && !collapsed}
       peek={peek}
-      storyId={storyId}
       blocked={blocked}
       blockedReason={blockedReason}
       onClose={closePeek}

@@ -528,6 +528,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     ...(cut !== undefined && !cut.inBlock ? { cutOff: cutOffMark(cut.failure) } : {}),
     ...(load.injectedHappenings.length > 0 ? { injectedHappenings: load.injectedHappenings } : {}),
     ...(fold?.metadata ?? inherited),
+    // The run's own read: neither the fold nor `inherited` carries a stamp.
+    ...(load.leadId != null ? { leadId: load.leadId } : {}),
     ...(stateReport !== undefined ? { stateReport } : {}),
     ...(suggestionsCaptured
       ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }

@@ -22,7 +22,6 @@ export type PeekDrawerProps = {
   /** The host's gate: rail shown expanded, reader focused. */
   visible: boolean
   peek: RailPeek | null
-  storyId: string | null
   blocked: boolean
   blockedReason: string | undefined
   /** The host clears `peek`; also called when the peeked row stops resolving. */
@@ -36,7 +35,6 @@ export function PeekDrawer({
   data,
   visible,
   peek,
-  storyId,
   blocked,
   blockedReason,
   onClose,
@@ -44,7 +42,7 @@ export function PeekDrawer({
 }: PeekDrawerProps) {
   // Called here, above SheetContent's Portal, which drops custom contexts on native.
   const { model, entityContext, entryIndex } = usePeekView(peek, data)
-  const control = usePeekLeadControl(storyId, blocked, blockedReason)
+  const control = usePeekLeadControl(data.branchId, blocked, blockedReason)
   const gone = peek != null && model == null
   const open = visible && model != null
   const leadAffordance = model == null ? undefined : peekLeadOf(model, control)

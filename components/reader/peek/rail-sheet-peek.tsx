@@ -11,7 +11,6 @@ import { usePeekLeadControl } from './use-set-lead'
 export type RailSheetPeekProps = {
   peek: RailPeek
   data: RailData
-  storyId: string | null
   blocked: boolean
   blockedReason: string | undefined
   /** RailSheet's `back`: the list level. */
@@ -23,14 +22,13 @@ export type RailSheetPeekProps = {
 export function RailSheetPeek({
   peek,
   data,
-  storyId,
   blocked,
   blockedReason,
   onBack,
   onOpenInPanel,
 }: RailSheetPeekProps) {
   const { model, entityContext, entryIndex } = usePeekView(peek, data)
-  const lead = usePeekLeadControl(storyId, blocked, blockedReason)
+  const lead = usePeekLeadControl(data.branchId, blocked, blockedReason)
   const gone = model == null
   // A row deleted under the peek returns to the list rather than keep its id: an undo that
   // restored it must not reopen the peek (lessons-learned → No "harmless" id leaks).

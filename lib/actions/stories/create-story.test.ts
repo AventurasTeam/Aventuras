@@ -1015,3 +1015,126 @@ describe('createStoryWithBranch — embed step', () => {
     expect(mockedEmbed).not.toHaveBeenCalled()
   })
 })
+
+describe('createStoryWithBranch — the lead flag', () => {
+  const MIRA_ID = 'char_55555555-5555-5555-5555-555555555555'
+
+  it("flags the lead's cast row, no other, and stamps the opening, writing no delta", async () => {
+    const { db, ctx } = await setup()
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Aria Rising',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake at dawn.',
+        openingMetadata: metadata,
+        cast: [characterRow(), characterRow({ id: MIRA_ID, name: 'Mira' }), locationRow()],
+        leadId: LEAD_ID,
+      },
+      ctx,
+      6000,
+    )
+
+    const rows = await db.select().from(entities).where(eq(entities.branchId, branchId))
+    expect(Object.fromEntries(rows.map((row) => [row.id, row.isLead]))).toEqual({
+      [LEAD_ID]: 1,
+      [MIRA_ID]: 0,
+      [LOCATION_ID]: 0,
+    })
+    const [opening] = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchId))
+    expect(opening.metadata?.leadId).toBe(LEAD_ID)
+    expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('flags no row and stamps nothing with no lead, dropping a stamp the caller carried', async () => {
+    const { db, ctx } = await setup()
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Ensemble',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: { ...metadata, leadId: LEAD_ID },
+        cast: [characterRow()],
+      },
+      ctx,
+      6100,
+    )
+
+    const rows = await db.select().from(entities).where(eq(entities.branchId, branchId))
+    expect(rows.map((row) => row.isLead)).toEqual([0])
+    const [opening] = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchId))
+    expect(opening.metadata).not.toHaveProperty('leadId')
+  })
+
+  it('stamps the lead it flags over a stamp the caller carried', async () => {
+    const { db, ctx } = await setup()
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Aria Rising',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake at dawn.',
+        openingMetadata: { ...metadata, leadId: MIRA_ID },
+        cast: [characterRow(), characterRow({ id: MIRA_ID, name: 'Mira' })],
+        leadId: LEAD_ID,
+      },
+      ctx,
+      6200,
+    )
+
+    const [opening] = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchId))
+    expect(opening.metadata?.leadId).toBe(LEAD_ID)
+  })
+
+  it.each<[string, WizardCastEntityInput[], string]>([
+    ['names no cast row', [characterRow({ id: MIRA_ID, name: 'Mira' })], LEAD_ID],
+    ["names a cast row that isn't a character", [locationRow()], LOCATION_ID],
+  ])('throws before any write when the lead %s', async (_, cast, leadId) => {
+    const { db, ctx } = await setup()
+
+    await expect(
+      createStoryWithBranch(
+        {
+          title: 'No such lead',
+          // Creative third person carries no definition lead, so only the new guard can refuse.
+          definition: makeDefinition(),
+          settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+          openingContent: 'x',
+          openingMetadata: metadata,
+          cast,
+          leadId,
+          embed: { config: LOCAL_CONFIG, exec: async () => {} },
+        },
+        ctx,
+        6300,
+      ),
+    ).rejects.toThrow('leadId requires a matching cast character')
+
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(branches)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+    expect(await db.select().from(storyEntries)).toHaveLength(0)
+  })
+})

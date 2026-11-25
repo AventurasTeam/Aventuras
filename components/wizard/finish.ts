@@ -33,11 +33,10 @@ import {
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
-import { checkParentChain, parentOfLocations, withPlacement } from '@/lib/world'
+import { checkParentChain, needsLead, parentOfLocations, withPlacement } from '@/lib/world'
 
 import { clampEffectiveDim } from './memory-cost-logic'
 import { activeLead, castPlacement, invalidCastRowIds } from './step-cast-logic'
-import { needsLead } from './step-frame-logic'
 import { invalidLoreRowIds, type LabeledPrompt } from './step-world-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
@@ -346,6 +345,7 @@ export async function finishWizard(
         settings,
         openingContent: s.opening.content,
         openingMetadata,
+        leadId: lead?.id,
         cast: castRows,
         lore: s.lore,
         embed: {

@@ -141,7 +141,6 @@ function ChipHarness({
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
         <ReaderBrowseChip
           data={data}
-          storyId={null}
           blocked={blocked}
           blockedReason={blockedReason}
           onNavigate={onNavigate}

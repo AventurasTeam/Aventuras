@@ -7,12 +7,15 @@ import {
   chapters,
   characterRelationships,
   deltas,
+  emptyEntityState,
   entities,
   happeningInvolvements,
   happenings,
   pipelineRuns,
+  stories,
   storyEntries,
   type Delta,
+  type NewEntity,
   type StoryEntry,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -54,6 +57,7 @@ import {
   ReversalIntegrityError,
   type reverseAndPruneDeltaRows,
 } from '../delta/reverse-replay'
+import { setBranchLead } from '../stories/set-lead'
 import {
   getRollbackCounts,
   resolveSweep,
@@ -241,6 +245,100 @@ describe('regenerateTurn', () => {
 
     // What the host re-submits on Retry / restores as a draft.
     expect(regen.userActionContent).toBe('I cross the bridge.')
+  })
+
+  it('stamps the new reply with the lead the sweep leaves, and the user action keeps its own', async () => {
+    const KAEL = 'char_00000000-0000-4000-8000-000000000001'
+    const MIRA = 'char_00000000-0000-4000-8000-000000000002'
+    const VORNE = 'char_00000000-0000-4000-8000-000000000003'
+    const character = (id: string, name: string, isLead: 0 | 1): NewEntity => ({
+      id,
+      branchId: 'b1',
+      kind: 'character',
+      name,
+      status: 'active',
+      injectionMode: 'auto',
+      state: emptyEntityState('character'),
+      isLead,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    // Three ids: the action's stamp (Vorne), the lead the set leaves (Mira) and the lead the sweep
+    // restores (Kael), so the new reply's stamp can only be the run's own read after the sweep.
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0, leadId: VORNE },
+      })
+      .where(eq(storyEntries.id, 'e_u2'))
+    await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await openStory(db, 's1', 'b1')
+    await db
+      .insert(entities)
+      .values([
+        character(KAEL, 'Kael', 1),
+        character(MIRA, 'Mira', 0),
+        character(VORNE, 'Vorne', 0),
+      ])
+    entitiesStore.hydrate('b1', (await db.select().from(entities)) as never)
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    // A World edit after the reply, logged with no entry: the regenerate's sweep reverses it.
+    expect(await setBranchLead('b1', MIRA, ctx)).toEqual({ status: 'ok' })
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    expect(
+      await db.select({ id: entities.id }).from(entities).where(eq(entities.isLead, 1)),
+    ).toEqual([{ id: KAEL }])
+    const [reply] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.position, 5)))
+    expect(reply.kind).toBe('ai_reply')
+    expect(reply.id).not.toBe('e_r2')
+    expect(reply.metadata?.leadId).toBe(KAEL)
+    const [action] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_u2'))
+    expect(action.metadata?.leadId).toBe(VORNE)
+  })
+
+  it('stamps no lead on the new reply when the sweep leaves none, whatever the action carries', async () => {
+    const VORNE = 'char_00000000-0000-4000-8000-000000000003'
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await db
+      .update(storyEntries)
+      .set({
+        metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0, leadId: VORNE },
+      })
+      .where(eq(storyEntries.id, 'e_u2'))
+    // The run reads the store's tail, so the stamp goes there too.
+    entriesStore.hydrate('b1', (await db.select().from(storyEntries)) as never)
+    await db.update(stories).set({ status: 'active' }).where(eq(stories.id, 's1'))
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx, {
+      expectedCounts: undefined,
+    })
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('completed')
+    const [reply] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.position, 5)))
+    expect(reply.kind).toBe('ai_reply')
+    expect(reply.metadata).not.toHaveProperty('leadId')
+    const [action] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'e_u2'))
+    expect(action.metadata?.leadId).toBe(VORNE)
   })
 
   it('older reply: deeper cascade through the same sweep, regenerating from that action', async () => {
