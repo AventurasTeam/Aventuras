@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { generateStructured, generateToolStep } from '@/lib/ai'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
@@ -1212,6 +1212,16 @@ async function expectNothingStartedOn(
 }
 
 describe('startCloseRerunOnFork (AC 18)', () => {
+  it("types its refusals apart from the in-place start's: no sweep's, no moved counts", () => {
+    type RefusedCode<T> = Extract<Awaited<T>, { status: 'rejected'; code: string }>['code']
+    expectTypeOf<RefusedCode<ReturnType<typeof startCloseRerunOnFork>>>().toEqualTypeOf<
+      'not-found' | 'not-latest' | 'no-close' | 'integrity' | 'close-owed' | 'turns-followed'
+    >()
+    expectTypeOf<
+      Extract<RefusedCode<ReturnType<typeof startCloseRerun>>, 'turns-followed'>
+    >().toBeNever()
+  })
+
   it("re-runs the chapter on a fresh fork at N whatever shortcut the parent's confirm showed", async () => {
     const c = await closed()
     const { reply } = await turnSince(c.h)
