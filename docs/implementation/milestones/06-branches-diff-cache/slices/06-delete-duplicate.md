@@ -862,7 +862,7 @@ branch is the whole story), read from `action_layer.story_duplicated`,
 which times the batch alone. In the desktop dev app (2026-11-25, slot
 1, `577884761`), three duplicates took 19, 19 and 26 ms for 22
 statements each, at load 1.36, 1.25 and 1.82 with the GPU idle; the
-last copy held the source's 133 entries and 103 vectors. On the slot AVD's
+first copy held the source's 133 entries and 103 vectors. On the slot AVD's
 dev client (`emulator-5554`, 2026-11-25), indicative only, a
 software-rendered debug build, they took 41, 37 and 38 ms for 22
 statements, at load 2.29, 2.40 and 2.18. The figures cover a one-branch
