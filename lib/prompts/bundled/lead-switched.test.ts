@@ -227,6 +227,7 @@ describe('the narrator', () => {
     const { user } = narrator({ entries: withMarks(SWITCHED_TURNS, { 3: { none: true } }) })
     expect(user).toContain(`# Story so far\n${EXPLAINER}\n\nThe gate stood open.`)
     expect(user).toContain(`\n${NONE_LINE}\nYou reach the top as the bell starts to ring.`)
+    expect(markCount(user)).toBe(1)
   })
 
   // Stamps Jorin, Mara, Mara, Jorin under Jorin: the first run is the named lead's and unmarked.
@@ -240,8 +241,8 @@ describe('the narrator', () => {
     expect(markCount(user)).toBe(2)
   })
 
-  // Q2: after a set with no turn since, every turn is the former lead's and only the first is
-  // marked; the explainer must not read the last run as the current lead's.
+  // After a set with no turn since, the latest run is a former lead's; the explainer must not read
+  // it as the current lead's.
   it('after a set with no turn since, marks the first turn alone and still explains', () => {
     const { system, user } = narrator({ entries: withMarks(SWITCHED_TURNS, { 0: FORMER_MARK }) })
     expect(user).toContain(`# Story so far\n${EXPLAINER}\n\n${markLine(FORMER)}\nThe gate`)
@@ -351,7 +352,7 @@ describe('the fallback classifier', () => {
     expect(markCount(user)).toBe(2)
   })
 
-  // Q5: a retired former lead's mark prints its placeholder, though the roster leaves it out.
+  // A retired former lead's mark prints its placeholder, though the roster leaves it out.
   it("prints a retired former lead's placeholder, which its roster leaves out", () => {
     const { user } = fallback({
       ...marked,
@@ -503,6 +504,28 @@ describe('the periodic classifier, switched', () => {
     expect(user).toContain(INTRO)
   })
 
+  // A switch back to the named lead (Bael, Aefre, Bael): the first run is unmarked, later turns are.
+  it('explains marks that begin after an unmarked first turn, and adds the clause', () => {
+    const { user } = renderTemplate(
+      TEMPLATE_IDS.periodicClassifier,
+      context([
+        turn('t1', 'ai_reply', 'The gate groans open.'),
+        turn('t2', 'user_action', 'I step into the yard.', {
+          leadMark: { id: 'c1', name: 'Aefre' },
+        }),
+        turn('t3', 'ai_reply', 'The yard is silent.', { leadMark: { id: 'c2', name: 'Bael' } }),
+      ]),
+    )
+    expect(user).toContain(
+      `\nThe story's lead is [c2] Bael. Outside quoted speech, "I" and "you" in the turns are the lead${CLAUSE}.\n\nTurns to classify.`,
+    )
+    expect(user).toContain(INTRO)
+    expect(user).toContain('\n[t1]\nThe gate groans open.\n')
+    expect(user).toContain(
+      '\n[t2] from this turn on, "I" and "you" are [c1] Aefre; the user\'s turn\nI step into the yard.\n',
+    )
+  })
+
   it('says nothing of marks when no turn holds one', () => {
     const unmarked = SWITCHED.map(({ leadMark, ...rest }) => rest)
     const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(unmarked))
@@ -563,6 +586,25 @@ describe('the chapter metadata and part calls, switched', () => {
       expect(prompt).toMatchSnapshot()
     },
   )
+
+  // A switch back to the named lead: the first run is unmarked, a later entry carries the mark.
+  it.each([
+    [TEMPLATE_IDS.chapterMetadata, '# The chapter'],
+    [TEMPLATE_IDS.chapterMetadataPart, '# This part of the chapter'],
+  ] as const)('%s adds the clause when only a later turn is marked', (templateId, heading) => {
+    const { user } = renderTemplate(
+      templateId,
+      context([
+        entry(1, 'ai_reply', 'The yard is silent.'),
+        entry(2, 'user_action', 'I bar the gate behind me.'),
+        entry(3, 'ai_reply', 'The gate groans open.', { name: 'Aefre' }),
+      ]),
+    )
+    expect(user).toContain(
+      `# The narration\nThe chapter is narrated in the first person.\n${LEAD_LINE}${CLAUSE}.\n\n${heading}\n`,
+    )
+    expect(user).toMatch(/Aefre[^\n]*\n+The gate groans open\./)
+  })
 
   it('marks no turn and adds no clause in a part with no switch inside it', () => {
     const { user } = renderTemplate(
@@ -732,6 +774,17 @@ describe("a close task's lead line", () => {
 
   it.each(PROSE)('%s adds the clause when a turn of its part is marked', (id, before, after) => {
     expect(userOf(id, { lead: LEAD, closeTurns: MARKED_TURNS })).toContain(
+      `${before}\n\n${CLAUSE_LINE}\n\n${after}`,
+    )
+  })
+
+  // A switch back to the named lead: the part's first turn is unmarked, a later one is marked.
+  it.each(PROSE)('%s adds the clause when only a later turn is marked', (id, before, after) => {
+    const later = MARKED_TURNS.map(({ leadMark, ...turn }, i) =>
+      i === 2 ? { ...turn, leadMark } : turn,
+    )
+
+    expect(userOf(id, { lead: LEAD, closeTurns: later })).toContain(
       `${before}\n\n${CLAUSE_LINE}\n\n${after}`,
     )
   })

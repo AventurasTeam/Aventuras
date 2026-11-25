@@ -30,7 +30,7 @@ const SECOND_ACTION = 'I ask the innkeeper whether the ferry still runs at night
 const SECOND_REPLY = /^She shrugs\./
 // Written out, never imported: the note is the answer's contract with the model.
 const LEAD_MARK_NOTE =
-  'A turn with a leadMark was written under a different lead from the turn before it. From that turn until the next one with a leadMark, "I" and "you" outside quoted speech are who its leadMark names, not the lead your task names: a character, by id and name; gone, a character no longer in the story, so credit nothing to that "I"; or none, no one. Before the first leadMark, they are the lead your task names, if it names one.'
+  'A turn with a leadMark was written under a different lead from the turn before it in this answer (the first one in the answer, from the lead your task names). From that turn until the next one with a leadMark, "I" and "you" outside quoted speech are who its leadMark names, not the lead your task names: a character, by id and name; gone, a character no longer in the story, so credit nothing to that "I"; or none, no one. Before the first leadMark, they are the lead your task names, if it names one.'
 
 const idsOf = (fx: CloseFixture, from: number, to?: number): string[] =>
   fx.entries.slice(from, to).map(({ id }) => id)
@@ -398,6 +398,34 @@ describe('read_turns → lead marks', () => {
       { id: 'c1', name: 'Aria of the Ford' },
       undefined,
     ])
+  })
+
+  it('walks only the answered turns: a mark on an unread turn adds no note and no handle', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 10), WREN)
+    await stampLead(fx, idsOf(fx, 10, 11), ARIA)
+    const ctx = chapterContext(fx, 12)
+
+    const answer = await readTurns(ctx, [
+      't1',
+      't2',
+      't3',
+      't4',
+      't5',
+      't6',
+      't7',
+      't8',
+      't9',
+      't10',
+      't11',
+    ])
+
+    expect(Object.keys(answer)).toEqual(['turns', 'unread'])
+    expect(answer.unread).toEqual(['t11'])
+    expect(ctx.ids.handleOf(ARIA)).toBeUndefined()
   })
 
   it('answers the marks through dispatch with their handles, the note first', async () => {
