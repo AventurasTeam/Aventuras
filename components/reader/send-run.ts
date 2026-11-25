@@ -121,7 +121,7 @@ export function closeRefusalOf(result: SubmitTurnResult): { error: PipelineError
   return null
 }
 
-/** A Send refused because the branch needs a lead and has none: settleLeadRefusal's to settle. */
+/** A Send refused because the branch needs a lead and has none; settleLeadRefusal settles it. */
 export function leadRefusalOf(result: SubmitTurnResult): boolean {
   return result.outcome === 'rejected' && result.blockedBy === LEAD_MISSING
 }
