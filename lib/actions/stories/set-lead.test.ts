@@ -408,6 +408,15 @@ describe('setBranchLead', () => {
     expect(await flagged('br_1')).toEqual(['char_kael'])
   })
 
+  it('refuses in-flight under the gate even when the target is already the only lead', async () => {
+    startHardGateRun()
+
+    expect(await setBranchLead('br_1', 'char_kael', ctx)).toEqual({
+      status: 'rejected',
+      code: 'in-flight',
+    })
+  })
+
   // The gate is the named branch's: its hold counts, another branch's doesn't.
   it('refuses in-flight while the named branch is held, and sets on a branch that is not', async () => {
     const real = generationStore.getTxState()
@@ -611,6 +620,16 @@ describe('unsetBranchLead', () => {
       code: 'in-flight',
     })
     expect(await flagged('br_1')).toEqual(['char_kael'])
+  })
+
+  it('refuses in-flight under the gate even when the branch has no lead', async () => {
+    await setFlag('char_kael', 0)
+    startHardGateRun()
+
+    expect(await unsetBranchLead('br_1', ctx)).toEqual({
+      status: 'rejected',
+      code: 'in-flight',
+    })
   })
 
   it('throws for a branch that does not exist', async () => {
