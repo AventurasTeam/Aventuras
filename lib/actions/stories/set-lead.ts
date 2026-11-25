@@ -22,14 +22,24 @@ export const LEAD_REJECTION = {
 
 export type LeadRejectionCode = (typeof LEAD_REJECTION)[keyof typeof LEAD_REJECTION]
 
-export type SetLeadResult = { status: 'ok' } | { status: 'rejected'; code: LeadRejectionCode }
+type LeadCode<K extends keyof typeof LEAD_REJECTION> = (typeof LEAD_REJECTION)[K]
+type SharedCode = LeadCode<'inFlight' | 'failed' | 'draftStory'>
 
-function refuse(
+type SetLeadRejectionCode = SharedCode | LeadCode<'wrongBranch' | 'notCharacter' | 'notActive'>
+type UnsetLeadRejectionCode = SharedCode | LeadCode<'needsLead'>
+
+type LeadRejected<Code extends LeadRejectionCode> = { status: 'rejected'; code: Code }
+type LeadResult<Code extends LeadRejectionCode> = { status: 'ok' } | LeadRejected<Code>
+
+export type SetLeadResult = LeadResult<SetLeadRejectionCode>
+export type UnsetLeadResult = LeadResult<UnsetLeadRejectionCode>
+
+function refuse<Code extends LeadRejectionCode>(
   branchId: string,
   entityId: string | null,
-  code: LeadRejectionCode,
+  code: Code,
   reason?: string,
-): SetLeadResult {
+): LeadRejected<Code> {
   logger.warn('action_layer.lead_rejected', {
     branchId,
     entityId,
@@ -41,7 +51,7 @@ function refuse(
 
 // Each reads the flagged rows before its group takes their row locks, so two at once on one
 // branch would each clear only what the other hadn't flagged yet: they run one at a time.
-function queued(branchId: string, run: () => Promise<SetLeadResult>): Promise<SetLeadResult> {
+function queued<Result>(branchId: string, run: () => Promise<Result>): Promise<Result> {
   return withKeyLock(`lead:${branchId}`, run)
 }
 
@@ -78,7 +88,7 @@ async function dispatch(
   entityId: string | null,
   actions: readonly PipelineAction[],
   ctx: DbCtx,
-): Promise<SetLeadResult> {
+): Promise<LeadResult<LeadCode<'inFlight' | 'failed'>>> {
   if (isUserEditBlocked(generationStore.getTxState(), branchId))
     return refuse(branchId, entityId, LEAD_REJECTION.inFlight)
   if (actions.length === 0) return { status: 'ok' }
@@ -121,7 +131,7 @@ export function setBranchLead(
 }
 
 /** Clears every flagged row on the branch; offered only on a story that needs no lead. */
-export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<SetLeadResult> {
+export function unsetBranchLead(branchId: string, ctx: DbCtx): Promise<UnsetLeadResult> {
   return queued(branchId, async () => {
     const story = await storyOf(branchId, ctx)
     if (story.status === 'draft') return refuse(branchId, null, LEAD_REJECTION.draftStory)
