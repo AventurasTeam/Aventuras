@@ -116,7 +116,8 @@ export function useStoryDuplicate({
       openRequest.current += 1
       const request = openRequest.current
       const read = await attempt(() => latest.current.readBranches(storyId))
-      if (request !== openRequest.current) return
+      // A submit can start a copy during the read.
+      if (request !== openRequest.current || dialogRef.current?.state.kind === 'copying') return
       if (!read.ok || read.value.branches.length === 0) {
         logger.error('app.story_duplicate_check_failed', {
           storyId,

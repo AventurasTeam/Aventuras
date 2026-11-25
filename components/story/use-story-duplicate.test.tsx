@@ -345,6 +345,41 @@ describe('useStoryDuplicate: submitting', () => {
     expect(duplicate).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps a copying dialog over an open whose branch read lands during the copy', async () => {
+    const { result, readBranches, check, duplicate, onDone } = setup()
+    await openOn(result)
+    const read = deferred<BranchRead>()
+    readBranches.mockReturnValueOnce(read.promise)
+    const copy = deferred<DuplicateStoryResult>()
+    duplicate.mockReturnValueOnce(copy.promise)
+    let opening: Promise<void> = Promise.resolve()
+    let copying: Promise<void> = Promise.resolve()
+    act(() => {
+      opening = result.current.open('story_b', 'Bran')
+    })
+    act(() => {
+      copying = result.current.submit(VALUES)
+    })
+    await act(async () => {
+      read.resolve({ branches: [MAIN], currentBranchId: MAIN.id })
+      await opening
+    })
+    expect(result.current.dialog).toMatchObject({
+      storyId: 'story_a',
+      sourceTitle: 'Aria',
+      state: { kind: 'copying' },
+    })
+    expect(check).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      copy.resolve(COPIED)
+      await copying
+    })
+    expect(result.current.dialog).toBeNull()
+    expect(onDone).toHaveBeenCalledTimes(1)
+    expect(onDone).toHaveBeenCalledWith({ storyId: 'story_copy', title: 'Copy' })
+  })
+
   it('copies once for two submits in one tick, before any render shows the first', async () => {
     const { result, duplicate, onDone } = setup()
     await openOn(result)
