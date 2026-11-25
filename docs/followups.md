@@ -251,7 +251,12 @@ breakdown under [UX](#ux).
   play checks the narrator never copies a mark into its prose, and
   whether other AI-written text (entity descriptions, traits, lore,
   threads) ever turns up in "I" and needs the same rule (added
-  2026-11-17 by the lead-per-entry design).
+  2026-11-17 by the lead-per-entry design). Read literally, the lead
+  lines' clause "except where a turn names another" doesn't cover a
+  mark that names no lead, a character since deleted or a run with no
+  lead; the mark line says whose "I" it is from there, and play checks
+  whether a model still credits those turns to today's lead (added
+  2026-11-25 by Slice 6.9's review).
 
   Two more placement questions wait on the same measurement: whether
   the wizard's shared macros split into an output contract and the
