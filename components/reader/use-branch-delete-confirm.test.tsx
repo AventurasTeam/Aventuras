@@ -385,6 +385,8 @@ describe('useBranchDeleteConfirm: the delete', () => {
       branchId: 'br_fork',
       error: 'disk full',
     })
+    // The confirm still shows, so its line is the only signal.
+    expect(toast.error).not.toHaveBeenCalled()
 
     const retry = deferred<DeleteBranchResult>()
     remove.mockReturnValueOnce(retry.promise)
@@ -398,6 +400,47 @@ describe('useBranchDeleteConfirm: the delete', () => {
       await pressed
     })
     expect(result.current.target).toBeNull()
+  })
+
+  /** Presses Delete with `remove` held, applies `leave` while it runs, then lands a throw. */
+  async function throwAfter(
+    leave: (host: ReturnType<typeof setup>) => void,
+  ): Promise<{ current: Hook }> {
+    const host = setup()
+    await openOn(host.result)
+    const removal = deferred<DeleteBranchResult>()
+    host.remove.mockReturnValueOnce(removal.promise)
+    let pressed: Promise<void> = Promise.resolve()
+    act(() => {
+      pressed = host.result.current.confirm()
+    })
+    leave(host)
+    await act(async () => {
+      removal.reject(new Error('disk full'))
+      await pressed
+    })
+    return host.result
+  }
+
+  it('toasts a thrown delete that lands after the reader lost focus, which drops its line', async () => {
+    const result = await throwAfter(({ rerender }) => rerender({ active: false }))
+    expect(result.current.target).toBeNull()
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('toasts a thrown delete that lands after the reader unmounted', async () => {
+    await throwAfter(({ unmount }) => unmount())
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('shows only the line for a throw landing once focus came back', async () => {
+    const result = await throwAfter(({ rerender }) => {
+      rerender({ active: false })
+      rerender({ active: true })
+    })
+    expect(result.current.phase).toEqual({ kind: 'failed' })
+    expect(result.current.target).toEqual(FORK)
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('ignores a dismiss while the delete runs', async () => {

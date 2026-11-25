@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 
 import {
   generationGateReason,
@@ -10,6 +10,8 @@ import { t } from '@/lib/i18n'
 import { generationStore, isUserEditBlocked, type TxState } from '@/lib/stores'
 import { attempt, messageOf } from '@/lib/thrown'
 import { toast } from '@/lib/toast'
+
+import { useAliveRef } from './use-alive-ref'
 
 export type BranchDeleteTarget = { branchId: string; name: string; count: number }
 
@@ -86,10 +88,12 @@ export function useBranchDeleteConfirm({
   // One ref for the confirm's life: FocusScope reads `.current` as the confirm unmounts, after the
   // render that cleared the target, so a prop set in that render would never reach it.
   const returnFocusTo = useRef<unknown>(null)
-  const latest = useRef({ count, remove, refresh, focusAfterDelete, swapPending })
-  useEffect(() => {
-    latest.current = { count, remove, refresh, focusAfterDelete, swapPending }
+  const latest = useRef({ count, remove, refresh, focusAfterDelete, swapPending, active })
+  // Layout: a delete's continuation can run between a commit and its passive effects.
+  useLayoutEffect(() => {
+    latest.current = { count, remove, refresh, focusAfterDelete, swapPending, active }
   })
+  const aliveRef = useAliveRef()
   // The reader saw a swap during the press: a refusal landing after that swap ended is stale.
   const swapSeenInPress = useRef(false)
   useEffect(() => {
@@ -147,6 +151,9 @@ export function useBranchDeleteConfirm({
         error: messageOf(removal.error),
       })
       setPhase(FAILED)
+      // Off-screen the line is lost: a focus loss dismisses the confirm, an unmount drops it.
+      if (!aliveRef.current || !latest.current.active)
+        toast.error(t('reader:branches.deleteConfirm.failed'))
       return
     }
     const result = removal.value
@@ -168,7 +175,7 @@ export function useBranchDeleteConfirm({
     if (result.code === 'current') toast.error(t('reader:branches.deleteConfirm.failed'))
     setTarget(null)
     void attempt(() => latest.current.refresh())
-  }, [storyId, target])
+  }, [storyId, target, aliveRef])
 
   const dismiss = useCallback(() => {
     if (pendingRef.current) return
