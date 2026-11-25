@@ -5,9 +5,8 @@ const BACK_BUTTON = 3
 const FORWARD_BUTTON = 4
 
 /**
- * While `active`, the mouse's Back and Forward buttons don't navigate (web; a no-op elsewhere).
- * Electron pops history on their mouseup unless it's cancelled, and expo-router answers the pop
- * with a root reset no `usePreventRemove` sees.
+ * While `active`, the mouse's Back and Forward buttons don't navigate (web; a no-op elsewhere):
+ * Electron pops history on their mouseup, and no `usePreventRemove` sees expo-router's reset.
  */
 export function useInertMouseBack(active: boolean): void {
   useEffect(() => {
