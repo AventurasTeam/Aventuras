@@ -17,6 +17,7 @@ import {
   stories,
   storyDefinitionSchema,
   wizardSessions,
+  type BranchCopyArgs,
   type DbCtx,
   type SqlOp,
   type VecTargetKind,
@@ -52,13 +53,34 @@ import {
 import { __redoGroupForTest } from '../delta/redo'
 
 // An in-flight swap holds the embedder's in-process lock, which only a running swap takes; the
-// read's own in-flight case is in lib/embedder-swap/app-deps.test.ts. The synchronous read takes
-// scripted answers in call order, none left reading the real state, and `onSyncRead` runs first.
+// read's own in-flight case is in lib/embedder-swap/app-deps.test.ts. A story in `pending` reads
+// as pending to the synchronous check too, which otherwise sees only the open story's marker.
 const swap = vi.hoisted(() => ({
   inFlight: new Set<string>(),
-  syncAnswers: [] as boolean[],
-  onSyncRead: null as (() => void) | null,
+  pending: new Set<string>(),
 }))
+
+// The copier's real ops; `afterCall` runs once each call's own reads have resolved, given the
+// call's 1-based count, so a test can admit a swap or a run during the action's last await.
+const copier = vi.hoisted(() => ({
+  calls: 0,
+  afterCall: null as ((call: number) => void) | null,
+}))
+
+vi.mock('@/lib/db', async (importOriginal) => {
+  const actual = await importOriginal<{
+    branchCopyOps: (db: DbCtx['db'], args: BranchCopyArgs) => Promise<SqlOp[]>
+  }>()
+  return {
+    ...actual,
+    branchCopyOps: async (db: DbCtx['db'], args: BranchCopyArgs) => {
+      const ops = await actual.branchCopyOps(db, args)
+      copier.calls += 1
+      copier.afterCall?.(copier.calls)
+      return ops
+    },
+  }
+})
 
 vi.mock('@/lib/embedder-swap', async (importOriginal) => {
   const actual = await importOriginal<{
@@ -69,10 +91,8 @@ vi.mock('@/lib/embedder-swap', async (importOriginal) => {
     ...actual,
     readStorySwapPending: async (db: DbCtx['db'], storyId: string) =>
       swap.inFlight.has(storyId) || actual.readStorySwapPending(db, storyId),
-    isStorySwapPending: (storyId: string) => {
-      swap.onSyncRead?.()
-      return swap.syncAnswers.shift() ?? actual.isStorySwapPending(storyId)
-    },
+    isStorySwapPending: (storyId: string) =>
+      swap.pending.has(storyId) || actual.isStorySwapPending(storyId),
   }
 })
 
@@ -100,8 +120,9 @@ let ctx: DbCtx
 beforeEach(async () => {
   resetAllStores()
   swap.inFlight.clear()
-  swap.syncAnswers = []
-  swap.onSyncRead = null
+  swap.pending.clear()
+  copier.calls = 0
+  copier.afterCall = null
   t = await createTestDb()
   posted = vi.fn(t.runInTransaction)
   ctx = { db: t.db, runInTransaction: posted }
@@ -768,22 +789,27 @@ describe('duplicateStory', () => {
     await expectRefusedWritingNothing({ title: TITLE, branch: 'all' }, DUPLICATE_REFUSAL.draft)
   })
 
-  it('refuses a swap admitted after the check, read with no await before the post', async () => {
-    swap.syncAnswers = [true]
+  // A and B copy, so the second copier call is the action's last await before the post.
+  it('refuses a swap admitted during its last read, read with no await before the post', async () => {
+    copier.afterCall = (call) => {
+      if (call === 2) swap.pending.add(STORY)
+    }
     await expectRefusedWritingNothing(
       { title: TITLE, branch: 'all' },
       DUPLICATE_REFUSAL.swapPending,
     )
+    expect(copier.calls).toBe(2)
   })
 
-  it('refuses a run registered after the check, read with no await before the post', async () => {
-    // The synchronous swap read runs last before the post; a run registered there stands in for
-    // one admitted during the action's reads.
-    swap.onSyncRead = () => registerRun({ storyId: STORY, branchId: A })
+  it('refuses a run registered during its last read, read with no await before the post', async () => {
+    copier.afterCall = (call) => {
+      if (call === 2) registerRun({ storyId: STORY, branchId: A })
+    }
     await expectRefusedWritingNothing(
       { title: TITLE, branch: 'all' },
       DUPLICATE_REFUSAL.runRegistered,
     )
+    expect(copier.calls).toBe(2)
   })
 
   it("copies one branch while the story's other branch holds an unfinished run, carrying no run row", async () => {
