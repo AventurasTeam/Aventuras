@@ -169,7 +169,8 @@ test.describe.serial('Per-branch lead', () => {
     await expect(reader.send(page)).toBeDisabled()
     // A press dispatched past the disabled state: Send must still refuse it.
     await reader.send(page).dispatchEvent('click')
-    // The composer clears synchronously on a Send that goes out, so this fails fast if one did.
+    // A Send let through is refused and hands its text back, so this can't catch one; the tail
+    // count below can, as the refusal writes the tail back under a new id.
     await expect(reader.composer(page)).toHaveValue(DRAFT)
     await expect(reader.leadMissingLine(page)).toBeVisible()
 
@@ -183,6 +184,9 @@ test.describe.serial('Per-branch lead', () => {
     expect(await userActions()).toBe(actionsBefore)
     expect(await tailRows()).toBe(2)
     expect(await logHead(page, branchId)).toBe(head)
+    // A ↻ let through opens its confirm, held on the lead, so the DB can't show it. Checked after
+    // the round trips above, not at the press: the confirm opens only once ↻'s count read lands.
+    await expect(reader.regenerateConfirm(page)).toHaveCount(0)
     await expect(reader.composer(page)).toHaveValue(DRAFT)
   })
 
@@ -210,7 +214,8 @@ test.describe.serial('Per-branch lead', () => {
   })
 })
 
-// A launch of its own: the pair's newer row is the lead from the start, as no in-app write makes it.
+// A launch of its own: the newer Brannoc is flagged before launch, so the merge is the only write
+// under test.
 test.describe('Per-branch lead — a merge keeps the lead row', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
