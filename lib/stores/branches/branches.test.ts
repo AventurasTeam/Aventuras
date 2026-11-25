@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, stories, type DbCtx } from '@/lib/db'
@@ -7,7 +8,13 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { currentStoryStore, resetAllStores } from '@/lib/stores'
 
-import { branchesStore, readStoryBranches, refreshBranches, type BranchRow } from './branches'
+import {
+  branchesStore,
+  readStoryBranches,
+  readStoryCurrentBranchId,
+  refreshBranches,
+  type BranchRow,
+} from './branches'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -114,6 +121,17 @@ describe('readStoryBranches', () => {
       rows.push(row('br_z'))
     }
     expect(push).toBeTypeOf('function')
+  })
+})
+
+describe('readStoryCurrentBranchId', () => {
+  it("returns one story's pointer, and null for a story with none or no story", async () => {
+    const db = await seed()
+    await db.update(stories).set({ currentBranchId: 'br_a' }).where(eq(stories.id, 's1'))
+
+    expect(await readStoryCurrentBranchId(db, 's1')).toBe('br_a')
+    expect(await readStoryCurrentBranchId(db, 's2')).toBeNull()
+    expect(await readStoryCurrentBranchId(db, 's_gone')).toBeNull()
   })
 })
 

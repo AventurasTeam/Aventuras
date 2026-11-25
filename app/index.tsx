@@ -51,6 +51,7 @@ import {
 } from '@/lib/recovery'
 import {
   readStoryBranches,
+  readStoryCurrentBranchId,
   rehydrateStories,
   selectStoryCards,
   storiesStore,
@@ -193,12 +194,12 @@ export default function Index() {
   const storyDuplicate = useStoryDuplicate({
     focused: isFocused,
     blocked: otherOverlayUp,
-    readBranches: async (storyId) => ({
-      branches: (await readStoryBranches(db, storyId)).map(({ id, name }) => ({ id, name })),
-      // switchBranch re-reads the stories store, so the row's pointer is the DB's.
-      currentBranchId:
-        storiesStore.getStories().rows.find((row) => row.id === storyId)?.currentBranchId ?? null,
-    }),
+    readBranches: async (storyId) => {
+      // Pointer first: a fork between the reads then adds a branch, not a pointer the list lacks.
+      const currentBranchId = await readStoryCurrentBranchId(db, storyId)
+      const rows = await readStoryBranches(db, storyId)
+      return { branches: rows.map(({ id, name }) => ({ id, name })), currentBranchId }
+    },
     check: (storyId, branch) => checkStoryDuplicate(storyId, branch, ctx),
     duplicate: (input) => duplicateStory(input, ctx),
     onDone: (copy) => {

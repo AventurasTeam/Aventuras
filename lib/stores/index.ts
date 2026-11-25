@@ -109,6 +109,7 @@ export { createWorkingSetStore } from './factory/working-set-store'
 export {
   branchesStore,
   readStoryBranches,
+  readStoryCurrentBranchId,
   refreshBranches,
   type BranchRow,
 } from './branches/branches'
