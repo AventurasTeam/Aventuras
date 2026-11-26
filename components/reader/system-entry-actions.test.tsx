@@ -753,12 +753,15 @@ describe('retryPassEntry', () => {
     expect(h.rewrite).toHaveBeenCalledWith({ held: true })
   })
 
-  it('leaves the entry and says to wait when another run refused the pass', async () => {
-    const h = harness({ outcome: 'rejected', blockedBy: 'periodic-classifier' })
-    await retryPassEntry(h.deps)
-    expect(h.calls).toEqual(['notify'])
-    expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
-  })
+  it.each(['periodic-classifier', 'suggestion-refresh'] as const)(
+    'leaves the entry and says to wait when a %s run refused the pass',
+    async (blockedBy) => {
+      const h = harness({ outcome: 'rejected', blockedBy })
+      await retryPassEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
+    },
+  )
 
   it('names no refusal code when the pass could not start for another reason, but logs it', async () => {
     const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
