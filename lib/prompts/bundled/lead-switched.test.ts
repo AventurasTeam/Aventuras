@@ -162,7 +162,7 @@ describe('macro_story_entry', () => {
     expect([...macroGlobals(engine, MACRO_IDS.storyEntry)].toSorted()).toEqual(['entry', 'ids'])
   })
 
-  it('prints a turn with no leadMark as it always has', () => {
+  it('prints a turn with no leadMark as the bare turn', () => {
     expect(render(ACTION, 'bracketed')).toBe(ACTION_TEXT)
     expect(render({ kind: 'ai_reply', content: 'The rain stops.' }, 'bare')).toBe('The rain stops.')
   })
@@ -474,7 +474,7 @@ describe('the periodic classifier, switched', () => {
     expect(prompt).toMatchSnapshot()
   })
 
-  // A creative story after an unset: no lead line, its older turns still marked.
+  // No lead today, its older turns still marked: no lead line.
   it('explains the marks with no lead line on a branch with no lead', () => {
     const { user } = renderTemplate(TEMPLATE_IDS.periodicClassifier, context(SWITCHED, null))
     expect(user).not.toContain("The story's lead")
@@ -634,7 +634,7 @@ describe('the chapter metadata and part calls, switched', () => {
     expect(prompt).toMatchSnapshot()
   })
 
-  // A creative story after an unset: the narration still stated, the marks still printed.
+  // No lead today: the narration still stated, the marks still printed.
   it('states the narration and no lead line on a branch with no lead', () => {
     const { user } = renderTemplate(TEMPLATE_IDS.chapterMetadata, context(SWITCHED, null))
     expect(user).toContain(
@@ -686,7 +686,7 @@ describe('close prose: lead marks', () => {
     const userMark = system.indexOf('Wren (c1)')
     expect(userMark).toBeGreaterThan(system.indexOf("## t5 (the user's turn)"))
     expect(system.indexOf('<user_turn>\nI step onto the jetty.')).toBeGreaterThan(userMark)
-    // Last, so it is first written once the handles print: the gone and none lines' wording.
+    // Last, so a first run writes the snapshot only once the handle checks above pass.
     expect(system).toMatchSnapshot()
   })
 

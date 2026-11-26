@@ -807,7 +807,7 @@ describe('buildClassifierContext — lead marks', () => {
   const marksOf = (context: Record<string, unknown>) =>
     (context.turns as Record<string, unknown>[]).map((t) => t.leadMark)
 
-  // Absent, not null: a never-switched context is key for key what it was.
+  // Absent, not null: an unmarked turn carries no leadMark key at all.
   it('marks no turn when every stamp names the lead', () => {
     const context = build(
       [stamped('t1', BAEL), stamped('t2', BAEL), stamped('t3', BAEL)],
@@ -871,7 +871,7 @@ describe('buildClassifierContext — lead marks', () => {
     expect(marksOf(context)).toEqual([{ none: true }, { id: 'c1', name: 'Bael' }])
   })
 
-  // A creative story after an unset: no lead today, its older turns stamped under one.
+  // No lead today, its older turns stamped under one.
   it('walks a branch with no lead from none, marking the first stamped run', () => {
     const context = build(
       [stamped('t1', undefined), stamped('t2', AEFRE), stamped('t3', AEFRE)],

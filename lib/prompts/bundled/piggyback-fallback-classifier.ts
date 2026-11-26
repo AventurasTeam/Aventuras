@@ -2,8 +2,8 @@ import type { TemplateSources } from '../types'
 
 // piggyback.md → Fallback classifier context: most of what the narrative call gets, minus
 // Setting / Genre / Tone and either output-format macro, plus the flat bracketed ID roster.
-// The lead line adds its clause only when a turn in lastTurns is marked, so a story whose lead
-// never changed renders as before (architecture.md → System and user halves).
+// The lead line adds its clause only when a turn in lastTurns is marked, so a never-switched
+// story's line stays unqualified (architecture.md → System and user halves).
 export const PIGGYBACK_FALLBACK_CLASSIFIER: TemplateSources = {
   system: `{% section 'setup' %}{% if calendarVocabulary -%}
 # Calendar

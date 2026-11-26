@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '..'
 
-// memory/chapter-close.md → Phase 2, classifier.md → What the classifier writes. Written out: the
-// test pins the bundled wording, not whatever the constant holds.
+// memory/chapter-close.md → Phase 2 and 3e. Written out: the test pins the bundled wording, not
+// whatever the constant holds.
 const RULE =
   'Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.'
 
@@ -149,7 +149,7 @@ describe('the third-person rule', () => {
     )
   })
 
-  it.each(CASES)("%s no longer tells it in the narration's person", (_name, id, context) => {
+  it.each(CASES)("%s does not tie the telling to the narration's person", (_name, id, context) => {
     const { system, user } = renderTemplate(id, context)
     for (const half of [system, user]) {
       expect(half).not.toContain('own person')

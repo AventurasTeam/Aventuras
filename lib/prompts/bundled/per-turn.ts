@@ -31,7 +31,6 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVo
 {% endsection %}{% section 'output' %}{% include 'macro_output_format_narrative' %}{% endsection %}`,
   // The scene loop ignores injectionMode on purpose (structural-floor invariant: active +
   // in-scene always inject), reading `entities`, not the floor, so it holds without retrieval.
-  // Lead marks explained only when a turn has one (architecture.md → System and user halves).
   user: `{%- comment -%}
 LiquidJS drops a filter on a for tag's collection, so the list is assigned first. The second
 half of the scene test de-dupes the row the classifier named as both in-scene and the location;

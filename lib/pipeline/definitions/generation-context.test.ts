@@ -2434,7 +2434,7 @@ describe('buildGenerationContext — lead marks', () => {
   })
   const marked = (position: number, leadMark: object) => ({ ...projected(position), leadMark })
 
-  // toStrictEqual throughout: an unmarked turn lacks the key, so it is key for key what it was.
+  // toStrictEqual throughout: an unmarked turn must lack the key, not hold it undefined.
   it('marks no entry and no last turn when every stamp is the named lead', async () => {
     const entries = stampedTurns(JORIN, JORIN, JORIN)
     const narrative = await buildContext({ entities: CAST, entries, settings: WIDE })
@@ -2554,7 +2554,8 @@ describe('buildGenerationContext — lead marks', () => {
     ])
   })
 
-  // A creative story after Unset: the walk starts from no lead and marks the first stamped run.
+  // No lead today, its older turns stamped under one: the walk starts from no lead and marks the
+  // first stamped run.
   it('walks from no lead on a branch with none', async () => {
     const ctx = await buildContext({
       entities: [character(MARA, 'Mara')],

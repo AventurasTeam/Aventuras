@@ -24,7 +24,6 @@ export const SUGGESTION_REFRESH: TemplateSources = {
 {{ definitionBlocks | rstrip }}`,
   // Structured-output call: the emission section asks for a JSON field, NOT the tagged
   // <suggestions> block (macro_suggestion_emission is the narrative fold's, appended to prose).
-  // Story so far explains the lead marks only when a turn carries one, as the narrator's does.
   user: `{%- comment -%}
 The narrator's in-scene list (per-turn.ts), without ids: nothing here writes state. Assigned
 first: LiquidJS drops a filter on a for tag's collection.

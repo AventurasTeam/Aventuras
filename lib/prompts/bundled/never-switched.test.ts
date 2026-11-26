@@ -4,8 +4,8 @@ import { emptyEntityView } from '@/lib/world'
 
 import { renderTemplate, TEMPLATE_IDS, templateReads, type TemplateId } from '../index'
 
-// A story whose lead never changed gets no mark and no clause, and changes only in the lines
-// canon gives it; a variable a later prompt reads joins the story constants below.
+// A story whose lead never changed gets no mark and no clause; the snapshots pin each render
+// whole. A variable a later prompt reads joins the story constants below.
 const CLAUSE = 'except where a turn names another'
 
 type Turn = { position: number; kind: string; content: string }
