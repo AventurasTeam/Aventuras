@@ -367,12 +367,6 @@ slice-planning gate forces its resolution before that slice is planned.
   toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
   passes (2026-11-24).
 
-- **Older overlay-list stories log a `ResizeObserver` loop error.** The
-  story run of `components/ui/searchable-overlay-list.stories.tsx`
-  logs an unhandled "ResizeObserver loop completed with undelivered
-  notifications" and still passes; the stories Slice 6.4 added don't
-  log it when run alone. Found in Slice 6.4's reviews (2026-11-24).
-
 - **A phone Sheet opened over the reader's inline editor lands under
   its keyboard.** Canon says a sheet opened over an open keyboard
   dismisses it first

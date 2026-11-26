@@ -48,9 +48,14 @@ function report(reason: unknown, id: number): void {
   logger.error('app.unhandled_rejection', { error, id })
 }
 
+// Chromium reports a ResizeObserver callback that resized what it observes as an error event
+// with no error; the held-back notifications arrive next frame, so nothing failed.
+const RESIZE_OBSERVER_LOOP = /^ResizeObserver loop /
+
 // An ErrorEvent from a cross-origin script carries no error, only a message.
 function reportUncaught(ev: unknown): void {
   const { error, message } = ev as { error?: unknown; message?: unknown }
+  if (error == null && typeof message === 'string' && RESIZE_OBSERVER_LOOP.test(message)) return
   let text: string
   try {
     text = redactSecretsInText(messageFor(error ?? message))
