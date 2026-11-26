@@ -99,19 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   6.2's third-PR review (2026-11-23); the list re-checked by its slice
   review (2026-11-23).
 
-- **`raiseSystemEntry` repeats the working-set factory's patch guard.**
-  `lib/actions/story-entries/system-entry.ts:85` returns early when the
-  store holds another branch, and the factory's `patch`
-  (`lib/stores/factory/working-set-store.ts:52`) already drops a branch
-  the store doesn't hold. In `system-entry.test.ts`, "leaves the store
-  alone when it holds another branch" fails only with both guards
-  removed; removing either alone passes (mutation-checked 2026-11-23).
-  The factory guard stays, since every writer relies on it; `:85` also
-  skips a database read. So the choice is dropping `:85` and accepting
-  the wasted read, or pinning it with a case that spies on that read.
-  It predates Slice 6.2's third PR. Found by that PR's review
-  (2026-11-23).
-
 - **Can a pipeline reversal leave a redo group that contradicts its
   branch?** Every delta-logged write clears its branch's redo stack,
   but the pipeline's reversals clear none: `reverseCloseForRerun`
