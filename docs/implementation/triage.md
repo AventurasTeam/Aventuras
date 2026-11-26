@@ -208,19 +208,6 @@ slice-planning gate forces its resolution before that slice is planned.
   removed. Verify the sequence before fixing anything. It predates
   Slice 6.2. Found by Slice 6.2's slice review (2026-11-23).
 
-- **Unit tests run hooks without React Compiler.** The app builds with
-  the compiler (`app.json` → `expo.experiments.reactCompiler`), but
-  `vitest.config.ts` doesn't apply it, so a hook whose correctness rests
-  on what the compiler memoizes passes vitest either way, and
-  `pnpm compiler:check` reports bail-outs, not behaviour. Slice 6.2's
-  slice review hit it in `components/reader/use-reader-undo.tsx`: a
-  Redo label that ignored the state the menu's open sets stayed green
-  uncompiled and went stale compiled (a scratch harness compiled the
-  hook with the build's compiler, 2026-11-23). Options: a vitest
-  transform that runs the compiler over `components/` and `hooks/`, or
-  a small compiled-hook layer for hooks that read stores outside a
-  subscription. Found by Slice 6.2's slice review (2026-11-23).
-
 - **A re-run's empty group with no recorded branch fires the log hook
   for `''`.** `lib/actions/delta/rerun-journal.ts:513-517` names the
   reversal set's branch `target[0]?.branchId ?? args.branchId ?? ''`; on
