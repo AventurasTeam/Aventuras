@@ -7,6 +7,12 @@ import { renderTemplate, TEMPLATE_IDS, templateReads, type TemplateId } from '..
 // A story whose lead never changed gets no mark and no clause; the snapshots pin each render
 // whole. A variable a later prompt reads joins the story constants below.
 const CLAUSE = 'except where a turn names another'
+// Written out, not imported: a gate that lets one through fails here past a rewritten snapshot.
+const EXPLAINER = 'before a turn says who "I" and "you" are from that turn until the next such line'
+const PERIODIC_INTRO =
+  'a turn where the lead changes says who "I" and "you" are from that turn until the next turn that says so'
+const MARK_LINE = '(From this turn on, '
+const PERIODIC_MARK = '] from this turn on, '
 
 type Turn = { position: number; kind: string; content: string }
 type Context = Record<string, unknown>
@@ -828,8 +834,16 @@ const CASES: Case[] = [
 function expectComplete(templateId: TemplateId, context: Context, shown: string): void {
   expect([...templateReads(templateId)].filter((name) => !(name in context))).toEqual([])
   const { system, user } = renderTemplate(templateId, context)
-  expect(`${system}\n${user}`).toContain(shown)
-  expect(`${system}\n${user}`).not.toContain(CLAUSE)
+  const text = `${system}\n${user}`
+  expect(text).toContain(shown)
+  expect(text).not.toContain(CLAUSE)
+  expect(text).not.toContain(EXPLAINER)
+  expect(text).not.toContain(PERIODIC_INTRO)
+  expect(text).not.toContain(MARK_LINE)
+  expect(text).not.toContain(PERIODIC_MARK)
+  // Whatever a clause says, it would follow "are the lead" on the lead line.
+  const leadLines = text.split('\n').filter((line) => line.includes('are the lead'))
+  expect(leadLines.filter((line) => !line.endsWith('are the lead.'))).toEqual([])
 }
 
 describe.each(CASES)('%s', (templateId, withLead, noLead, [showsWithLead, showsNoLead]) => {
@@ -841,11 +855,11 @@ describe.each(CASES)('%s', (templateId, withLead, noLead, [showsWithLead, showsN
     expect(renderTemplate(templateId, noLead)).toMatchSnapshot()
   })
 
-  it('with a lead: sets every variable it reads, shows its story and holds no clause', () => {
+  it('with a lead: sets every variable it reads, shows its story and holds no clause or mark', () => {
     expectComplete(templateId, withLead, showsWithLead)
   })
 
-  it('with no lead: sets every variable it reads, shows its story and holds no clause', () => {
+  it('with no lead: sets every variable it reads, shows its story and holds no clause or mark', () => {
     expectComplete(templateId, noLead, showsNoLead)
   })
 })
