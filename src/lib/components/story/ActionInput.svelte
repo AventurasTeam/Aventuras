@@ -33,7 +33,7 @@
     type ResponseStreamingEvent,
     type ClassificationCompleteEvent,
   } from '#lib/services/events.ts'
-  import { isTouchDevice } from '#lib/utils/swipe.ts'
+  import { isSendKey, sendKeyHint as hintFor, sendKeyPlatform } from '#lib/utils/sendKey.ts'
   import { isIos } from '#lib/utils/platform.ts'
   import {
     afterBackgroundKeepAlive,
@@ -153,9 +153,7 @@
 
   const isCreativeMode = $derived(story.storyMode === 'creative-writing')
 
-  const sendKeyHint = $derived(
-    isTouchDevice() ? 'Shift+Enter to send' : 'Enter to send, Shift+Enter for new line',
-  )
+  const sendKeyHint = hintFor(sendKeyPlatform())
 
   // Block generation when any service is missing a model or has an invalid profile
   const blockGeneration = $derived(settings.hasGenerationConfigIssues)
@@ -1525,11 +1523,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent) {
-    const isMobile = isTouchDevice()
-    const shouldSubmit = isMobile
-      ? event.key === 'Enter' && event.shiftKey
-      : event.key === 'Enter' && !event.shiftKey
-    if (shouldSubmit) {
+    if (isSendKey(event, sendKeyPlatform())) {
       event.preventDefault()
       handleSubmit()
     }

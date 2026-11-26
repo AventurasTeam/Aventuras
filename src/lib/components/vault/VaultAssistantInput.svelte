@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isTouchDevice } from '#lib/utils/swipe.ts'
+  import { isSendKey, sendKeyHint, sendKeyPlatform } from '#lib/utils/sendKey.ts'
   import { Textarea } from '#lib/components/ui/textarea/index.ts'
   import { Button } from '#lib/components/ui/button/index.ts'
   import { Send, Square } from '@lucide/svelte'
@@ -20,11 +20,7 @@
   let textareaRef = $state<HTMLTextAreaElement | null>(null)
 
   function handleKeyDown(e: KeyboardEvent) {
-    const isTouch = isTouchDevice()
-    const shouldSubmit = isTouch
-      ? e.key === 'Enter' && e.shiftKey
-      : e.key === 'Enter' && !e.shiftKey
-    if (shouldSubmit) {
+    if (isSendKey(e, sendKeyPlatform())) {
       e.preventDefault()
       handleSend()
     }
@@ -72,8 +68,6 @@
     </Button>
   </div>
   <div class="text-surface-500 mt-1.5 hidden text-center text-[10px] md:block">
-    {isTouchDevice()
-      ? 'Shift+Enter to send, Enter for new line'
-      : 'Enter to send, Shift+Enter for new line'}
+    {sendKeyHint(sendKeyPlatform())}
   </div>
 </div>

@@ -23,7 +23,7 @@
   <DrawerPrimitive.Content
     bind:ref
     class={cn(
-      'bg-background fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border',
+      'drawer-content bg-background fixed inset-x-0 bottom-(--keyboard-inset) z-50 mt-24 flex h-auto flex-col rounded-t-[10px] border',
       className,
     )}
     {...restProps}
@@ -34,3 +34,10 @@
     {@render children?.()}
   </DrawerPrimitive.Content>
 </DrawerPrimitive.Portal>
+
+<style>
+  /* Over a caller's own height: the sheet ends at the keyboard and must not run under the status bar. */
+  :global(:root[data-keyboard-open] .drawer-content) {
+    max-height: calc(var(--app-height) - var(--safe-top));
+  }
+</style>

@@ -121,6 +121,14 @@
     --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--sab, 0px));
     --safe-left: max(env(safe-area-inset-left, 0px), var(--sal, 0px));
     --safe-right: max(env(safe-area-inset-right, 0px), var(--sar, 0px));
+    /* Set on iOS only, by utils/iosKeyboard.ts; Android shrinks the WebView itself. */
+    --keyboard-inset: 0px;
+    --app-height: calc(100dvh - var(--keyboard-inset));
+  }
+
+  /* The keyboard covers the home indicator, so nothing needs to clear it. */
+  :root[data-keyboard-open] {
+    --safe-bottom: 0px;
   }
 
   /* Scrollbar styling */

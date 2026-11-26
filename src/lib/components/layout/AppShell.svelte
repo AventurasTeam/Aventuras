@@ -255,7 +255,7 @@
 />
 
 <div
-  class="app-shell bg-surface-900 relative flex h-screen w-screen flex-col"
+  class="app-shell bg-surface-900 relative flex h-(--app-height) w-screen flex-col"
   use:swipe={{
     onSwipeLeft: handleEdgeSwipeLeft,
     onSwipeRight: handleEdgeSwipeRight,
@@ -427,7 +427,8 @@
     right: 0;
     height: var(--safe-bottom);
     background-color: var(--color-surface-900);
-    z-index: 9999;
+    /* Under the overlays (sidebars 40+, sheets 50), which bring their own bottom inset. */
+    z-index: 30;
     pointer-events: none;
   }
 

@@ -31,14 +31,17 @@
   <!--
     Capped to the visible area, not the viewport: Android runs edge-to-edge, so `100vh`
     spans the space behind the system bars and a centred `h-[90vh]` dialog can sit under
-    the navigation bar. `dvh` so the cap follows the soft keyboard too.
+    the navigation bar. `--app-height` so the cap follows the soft keyboard too.
 
     Inert on desktop, where every inset is 0, and a caller's own `max-h-*` still wins since
     `className` is merged last. Height only — the matching `max-w` would be deleted by
     every caller that sets its own, so it would only protect the modals that need it least.
   -->
   <Dialog.Content
-    class={cn('max-h-[calc(100dvh_-_var(--safe-top)_-_var(--safe-bottom)_-_2rem)]', className)}
+    class={cn(
+      'max-h-[calc(var(--app-height)_-_var(--safe-top)_-_var(--safe-bottom)_-_2rem)]',
+      className,
+    )}
     {...props}
   >
     {@render children?.()}
@@ -46,7 +49,8 @@
 {/if}
 
 <style>
+  /* Padding, not margin: the sheet's background runs under the home indicator. */
   :global(.safe-area-bottom) {
-    margin-bottom: var(--safe-bottom);
+    padding-bottom: var(--safe-bottom);
   }
 </style>
