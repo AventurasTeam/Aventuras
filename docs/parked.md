@@ -2333,6 +2333,16 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### A story whose open failed won't retry in the same session
+
+After a story's open fails (a corrupt definition or settings), its card
+keeps the failure for the session: a tap goes to the recovery dialog
+rather than trying the open again, and the dialog has no Try again. A
+definition repaired outside the app is only picked up after a restart.
+Read from `app/index.tsx` and `components/story/story-list.tsx` by the
+2026-11-26 triage pass, not run. Parked until a story repaired outside
+the app becomes a flow worth supporting.
+
 #### The memory banner may announce a close too often
 
 The banner's label sits in a `role="status"` `aria-live="polite"`
@@ -4455,6 +4465,22 @@ each handler catches its own failure, so none can reject unhandled.
 Declined by the developer on that cost for no real hit; `return-await`
 was not probed. The signal to revisit is a shipped bug from a dropped
 `await`.
+
+#### Lint fences match syntax, not bindings
+
+The store-mutator and `db` fences in `eslint.config.js` match what a
+file writes, so a route around them still lints clean. The 2026-11-26
+triage pass closed the aliased import and the copy into a variable
+(`generationStore`, `db`, `expoDb`) and added a selector for a scoped read
+handed `getLoadedBranch()` directly. Still open, as the worker that added
+them reported (not re-probed): passing `generationStore` as an argument or
+an object property, `export { generationStore as g }`, assigning it to a
+variable declared earlier, copying `db` or `expoDb` into a variable, and,
+for the scoped read, the loaded branch held in a variable first, `new`,
+an optional call or a JSX prop. Closing them needs a rule that resolves
+bindings through ESLint's scope manager, which needs no type information,
+unlike the promise rules above. Parked 2026-11-26; the signal is a shipped
+bug from a route around a fence.
 
 #### AI SDK v7 migration
 
