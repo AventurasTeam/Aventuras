@@ -152,21 +152,6 @@ slice-planning gate forces its resolution before that slice is planned.
   close modal runs each time it opens. Found by Slice 6.8's slice review
   (2026-11-25).
 
-- **A create's payload admits the lead flag.** `createEntity`'s
-  payload is `{ entry: NewEntity }`
-  (`lib/actions/entities/register.ts:93`), and since `entities.is_lead`
-  exists, `NewEntity` admits `isLead: 1`, which the handler refuses
-  only at runtime (`:227`, "a create never sets isLead"). The designed
-  shape is `NewEntity & { isLead?: 0 }`
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
-  Known shape). Tightened in a scratch typecheck, it breaks 39 files:
-  two in production, `lib/world/entity-actions.ts` and
-  `lib/pipeline/definitions/per-turn-creates.ts`, and 37 test files and
-  fixtures that build create entries as `NewEntity`. An exported alias
-  such as `EntityCreate` for the fixtures is the likely route. The
-  payload line is older code. Found by Slice 6.8's slice review
-  (2026-11-25).
-
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
   `action_layer.branch_switch_*` (`_navigation_blocked`,

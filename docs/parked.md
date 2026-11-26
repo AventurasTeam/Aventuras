@@ -4320,6 +4320,34 @@ Only `onFork`, `undoPayloadsOf`, `deltasOf` and `TARGET_MISMATCH` are
 table-agnostic; a `lib/actions/delta/__tests__/branch-scope.ts` beside
 `reverse-rows.ts` fits them better than `two-branch.ts`. Same signal.
 
+#### A create's payload admits the lead flag
+
+`createEntity`'s
+payload is `{ entry: NewEntity }`
+(`lib/actions/entities/register.ts:93`), and since `entities.is_lead`
+exists, `NewEntity` admits `isLead: 1`, which the handler refuses
+only at runtime (`:227`, "a create never sets isLead"). The designed
+shape is `NewEntity & { isLead?: 0 }`
+([`code-conventions.md → Type design`](./code-conventions.md#type-design),
+Known shape). Tightened in a scratch typecheck, it breaks 39 files:
+two in production, `lib/world/entity-actions.ts` and
+`lib/pipeline/definitions/per-turn-creates.ts`, and 37 test files and
+fixtures that build create entries as `NewEntity`. An exported alias
+such as `EntityCreate` for the fixtures is the likely route. The
+payload line is older code. Found by Slice 6.8's slice review
+(2026-11-25). Measured on
+routing: with `EntityCreate = Omit<NewEntity, 'isLead'> & { isLead?: 0 }`,
+39 files break, 36 still after retyping the three shared fixtures
+(`two-branch.ts`, `fork-harness.ts`, `chapter-delete-fixture.ts`): two
+production files and 34 tests, mostly per-file `NewEntity` builders under
+`lib/actions/delta/` and the register and state-patch suites. The
+runtime refusal is tested, and the state-patch path now types its
+columns, so the gap is a compile-time one on the create path alone.
+**Revisit signal:** a second create path that could set the flag, or a
+sweep that retypes those builders anyway (see
+[Unit test fixtures repeat with no shared home](#unit-test-fixtures-repeat-with-no-shared-home)).
+Routed from triage 2026-11-26.
+
 #### The mock LLM's token count has no run guard
 
 `scripts/mock-llm/respond/wire.ts:49-53` keeps its own `countO200k`,
