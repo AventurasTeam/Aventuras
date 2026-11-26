@@ -1755,10 +1755,7 @@ function ReaderComposerBody({
         logger.debug('reader.branch_switch_started', { branchId, toBranchId })
         const hold = readerHoldStore.take(branchId)
         const isCurrentRequest = () => aliveRef.current && isFocusedRef.current
-        void switchBranch(
-          { storyId, fromBranchId: branchId, toBranchId, hold, isCurrentRequest, replaceStack },
-          ctx,
-        ).then(
+        void switchBranch({ storyId, toBranchId, hold, isCurrentRequest, replaceStack }, ctx).then(
           (result) => postSwitchNotice(result, storyId, branchId),
           (error: unknown) => {
             logger.error('reader.branch_switch_threw', {

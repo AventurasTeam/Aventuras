@@ -447,19 +447,6 @@ slice-planning gate forces its resolution before that slice is planned.
   this is drift, not a contract break. Found by Slice 6.5's final
   review (2026-11-25).
 
-- **The switch's input names the left branch twice.**
-  `SwitchBranchInput` (`lib/actions/stories/switch-branch.ts`) takes
-  `fromBranchId` beside `hold`, whose `branchId` is the same branch: the
-  reader takes the hold on the branch it shows and passes that id again
-  (`app/reader-composer/[branchId].tsx`, the switch's call). A failed
-  switch writes `fromBranchId` back into `stories.current_branch_id`,
-  which has no foreign key, so the two disagreeing would put the
-  pointer on a branch the frozen reader doesn't show. Per
-  `code-conventions.md → Type design` ("one argument where two could
-  disagree"), restore to `hold.branchId` and drop the field. Slice
-  6.5's review made the same change to `ShowBranchInput`. Found by
-  Slice 6.5's slice review (2026-11-25).
-
 - **Helpers copied across the reader's inputs and the E2E specs.** The
   IME guard (`isComposing`, `IME_KEY_CODE`) is now in both
   `components/reader/branch-rename-input.tsx` and
