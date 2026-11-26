@@ -151,15 +151,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ruled to ship canon-literal and route here. Case (3) found in
   Slice 6.7's slice review (2026-11-23).
 
-- **The M6 milestone doc names the fork planner by its old canon
-  name.** `milestones/06-branches-diff-cache/milestone.md:32` still
-  says canon calls the rewind's planner `planReversal` with a target
-  branch. Slice 6.3's canon edits renamed both: canon now names
-  `buildReverseAndPrunePlan`, given a `PlanTarget` whose
-  `writeBranchId` is the new branch. The sentence is planning
-  narrative, so the fix is a reword there. Found by Slice 6.3's final
-  review (2026-11-24).
-
 - **The seed's fork carries world rows tied to entries it lacks.**
   `br_hero_fork` is `br_hero_main` rolled back to `entry_hero_0040`,
   but the hero seed logs no delta for most world rows, so the rollback
