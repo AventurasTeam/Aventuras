@@ -57,7 +57,7 @@
 <ResponsiveModal.Root bind:open={isOpen} onOpenChange={handleModalOpenChange}>
   <ResponsiveModal.Content
     class={cn(
-      'flex h-[100dvh] w-full flex-col overflow-hidden rounded-none p-0 transition-all duration-200 sm:h-[90vh] sm:max-w-6xl sm:rounded-lg',
+      'flex h-[calc(var(--app-height)-var(--safe-top))] w-full flex-col overflow-hidden rounded-none p-0 transition-all duration-200 sm:h-[90vh] sm:max-w-6xl sm:rounded-lg',
     )}
   >
     <VaultLorebookEditorContent

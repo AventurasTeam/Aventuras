@@ -167,6 +167,10 @@ scroller can reveal it, so the tracker scrolls the focused field into view when 
 and on each focus change while it is up. vaul's `repositionInputs` is off here too: it would move
 the sheet a second time.
 
+Anything that fills the screen sizes itself to `--app-height`, not `100dvh`, or its bottom ends up
+under the keyboard. On a phone held sideways the keyboard leaves about 150pt, so `AppShell` hides
+the warning banner and the header while it is up there, and the story input keeps the space.
+
 `app.html` also adds `maximum-scale=1` to the viewport on iOS. Without it WebKit zooms the page into
 any focused field set below 16px, and the zoomed page runs off the right edge.
 
