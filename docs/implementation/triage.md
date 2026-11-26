@@ -165,19 +165,6 @@ slice-planning gate forces its resolution before that slice is planned.
   It predates Slice 6.2's third PR. Found by that PR's review
   (2026-11-23).
 
-- **A story delete can race an undo in flight.** `deleteStory`
-  (`lib/actions/stories/delete-story.ts`) takes no guard against a
-  reversal in flight. A delete that commits after an undo built its
-  plan and before the undo commits lets the undo report `ok` and push
-  its redo group for a branch that no longer exists: probed with a
-  wrapped `runInTransaction`, `undoRedoStore.__branches()` held the
-  deleted branch (2026-11-23). The reversal itself then commits
-  against the deleted story; for a delete's undo it would re-insert
-  rows into the dead branch (inferred, not probed). Whether the UI can
-  reach the window, the undo's own read-to-commit stretch, is unshown.
-  It predates Slice 6.2. Found by Slice 6.2's slice review
-  (2026-11-23).
-
 - **Can a pipeline reversal leave a redo group that contradicts its
   branch?** Every delta-logged write clears its branch's redo stack,
   but the pipeline's reversals clear none: `reverseCloseForRerun`

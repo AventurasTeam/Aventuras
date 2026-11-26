@@ -420,6 +420,15 @@ describe('checkStoryDuplicate', () => {
     await expectRefused({ branchId: A }, DUPLICATE_REFUSAL.runRegistered)
   })
 
+  // A Send's user_action lands before its run reserves: the copy would take it with no run row.
+  it('refuses while a turn is pending on one of its branches', async () => {
+    let checked: Awaited<ReturnType<typeof check>> | undefined
+    await generationStore.bracketPendingTurn(B, async () => {
+      checked = await check({ branchId: A })
+    })
+    expect(checked).toEqual({ status: 'rejected', code: DUPLICATE_REFUSAL.runRegistered })
+  })
+
   it('reports the first refusal in canon order', async () => {
     t.sqlite.prepare("UPDATE stories SET status = 'draft' WHERE id = ?").run(STORY)
     markSwap(STORY)
@@ -1128,7 +1137,7 @@ describe('duplicateStory', () => {
   })
 
   /** A ctx whose batch runs after `write`, which stands in for one landing after the reads. */
-  function racing(write: () => Promise<void>) {
+  function racing(write: () => Promise<unknown>) {
     let afterWrite: Record<string, unknown[]> = {}
     const ctx: DbCtx = {
       db: t.db,

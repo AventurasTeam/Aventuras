@@ -7,10 +7,10 @@ import { isStorySwapPending, readStorySwapPending, swapMarkerStored } from '@/li
 import { generateId } from '@/lib/ids'
 import {
   generationStore,
+  isAnyStoryBranchBusy,
   readStoryBranches,
   rehydrateStories,
   type BranchRow,
-  type TxState,
 } from '@/lib/stores'
 
 import { readUnfinishedRuns } from '../delta/unfinished-runs'
@@ -44,13 +44,6 @@ export type DuplicateStoryResult =
 type CheckRefusal = Extract<DuplicateCheck, { status: 'rejected' }>
 
 const refused = (code: CheckRefusal['code']): CheckRefusal => ({ status: 'rejected', code })
-
-// RunState.storyId is nullable, so a run also counts by its branch.
-function runOnStory(txState: TxState, storyId: string, branchIds: readonly string[]): boolean {
-  return [...txState.runs.values()].some(
-    (run) => run.storyId === storyId || branchIds.includes(run.branchId),
-  )
-}
 
 type StoredHold = typeof DUPLICATE_REFUSAL.branchHeld | typeof DUPLICATE_REFUSAL.unfinishedRun
 
@@ -99,7 +92,7 @@ export async function checkStoryDuplicate(
   // Read last, so a marker stored during the reads above counts. The marker as stored, for any
   // story: the in-memory read sees only the open story's.
   if (await readStorySwapPending(ctx.db, storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
-  const runRegistered = () => runOnStory(generationStore.getTxState(), storyId, onStory)
+  const runRegistered = () => isAnyStoryBranchBusy(generationStore.getTxState(), storyId, onStory)
   if (runRegistered()) return refused(DUPLICATE_REFUSAL.runRegistered)
   if (hold != null) {
     // A run stores its end before leaving the store: re-read, then check runs, no await between.
@@ -253,7 +246,7 @@ export async function duplicateStory(
   // No await from here to the post: a swap or a run admitted during the reads above refuses.
   if (isStorySwapPending(storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
   if (
-    runOnStory(
+    isAnyStoryBranchBusy(
       generationStore.getTxState(),
       storyId,
       onStory.map(({ id }) => id),

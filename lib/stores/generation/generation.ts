@@ -121,6 +121,20 @@ export function isStoryBusy(
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
 }
 
+/** isStoryBusy over every branch of the story, for a write that takes the whole story. */
+export function isAnyStoryBranchBusy(
+  txState: TxState,
+  storyId: string,
+  branchIds: readonly string[],
+): boolean {
+  if (txState.reversalInProgress) return true
+  for (const turn of txState.pendingTurns) if (branchIds.includes(turn.branchId)) return true
+  // RunState.storyId is nullable, so a run also counts by its branch.
+  return [...txState.runs.values()].some(
+    (r) => r.storyId === storyId || branchIds.includes(r.branchId),
+  )
+}
+
 // An emptied record is deleted, not left as {}: readers test `deferred.has(branchId)`.
 function withDeferral(
   deferred: ReadonlyMap<string, DeferredWork>,

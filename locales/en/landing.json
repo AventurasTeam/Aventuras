@@ -25,7 +25,8 @@
     "title": "Delete this story?",
     "body": "This permanently removes the story and all its branches, entries, and world data. This cannot be undone.",
     "cancel": "Cancel",
-    "confirm": "Delete"
+    "confirm": "Delete",
+    "running": "A run is still going on this story."
   },
   "duplicate": {
     "title": "Duplicate story",

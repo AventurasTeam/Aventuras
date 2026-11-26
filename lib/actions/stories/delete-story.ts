@@ -25,7 +25,13 @@ import {
   wizardSessions,
   type SqlOp,
 } from '@/lib/db'
-import { embedderSwapStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
+import {
+  embedderSwapStore,
+  generationStore,
+  isAnyStoryBranchBusy,
+  rehydrateStories,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -71,6 +77,8 @@ export function branchRowDeleteOps(
   ]
 }
 
+export type DeleteStoryResult = { status: 'deleted' } | { status: 'rejected'; code: 'story-busy' }
+
 /** Transactional cascade of a story's entire owned graph, child -> parent. No DB-level FK cascade exists. */
 export async function deleteStory(
   storyId: string,
@@ -78,7 +86,7 @@ export async function deleteStory(
   // Injected for tests, which drive sqlite directly rather than through the
   // platform bridge this resolves to at runtime.
   listTables: () => Promise<string[]> = listTableNames,
-): Promise<void> {
+): Promise<DeleteStoryResult> {
   const branchRows = await ctx.db
     .select({ id: branches.id })
     .from(branches)
@@ -94,6 +102,10 @@ export async function deleteStory(
   ops.push(ctx.db.delete(branches).where(eq(branches.storyId, storyId)).toSQL())
   ops.push(ctx.db.delete(stories).where(eq(stories.id, storyId)).toSQL())
 
+  // No await from here to the batch's post: a run, a pending turn or a reversal on the story would
+  // go on writing to rows the batch removes.
+  if (isAnyStoryBranchBusy(generationStore.getTxState(), storyId, branchIds))
+    return { status: 'rejected', code: 'story-busy' }
   await ctx.runInTransaction(ops)
   // A future importer that keeps source ids would otherwise inherit this story's stale Later.
   embedderSwapStore.clearDeferredUpgradeFor(storyId)
@@ -103,4 +115,5 @@ export async function deleteStory(
     undoRedoStore.drop(branchId)
   }
   await rehydrateStories(ctx.db)
+  return { status: 'deleted' }
 }
