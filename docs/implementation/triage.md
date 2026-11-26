@@ -61,17 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Can a pipeline reversal leave a redo group that contradicts its
-  branch?** Every delta-logged write clears its branch's redo stack,
-  but the pipeline's reversals clear none: `reverseCloseForRerun`
-  (`lib/pipeline/definitions/chapter-close-reversal.ts`) and a run
-  abort's `reverseRunGroup` / `reverseReplayDeltas`. A review agent
-  reasoned, without a probe, that an aborted re-run whose journal
-  write-back ends `undone` changes the branch while a redo group pushed
-  before the re-run stays, so the redo could restore rows the reversal
-  removed. Verify the sequence before fixing anything. It predates
-  Slice 6.2. Found by Slice 6.2's slice review (2026-11-23).
-
 - **A re-run's empty group with no recorded branch fires the log hook
   for `''`.** `lib/actions/delta/rerun-journal.ts:513-517` names the
   reversal set's branch `target[0]?.branchId ?? args.branchId ?? ''`; on
