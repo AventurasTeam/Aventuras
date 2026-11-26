@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react'
 import { createRef, type RefObject } from 'react'
+import type { View } from 'react-native'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { db } from '@/lib/db'
@@ -56,6 +57,9 @@ function connected(
     isFocused?: boolean
     paused?: boolean
     ref?: RefObject<ReaderBranchNavigatorHandle | null>
+    onDelete?: (branchId: string) => void
+    holdOpen?: boolean
+    currentRowRef?: RefObject<View | null>
   } = {},
 ) {
   return (
@@ -67,6 +71,9 @@ function connected(
       paused={overrides.paused ?? false}
       onSwitch={onSwitch}
       onRename={onRename}
+      onDelete={overrides.onDelete}
+      holdOpen={overrides.holdOpen}
+      currentRowRef={overrides.currentRowRef}
     />
   )
 }
@@ -192,5 +199,27 @@ describe('ReaderBranchNavigator', () => {
     rerender(connected())
     expect(stubs.handle.close).toHaveBeenCalledTimes(1)
     expect(stubs.handle.open).not.toHaveBeenCalled()
+  })
+
+  it('passes the delete handler, the hold and the current row ref through', () => {
+    const onDelete = vi.fn<(branchId: string) => void>()
+    const currentRowRef = createRef<View>()
+    render(connected({ onDelete, holdOpen: true, currentRowRef }))
+    stubs.navigator?.onDelete?.('br_fork')
+    expect(onDelete).toHaveBeenCalledWith('br_fork')
+    expect(stubs.navigator?.holdOpen).toBe(true)
+    expect(stubs.navigator?.currentRowRef).toBe(currentRowRef)
+  })
+
+  // branch-navigator.md → Delete confirm: the header's count drops at once, the chip's at close.
+  it('holds the chip while the view reports open, and lets the rows through at once', () => {
+    branchesStore.hydrate('story_1', [MAIN, FORK, TRAP])
+    render(connected())
+    act(() => stubs.navigator?.onOpenChange?.(true))
+    act(() => branchesStore.hydrate('story_1', [MAIN, FORK]))
+    expect(stubs.navigator?.rows).toEqual([MAIN, FORK])
+    expect(stubs.navigator?.chip).toEqual({ count: 3, currentName: 'Main' })
+    act(() => stubs.navigator?.onOpenChange?.(false))
+    expect(stubs.navigator?.chip).toEqual({ count: 2, currentName: 'Main' })
   })
 })

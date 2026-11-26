@@ -106,6 +106,19 @@ No `tone` / `severity` prop on AlertDialog itself — the variant axis would dup
 
 A dialog whose actions disable while it works (a save in flight, a removal, a gate) passes `busy` to `AlertDialogContent`. On web the focused action blurs the moment it disables, and with every action off there is nothing to hand focus to, so the dialog takes it and Tab stays inside ([a control that disables under focus drops focus on web](../../implementation/lessons-learned/rnweb-disabled-under-focus-blurs.md)).
 
+## Over an open Popover
+
+A confirm opened over a Popover that stays open under it passes
+`aboveOpenPopover` to `AlertDialogContent`; the
+[branch delete confirm](../screens/reader-composer/branch-navigator/branch-navigator.md#delete-confirm)
+is the one today. On web a Popover's overlay sits at `zIndex` 100, so a
+Popover opened inside a Dialog paints above it
+([RN-Web Views are stacking contexts](../../implementation/lessons-learned/rnweb-view-stacking-context.md)),
+which would leave a held Popover painting over the confirm. The flag
+lifts the dialog's overlay to 110. Native is unaffected, and every other
+AlertDialog keeps its order, so a Popover opened over one still paints
+above it.
+
 ## Copy contract
 
 - **Title ends with `?`** — consent-gate signal. `Delete from entry <N>?`, `Switch calendar to <name>?`.

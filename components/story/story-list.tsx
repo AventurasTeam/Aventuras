@@ -30,6 +30,8 @@ export type StoryCardHandlers = {
   onArchiveToggle: () => void
   /** Absent on drafts: there is no branch to boot, and the wizard owns their identity. */
   onEditInfo?: () => void
+  /** Absent on drafts: drafts aren't duplicated. */
+  onDuplicate?: () => void
   onDelete: () => void
 }
 

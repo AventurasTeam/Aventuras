@@ -1713,7 +1713,9 @@ own.
   rn-primitives' web `Content` hands Radix's element only its focus and
   dismiss props. The choice is a real description per dialog or a
   hidden empty one. Raised in 5.11's review; routed from triage
-  2026-11-14, whose pass fixed the same entry's raw × label.
+  2026-11-14, whose pass fixed the same entry's raw × label. New
+  instance (2026-11-26): the story list's Duplicate dialog
+  (`components/story/duplicate-story-dialog.tsx`) warns on every open.
 - **M9.5 — A removable `Tag`'s × likely misses the phone tap floor on
   Android.** [`chips.md → Tag`](../ui/patterns/chips.md#tag--pill-labeled-content)
   promises the × its own 44 px target. It is a 20 px circle with
@@ -1928,7 +1930,10 @@ own.
   Cancel & leave while its confirm spins. The same trap contradicts
   [`toast.md → Z-index`](../ui/patterns/toast.md#z-index), which puts
   the `Toaster` (`z-[100]` in `components/ui/toast.tsx`) above Sheet and
-  AlertDialog. Routed from triage 2026-10-09.
+  AlertDialog. Routed from triage 2026-10-09. A further instance
+  (2026-11-26): the branch delete confirm lifts its overlay to zIndex
+  110 over an open Popover (`AlertDialogContent`'s `aboveOpenPopover`),
+  above the `Toaster`'s 100 even as `toast.md` has it.
 - **M9.5 — A Dialog opened as a bottom Sheet closes may sit under its scrim.** On
   native, gorhom's sheets render above the app's `PortalHost`, and since 4.5a
   a closing Sheet's scrim keeps catching touches until its animation ends

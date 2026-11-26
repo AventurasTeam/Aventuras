@@ -16,6 +16,7 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { StoryStatusPill } from '@/components/compounds/story-status-pill'
 import { TruncatedText } from '@/components/compounds/truncated-text'
 import { BranchCreateModal } from '@/components/reader/branch-create-modal'
+import { BranchDeleteConfirm } from '@/components/reader/branch-delete-confirm'
 import { branchSwitchPaused } from '@/components/reader/branch-switch-paused'
 import { chapterBreaksOf } from '@/components/reader/chapter-breaks'
 import { closeHereEntryIds } from '@/components/reader/close-here-entries'
@@ -133,6 +134,10 @@ import {
 import { readerUndoRedoGates } from '@/components/reader/undo-redo-gates'
 import { useAliveRef } from '@/components/reader/use-alive-ref'
 import { useBranchCreate } from '@/components/reader/use-branch-create'
+import {
+  branchDeleteBlockedReason,
+  useBranchDeleteConfirm,
+} from '@/components/reader/use-branch-delete-confirm'
 import { useEmptyAfterRowsSignal } from '@/components/reader/use-empty-after-rows-signal'
 import { useLiveRollbackCounts } from '@/components/reader/use-live-rollback-counts'
 import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
@@ -151,6 +156,7 @@ import {
 } from '@/components/story-settings/generation-run'
 import { EmptyState } from '@/components/ui/empty-state'
 import { KeyboardInsetColumn } from '@/components/ui/keyboard-inset-column'
+import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { useChapterProgress } from '@/hooks/use-chapter-progress'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useInlineEditGuard } from '@/hooks/use-inline-edit-guard'
@@ -163,6 +169,8 @@ import { useStoryLeaveGuard } from '@/hooks/use-story-leave-guard'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
+  countBranchOnlyEntries,
+  deleteBranch,
   ENTRIES_WINDOW_SIZE,
   getRollbackCounts,
   loadOpenStory,
@@ -207,6 +215,7 @@ import {
   appSettingsStore,
   awaitRunTerminal,
   blockingOverlaysStore,
+  branchesStore,
   chapterOverlaysStore,
   chaptersStore,
   currentStoryStore,
@@ -218,6 +227,7 @@ import {
   isUserEditBlocked,
   readerHoldStore,
   readerRailStore,
+  refreshBranches,
   RERUN_HELD,
   rehydrateStories,
   storiesStore,
@@ -236,6 +246,8 @@ const EDIT_COMMIT_TIMEOUT_MS = 10_000
 
 const loadRollbackCounts = (branchId: string, targetId: string) =>
   getRollbackCounts(branchId, targetId, ctx)
+const countBranchOnly = (branchId: string) => countBranchOnlyEntries(branchId, ctx)
+const removeBranch = (branchId: string) => deleteBranch(branchId, ctx)
 
 type BranchHydrationState =
   | { branchId: string; status: 'loading' }
@@ -1774,6 +1786,45 @@ function ReaderComposerBody({
     },
     [storyId],
   )
+  const currentRowRef = useRef<View>(null)
+  const refreshStoryBranches = useCallback(async () => {
+    if (storyId != null) await refreshBranches(db, storyId)
+  }, [storyId])
+  const {
+    target: deleteTarget,
+    phase: deletePhase,
+    returnFocusTo: deleteReturnFocusTo,
+    open: openDeleteConfirm,
+    dismiss: dismissDeleteConfirm,
+    confirm: confirmDelete,
+  } = useBranchDeleteConfirm({
+    // Logs only: the navigator, and so the confirm, mounts once the story has hydrated.
+    storyId: storyId ?? '',
+    active: isFocused,
+    swapPending,
+    count: countBranchOnly,
+    remove: removeBranch,
+    refresh: refreshStoryBranches,
+    focusAfterDelete: currentRowRef,
+  })
+  // The navigator's row carries its id alone; a row gone from the store opens nothing.
+  const handleDeleteRequest = useCallback(
+    (id: string) => {
+      if (storyId == null) return
+      const row = branchesStore.getBranches(storyId).find((branch) => branch.id === id)
+      if (row != null) void openDeleteConfirm(id, row.name)
+    },
+    [storyId, openDeleteConfirm],
+  )
+  const deleteBlockedReason = generationStore.useGeneration((s) =>
+    branchDeleteBlockedReason({
+      txState: s.txState,
+      storyId: storyId ?? undefined,
+      switchPaused,
+      swapPending,
+      phase: deletePhase,
+    }),
+  )
   const { onBranch, modal: branchCreate } = useBranchCreate({
     storyId,
     branchId,
@@ -2032,6 +2083,10 @@ function ReaderComposerBody({
               paused={switchPaused}
               onSwitch={handleSwitch}
               onRename={handleRename}
+              // Hidden, not disabled: lifecycle ops pause as a set, and a swap embeds every branch.
+              onDelete={!switchPaused && !swapPending ? handleDeleteRequest : undefined}
+              holdOpen={deleteTarget != null}
+              currentRowRef={currentRowRef}
             />
           </>
         ) : undefined
@@ -2200,6 +2255,22 @@ function ReaderComposerBody({
       ) : null}
       {/* Focus-gated: a portaled modal would stay over a screen pushed above the reader. */}
       {branchCreate != null && isFocused ? <BranchCreateModal {...branchCreate} /> : null}
+      {/* Focus-gated as the rollback confirm is; a delete running as focus leaves still lands. */}
+      {deleteTarget != null && isFocused ? (
+        <BranchDeleteConfirm
+          open
+          onOpenChange={(open) => {
+            if (!open) dismissDeleteConfirm()
+          }}
+          name={deleteTarget.name}
+          count={deleteTarget.count}
+          blockedReason={deleteBlockedReason}
+          phase={deletePhase.kind === 'refused' ? 'idle' : deletePhase.kind}
+          portalHost={tier === 'phone' ? ABOVE_SHEETS_PORTAL_HOST : undefined}
+          returnFocusTo={deleteReturnFocusTo}
+          onDelete={() => void confirmDelete()}
+        />
+      ) : null}
       {timeEdit != null && worldTimeFrame != null ? (
         <WorldTimeEditSheet
           frame={worldTimeFrame}

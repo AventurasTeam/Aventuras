@@ -40,6 +40,7 @@ import {
   storiesStore,
   undoRedoStore,
   type DeferredWorkKind,
+  type RunSlot,
 } from '@/lib/stores'
 
 import { BRANCH_SCOPED, deleteStory } from './delete-story'
@@ -118,8 +119,8 @@ async function setup() {
   return { db, sqlite, listTables, ctx: { db, runInTransaction } }
 }
 
-// Records `slot` deferred on `branchId` as an interrupt does: a run reserved, then aborted.
-function deferOn(branchId: string, slot: DeferredWorkKind): void {
+// Reserves a run in `slot` on `branchId`, as the orchestrator registers one.
+function startRunIn(slot: RunSlot, branchId: string): string {
   const runId = `run_${slot}_${branchId}`
   generationStore.startRun({
     runId,
@@ -136,7 +137,17 @@ function deferOn(branchId: string, slot: DeferredWorkKind): void {
     terminal: Promise.resolve(),
     resolveTerminal: () => {},
   })
-  generationStore.abortRun(runId, 'aborted')
+  return runId
+}
+
+// Records `slot` deferred on `branchId` as an interrupt does: a run reserved, then aborted.
+function deferOn(branchId: string, slot: DeferredWorkKind): void {
+  generationStore.abortRun(startRunIn(slot, branchId), 'aborted')
+}
+
+// Holds `branchId` as a re-run does whose abort's reversal didn't commit.
+function holdOn(branchId: string): void {
+  generationStore.abortRun(startRunIn('rerun', branchId), 'aborted', { unreversed: true })
 }
 
 describe('deleteStory', () => {
@@ -209,33 +220,45 @@ describe('deleteStory', () => {
     await db
       .insert(branches)
       .values({ id: 'br_victim_alt', storyId: 'victim', name: 'alt', createdAt: 1 })
+    // The hold goes first: a pass's or a close's end clears its branch's re-run record.
     for (const branchId of ['br_victim', 'br_victim_alt', 'br_survivor']) {
+      holdOn(branchId)
       deferOn(branchId, 'pass')
       deferOn(branchId, 'close')
       generationStore.setPendingClose(branchId, { endEntryId: `e_${branchId}` })
+      generationStore.setPendingRerun(branchId, { chapterId: `chapter_${branchId}` })
     }
+    expect(generationStore.getTxState().heldBranches.size).toBe(3)
+    expect(generationStore.getTxState().pendingRerun.size).toBe(3)
 
     await deleteStory('victim', ctx, listTables)
 
-    const { deferred, pendingClose } = generationStore.getTxState()
+    const { deferred, pendingClose, pendingRerun, heldBranches } = generationStore.getTxState()
     expect([...deferred.keys()]).toEqual(['br_survivor'])
     expect([...pendingClose.keys()]).toEqual(['br_survivor'])
+    expect([...pendingRerun.keys()]).toEqual(['br_survivor'])
+    expect([...heldBranches.keys()]).toEqual(['br_survivor'])
     expect(deferred.get('br_survivor')).toEqual({ pass: true, close: true })
     expect(pendingClose.get('br_survivor')).toEqual({ endEntryId: 'e_br_survivor' })
+    expect(pendingRerun.get('br_survivor')).toEqual({ chapterId: 'chapter_br_survivor' })
+    expect(heldBranches.get('br_survivor')).toEqual({ storyId: null })
   })
 
   it('keeps the records when the delete does not commit', async () => {
     const { listTables, ctx } = await setup()
+    holdOn('br_victim')
     deferOn('br_victim', 'close')
     generationStore.setPendingClose('br_victim', { endEntryId: 'e_victim' })
+    generationStore.setPendingRerun('br_victim', { chapterId: 'chapter_victim' })
     const failingCtx = { ...ctx, runInTransaction: () => Promise.reject(new Error('write failed')) }
 
     await expect(deleteStory('victim', failingCtx, listTables)).rejects.toThrow('write failed')
 
-    expect(generationStore.getTxState().deferred.get('br_victim')).toEqual({ close: true })
-    expect(generationStore.getTxState().pendingClose.get('br_victim')).toEqual({
-      endEntryId: 'e_victim',
-    })
+    const { deferred, pendingClose, pendingRerun, heldBranches } = generationStore.getTxState()
+    expect(deferred.get('br_victim')).toEqual({ close: true })
+    expect(pendingClose.get('br_victim')).toEqual({ endEntryId: 'e_victim' })
+    expect(pendingRerun.get('br_victim')).toEqual({ chapterId: 'chapter_victim' })
+    expect(heldBranches.get('br_victim')).toEqual({ storyId: null })
   })
 
   it("drops the redo stack of every deleted branch and keeps another story's", async () => {

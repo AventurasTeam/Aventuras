@@ -36,14 +36,20 @@ const RUN_MUTATORS = generationStoreMutators(
 
 // A stray write makes the next Send start a close nobody owes, or skip one that is owed.
 const CLOSE_RECORD_MUTATORS = generationStoreMutators(
-  ['setPendingClose', 'clearPendingClose', 'clearDeferredClose', 'dropBranchRecords'],
+  ['setPendingClose', 'clearPendingClose', 'clearDeferredClose'],
   "Only a close's record writers write pendingClose or deferred, and prose reversal may clearPendingClose. See docs/generation-pipeline.md → Multi-run txState.",
+)
+
+// A stray drop loses a live branch's owed work, its re-run or its hold.
+const BRANCH_DROP_MUTATORS = generationStoreMutators(
+  ['dropBranchRecords'],
+  "Only a story's or a branch's delete drops a branch's records. See docs/generation-pipeline.md → Multi-run txState.",
 )
 
 // A stray write turns the branch's next close into a re-run, or ends a re-run's chain early.
 const RERUN_RECORD_MUTATORS = generationStoreMutators(
   ['setPendingRerun', 'clearPendingRerun'],
-  "Only the re-run's start writes pendingRerun; the store clears it as the chain ends. See docs/generation-pipeline.md → Multi-run txState.",
+  "Only the re-run's start writes pendingRerun; the store clears it as the chain ends, and a delete drops it. See docs/generation-pipeline.md → Multi-run txState.",
 )
 
 const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(
@@ -142,6 +148,7 @@ module.exports = defineConfig([
         'error',
         ...RUN_MUTATORS,
         ...CLOSE_RECORD_MUTATORS,
+        ...BRANCH_DROP_MUTATORS,
         ...RERUN_RECORD_MUTATORS,
         ...CLOSE_PROGRESS_MUTATORS,
       ],
@@ -354,12 +361,11 @@ module.exports = defineConfig([
     },
   },
 
-  // A close's record writers. The one other record write is prose reversal's clearPendingClose.
+  // A close's record writers.
   // Owner blocks sit before the off-block, so their files' tests stay exempt.
   {
     files: [
       'lib/actions/chapters/**',
-      'lib/actions/stories/delete-story.ts',
       'lib/pipeline/definitions/chapter-close-boundary.ts',
       'lib/pipeline/definitions/memory-chain.ts',
     ],
@@ -367,6 +373,7 @@ module.exports = defineConfig([
       'no-restricted-properties': [
         'error',
         ...RUN_MUTATORS,
+        ...BRANCH_DROP_MUTATORS,
         ...RERUN_RECORD_MUTATORS,
         ...CLOSE_PROGRESS_MUTATORS,
       ],
@@ -377,7 +384,12 @@ module.exports = defineConfig([
   {
     files: ['lib/actions/chapters/close-rerun.ts'],
     rules: {
-      'no-restricted-properties': ['error', ...RUN_MUTATORS, ...CLOSE_PROGRESS_MUTATORS],
+      'no-restricted-properties': [
+        'error',
+        ...RUN_MUTATORS,
+        ...BRANCH_DROP_MUTATORS,
+        ...CLOSE_PROGRESS_MUTATORS,
+      ],
     },
   },
 
@@ -385,7 +397,12 @@ module.exports = defineConfig([
   {
     files: ['lib/pipeline/runtime/**'],
     rules: {
-      'no-restricted-properties': ['error', ...CLOSE_RECORD_MUTATORS, ...RERUN_RECORD_MUTATORS],
+      'no-restricted-properties': [
+        'error',
+        ...CLOSE_RECORD_MUTATORS,
+        ...BRANCH_DROP_MUTATORS,
+        ...RERUN_RECORD_MUTATORS,
+      ],
     },
   },
 
@@ -396,6 +413,21 @@ module.exports = defineConfig([
       'no-restricted-properties': [
         'error',
         ...CLOSE_RECORD_MUTATORS.filter(({ property }) => property !== 'clearPendingClose'),
+        ...BRANCH_DROP_MUTATORS,
+        ...RERUN_RECORD_MUTATORS,
+        ...CLOSE_PROGRESS_MUTATORS,
+      ],
+    },
+  },
+
+  // A story's and a branch's delete drop each removed branch's records, and write none.
+  {
+    files: ['lib/actions/stories/delete-story.ts', 'lib/actions/stories/delete-branch.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...RUN_MUTATORS,
+        ...CLOSE_RECORD_MUTATORS,
         ...RERUN_RECORD_MUTATORS,
         ...CLOSE_PROGRESS_MUTATORS,
       ],
