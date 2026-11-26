@@ -255,9 +255,12 @@ marks but hold no lead line.
 - `close-instructions.ts` stays free of the lead. The roadmap entry's
   "`close-instructions` … naming the lead" is stale and isn't built.
 
-**The third-person rule.** The summaries' and the close's wording follows
-canon: told in the third person, naming each character as the prose does,
-the lead included, never "I" or "you" outside quoted speech. It goes in:
+**The third-person rule.** The summaries' and the close's wording is
+canon's, told in the third person, naming each character as the prose
+does, never "I" or "you" outside quoted speech, and the lead by name
+where canon says "the lead included": in first- or second-person prose
+the prose calls the lead "I" or "you", which "as the prose does" would
+point at. It goes in:
 
 - the three summary rules, which today say the reverse:
   `chapter-metadata.ts:39`, `chapter-metadata-part.ts:13`, and the
@@ -664,8 +667,10 @@ after probes the one on the new wording;
   prose does" and keeping "the lead included"; the summaries and the
   close keep `THIRD_PERSON_RULE`. `classifier.md`'s sentence changed
   with it, because the 10-run figures showed the longer phrase
-  coinciding with unnamed figures made into new characters. At 10 runs
-  C1 was still more than one run below before on four checks, so "Q27:
+  coinciding with unnamed figures made into new characters (`ambush`,
+  the archer and the third rider, never named: 9/10 → 6/10 at 10 runs,
+  8/10 under C1, in the Probes table). At 10 runs C1 was still more
+  than one run below before on four checks, so "Q27:
   D2": ten more runs a side of `learning` and `recounted`, and a test
   fixed before the numbers, a two-sided Fisher exact test per check,
   before (20 runs) against the variant (20 runs), accepting the variant
@@ -744,22 +749,111 @@ after probes the one on the new wording;
 `222d11765` (the first wording; the commits after it, up to the C1
 reword, add only comments and docs). The close runs read one seeded
 database, its sha256 the same in both. The third-person check's before
-figures had no rule in the prompt behind them. Evaluation set: 5 runs a
-window; the checks that fell, the `switch` window's two that rose, and
-the totals, with the same runs after C1 (`dcbb6c948`):
+figures had no rule in the prompt behind them. Evaluation set, 5 runs a
+window: every check's rate before, under the first wording and after C1
+(`dcbb6c948`):
 
-| Window      | Check                                                                                       | Before  | First wording | C1      |
-| ----------- | ------------------------------------------------------------------------------------------- | ------- | ------------- | ------- |
-| `ambush`    | the archer and the third rider, never named, are not new characters                         | 4/5     | 3/5           | 4/5     |
-| `recounted` | Vane, who gave the order, is involved in the wreck                                          | 4/5     | 2/5           | 1/5     |
-| `learning`  | the poisoning is not added again                                                            | 5/5     | 3/5           | 4/5     |
-| `learning`  | the steward, who is after the shop, is a new character                                      | 5/5     | 4/5           | 2/5     |
-| `learning`  | Tam's aunt, whom Oriel sets out to find, is a new character                                 | 2/5     | 0/5           | 1/5     |
-| `namedrops` | every ID names a listed row or a handle the reply declares                                  | 5/5     | 4/5           | 5/5     |
-| `switch`    | the archive break-in is Wenna's: a happening telling it involves her or gives her awareness | 0/5     | 5/5           | 5/5     |
-| `switch`    | the archive break-in is not credited to Dace, the lead after it                             | 0/5     | 5/5           | 5/5     |
-| all windows | rule checks held                                                                            | 360/390 | 369/390       | 365/390 |
-| all windows | judgment checks held                                                                        | 33/35   | 32/35         | 33/35   |
+| Window         | Check                                                                                                            | Before          | First wording | C1        |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- | --------------- | ------------- | --------- |
+| `ambush`       | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `ambush`       | expect rule: Dov Hask is a new character                                                                         | 5/5             | 5/5           | 5/5       |
+| `ambush`       | expect rule: the fight is one happening, not one a beat                                                          | 4/5             | 5/5           | 4/5       |
+| `ambush`       | expect rule: a happening tells the fight’s moments: Hask unhorsed, the archer shot, Sefa’s wound                 | 5/5             | 5/5           | 5/5       |
+| `ambush`       | expect rule: a happening sits at t4, the fight’s last turn                                                       | 5/5             | 5/5           | 5/5       |
+| `ambush`       | expect rule: a happening involves Tobin, the prose’s "you"                                                       | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid rule: Pell, never in the prose, is involved in no happening                                                | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid rule: no happening’s description tells Pell in the fight                                                   | 5/5             | 5/5           | 5/5       |
+| `ambush`       | expect rule: a happening involves Sefa                                                                           | 5/5             | 5/5           | 5/5       |
+| `ambush`       | expect rule: a happening involves the crossing, where it happened                                                | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid rule: Sefa, wounded, is not retired                                                                        | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid rule: no new character stands for "you"                                                                    | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid judgment: the archer and the third rider, never named, are not new characters                              | 4/5             | 3/5           | 4/5       |
+| `ambush`       | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `ambush`       | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `recounted`    | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `recounted`    | expect rule: the wreck is a recounted happening, with its time                                                   | 5/5             | 5/5           | 5/5       |
+| `recounted`    | expect rule: Nessa learns of the wreck, with learnedAtTurn                                                       | 5/5             | 5/5           | 5/5       |
+| `recounted`    | expect rule: Brannoc, who watched it, is aware of the wreck                                                      | 5/5             | 5/5           | 5/5       |
+| `recounted`    | expect rule: Edric Vane is a new character                                                                       | 5/5             | 5/5           | 5/5       |
+| `recounted`    | expect rule: Vane, who gave the order, is involved in the wreck                                                  | 4/5             | 2/5           | 1/5       |
+| `recounted`    | expect rule: Nessa’s resolve to take the page to court is a new thread                                           | 5/5             | 5/5           | 5/5       |
+| `recounted`    | avoid rule: the wreck is one happening: the doused lamp is a moment of it, not its own                           | 5/5             | 5/5           | 5/5       |
+| `recounted`    | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `recounted`    | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `recounted`    | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `reveal`       | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `reveal`       | expect rule: the woman in grey is renamed Ilse Marrow                                                            | 5/5             | 5/5           | 5/5       |
+| `reveal`       | expect rule: the Heron is an alias of hers                                                                       | 4/5             | 5/5           | 4/5       |
+| `reveal`       | expect rule: her cover name, Mistress Penn, is an alias of hers                                                  | 0/5             | 0/5           | 0/5       |
+| `reveal`       | avoid rule: no new character for her, under any of her names                                                     | 5/5             | 5/5           | 5/5       |
+| `reveal`       | avoid rule: the cover name renames no one                                                                        | 5/5             | 5/5           | 5/5       |
+| `reveal`       | avoid judgment: the passing fishmonger is not a new character                                                    | 5/5             | 5/5           | 5/5       |
+| `reveal`       | expect rule: the meeting in the market is one happening, not one a beat                                          | 5/5             | 5/5           | 5/5       |
+| `reveal`       | expect rule: a happening tells the meeting’s moments: the cornering, her name, the note                          | 5/5             | 5/5           | 5/5       |
+| `reveal`       | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `reveal`       | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `reveal`       | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `defection`    | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `defection`    | expect rule: Brann ends the window in House Varro                                                                | 5/5             | 5/5           | 5/5       |
+| `defection`    | expect rule: his membership sits at t2, where he swears                                                          | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: Maela’s borrowed coat changes no membership of hers                                                  | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid judgment: no new character but the warrant’s signer: the gate-boy and the hanged brother go unnamed        | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: no new faction for a listed one                                                                      | 5/5             | 5/5           | 5/5       |
+| `defection`    | expect judgment: the ledger theft is a happening involving Brann and Maela                                       | 5/5             | 5/5           | 5/5       |
+| `defection`    | expect rule: a happening involves the toll-house, where the theft happened                                       | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: the hanging carries no time worked out from other numbers                                            | 4/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: the alehouse bargain is one happening, not an offer and an acceptance                                | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `defection`    | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `learning`     | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `learning`     | expect rule: Idris learns of the listed poisoning                                                                | 5/5             | 5/5           | 5/5       |
+| `learning`     | expect rule: Oriel, who tells of the poisoning, knows of it                                                      | 3/5             | 4/5           | 4/5       |
+| `learning`     | expect rule: his learning sits at t2                                                                             | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: the poisoning is not added again                                                                     | 5/5             | 3/5           | 4/5       |
+| `learning`     | avoid rule: the listed master and apprentice views are not restated                                              | 5/5             | 5/5           | 5/5       |
+| `learning`     | expect rule: Tam Rook is a new character                                                                         | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: Tam Rook, who fled, is not made dead                                                                 | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: no description tells Tam as dead                                                                     | 2/5             | 2/5           | 1/5       |
+| `learning`     | expect rule: the steward, who is after the shop, is a new character                                              | 5/5             | 4/5           | 2/5       |
+| `learning`     | expect rule: Tam’s aunt, whom Oriel sets out to find, is a new character                                         | 2/5             | 0/5           | 1/5       |
+| `learning`     | avoid judgment: a steward, if added, is described by what he is doing                                            | 4/5             | 4/5           | 5/5       |
+| `learning`     | expect rule: finding Tam is a new thread                                                                         | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: the unrelated listed fire gets no awareness                                                          | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `learning`     | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `namedrops`    | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `namedrops`    | expect rule: Jorun Vask, whom Wren sets out to find, is a new character                                          | 5/5             | 5/5           | 5/5       |
+| `namedrops`    | avoid judgment: no new character for a name only invoked: a saint in an oath, a king in a saying, a song’s maker | 5/5             | 5/5           | 4/5       |
+| `namedrops`    | avoid judgment: the fiddler, a passing figure, is not a new character                                            | 5/5             | 5/5           | 5/5       |
+| `namedrops`    | avoid rule: the Copper Bell, a named place, is no character                                                      | 5/5             | 5/5           | 5/5       |
+| `namedrops`    | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `namedrops`    | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 4/5           | 5/5       |
+| `namedrops`    | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `direction`    | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `direction`    | avoid rule: no happening says Aria lied, which only the direction asked for                                      | 3/5             | 5/5           | 4/5       |
+| `direction`    | expect rule: the confrontation tells what the narration made of it: she wrote it to their mother                 | 5/5             | 5/5           | 5/5       |
+| `direction`    | expect rule: the burning, from the turn written as prose, is recorded                                            | 4/5             | 5/5           | 5/5       |
+| `direction`    | expect rule: Kael knows of the confrontation                                                                     | 5/5             | 5/5           | 5/5       |
+| `direction`    | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `direction`    | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `direction`    | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| `switch`       | parsed                                                                                                           | 5/5             | 5/5           | 5/5       |
+| `switch`       | expect rule: the archive break-in is Wenna’s: a happening telling it involves her or gives her awareness         | 0/5             | 5/5           | 5/5       |
+| `switch`       | avoid rule: the archive break-in is not credited to Dace, the lead after it                                      | 0/5             | 5/5           | 5/5       |
+| `switch`       | expect rule: the ring paid for passage is Dace’s: a happening telling it involves him or gives him awareness     | 5/5             | 5/5           | 5/5       |
+| `switch`       | avoid rule: the ring paid for passage is not credited to Wenna                                                   | 5/5             | 5/5           | 5/5       |
+| `switch`       | avoid rule: knownAwareness names only a listed happening                                                         | 5/5             | 5/5           | 5/5       |
+| `switch`       | avoid rule: every ID names a listed row or a handle the reply declares                                           | 5/5             | 5/5           | 5/5       |
+| `switch`       | avoid rule: happening descriptions in the third person                                                           | 5/5             | 5/5           | 5/5       |
+| all windows    | rule checks held                                                                                                 | 360/390         | 369/390       | 365/390   |
+| all windows    | judgment checks held                                                                                             | 33/35           | 32/35         | 33/35     |
+| evaluation set | first-attempt parse                                                                                              | 39/40           | 40/40         | 40/40     |
+| parse probe    | first-attempt parse                                                                                              | 19/20           | 19/20         | 20/20     |
+| close probe    | bar                                                                                                              | 7 of 10, missed | 8 of 10, met  | not rerun |
+| close probe    | summaries in the first or second person                                                                          | 8 of 8          | 0 of 10       | not rerun |
 
 Under the first wording every other check rose or held; C1 moved two
 more, `learning` Tam as dead 2/5 → 1/5 and `namedrops` the saint check
@@ -779,6 +873,66 @@ Summaries in the first or second person outside quoted speech: 8 of 8
 completed runs before (the second person in four, the first in four) and
 0 of 10 after.
 
+The four windows with a falling check ran five more runs a side (Q21), so
+these are 10 runs:
+
+| Window           | Check                                                                                                            | Before  | First wording | C1      |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- | ------- | ------------- | ------- |
+| `ambush`         | parsed                                                                                                           | 10/10   | 10/10         | 10/10   |
+| `ambush`         | expect rule: Dov Hask is a new character                                                                         | 10/10   | 10/10         | 10/10   |
+| `ambush`         | expect rule: the fight is one happening, not one a beat                                                          | 9/10    | 8/10          | 9/10    |
+| `ambush`         | expect rule: a happening tells the fight’s moments: Hask unhorsed, the archer shot, Sefa’s wound                 | 10/10   | 10/10         | 10/10   |
+| `ambush`         | expect rule: a happening sits at t4, the fight’s last turn                                                       | 10/10   | 10/10         | 10/10   |
+| `ambush`         | expect rule: a happening involves Tobin, the prose’s "you"                                                       | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid rule: Pell, never in the prose, is involved in no happening                                                | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid rule: no happening’s description tells Pell in the fight                                                   | 10/10   | 10/10         | 10/10   |
+| `ambush`         | expect rule: a happening involves Sefa                                                                           | 10/10   | 10/10         | 10/10   |
+| `ambush`         | expect rule: a happening involves the crossing, where it happened                                                | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid rule: Sefa, wounded, is not retired                                                                        | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid rule: no new character stands for "you"                                                                    | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid judgment: the archer and the third rider, never named, are not new characters                              | 9/10    | 6/10          | 8/10    |
+| `ambush`         | avoid rule: knownAwareness names only a listed happening                                                         | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid rule: every ID names a listed row or a handle the reply declares                                           | 10/10   | 10/10         | 10/10   |
+| `ambush`         | avoid rule: happening descriptions in the third person                                                           | 10/10   | 10/10         | 10/10   |
+| `recounted`      | parsed                                                                                                           | 10/10   | 10/10         | 10/10   |
+| `recounted`      | expect rule: the wreck is a recounted happening, with its time                                                   | 10/10   | 10/10         | 10/10   |
+| `recounted`      | expect rule: Nessa learns of the wreck, with learnedAtTurn                                                       | 10/10   | 10/10         | 10/10   |
+| `recounted`      | expect rule: Brannoc, who watched it, is aware of the wreck                                                      | 10/10   | 10/10         | 10/10   |
+| `recounted`      | expect rule: Edric Vane is a new character                                                                       | 10/10   | 10/10         | 10/10   |
+| `recounted`      | expect rule: Vane, who gave the order, is involved in the wreck                                                  | 6/10    | 3/10          | 4/10    |
+| `recounted`      | expect rule: Nessa’s resolve to take the page to court is a new thread                                           | 10/10   | 10/10         | 10/10   |
+| `recounted`      | avoid rule: the wreck is one happening: the doused lamp is a moment of it, not its own                           | 10/10   | 10/10         | 10/10   |
+| `recounted`      | avoid rule: knownAwareness names only a listed happening                                                         | 10/10   | 10/10         | 10/10   |
+| `recounted`      | avoid rule: every ID names a listed row or a handle the reply declares                                           | 10/10   | 10/10         | 10/10   |
+| `recounted`      | avoid rule: happening descriptions in the third person                                                           | 10/10   | 10/10         | 10/10   |
+| `learning`       | parsed                                                                                                           | 10/10   | 10/10         | 10/10   |
+| `learning`       | expect rule: Idris learns of the listed poisoning                                                                | 10/10   | 10/10         | 10/10   |
+| `learning`       | expect rule: Oriel, who tells of the poisoning, knows of it                                                      | 5/10    | 5/10          | 6/10    |
+| `learning`       | expect rule: his learning sits at t2                                                                             | 10/10   | 10/10         | 10/10   |
+| `learning`       | avoid rule: the poisoning is not added again                                                                     | 10/10   | 8/10          | 8/10    |
+| `learning`       | avoid rule: the listed master and apprentice views are not restated                                              | 10/10   | 10/10         | 10/10   |
+| `learning`       | expect rule: Tam Rook is a new character                                                                         | 10/10   | 10/10         | 10/10   |
+| `learning`       | avoid rule: Tam Rook, who fled, is not made dead                                                                 | 10/10   | 10/10         | 10/10   |
+| `learning`       | avoid rule: no description tells Tam as dead                                                                     | 6/10    | 5/10          | 3/10    |
+| `learning`       | expect rule: the steward, who is after the shop, is a new character                                              | 8/10    | 6/10          | 4/10    |
+| `learning`       | expect rule: Tam’s aunt, whom Oriel sets out to find, is a new character                                         | 4/10    | 2/10          | 3/10    |
+| `learning`       | avoid judgment: a steward, if added, is described by what he is doing                                            | 8/10    | 9/10          | 9/10    |
+| `learning`       | expect rule: finding Tam is a new thread                                                                         | 10/10   | 10/10         | 10/10   |
+| `learning`       | avoid rule: the unrelated listed fire gets no awareness                                                          | 10/10   | 10/10         | 10/10   |
+| `learning`       | avoid rule: knownAwareness names only a listed happening                                                         | 10/10   | 10/10         | 10/10   |
+| `learning`       | avoid rule: every ID names a listed row or a handle the reply declares                                           | 9/10    | 10/10         | 10/10   |
+| `learning`       | avoid rule: happening descriptions in the third person                                                           | 10/10   | 10/10         | 10/10   |
+| `namedrops`      | parsed                                                                                                           | 10/10   | 10/10         | 10/10   |
+| `namedrops`      | expect rule: Jorun Vask, whom Wren sets out to find, is a new character                                          | 10/10   | 10/10         | 10/10   |
+| `namedrops`      | avoid judgment: no new character for a name only invoked: a saint in an oath, a king in a saying, a song’s maker | 10/10   | 10/10         | 9/10    |
+| `namedrops`      | avoid judgment: the fiddler, a passing figure, is not a new character                                            | 10/10   | 10/10         | 10/10   |
+| `namedrops`      | avoid rule: the Copper Bell, a named place, is no character                                                      | 10/10   | 10/10         | 10/10   |
+| `namedrops`      | avoid rule: knownAwareness names only a listed happening                                                         | 10/10   | 10/10         | 10/10   |
+| `namedrops`      | avoid rule: every ID names a listed row or a handle the reply declares                                           | 10/10   | 9/10          | 10/10   |
+| `namedrops`      | avoid rule: happening descriptions in the third person                                                           | 10/10   | 10/10         | 10/10   |
+| the four windows | rule checks held                                                                                                 | 417/440 | 406/440       | 407/440 |
+| the four windows | judgment checks held                                                                                             | 37/40   | 35/40         | 36/40   |
+
 The classifier's final wording, E2, ran `learning` and `recounted` at 20
 runs, against the before runs' 20. The four checks that failed the
 earlier rules:
@@ -791,9 +945,10 @@ earlier rules:
 | `recounted` | Vane, who gave the order, is involved in the wreck     | 6/20            | 11/20 | 6/20  | 0.200           | 1.000           |
 
 Over these two windows E2 holds 429/500 rule checks and 19/20 judgment
-checks, before 437/500 and 18/20. The other six windows' after figures
-are C1's, the same words with the sentence earlier in the bullet, and
-the close's are unaffected, its rule being untouched.
+checks, before 437/500 and 18/20. E2 ran only these two windows: the other six windows
+and the parse probe were not rerun under E2; C1's figures stand in for
+them, the same words with the sentence earlier in the bullet. The
+close's are unaffected, its rule being untouched.
 
 **Falls.** The first wording's six falls at 5 runs are in the table:
 `ambush` "the archer and the third rider, never named, are not new
@@ -813,6 +968,7 @@ separate it from sampling.
 **Not probed.** The close's marks and the narrator's reading of marks
 met no real model: no probe reaches the narrator (Q2), and the close
 probe runs the dataset seed, which has no switch (Q6). The `switch`
-window is the slice's one real-model check on marks. The dataset
+window is the slice's one real-model check on marks, and it ran under
+the first wording and C1 only, not E2. The dataset
 chapter fits one call at the dev model's window, so the part and merge
 calls' summary rule met no real model either.
