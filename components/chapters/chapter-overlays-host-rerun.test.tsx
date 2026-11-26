@@ -796,6 +796,29 @@ describe('ChapterOverlaysHost — the re-run confirm', () => {
     act(() => generationStore.finishRun(run.runId))
     expect(confirmView.props?.blockedReason).toBeUndefined()
   })
+
+  it('an in-place start that throws past its own catches ends pending, logs, and leaves the confirm open to cancel', async () => {
+    vi.spyOn(toast, 'error').mockImplementation(() => {
+      throw new Error('toast broke')
+    })
+    const logError = vi.spyOn(logger, 'error').mockImplementation(() => {})
+    actions.start.mockRejectedValue(new Error('disk'))
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    act(() => props.onConfirm())
+    await waitFor(() =>
+      expect(logError).toHaveBeenCalledWith('app.close_rerun_threw', {
+        branchId: 'br_1',
+        chapterId: 'chap_2',
+        error: 'toast broke',
+      }),
+    )
+    expect(confirmView.props?.pending).toBe(false)
+    expect(confirmView.mounted).toBe(true)
+    act(() => confirmView.props?.onCancel())
+    expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull()
+  })
 })
 
 describe('ChapterOverlaysHost — Re-run on new branch', () => {

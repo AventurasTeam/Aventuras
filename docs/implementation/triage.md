@@ -587,16 +587,6 @@ slice-planning gate forces its resolution before that slice is planned.
   this is drift, not a contract break. Found by Slice 6.5's final
   review (2026-11-25).
 
-- **The in-place re-run confirm can strand pending on a throw.**
-  `RerunConfirmHost`'s `Roll back & re-run` press
-  (`components/chapters/chapter-overlays-host.tsx`, `confirm`) chains
-  `runCloseRerun(...).then(...)` with no `.catch`, and the run's
-  refusal mapping (`speak`, `rerunStartOutcome`) sits outside its own
-  `try`: a throw there leaves the confirm pending with no way to close
-  it. Slice 6.5 gave the fork press a `.catch` that ends pending; the
-  in-place press predates the slice. Found by Slice 6.5's final review
-  (2026-11-25).
-
 - **The switch's input names the left branch twice.**
   `SwitchBranchInput` (`lib/actions/stories/switch-branch.ts`) takes
   `fromBranchId` beside `hold`, whose `branchId` is the same branch: the
