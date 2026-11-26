@@ -117,7 +117,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, and `leadMark` on the first turn of each run written under another lead; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry), as they print a `leadMark`. Render it whole.",
+        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, and `leadMark` on the first turn of each run written under another lead than the turn before it (the first turn compared with `lead`); a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry), as they print a `leadMark`. Render it whole.",
       infoFields: GENERATION_LEAD_MARK_INFO,
       required: true,
     },
