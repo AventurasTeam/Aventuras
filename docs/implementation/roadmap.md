@@ -1102,6 +1102,25 @@ code before it moved; resolve with the slice it names.
   (`Tags: respelled "iron pact" as "iron pact"`) and free text changed
   only in its NFC form collide the same way. Routed from triage
   2026-11-26, the design pass going with the M7.3 change-prose work above.
+- **M7.1 — Diagnostics settings show capture off in a dev build that
+  forces it on.** The debug switch in
+  `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
+  on the stored flag, while a dev build forces capture on
+  (`lib/boot/bootstrap.ts:39-42`). So the panel reads capture off and
+  debug disabled while capture runs, and turning debug on needs capture
+  toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
+  passes (2026-11-24).
+  Wider than filed, verified in code 2026-11-26: the Actions menu hides
+  the Diagnostics Hub entry on the stored flag
+  (`components/compounds/app-actions-menu.tsx`), probe captures gate on
+  it too and skip the dev force-on (`per-turn-retrieval.ts`), and turning
+  the master off in dev clears the buffers while capture keeps running.
+  The tab and the hub entry should read the effective gate (stored flag
+  or `__DEV__`), the master showing checked and locked in dev; whether
+  the dev force-on also covers probe captures is the tab's call, and
+  [`app-settings.md`](../ui/screens/app-settings/app-settings.md) says
+  nothing of the force-on yet. Dev builds only. Routed from triage
+  2026-11-26.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware

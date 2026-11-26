@@ -112,15 +112,6 @@ slice-planning gate forces its resolution before that slice is planned.
   meet the same refusal from the test-fixture side. Found in Slice 6.7's
   reviews (2026-11-23).
 
-- **Diagnostics settings show capture off in a dev build that forces it
-  on.** The debug switch in
-  `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
-  on the stored flag, while a dev build forces capture on
-  (`lib/boot/bootstrap.ts:39-42`). So the panel reads capture off and
-  debug disabled while capture runs, and turning debug on needs capture
-  toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
-  passes (2026-11-24).
-
 - **A phone Sheet opened over the reader's inline editor lands under
   its keyboard.** Canon says a sheet opened over an open keyboard
   dismisses it first
