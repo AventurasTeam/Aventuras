@@ -2,8 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
-import { Text } from '@/components/ui/text'
-import { useTier } from '@/hooks/use-tier'
+import { TierMark, waitForTier } from '@/hooks/tier-probe'
 import { t } from '@/lib/i18n'
 
 import {
@@ -30,14 +29,6 @@ const COPY = {
     'The memory work after this entry never finished, so branch from an earlier entry.',
   entryGone: 'This entry is no longer on the branch.',
   failed: "Couldn't create the branch.",
-}
-
-function TierMark() {
-  return <Text testID="tier">{useTier()}</Text>
-}
-
-async function waitForTier(tier: 'desktop' | 'tablet' | 'phone') {
-  await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier), WAIT)
 }
 
 async function findModal(): Promise<HTMLElement> {
@@ -205,7 +196,7 @@ function refusedPlay(line: string) {
 /** Opens empty with the input focused and `Create` disabled, about 360 px wide. */
 export const Empty: Story = {
   play: async ({ args }) => {
-    await waitForTier('desktop')
+    await waitForTier('desktop', WAIT)
     const dialog = await findModal()
     await expect(dialog).toHaveAccessibleDescription(COPY.context)
     const field = nameField(dialog)
@@ -280,7 +271,7 @@ export const ImeEnterCreatesNothing: Story = {
 
 export const CancelEscAndClose: Story = {
   play: async (context) => {
-    await waitForTier('desktop')
+    await waitForTier('desktop', WAIT)
     await cancelPlay(context)
   },
 }
@@ -288,7 +279,7 @@ export const CancelEscAndClose: Story = {
 export const Tablet: Story = {
   globals: TABLET,
   play: async (context) => {
-    await waitForTier('tablet')
+    await waitForTier('tablet', WAIT)
     await shapePlay(context)
   },
 }
@@ -296,7 +287,7 @@ export const Tablet: Story = {
 export const TabletCancels: Story = {
   globals: TABLET,
   play: async (context) => {
-    await waitForTier('tablet')
+    await waitForTier('tablet', WAIT)
     await cancelPlay(context)
   },
 }
@@ -304,7 +295,7 @@ export const TabletCancels: Story = {
 export const Phone390: Story = {
   globals: PHONE,
   play: async (context) => {
-    await waitForTier('phone')
+    await waitForTier('phone', WAIT)
     await shapePlay(context)
   },
 }
@@ -312,7 +303,7 @@ export const Phone390: Story = {
 export const Phone390Cancels: Story = {
   globals: PHONE,
   play: async (context) => {
-    await waitForTier('phone')
+    await waitForTier('phone', WAIT)
     await cancelPlay(context)
   },
 }

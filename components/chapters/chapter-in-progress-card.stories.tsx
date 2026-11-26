@@ -2,8 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
-import { Text } from '@/components/ui/text'
-import { useTier } from '@/hooks/use-tier'
+import { TierMark, waitForTier } from '@/hooks/tier-probe'
 import type { ChapterProgress, ChapterProgressTone } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 
@@ -38,10 +37,6 @@ const AT_THRESHOLD: ChapterProgress = {
   startEntryId: 'entry_59',
 }
 
-function TierMark() {
-  return <Text testID="tier">{useTier()}</Text>
-}
-
 const meta = {
   title: 'Compounds/Chapters/ChapterInProgressCard',
   component: ChapterInProgressCard,
@@ -67,10 +62,6 @@ const meta = {
 
 export default meta
 type Story = StoryObj<typeof meta>
-
-async function waitForTier(tier: 'desktop' | 'phone') {
-  await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
-}
 
 const card = () => screen.getByTestId('chapter-in-progress-card')
 const closeButton = () => screen.getByRole('button', { name: t('chapters:inProgress.close') })

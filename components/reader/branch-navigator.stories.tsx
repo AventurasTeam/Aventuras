@@ -4,8 +4,7 @@ import { useWindowDimensions, View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { ActionsMenu } from '@/components/compounds/actions-menu'
-import { Text } from '@/components/ui/text'
-import { useTier } from '@/hooks/use-tier'
+import { TierMark, waitForTier } from '@/hooks/tier-probe'
 
 import { BranchDeleteConfirm } from './branch-delete-confirm'
 import {
@@ -36,10 +35,6 @@ const LONG_LIST: BranchNavigatorRow[] = Array.from({ length: 30 }, (_, i) => ({
   name: `Branch ${i + 1}`,
 }))
 
-function TierMark() {
-  return <Text testID="tier">{useTier()}</Text>
-}
-
 // gorhom's container fills this stage, so a detent is a share of the stage's height.
 function Stage({ children }: { children: ReactNode }) {
   const { height } = useWindowDimensions()
@@ -49,10 +44,6 @@ function Stage({ children }: { children: ReactNode }) {
       {children}
     </View>
   )
-}
-
-async function waitForTier(tier: 'desktop' | 'tablet' | 'phone') {
-  await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
 }
 
 const navigator = (name: string) => screen.getByRole('dialog', { name })

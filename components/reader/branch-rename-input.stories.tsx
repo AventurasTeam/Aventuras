@@ -5,7 +5,7 @@ import { expect, fn, screen, spyOn, userEvent, waitFor } from 'storybook/test'
 
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
-import { useTier } from '@/hooks/use-tier'
+import { TierMark, waitForTier } from '@/hooks/tier-probe'
 import { logger } from '@/lib/diagnostics'
 
 import { BranchRenameInput, type BranchRenameInputProps } from './branch-rename-input'
@@ -14,14 +14,6 @@ const TABLET = { viewport: { value: 'tablet' } }
 const PHONE = { viewport: { value: 'mobile1' } }
 // CI runs plays several times slower than local.
 const ANIMATION = { timeout: 3000 }
-
-function TierMark() {
-  return <Text testID="tier">{useTier()}</Text>
-}
-
-async function waitForTier(tier: 'desktop' | 'tablet' | 'phone') {
-  await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
-}
 
 /** Stands in for the navigator row: the input while renaming, the stored name once `onDone` runs.
  * F2 toggles the input from the document, as the navigator closing does: no blur runs. F3 renames
