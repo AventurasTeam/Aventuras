@@ -450,14 +450,19 @@ describe('deleteStory — vec0 cleanup', () => {
     expect(vecBranches(sqlite, 768)).toEqual(['br_survivor'])
   })
 
-  it('skips vec0 shadow tables, which reject DML', async () => {
+  it('skips vec0 shadow tables, which a family delete must never write', async () => {
     const { listTables } = await setup()
     const names = await listTables()
+    const shadows = [
+      'entities_vec_384_info',
+      'entities_vec_384_auxiliary',
+      'entities_vec_384_metadatatext00',
+      'entities_vec_384_vector_chunks00',
+    ]
 
-    // The shadow tables exist and must not be matched.
-    expect(names).toContain('entities_vec_384_info')
+    expect(names).toEqual(expect.arrayContaining(shadows))
     expect(names.filter(isVecFamilyTable)).toContain('entities_vec_384')
-    expect(names.filter(isVecFamilyTable)).not.toContain('entities_vec_384_info')
+    for (const shadow of shadows) expect(names.filter(isVecFamilyTable)).not.toContain(shadow)
   })
 
   it('builds no ops when the story had no branches', () => {

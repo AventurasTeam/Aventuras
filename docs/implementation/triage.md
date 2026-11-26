@@ -75,29 +75,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the note has been stale since that row landed. Found by M6.1's final
   review (2026-11-22); pre-existing canon, outside that slice's scope.
 
-- **The vec0 shadow-table list is incomplete.**
-  `lib/db/embeddings/vec-tables.ts:16-18` names four shadow tables;
-  sqlite-vec 0.1.9 with metadata and auxiliary columns also creates
-  `_auxiliary`, `_metadatachunks00/01` and `_metadatatext00/01`
-  (checked on a scratch `vec0` table with the families' column shape).
-  The exact-name regex still holds, so only the comment misleads. Its
-  stated reason is off too: the shadow tables reject DML only under
-  SQLite's defensive flag (`node:sqlite`'s default), and
-  `_vector_chunks00` accepts a `DELETE` even then;
-  `lib/actions/stories/delete-story.test.ts:354`'s test name repeats it.
-  Found by M6.1's final review and its slice review (2026-11-22).
-
-- **Two vec0 comments say a `pk IN` read answers no rows.**
-  `lib/db/embeddings/knn.ts:63-65` and `lib/db/embeddings/ops.ts:75-76`
-  say vec0 answers `pk IN (…)` with zero rows, and
-  [Slice 6.1](milestones/06-branches-diff-cache/slices/01-copy-substrate.md)
-  repeats it in its Scope. On sqlite-vec 0.1.9 under `node:sqlite`,
-  desktop's version, every `pk` predicate answers correctly: `=`, `IN`,
-  `IN (SELECT …)`, `LIKE`, and a `DELETE … pk IN`. Android's
-  v0.1.7-alpha.2 is unchecked. The code reads by `branch_id` and `id`
-  either way, so only the comments' stated reason may be stale. Found by
-  M6.1's slice review (2026-11-22).
-
 - **Test plumbing the M6.1 simplifier left duplicated.** Three test
   modules hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
   `DatabaseSync`: `lib/db/branch-copy/vec-copy.test.ts:92`

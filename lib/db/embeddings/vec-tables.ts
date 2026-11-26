@@ -13,9 +13,10 @@ export const VEC_FAMILIES: Record<VecTargetKind, string> = {
   chapter: 'chapter_summaries_vec',
 }
 
-// vec0 creates shadow tables beside each virtual table (`_info`, `_chunks`,
-// `_rowids`, `_vector_chunks00`), and those reject DML — so a name match has to
-// be exact rather than a LIKE over `%_vec_%`.
+// vec0 creates shadow tables beside each virtual table (`_info`, `_chunks`, `_rowids`,
+// `_auxiliary`, `_vector_chunks00`, and `_metadatachunksNN` / `_metadatatextNN` per metadata
+// column). Desktop's defensive flag refuses most DML on them; Android sets none, so a write there
+// corrupts the family. A name match has to be exact rather than a LIKE over `%_vec_%`.
 const VEC_FAMILY_TABLE_RE = new RegExp(`^(?:${Object.values(VEC_FAMILIES).join('|')})_[1-9][0-9]*$`)
 
 export function isVecFamilyTable(name: string): boolean {
