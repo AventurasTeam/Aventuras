@@ -1,11 +1,11 @@
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { ensureVecTablesSql, vecRowPk } from '../embeddings/vec-tables'
-import type { SqlOp } from '../types'
 import { vecCopyStatement } from './vec-copy'
+import { runOps } from '../__tests__/test-db'
+import { ensureVecTablesSql, vecRowPk } from '../embeddings/vec-tables'
 
 const VEC = 'entities_vec_4'
 const SOURCE = 'entities'
@@ -88,18 +88,6 @@ function makeDb(): DatabaseSync {
   return db
 }
 
-// As createTestDb's: one BEGIN..COMMIT, rolled back on a throw.
-function runInTransaction(db: DatabaseSync, ops: SqlOp[]): void {
-  db.exec('BEGIN')
-  try {
-    for (const op of ops) db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
-    db.exec('COMMIT')
-  } catch (err) {
-    db.exec('ROLLBACK')
-    throw err
-  }
-}
-
 function partition(db: DatabaseSync, branchId: string): VecRow[] {
   return db
     .prepare(
@@ -117,9 +105,7 @@ describe('vecCopyStatement', () => {
   })
 
   function copy(): void {
-    runInTransaction(db, [
-      vecCopyStatement({ vecTable: VEC, sourceTable: SOURCE }, { from: A, to: B }),
-    ])
+    runOps(db, [vecCopyStatement({ vecTable: VEC, sourceTable: SOURCE }, { from: A, to: B })])
   }
 
   it("copies from's vectors whose source row to holds, keyed <to>:<id>:<model>, every other column as stored", () => {

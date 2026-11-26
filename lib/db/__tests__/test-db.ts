@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
 import { dbSchema } from '../schema'
+import type { SqlOp } from '../types'
 
 export const MIGRATIONS_DIR = 'lib/db/migrations'
 
@@ -21,6 +22,30 @@ export function applyMigration(sqlite: DatabaseSync, tag: string): void {
   for (const statement of sql.split('--> statement-breakpoint')) {
     const trimmed = statement.trim()
     if (trimmed) sqlite.exec(trimmed)
+  }
+}
+
+/** In-memory node:sqlite with sqlite-vec and every migration applied; FK off, no drizzle. */
+export function createMigratedSqlite(): DatabaseSync {
+  const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
+  sqlite.loadExtension(getLoadablePath())
+  for (const tag of migrationTags()) applyMigration(sqlite, tag)
+  return sqlite
+}
+
+/** Runs `ops` as one transaction on a raw handle, as Electron main's `transaction` does. */
+export function runOps(sqlite: DatabaseSync, ops: SqlOp[]): void {
+  try {
+    sqlite.exec('BEGIN')
+    for (const op of ops) sqlite.prepare(op.sql).run(...(op.params as SQLInputValue[]))
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    try {
+      sqlite.exec('ROLLBACK')
+    } catch {
+      // BEGIN itself failed — no transaction to roll back; surface the original error.
+    }
+    throw err
   }
 }
 
@@ -91,20 +116,7 @@ async function openMigrated(location: string) {
     sqlite.close()
     throw err
   }
-  const runInTransaction = async (ops: { sql: string; params: unknown[] }[]): Promise<void> => {
-    try {
-      sqlite.exec('BEGIN')
-      for (const op of ops) sqlite.prepare(op.sql).run(...(op.params as never[]))
-      sqlite.exec('COMMIT')
-    } catch (err) {
-      try {
-        sqlite.exec('ROLLBACK')
-      } catch {
-        // BEGIN itself failed — no transaction to roll back; surface the original error.
-      }
-      throw err
-    }
-  }
+  const runInTransaction = async (ops: SqlOp[]): Promise<void> => runOps(sqlite, ops)
   return { db, sqlite, runInTransaction }
 }
 

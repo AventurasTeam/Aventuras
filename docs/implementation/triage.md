@@ -61,23 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **Test plumbing the M6.1 simplifier left duplicated.** Three test
-  modules hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
-  `DatabaseSync`: `lib/db/branch-copy/vec-copy.test.ts:92`
-  (`runInTransaction`, "As createTestDb's"),
-  `lib/db/__tests__/migration-runners.ts:33`
-  (`migrateLikeAndroid`, which models expo's runner and may need to stay
-  apart) and `lib/db/__tests__/two-branch.ts:91` (`cloneBranch`). A
-  shared helper would live beside `createTestDb`'s own in
-  `lib/db/__tests__/test-db.ts`, which `migration-runners.ts` already
-  imports. Slice 6.8 moved the migration runners out of
-  `migrate-m6-deltas-key.test.ts` into that module, shared with its lead
-  migration test; the three transactions stand. Separately,
-  `lib/actions/story-entries/scene-fields.test.ts:248`
-  and `:315` spell out the call its `removeCast` helper makes (`:216`).
-  No defect either way. Found by M6.1's slice review (2026-11-22); the
-  runner's pointer moved by Slice 6.8's slice review (2026-11-25).
-
 - **Can a pipeline reversal leave a redo group that contradicts its
   branch?** Every delta-logged write clears its branch's redo stack,
   but the pipeline's reversals clear none: `reverseCloseForRerun`

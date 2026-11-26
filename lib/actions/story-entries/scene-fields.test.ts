@@ -245,7 +245,7 @@ describe('updateEntrySceneFields', () => {
 
     // The gate is "last entry", and a failure banner is not one: refusing here would
     // make the scene editor go dead for as long as the banner shows.
-    const result = await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)
+    const result = await removeCast(ctx)
 
     expect(result).toEqual({ status: 'ok' })
     expect((await storedMetadata(db, 'e2'))?.sceneEntities).toEqual(['char_a'])
@@ -312,9 +312,7 @@ describe('updateEntrySceneFields', () => {
       })
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e1')))
 
-    expect(await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_a'] }, ctx)).toEqual({
-      status: 'ok',
-    })
+    expect(await removeCast(ctx)).toEqual({ status: 'ok' })
     expect((await entityState(db, 'char_c')).current_location_id).toBe(LOC_B)
     expect((await entityState(db, 'char_b')).current_location_id).toBe(LOC_A)
   })

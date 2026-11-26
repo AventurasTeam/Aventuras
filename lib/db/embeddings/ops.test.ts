@@ -1,31 +1,18 @@
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
+import { DatabaseSync } from 'node:sqlite'
 
 import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { plantVec } from '../__tests__/vec-fixtures'
-import type { SqlOp } from '../types'
 import { deleteVecIdsOps, deleteVecOps, upsertVecOps, type VecSourceGuard } from './ops'
 import { sourceHash } from './source-hash'
 import { deleteBranchModelVecOps, ensureVecTables, vecRowPk } from './vec-tables'
+import { runOps } from '../__tests__/test-db'
+import { plantVec } from '../__tests__/vec-fixtures'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { allowExtension: true })
   db.loadExtension(getLoadablePath())
   return db
-}
-
-function runOps(db: DatabaseSync, ops: SqlOp[]): void {
-  db.exec('BEGIN')
-  try {
-    for (const op of ops) {
-      db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
-    }
-    db.exec('COMMIT')
-  } catch (err) {
-    db.exec('ROLLBACK')
-    throw err
-  }
 }
 
 function vec(dim: number, seed: number): Uint8Array {

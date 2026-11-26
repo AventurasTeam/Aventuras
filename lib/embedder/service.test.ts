@@ -1,6 +1,5 @@
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 
-import { getLoadablePath } from 'sqlite-vec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { embedViaProvider } from '@/lib/ai'
@@ -14,10 +13,9 @@ import {
   toEmbeddedFieldRow,
   vecTableName,
   type EmbeddedFieldRow,
-  type SqlOp,
   type VecTargetKind,
 } from '@/lib/db'
-import { applyMigration, createTestDb, migrationTags } from '@/lib/db/__tests__/test-db'
+import { createMigratedSqlite, createTestDb, runOps } from '@/lib/db/__tests__/test-db'
 import { KIND_COLUMNS } from '@/lib/db/embeddings/stale'
 import { logger } from '@/lib/diagnostics'
 
@@ -330,24 +328,6 @@ describe('lazy init', () => {
   })
 })
 
-function makeDb(): DatabaseSync {
-  const db = new DatabaseSync(':memory:', { allowExtension: true })
-  db.loadExtension(getLoadablePath())
-  for (const tag of migrationTags()) applyMigration(db, tag)
-  return db
-}
-
-function runOps(db: DatabaseSync, ops: SqlOp[]): void {
-  db.exec('BEGIN')
-  try {
-    for (const op of ops) db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
-    db.exec('COMMIT')
-  } catch (err) {
-    db.exec('ROLLBACK')
-    throw err
-  }
-}
-
 function oneHot(dim: number, at: number): Float32Array {
   const v = new Float32Array(dim)
   v[at] = 1
@@ -359,7 +339,7 @@ describe('embedAndBuildVecOps integration', () => {
   const now = Date.now()
 
   beforeEach(() => {
-    db = makeDb()
+    db = createMigratedSqlite()
     db.prepare(`insert into stories (id, title, created_at, updated_at) values (?, ?, ?, ?)`).run(
       's1',
       'Story',
