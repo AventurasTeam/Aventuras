@@ -91,6 +91,23 @@ export function transaction(ops: { sql: string; params: unknown[] }[]): { ok: tr
   return { ok: true }
 }
 
+// Every pending migration in one transaction, as Android's migrator runs them: applied a
+// statement at a time, a kill mid-rebuild leaves a half-done step the next boot fails to re-run.
+export function migrateOn(db: Pick<DatabaseSync, 'exec'>, queries: readonly string[]): void {
+  db.exec('BEGIN')
+  try {
+    for (const q of queries) db.exec(q)
+    db.exec('COMMIT')
+  } catch (e) {
+    try {
+      db.exec('ROLLBACK')
+    } catch {
+      // SQLite already rolled back (a full disk or an I/O error does); keep the original error.
+    }
+    throw e
+  }
+}
+
 export function getDbFilePath(): string {
   return join(app.getPath('userData'), 'aventuras.db')
 }
@@ -105,7 +122,7 @@ export async function initDb(): Promise<void> {
   // drizzle-orm 0.45.2 has no node-sqlite migrator; run migrations through the
   // sqlite-proxy migrator backed by this node:sqlite connection.
   const proxyDb = drizzle(async (s, p, m) => query(s, p, m as DbProxyMethod))
-  await migrate(proxyDb, (queries) => Promise.resolve(queries.forEach((q) => getDb().exec(q))), {
+  await migrate(proxyDb, (queries) => Promise.resolve(migrateOn(getDb(), queries)), {
     migrationsFolder: resolveMigrationsDir(),
   })
 }

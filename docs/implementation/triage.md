@@ -114,25 +114,6 @@ slice-planning gate forces its resolution before that slice is planned.
   either way, so only the comments' stated reason may be stale. Found by
   M6.1's slice review (2026-11-22).
 
-- **A desktop crash mid-migration can leave the database unable to
-  boot.** Desktop's runner applies a migration's statements one by one
-  with no wrapping transaction (`electron/db/service.ts:107-110`; drizzle's
-  `sqlite-proxy/migrator.js` opens none either).
-  Killed partway through a table rebuild (`0003`, `0009`, `0016`, `0021`
-  and `0025` rebuild), the next boot re-runs the step from its start and
-  fails: after the `CREATE` or the `DROP`, on "table `__new_deltas`
-  already exists"; after `0021`'s closing `ALTER`, before drizzle records
-  the step, on "duplicate column name: branch_id". Slice 6.8's
-  `0025_m6_entities_lead_check.sql` fails the same way on
-  `__new_entities` when killed after its `CREATE`, `INSERT` or `DROP`; a
-  kill after its `RENAME` re-runs cleanly. Android runs every
-  pending migration in one transaction and rolls back. The relaunch that
-  could cause such a kill is parked as
-  [A relaunch kills a primary whose main thread stalls](../parked.md#a-relaunch-kills-a-primary-whose-main-thread-stalls);
-  this is what the kill leaves behind. Found by M6.1's slice review
-  (2026-11-22), probed on `node:sqlite`; `0025` added by Slice 6.8's
-  slice review (2026-11-25), probed the same way.
-
 - **Test plumbing the M6.1 simplifier left duplicated.** Three test
   modules hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
   `DatabaseSync`: `lib/db/branch-copy/vec-copy.test.ts:92`

@@ -3853,7 +3853,9 @@ Harmless there, since that process had already failed. In normal use
 it needs main blocked for that long, and main shows no other
 synchronous dialog. The realistic case is a very long migration at boot
 on a large database, where a user relaunching an app that looks stuck
-would kill it mid-migration.
+would kill it mid-migration. Desktop runs every pending migration in one
+transaction, as Android does, so that kill costs the migration's time on
+the next boot rather than a database that can't open.
 
 Parked 2026-09-13; a migration or other main-thread stall long enough
 to near the timeout is the signal to revisit.
