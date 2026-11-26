@@ -28,6 +28,7 @@ import {
   showLead,
   storyModeOf,
   type CloseTurns,
+  type ShownLead,
 } from './turns'
 import {
   markCommonKnowledgeTool,
@@ -76,7 +77,7 @@ export type UpkeepShow = {
   rows: UpkeepRow[]
   happenings: { id: string; title: string }[]
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 /** data-model.md → Entry metadata shape: a part's scene, its characters and items and its place. */

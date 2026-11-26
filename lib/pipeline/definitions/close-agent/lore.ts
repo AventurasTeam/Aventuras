@@ -16,6 +16,7 @@ import {
   showLead,
   storyModeOf,
   type CloseTurns,
+  type ShownLead,
 } from './turns'
 
 /** C11: a lore row's fields, which read_row returns; the start shows only titles. */
@@ -30,7 +31,7 @@ export type LoreShow = {
   lore: { id: string; title: string }[]
   limits: { creates: number; left: number; bodyChars: number }
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 // memory/chapter-close.md → Run order: the lore titles; starts whenever the part has turns, so a

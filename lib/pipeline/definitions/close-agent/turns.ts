@@ -19,7 +19,12 @@ import { leadStampOf } from '@/lib/world'
 
 import type { CloseIds } from './ids'
 import type { TaskPromptContext } from './task'
-import { buildCloseTurns, type CloseRangeEntry, type CloseTurn } from '../chapter-context'
+import {
+  buildCloseTurns,
+  type CloseHandle,
+  type CloseRangeEntry,
+  type CloseTurn,
+} from '../chapter-context'
 import { storedProseTokens } from '../entry-reads'
 
 /** A close task's turns, at least one: with none, its prompt's "# The turns" renders empty. */
@@ -60,6 +65,9 @@ export async function readStampedNames(
   }
 }
 
+/** The lead as a close task names it: under its handle. */
+export type ShownLead = { id: CloseHandle; name: string }
+
 /**
  * The lead a task's user half names (VARIABLES.chapter → lead), under its handle. A start calls it
  * after it shows its rows, so they keep their numbering; null with no lead.
@@ -67,8 +75,8 @@ export async function readStampedNames(
 export function showLead(
   ids: CloseIds,
   lead: { id: string; name: string } | null,
-): { id: string; name: string } | null {
-  return lead === null ? null : { id: ids.show(lead.id, lead.name), name: lead.name }
+): ShownLead | null {
+  return lead === null ? null : { id: ids.show(lead.id, lead.name) as CloseHandle, name: lead.name }
 }
 
 /** The entries the task was shown (`taskEntryIds`), in position order, under their turn handles. */

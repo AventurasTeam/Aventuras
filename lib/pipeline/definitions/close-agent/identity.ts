@@ -18,6 +18,7 @@ import {
   showLead,
   storyModeOf,
   type CloseTurns,
+  type ShownLead,
 } from './turns'
 import type { CloseTurn } from '../chapter-context'
 
@@ -53,7 +54,7 @@ export type IdentityShow = {
   characters: IdentityCharacter[]
   factions: IdentityFaction[]
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 // Any status: canon names the entities the chapter touches, and a retired one was still there.

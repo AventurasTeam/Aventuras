@@ -15,6 +15,7 @@ import {
   showLead,
   storyModeOf,
   type CloseTurns,
+  type ShownLead,
 } from './turns'
 import { isOpen, OPEN_THREAD_STATUSES, type OpenThreadStatus } from '../chapter-context'
 
@@ -36,7 +37,7 @@ export type ThreadsShow = {
     injectionMode: InjectionMode
   }[]
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 // memory/chapter-close.md → Run order: the open threads, the user's included.

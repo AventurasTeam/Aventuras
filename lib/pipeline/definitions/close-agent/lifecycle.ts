@@ -21,6 +21,7 @@ import {
   showLead,
   storyModeOf,
   type CloseTurns,
+  type ShownLead,
 } from './turns'
 
 const LIFECYCLE_PATHS = [
@@ -65,7 +66,7 @@ export type LifecycleShow = {
   proseTokens: number
   rows: LifecycleRow[]
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 const KIND_ORDER: readonly LifecycleKind[] = ['character', 'item', 'faction']

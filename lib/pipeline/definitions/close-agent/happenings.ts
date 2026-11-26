@@ -18,7 +18,7 @@ import { readRowTool, refsIn } from './read-tools'
 import { readTurnsTool } from './read-turns'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { readCloseLead, showLead, storyModeOf } from './turns'
+import { readCloseLead, showLead, storyModeOf, type ShownLead } from './turns'
 import { closeClustersOf } from '../close-intermediates'
 
 /** C11: the fields Happenings' start shows, so read_row returns the same and its rows count as read. */
@@ -44,7 +44,7 @@ type HappeningsShow = {
   clusters: HappeningClusterRow[][]
   mode: StoryMode
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 type EntityLinks = {

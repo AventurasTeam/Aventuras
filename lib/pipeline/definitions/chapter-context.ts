@@ -109,11 +109,22 @@ export function buildChapterMergeContext(input: {
   }
 }
 
+/** A row's handle in a close (c1, lo2…), as the id map's `show` gives it: never a raw id. */
+export type CloseHandle = string & { readonly __brand: 'CloseHandle' }
+
 /** A close's mark: the id is the close handle. */
 export type CloseLeadMark =
-  | { id: string; name: string; gone?: never; none?: never }
+  | { id: CloseHandle; name: string; gone?: never; none?: never }
   | { gone: true; none?: never }
   | { none: true; gone?: never }
+
+/** `mark` in a close's scheme: a marked character under the handle `show` gives it. */
+export function showMark(
+  mark: LeadMark,
+  show: (id: string, name: string) => string,
+): CloseLeadMark {
+  return 'id' in mark ? { id: show(mark.id, mark.name) as CloseHandle, name: mark.name } : mark
+}
 
 /** A turn as a close task shows it (VARIABLES.chapter → closeTurns). */
 export type CloseTurn = {
@@ -149,9 +160,6 @@ export function buildCloseTurns(
     const mark = leadMarkOf[i]
     if (mark === undefined) return turn
     // Shown as the turns are built, before the part's first render, so its tasks share the handle.
-    return {
-      ...turn,
-      leadMark: 'id' in mark ? { id: marks.show(mark.id, mark.name), name: mark.name } : mark,
-    }
+    return { ...turn, leadMark: showMark(mark, marks.show) }
   })
 }

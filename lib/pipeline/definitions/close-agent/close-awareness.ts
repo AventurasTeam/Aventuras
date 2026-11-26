@@ -40,7 +40,7 @@ import { refsIn } from './read-tools'
 import { readTurnsTool } from './read-turns'
 import type { CodeStep, CodeStepContext } from './slots'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
-import { readCloseLead, showLead, storyModeOf } from './turns'
+import { readCloseLead, showLead, storyModeOf, type ShownLead } from './turns'
 import { emitDeltaGroup } from '../../runtime/emit-group'
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 import { closeRangeOf } from '../close-intermediates'
@@ -67,7 +67,7 @@ type AwarenessShow = {
   summary: string
   mode: StoryMode
   /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
-  lead: { id: string; name: string } | null
+  lead: ShownLead | null
 }
 
 type ListedRow = {

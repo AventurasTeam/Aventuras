@@ -14,7 +14,7 @@ import {
   type ToolContext,
 } from './tool'
 import { readCloseLead, readStampedNames } from './turns'
-import type { CloseLeadMark } from '../chapter-context'
+import { showMark, type CloseLeadMark } from '../chapter-context'
 
 /** The most turns one call answers; the rest it names as unread, for another call. */
 export const READ_TURNS_MAX = 10
@@ -103,12 +103,10 @@ async function answeredMarks(
     lead?.id ?? null,
     nameOf,
   )
-  // By show, with the name: the answer's id swap would mint the handle with none.
-  return marks.map((mark) =>
-    mark !== undefined && 'id' in mark
-      ? { id: ctx.ids.show(mark.id, mark.name), name: mark.name }
-      : mark,
-  )
+  // By show, with the name: the answer's id swap would mint the handle with none. Wrapped: passed
+  // bare, the id map's method would lose its `this`.
+  const show = (id: string, name: string): string => ctx.ids.show(id, name)
+  return marks.map((mark) => (mark === undefined ? undefined : showMark(mark, show)))
 }
 
 // From SQLite, not entriesStore: the store holds a window, and a listed row can come from any chapter.
