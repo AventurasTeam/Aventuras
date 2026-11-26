@@ -23,6 +23,7 @@ erDiagram
     branches ||--o{ probe_captures : "captures retrieval state for"
     branches ||--o{ deltas : "logs changes in"
     branches ||--o{ reversal_journals : "journals re-run reversals in"
+    branches ||--o{ pipeline_runs : "marks runs on"
     story_entries ||--o{ deltas : "triggers"
     story_entries }o--|| chapters : "belongs to (once chaptered)"
     story_entries ||--o{ entry_assets : "attaches"
@@ -252,7 +253,7 @@ erDiagram
 
     probe_captures {
         text id PK
-        text branch_id FK "composite PK with id; branch-scoped, but NOT copied on fork (the only such table; see the Branch-copy manifest)"
+        text branch_id FK "composite PK with id; branch-scoped, but NOT copied on fork or duplicate (like pipeline_runs; see the Branch-copy manifest)"
         text target_entry_id "the entry whose retrieval pass this capture diagnoses; FK-less ref into story_entries, branch-scoped"
         integer captured_at
         text capture_mode "light | deep; light stores per-row sims + score components, deep adds candidate vectors. See docs/memory/probe.md → Capture model"
@@ -289,6 +290,27 @@ erDiagram
         integer created_at
     }
     %% Not delta-logged: the undo half of one delta group. Goes with the group: a sweep that removes any of the group's deltas outside chapters and story_entries, removes or rewrites a delta at or below its floor other than the chapter row's or a stamp, or removes the group's last delta drops it; a later re-run's journal holds it as a before-image. Copies on fork per the Branch-copy manifest (Branch model).
+
+    pipeline_runs {
+        text run_id PK
+        text kind "the pipeline's kind"
+        text action_id "the run's delta group"
+        text story_id "nullable: a run with no story"
+        text branch_id FK "nullable only on rows older than the column; the backfill filled the unfinished ones it could"
+        integer started_at
+        integer finished_at "null while the run is unfinished: the crash-recovery marker"
+        text outcome "completed | aborted | failed | recovered"
+        text rerun_chapter_id "set in a re-run's reversal transaction"
+    }
+    %% Run bookkeeping, not story state: not delta-logged, not copied on fork or duplicate. See generation-pipeline.md → Crash recovery via pipeline_runs marker table
+
+    wizard_sessions {
+        text id PK "the draft story's id"
+        text story_id "nullable"
+        json state "the wizard's working state, resumed on reopen"
+        integer updated_at
+    }
+    %% An unfinished wizard's state: not delta-logged, not exported, removed with its story.
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
