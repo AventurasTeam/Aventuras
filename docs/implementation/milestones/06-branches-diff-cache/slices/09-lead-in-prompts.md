@@ -605,10 +605,10 @@ after probes the one on the new wording;
   Story so far opens with one explainer line when a turn in it is
   marked: no probe reaches the narrator, and its system half's
   unqualified "'I' is the lead" competes with the marks. The line never
-  claims the last run is today's lead's, since after a switch with no
-  turn since every turn is the former lead's. The suggestion voice
-  names the lead for the next turn's voice, always today's lead's, so
-  it takes no clause either.
+  claims the latest run is today's lead's, since after a switch with no
+  turn since it is not. The suggestion voice names the lead for the
+  next turn's voice, always today's lead's, so it takes no clause
+  either.
 - **Q3. The close tasks name the lead, not the narration.** No close
   task writes text whose person follows the narration. Phase 3's list
   dropped "and the narration", matching Conversations and the bundled
@@ -712,12 +712,13 @@ after probes the one on the new wording;
 - Probe order: the never-switched baseline, the probe tooling, the
   before runs at that commit, the prompt work, the after runs. Main had
   no switch window, no summary output and no saved replies to rescore.
-- Task 15's plan put the stems "narration's own person" and "keep the
-  person they are told in" in positive assertions of
-  `third-person.test.ts`, while its own step and this slice's Acceptance
-  criteria want `rg` over `lib/prompts` to find neither. The test's
-  negative assertions use "own person" and "person they are told in",
-  which the old text carried and the rule's text does not.
+- Task 15's plan wrote the stems "narration's own person" and "keep the
+  person they are told in" into the negative assertions of
+  `third-person.test.ts`, a file under `lib/prompts`, so the literal
+  phrases sat where its own step and this slice's Acceptance criteria
+  run `rg` and want neither found. The assertions use "own person" and
+  "person they are told in", which the old text carried and the rule's
+  text does not.
 
 **What a later slice builds on.**
 
