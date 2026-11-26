@@ -665,8 +665,9 @@ after probes the one on the new wording;
   each fall held at 10 runs. "Q23: C1": reword only the periodic
   classifier's happening bullet, dropping "naming each character as the
   prose does" and keeping "the lead included"; the summaries and the
-  close keep `THIRD_PERSON_RULE`. `classifier.md`'s sentence changed
-  with it, because the 10-run figures showed the longer phrase
+  close keep `THIRD_PERSON_RULE`.
+  [`classifier.md`](../../../../memory/classifier.md#what-the-classifier-writes)'s
+  sentence changed with it, because the 10-run figures showed the longer phrase
   coinciding with unnamed figures made into new characters (`ambush`,
   the archer and the third rider, never named: 9/10 → 6/10 at 10 runs,
   8/10 under C1, in the Probes table). At 10 runs C1 was still more
@@ -678,7 +679,9 @@ after probes the one on the new wording;
   under 0.1. C1 failed it on "the poisoning is not added again", 19/20
   to 14/20, p = 0.091.
   "Q29: E2": move the classifier's sentence to the end of the bullet,
-  the same words; `classifier.md` mirrors the order. E2 passes the same
+  the same words;
+  [`classifier.md`](../../../../memory/classifier.md#what-the-classifier-writes)
+  mirrors the order. E2 passes the same
   test (20 runs, `learning` and `recounted`): no check is lower at
   p under 0.1, and the poisoning check is 19/20, level with before.
 
@@ -694,8 +697,9 @@ after probes the one on the new wording;
   store-backed builders, `readMetadataInputs` among them, read through
   `resolveLeadLogged`, and the close through `readBranchLead`, whose
   [`branch_lead_double`](../../../../observability.md#subsystem-emission-inventory)
-  entry now names the close. `data-model.md → The lead`'s Readers
-  paragraph names the close as a `readBranchLead` caller.
+  entry now names the close.
+  [`data-model.md → The lead`](../../../../data-model.md#the-lead)'s
+  Readers paragraph names the close as a `readBranchLead` caller.
 - The close reads its lead per task, and `read_turns` per call, with no
   carrier on `ToolContext`: nothing moves the flag during a close. The
   close runs under a hard gate (`chapter-close.ts:40`), Set as lead and
@@ -737,12 +741,14 @@ after probes the one on the new wording;
   `TaskTurns.lead`.
 - Open in [`followups.md`](../../../../followups.md#tuning-and-play-testing):
   whether a model credits a mark that names no lead to today's lead
-  (added with the review's finding); and in
+  (added with the review's finding), and the paths and costs under
+  Probes below (added by the slice review); and in
   [`triage.md`](../../../triage.md), the entries this slice filed: the
   evaluation set's appended checks are unpinned, the dataset build
-  leaves the story in the third person, a stranded comment above
-  `leadOf`, and `data-model.md` calling a context's missing lead
-  "absent" where the builders pass `null`.
+  leaves the story in the third person, and a stranded comment above
+  `leadOf`. A fourth, `data-model.md` calling a context's missing lead
+  "absent" where the builders pass `null`, was fixed by the slice
+  review.
 
 **Probes.** On the dev model `Gemma4-26B-A4B-QAT-MTP`, before at
 `510af826c` (the probe tooling, no prompt change) and after at
