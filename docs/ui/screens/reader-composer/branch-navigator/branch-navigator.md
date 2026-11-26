@@ -254,18 +254,30 @@ row-local delete uses.
   with it, and the delete can't be undone, as the sketch above
   words it.
 - `Cancel` (or `Esc`, or hardware back) closes the dialog and leaves
-  the navigator as it was. `Delete branch` (destructive) deletes. The
-  dialog closes, the row leaves the list, the navigator's count in the
-  header decrements, and the navigator stays open. The chip's count
-  badge in the reader top bar updates when the navigator closes.
+  the navigator as it was, focus back on the row's `×`. `Delete branch`
+  (destructive) deletes. The dialog closes, the row leaves the list,
+  the navigator's count in the header decrements, and the navigator
+  stays open with focus on the current branch's row, since the pressed
+  `×` left with its row. The chip's count badge in the reader top bar
+  updates when the navigator closes.
+- **Pending** — while the delete runs, both buttons disable and the
+  dialog holds focus ([Busy](../../../patterns/alert-dialog.md#busy));
+  `Esc` and hardware back do nothing, since the transaction can't stop
+  partway.
+- **Blocked** — when the generation gate closes or an embedder swap
+  becomes pending after the dialog opened, `Delete branch` disables
+  and the reason shows as a line above the buttons; it re-enables when
+  that lifts. A refusal the delete returns at the press shows the same
+  line.
+- **Failed** — `Couldn't delete the branch.` shows above the buttons,
+  and the dialog stays open for a retry or `Cancel`.
 
 The delete is one transaction of per-table deletes scoped by the
 branch, re-parenting its children to its own parent, per
 [`data-model.md → Branch model`](../../../../data-model.md#branch-model).
-Its `entry_assets` rows go, and assets no story references any more
-enter the trash-can flow (`assets.pending_delete_at` flag, trash
-sweep, rollback restoration) per
-[`data-model.md → Assets`](../../../../data-model.md#assets-images--future-media).
+Its `entry_assets` rows go and trash no asset: the refcount trash that
+reclaims an asset no story references isn't built yet (M9.3), per
+[`data-model.md → Branch model`](../../../../data-model.md#branch-model).
 
 ## Why no creation entry point in the navigator
 

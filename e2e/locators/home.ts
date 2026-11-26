@@ -26,6 +26,19 @@ export const home = {
       .locator('..')
       .getByRole('button', { name: t('storyCard.actionsLabel') }),
 
+  // Exact: a copy's card is named `Open <title> (copy)`, which the substring match above takes too.
+  openStoryExact: (page: Page, title: string): Locator =>
+    page.getByRole('button', { name: t('storyCard.open', { title }), exact: true }),
+
+  storyActionsExact: (page: Page, title: string): Locator =>
+    home
+      .openStoryExact(page, title)
+      .locator('..')
+      .getByRole('button', { name: t('storyCard.actionsLabel') }),
+
+  duplicate: (page: Page): Locator =>
+    page.getByRole('menuitem', { name: t('storyCard.duplicate'), exact: true }),
+
   // The card's overflow entries are menu items, not plain text: the press
   // handler is on the row and its accessible name is the label.
   editInfo: (page: Page): Locator => page.getByRole('menuitem', { name: t('storyCard.editInfo') }),

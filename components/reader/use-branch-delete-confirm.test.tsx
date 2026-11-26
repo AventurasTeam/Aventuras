@@ -1,0 +1,553 @@
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+
+import type { DeleteBranchResult } from '@/lib/actions'
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+import { logger } from '@/lib/diagnostics'
+import { generationStore, type RunState, type TxState } from '@/lib/stores'
+import { toast } from '@/lib/toast'
+
+import { branchDeleteBlockedReason, useBranchDeleteConfirm } from './use-branch-delete-confirm'
+
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn() } }))
+
+type Count = (branchId: string) => Promise<number>
+type Remove = (branchId: string) => Promise<DeleteBranchResult>
+type Hook = ReturnType<typeof useBranchDeleteConfirm>
+// The route's inputs a test changes; the swap reads false unless given.
+type HostProps = { active: boolean; swapPending?: boolean }
+
+const READ_FAILED = "Couldn't read the branch. Please try again."
+const FAILED = "Couldn't delete the branch."
+const IN_FLIGHT = 'Generation is in flight. Cancel to edit.'
+const UPDATING_MEMORY = 'Updating memory. Cancel to edit.'
+const SWAPPING = 'Unavailable while the embedder switch finishes.'
+const FORK = { branchId: 'br_fork', name: 'The fork', count: 5 }
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+function setup(swapPending = false) {
+  const count = vi.fn<Count>(async () => 5)
+  const remove = vi.fn<Remove>(async () => ({ status: 'deleted' }))
+  const refresh = vi.fn(async (): Promise<void> => {})
+  const row = document.createElement('div')
+  const focusAfterDelete = { current: row }
+  const { result, rerender, unmount } = renderHook<Hook, HostProps>(
+    ({ active, swapPending: swapping = false }) =>
+      useBranchDeleteConfirm({
+        storyId: 'story_1',
+        active,
+        swapPending: swapping,
+        count,
+        remove,
+        refresh,
+        focusAfterDelete,
+      }),
+    { initialProps: { active: true, swapPending } },
+  )
+  return { result, rerender, unmount, count, remove, refresh, row }
+}
+
+async function openOn(result: { current: Hook }, branchId = 'br_fork', name = 'The fork') {
+  await act(async () => {
+    await result.current.open(branchId, name)
+  })
+}
+
+async function confirmOn(result: { current: Hook }) {
+  await act(async () => {
+    await result.current.confirm()
+  })
+}
+
+// A reversal in progress closes the bare gate with no run fixture.
+function closeTheGate() {
+  act(() => generationStore.setReversalInProgress(true))
+}
+
+beforeEach(() => {
+  generationStore.__reset()
+  vi.mocked(toast.error).mockClear()
+  vi.spyOn(logger, 'error').mockImplementation(() => {})
+  vi.spyOn(logger, 'warn').mockImplementation(() => {})
+})
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
+
+describe('useBranchDeleteConfirm: opening', () => {
+  it("opens on the count read, with the row's name and count", async () => {
+    const { result, count } = setup()
+    await openOn(result)
+    expect(count).toHaveBeenCalledWith('br_fork')
+    expect(result.current.target).toEqual(FORK)
+    expect(result.current.phase).toEqual({ kind: 'idle' })
+    expect(result.current.returnFocusTo.current).toBeNull()
+  })
+
+  it('logs, toasts and opens nothing when the count read throws', async () => {
+    const { result, count } = setup()
+    count.mockRejectedValueOnce(new Error('db gone'))
+    await openOn(result)
+    expect(result.current.target).toBeNull()
+    expect(toast.error).toHaveBeenCalledWith(READ_FAILED)
+    expect(logger.error).toHaveBeenCalledWith('app.branch_delete_count_failed', {
+      storyId: 'story_1',
+      branchId: 'br_fork',
+      error: 'db gone',
+    })
+  })
+
+  it('opens only the latest of two presses whose reads land out of order', async () => {
+    const { result, count } = setup()
+    const first = deferred<number>()
+    const second = deferred<number>()
+    count.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    let firstOpen!: Promise<void>
+    let secondOpen!: Promise<void>
+    act(() => {
+      firstOpen = result.current.open('br_fork', 'The fork')
+    })
+    act(() => {
+      secondOpen = result.current.open('br_trap', 'The trap')
+    })
+    await act(async () => {
+      second.resolve(2)
+      await secondOpen
+    })
+    await act(async () => {
+      first.resolve(7)
+      await firstOpen
+    })
+    expect(result.current.target).toEqual({ branchId: 'br_trap', name: 'The trap', count: 2 })
+    expect(count.mock.calls).toEqual([['br_fork'], ['br_trap']])
+  })
+
+  it('opens nothing on return for a read the reader lost focus during', async () => {
+    const { result, rerender, count } = setup()
+    const reading = deferred<number>()
+    count.mockReturnValueOnce(reading.promise)
+    let opening!: Promise<void>
+    act(() => {
+      opening = result.current.open('br_fork', 'The fork')
+    })
+    rerender({ active: false })
+    await act(async () => {
+      reading.resolve(5)
+      await opening
+    })
+    rerender({ active: true })
+    expect(result.current.target).toBeNull()
+  })
+
+  it('drops a read still running when it unmounts', async () => {
+    const { result, count, unmount } = setup()
+    const reading = deferred<number>()
+    count.mockReturnValueOnce(reading.promise)
+    let opening!: Promise<void>
+    act(() => {
+      opening = result.current.open('br_fork', 'The fork')
+    })
+    unmount()
+    await act(async () => {
+      reading.reject(new Error('late'))
+      await opening
+    })
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+})
+
+describe('useBranchDeleteConfirm: the delete', () => {
+  it('runs one delete for a double press', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    const removal = deferred<DeleteBranchResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let first!: Promise<void>
+    let second!: Promise<void>
+    act(() => {
+      first = result.current.confirm()
+      second = result.current.confirm()
+    })
+    expect(result.current.phase).toEqual({ kind: 'pending' })
+    await act(async () => {
+      removal.resolve({ status: 'deleted' })
+      await first
+      await second
+    })
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(remove).toHaveBeenCalledWith('br_fork')
+    expect(result.current.phase).toEqual({ kind: 'idle' })
+  })
+
+  it('names the current row for focus before the confirm clears', async () => {
+    const row = document.createElement('div')
+    const seenAsTargetCleared: unknown[] = []
+    const { result } = renderHook(() => {
+      const hook = useBranchDeleteConfirm({
+        storyId: 'story_1',
+        active: true,
+        swapPending: false,
+        count: async () => 5,
+        remove: async () => ({ status: 'deleted' }),
+        refresh: async () => {},
+        focusAfterDelete: { current: row },
+      })
+      if (hook.target == null) seenAsTargetCleared.push(hook.returnFocusTo.current)
+      return hook
+    })
+    await openOn(result)
+    seenAsTargetCleared.length = 0
+    await confirmOn(result)
+    expect(result.current.target).toBeNull()
+    // The first render without a target already names the row: the confirm unmounts in it.
+    expect(seenAsTargetCleared[0]).toBe(row)
+  })
+
+  it('forgets the row on the next open, so its Cancel returns to the delete control', async () => {
+    const { result, row } = setup()
+    await openOn(result)
+    await confirmOn(result)
+    expect(result.current.returnFocusTo.current).toBe(row)
+    await openOn(result, 'br_trap', 'The trap')
+    expect(result.current.returnFocusTo.current).toBeNull()
+  })
+
+  it('forgets the row on a dismiss', async () => {
+    const { result, row } = setup()
+    await openOn(result)
+    await confirmOn(result)
+    expect(result.current.returnFocusTo.current).toBe(row)
+    act(() => result.current.dismiss())
+    expect(result.current.returnFocusTo.current).toBeNull()
+  })
+
+  it('hands the confirm a focus target it can read but not write', () => {
+    const { result } = setup()
+    expectTypeOf(result.current.returnFocusTo).toEqualTypeOf<{ readonly current: unknown }>()
+  })
+
+  it.each(['missing', 'current'] as const)(
+    'closes on a %s refusal, logs it and refreshes the rows',
+    async (code) => {
+      const { result, remove, refresh } = setup()
+      await openOn(result)
+      remove.mockResolvedValueOnce({ status: 'rejected', code })
+      await confirmOn(result)
+      expect(result.current.target).toBeNull()
+      expect(result.current.phase).toEqual({ kind: 'idle' })
+      expect(result.current.returnFocusTo.current).toBeNull()
+      expect(refresh).toHaveBeenCalledTimes(1)
+      expect(logger.warn).toHaveBeenCalledWith('app.branch_delete_refused', {
+        storyId: 'story_1',
+        branchId: 'br_fork',
+        code,
+      })
+    },
+  )
+
+  it("toasts a current refusal: the re-read keeps the row, so the press isn't silent", async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'current' })
+    await confirmOn(result)
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('toasts nothing on a missing refusal: the re-read drops its row', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'missing' })
+    await confirmOn(result)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it.each(['gated', 'swap-pending'] as const)(
+    'keeps the confirm on a %s refusal, holding the code for its line',
+    async (code) => {
+      const { result, remove, refresh } = setup()
+      await openOn(result)
+      closeTheGate()
+      remove.mockResolvedValueOnce({ status: 'rejected', code })
+      await confirmOn(result)
+      expect(result.current.target).toEqual(FORK)
+      expect(result.current.phase).toEqual({ kind: 'refused', code })
+      expect(refresh).not.toHaveBeenCalled()
+    },
+  )
+
+  it('lets a gate refusal go once the gate opens, so Delete branch is live again', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    closeTheGate()
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'gated' })
+    await confirmOn(result)
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'gated' })
+    act(() => generationStore.setReversalInProgress(false))
+    expect(result.current.phase).toEqual({ kind: 'idle' })
+    expect(result.current.target).toEqual(FORK)
+  })
+
+  it("keeps a swap refusal when the gate opens: only the gate's follows the gate", async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    closeTheGate()
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
+    await confirmOn(result)
+    act(() => generationStore.setReversalInProgress(false))
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
+  })
+
+  it('lets a swap refusal go once the swap the reader saw ends, so Delete branch is live again', async () => {
+    const { result, rerender, remove } = setup(true)
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
+    await confirmOn(result)
+    rerender({ active: true, swapPending: true })
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
+    rerender({ active: true, swapPending: false })
+    expect(result.current.phase).toEqual({ kind: 'idle' })
+    expect(result.current.target).toEqual(FORK)
+  })
+
+  it('keeps a swap refusal from a marker the reader never saw pending', async () => {
+    const { result, rerender, remove } = setup(false)
+    await openOn(result)
+    remove.mockResolvedValueOnce({ status: 'rejected', code: 'swap-pending' })
+    await confirmOn(result)
+    rerender({ active: true, swapPending: false })
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
+  })
+
+  /** Presses Delete with `remove` held, applies `during` while it runs, then lands `swap-pending`. */
+  async function swapRefusalAfter(
+    initial: boolean,
+    during: readonly boolean[],
+  ): Promise<{ current: Hook }> {
+    const { result, rerender, remove } = setup(initial)
+    await openOn(result)
+    const removal = deferred<DeleteBranchResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let pressing: Promise<void> = Promise.resolve()
+    act(() => {
+      pressing = result.current.confirm()
+    })
+    for (const swapPending of during) rerender({ active: true, swapPending })
+    await act(async () => {
+      removal.resolve({ status: 'rejected', code: 'swap-pending' })
+      await pressing
+    })
+    return result
+  }
+
+  it('holds no swap refusal when the swap the reader saw ends while the delete runs', async () => {
+    const result = await swapRefusalAfter(true, [false])
+    expect(result.current.phase).toEqual({ kind: 'idle' })
+    expect(result.current.target).toEqual(FORK)
+  })
+
+  it('holds no swap refusal when a swap starts and ends while the delete runs', async () => {
+    const result = await swapRefusalAfter(false, [true, false])
+    expect(result.current.phase).toEqual({ kind: 'idle' })
+  })
+
+  it('holds a swap refusal that lands while the swap the reader saw still runs', async () => {
+    const result = await swapRefusalAfter(true, [])
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
+  })
+
+  it('holds a swap refusal from a marker the reader never saw pending during the delete', async () => {
+    const result = await swapRefusalAfter(false, [false])
+    expect(result.current.phase).toEqual({ kind: 'refused', code: 'swap-pending' })
+  })
+
+  it('marks a thrown delete failed and keeps the confirm; a retry clears the line', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    remove.mockRejectedValueOnce(new Error('disk full'))
+    await confirmOn(result)
+    expect(result.current.phase).toEqual({ kind: 'failed' })
+    expect(result.current.target).toEqual(FORK)
+    expect(result.current.returnFocusTo.current).toBeNull()
+    expect(logger.error).toHaveBeenCalledWith('app.branch_delete_threw', {
+      storyId: 'story_1',
+      branchId: 'br_fork',
+      error: 'disk full',
+    })
+    // The confirm still shows, so its line is the only signal.
+    expect(toast.error).not.toHaveBeenCalled()
+
+    const retry = deferred<DeleteBranchResult>()
+    remove.mockReturnValueOnce(retry.promise)
+    let pressed!: Promise<void>
+    act(() => {
+      pressed = result.current.confirm()
+    })
+    expect(result.current.phase).toEqual({ kind: 'pending' })
+    await act(async () => {
+      retry.resolve({ status: 'deleted' })
+      await pressed
+    })
+    expect(result.current.target).toBeNull()
+  })
+
+  /** Presses Delete with `remove` held, applies `leave` while it runs, then lands a throw. */
+  async function throwAfter(
+    leave: (host: ReturnType<typeof setup>) => void,
+  ): Promise<{ current: Hook }> {
+    const host = setup()
+    await openOn(host.result)
+    const removal = deferred<DeleteBranchResult>()
+    host.remove.mockReturnValueOnce(removal.promise)
+    let pressed: Promise<void> = Promise.resolve()
+    act(() => {
+      pressed = host.result.current.confirm()
+    })
+    leave(host)
+    await act(async () => {
+      removal.reject(new Error('disk full'))
+      await pressed
+    })
+    return host.result
+  }
+
+  it('toasts a thrown delete that lands after the reader lost focus, which drops its line', async () => {
+    const result = await throwAfter(({ rerender }) => rerender({ active: false }))
+    expect(result.current.target).toBeNull()
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('toasts a thrown delete that lands after the reader unmounted', async () => {
+    await throwAfter(({ unmount }) => unmount())
+    expect(toast.error).toHaveBeenCalledWith(FAILED)
+  })
+
+  it('shows only the line for a throw landing once focus came back', async () => {
+    const result = await throwAfter(({ rerender }) => {
+      rerender({ active: false })
+      rerender({ active: true })
+    })
+    expect(result.current.phase).toEqual({ kind: 'failed' })
+    expect(result.current.target).toEqual(FORK)
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores a dismiss while the delete runs', async () => {
+    const { result, remove } = setup()
+    await openOn(result)
+    const removal = deferred<DeleteBranchResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let pressed!: Promise<void>
+    act(() => {
+      pressed = result.current.confirm()
+    })
+    act(() => result.current.dismiss())
+    expect(result.current.target).toEqual(FORK)
+    await act(async () => {
+      removal.resolve({ status: 'deleted' })
+      await pressed
+    })
+  })
+
+  it('dismisses when the reader loses focus', async () => {
+    const { result, rerender } = setup()
+    await openOn(result)
+    rerender({ active: false })
+    expect(result.current.target).toBeNull()
+  })
+
+  it('holds a running delete through a focus loss, then dismisses what it left open', async () => {
+    const { result, rerender, remove } = setup()
+    await openOn(result)
+    closeTheGate()
+    const removal = deferred<DeleteBranchResult>()
+    remove.mockReturnValueOnce(removal.promise)
+    let pressed!: Promise<void>
+    act(() => {
+      pressed = result.current.confirm()
+    })
+    rerender({ active: false })
+    expect(result.current.target).toEqual(FORK)
+    expect(result.current.phase).toEqual({ kind: 'pending' })
+    await act(async () => {
+      removal.resolve({ status: 'rejected', code: 'gated' })
+      await pressed
+    })
+    expect(result.current.target).toBeNull()
+  })
+})
+
+function memoryRun(): RunState {
+  return {
+    runId: 'run_memory',
+    kind: PERIODIC_CLASSIFIER_KIND,
+    gateBehavior: 'hard-gate',
+    interruptible: 'pass',
+    beforeTurn: false,
+    actionId: 'act_memory',
+    storyId: 'story_1',
+    branchId: 'br_main',
+    abortController: new AbortController(),
+    currentPhase: 'running',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  }
+}
+
+function blockedReason(
+  overrides: Partial<Parameters<typeof branchDeleteBlockedReason>[0]> = {},
+): string | undefined {
+  return branchDeleteBlockedReason({
+    txState: generationStore.getTxState(),
+    storyId: 'story_1',
+    switchPaused: false,
+    swapPending: false,
+    phase: { kind: 'idle' },
+    ...overrides,
+  })
+}
+
+describe('branchDeleteBlockedReason', () => {
+  // A held current branch leaves a delete open, so the reason is the run's.
+  it("names the story's run, not a hold on the current branch", () => {
+    const txState: TxState = {
+      ...generationStore.getTxState(),
+      runs: new Map([['run_memory', memoryRun()]]),
+      heldBranches: new Map([['br_main', { storyId: 'story_1' }]]),
+    }
+    expect(blockedReason({ txState, switchPaused: true })).toBe(UPDATING_MEMORY)
+  })
+
+  it("names the gate's own reason for a pause with no run", () => {
+    expect(blockedReason({ switchPaused: true })).toBe(IN_FLIGHT)
+  })
+
+  it('names the swap while one is pending', () => {
+    expect(blockedReason({ swapPending: true })).toBe(SWAPPING)
+  })
+
+  it('puts the gate ahead of the swap', () => {
+    expect(blockedReason({ switchPaused: true, swapPending: true })).toBe(IN_FLIGHT)
+  })
+
+  it('falls back to the refusal the press met', () => {
+    expect(blockedReason({ phase: { kind: 'refused', code: 'gated' } })).toBe(IN_FLIGHT)
+    expect(blockedReason({ phase: { kind: 'refused', code: 'swap-pending' } })).toBe(SWAPPING)
+  })
+
+  it('gives nothing while nothing blocks', () => {
+    expect(blockedReason()).toBeUndefined()
+  })
+})

@@ -2,7 +2,7 @@ import { asc, eq } from 'drizzle-orm'
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { branches, type Branch, type DbCtx } from '@/lib/db'
+import { branches, stories, type Branch, type DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 export type BranchRow = Pick<Branch, 'id' | 'name' | 'parentBranchId' | 'forkEntryId' | 'createdAt'>
@@ -41,6 +41,21 @@ export async function readStoryBranches(
     .where(eq(branches.storyId, storyId))
     .orderBy(asc(branches.createdAt), asc(branches.id))
   return rows
+}
+
+/**
+ * A story's `current_branch_id`, read from the DB; null when it has none or the story is gone.
+ * Throws on a read failure.
+ */
+export async function readStoryCurrentBranchId(
+  db: DbCtx['db'],
+  storyId: string,
+): Promise<string | null> {
+  const [story] = await db
+    .select({ currentBranchId: stories.currentBranchId })
+    .from(stories)
+    .where(eq(stories.id, storyId))
+  return story?.currentBranchId ?? null
 }
 
 function useBranches<T>(storyId: string | null, selector: (rows: readonly BranchRow[]) => T): T {

@@ -1,4 +1,5 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql, type SQL } from 'drizzle-orm'
+import { alias, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 import type { ProviderInstanceWithStub } from '@/lib/ai'
 import { resolveModelCapabilities } from '@/lib/ai'
@@ -166,6 +167,33 @@ export function isStorySwapPending(storyId: string): boolean {
   if (inFlight.has(storyId)) return true
   const open = currentStoryStore.getCurrentStory()
   return open?.storyId === storyId && open.settings.embedding_swap_target != null
+}
+
+// json_valid first: a bare json_extract raises on a malformed blob and would fail the read.
+const storedSwapTarget = (settings: AnySQLiteColumn) =>
+  sql<
+    string | null
+  >`CASE WHEN json_valid(${settings}) THEN json_extract(${settings}, '$.embedding_swap_target') END`
+
+const markedStory = alias(stories, 'swap_marked_story')
+
+/**
+ * The story's stored swap marker, a malformed blob holding none; not a swap in flight. It reads
+ * its own aliased row, so any query can embed it.
+ */
+export function swapMarkerStored(storyId: string): SQL<boolean> {
+  return sql`exists (select 1 from ${stories} ${markedStory} where ${eq(markedStory.id, storyId)}
+    and ${storedSwapTarget(markedStory.settings)} is not null)`.mapWith(Boolean)
+}
+
+/** A swap owns the story's vec tables: in flight here, or its marker stored, for any story. */
+export async function readStorySwapPending(db: DbCtx['db'], storyId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ target: storedSwapTarget(stories.settings) })
+    .from(stories)
+    .where(eq(stories.id, storyId))
+  // Read after the await, so a swap admitted while the row was read counts too.
+  return inFlight.has(storyId) || row?.target != null
 }
 
 async function runAdmittedEmbedder<T>(

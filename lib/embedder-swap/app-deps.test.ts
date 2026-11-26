@@ -1,14 +1,18 @@
+import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
+  branches,
   buildStorySettings,
+  clearSwapTargetOp,
   compositeText,
   execRaw,
   setSwapTargetOp,
   sourceHash,
+  stories,
   storyDefinitionSchema,
   VEC_FAMILIES,
   type DbCtx,
@@ -39,8 +43,10 @@ import {
   cancelStorySwap,
   composeRetrievalEmbedDeps,
   embedClassifierDescriptions,
+  isStorySwapPending,
   setDrainStatusSink,
   makeCallbackGuards,
+  readStorySwapPending,
   reindexStoryNow,
   RelabelBlockedError,
   relabelStory,
@@ -50,6 +56,7 @@ import {
   runExclusive,
   startStorySwap,
   SwapBusyError,
+  swapMarkerStored,
 } from './app-deps'
 import {
   cancelSwap,
@@ -727,6 +734,144 @@ describe('resolveDrainConfig swap guards', () => {
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
 
     expect(resolveDrainConfig('s1')).toEqual({ ok: false, reason: 'no-model' })
+  })
+})
+
+describe('readStorySwapPending', () => {
+  const definition = storyDefinitionSchema.parse({
+    mode: 'adventure',
+    narration: 'first',
+    genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+    tone: { label: 'Wry', promptBody: 'wry' },
+    setting: 'A keep on a hill.',
+    calendarSystemId: 'gregorian',
+    worldTimeOrigin: { year: 0 },
+  })
+  const settings = storySettings({ embeddingBackend: 'local' }, MINILM, null)
+
+  // Raw inserts: a corrupt blob can't go through drizzle's JSON column.
+  async function seedStories(blobs: Record<string, string>): Promise<DbCtx> {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    const insert = sqlite.prepare(
+      'INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)',
+    )
+    for (const [id, blob] of Object.entries(blobs)) insert.run(id, id, blob, 1000, 1000)
+    return { db, runInTransaction }
+  }
+
+  // The engine's own marker write.
+  const storeMarker = (ctx: DbCtx, storyId: string) =>
+    ctx.runInTransaction([setSwapTargetOp(storyId, { modelId: MINILM, backend: 'local' }, 2000)])
+
+  it('reads a stored marker on a story the open-story store does not hold', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings), s2: JSON.stringify(settings) })
+    await storeMarker(ctx, 's1')
+    currentStoryStore.set({ storyId: 's2', branchId: 'b9', definition, settings })
+
+    expect(isStorySwapPending('s1')).toBe(false)
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+    await expect(readStorySwapPending(ctx.db, 's2')).resolves.toBe(false)
+  })
+
+  it('reads a stored marker with no story open', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    await storeMarker(ctx, 's1')
+    expect(currentStoryStore.getCurrentStory()).toBeNull()
+
+    expect(isStorySwapPending('s1')).toBe(false)
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+  })
+
+  it('reads false for a story with no marker, and once a marker is cleared', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+
+    await storeMarker(ctx, 's1')
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+    await ctx.runInTransaction([clearSwapTargetOp('s1', 3000)])
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+  })
+
+  it('reads a corrupt settings blob as no marker, without throwing', async () => {
+    const ctx = await seedStories({ s1: '{not json' })
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+  })
+
+  it('reads false for a story with no row', async () => {
+    const ctx = await seedStories({})
+    await expect(readStorySwapPending(ctx.db, 'missing')).resolves.toBe(false)
+  })
+
+  it('reads a swap in flight before any marker is stored, and not once it settles', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = runExclusive('s1', () => gate)
+    try {
+      await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(true)
+    } finally {
+      release()
+      await held
+    }
+    await expect(readStorySwapPending(ctx.db, 's1')).resolves.toBe(false)
+  })
+
+  it('reads a swap admitted while the row is being read', async () => {
+    const ctx = await seedStories({ s1: JSON.stringify(settings) })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const read = readStorySwapPending(ctx.db, 's1')
+    const held = runExclusive('s1', () => gate)
+    try {
+      await expect(read).resolves.toBe(true)
+    } finally {
+      release()
+      await held
+    }
+  })
+})
+
+describe('swapMarkerStored', () => {
+  // s1 marked, s2 unmarked with a branch, s3 corrupt; raw inserts, as readStorySwapPending's.
+  async function seedMarked(): Promise<DbCtx['db']> {
+    const { db, sqlite } = await createTestDb()
+    const insert = sqlite.prepare(
+      'INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)',
+    )
+    insert.run('s1', 's1', JSON.stringify({ embedding_swap_target: MINILM }), 1000, 1000)
+    insert.run('s2', 's2', JSON.stringify({ embedding_swap_target: null }), 1000, 1000)
+    insert.run('s3', 's3', '{not json', 1000, 1000)
+    sqlite
+      .prepare('INSERT INTO branches (id, story_id, name, created_at) VALUES (?,?,?,?)')
+      .run('b2', 's2', 'main', 1000)
+    return db
+  }
+
+  it('reads a stored marker from a query over another table, a corrupt blob as none', async () => {
+    const db = await seedMarked()
+    const marked = (storyId: string) =>
+      db.select({ marked: swapMarkerStored(storyId) }).from(branches)
+
+    await expect(marked('s1')).resolves.toEqual([{ marked: true }])
+    await expect(marked('s2')).resolves.toEqual([{ marked: false }])
+    await expect(marked('s3')).resolves.toEqual([{ marked: false }])
+    await expect(marked('missing')).resolves.toEqual([{ marked: false }])
+  })
+
+  it("reads its own story's row, not the row of a query over stories", async () => {
+    const db = await seedMarked()
+    const under = (outer: string, storyId: string) =>
+      db
+        .select({ id: stories.id, marked: swapMarkerStored(storyId) })
+        .from(stories)
+        .where(eq(stories.id, outer))
+
+    await expect(under('s2', 's1')).resolves.toEqual([{ id: 's2', marked: true }])
+    await expect(under('s1', 's2')).resolves.toEqual([{ id: 's1', marked: false }])
   })
 })
 

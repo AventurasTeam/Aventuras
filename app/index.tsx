@@ -1,4 +1,5 @@
 import { useIsFocused } from '@react-navigation/native'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, type Href } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -6,8 +7,11 @@ import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { readerHref } from '@/components/reader/reader-href'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { AppBannerHost } from '@/components/story/app-banner-host'
+import { DuplicateStoryDialog } from '@/components/story/duplicate-story-dialog'
 import { StoryConfigRecoveryDialog } from '@/components/story/story-config-recovery-dialog'
 import { StoryList, type StoryCardHandlers } from '@/components/story/story-list'
+import { useDuplicateDoneToast } from '@/components/story/use-duplicate-done-toast'
+import { useStoryDuplicate } from '@/components/story/use-story-duplicate'
 import {
   ConcurrentStatePrompt,
   useWizardSessionExists,
@@ -26,8 +30,10 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useStoryChapterNumbers } from '@/hooks/use-story-chapter-numbers'
 import {
+  checkStoryDuplicate,
   clearLiveSession,
   deleteStory,
+  duplicateStory,
   loadDraft,
   loadLiveSession,
   openStory,
@@ -44,6 +50,8 @@ import {
   handleStoryRecoveryResetOutcome,
 } from '@/lib/recovery'
 import {
+  readStoryBranches,
+  readStoryCurrentBranchId,
   rehydrateStories,
   selectStoryCards,
   storiesStore,
@@ -181,6 +189,34 @@ export default function Index() {
     )
   }
 
+  const queryClient = useQueryClient()
+  const otherOverlayUp = prompt != null || storyRecovery != null || pendingDelete != null
+  const storyDuplicate = useStoryDuplicate({
+    focused: isFocused,
+    blocked: otherOverlayUp,
+    readBranches: async (storyId) => {
+      // Pointer first: a fork between the reads then adds a branch, not a pointer the list lacks.
+      const currentBranchId = await readStoryCurrentBranchId(db, storyId)
+      const rows = await readStoryBranches(db, storyId)
+      return { branches: rows.map(({ id, name }) => ({ id, name })), currentBranchId }
+    },
+    check: (storyId, branch) => checkStoryDuplicate(storyId, branch, ctx),
+    duplicate: (input) => duplicateStory(input, ctx),
+    onDone: (copy) => {
+      // The numbers' key doesn't move on a duplicate, so the copy's card would read Chapter 1.
+      void queryClient.invalidateQueries({ queryKey: ['story-chapter-numbers'] })
+      showDuplicated(copy)
+    },
+  })
+  const duplicateDialog = storyDuplicate.dialog
+  // A confirm to answer before navigating away.
+  const listBlocked = otherOverlayUp || duplicateDialog != null
+  const showDuplicated = useDuplicateDoneToast({
+    focused: isFocused,
+    blocked: listBlocked,
+    open: (storyId) => attemptOpenStory(storyId),
+  })
+
   const cardHandlers = (storyId: string): StoryCardHandlers => {
     const row = rows.find((r) => r.id === storyId)
     const isDraft = row?.status === 'draft'
@@ -210,6 +246,11 @@ export default function Index() {
         ? undefined
         : () =>
             attemptOpenStory(storyId, navigateToAbout(storyId), t('landing:errors.editInfoFailed')),
+      onDuplicate: isDraft
+        ? undefined
+        : () => {
+            void storyDuplicate.open(storyId, row?.title ?? '')
+          },
       onDelete: () => setPendingDelete(storyId),
     }
   }
@@ -223,12 +264,7 @@ export default function Index() {
       variant="app-root"
       title={<Text className="font-semibold">{t('landing:title')}</Text>}
       onOpenAppSettings={() => router.push('/settings')}
-      actions={
-        <AppActionsMenu
-          beforeLeaveStory={null}
-          blocked={prompt != null || storyRecovery != null || pendingDelete != null}
-        />
-      }
+      actions={<AppActionsMenu beforeLeaveStory={null} blocked={listBlocked} />}
     >
       <StoryList
         cards={cards}
@@ -352,6 +388,24 @@ export default function Index() {
             }
           }}
           onDismiss={dismissStoryRecovery}
+        />
+      ) : null}
+
+      {/* Portaled: without the focus gate it would paint over a pushed reader. */}
+      {duplicateDialog != null && isFocused ? (
+        <DuplicateStoryDialog
+          key={duplicateDialog.openSeq}
+          open
+          onOpenChange={(open) => {
+            if (!open) storyDuplicate.dismiss()
+          }}
+          sourceTitle={duplicateDialog.sourceTitle}
+          branches={duplicateDialog.branches}
+          state={duplicateDialog.state}
+          onBranchChange={storyDuplicate.setBranch}
+          onDuplicate={(values) => {
+            void storyDuplicate.submit(values)
+          }}
         />
       ) : null}
 

@@ -16,6 +16,7 @@ import {
   useWindowDimensions,
   View,
   type ViewProps,
+  type ViewStyle,
 } from 'react-native'
 import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
@@ -69,6 +70,10 @@ function AlertDialogOverlay({
 // reachable. Cap the panel and scroll its body instead.
 const MAX_HEIGHT_RATIO = 0.9
 
+// Over a Popover held open beneath it: the Popover's web overlay sits at 100 (popover.tsx), above a
+// plain dialog's z-50, so that a Popover opened from a dialog paints over it.
+const ABOVE_OPEN_POPOVER: ViewStyle = { zIndex: 110 }
+
 /**
  * Splits the actions row out of the scrolling body. A consent gate is answered by
  * its actions, so they stay pinned however long the body runs. Unlike Dialog, this
@@ -91,6 +96,7 @@ function AlertDialogContent({
   portalHost,
   busy = false,
   returnFocusTo,
+  aboveOpenPopover = false,
   onOpenAutoFocus,
   onCloseAutoFocus,
   style,
@@ -102,6 +108,8 @@ function AlertDialogContent({
   busy?: boolean
   /** Where focus goes as it closes, ahead of what held focus when it opened (overlays.md → Close focus). */
   returnFocusTo?: RefObject<unknown>
+  /** Opened over a Popover that stays open: on web its overlay stacks above the Popover's. */
+  aboveOpenPopover?: boolean
 }) {
   // Keyed on `open`, not mount-scoped: the Portal unmounts its children while
   // closed, but this renders the Portal rather than living inside one, so it
@@ -121,7 +129,9 @@ function AlertDialogContent({
   const { body, actions } = partitionActions(children)
   return (
     <AlertDialogPortal hostName={portalHost}>
-      <AlertDialogOverlay>
+      <AlertDialogOverlay
+        style={aboveOpenPopover && Platform.OS === 'web' ? ABOVE_OPEN_POPOVER : undefined}
+      >
         <AlertDialogPrimitive.Content
           ref={contentRef}
           className={cn(

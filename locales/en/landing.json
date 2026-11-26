@@ -27,6 +27,23 @@
     "cancel": "Cancel",
     "confirm": "Delete"
   },
+  "duplicate": {
+    "title": "Duplicate story",
+    "name": "Name",
+    "nameDefault": "{{title}} (copy)",
+    "branch": "Branch",
+    "currentMark": "current",
+    "allBranches": "All branches ({{count}})",
+    "confirm": "Duplicate",
+    "failed": "Couldn't duplicate the story.",
+    "refused": {
+      "swapPending": "An embedding model change is pending on this story.",
+      "unrecovered": "A branch being copied has an interrupted update the app hasn't recovered.",
+      "running": "A run is still going on this story."
+    },
+    "done": "Duplicated as \"{{name}}\"",
+    "open": "Open"
+  },
   "storyRecovery": {
     "definitionTitle": "Couldn't open {{storyName}}",
     "definitionBody": "This story's definition is corrupted. Aventuras has no safe default to replace it.",

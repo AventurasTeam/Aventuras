@@ -34,6 +34,10 @@ export const branchNavigator = {
       .getByRole('button', { name: t('reader:branches.rename', { name }), exact: true }),
   anyRenameButton: (page: Page): Locator =>
     branchNavigator.navigator(page).getByRole('button', { name: RENAME_ANY }),
+  deleteButton: (page: Page, name: string): Locator =>
+    branchNavigator
+      .navigator(page)
+      .getByRole('button', { name: t('reader:branches.delete', { name }), exact: true }),
   anyDeleteButton: (page: Page): Locator =>
     branchNavigator.navigator(page).getByRole('button', { name: DELETE_ANY }),
   renameInput: (page: Page): Locator =>

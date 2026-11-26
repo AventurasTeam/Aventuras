@@ -199,7 +199,8 @@ state, and closes through `AlertDialogAction` before an async confirm
 settles (`components/compounds/delete-confirm-dialog.tsx:57-61`).
 
 - Props: `open`, `onOpenChange`, `name`, `count`, `blockedReason?`,
-  `pending?`, `failed?`, `portalHost?`, `returnFocusTo?`, `onDelete()`.
+  `phase?` (`idle`, `pending` or `failed`), `portalHost?`,
+  `returnFocusTo?`, `onDelete()`.
 - Copy per canon, all inside `AlertDialogDescription`: the title,
   `Delete <name>?`; the count line, canon's `<N> entries` sentence with
   its singular, or its zero wording; the last line, that the branch's
@@ -347,7 +348,8 @@ and the branch are one cluster with a submit button, so they use
   (`app/index.tsx:229`), and its `open` is gated on `isFocused`: a toast's
   `Open` can push a reader while a second dialog is up.
 - On done: the dialog closes; the stories store has re-read inside the
-  action; the chapter numbers re-read; then a success toast,
+  action; the chapter numbers re-read; then an info toast, as
+  [`toast.md`](../../../../ui/patterns/toast.md) has it,
   `Duplicated as "<name>"`, whose `Open` calls `attemptOpenStory` with
   the new id (`app/index.tsx:158-182`). The user stays on the list.
 - The chapter numbers need the explicit re-read. The hook's key,
@@ -365,7 +367,8 @@ and the branch are one cluster with a submit button, so they use
   re-hydrates (C5). So the host keeps the toast's id, dismisses the toast
   (`toast.dismiss`) when the list loses focus, and the `Open` handler
   does nothing unless the list is focused at the press, for a press that
-  lands as focus leaves. Both live in one hook,
+  lands as focus leaves, and no list confirm is up: on native the toast
+  sits above one. Both live in one hook,
   `components/story/use-duplicate-done-toast.ts`.
 
 **Cost.** A full duplicate of the dataset story (`pnpm db:seed:dataset`,
@@ -589,7 +592,7 @@ pass hasn't already made it. The rest are this slice's own.
   disables `Duplicate`; a `Copying` story disables the fields and `Cancel`
   and stays open on Escape; a `Failed` story shows the inline line.
 - `components/story/use-duplicate-done-toast.test.tsx` (jsdom, mocked
-  `toast` and open): a done shows the success toast with `Open`; focus
+  `toast` and open): a done shows the info toast with `Open`; focus
   going false dismisses it by its id; an `Open` pressed while the list is
   unfocused opens nothing; one pressed while focused opens the copy.
 - `e2e/tests/story-duplicate.spec.ts`, on the seeded hero story:
@@ -684,18 +687,22 @@ change amends the scope above.
 - **The refusal line for an unfinished run.** Canon's Refused paragraph
   names a pending embedder change, a branch held by an unrecovered memory
   update, or a run still going. An unfinished row of another kind, a
-  per-turn orphan for one, is none of these. Default: one line for
+  per-turn orphan for one, is none of these. Decided (D1): one line for
   `branch-held` and `unfinished-run`, that a branch being copied has an
-  interrupted update the app hasn't recovered, and that restarting the
-  app retries it; canon's paragraph gains it.
+  interrupted update the app hasn't recovered. It carries no restart
+  clause, since the recovery modal says it won't retry, and canon's
+  paragraph gains nothing; the Implementation notes record why.
 - **A source changing mid-duplicate.** The branch list and the vec
-  family list are read before the batch. A source branch deleted in that
-  gap is left out if it was a leaf, and fails the batch on the remapped
-  parent's foreign key if it wasn't; a branch forked in the gap is left
-  out. Nothing partial lands either way, and neither race is reachable
-  from the UI: the story list and the navigator never take input
-  together. Default: accept, with the test above. A vec family created in
-  the gap is missed, which C3 accepts.
+  family list are read before the batch. Resolved: a source story, or for
+  a single-branch copy the copied branch, gone in that gap fails the
+  batch and nothing lands, and so does a full duplicate whose copied
+  branches all went while the story stayed; a leaf lost from a full
+  duplicate leaves a copy without it, a non-leaf fails on the remapped
+  parent's foreign key, and a branch forked in the gap is left out. The
+  Implementation notes record how the batch holds that. No race is
+  reachable from the UI:
+  the story list and the navigator never take input together. A vec
+  family created in the gap is missed, which C3 accepts.
 - **The group the duplicate E2E undoes.** The seeded hero story's newest
   group may be one the reader confirms before undoing. Default: the spec
   makes a prose edit on the source through the reader first, so the
@@ -707,8 +714,11 @@ change amends the scope above.
 - **The Popover under the confirm on web.** Radix keeps a lower layer
   from dismissing while a modal sits above it, and the lockfile holds one
   copy of `@radix-ui/react-dismissable-layer` (1.1.11), so the navigator
-  should stay open under the confirm. Unverified; the delete E2E's "the
-  navigator stays open" checks it on desktop.
+  should stay open under the confirm. Decided: it doesn't. A desktop
+  probe showed the Popover closing without a hold, so
+  `BranchNavigator` gained `holdOpen`; the Implementation notes'
+  Deviations record it, and the delete E2E's "the navigator stays open"
+  checks it.
 - **`branchQueues`** (`lib/actions/turns/branch-queue.ts:16`) never
   prunes, so a deleted branch's settled entry stays. A deleted branch's
   id can't come back, which is what the lesson guards against. Default:
@@ -728,5 +738,167 @@ change amends the scope above.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+**Decisions** (developer, 2026-11-25).
+
+- **The refusal line for an unfinished run.** One line serves
+  `branch-held` and `unfinished-run`: "A branch being copied has an
+  interrupted update the app hasn't recovered." It drops Open
+  questions' restart clause and adds nothing to canon: an orphan
+  refused as a `ReversalIntegrityError` fails on every boot, and the
+  recovery modal already says it won't retry.
+  [`story-list.md → Duplicate a story`](../../../../ui/screens/story-list/story-list.md#duplicate-a-story)
+  names the reason as the R1 pass left it. A pending embedder change
+  and a run still going each have their own line.
+- **Vector order in a full duplicate.** `duplicateStory` runs 6.1's
+  `branchCopyOps` once per copied branch, so each branch's vectors
+  follow its own tables, and
+  [`data-model.md → Story duplicate`](../../../../data-model.md#story-duplicate)
+  now reads "…then each copied branch's tables, its `*_vec` after
+  them". No behavior differs: each vector statement copies only rows
+  its own branch's tables already copied. The same paragraph names the
+  `UPDATE stories SET current_branch_id` the batch posts after the
+  branch rows, and that a source gone before the batch, or a refusal
+  stored after the check, fails it.
+- **A source changing mid-duplicate holds its invariant.** The slice's
+  default accepted a source branch deleted between the reads and the
+  batch, on the premise that nothing partial lands either way. The
+  premise was wrong: a single-branch copy whose source branch, or a
+  whole story, vanished in the gap landed a branchless story, or no
+  row, and returned `duplicated`, and a full copy whose current leaf
+  went left a dangling `current_branch_id`. Canon states the invariant
+  ([`data-model.md → Story duplicate`](../../../../data-model.md#story-duplicate):
+  one batch reads a consistent snapshot, a failure writes nothing), so
+  the code now holds it. The copy's `stories` row selects from
+  `(select 1) left join stories` and binds its title through a
+  subquery that yields NULL when the source story, or for a
+  single-branch copy the copied source branch, is gone; the NOT NULL
+  constraint fails the batch, nothing lands, and the host shows the
+  failure. The row goes in with a null `current_branch_id`, which an
+  `UPDATE` after the branch rows resolves to the intended copy if it
+  landed, else the first copy that did (a root, by the walk). A full
+  duplicate losing a leaf still yields a copy without it, and losing a
+  non-leaf still fails on the foreign key. A full duplicate takes the
+  title from a subquery over its own copied branch rows, so one whose
+  every copied branch vanishes while the story stays fails the batch as
+  well, rather than landing a branchless copy. The copy's current
+  branch follows the pointer read before the batch, not the source's at
+  batch time.
+- **The batch is the authority at commit.** The same title subquery
+  also fails the batch when the source story is a draft or holds a
+  stored swap marker (read as `readStorySwapPending` reads it, so a
+  malformed `settings` blob holds none and copies whole), or when a
+  copied branch holds an unfinished `pipeline_runs` row or a
+  `classifier_status` reading `running` (malformed, too, checked with
+  `json_valid` first). So every DB-backed refusal holds at commit with
+  no lock: a vanished source, a draft, a stored swap marker, an
+  unfinished run row, a running classifier. The checks before the post
+  give the refusal lines; the guard makes them hold.
+- **A switch racing the delete.** A branch switch writes the story's
+  pointer before it publishes the open story, so it can name the branch
+  after the delete's read of the pointer. The delete's batch now opens
+  with a guard that fails it, writing nothing, when the story's pointer
+  names the branch at commit; on a delete that lands it matches no row.
+  No lock is taken, and the host shows the failure.
+
+**Deviations from the brief.**
+
+- **Refusal codes.** `deleteBranch` refuses `missing`, `current`,
+  `gated` and `swap-pending`, the vocabulary the fork and rename use
+  across `lib/actions/stories`, so Scope's `not-found` and `in-flight`
+  read as `missing` and `gated`. `duplicateStory` stores the title
+  trimmed and refuses one blank once trimmed as `empty`, as
+  `renameBranch` does; the dialog's blank-name check comes first.
+- **The lint.** `dropBranchRecords` left `CLOSE_RECORD_MUTATORS` for a
+  `BRANCH_DROP_MUTATORS` list of its own, which one owner block for
+  `delete-story.ts` and `delete-branch.ts` allows alone.
+  `delete-story.ts` left the record-writer block, and every other owner
+  block bans the drop. Joining the record writers instead would have
+  let a delete write a close pick.
+  [`code-conventions.md → Syncing a store after a write`](../../../../code-conventions.md#syncing-a-store-after-a-write)
+  says so.
+- **No injected table list.** Neither action takes the `listTables`
+  Scope gave it: `deleteBranch` reads the vec families through
+  `listVecFamilyTables(ctx.db)`, and the copier reads its own.
+  `deleteStory` keeps its injection.
+- **When the delete control hides.** The route passes the handler
+  only while neither `switchPaused` nor `swapPending` holds.
+  `switchPaused` covers the gate, a turn dispatch in flight and the
+  reader hold, wider than Scope's "while C8's gate is open", since
+  canon pauses lifecycle operations as a set. The action itself refuses
+  only the bare gate and a pending swap.
+- **The Popover under the confirm.** Open questions' default didn't
+  hold: Radix keeps a lower layer open under a modal against
+  pointer-downs, but its focus-outside dismiss has no highest-layer
+  check, so the confirm's autofocus, mounted at the route outside the
+  Popover's tree, closes the navigator. A Storybook probe on desktop
+  showed the Popover closing without help and staying open with `BranchNavigator`'s new `holdOpen`, which
+  prevents the outside dismiss while the confirm is open and doesn't
+  record it, so a later Esc or Close still restores focus. On phone the
+  Sheet stays under the confirm with no code, since gorhom's modal
+  Sheet has no focus-outside dismiss; the Android smoke confirmed back
+  closes only the confirm. `branch-delete.spec.ts` holds the navigator
+  open on Electron.
+- **`Cancel` is the `AlertDialogCancel`.** Scope has both buttons plain.
+  Radix focuses an AlertDialog through its Cancel as it opens, so a
+  plain `Cancel` would leave focus behind the modal; `Cancel` is
+  `AlertDialogCancel asChild` over a `Button`, and only `Delete branch`
+  is a plain button, which keeps the confirm up until the host closes it.
+- **The confirm above the held Popover.** `AlertDialogContent` gained
+  `aboveOpenPopover`: on web the dialog's overlay takes `zIndex` 110,
+  above the Popover overlay's 100, so the navigator under it never
+  paints over the confirm, and every other AlertDialog keeps its order.
+  [`alert-dialog.md → Over an open Popover`](../../../../ui/patterns/alert-dialog.md#over-an-open-popover)
+  records it.
+- **Focus after a delete.** The confirm always takes one stable
+  `returnFocusTo`, owned by `useBranchDeleteConfirm`. Its `.current`
+  becomes the current branch's row just before a landed delete clears
+  the confirm and is null on every other close, so `Cancel` returns
+  focus to the row's `×`. The route mounts the confirm conditionally,
+  so a prop changed in the render that clears it would never reach it.
+- **The Duplicate dialog mounts after the branch read.** The host reads
+  the branches and the current branch first, a failed or empty read
+  toasting with no dialog, then mounts the dialog keyed per open with
+  its form defaults known. So `checking` covers the refusal check
+  alone, not Scope's "the branch read and the refusal check", and the
+  form never resets, which keeps any value from carrying across opens.
+  A `current_branch_id` naming no branch of the story falls back to the
+  first.
+- **The Duplicate dialog while copying.** It passes `closeDisabled`, so
+  the × disables beside the fields and `Cancel`, as
+  [`overlays.md → Dialog — Busy`](../../../../ui/patterns/overlays.md#dialog--busy)
+  has it for an action that can't be abandoned. Slice 6.5 added that
+  line after the plan was written, and the plan left the × live.
+- **The Duplicate dialog's width.** The panel is 360 px below `sm` on
+  web too, in the shape `BranchCreateModal` uses (a `w-[360px]` capped
+  to the window less a gutter), where the plan's `sm:max-w-[360px]`
+  alone left it content-sized on a narrow window, against
+  [`story-list.md → Duplicate a story`](../../../../ui/screens/story-list/story-list.md#duplicate-a-story),
+  which sets the width at about 360 px on every tier.
+
+**Cost.** A duplicate of the dataset story (`pnpm db:seed:dataset`,
+opened once so its rows embed: 133 entries, 1,106 deltas and 103
+vectors on its one branch, so the dialog shows no Select and that
+branch is the whole story), read from `action_layer.story_duplicated`,
+which times the batch alone. In the desktop dev app (2026-11-25, slot
+1, `577884761`), three duplicates took 19, 19 and 26 ms for 22
+statements each, at load 1.36, 1.25 and 1.82 with the GPU idle; the
+first copy held the source's 133 entries and 103 vectors. On the slot AVD's
+dev client (`emulator-5554`, 2026-11-25), indicative only, a
+software-rendered debug build, they took 41, 37 and 38 ms for 22
+statements, at load 2.29, 2.40 and 2.18. The figures cover a one-branch
+story, 19 statements per copied branch; no multi-branch full duplicate
+was timed.
+
+**Device checks.** Desktop, through the `electron-app` MCP on the
+seeded hero story (slot 1, `577884761`): the delete left the row gone
+with `Branches · 1` and the chip at 2 until the navigator closed, and
+the DB held one branch; the duplicate landed and the toast's `Open`
+reached `/reader-composer/br_c1b3e915-4cb5-4de8-b5ac-9e70cb85ba3e`.
+Android, on the slot AVD at phone width (`emulator-5554`,
+`577884761`): the confirm opened over the navigator Sheet; hardware
+back closed the confirm and the Sheet stayed; `⋯ → Duplicate` ran
+through to the toast. The AVD's hero kept its fork, and the Select
+defaulted to `Main · current`, so that duplicate copied one branch.
+
+**Size.** Planned at 19 tasks, under the split line of 20, so the
+slice landed whole.

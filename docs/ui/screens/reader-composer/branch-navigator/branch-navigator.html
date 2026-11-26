@@ -107,6 +107,11 @@
   .modal-body .impact strong { font-weight: 600; }
   .modal-body .undone { font-size: 12px; color: var(--ink-muted); margin: 0; }
   .modal-foot .btn.danger { background: var(--warn); color: #fff; border-color: var(--warn); font-weight: 600; }
+  /* confirm states (branch-navigator.md → Delete confirm): pending disables both buttons, blocked
+     disables Delete branch with its reason, failed shows its line with both live */
+  .modal-body .confirm-line { display: none; font-size: 12px; color: var(--warn); margin: 8px 0 0; }
+  .modal-body .confirm-line.show { display: block; }
+  .modal-foot .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* drawer (mobile) */
   .drawer-backdrop { position: absolute; inset: 0; background: var(--bg-dim); z-index: 4; display: none; }
@@ -214,6 +219,13 @@
     <span class="gl">only on branch:</span>
     <button class="rb-btn active" data-only-count="38">38 entries</button>
     <button class="rb-btn" data-only-count="0">none</button>
+  </div>
+  <div class="rb-group">
+    <span class="gl">confirm:</span>
+    <button class="rb-btn active" data-confirm-state="ready">ready</button>
+    <button class="rb-btn" data-confirm-state="pending">pending (busy; Esc does nothing)</button>
+    <button class="rb-btn" data-confirm-state="blocked">blocked (reason)</button>
+    <button class="rb-btn" data-confirm-state="failed">failed</button>
   </div>
   <div class="rb-group">
     <span class="gl">gen:</span>
@@ -339,6 +351,7 @@
       <div class="modal-body" id="delete-desc">
         <p class="impact" id="delete-count"><strong>38 entries</strong> exist only on this branch.</p>
         <p class="undone">Its world, plot and chapter changes go with it. This can't be undone.</p>
+        <p class="confirm-line" id="delete-line"></p>
       </div>
       <div class="modal-foot">
         <button class="btn" id="delete-cancel">Cancel</button>
@@ -398,6 +411,7 @@
   let genState = 'idle';               // 'idle' | 'in-flight' (paused)
   let swapState = 'none';              // 'none' | 'pending' (embedder swap; delete hidden)
   let onlyCount = '38';                // entries whose id no other branch holds
+  let confirmState = 'ready';          // 'ready' | 'pending' | 'blocked' | 'failed' (the delete confirm's states)
   let branchMode = 'many';             // 'many' | 'single' (the current branch alone: no chip)
 
   function visibleBranches() {
@@ -494,6 +508,13 @@
     document.getElementById('delete-count').innerHTML = onlyCount === '0'
       ? 'No entries exist only on this branch.'
       : '<strong>' + onlyCount + ' entries</strong> exist only on this branch.';
+    const deleteLine = document.getElementById('delete-line');
+    deleteLine.textContent = confirmState === 'blocked'
+      ? 'Unavailable while generating.'
+      : confirmState === 'failed' ? "Couldn't delete the branch." : '';
+    deleteLine.classList.toggle('show', confirmState === 'blocked' || confirmState === 'failed');
+    document.getElementById('delete-cancel').disabled = confirmState === 'pending';
+    document.getElementById('delete-confirm').disabled = confirmState === 'pending' || confirmState === 'blocked';
 
     // pick the right row state — "menu" only makes sense on a non-default row,
     // and "renaming"/"confirming" target b2 by default for the demo
@@ -539,6 +560,17 @@
     onlyCount = b.dataset.onlyCount;
     applySurface();
   }));
+  // a confirm state opens the confirm on a deletable row, so the state shows at once
+  document.querySelectorAll('.rb-btn[data-confirm-state]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.rb-btn[data-confirm-state]').forEach(x => x.classList.toggle('active', x === b));
+    confirmState = b.dataset.confirmState;
+    const target = branches.find(x => x.id === stateRowId);
+    if (!target || target.current) {
+      const other = branches.find(x => !x.current);
+      if (other) stateRowId = other.id;
+    }
+    setRowState('confirming');
+  }));
   document.getElementById('delete-cancel').addEventListener('click', () => setRowState('default'));
   document.getElementById('delete-confirm').addEventListener('click', () => {
     const i = branches.findIndex(x => x.id === stateRowId);
@@ -546,7 +578,7 @@
     setRowState('default');
   });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && rowState === 'confirming') setRowState('default');
+    if (e.key === 'Escape' && rowState === 'confirming' && confirmState !== 'pending') setRowState('default');
   });
 
   document.querySelectorAll('.rb-btn[data-gen-state]').forEach(b => b.addEventListener('click', () => {

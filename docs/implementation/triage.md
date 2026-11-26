@@ -630,8 +630,12 @@ slice-planning gate forces its resolution before that slice is planned.
   resolves against that wrapper, so a definite width there loses 32 px.
   The comment above the class list assumes otherwise
   (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
-  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`. Found by Slice
-  6.5's task review (2026-11-24).
+  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`, and
+  `components/story/duplicate-story-dialog.tsx` adds the same, having
+  measured 245–257 px at a 390 px window without it. A width option or a
+  web fix in the primitive would spare each new dialog the workaround and
+  its story. Found by Slice 6.5's task review (2026-11-24); a second
+  consumer found during Slice 6.6.
 
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
@@ -712,3 +716,74 @@ slice-planning gate forces its resolution before that slice is planned.
   `hooks/use-inert-mouse-back.ts` is a narrow block for a pending fork
   that this fix would subsume. Found by CodeRabbit's review of Slice
   6.5 after the Slice 6.8 merge (2026-11-25).
+
+- **`abortRun`'s docblock says any pass or close end clears the pending
+  re-run, but a re-run's own abort clears it too.** The block at
+  `lib/stores/generation/generation.ts:177-182` reads "any pass or close
+  end clears the pending re-run", while
+  [`generation-pipeline.md`](../generation-pipeline.md#multi-run-txstate)
+  (`:657-661`) has the record cleared "whatever ends it: … or the
+  re-run's own end". A reader trusting the docblock would add a clear
+  the store already does, or miss that a re-run's abort drops the record.
+  Reword the docblock to the canon's list. Found during Slice 6.6.
+
+- **The mutator fences match the literal identifier `generationStore`,
+  so an aliased import bypasses all of them.** The
+  `no-restricted-properties` entries built at `eslint.config.js:19-22`
+  set `object: 'generationStore'`, which ESLint compares to the written
+  name. Probe: `import { generationStore as g }` then
+  `g.dropBranchRecords(...)` in `components/reader/` lints with 0 errors,
+  against 1 for the plain name. Any owner-only mutator (run, close
+  record, re-run record, drop, close progress) can be called through an
+  alias from a file that may not. A `no-restricted-syntax` selector on
+  the import specifier (ban the `as` rename of `generationStore`), or a
+  rule that resolves the binding, would close it.
+  Found during Slice 6.6.
+
+- **The unfinished-run reads scan `pipeline_runs` whole.** The table
+  has no index on `branch_id` (`lib/db/system/system.table.ts`), and
+  nothing prunes finished rows short of a story delete, so it grows with
+  every turn. `readUnfinishedRuns` (`lib/actions/delta/unfinished-runs.ts`)
+  scans it per branch, the duplicate's check runs it twice per copied
+  branch, and the duplicate's in-batch guard scans it once more. On a
+  synthetic table the scan took 0.24 ms at 10k rows and 3.8 ms at 100k,
+  so it passes 1 ms around 25–30k rows. A partial index on
+  `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
+  read an index probe; it's a schema change, so it waits for an owner.
+  Found during Slice 6.6.
+
+- **A held Enter on a button that opens or closes a dialog repeats
+  the press on whatever takes focus.** Chromium clicks a focused
+  `<button>` on every Enter keydown, repeats included, so once a press
+  moves focus the repeats land on the new target
+  ([a keydown that moves focus hands off its auto-repeat](./lessons-learned/keydown-focus-move-hands-off-key-repeat.md)).
+  Two instances, traced in code, not run: holding Enter on a navigator
+  row's `×` opens the branch delete confirm with focus on `Cancel`, a
+  repeat clicks `Cancel`, focus returns to `×` and the next repeat
+  reopens it, flipping until the key is released; holding Enter on
+  `Delete branch` puts focus on the current branch's row once the delete
+  lands, and a repeat presses that row, which closes the navigator that
+  canon keeps open. Any dialog opened or closed from a focused button
+  likely does the same; `swallowKeyRepeats` is used only in
+  `SearchableOverlayList`. The fix is app-wide, the button or the
+  dialog swallowing a keyboard press's repeats, so it waits for an
+  owner. Found by Slice 6.6's slice review (2026-11-26).
+
+- **Eighteen test files each define the same `deferred<T>()`
+  helper.** A promise with its `resolve` and `reject` exposed, written
+  out per file (`grep -rln 'function deferred<' components lib hooks`):
+  the two new hook tests of Slice 6.6 (`use-branch-delete-confirm`,
+  `use-story-duplicate`) and sixteen older ones. One shared test util
+  would serve them all; it needs a home the unit project's files can
+  import, and moving it edits files across the tree. Found by Slice
+  6.6's slice review (2026-11-26).
+
+- **Five dialogs write out the same inline status and alert lines.**
+  The blocked or refused line (`role="status"`) and the failed line
+  (`role="alert"`, `accessibilityLiveRegion="assertive"`, `text-danger`)
+  repeat in `branch-delete-confirm.tsx`, `duplicate-story-dialog.tsx`,
+  `branch-create-modal.tsx`, `scene-edit-form.tsx` and
+  `world-time-edit-form.tsx`. A shared compound in
+  `components/compounds/` would keep their roles and live regions in
+  step; it touches files outside any one slice. Found by Slice 6.6's
+  slice review (2026-11-26).
