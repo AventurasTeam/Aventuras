@@ -204,6 +204,13 @@ describe('leadMarks', () => {
       { id: MARA, name: 'Mara the Elder' },
     ])
   })
+
+  // The templates print a mark's name raw, on the line that introduces its turn.
+  it('puts a name the lookup gives over several lines on one line', () => {
+    expect(leadMarks([MARA], JORIN, () => '  Mara\nthe \t Elder\n')).toStrictEqual([
+      { id: MARA, name: 'Mara the Elder' },
+    ])
+  })
 })
 
 describe('leadStampOf', () => {

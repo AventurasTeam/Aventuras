@@ -1,5 +1,6 @@
 import type { Entity, StoryDefinition, StoryEntry, StoryMode } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { oneLine } from '@/lib/text'
 
 /** The lead badge's copy key (`world:lead.<label>`). */
 export type LeadLabel = 'you' | 'protagonist'
@@ -65,8 +66,8 @@ export function leadStampOf(entry: Pick<StoryEntry, 'metadata'>): string | undef
 }
 
 /**
- * Each turn's mark in render order, undefined on an unmarked turn. `nameOf` gives a character's
- * name on the branch, undefined when the branch holds no such row.
+ * Each turn's mark in render order, undefined on an unmarked turn; a mark's name is on one line.
+ * `nameOf` gives the character row's name, undefined when the branch holds no such row.
  */
 export function leadMarks(
   stamps: readonly (string | undefined)[],
@@ -80,6 +81,6 @@ export function leadMarks(
     previous = stamp
     if (stamp === undefined) return { none: true }
     const name = nameOf(stamp)
-    return name === undefined ? { gone: true } : { id: stamp, name }
+    return name === undefined ? { gone: true } : { id: stamp, name: oneLine(name) }
   })
 }
