@@ -2,6 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
+import { isMouseBackInert } from '@/hooks/use-inert-mouse-back'
 import type { ReplaceStoryStack } from '@/hooks/use-replace-story-stack'
 import { FORK_REFUSAL, type ForkResult, type ShowBranchResult } from '@/lib/actions'
 import { CHAPTER_CLOSE_KIND } from '@/lib/chapters'
@@ -763,32 +764,22 @@ describe('useBranchCreate — a log that throws while a throw is handled', () =>
   })
 })
 
-// Electron goes back or forward in history on these buttons' mouseup unless it's cancelled.
-function mouseUp(button: number): boolean {
-  const event = new MouseEvent('mouseup', { button, bubbles: true, cancelable: true })
-  document.body.dispatchEvent(event)
-  return event.defaultPrevented
-}
-
-describe("useBranchCreate — the mouse's Back and Forward buttons", () => {
-  it.each([3, 4])(
-    'button %s does nothing from Create to the fork settling, and navigates before and after',
-    async (button) => {
-      const forked = deferred<ForkResult>()
-      actions.fork.mockReturnValue(forked.promise)
-      const hook = renderCreate()
-      await openModal(hook)
-      expect(mouseUp(button)).toBe(false)
-      press(hook, 'Side quest')
-      expect(mouseUp(button)).toBe(true)
-      await act(async () =>
-        forked.resolve({ status: 'rejected', code: FORK_REFUSAL.unfinishedRun, reason: 'x' }),
-      )
-      await settle()
-      expect(modal(hook).phase).toStrictEqual(idle(COPY.unfinishedRun))
-      expect(mouseUp(button)).toBe(false)
-    },
-  )
+describe("useBranchCreate — the mouse's Back", () => {
+  it('is held inert from Create to the fork settling, and not before or after', async () => {
+    const forked = deferred<ForkResult>()
+    actions.fork.mockReturnValue(forked.promise)
+    const hook = renderCreate()
+    await openModal(hook)
+    expect(isMouseBackInert()).toBe(false)
+    press(hook, 'Side quest')
+    expect(isMouseBackInert()).toBe(true)
+    await act(async () =>
+      forked.resolve({ status: 'rejected', code: FORK_REFUSAL.unfinishedRun, reason: 'x' }),
+    )
+    await settle()
+    expect(modal(hook).phase).toStrictEqual(idle(COPY.unfinishedRun))
+    expect(isMouseBackInert()).toBe(false)
+  })
 
   it('stays inert through the tail and after its navigation, until the reader unmounts', async () => {
     const tail = deferred<ShowBranchResult>()
@@ -798,12 +789,12 @@ describe("useBranchCreate — the mouse's Back and Forward buttons", () => {
     press(hook, 'Side quest')
     await settle()
     expect(actions.show).toHaveBeenCalledTimes(1)
-    expect(mouseUp(3)).toBe(true)
+    expect(isMouseBackInert()).toBe(true)
     await act(async () => tail.resolve({ status: 'ok' }))
     await settle()
-    expect(mouseUp(3)).toBe(true)
+    expect(isMouseBackInert()).toBe(true)
     hook.unmount()
-    expect(mouseUp(3)).toBe(false)
+    expect(isMouseBackInert()).toBe(false)
   })
 
   it.each([
@@ -826,8 +817,8 @@ describe("useBranchCreate — the mouse's Back and Forward buttons", () => {
     const hook = renderCreate()
     await openModal(hook)
     press(hook, 'Side quest')
-    expect(mouseUp(3)).toBe(true)
+    expect(isMouseBackInert()).toBe(true)
     await settle()
-    expect(mouseUp(3)).toBe(false)
+    expect(isMouseBackInert()).toBe(false)
   })
 })

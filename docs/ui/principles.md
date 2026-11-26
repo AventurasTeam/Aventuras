@@ -257,6 +257,12 @@ to a fixed parent.
   written for — boots the target story and _pushes_ its Story Settings
   over the list, so the first Return is an ordinary pop and every
   Return after it retraces the stack.
+- **The mouse's Back and Forward (desktop)**: the Back button is a
+  Return, through the same leave guards as ←. While a dialog, sheet or
+  popover is up it does nothing (Esc or the overlay's own controls close
+  it), and at the root it does nothing, since desktop exits by its
+  window. The Forward button does nothing: the stack keeps no forward
+  history.
 - **Empty stack (root state)**: a Return action with no previous
   page — fresh session before any navigation, or a deep-link entry
   that bypassed normal flow — is interpreted as "exit the app" and

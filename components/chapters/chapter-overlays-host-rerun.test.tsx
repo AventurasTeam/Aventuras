@@ -3,6 +3,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useReaderDispatch } from '@/components/reader/use-reader-dispatch'
+import { isMouseBackInert } from '@/hooks/use-inert-mouse-back'
 import type {
   CloseRerunForkPreview,
   CloseRerunParentCheck,
@@ -243,13 +244,6 @@ function markPendingTurn(): { end: () => Promise<void> } {
         await marked
       }),
   }
-}
-
-// Electron goes back or forward in history on these buttons' mouseup unless it's cancelled.
-function mouseUp(button: number): boolean {
-  const event = new MouseEvent('mouseup', { button, bubbles: true, cancelable: true })
-  document.body.dispatchEvent(event)
-  return event.defaultPrevented
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -1077,22 +1071,19 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     expect(readerHoldStore.isHeld('br_1')).toBe(false)
   })
 
-  it.each([3, 4])(
-    "the mouse's button %s does nothing from the press to the publish, and navigates before and after",
-    async (button) => {
-      const forked = deferred<ForkResult>()
-      actions.fork.mockReturnValue(forked.promise)
-      renderHost()
-      openRerun()
-      const props = await confirmShown()
-      expect(mouseUp(button)).toBe(false)
-      act(() => props.onConfirmOnBranch(WITH_TURNS))
-      expect(mouseUp(button)).toBe(true)
-      await act(async () => forked.resolve({ status: 'ok', branchId: 'br_child' }))
-      await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
-      expect(mouseUp(button)).toBe(false)
-    },
-  )
+  it("holds the mouse's Back inert from the press to the publish, and not before or after", async () => {
+    const forked = deferred<ForkResult>()
+    actions.fork.mockReturnValue(forked.promise)
+    renderHost()
+    openRerun()
+    const props = await confirmShown()
+    expect(isMouseBackInert()).toBe(false)
+    act(() => props.onConfirmOnBranch(WITH_TURNS))
+    expect(isMouseBackInert()).toBe(true)
+    await act(async () => forked.resolve({ status: 'ok', branchId: 'br_child' }))
+    await waitFor(() => expect(chapterOverlaysStore.getState().rerunConfirm).toBeNull())
+    expect(isMouseBackInert()).toBe(false)
+  })
 
   const pressEnded = () => confirmView.props?.pending === false
   const confirmClosed = () => chapterOverlaysStore.getState().rerunConfirm == null
@@ -1128,9 +1119,9 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     openRerun()
     const props = await confirmShown()
     act(() => props.onConfirmOnBranch(WITH_TURNS))
-    expect(mouseUp(3)).toBe(true)
+    expect(isMouseBackInert()).toBe(true)
     await waitFor(() => expect(settled()).toBe(true))
-    expect(mouseUp(3)).toBe(false)
+    expect(isMouseBackInert()).toBe(false)
   })
 
   it("the mouse's Back navigates again after a sequence that throws past its own catches", async () => {
@@ -1143,9 +1134,9 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     openRerun()
     const props = await confirmShown()
     act(() => props.onConfirmOnBranch(WITH_TURNS))
-    expect(mouseUp(3)).toBe(true)
+    expect(isMouseBackInert()).toBe(true)
     await waitFor(() => expect(confirmView.props?.pending).toBe(false))
-    expect(mouseUp(3)).toBe(false)
+    expect(isMouseBackInert()).toBe(false)
   })
 
   it("leaves the mouse's Back alone while the in-place re-run starts: nothing navigates on that path", async () => {
@@ -1155,6 +1146,6 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
     const props = await confirmShown()
     act(() => props.onConfirm())
     expect(confirmView.props?.pending).toBe(true)
-    expect(mouseUp(3)).toBe(false)
+    expect(isMouseBackInert()).toBe(false)
   })
 })

@@ -19,6 +19,7 @@ import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
 import { useMemoryRunOutcomes } from '@/hooks/use-memory-run-outcomes'
+import { useMouseHistoryButtons } from '@/hooks/use-mouse-history-buttons'
 import { setAppearanceThemeId } from '@/lib/actions'
 import { registerRejectionHandler, useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
@@ -61,6 +62,7 @@ export default function RootLayout() {
   // on app_settings being hydrated and can run before migrations finish.
   useEffect(() => registerRejectionHandler(), [])
   useEffect(() => registerKeyRepeatGuard(), [])
+  useMouseHistoryButtons()
 
   // Seed the app_settings singleton (idempotent) once migrations are applied.
   useEffect(() => {

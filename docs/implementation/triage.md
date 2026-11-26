@@ -498,28 +498,6 @@ slice-planning gate forces its resolution before that slice is planned.
   simplifier left them, since each move edits a file outside the
   slice. Found by Slice 6.5's slice review (2026-11-25).
 
-- **A desktop mouse Back skips every leave guard.** Electron pops
-  history on the mouse's Back button, and expo-router's linking answers
-  the pop with `navigation.resetRoot(record.state)`
-  (`node_modules/expo-router/build/fork/useLinking.js`), a RESET at the
-  container root. The root's `__root` route keeps its key, so
-  `shouldPreventRemove` finds no removed route and the nested app
-  Stack's screens drop with no `beforeRemove`: no `usePreventRemove`
-  sees the pop. A dirty Story Settings draft is discarded with no
-  unsaved-changes dialog. Probe: open the hero story, open Story
-  Settings from the reader, change the About title, then
-  `page.goBack()` in an E2E spec; the reader shows and the dialog never
-  does. Plot's and World's drafts and the story-leave confirm sit on the
-  same `usePreventRemove` (`hooks/use-unsaved-changes-guard.ts`,
-  `hooks/use-story-leave-guard.ts`), so they should fail the same way;
-  not probed. A renderer `mouseup` listener that calls `preventDefault()` for
-  buttons 3 and 4 cancels the navigation in Electron 41, and Alt+Left
-  and the app menu don't navigate, so the likely fix routes the mouse's
-  Back through the guarded in-app back. Slice 6.5's
-  `hooks/use-inert-mouse-back.ts` is a narrow block for a pending fork
-  that this fix would subsume. Found by CodeRabbit's review of Slice
-  6.5 after the Slice 6.8 merge (2026-11-25).
-
 - **The evaluation set's appended checks are unpinned.**
   `EVAL_WINDOWS` (`scripts/classifier-eval/index.ts`) appends
   `refsResolve(w)` to every window, and no test asserts it: removing it
