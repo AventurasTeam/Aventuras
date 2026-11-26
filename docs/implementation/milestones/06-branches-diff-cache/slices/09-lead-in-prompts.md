@@ -855,26 +855,21 @@ window: every check's rate before, under the first wording and after C1
 | close probe    | bar                                                                                                              | 7 of 10, missed | 8 of 10, met  | not rerun |
 | close probe    | summaries in the first or second person                                                                          | 8 of 8          | 0 of 10       | not rerun |
 
-Under the first wording every other check rose or held; C1 moved two
-more, `learning` Tam as dead 2/5 → 1/5 and `namedrops` the saint check
-5/5 → 4/5. The `switch` window's other five checks
-are 5/5 in all three runs, and the third-person check is 5/5 in every
-window before and after, so it had no headroom. The evaluation set's
-first-attempt parse is 39/40 before, 40/40 after and 40/40 after C1. The
-parse probe on `br_hero_main` parsed 19 of 20 on the first attempt
-before, 19 of 20 with the first wording and 20 of 20 after C1; it did
-not rerun after E2, which moves a sentence within the bullet. The close
-probe's bar: before `bar: 7 of 10 runs passed; a cap reached in 8 runs,
-merge_threads called in 8: missed`, after `bar: 8 of 10 runs passed; a
-cap reached in 9 runs, merge_threads called in 10: met`. Before, runs 7
+The first wording's six falls are listed under Falls below; C1 moved
+two more checks down, `learning` Tam as dead 2/5 → 1/5 and `namedrops`
+the saint check 5/5 → 4/5. The `switch` window's other five checks are
+5/5 in all three runs, and the third-person check is 5/5 in every
+window before and after, so it had no headroom. The parse probe did not
+rerun after E2, which moves a sentence within the bullet. In the close
+probe, a cap was reached in 8 runs before and 9 after, and
+`merge_threads` was called in 8 runs before and 10 after. Before, runs 7
 and 8 ended in the metadata phase on a reply that never stopped (cause
-unknown, 39,642 output tokens): those two alone made the bar missed.
-Summaries in the first or second person outside quoted speech: 8 of 8
-completed runs before (the second person in four, the first in four) and
-0 of 10 after.
+unknown, 39,642 output tokens): those two alone made the bar missed. The
+8 completed summaries before used the second person in four runs and the
+first in four; none after.
 
-The four windows with a falling check ran five more runs a side (Q21), so
-these are 10 runs:
+The four windows with a falling check ran five more runs a side: before
+and the first wording under Q21, C1 under Q23. So these are 10 runs:
 
 | Window           | Check                                                                                                            | Before  | First wording | C1      |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------- | ------- | ------------- | ------- |
@@ -934,15 +929,42 @@ these are 10 runs:
 | the four windows | judgment checks held                                                                                             | 37/40   | 35/40         | 36/40   |
 
 The classifier's final wording, E2, ran `learning` and `recounted` at 20
-runs, against the before runs' 20. The four checks that failed the
-earlier rules:
+runs, against the before runs' 20 (the first, second and third sets of
+each) and C1's 20, every check; the p-values are two-sided Fisher exact
+tests against before, the test fixed under Q27. The four checks that
+failed the earlier rules are the poisoning, Tam as dead, the steward
+and Vane.
 
-| Window      | Check                                                  | Before, 20 runs | C1    | E2    | p, before vs C1 | p, before vs E2 |
-| ----------- | ------------------------------------------------------ | --------------- | ----- | ----- | --------------- | --------------- |
-| `learning`  | the poisoning is not added again                       | 19/20           | 14/20 | 19/20 | 0.091           | 1.000           |
-| `learning`  | no description tells Tam as dead                       | 11/20           | 5/20  | 8/20  | 0.105           | 0.527           |
-| `learning`  | the steward, who is after the shop, is a new character | 13/20           | 10/20 | 10/20 | 0.523           | 0.523           |
-| `recounted` | Vane, who gave the order, is involved in the wreck     | 6/20            | 11/20 | 6/20  | 0.200           | 1.000           |
+| Window      | Check                                                                                  | Before, 20 runs | C1, 20 | E2, 20 | p, before vs C1 | p, before vs E2 |
+| ----------- | -------------------------------------------------------------------------------------- | --------------- | ------ | ------ | --------------- | --------------- |
+| `learning`  | parsed                                                                                 | 20/20           | 20/20  | 20/20  |                 |                 |
+| `learning`  | expect rule: Idris learns of the listed poisoning                                      | 19/20           | 19/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | expect rule: Oriel, who tells of the poisoning, knows of it                            | 10/20           | 12/20  | 9/20   | 0.751           | 1.000           |
+| `learning`  | expect rule: his learning sits at t2                                                   | 19/20           | 19/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: the poisoning is not added again                                           | 19/20           | 14/20  | 19/20  | 0.091           | 1.000           |
+| `learning`  | avoid rule: the listed master and apprentice views are not restated                    | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | expect rule: Tam Rook is a new character                                               | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: Tam Rook, who fled, is not made dead                                       | 20/20           | 20/20  | 19/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: no description tells Tam as dead                                           | 11/20           | 5/20   | 8/20   | 0.105           | 0.527           |
+| `learning`  | expect rule: the steward, who is after the shop, is a new character                    | 13/20           | 10/20  | 10/20  | 0.523           | 0.523           |
+| `learning`  | expect rule: Tam’s aunt, whom Oriel sets out to find, is a new character               | 7/20            | 7/20   | 6/20   | 1.000           | 1.000           |
+| `learning`  | avoid judgment: a steward, if added, is described by what he is doing                  | 18/20           | 19/20  | 19/20  | 1.000           | 1.000           |
+| `learning`  | expect rule: finding Tam is a new thread                                               | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: the unrelated listed fire gets no awareness                                | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: knownAwareness names only a listed happening                               | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: every ID names a listed row or a handle the reply declares                 | 19/20           | 20/20  | 19/20  | 1.000           | 1.000           |
+| `learning`  | avoid rule: happening descriptions in the third person                                 | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `recounted` | parsed                                                                                 | 20/20           | 20/20  | 20/20  |                 |                 |
+| `recounted` | expect rule: the wreck is a recounted happening, with its time                         | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `recounted` | expect rule: Nessa learns of the wreck, with learnedAtTurn                             | 17/20           | 20/20  | 17/20  | 0.231           | 1.000           |
+| `recounted` | expect rule: Brannoc, who watched it, is aware of the wreck                            | 18/20           | 20/20  | 19/20  | 0.487           | 1.000           |
+| `recounted` | expect rule: Edric Vane is a new character                                             | 19/20           | 20/20  | 18/20  | 1.000           | 1.000           |
+| `recounted` | expect rule: Vane, who gave the order, is involved in the wreck                        | 6/20            | 11/20  | 6/20   | 0.200           | 1.000           |
+| `recounted` | expect rule: Nessa’s resolve to take the page to court is a new thread                 | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `recounted` | avoid rule: the wreck is one happening: the doused lamp is a moment of it, not its own | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `recounted` | avoid rule: knownAwareness names only a listed happening                               | 20/20           | 20/20  | 19/20  | 1.000           | 1.000           |
+| `recounted` | avoid rule: every ID names a listed row or a handle the reply declares                 | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
+| `recounted` | avoid rule: happening descriptions in the third person                                 | 20/20           | 20/20  | 20/20  | 1.000           | 1.000           |
 
 Over these two windows E2 holds 429/500 rule checks and 19/20 judgment
 checks, before 437/500 and 18/20. E2 ran only these two windows: the other six windows
