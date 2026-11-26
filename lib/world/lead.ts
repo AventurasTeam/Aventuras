@@ -54,7 +54,10 @@ export function resolveLeadLogged(
 }
 
 /** Who "I" and "you" are from a marked turn on (architecture.md → System and user halves). */
-export type LeadMark = { id: string; name: string } | { gone: true } | { none: true }
+export type LeadMark =
+  | { id: string; name: string; gone?: never; none?: never }
+  | { gone: true; none?: never }
+  | { none: true; gone?: never }
 
 /** The lead an entry was written under: its `metadata.leadId`, undefined when unstamped. */
 export function leadStampOf(entry: Pick<StoryEntry, 'metadata'>): string | undefined {

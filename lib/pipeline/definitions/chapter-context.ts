@@ -11,7 +11,10 @@ export type CloseRangeEntry = Readonly<
 export type OpenThreadStatus = Extract<ThreadStatus, 'pending' | 'active'>
 
 /** A chapter call's mark: no id, since the call has no id map. */
-export type ChapterLeadMark = { name: string } | { gone: true } | { none: true }
+export type ChapterLeadMark =
+  | { name: string; id?: never; gone?: never; none?: never }
+  | { gone: true; none?: never }
+  | { none: true; gone?: never }
 
 /** The metadata call's and a part's `chapter` context: less the close- and merge-only ones. No ids. */
 export type ChapterContext = {
@@ -24,7 +27,7 @@ export type ChapterContext = {
   previousChapterSummary: string | null
   threads: { title: string; status: OpenThreadStatus }[]
   mode: StoryMode
-  lead: { name: string } | null
+  lead: { name: string; id?: never } | null
   narration: StoryDefinition['narration']
 }
 
@@ -81,7 +84,7 @@ export function buildChapterContext(input: {
         position: e.position,
         kind: e.kind,
         content: promptProse(e),
-        // Absent, not null, on an unmarked entry: a never-switched context keeps its keys.
+        // Absent, not null, on an unmarked entry: an unmarked entry carries no leadMark key.
         ...(leadMark === undefined ? {} : { leadMark }),
       }
     }),
@@ -107,7 +110,10 @@ export function buildChapterMergeContext(input: {
 }
 
 /** A close's mark: the id is the close handle. */
-export type CloseLeadMark = { id: string; name: string } | { gone: true } | { none: true }
+export type CloseLeadMark =
+  | { id: string; name: string; gone?: never; none?: never }
+  | { gone: true; none?: never }
+  | { none: true; gone?: never }
 
 /** A turn as a close task shows it (VARIABLES.chapter → closeTurns). */
 export type CloseTurn = {
