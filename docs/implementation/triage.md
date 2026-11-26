@@ -61,25 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A re-run's empty group with no recorded branch fires the log hook
-  for `''`.** `lib/actions/delta/rerun-journal.ts:513-517` names the
-  reversal set's branch `target[0]?.branchId ?? args.branchId ?? ''`; on
-  a restored write-back the post-commit hook then fires for the set's
-  branch (`lib/actions/delta/reverse-replay.ts:959`), so an empty group
-  with a null `args.branchId` tells the diff cache `''` instead of the
-  journal's branch, and that branch's entries survive the write-back.
-  It needs a `pipeline_runs.branch_id` that is null, which only rows
-  older than that column have (`lib/db/system/system.table.ts:54-55`),
-  met at boot recovery (`lib/pipeline/runtime/recovery.ts:73-78`), when
-  the cache is still empty. Migration 0022 backfills an unfinished run's
-  `branch_id` from its deltas, then its reversal journal, then its
-  re-run chapter, so a marker still null has no delta, no journal and no
-  chapter row under its ids: the restored write-back can't reach it, and
-  the path serves only a dead pre-6.1 marker, at boot, with an empty
-  cache. Not reachable in practice today. Found in Slice 6.7's reviews
-  (2026-11-23); CodeRabbit raised it on PR #789, kept here
-  (provisional, coordinator).
-
 - **Does the fork's refusal cover a refused admission's reversal?**
   [Slice 6.1](./milestones/06-branches-diff-cache/slices/01-copy-substrate.md#scope-out)
   kept `reverseReplayDeltas`'s read by `action_id` alone
