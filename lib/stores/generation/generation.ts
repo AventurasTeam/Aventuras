@@ -184,13 +184,13 @@ type GenerationState = {
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
   /** Removes the run, swapping in `successor` atomically; clears its deferral, a close's pending
-   * close, and, for a pass or close with no successor, the pending re-run. */
+   * close, and, for a pass, close or re-run with no successor, the pending re-run. */
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. `'aborted'` defers an interruptible pass or close; `'failed'`/`'unwound'`
    * leave the record (only a commit clears it); a re-run records none. A pending close stays; any
-   * pass or close end clears the pending re-run. A re-run `unreversed` (its abort's reversal didn't
-   * commit) holds its branch. Returns the slot newly recorded, or null.
+   * pass, close or re-run end clears the pending re-run. A re-run `unreversed` (its abort's
+   * reversal didn't commit) holds its branch. Returns the slot newly recorded, or null.
    */
   abortRun: (
     runId: string,

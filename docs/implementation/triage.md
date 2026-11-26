@@ -588,16 +588,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`dataset:export-seed`), reverts it. The drive should pick first
   person in the wizard. Found by Slice 6.9's planning (2026-11-25).
 
-- **`abortRun`'s docblock says any pass or close end clears the pending
-  re-run, but a re-run's own abort clears it too.** The block at
-  `lib/stores/generation/generation.ts:177-182` reads "any pass or close
-  end clears the pending re-run", while
-  [`generation-pipeline.md`](../generation-pipeline.md#multi-run-txstate)
-  (`:657-661`) has the record cleared "whatever ends it: … or the
-  re-run's own end". A reader trusting the docblock would add a clear
-  the store already does, or miss that a re-run's abort drops the record.
-  Reword the docblock to the canon's list. Found during Slice 6.6.
-
 - **The mutator fences match the literal identifier `generationStore`,
   so an aliased import bypasses all of them.** The
   `no-restricted-properties` entries built at `eslint.config.js:19-22`
