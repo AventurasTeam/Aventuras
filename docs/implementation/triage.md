@@ -108,17 +108,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (2026-11-23); CodeRabbit raised it on PR #789, kept here
   (provisional, coordinator).
 
-- **The test database collapses same-named result columns.**
-  `rowsOf` in `lib/db/__tests__/test-db.ts:35-47` reads row objects and
-  maps them with `Object.values`, so two columns of one name collapse
-  and an integer-like alias moves first. Electron main's `queryOn`
-  (`electron/db/service.ts:52-54`) calls `setReturnArrays(true)` to
-  avoid exactly that: `SELECT 1 AS id, 2 AS id, 3 AS "1"` gives
-  `[3, 2]` on the test database and `[1, 2, 3]` on main (checked on
-  `node:sqlite`, 2026-11-23). A query that only misreads on one of
-  them passes its tests. Pre-existing; the new batch callback inherits
-  it. Found in Slice 6.7's reviews (2026-11-23).
-
 - **Does the fork's refusal cover a refused admission's reversal?**
   [Slice 6.1](./milestones/06-branches-diff-cache/slices/01-copy-substrate.md#scope-out)
   kept `reverseReplayDeltas`'s read by `action_id` alone

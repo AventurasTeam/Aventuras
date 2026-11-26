@@ -26,12 +26,9 @@ export function applyMigration(sqlite: DatabaseSync, tag: string): void {
 
 type ProxyMethod = 'run' | 'all' | 'get' | 'values'
 
-// drizzle-orm 0.45.2 ships no node-sqlite driver; sqlite-proxy wraps any
-// SQLite backend via a callback, making node:sqlite usable without a native dep.
-// The proxy's mapResultRow indexes rows by column position, so all methods
-// must return rows as arrays-of-values, not as objects. Mirrors the desktop
-// (Electron main) adapter: 'get' returns the single row directly so drizzle
-// decodes it as a row rather than an array-of-rows.
+// drizzle-orm 0.45.2 ships no node-sqlite driver, so sqlite-proxy wraps node:sqlite. As Electron
+// main's queryOn: rows read as arrays (a row object drops one of two same-named columns and moves
+// a numeric alias first), and 'get' answers with the single row itself.
 function rowsOf(
   sqlite: DatabaseSync,
   sql: string,
@@ -43,9 +40,9 @@ function rowsOf(
     stmt.run(...(params as Parameters<typeof stmt.run>))
     return { rows: [] }
   }
-  const raw = stmt.all(...(params as Parameters<typeof stmt.all>)) as Record<string, unknown>[]
-  const asArrays = raw.map((r) => Object.values(r))
-  return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
+  stmt.setReturnArrays(true)
+  const rows = stmt.all(...(params as Parameters<typeof stmt.all>)) as unknown as unknown[][]
+  return { rows: (method === 'get' ? rows[0] : rows) as unknown[] }
 }
 
 export function makeCallback(sqlite: DatabaseSync) {
