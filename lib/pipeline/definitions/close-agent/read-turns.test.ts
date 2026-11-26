@@ -372,6 +372,22 @@ describe('read_turns → lead marks', () => {
     expect(JSON.stringify(answer)).not.toContain(GONE)
   })
 
+  it('adds the note when only a later answered turn is marked, gone', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 3), WREN)
+    await stampLead(fx, idsOf(fx, 3, 5), GONE)
+    await stampLead(fx, idsOf(fx, 5, 7), WREN)
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t2', 't4'])
+
+    expect(Object.keys(answer)).toEqual(['note', 'turns'])
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    expect(answer.turns.map((turn) => 'leadMark' in turn)).toEqual([false, true])
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([undefined, { gone: true }])
+  })
+
   it('marks a run written with no lead as none', async () => {
     const fx = await openCloseFixture()
     await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
