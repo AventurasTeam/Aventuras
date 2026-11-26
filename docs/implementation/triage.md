@@ -719,23 +719,6 @@ slice-planning gate forces its resolution before that slice is planned.
   read an index probe; it's a schema change, so it waits for an owner.
   Found during Slice 6.6.
 
-- **A held Enter on a button that opens or closes a dialog repeats
-  the press on whatever takes focus.** Chromium clicks a focused
-  `<button>` on every Enter keydown, repeats included, so once a press
-  moves focus the repeats land on the new target
-  ([a keydown that moves focus hands off its auto-repeat](./lessons-learned/keydown-focus-move-hands-off-key-repeat.md)).
-  Two instances, traced in code, not run: holding Enter on a navigator
-  row's `×` opens the branch delete confirm with focus on `Cancel`, a
-  repeat clicks `Cancel`, focus returns to `×` and the next repeat
-  reopens it, flipping until the key is released; holding Enter on
-  `Delete branch` puts focus on the current branch's row once the delete
-  lands, and a repeat presses that row, which closes the navigator that
-  canon keeps open. Any dialog opened or closed from a focused button
-  likely does the same; `swallowKeyRepeats` is used only in
-  `SearchableOverlayList`. The fix is app-wide, the button or the
-  dialog swallowing a keyboard press's repeats, so it waits for an
-  owner. Found by Slice 6.6's slice review (2026-11-26).
-
 - **Eighteen test files each define the same `deferred<T>()`
   helper.** A promise with its `resolve` and `reject` exposed, written
   out per file (`grep -rln 'function deferred<' components lib hooks`):

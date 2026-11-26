@@ -14,6 +14,7 @@ import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
 import { RailViewportWatcher } from '@/components/reader/rail/rail-viewport-watcher'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
+import { registerKeyRepeatGuard } from '@/components/ui/key-repeat-guard'
 import { ABOVE_SHEETS_PORTAL_HOST } from '@/components/ui/sheet'
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
@@ -59,6 +60,7 @@ export default function RootLayout() {
   // ALWAYS_RECORDED kinds bypass the diagnostics gate, so this doesn't depend
   // on app_settings being hydrated and can run before migrations finish.
   useEffect(() => registerRejectionHandler(), [])
+  useEffect(() => registerKeyRepeatGuard(), [])
 
   // Seed the app_settings singleton (idempotent) once migrations are applied.
   useEffect(() => {
