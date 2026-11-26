@@ -12,6 +12,14 @@ import {
 import { COLLISION_REASONS, INJECTION_MODES } from '../enums'
 import type { EntityState } from './entities-types'
 import { branches } from '../stories/stories.table'
+import type { Entity } from '../types'
+
+/** The columns entities_name_collision_pair holds together: written, cleared and worded as one. */
+export const COLLISION_COLUMNS = [
+  'nameCollisionFlag',
+  'nameCollisionPartnerId',
+  'nameCollisionReason',
+] as const satisfies readonly (keyof Entity)[]
 
 export const entities = sqliteTable(
   'entities',

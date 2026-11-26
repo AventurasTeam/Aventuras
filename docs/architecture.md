@@ -1598,7 +1598,7 @@ Then, for each `op=update` delta on the path, newest first:
 3. `new_partial = pick(state, keys)`, with the collision group filled in:
    when an `entities` payload holds any of `nameCollisionFlag`,
    `nameCollisionPartnerId` or `nameCollisionReason`
-   (`COLLISION_COLUMNS` in `lib/history/prose-fields.ts`), `new` holds
+   (`COLLISION_COLUMNS` in `lib/db/entities/entities.table.ts`), `new` holds
    all three, picked from the state after the delta (`pickedKeys` in
    `lib/history/diff-walk.ts`). The group is worded as one field, and a
    merge's re-point of the partner writes it without the flag.

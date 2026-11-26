@@ -6,13 +6,15 @@ export type TermMatch = 'normalized' | 'exact'
 /** What a write did to one term: its presence or its spelling. */
 export type TermChange = 'added' | 'removed' | 'respelled'
 
-export function termKeyOf(term: string, match: TermMatch): string {
+function termKeyOf(term: string, match: TermMatch): string {
   return match === 'normalized' ? normalizeTerm(term) : term
 }
 
-// A list is a set (generation-pipeline.md → Reverse-replay): a duplicate is one term, spelled as
-// its first occurrence.
-function spellings(list: readonly string[], match: TermMatch): Map<string, string> {
+/**
+ * Each term's spelling by match key. A list is a set (generation-pipeline.md → Reverse-replay): a
+ * duplicate is one term, spelled as its first occurrence.
+ */
+export function termSpellings(list: readonly string[], match: TermMatch): Map<string, string> {
   const byKey = new Map<string, string>()
   for (const term of list) {
     const key = termKeyOf(term, match)
@@ -27,8 +29,8 @@ export function termChanges(
   result: readonly string[],
   match: TermMatch,
 ): Map<string, TermChange> {
-  const before = spellings(prior, match)
-  const after = spellings(result, match)
+  const before = termSpellings(prior, match)
+  const after = termSpellings(result, match)
   const changes = new Map<string, TermChange>()
   for (const [key, spelling] of before) {
     const now = after.get(key)

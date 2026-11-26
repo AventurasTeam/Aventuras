@@ -78,7 +78,7 @@ export {
   reverseReplayDeltas,
 } from './delta/reverse-replay'
 export { readRowGuard } from './delta/row-guard'
-export { termChanges, termKeyOf, type TermChange, type TermMatch } from './delta/term-list'
+export { termChanges, termSpellings, type TermChange, type TermMatch } from './delta/term-list'
 export { readUnfinishedRuns, type UnfinishedRun } from './delta/unfinished-runs'
 export { userDeletedHappeningLink } from './delta/user-precedence'
 export { PLOT_REJECTION, type PlotSaveResult } from './plot/commit-plot-save'

@@ -1,4 +1,4 @@
-import { termChanges, termKeyOf, termMatchOf, type TermMatch } from '@/lib/actions'
+import { termChanges, termMatchOf, termSpellings, type TermMatch } from '@/lib/actions'
 import { INJECTION_MODES, THREAD_STATUSES } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { isJsonObject } from '@/lib/json-object'
@@ -222,16 +222,6 @@ function cutTerm(term: string): string {
   return `${wordEnd > 0 ? head.slice(0, wordEnd) : head}${ellipsis()}`
 }
 
-// A list is a set: a duplicate is one term, spelled as its first occurrence.
-function firstSpellings(list: readonly string[], match: TermMatch): Map<string, string> {
-  const byKey = new Map<string, string>()
-  for (const term of list) {
-    const key = termKeyOf(term, match)
-    if (!byKey.has(key)) byKey.set(key, term)
-  }
-  return byKey
-}
-
 // Added and respelled follow the new list's order, removed the old list's; a reorder is no change.
 function listParts(
   before: readonly string[],
@@ -241,8 +231,8 @@ function listParts(
 ): Change {
   const changes = termChanges(before, after, match)
   if (changes.size === 0) return SAME
-  const was = firstSpellings(before, match)
-  const now = firstSpellings(after, match)
+  const was = termSpellings(before, match)
+  const now = termSpellings(after, match)
   const added: string[] = []
   const respelled: string[] = []
   for (const [key, term] of now) {
