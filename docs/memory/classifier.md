@@ -137,11 +137,11 @@ alias list (the keywords bullet below).
   awareness records, and a plan, which a thread records. Its description
   tells the notable moments in order, who did what, what was said,
   given or lost and how it ended, so that a character recalling it
-  has the scene to recall. It is told in the third person, the lead
-  included, never "I" or "you" outside quoted speech, whatever person
-  the story is narrated in: it is recalled under whatever lead the
-  story has then. Another event is another happening: one at
-  another time or place, or one the turns only recount. Each
+  has the scene to recall. Another event is another happening: one at
+  another time or place, or one the turns only recount. It is told in
+  the third person, the lead included, never "I" or "you" outside
+  quoted speech, whatever person the story is narrated in: it is
+  recalled under whatever lead the story has then. Each
   happening sits in story time at its source turn
   (`occurred_at_entry_id`), where the turns show it happen, or, for an
   event from before the story or offstage that the turns only recount,

@@ -105,7 +105,7 @@ const CASES: Case[] = [
     TEMPLATE_IDS.periodicClassifier,
     PERIODIC,
     'system',
-    `so that a character recalling it later has the scene to recall. ${CLASSIFIER_RULE} Another event is another happening: one at another time or place, or one the turns only recount.\n`,
+    `Another event is another happening: one at another time or place, or one the turns only recount. ${CLASSIFIER_RULE}\n`,
     CLASSIFIER_RULE,
   ],
   [
