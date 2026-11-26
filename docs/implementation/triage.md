@@ -266,13 +266,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the shape as the seed's contract. Found by Slice 6.3's slice review
   (2026-11-24).
 
-- **A successful story load's open-failure clear is untested.**
-  `loadAndPublish` in `lib/actions/stories/operational.ts` calls
-  `storiesStore.clearOpenFailure(storyId)` before it publishes;
-  deleting the line leaves the three load suites green (28 tests). The
-  line predates Slice 6.4, which only moved it. Found in Slice 6.4's
-  reviews (2026-11-24).
-
 - **Diagnostics settings show capture off in a dev build that forces it
   on.** The debug switch in
   `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
