@@ -1559,8 +1559,9 @@ of past turns mark where the lead changes
 null with none or two. `resolveLead` (`lib/world/lead.ts`) reads the
 entity map the caller holds and logs nothing; the render paths use it.
 `resolveLeadLogged`, beside it, logs a double as `pipeline.lead_double`;
-the generation, classifier and chapter contexts read through it and
-hand the lead to templates as `lead`, absent when the branch has none
+the generation and classifier contexts and the chapter metadata and
+part calls read through it and hand the lead to templates as `lead`,
+null when the branch has none
 ([`architecture.md → System and user halves`](./architecture.md#system-and-user-halves)).
 `readBranchLead` (`lib/db`) reads the table for a caller with no
 store, the turn actions and the chapter close (its tasks' lead reads

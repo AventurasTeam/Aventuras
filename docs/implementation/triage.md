@@ -739,12 +739,3 @@ slice-planning gate forces its resolution before that slice is planned.
   happening can name one.", which is about `placeRow` below it. It
   predates Slice 6.9 (`a6d81c572`). Found by Slice 6.9's Task 9 review
   (2026-11-25).
-
-- **`data-model.md` says a context's `lead` is absent with no lead.**
-  [`data-model.md → The lead`](../data-model.md#the-lead)'s Readers
-  paragraph says the generation, classifier and chapter contexts hand
-  the lead to templates "as `lead`, absent when the branch has none".
-  The builders pass `lead: null` (`generation-context.ts`,
-  `classifier-context.ts`, and `chapter-context.ts` since Slice 6.9),
-  and the registry describes it as null. The wording predates Slice 6.9
-  (Slice 6.8). Found by Slice 6.9's Task 11 review (2026-11-25).
