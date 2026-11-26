@@ -656,10 +656,10 @@ code before it moved; resolve with the slice it names.
 - **M7.2 — A context group promises variables some of its templates
   never get.** `lib/prompts/templateContextMap.ts` describes one variable
   list per group and marks `chapter`'s `entries`, `previousChapterSummary`,
-  `threads` and `mode` `required` for all ten of the group's templates,
-  but the close tasks' renders set only `mode`, `lead`, `narration` and
-  their own variables, and the metadata merge sets no `entries`, `mode`,
-  `lead` or `narration`. Nothing reads
+  `threads`, `mode`, `lead` and `narration` `required` for all ten of
+  the group's templates, but the close tasks' renders set only `mode`,
+  `lead` and their own variables, and the metadata merge sets no
+  `entries`, `mode`, `lead` or `narration`. Nothing reads
   `required` outside tests today, so it misleads only the template
   editor: an override that reads `entries` in a close task renders it
   empty. The editor is the first reader of `required`, so it picks the
