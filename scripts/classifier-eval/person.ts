@@ -2,9 +2,9 @@
 const PERSON_WORD =
   /\b(?:i|me|my|mine|myself|we|us|our|ours|ourselves|you|your|yours|yourself|yourselves)\b/gi
 
-// A straight pair, or a curly pair opening on “ and closing on ”; one left open runs to the end.
+// Opens on " or “ and closes on the next " or ”, so a mixed pair closes; one left open runs to the end.
 // Single quotes are apostrophes as often as quotes (Hask’s), so they never open one.
-const QUOTED_SPEECH = /"[^"]*(?:"|$)|“[^”]*(?:”|$)/g
+const QUOTED_SPEECH = /["“][^"”]*(?:["”]|$)/g
 
 /** First- and second-person words in `text` outside quoted speech, in order of appearance. */
 export function personWords(text: string): string[] {

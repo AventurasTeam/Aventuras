@@ -230,6 +230,11 @@ describe('personWords', () => {
     expect(personWords('Hask said, “I will find you,” and rode off.')).toEqual([])
   })
 
+  it('closes a quote on either closing mark, whichever mark opened it', () => {
+    expect(personWords('Hask said, "I will find you,” and I rode off.')).toEqual(['I'])
+    expect(personWords('Hask said, “I will find you," and I rode off.')).toEqual(['I'])
+  })
+
   it('counts the words between two quotes', () => {
     expect(personWords('"Go," Sefa said, and I went. "Now," she said.')).toEqual(['I'])
   })
@@ -244,6 +249,10 @@ describe('personWords', () => {
   it('counts the rest of the text as quoted after a quote left open', () => {
     expect(personWords('We heard him say "you will pay, and I ran.')).toEqual(['We'])
     expect(personWords('We heard him say “you will pay, and I ran.')).toEqual(['We'])
+  })
+
+  it('runs a quote left open past an opening curly mark inside it', () => {
+    expect(personWords('We heard him say "you will pay, and “I ran.')).toEqual(['We'])
   })
 
   it('finds a whole word only, never one inside a longer word', () => {
