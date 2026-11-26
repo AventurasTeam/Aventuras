@@ -61,18 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **An unguarded `json_extract` on entry metadata.**
-  `lib/db/story-entries/chapter-time-ranges.ts:10` runs `json_extract`
-  over `story_entries.metadata` with no `json_valid` guard. A branch
-  holding malformed metadata, which the M6 lead backfill leaves as it
-  was, makes that read throw `malformed JSON`. Slice 6.8 guarded its
-  own stamp read (`lib/db/story-entries/lead-stamps.ts`); this one is
-  older. Found in Slice 6.8's reviews (2026-11-24). A second site,
-  `lib/entry-refs/read.ts:140`, reads `metadata.worldTime` through the
-  same unguarded `json_extract` for `readOpenRegionTimes`, which the
-  close modal runs each time it opens. Found by Slice 6.8's slice review
-  (2026-11-25).
-
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
   `action_layer.branch_switch_*` (`_navigation_blocked`,
