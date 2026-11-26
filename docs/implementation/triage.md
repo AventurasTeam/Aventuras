@@ -61,23 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **A second `beforeRemove` preventer replays its action and the arm
-  registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
-  keeps `data.action` and replays it on "Cancel & leave", and
-  `isUnsavedPopArmed` doesn't cover it. A switch's stack reset could be
-  swallowed by it only if a run started on the story between the
-  switch's gate check and its reset: unreachable today, since every
-  pipeline is `hard-gate` and `switchBranch` also refuses on
-  `isStoryBusy`. `switchBranch` checks `isStoryBusy` again right before
-  its reset, with nothing awaited between. A switch could still meet
-  the guard only while its arming render lags a run that just ended,
-  which needs the run's end and the switch's last step in one
-  microtask checkpoint; none was found (each desktop IPC reply is its
-  own task, and a zustand write renders before the next task; read
-  from the code, not run on a device). The tail (`showBranch`) takes
-  no such check, so it is the path left to meet it. Pre-existing.
-  Found by Slice 6.4's reviews (2026-11-24).
-
 - **A late `onDismissed` from an earlier close can release a row held
   by a reopened presentation.** After a reopen during a dismiss, the
   earlier close's `onDismissed` runs the held row (e.g. the phone
