@@ -514,7 +514,11 @@ test.describe.serial('Plot panel', () => {
       })
     // Link rows ride in the happening's own undo payload, so the whole delete is this one delta.
     expect(
-      await queryApp(page, `SELECT target_table, op, source FROM deltas WHERE target_id = ?`, [id]),
+      await queryApp(
+        page,
+        `SELECT target_table, op, source FROM deltas WHERE branch_id = ? AND target_id = ?`,
+        [branchId, id],
+      ),
     ).toEqual([['happenings', 'delete', 'user_edit']])
     await expect(plot.row(page, title)).toHaveCount(0)
 

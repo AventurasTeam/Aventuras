@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { currentBranchId, queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { chrome } from '../locators/chrome'
@@ -68,8 +68,9 @@ test.describe('reader — edit an entry world time', () => {
   async function editDeltaCount(entryId: string): Promise<number> {
     const rows = await queryApp(
       app.window,
-      `SELECT count(*) FROM deltas WHERE entry_id = ? AND op = 'update' AND source = 'user_edit'`,
-      [entryId],
+      `SELECT count(*) FROM deltas
+        WHERE branch_id = ? AND entry_id = ? AND op = 'update' AND source = 'user_edit'`,
+      [await currentBranchId(app.window, 'story_hero'), entryId],
     )
     return rows[0][0] as number
   }

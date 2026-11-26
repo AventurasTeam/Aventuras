@@ -159,7 +159,12 @@ test.describe.serial('History diff prose — edits, undo and redo', () => {
       [branchId, THREAD],
     )
     const description = async () =>
-      (await queryApp(page, `SELECT description FROM threads WHERE id = ?`, [threadId]))[0][0]
+      (
+        await queryApp(page, `SELECT description FROM threads WHERE branch_id = ? AND id = ?`, [
+          branchId,
+          threadId,
+        ])
+      )[0][0]
 
     await goToPlot(page)
     await plot.segmentCell(page, 'thread').click()

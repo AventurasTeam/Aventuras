@@ -160,13 +160,6 @@ slice-planning gate forces its resolution before that slice is planned.
   narrative, so the fix is a reword there. Found by Slice 6.3's final
   review (2026-11-24).
 
-- **Unscoped delta reads in E2E can't catch a delta on the wrong
-  branch.** `e2e/tests/plot.spec.ts:517` reads
-  `deltas WHERE target_id = ?` with no branch scope, so a delete delta
-  written to the wrong branch would still pass the exact-equality
-  check. The shape predates Slice 6.3, and every unscoped delta read in
-  the specs shares it. Found by Slice 6.3's final review (2026-11-24).
-
 - **The seed's fork carries world rows tied to entries it lacks.**
   `br_hero_fork` is `br_hero_main` rolled back to `entry_hero_0040`,
   but the hero seed logs no delta for most world rows, so the rollback
