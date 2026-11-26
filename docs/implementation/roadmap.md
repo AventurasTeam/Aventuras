@@ -1850,6 +1850,14 @@ own.
   phone today (World and Plot category selects, the composer's mode
   select, the detail tabs, the rail category select, the toolbar sort at
   36 px).
+- **M9.5 — `FormRow`'s error line is announced to no one.**
+  `components/compounds/form-row.tsx` renders a validation error as
+  plain `text-xs text-danger` text below the control: no live region, and
+  no `aria-describedby` or `aria-invalid` tying it to the control, so a
+  screen reader meets it only by reading on. Canon's forms pattern says
+  nothing either way. Whether each error is announced, tied to its
+  control, or both, is the audit's call. Read from the code; raised by
+  the 2026-11-26 triage pass.
 - **M9.5 — A phone Sheet opened over the reader's inline editor lands
   under its keyboard.** Canon says a sheet opened over an open keyboard
   dismisses it first
@@ -1885,7 +1893,10 @@ own.
   back at the next viewport-height change, a keyboard show / hide or a
   resize. A close-then-reopen inside gorhom's dismiss animation carries
   the old anchor over only when the value was cleared or moved to an
-  unlisted id in that window; otherwise the next open overwrites it. On
+  unlisted id in that window; otherwise the next open overwrites it.
+  (That window may be gone: since 2026-11-22 the Sheet holds a reopen
+  until the earlier dismiss has ended. Unchecked; noted by the
+  2026-11-26 triage pass.) On
   a phone sheet with sticky section headers (`ProviderModelPicker`
   only), the target lands one header height, about 24 px, below centre:
   `VirtualizedSectionList` adds the header's height to `viewOffset`.
