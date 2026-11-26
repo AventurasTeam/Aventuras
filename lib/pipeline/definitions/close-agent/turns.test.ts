@@ -1,16 +1,17 @@
 import { and, eq } from 'drizzle-orm'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { PromptHalves, ResolveModelConfig } from '@/lib/ai'
 import { __clearPromptCountCache, countPromptTokens } from '@/lib/ai/context-window'
 import { entities, storyEntries, threads } from '@/lib/db'
-import { makeLogger } from '@/lib/diagnostics'
+import { logger, makeLogger } from '@/lib/diagnostics'
 import { TEMPLATE_IDS } from '@/lib/prompts'
 import { resetAllStores } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
 import {
   ARIA as AWARENESS_ARIA,
+  JORIN as AWARENESS_JORIN,
   promptContextFor as awarenessContextFor,
   seedAwarenessWorld,
 } from './__tests__/close-awareness-fixture'
@@ -532,5 +533,84 @@ describe("the close tasks' starts and renders", () => {
     expect(awarenessTask.render(start!, { ...ctx, writesSoFar: '' }).user).not.toContain(
       "The story's lead",
     )
+  })
+})
+
+// observability.md → Subsystem emission inventory: a close read finding two flags logs the double
+// and reads the branch as having no lead, so the task names none and its marks count from none.
+describe("the close's lead reads on a branch with two flagged characters", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('reads no lead for the turns, walks their marks from none and logs the double', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await flagLead(fx, WREN)
+    await flagLead(fx, ARIA)
+    await stampLead(fx, idsOf(fx, 0, 4), WREN)
+    const ctx = taskContextFor(fx, idsOf(fx, 0, 4))
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+    const { closeTurns, lead } = await readTaskTurns(ctx)
+
+    expect(lead).toBeNull()
+    expect(closeTurns.map((turn) => turn.leadMark)).toEqual([
+      { id: 'c1', name: 'Wren' },
+      undefined,
+      undefined,
+      undefined,
+    ])
+    expect(ctx.ids.idOf('c1')).toBe(WREN)
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: fx.branchId,
+      ids: [WREN, ARIA],
+    })
+  })
+
+  it('starts Happenings naming no lead, and logs the double', async () => {
+    const fx = await openCloseFixture()
+    const ctx = await happeningsContextFor(fx)
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, MARA)
+    await flagLead(fx, WREN)
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+    const start = await happeningsTask.start(ctx)
+
+    expect(start).not.toBeNull()
+    expect(start!.show.lead).toBeNull()
+    expect(happeningsTask.render(start!, { ...ctx, writesSoFar: '' }).user).not.toContain(
+      "The story's lead",
+    )
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: fx.branchId,
+      ids: [WREN, MARA],
+    })
+  })
+
+  it('starts Awareness naming no lead, and logs the double', async () => {
+    const fx = await openCloseFixture()
+    await seedAwarenessWorld(fx)
+    await flagLead(fx, AWARENESS_ARIA)
+    await flagLead(fx, AWARENESS_JORIN)
+    const ctx = awarenessContextFor(fx)
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+    const start = await awarenessTask.start(ctx)
+
+    expect(start).not.toBeNull()
+    expect(start!.show.lead).toBeNull()
+    expect(awarenessTask.render(start!, { ...ctx, writesSoFar: '' }).user).not.toContain(
+      "The story's lead",
+    )
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: fx.branchId,
+      ids: [AWARENESS_ARIA, AWARENESS_JORIN],
+    })
   })
 })

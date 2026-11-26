@@ -1,7 +1,8 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, deltas, storyEntries } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { entriesStore, resetAllStores } from '@/lib/stores'
 
@@ -43,6 +44,7 @@ type TurnsAnswer = {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   resetAllStores()
 })
 
@@ -414,6 +416,30 @@ describe('read_turns → lead marks', () => {
       { id: 'c1', name: 'Aria of the Ford' },
       undefined,
     ])
+  })
+
+  it('walks from no lead when two characters carry the flag, and logs the double', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await flagLead(fx, WREN)
+    await flagLead(fx, ARIA)
+    await stampLead(fx, idsOf(fx, 0, 7), WREN)
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t1', 't2'])
+
+    expect(Object.keys(answer)).toEqual(['note', 'turns'])
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([
+      { id: 'c1', name: 'Wren' },
+      undefined,
+    ])
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: fx.branchId,
+      ids: [WREN, ARIA],
+    })
   })
 
   it('walks only the answered turns: a mark on an unread turn adds no note and no handle', async () => {
