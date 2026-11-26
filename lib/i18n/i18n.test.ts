@@ -28,6 +28,14 @@ describe('lib/i18n', () => {
     expect(t('storySettings:tabs.memory')).toBe('Memory')
   })
 
+  // Before 26.5.4 i18next wrote a value at the first copy of its placeholder's text, which could
+  // sit inside a value it had already written.
+  it('writes each value at its own placeholder when an earlier value holds that text', () => {
+    expect(
+      t('history:rowLabelWithEntry', { op: 'update', name: 'Rope {{entry}} x', entry: 'entry_7' }),
+    ).toBe('update Rope {{entry}} x, entry_7')
+  })
+
   it('resolves the shared chrome keys from the common namespace', () => {
     expect(t('chrome.appSettings')).toBe('App Settings')
     expect(t('chrome.back')).toBe('Back')

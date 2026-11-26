@@ -66,17 +66,10 @@ type FilledKey =
   | 'history:prose.lastSeenNoPlace'
   | 'history:prose.deletedName'
 
-const SLOT = /\uE000(\d+)\uE001/g
-
-// i18next fills a placeholder at the first match of its text, even inside a value it inserted, so
-// t() sees private-use slot marks and each value replaces its mark in one pass, never re-read.
 function fill(key: FilledKey, values: Readonly<Record<string, string>>, count?: number): string {
-  const names = Object.keys(values)
-  const options: Record<string, string | number> = Object.fromEntries(
-    names.map((name, i) => [name, `\uE000${i}\uE001`]),
-  )
+  const options: Record<string, string | number> = { ...values }
   if (count !== undefined) options.count = count
-  return t(key, options).replace(SLOT, (_, i: string) => values[names[Number(i)]])
+  return t(key, options)
 }
 
 const none = () => t('history:prose.none')

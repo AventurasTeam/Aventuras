@@ -316,22 +316,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ruled to ship canon-literal and route here. Case (3) found in
   Slice 6.7's slice review (2026-11-23).
 
-- **A row label scrambles a name holding `{{entry}}`.**
-  `history:rowLabelWithEntry` (`{{op}} {{name}}, {{entry}}`) is the
-  label `DeltaLogRow` gives a pressable row with an entry
-  (`components/compounds/delta-log-row.tsx:95-102`); History's rows take
-  the name from `lib/history/humanize.ts`. i18next fills a placeholder
-  at the first match of its text, including inside a value it already
-  inserted, so a target named `Rope {{entry}} x` reads
-  `update Rope entry_7 x, {{entry}}` (i18next 26.3.0, checked on
-  2026-11-23). `history:rowLabel` (`{{op}} {{name}}`) and
-  `history:link.target` (`{{label}} · {{name}}`, `humanize.ts:90-93`)
-  put the user's text last, so they hold in English and would break
-  only under a locale that reorders their placeholders. The change
-  prose's `fill` helper (`lib/history/diff-prose.ts:54-65`) is the
-  pattern that fixes it. Pre-existing. Found in Slice 6.7's slice review
-  (2026-11-23).
-
 - **The diff cache repeats rules the action layer owns.** Two copies
   sit across the `lib/actions` → `lib/history` boundary, which only
   `lib/history` may cross:
