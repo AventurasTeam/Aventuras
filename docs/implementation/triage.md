@@ -60,15 +60,3 @@ slice-planning gate forces its resolution before that slice is planned.
   to get. Held rather than routed in the 2026-09-09 triage pass, which
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
-
-- **The observability inventory lacks the branch switch's kinds.**
-  `docs/observability.md → Subsystem emission inventory` names no
-  `action_layer.branch_switch_*` (`_navigation_blocked`,
-  `_restore_retried`, `_restore_failed`, `_restore_reread_failed`,
-  `_failed`) or `action_layer.branch_show_*` kind
-  (`lib/actions/stories/switch-branch.ts`), nor
-  `app.branches_refresh_failed` (`lib/stores/branches/branches.ts`).
-  Slice 6.5's blocked-navigation restore now emits the restore kinds
-  from the fork paths too. The inventory calls itself illustrative, so
-  this is drift, not a contract break. Found by Slice 6.5's final
-  review (2026-11-25).
