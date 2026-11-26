@@ -451,15 +451,6 @@ slice-planning gate forces its resolution before that slice is planned.
   simplifier left them, since each move edits a file outside the
   slice. Found by Slice 6.5's slice review (2026-11-25).
 
-- **The evaluation set's appended checks are unpinned.**
-  `EVAL_WINDOWS` (`scripts/classifier-eval/index.ts`) appends
-  `refsResolve(w)` to every window, and no test asserts it: removing it
-  leaves `scripts/classifier-eval` green, and the probe silently stops
-  checking that a reply's refs resolve. A `windows.test.ts` case that
-  every window's check names include the appended checks would pin it.
-  Found by Slice 6.9's Task 3 review (2026-11-25), which adds a second
-  appended check, `toldInThirdPerson()`, with the same gap.
-
 - **The dataset build leaves the story in the third person.** The
   wizard drive in `e2e/tests/dataset-chapter.build.spec.ts`
   (`createAdventureStory`) keeps the wizard's default narration,
