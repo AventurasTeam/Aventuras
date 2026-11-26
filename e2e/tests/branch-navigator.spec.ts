@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { currentBranchId, queryApp } from '../harness/db'
+import { branchName, currentBranchId, entryContent, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { escapeRegExp, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -60,20 +60,6 @@ async function readHero(page: Page): Promise<Hero> {
   const fork = branches.find((b) => b.id !== currentId)
   if (main === undefined || fork === undefined) throw new Error(`no fork beside ${currentId}`)
   return { title: title as string, main, fork }
-}
-
-async function branchName(page: Page, branchId: string): Promise<string> {
-  const [[name]] = await queryApp(page, `SELECT name FROM branches WHERE id = ?`, [branchId])
-  return name as string
-}
-
-async function entryContent(page: Page, branchId: string, entryId: string): Promise<string> {
-  const [[content]] = await queryApp(
-    page,
-    `SELECT content FROM story_entries WHERE branch_id = ? AND id = ?`,
-    [branchId, entryId],
-  )
-  return content as string
 }
 
 async function openStoryNamed(page: Page, title: string): Promise<void> {

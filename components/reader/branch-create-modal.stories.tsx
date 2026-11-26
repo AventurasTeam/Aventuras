@@ -257,6 +257,27 @@ export const EnterConfirms: Story = {
   },
 }
 
+/** An IME's confirming Enter can arrive with isComposing false and keyCode 229: it creates nothing. */
+export const ImeEnterCreatesNothing: Story = {
+  play: async ({ args }) => {
+    const dialog = await findModal()
+    const field = nameField(dialog)
+    await userEvent.type(field, 'Side quest')
+    await waitFor(() => expect(isDisabled(button(dialog, COPY.create))).toBe(false), WAIT)
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        isComposing: false,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(args.onCreate).not.toHaveBeenCalled()
+  },
+}
+
 export const CancelEscAndClose: Story = {
   play: async (context) => {
     await waitForTier('desktop')

@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
-import { currentBranchId, queryApp, queryScalar } from '../harness/db'
+import { currentBranchId, entryContent, queryApp, queryScalar } from '../harness/db'
 import { escapeRegExp, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import {
@@ -55,15 +55,6 @@ async function entryIds(page: Page, branchId: string): Promise<string[]> {
     [branchId],
   )
   return rows.map(([id]) => id as string)
-}
-
-async function entryContent(page: Page, branchId: string, entryId: string): Promise<string> {
-  const [[content]] = await queryApp(
-    page,
-    `SELECT content FROM story_entries WHERE branch_id = ? AND id = ?`,
-    [branchId, entryId],
-  )
-  return content as string
 }
 
 async function newestDeltaSource(page: Page, branchId: string): Promise<string> {

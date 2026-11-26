@@ -11,7 +11,14 @@ import {
   UNASKED_LANES,
 } from '../flows/close-rerun'
 import { goToChapterTimeline, openStory } from '../flows/navigation'
-import { chapterByTitle, currentBranchId, queryApp, queryScalar } from '../harness/db'
+import {
+  branchName,
+  chapterByTitle,
+  currentBranchId,
+  entryContent,
+  queryApp,
+  queryScalar,
+} from '../harness/db'
 import { escapeRegExp, t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, toolLaneKey, type MockLlm } from '../harness/mock-llm'
@@ -51,11 +58,6 @@ async function heroTitle(page: Page): Promise<string> {
   return title as string
 }
 
-async function branchName(page: Page, branchId: string): Promise<string> {
-  const [[name]] = await queryApp(page, `SELECT name FROM branches WHERE id = ?`, [branchId])
-  return name as string
-}
-
 const branchCount = (page: Page): Promise<number> =>
   queryScalar(page, `SELECT COUNT(*) FROM branches WHERE story_id = ?`, [HERO_STORY])
 
@@ -74,15 +76,6 @@ const chaptersOf = (page: Page, branchId: string): Promise<unknown[][]> =>
       WHERE branch_id = ? ORDER BY sequence_number`,
     [branchId],
   )
-
-async function entryContent(page: Page, branchId: string, entryId: string): Promise<string> {
-  const [[content]] = await queryApp(
-    page,
-    `SELECT content FROM story_entries WHERE branch_id = ? AND id = ?`,
-    [branchId, entryId],
-  )
-  return content as string
-}
 
 async function latestReply(page: Page, branchId: string): Promise<Entry & { content: string }> {
   const [[id, position, content]] = await queryApp(

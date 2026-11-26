@@ -329,17 +329,6 @@ slice-planning gate forces its resolution before that slice is planned.
   this is drift, not a contract break. Found by Slice 6.5's final
   review (2026-11-25).
 
-- **Helpers copied across the reader's inputs and the E2E specs.** The
-  IME guard (`isComposing`, `IME_KEY_CODE`) is now in both
-  `components/reader/branch-rename-input.tsx` and
-  `branch-create-modal.tsx`; one `components/reader/` module could
-  serve both. In the specs, `branchName` and `entryContent` in
-  `e2e/tests/branch-navigator.spec.ts` repeat `branch-fork.spec.ts`'s,
-  and `chapter-delete.spec.ts` keeps its own `expandCard` beside
-  `e2e/flows/close-rerun.ts`'s `expandChapterCard`. Slice 6.5's
-  simplifier left them, since each move edits a file outside the
-  slice. Found by Slice 6.5's slice review (2026-11-25).
-
 - **The unfinished-run reads scan `pipeline_runs` whole.** The table
   has no index on `branch_id` (`lib/db/system/system.table.ts`), and
   nothing prunes finished rows short of a story delete, so it grows with
