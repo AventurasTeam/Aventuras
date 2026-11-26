@@ -1654,6 +1654,23 @@ own.
   `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
   2026-10-15 by the retired and disabled places slice review's
   simplifier pass. Routed from triage 2026-10-25.
+- **M9.2 — Five dialogs write out the same inline status and alert lines.**
+  The blocked or refused line (`role="status"`) and the failed line
+  (`role="alert"`, `accessibilityLiveRegion="assertive"`, `text-danger`)
+  repeat in `branch-delete-confirm.tsx`, `duplicate-story-dialog.tsx`,
+  `branch-create-modal.tsx`, `scene-edit-form.tsx` and
+  `world-time-edit-form.tsx`. A shared compound in
+  `components/compounds/` would keep their roles and live regions in
+  step; it touches files outside any one slice. Found by Slice 6.6's
+  slice review (2026-11-26).
+  Narrower than filed, verified on routing: only `branch-delete-confirm`
+  and `duplicate-story-dialog` match. `branch-create-modal` puts its
+  blocked line and its failed line in one assertive `role="alert"`, the
+  blocked one muted, where the other two give a blocked reason
+  `role="status"`; that disagreement needs a call before a compound
+  can serve all three. `scene-edit-form` and `world-time-edit-form` are
+  inline forms with alert lines only, at `xs`. Routed from triage
+  2026-11-26.
 - **M9.2 — `PlacementPicker` copies `EntityPicker`'s row markup.**
   `PlacementPicker` (`components/world/detail/placement-field.tsx`)
   copies `EntityPicker`'s row markup; sharing it means exporting a row
