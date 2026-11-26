@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { waitForTier } from '@/hooks/tier-probe'
 import { useTier } from '@/hooks/use-tier'
 
 import { Button } from './button'
@@ -251,11 +252,8 @@ async function waitForStableHeight(el: HTMLElement) {
 }
 
 async function playInitialScroll({ phone }: { phone: boolean }) {
-  // A tier-specific render has to land before the trigger is pressed
-  // (lessons-learned/storybook-viewport-usetier-async.md).
-  await waitFor(() =>
-    expect(screen.getByTestId('tier')).toHaveTextContent(phone ? 'phone' : 'desktop'),
-  )
+  // A tier-specific render has to land before the trigger is pressed.
+  await waitForTier(phone ? 'phone' : 'desktop')
   const trigger = screen.getByRole('button', { name: 'Pick an item' })
   await userEvent.click(trigger)
   await expectRowCentered(SCROLL_TARGET_NAME)
@@ -310,7 +308,7 @@ export const InitialScrollRowPhone: Story = {
 export const InitialScrollRowAbsent: Story = {
   render: () => <InitialScrollDemo initialScrollRowId="item-999" />,
   play: async () => {
-    await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('desktop'))
+    await waitForTier('desktop')
     await userEvent.click(screen.getByRole('button', { name: 'Pick an item' }))
     await expect(await screen.findByRole('option', { name: 'Item 0' })).toBeVisible()
     await expect(screen.getByRole('listbox').scrollTop).toBe(0)
@@ -347,7 +345,7 @@ function AsTriggerInitialScrollDemo() {
 export const InitialScrollRowAsTriggerTypingDrops: Story = {
   render: () => <AsTriggerInitialScrollDemo />,
   play: async () => {
-    await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent('desktop'))
+    await waitForTier('desktop')
     const input = screen.getByRole('combobox')
     await userEvent.click(input)
     await expectRowCentered(SCROLL_TARGET_NAME)
