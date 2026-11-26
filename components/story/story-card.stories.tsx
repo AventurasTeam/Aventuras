@@ -209,6 +209,30 @@ export const OverflowOpensMenu: StoryT = {
   },
 }
 
+// story-list.md → Mobile expression: a short Sheet on phone. Duplicate opens a dialog, so it
+// runs once the menu's Sheet has gone, not under it.
+export const OverflowIsASheetOnPhone: StoryT = {
+  ...cardCentered,
+  globals: { viewport: { value: 'mobile1' } },
+  args: { story: baseStory, ...handlers },
+  play: async ({ args }) => {
+    const label = t('storyCard.actionsLabel')
+    // Only the Popover trigger carries a title-bearing tooltip: a real phone-tier signal.
+    await waitFor(() => expect(screen.queryByTitle(label)).toBeNull())
+    await userEvent.click(screen.getByRole('button', { name: label }))
+    const duplicate = await waitFor(() =>
+      screen.getByRole('menuitem', { name: t('storyCard.duplicate') }),
+    )
+    await waitFor(() => expect(duplicate).toBeVisible())
+    expect(duplicate.closest('[data-radix-popper-content-wrapper]')).toBeNull()
+
+    await userEvent.click(duplicate)
+    expect(args.onDuplicate).not.toHaveBeenCalled()
+    await waitFor(() => expect(args.onDuplicate).toHaveBeenCalledTimes(1), { timeout: 3000 })
+    expect(args.onOpen).not.toHaveBeenCalled()
+  },
+}
+
 export const DraftHidesArchive: StoryT = {
   ...cardCentered,
   args: { story: makeStoryRow({ id: 's1', status: 'draft', chapterLabel: null }), ...handlers },

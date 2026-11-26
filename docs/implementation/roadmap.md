@@ -1558,15 +1558,15 @@ own.
   in M9.5 above, so this lands after that fix. Decided 2026-10-09
   (developer): build the Sheet per canon, in the World / Plot shard,
   with the shared row below. Routed from triage 2026-10-09.
-- **M9.2 — Four hand-copied menu-item rows.** (2026-09-22)
+- **M9.2 — Three hand-copied menu-item rows.** (2026-09-22)
   `ImporterMenuItem` (`components/compounds/importer-menu.tsx`),
   `OverflowMenu`'s `MenuItem` (`components/compounds/overflow-menu.tsx`),
-  `StoryCard`'s `OverflowItem` (`components/story/story-card.tsx`), and
-  the cast-list inline row (`components/wizard/cast-list.tsx`) each
+  and the cast-list inline row (`components/wizard/cast-list.tsx`) each
   reimplement the same pressable-row shape. Their disabled naming was
   aligned to `label, reason` on 2026-09-23, but the shapes still
-  differ: only the first two have a disabled state, and `StoryCard`'s
-  row is `py-row-y-sm` with no phone `min-h`. Extracting one shared
+  differ: only the first two have a disabled state. `StoryCard`'s own
+  row, a fourth, went when its `⋯` moved onto `OverflowMenu`
+  (2026-11-26). Extracting one shared
   `MenuItem` belongs with the `ImporterMenu` Sheet above. The rows' role
   stays with
   [Nested dialog roles in Popover](../parked.md#nested-dialog-roles-in-popover).
