@@ -112,45 +112,6 @@ slice-planning gate forces its resolution before that slice is planned.
   meet the same refusal from the test-fixture side. Found in Slice 6.7's
   reviews (2026-11-23).
 
-- **Change prose can show two sides that read identically.** Three
-  cases.
-  (1) _Term-list display._ `termListChange` in
-  `lib/history/diff-prose.ts:273-281` shows each term through `cutTerm`
-  (`:218-224`), which collapses whitespace and keeps a head of 40
-  characters; free text gets a window cut around its first difference
-  ([Long text](../ui/screens/world/world.md#long-text--change-prose)).
-  A tail edit past the 40th character of a long agenda item renders as
-  `Agenda: added "Seize control of the harbor district…"` followed by
-  `removed "Seize control of the harbor district…"`, the same text
-  twice. A respelling between NFD and NFC forms in a normalized list
-  renders `Tags: respelled "Eldrá" as "Eldrá"`. Needs a design pass on
-  how a term list shows two forms that collide once cut or collapsed.
-  (2) _Exact-list write side._ The entity `state` term lists (`traits`,
-  `drives`, `agenda`) match exactly
-  (`lib/actions/entities/register.ts:401-407`, `termKeyOf` in
-  `lib/actions/delta/term-list.ts:9-11`) and store terms with no
-  whitespace or Unicode normalization, unlike `keywords` and `tags`,
-  which key by `normalizeTerm`. `'brave  heart'` and `'brave heart'`, or
-  NFD and NFC forms of one term, are distinct values, so a change
-  between them reads `Traits: added "brave heart", removed "brave heart"`
-  (the display collapses the spacing). Whether those lists should
-  normalize on write, and what that does to existing rows and the delta
-  history, is a write-side question, not only display.
-  (3) _Namesake refs._ A row ref and a ref list's items (and a place's
-  parent and a collision partner) compare by id but read by name
-  (`rowRefChange` and `refListChange`,
-  `lib/history/diff-prose.ts:332-343`), so two live rows sharing a name
-  read alike: `Faction: Iron Pact → Iron Pact`, or
-  `Carried: added Rope, removed Rope`. The World panel's keep-as-distinct
-  resolution keeps both rows of a name
-  ([Collision review](../ui/screens/world/world.md#collision-review-and-entity-merge)).
-  The code follows canon literally, a row ref reading the row's name; it
-  needs the same design pass as (1).
-  Slice 6.7 shipped the prose as `world.md → Change prose` reads. Cases
-  (1) and (2) found in Slice 6.7's final review (2026-11-23); developer
-  ruled to ship canon-literal and route here. Case (3) found in
-  Slice 6.7's slice review (2026-11-23).
-
 - **Diagnostics settings show capture off in a dev build that forces it
   on.** The debug switch in
   `components/compounds/diagnostics-settings-panel.tsx:32` is disabled

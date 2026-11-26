@@ -1058,6 +1058,50 @@ code before it moved; resolve with the slice it names.
   and Story Settings' "newest pointer (chapter + turn)" want a real
   chapter. Read the entry's current chapter instead. The null is read
   from the code, not run after a close. Moved here at M5's promotion (2026-11-01).
+- **M7.3 — Change prose can show two sides that read identically.** Three
+  cases.
+  (1) _Term-list display._ `termListChange` in
+  `lib/history/diff-prose.ts:273-281` shows each term through `cutTerm`
+  (`:218-224`), which collapses whitespace and keeps a head of 40
+  characters; free text gets a window cut around its first difference
+  ([Long text](../ui/screens/world/world.md#long-text--change-prose)).
+  A tail edit past the 40th character of a long agenda item renders as
+  `Agenda: added "Seize control of the harbor district…"` followed by
+  `removed "Seize control of the harbor district…"`, the same text
+  twice. A respelling between NFD and NFC forms in a normalized list
+  renders `Tags: respelled "Eldrá" as "Eldrá"`. Needs a design pass on
+  how a term list shows two forms that collide once cut or collapsed.
+  (2) _Exact-list write side._ The entity `state` term lists (`traits`,
+  `drives`, `agenda`) match exactly
+  (`lib/actions/entities/register.ts:401-407`, `termKeyOf` in
+  `lib/actions/delta/term-list.ts:9-11`) and store terms with no
+  whitespace or Unicode normalization, unlike `keywords` and `tags`,
+  which key by `normalizeTerm`. `'brave  heart'` and `'brave heart'`, or
+  NFD and NFC forms of one term, are distinct values, so a change
+  between them reads `Traits: added "brave heart", removed "brave heart"`
+  (the display collapses the spacing). Whether those lists should
+  normalize on write, and what that does to existing rows and the delta
+  history, is a write-side question, not only display.
+  (3) _Namesake refs._ A row ref and a ref list's items (and a place's
+  parent and a collision partner) compare by id but read by name
+  (`rowRefChange` and `refListChange`,
+  `lib/history/diff-prose.ts:332-343`), so two live rows sharing a name
+  read alike: `Faction: Iron Pact → Iron Pact`, or
+  `Carried: added Rope, removed Rope`. The World panel's keep-as-distinct
+  resolution keeps both rows of a name
+  ([Collision review](../ui/screens/world/world.md#collision-review-and-entity-merge)).
+  The code follows canon literally, a row ref reading the row's name; it
+  needs the same design pass as (1).
+  Slice 6.7 shipped the prose as `world.md → Change prose` reads. Cases
+  (1) and (2) found in Slice 6.7's final review (2026-11-23); developer
+  ruled to ship canon-literal and route here. Case (3) found in
+  Slice 6.7's slice review (2026-11-23).
+  Case (2) is the write-side half of
+  [Unicode case folding for names and terms](../parked.md#unicode-case-folding-for-names-and-terms)'s
+  family. Also verified: a normalized list respelled by whitespace alone
+  (`Tags: respelled "iron pact" as "iron pact"`) and free text changed
+  only in its NFC form collide the same way. Routed from triage
+  2026-11-26, the design pass going with the M7.3 change-prose work above.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
