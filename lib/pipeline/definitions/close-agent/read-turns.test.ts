@@ -1,7 +1,8 @@
 import { and, eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, deltas, storyEntries } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { entriesStore, resetAllStores } from '@/lib/stores'
 
@@ -9,7 +10,13 @@ import { CloseIds } from './ids'
 import { readTurnsTool } from './read-turns'
 import { assertReplaySafe, type ToolContext } from './tool'
 import { runDispatchCalls } from '../__tests__/close-dispatch'
-import { openCloseFixture, type CloseFixture } from '../__tests__/close-fixture'
+import {
+  flagLead,
+  openCloseFixture,
+  putEntityRow,
+  stampLead,
+  type CloseFixture,
+} from '../__tests__/close-fixture'
 
 const WREN = 'char_00000000-0000-4000-8000-000000000001'
 // The fixture's opening, first action, first reply and third reply (close-fixture.ts).
@@ -17,14 +24,27 @@ const OPENING = /^Rain had followed Wren from the coast for three days/
 const FIRST_ACTION = 'I tie the mare outside the inn and shake the rain from my hood.'
 const FIRST_REPLY = /^The inn is warm and loud with drovers\./
 const THIRD_REPLY = /^The landing is a black line of planks over black water\./
+const ARIA = 'char_00000000-0000-4000-8000-000000000002'
+// Stamped on entries, never written as a row: a character since deleted.
+const GONE = 'char_00000000-0000-4000-8000-0000000000ff'
+const SECOND_ACTION = 'I ask the innkeeper whether the ferry still runs at night.'
+const SECOND_REPLY = /^She shrugs\./
+// Written out, never imported: the note is the answer's contract with the model.
+const LEAD_MARK_NOTE =
+  'A turn with a leadMark was written under a different lead from the turn before it in this answer (the first one in the answer, from the lead your task names). From that turn until the next one with a leadMark, "I" and "you" outside quoted speech are who its leadMark names, not the lead your task names: a character, by id and name; gone, a character no longer in the story, so credit nothing to that "I"; or none, no one. Before the first leadMark, they are the lead your task names, if it names one.'
+
+const idsOf = (fx: CloseFixture, from: number, to?: number): string[] =>
+  fx.entries.slice(from, to).map(({ id }) => id)
 
 type TurnsAnswer = {
-  turns: { id: string; kind: string; prose: string }[]
+  note?: string
+  turns: { id: string; kind: string; prose: string; leadMark?: unknown }[]
   unread?: string[]
   notRead?: { id: string; reason: string }[]
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   resetAllStores()
 })
 
@@ -278,5 +298,202 @@ describe('read_turns', () => {
     expect(
       await fx.ctx.db.select().from(deltas).where(eq(deltas.actionId, result.actionId)),
     ).toEqual([])
+  })
+})
+
+// memory/chapter-close.md → Tools and writes: a turn "as the prompt shows it, lead marks included",
+// walked over the answered turns from the lead the task names.
+describe('read_turns → lead marks', () => {
+  it("marks no answered turn and adds no note when every stamp is the lead's", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 7), WREN)
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t2', 't1'])
+
+    expect(Object.keys(answer)).toEqual(['turns'])
+    expect(answer.turns.map((turn) => Object.keys(turn))).toEqual([
+      ['id', 'kind', 'prose'],
+      ['id', 'kind', 'prose'],
+    ])
+  })
+
+  it("marks the first answered turn of each lead's run with its handle and name, the note first", async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 3), ARIA)
+    await stampLead(fx, idsOf(fx, 3, 7), WREN)
+    const ctx = chapterContext(fx, 6)
+
+    const answer = await readTurns(ctx, ['t5', 't1', 't4', 't2'])
+
+    expect(Object.keys(answer)).toEqual(['note', 'turns'])
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    // t3 (Aria's) isn't answered: t4 is compared with t2, the answered turn before it.
+    expect(answer.turns).toEqual([
+      {
+        id: 't1',
+        kind: 'opening',
+        prose: expect.stringMatching(OPENING),
+        leadMark: { id: 'c1', name: 'Aria' },
+      },
+      { id: 't2', kind: 'user_action', prose: FIRST_ACTION },
+      {
+        id: 't4',
+        kind: 'user_action',
+        prose: SECOND_ACTION,
+        leadMark: { id: 'c2', name: 'Wren' },
+      },
+      { id: 't5', kind: 'ai_reply', prose: expect.stringMatching(SECOND_REPLY) },
+    ])
+    expect(answer.turns.map((turn) => 'leadMark' in turn)).toEqual([true, false, true, false])
+    // Shown with the name, so a handle copied into prose is stored as "Aria".
+    expect(ctx.ids.idOf('c1')).toBe(ARIA)
+    expect(ctx.ids.nameOf('c1')).toBe('Aria')
+  })
+
+  it('marks a run under a character the branch no longer holds as gone, and shows it no handle', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 3), GONE)
+    await stampLead(fx, idsOf(fx, 3, 7), WREN)
+    const ctx = chapterContext(fx, 6)
+
+    const answer = await readTurns(ctx, ['t1', 't4'])
+
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([
+      { gone: true },
+      { id: 'c1', name: 'Wren' },
+    ])
+    expect(ctx.ids.handleOf(GONE)).toBeUndefined()
+    expect(JSON.stringify(answer)).not.toContain(GONE)
+  })
+
+  it('adds the note when only a later answered turn is marked, gone', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 3), WREN)
+    await stampLead(fx, idsOf(fx, 3, 5), GONE)
+    await stampLead(fx, idsOf(fx, 5, 7), WREN)
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t2', 't4'])
+
+    expect(Object.keys(answer)).toEqual(['note', 'turns'])
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    expect(answer.turns.map((turn) => 'leadMark' in turn)).toEqual([false, true])
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([undefined, { gone: true }])
+  })
+
+  it('marks a run written with no lead as none', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 3, 7), WREN)
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t1', 't4'])
+
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([
+      { none: true },
+      { id: 'c1', name: 'Wren' },
+    ])
+  })
+
+  it('walks from no lead on a branch with none, marking its first stamped turn', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria\nof the Ford' })
+    await stampLead(fx, idsOf(fx, 0, 7), ARIA)
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t1', 't2'])
+
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([
+      { id: 'c1', name: 'Aria of the Ford' },
+      undefined,
+    ])
+  })
+
+  it('walks from no lead when two characters carry the flag, and logs the double', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await flagLead(fx, WREN)
+    await flagLead(fx, ARIA)
+    await stampLead(fx, idsOf(fx, 0, 7), WREN)
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
+
+    const answer = await readTurns(chapterContext(fx, 6), ['t1', 't2'])
+
+    expect(Object.keys(answer)).toEqual(['note', 'turns'])
+    expect(answer.note).toBe(LEAD_MARK_NOTE)
+    expect(answer.turns.map((turn) => turn.leadMark)).toEqual([
+      { id: 'c1', name: 'Wren' },
+      undefined,
+    ])
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledWith('action_layer.branch_lead_double', {
+      branchId: fx.branchId,
+      ids: [WREN, ARIA],
+    })
+  })
+
+  it('walks only the answered turns: a mark on an unread turn adds no note and no handle', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 10), WREN)
+    await stampLead(fx, idsOf(fx, 10, 11), ARIA)
+    const ctx = chapterContext(fx, 12)
+
+    const answer = await readTurns(ctx, [
+      't1',
+      't2',
+      't3',
+      't4',
+      't5',
+      't6',
+      't7',
+      't8',
+      't9',
+      't10',
+      't11',
+    ])
+
+    expect(Object.keys(answer)).toEqual(['turns', 'unread'])
+    expect(answer.unread).toEqual(['t11'])
+    expect(ctx.ids.handleOf(ARIA)).toBeUndefined()
+  })
+
+  it('answers the marks through dispatch with their handles, the note first', async () => {
+    const fx = await openCloseFixture()
+    await putEntityRow(fx, { id: ARIA, kind: 'character', name: 'Aria' })
+    await putEntityRow(fx, { id: WREN, kind: 'character', name: 'Wren' })
+    await flagLead(fx, WREN)
+    await stampLead(fx, idsOf(fx, 0, 3), ARIA)
+    await stampLead(fx, idsOf(fx, 3, 7), WREN)
+    const chapter = idsOf(fx, 0, 7)
+
+    const { answers, ids } = await runDispatchCalls(fx, {
+      task: 'awareness',
+      tools: { read_turns: readTurnsTool },
+      shown: [],
+      calls: [{ toolName: 'read_turns', input: { turns: ['t1', 't4'] } }],
+      turns: { endEntryId: chapter.at(-1)!, taskEntryIds: chapter, part: 0 },
+    })
+
+    const [answer] = answers as TurnsAnswer[]
+    expect(Object.keys(answer!)).toEqual(['note', 'turns'])
+    expect(answer!.turns.map((turn) => turn.leadMark)).toEqual([
+      { id: 'c1', name: 'Aria' },
+      { id: 'c2', name: 'Wren' },
+    ])
+    expect(ids.nameOf('c1')).toBe('Aria')
+    expect(JSON.stringify(answers)).not.toContain('char_')
   })
 })

@@ -1,8 +1,9 @@
 import type { TemplateSources } from '../types'
+import { THIRD_PERSON_RULE } from './third-person'
 
-// architecture.md → System and user halves: the mode sits in the system half; the chapter, prior
-// summary and threads are per call. Mode paragraph: classifier-mode-rule.ts's, worded for a summary.
-// The rules and sections below are shared with a part's template and the merge's.
+// architecture.md → System and user halves: mode in the system half; the lead and narration sit
+// with the per-call chapter, summary and threads in the user half. Rules and sections below are
+// shared with a part's template and the merge's.
 
 export const CHAPTER_TITLE_RULE = `- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.`
 
@@ -32,11 +33,19 @@ export const CHAPTER_CONTINUITY_SECTIONS = `{% if previousChapterSummary != blan
 
 {% endif -%}`
 
+/** The narration and the lead, before a chapter call's turns; reads narration, lead, entries. */
+export const CHAPTER_LEAD_SECTION = `# The narration
+The chapter is narrated in the {{ narration }} person.
+{%- if lead %}
+{%- assign leadMarked = entries | where: 'leadMark' %}
+The story's lead is {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead{% if leadMarked.size > 0 %}, except where a turn names another{% endif %}.
+{%- endif %}`
+
 export const CHAPTER_METADATA: TemplateSources = {
   system: `You are closing a chapter of an ongoing story. Read the whole chapter below and give it a title, a summary, a theme and keywords. Report only what the chapter's prose supports; never invent.
 
 ${CHAPTER_TITLE_RULE}
-- Summary. Two to four sentences telling what happened in this chapter, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them, and tell it in the narration's own person: if the prose says "you", so does the summary. Later chapters recall this one through its summary alone, so keep what the story will need.
+- Summary. Two to four sentences telling what happened in this chapter, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them. ${THIRD_PERSON_RULE} Later chapters recall this one through its summary alone, so keep what the story will need.
 ${CHAPTER_THEME_AND_KEYWORDS_RULES}
 
 ${CHAPTER_TURN_RULE}
@@ -45,9 +54,11 @@ ${chapterContinuityRule('this chapter')}`,
   user: `Give this chapter its title, summary, theme and keywords.
 
 ${CHAPTER_CONTINUITY_SECTIONS}
+${CHAPTER_LEAD_SECTION}
+
 # The chapter
 {%- for entry in entries %}
 
-{% include 'macro_story_entry', entry: entry %}
+{% include 'macro_story_entry', entry: entry, ids: false %}
 {%- endfor %}`,
 }

@@ -23,11 +23,10 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     expect(failing('avoid', w.bad, true)).toEqual([])
   })
 
-  it('flags its lead and stamps every turn with it, or flags and stamps nothing', () => {
+  it('flags its lead, or nothing', () => {
     expect(w.entities.filter((e) => e.isLead === 1).map((e) => e.id)).toEqual(
       w.lead == null ? [] : [w.lead],
     )
-    expect(w.entries.map((e) => e.metadata?.leadId)).toEqual(w.entries.map(() => w.lead))
   })
 
   it('fails no check on a blank-named new character, which the planner never creates', () => {
@@ -71,6 +70,28 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     const { reply: back } = read(schema.parse(bracketed))
     expect(back).toEqual(w.ideal)
   })
+})
+
+// Every window but the switch is written under one lead, or none.
+describe.each(EVAL_WINDOWS.filter((w) => w.name !== 'switch').map((w) => [w.name, w] as const))(
+  'eval window %s, written under one lead or none',
+  (_, w) => {
+    it('stamps every turn with its lead, or stamps nothing', () => {
+      expect(w.entries.map((e) => e.metadata?.leadId)).toEqual(w.entries.map(() => w.lead))
+    })
+  },
+)
+
+it('the switch window stamps its first two turns with Wenna, its last two with Dace, and flags Dace alone', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  expect(w.lead).toBe('char_dace')
+  expect(w.entities.filter((e) => e.isLead === 1).map((e) => e.id)).toEqual(['char_dace'])
+  expect(w.entries.map((e) => e.metadata?.leadId)).toEqual([
+    'char_wenna',
+    'char_wenna',
+    'char_dace',
+    'char_dace',
+  ])
 })
 
 it('the ambush window leads with Tobin on all four turns; the direction window has no lead', () => {
@@ -182,4 +203,141 @@ it('the namedrops window finds Jorun Vask by his name, not in any new character'
   const jorun = w.ideal.newCharacters[0]
   expect(holds(w.ideal)).toBe(true)
   expect(holds({ ...w.ideal, newCharacters: [{ ...jorun, name: 'Saint Aldric' }] })).toBe(false)
+})
+
+it('the switch window credits the break-in by awareness as by involvement', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const isWennas = w.checks.find((c) => c.name.startsWith('the archive break-in is Wenna’s'))!.holds
+  const notDaces = w.checks.find((c) => c.name.startsWith('the archive break-in is not'))!.holds
+  const breakInKnownTo = (ref: string) =>
+    reply({
+      happenings: [
+        {
+          title: 'The Calder Shoals chart is stolen from the archive',
+          involvements: [{ ref: 'loc_archive', role: 'site' }],
+          awareness: [{ ref, source: 'was told', severity: 0.5 }],
+          sourceTurn: 't2',
+        },
+      ],
+    })
+  expect(isWennas(breakInKnownTo('char_wenna'))).toBe(true)
+  expect(notDaces(breakInKnownTo('char_dace'))).toBe(false)
+})
+
+it('the switch window’s bad reply, the break-in Dace’s and the passage Wenna’s, fails both expect checks', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  expect(w.checks.filter((c) => c.kind === 'expect').map((c) => [c.name, c.holds(w.bad)])).toEqual([
+    [
+      'the archive break-in is Wenna’s: a happening telling it involves her or gives her awareness',
+      false,
+    ],
+    [
+      'the ring paid for passage is Dace’s: a happening telling it involves him or gives him awareness',
+      false,
+    ],
+  ])
+})
+
+it('the switch window takes a palm in the crossing and a passage in the break-in for neither fact', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const r = reply({
+    happenings: [
+      {
+        title: 'Wenna steals the Calder Shoals chart',
+        description:
+          'Wenna slips through the passage behind the counting floor and takes the chart.',
+        involvements: [{ ref: 'char_wenna', role: 'actor' }],
+        awareness: [],
+        sourceTurn: 't2',
+      },
+      {
+        title: 'Dace pays Ebbe Lunt for the crossing',
+        description: 'Dace presses his father’s silver ring into Lunt’s palm.',
+        involvements: [{ ref: 'char_dace', role: 'actor' }],
+        awareness: [],
+        sourceTurn: 't4',
+      },
+    ],
+  })
+  const attribution = [
+    'the archive break-in is Wenna’s: a happening telling it involves her or gives her awareness',
+    'the archive break-in is not credited to Dace, the lead after it',
+    'the ring paid for passage is Dace’s: a happening telling it involves him or gives him awareness',
+    'the ring paid for passage is not credited to Wenna',
+  ]
+  expect(
+    attribution.map((name) => [name, w.checks.find((c) => c.name === name)!.holds(r)]),
+  ).toEqual(attribution.map((name) => [name, true]))
+})
+
+it('the switch window takes a crossing that "locks in" passage for no break-in', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const r = reply({
+    happenings: [
+      {
+        title: 'Wenna steals the Calder Shoals chart',
+        description: 'Wenna picks the archive lock and takes the chart.',
+        involvements: [{ ref: 'char_wenna', role: 'actor' }],
+        awareness: [],
+        sourceTurn: 't2',
+      },
+      {
+        title: 'Dace locks in his crossing',
+        description: 'Dace locks in a place on the Skell ferry with his father’s silver ring.',
+        involvements: [{ ref: 'char_dace', role: 'actor' }],
+        awareness: [],
+        sourceTurn: 't4',
+      },
+    ],
+  })
+  const attribution = [
+    'the archive break-in is Wenna’s: a happening telling it involves her or gives her awareness',
+    'the archive break-in is not credited to Dace, the lead after it',
+    'the ring paid for passage is Dace’s: a happening telling it involves him or gives him awareness',
+    'the ring paid for passage is not credited to Wenna',
+  ]
+  expect(
+    attribution.map((name) => [name, w.checks.find((c) => c.name === name)!.holds(r)]),
+  ).toEqual(attribution.map((name) => [name, true]))
+})
+
+// architecture.md → System and user halves: a window whose lead never changed renders no mark.
+const LEAD_MARK = 'from this turn on, '
+const LEAD_CLAUSE = 'except where a turn names another'
+
+describe.each(EVAL_WINDOWS.filter((w) => w.name !== 'switch').map((w) => [w.name, w] as const))(
+  'eval window %s, never switched',
+  (_, w) => {
+    it('renders no lead mark, no explanation of marks and no clause', () => {
+      const { prompt } = renderWindow(w, MAX_ENTRIES)
+      expect(prompt.user).not.toContain(LEAD_MARK)
+      expect(prompt.user).not.toContain('a turn where the lead changes')
+      expect(prompt.user).not.toContain(LEAD_CLAUSE)
+    })
+  },
+)
+
+// Turns 1–2 under the former lead, 3–4 under the lead: t1 differs from the lead the prompt names.
+it('the switch window marks t1 with its former lead and t3 with its lead, and no other turn', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const lead = w.lead!
+  const former = w.entries[0]!.metadata!.leadId!
+  expect(former).not.toBe(lead)
+  expect(w.entries.map((e) => e.metadata?.leadId)).toEqual([former, former, lead, lead])
+
+  const { prompt, legend } = renderWindow(w, MAX_ENTRIES)
+  const nameOf = (id: string) => w.entities.find((e) => e.id === id)!.name
+  const header = (handle: string) =>
+    prompt.user.split('\n').find((line) => line.startsWith(`[${handle}]`))!
+  const marked = (handle: string, id: string) => {
+    expect(legend.get(id)).toMatch(/^c\d+$/)
+    const expected = `[${handle}] ${LEAD_MARK}"I" and "you" are [${legend.get(id)}] ${nameOf(id)}`
+    expect(header(handle).slice(0, expected.length)).toBe(expected)
+  }
+
+  marked('t1', former)
+  expect(header('t2')).not.toContain(LEAD_MARK)
+  marked('t3', lead)
+  expect(header('t4')).not.toContain(LEAD_MARK)
+  expect(prompt.user).toContain(LEAD_CLAUSE)
 })

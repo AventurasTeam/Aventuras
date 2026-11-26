@@ -57,6 +57,8 @@ describe('templateContextMap', () => {
       'previousChapterSummary',
       'threads',
       'mode',
+      'lead',
+      'narration',
       'partSummaries',
       'closeTurns',
       'closeCharacters',
@@ -78,6 +80,20 @@ describe('templateContextMap', () => {
       'boundaryLengthTo',
       'boundaryActiveThreads',
     ])
+  })
+
+  // memory/chapter-close.md → Phase 2: the metadata and part calls read both; a close task its lead.
+  it("files the chapter group's lead under Entities and its narration under Story Config, neither close-only", () => {
+    const closeOnly: readonly string[] = CLOSE_ONLY_CHAPTER_VARIABLES
+    expect(closeOnly).not.toContain('lead')
+    expect(closeOnly).not.toContain('narration')
+    const defs = VARIABLES.chapter.filter((v) => v.name === 'lead' || v.name === 'narration')
+    expect(defs.map((v) => [v.name, v.type, v.category])).toEqual([
+      ['lead', '{ id?, name } | null', 'Entities'],
+      ['narration', "'first' | 'second' | 'third'", 'Story Config'],
+    ])
+    expect(DISPLAY_GROUPS.Entities).toContain('lead')
+    expect(DISPLAY_GROUPS['Story Config']).toContain('narration')
   })
 
   // Only a close task's render sets them, so the metadata call may leave them unset.
@@ -230,6 +246,17 @@ describe('templateContextMap', () => {
         def.name,
       ).toContain('state.holdings')
     }
+  })
+
+  // The editor's autocomplete offers these after `entry.`: the whole turn, not its mark alone.
+  it('lists the fields of a turn on every variable that carries lead marks', () => {
+    const turn = ['position', 'kind', 'content', 'leadMark']
+    const names = (group: 'generationContext' | 'chapter', name: string) =>
+      VARIABLES[group].find((v) => v.name === name)?.infoFields?.map((f) => f.name)
+
+    expect(names('generationContext', 'entries')).toEqual(turn)
+    expect(names('generationContext', 'lastTurns')).toEqual(turn)
+    expect(names('chapter', 'entries')).toEqual(turn)
   })
 
   it('gives every infoFields entry a name, a type and a description', () => {

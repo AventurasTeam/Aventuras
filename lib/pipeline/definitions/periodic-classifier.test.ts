@@ -673,7 +673,20 @@ describe('periodicClassifierPhase', () => {
       keywords: [],
       isLead,
     } as unknown as Entity
-    const h = await ctxWith({ processedThrough: 0, headPosition: 1, entities: [kael] })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 1,
+      entities: [kael],
+      // Stamped as a turn is: with the lead it was written under, none without one.
+      entryMetadata: {
+        1: {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          ...(isLead === 1 ? { leadId: CHAR_KAEL } : {}),
+        },
+      },
+    })
     vi.mocked(generateStructured).mockResolvedValue({
       status: 'ok',
       recoverable: [],
@@ -684,7 +697,53 @@ describe('periodicClassifierPhase', () => {
 
     const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
     if (line == null) expect(prompt).not.toContain('lead')
-    else expect(prompt).toContain(`${line} Outside quoted speech`)
+    else
+      expect(prompt).toContain(
+        `${line} Outside quoted speech, "I" and "you" in the turns are the lead.\n`,
+      )
+    expect(prompt).not.toContain('from this turn on, "I" and "you" are')
+  })
+
+  // architecture.md → System and user halves: each row's stamp reaches its turn's header.
+  it("marks where the lead changed, from each turn's stamp in the database", async () => {
+    const character = (id: string, name: string, isLead: 0 | 1) =>
+      ({
+        id,
+        branchId: 'b1',
+        kind: 'character',
+        name,
+        status: 'active',
+        description: null,
+        keywords: [],
+        isLead,
+      }) as unknown as Entity
+    const stamp = (leadId: string) => ({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      leadId,
+    })
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 3,
+      entities: [character(CHAR_KAEL, 'Kael', 1), character(CHAR_ARIA, 'Aria', 0)],
+      entryMetadata: { 1: stamp(CHAR_ARIA), 2: stamp(CHAR_ARIA), 3: stamp(CHAR_KAEL) },
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      recoverable: [],
+      value: extraction(),
+    } as never)
+
+    await drain(h.ctx)
+
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1].user
+    expect(prompt).toContain('\n[t1] from this turn on, "I" and "you" are [c2] Aria\nturn 1\n')
+    expect(prompt).toContain('\n[t2]\nturn 2\n')
+    expect(prompt).toContain('\n[t3] from this turn on, "I" and "you" are [c1] Kael\nturn 3')
+    expect(prompt).toContain(
+      `The story's lead is [c1] Kael. Outside quoted speech, "I" and "you" in the turns are the lead, except where a turn names another.\n`,
+    )
   })
 
   // architecture.md → System and user halves; observability.md → actionId threading.

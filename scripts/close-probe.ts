@@ -99,6 +99,7 @@ import {
 } from './close-probe-bar'
 import { installProbeBridges, probeEmbedderBridge } from './close-probe-embedder'
 import { rejudgeSaved } from './close-probe-rejudge'
+import { summaryPersonLines, summaryPersonWords, type ChapterText } from './close-probe-summary'
 import {
   applyDatasetOverlay,
   DATASET_BRANCH_ID,
@@ -110,7 +111,8 @@ import { resolveDevSlot } from './dev-slot/resolve'
 //   SMOKE_LLM_URL=http://host:port/v1 SMOKE_LLM_MODEL=<id> pnpm probe:close
 // SMOKE_LLM_KEY (none), PROBE_RUNS (1), PROBE_BRANCH_ID (br_hero_main; the dataset branch under
 // PROBE_OVERLAY), PROBE_END_ENTRY (the open region's latest ai_reply), PROBE_OUT (a directory a
-// run: each tool step's request and response, and the report; bar.json beside the runs),
+// run: each tool step's request and response, the report, and the chapter's title and summary in
+// chapter.json; bar.json beside the runs),
 // PROBE_STAND_IN=1 (the stand-in task in place of the shipped slots), PROBE_OVERLAY=1 (the dataset
 // seed's test overlay on each run's copy, and the bar over the runs), PROBE_WINDOW (none; the
 // model's window in tokens, set on the probe's provider as App Settings' override is, so a close
@@ -479,6 +481,39 @@ async function readReport(ctx: DbCtx, endEntryId: string): Promise<CloseReport |
   return row?.report == null ? null : closeReportSchema.parse(row.report)
 }
 
+async function readChapterText(
+  ctx: DbCtx,
+  endEntryId: string,
+): Promise<{ title: string; summary: string } | undefined> {
+  const [row] = await ctx.db
+    .select({ title: chapters.title, summary: chapters.summary })
+    .from(chapters)
+    .where(and(eq(chapters.branchId, BRANCH_ID), eq(chapters.endEntryId, endEntryId)))
+  return row
+}
+
+// A completed close writes its chapter row at `end`; a run missing one read the wrong row.
+async function closedChapter(k: number, ctx: DbCtx, end: string): Promise<ChapterText | null> {
+  const row = await readChapterText(ctx, end)
+  if (row === undefined) {
+    console.log(`[probe:close]   run ${k}: no chapter row at ${end}, so no summary to read`)
+    return null
+  }
+  const chapter: ChapterText = { run: k, title: row.title, summary: row.summary }
+  const words = summaryPersonWords(chapter)
+  console.log(`[probe:close]   title: ${chapter.title}`)
+  console.log(`[probe:close]   summary: ${chapter.summary}`)
+  console.log(
+    `[probe:close]   run ${k} summary's first- and second-person words: ${words.length === 0 ? 'none' : words.join(', ')}`,
+  )
+  if (capture.dir !== null)
+    writeFileSync(
+      join(capture.dir, 'chapter.json'),
+      `${JSON.stringify({ title: chapter.title, summary: chapter.summary }, null, 2)}\n`,
+    )
+  return chapter
+}
+
 function errorLine(error: PipelineError): string {
   const reason = 'reason' in error ? ` (${String(error.reason)})` : ''
   return `${error.kind}${reason}: ${pipelineErrorDetail(error) ?? JSON.stringify(error)}`
@@ -662,6 +697,8 @@ type RunResult = {
   tally: RunTally
   largestValue: LargestValue | null
   reportBytes: number | null
+  /** The chapter a completed close wrote; null for a run that didn't complete. */
+  chapter: ChapterText | null
 }
 
 // Opens run k's scratch copy as the app's boot leaves it, the overlay applied where asked, and runs
@@ -758,6 +795,7 @@ async function closeRun(k: number, ctx: DbCtx): Promise<RunResult> {
   if (report !== null && capture.dir !== null)
     writeFileSync(join(capture.dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`)
   printRun(k, result, ms, report)
+  const chapter = completed ? await closedChapter(k, ctx, end) : null
   if (!STAND_IN) printRangeEmbed(k)
   const tally = tallyRun({
     report,
@@ -770,7 +808,7 @@ async function closeRun(k: number, ctx: DbCtx): Promise<RunResult> {
     printMeasures(k, tally, largestValue, reportBytes)
     printTokens(k)
   }
-  return { completed, tally, largestValue, reportBytes }
+  return { completed, tally, largestValue, reportBytes, chapter }
 }
 
 // The boundary call's own context: a fresh action id and a signal nothing aborts, on the copy.
@@ -960,6 +998,8 @@ async function main(): Promise<void> {
       )
     )
       process.exitCode = 1
+    const closed = results.flatMap(({ chapter }) => (chapter === null ? [] : [chapter]))
+    for (const line of summaryPersonLines(closed)) console.log(`[probe:close] ${line}`)
     if (!STAND_IN)
       printLargest(
         results.map(({ largestValue }, i) => ({ value: largestValue, run: i + 1 })),

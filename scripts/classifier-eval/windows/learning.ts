@@ -237,6 +237,7 @@ Oriel ducked his head, pleased and embarrassed at once, and was gone.`,
     happenings: [
       {
         title: 'Lady Senna’s death',
+        description: 'Oriel tells me Lady Senna died at the harvest feast.',
         involvements: [{ ref: 'char_senna', role: 'target' }],
         awareness: [],
         sourceTurn: 't2',

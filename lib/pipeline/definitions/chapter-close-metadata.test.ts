@@ -102,6 +102,9 @@ function inputsWith(config: Partial<ResolveModelConfig> = {}): MetadataCallInput
       assignments: { 'lore-mgmt': 'prof_lore', classifier: 'prof_classifier' },
       ...config,
     },
+    lead: null,
+    narration: 'third',
+    nameOf: () => undefined,
   }
 }
 

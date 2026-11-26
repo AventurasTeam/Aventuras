@@ -123,6 +123,15 @@ By the time the barrow had passed she was straight-backed again and twenty paces
   }),
   bad: reply({
     aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
+    happenings: [
+      {
+        title: 'Corwin corners the woman in grey',
+        description: 'You corner the woman in grey behind the awning, and she gives you a name.',
+        involvements: [],
+        awareness: [],
+        sourceTurn: 't2',
+      },
+    ],
     knownAwareness: [
       {
         happening: 'hap_unlisted',

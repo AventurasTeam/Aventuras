@@ -669,12 +669,26 @@ window carries checks of the facts its prose should and shouldn't
 yield, marked by whether a rule in the prompt asks for the fact or
 only the window's author judges it, and every window also checks
 that each ID a reply names is one the prompt listed or a handle the
-reply declares; the probe prints each run's misses, then how often
+reply declares, and that each happening description is told in the
+third person, as a rule in the prompt asks: no "I", "me", "we", "you"
+or their other forms outside double quotes, straight or curly, which
+mark quoted speech, while a single quote reads as an apostrophe; the
+probe prints each run's misses, then how often
 each check held, and `PROBE_OUT`, a directory of its own for each
 run, saves each window's prompt, its system and user halves apart,
 and each reply, as the server sent it, with any separate reasoning,
 and as the checks read it. A unit test proves
 each check can hold and can fail.
+
+A window's entries carry its lead's stamp, or none when it has no
+lead, so it renders no lead mark, except the `switch` window's: its
+lead changes partway, its first two turns stamped with the character
+who was the lead then and its last two with the window's lead, so the
+prompt marks both runs. Its checks ask that a fact from the earlier
+turns go to the earlier lead and not to the window's, and that a fact
+from the later turns go to the window's lead and not to the earlier
+one
+([`memory/classifier.md → What the classifier reads`](./memory/classifier.md#what-the-classifier-reads)).
 
 The checks look for the facts a reply must hold and can't see one the
 prose never had. `pnpm judge:classifier <out-dir> <run-dir>...`
@@ -734,11 +748,19 @@ empty or new for each invocation (the probe refuses one holding files),
 saves each run's tool steps, request and response, in a `run<k>/`
 inside it, named by task, part and step (`identity-p1-s2.json`), a
 retried attempt beside its step, a failed one with its request and its
-error, every cause and code included, and the report the close wrote.
+error, every cause and code included, the report the close wrote and,
+for a run that completed, the chapter's title and summary as
+`chapter.json`, which `PROBE_REJUDGE` doesn't read.
 The probe prints each task's steps, its calls with their results, and
 its stops, each retried attempt with its task and part (its phase
-outside a task) and the error's kind, and for a failed run the phase it
-failed in and the task it came after. Ctrl-C or SIGTERM removes the
+outside a task) and the error's kind, for a failed run the phase it
+failed in and the task it came after, and for a run that completed the
+chapter's title and summary. After the runs it counts the completed
+runs whose summary has a first- or second-person word outside quoted
+speech, by the evaluation set's third-person rule above, and names
+each one's words, since a summary is told in the third person
+([`memory/chapter-close.md → Phase 2`](./memory/chapter-close.md#phase-2--chapter-metadata));
+a failed run has no summary and isn't counted. Ctrl-C or SIGTERM removes the
 copy and exits non-zero. `PROBE_STAND_IN=1` runs a stand-in task in
 place of the close's shipped slots, a write landing a create and an
 update in one group, so the mock can drive the whole runner: script its

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { createdCharacters, factionAfter, refsResolve } from './checks'
+import { createdCharacters, factionAfter, refsResolve, toldInThirdPerson } from './checks'
 import { character, faction, happening, reply, thread } from './fixture'
+import { personWords } from './person'
 import { defection } from './windows/defection'
 
 const BRANN = 'char_brann'
@@ -184,5 +185,130 @@ describe('refsResolve', () => {
       threadStatuses: [{ thread: 'thr_d', status: 'resolved', sourceTurn: 't1' }],
     })
     expect(check.holds(r)).toBe(true)
+  })
+})
+
+describe('personWords', () => {
+  it.each(['I', 'me', 'my', 'mine', 'myself'])('finds the first person singular: %s', (word) => {
+    expect(personWords(`and ${word} then`)).toEqual([word])
+  })
+
+  it.each(['we', 'us', 'our', 'ours', 'ourselves'])('finds the first person plural: %s', (word) => {
+    expect(personWords(`and ${word} then`)).toEqual([word])
+  })
+
+  it.each(['you', 'your', 'yours', 'yourself', 'yourselves'])(
+    'finds the second person: %s',
+    (word) => {
+      expect(personWords(`and ${word} then`)).toEqual([word])
+    },
+  )
+
+  it('reads every word but I in any case, and I only as a capital', () => {
+    expect(personWords('You, YOUR, We and Us')).toEqual(['You', 'YOUR', 'We', 'Us'])
+    expect(personWords('the letter i, written small')).toEqual([])
+  })
+
+  it('lists the words as written, in order of appearance', () => {
+    expect(personWords('You told me that we would go, and I went.')).toEqual([
+      'You',
+      'me',
+      'we',
+      'I',
+    ])
+  })
+
+  it('counts the pronoun a contraction holds', () => {
+    expect(personWords('I’m sure you’re right.')).toEqual(['I', 'you'])
+  })
+
+  it('skips quoted speech between straight double quotes', () => {
+    expect(personWords('Hask said, "I will find you," and rode off.')).toEqual([])
+  })
+
+  it('skips quoted speech between curly double quotes', () => {
+    expect(personWords('Hask said, “I will find you,” and rode off.')).toEqual([])
+  })
+
+  it('closes a quote on either closing mark, whichever mark opened it', () => {
+    expect(personWords('Hask said, "I will find you,” and I rode off.')).toEqual(['I'])
+    expect(personWords('Hask said, “I will find you," and I rode off.')).toEqual(['I'])
+  })
+
+  it('counts the words between two quotes', () => {
+    expect(personWords('"Go," Sefa said, and I went. "Now," she said.')).toEqual(['I'])
+  })
+
+  it('takes no apostrophe or single quote for a quote mark', () => {
+    expect(personWords('Hask’s riders saw you, and Sefa’s bolt saw them.')).toEqual(['you'])
+    expect(personWords("Hask's riders saw 'me' first.")).toEqual(['me'])
+    expect(personWords("He wrote 'me' on the wall.")).toEqual(['me'])
+    expect(personWords('He wrote ‘me’ on the wall.')).toEqual(['me'])
+  })
+
+  it('counts the rest of the text as quoted after a quote left open', () => {
+    expect(personWords('We heard him say "you will pay, and I ran.')).toEqual(['We'])
+    expect(personWords('We heard him say “you will pay, and I ran.')).toEqual(['We'])
+  })
+
+  it('runs a quote left open past an opening curly mark inside it', () => {
+    expect(personWords('We heard him say "you will pay, and “I ran.')).toEqual(['We'])
+  })
+
+  it('finds a whole word only, never one inside a longer word', () => {
+    expect(personWords('yourselves')).toEqual(['yourselves'])
+    expect(personWords('It is Iris’s turn; the museum used our mineral rights.')).toEqual(['our'])
+  })
+})
+
+describe('toldInThirdPerson', () => {
+  const check = toldInThirdPerson()
+  const describing = (...descriptions: string[]) =>
+    reply({
+      happenings: descriptions.map((description, i) => ({
+        title: `Happening ${i + 1}`,
+        description,
+        involvements: [],
+        awareness: [],
+        sourceTurn: 't1',
+      })),
+    })
+
+  it('is an avoid check a rule asks for', () => {
+    expect([check.name, check.kind, check.basis]).toEqual([
+      'happening descriptions in the third person',
+      'avoid',
+      'rule',
+    ])
+  })
+
+  it('holds on descriptions told in the third person', () => {
+    expect(
+      check.holds(describing('Tobin unhorses Hask at the crossing.', 'Sefa shoots the archer.')),
+    ).toBe(true)
+  })
+
+  it('reads the description, not the title, and holds on a reply with no happening', () => {
+    const titled = reply({
+      happenings: [{ title: 'I unhorse Hask', involvements: [], awareness: [], sourceTurn: 't1' }],
+    })
+    expect(check.holds(titled)).toBe(true)
+    expect(check.holds(reply({}))).toBe(true)
+  })
+
+  it('fails when one description has "I" outside quoted speech', () => {
+    expect(check.holds(describing('Tobin rides on.', 'I unhorse Hask at the crossing.'))).toBe(
+      false,
+    )
+  })
+
+  it('fails on a description told in the second person', () => {
+    expect(check.holds(describing('You unhorse Hask at the crossing.'))).toBe(false)
+  })
+
+  it('holds with "I" inside quoted speech', () => {
+    expect(check.holds(describing('Hask swears, "I will find you," as Tobin rides off.'))).toBe(
+      true,
+    )
   })
 })

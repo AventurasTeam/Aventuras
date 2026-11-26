@@ -191,7 +191,13 @@ Maela slid the paper across the table. He read it twice, then unpinned the tarni
         sourceTurn: 't2',
       },
       { title: 'Maela’s offer', involvements: [], awareness: [], sourceTurn: 't1' },
-      { title: 'Brann accepts', involvements: [], awareness: [], sourceTurn: 't2' },
+      {
+        title: 'Brann accepts',
+        description: 'I take Maela’s paper and swear to House Varro.',
+        involvements: [],
+        awareness: [],
+        sourceTurn: 't2',
+      },
     ],
     memberships: [{ character: 'char_maela', faction: 'fact_wardens', sourceTurn: 't4' }],
     newCharacters: [

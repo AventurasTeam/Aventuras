@@ -89,6 +89,15 @@ He set the tankard down. "He gave his name as Jorun Vask. Said you'd find him at
   }),
   bad: reply({
     aliases: [{ ref: 'c9', terms: ['x'], sourceTurn: 't2' }],
+    happenings: [
+      {
+        title: 'A stranger asks after Wren',
+        description: 'Odo tells me a man in a grey coat asked after me twice.',
+        involvements: [],
+        awareness: [],
+        sourceTurn: 't2',
+      },
+    ],
     knownAwareness: [
       {
         happening: 'hap_unlisted',

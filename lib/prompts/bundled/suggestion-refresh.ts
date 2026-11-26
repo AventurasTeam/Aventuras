@@ -1,4 +1,5 @@
 import type { TemplateSources } from '../types'
+import { LEAD_MARK_EXPLAINER } from './story-entry'
 
 export const SUGGESTION_REFRESH: TemplateSources = {
   // rstrip: a JSON contract may be appended after this half with its own blank line, which the
@@ -44,8 +45,9 @@ first: LiquidJS drops a filter on a for tag's collection.
 {% endfor %}
 {% endif -%}
 # Story so far
-{% for entry in entries %}
-{% include 'macro_story_entry', entry: entry %}
+{% assign markedEntries = entries | where: 'leadMark' %}{% if markedEntries.size > 0 %}${LEAD_MARK_EXPLAINER}
+{% endif %}{% for entry in entries %}
+{% include 'macro_story_entry', entry: entry, ids: false %}
 {% endfor %}
 {%- comment -%}
 No suggestionsFire guard, unlike per-turn and the fallback classifier: those

@@ -88,6 +88,26 @@ const FLOOR_ENTITY_INFO: readonly InfoField[] = ENTITY_FIELDS_INFO.filter(
   (f) => f.name !== 'injectionMode',
 )
 
+const TURN_INFO: readonly InfoField[] = [
+  field('position', 'number', "The entry's position on the branch."),
+  field(
+    'kind',
+    "'user_action' | 'ai_reply' | 'opening'",
+    "Who wrote the entry; a 'user_action' is the user's turn.",
+  ),
+  field('content', 'string', "The entry's prose."),
+]
+
+// architecture.md → System and user halves: every history marks where the lead changes.
+const GENERATION_LEAD_MARK_INFO: readonly InfoField[] = [
+  ...TURN_INFO,
+  field(
+    'leadMark',
+    '{ id, name } | { gone: true } | { none: true }',
+    "Set only on the first turn of a run written under another lead than the turn before it, the list's first turn compared with `lead`; absent on every other turn. `{ id, name }` is that character, `id` its placeholder as `entities` numbers it and `name` on one line; `{ gone }` a character since deleted, which names no row; `{ none }` a run written with no lead. Each list is walked on its own. macro_story_entry prints it on a line before the turn.",
+  ),
+]
+
 // buildGenerationContext must emit these exact names; generation-context.test.ts pins the parity.
 // Entity fields follow the drizzle row (camelCase); `state` is a per-kind view, not the column.
 export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
@@ -97,7 +117,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Render it whole.",
+        "Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, and `leadMark` on the first turn of each run written under another lead than the turn before it (the first turn compared with `lead`); a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry), as they print a `leadMark`. Render it whole.",
+      infoFields: GENERATION_LEAD_MARK_INFO,
       required: true,
     },
     {
@@ -105,7 +126,8 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it, shaped like `entries`. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+        'The trailing non-system entries the per-turn classifier reads, `classifierContextEntries` many, floored at the action-plus-reply pair so neither the buffer knobs nor a template can cut below it, shaped like `entries`, its `leadMark`s walked over this list on its own. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+      infoFields: GENERATION_LEAD_MARK_INFO,
       required: true,
     },
     {
@@ -217,7 +239,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, name } | null',
       category: 'Entities',
       description:
-        "The story's lead as `entities` lists it, its name on one line. Null when the story has no lead, or its lead dangles on this branch. A system half reads `lead.name` only: the id is a placeholder allocated per call, so it would change the half every call.",
+        "The branch's lead, the character row flagged as it, as `entities` lists it, its name on one line. Null when the branch has no lead; two flagged rows read as none. A system half reads `lead.name` only: the id is a placeholder allocated per call, so it would change the half every call.",
       required: true,
     },
     {
@@ -406,10 +428,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
   classifierContext: [
     {
       name: 'turns',
-      type: '{ handle, kind, content, scene, location }[]',
+      type: '{ handle, kind, content, scene, location, leadMark? }[]',
       category: 'Story',
       description:
-        "Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its entry's `kind` ('user_action' for the user's turn, 'ai_reply' or 'opening'), its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out.",
+        "Unclassified prose window. Each turn carries the provenance handle (t1..tN) the model must tag its facts with, its entry's `kind` ('user_action' for the user's turn, 'ai_reply' or 'opening'), its prose (`content`), and the scene saved on its entry: `scene` (entity ids) and `location` (an entity id or null). Ids the branch no longer has are left out. `leadMark` is set only where the lead changes: on the first turn of each run written under another lead than the turn before it, the first turn compared with `lead`. It is `{ id, name }` for a character `entities` lists, by its id; `{ gone: true }` for one no longer on the branch, with no id; or `{ none: true }` for a run written with no lead. Absent on every other turn.",
       required: true,
     },
     {
@@ -473,7 +495,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: '{ id, name } | null',
       category: 'Entities',
       description:
-        'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the story has no lead, or its lead dangles on this branch.',
+        'The story\'s lead as `entities` lists it (id and its name on one line), so the model knows whose "I" and "you" the turns narrate. Null when the branch has no lead, or two rows carry the flag.',
       required: false,
     },
     {
@@ -580,7 +602,15 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead, and the merge after them has none: it reads `partSummaries`. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget.",
+        "The chapter being closed, whole: its entries in order from the open region's first through the chosen end, the opening included in a story's first chapter, system entries excluded. A part's summary call of a chapter closed in parts holds that part's entries instead, and the merge after them has none: it reads `partSummaries`. Each item carries `position`, `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks; a `user_action` is the user's turn, which the bundled templates mark (macro_story_entry). Never cut to a budget. `leadMark` is set only where the lead changes: on the first entry of each run written under another lead than the entry before it, the first entry compared with `lead`. It is `{ name }`, by name with no id since the call has no id map; `{ gone: true }` for a character no longer on the branch; or `{ none: true }` for a run written with no lead. Absent on every other entry. A part's entries are walked on their own.",
+      infoFields: [
+        ...TURN_INFO,
+        field(
+          'leadMark',
+          '{ name } | { gone: true } | { none: true }',
+          'Set only on the first entry of a run written under another lead than the entry before it, the first entry compared with `lead`; absent on every other entry. `{ name }` is that character, by name with no id since the call has no id map; `{ gone }` a character no longer on the branch; `{ none }` a run written with no lead. macro_story_entry prints it on a line before the turn.',
+        ),
+      ],
       required: true,
     },
     {
@@ -608,6 +638,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'lead',
+      type: '{ id?, name } | null',
+      category: 'Entities',
+      description:
+        'The branch\'s lead, its name on one line, so the model knows whose "I" and "you" the turns narrate; null when the branch has no lead, or two rows carry the flag. The metadata and part calls carry it by name alone, with no `id`, since they have no id map; a close task\'s render sets `id` to the lead\'s short id (c1, c2…). The merge and boundary selection leave it unset.',
+      required: true,
+    },
+    {
+      name: 'narration',
+      type: "'first' | 'second' | 'third'",
+      category: 'Story Config',
+      description:
+        "The person the story is narrated in (the story definition's `narration`), which the metadata and part calls state beside the lead. The merge, boundary selection and the close tasks leave it unset.",
+      required: true,
+    },
+    {
       name: 'partSummaries',
       type: 'string[]',
       category: 'Story',
@@ -617,10 +663,10 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'closeTurns',
-      type: '{ handle: string; kind: string; content: string }[]',
+      type: '{ handle: string; kind: string; content: string; leadMark?: { id: string; name: string } | { gone: true } | { none: true } }[]',
       category: 'Story',
       description:
-        "A close task's turns: the chapter, or the part the task runs over, each entry in order under its turn id (`t1`, `t2`…, the ids its writes cite), with its `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks. Only a close task's render sets it; the metadata call leaves it unset.",
+        "A close task's turns: the chapter, or the part the task runs over, each entry in order under its turn id (`t1`, `t2`…, the ids its writes cite), with its `kind` ('user_action', 'ai_reply' or 'opening') and `content`, the prose with no trailing blocks. A turn written under a different lead from the turn before it (the first turn: from the branch's lead) carries `leadMark`, which the bundled templates print before it: `{ id, name }`, the character's short id (c1, c2…) and name; `{ gone: true }`, a character no longer on the branch, with no id; or `{ none: true }`, a turn written with no lead. It is absent on every other turn, and each part's turns are walked on their own. Only a close task's render sets it; the metadata call leaves it unset.",
       required: false,
     },
     {
@@ -906,6 +952,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'startTime',
     'composerWrapPov',
     'mode',
+    'narration',
     'userSettings',
     'suggestionSlots',
     'suggestionCount',

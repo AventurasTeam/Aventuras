@@ -1,5 +1,5 @@
 import type { TemplateSources } from '../types'
-import { CLOSE_TASK_SYSTEM } from './close-instructions'
+import { CLOSE_PROSE_LEAD_LINE, CLOSE_TASK_SYSTEM } from './close-instructions'
 
 // memory/chapter-close.md → 3b. Fields show as JSON, the shape the tool takes them back in, so a
 // list resent unchanged reads as restated.
@@ -18,7 +18,7 @@ Keep who the characters and factions below are true to this chapter, with update
 - Voice and standing. Rewrite a character's voice or a faction's standing whole when the chapter shows it changed.
 - Descriptions. Rewrite a description only when the chapter materially changes who or what the row is (the stable boy who became the king's champion), never for detail its other fields already carry.
 - Blank fields. A blank description, voice or standing may be filled when the cited turns show it.
-- Other rows. For a character or faction the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+- Other rows. For a character or faction the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.${CLOSE_PROSE_LEAD_LINE}
 
 The rows below show the fields you may write, as they stand: "" is blank and [] an empty list.
 

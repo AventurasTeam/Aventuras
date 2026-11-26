@@ -21,7 +21,15 @@ import { readRowTool, refsIn, searchWorldTool } from './read-tools'
 import { byNameThenId, stateOf, strings, text } from './row-values'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import type { ReadFields } from './tool'
-import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
+import {
+  hasTurns,
+  readTaskTurns,
+  renderClosePrompt,
+  showLead,
+  storyModeOf,
+  type CloseTurns,
+  type ShownLead,
+} from './turns'
 import {
   markCommonKnowledgeTool,
   setKeywordsTool,
@@ -68,6 +76,8 @@ export type UpkeepShow = {
   proseTokens: number
   rows: UpkeepRow[]
   happenings: { id: string; title: string }[]
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: ShownLead | null
 }
 
 /** data-model.md → Entry metadata shape: a part's scene, its characters and items and its place. */
@@ -120,7 +130,7 @@ const shownText = (row: Entity): unknown => [
 // memory/chapter-close.md → Run order: off-scene rows the part mentions, bare places and items in
 // its scene, and its happenings not yet common knowledge.
 async function startUpkeep(ctx: TaskPromptContext): Promise<TaskStart<UpkeepShow> | null> {
-  const { entries, closeTurns, proseTokens } = await readTaskTurns(ctx)
+  const { entries, closeTurns, proseTokens, lead } = await readTaskTurns(ctx)
   if (!hasTurns(closeTurns)) return null
   const scene = sceneIdsOf(entries)
   const prose = closeTurns.map((turn) => turn.content).join('\n\n')
@@ -184,6 +194,8 @@ async function startUpkeep(ctx: TaskPromptContext): Promise<TaskStart<UpkeepShow
         id: ctx.ids.show(row.id, row.title),
         title: handled(row.title),
       })),
+      // Last: the rows above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     // C11: each shown row and happening shows the fields its tools write; a parent only its name.
     seeds: [
@@ -205,6 +217,7 @@ function renderUpkeep(
       closeUpkeepRows: show.rows,
       closeUpkeepHappenings: show.happenings,
       closeWritesSoFar: ctx.writesSoFar,
+      lead: show.lead,
     },
     show.proseTokens,
   )

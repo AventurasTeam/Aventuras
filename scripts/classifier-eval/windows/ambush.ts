@@ -173,7 +173,7 @@ When Sefa comes down the bank leading the cart horse, there's an arrow standing 
     happenings: [
       {
         title: 'Pell charges the scarred man',
-        description: 'Pell charges the scarred man.',
+        description: 'You watch Pell charge the scarred man.',
         involvements: [{ ref: 'char_pell', role: 'actor' }],
         awareness: [],
         sourceTurn: 't4',

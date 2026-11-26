@@ -274,6 +274,37 @@ export async function setSceneOf(
     .where(where)
 }
 
+/** Flags `id`, a character on the branch, as its lead (data-model.md → The lead). */
+export async function flagLead(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  id: string,
+): Promise<void> {
+  await f.ctx.db
+    .update(entities)
+    .set({ isLead: 1 })
+    .where(and(eq(entities.branchId, f.branchId), eq(entities.id, id)))
+}
+
+/** Stamps each entry with `leadId`, the lead it was written under (its `metadata.leadId`). */
+export async function stampLead(
+  f: Pick<CloseFixture, 'ctx' | 'branchId'>,
+  entryIds: readonly string[],
+  leadId: string,
+): Promise<void> {
+  for (const entryId of entryIds) {
+    const where = and(eq(storyEntries.branchId, f.branchId), eq(storyEntries.id, entryId))
+    const [row] = await f.ctx.db
+      .select({ metadata: storyEntries.metadata })
+      .from(storyEntries)
+      .where(where)
+    if (!row?.metadata) throw new Error(`stampLead: entry ${entryId} has no metadata`)
+    await f.ctx.db
+      .update(storyEntries)
+      .set({ metadata: { ...row.metadata, leadId } })
+      .where(where)
+  }
+}
+
 /** A character in one entry's scene, written with no delta: Identity starts only on one. */
 export async function putSceneCharacter(
   f: Pick<CloseFixture, 'ctx' | 'branchId'>,

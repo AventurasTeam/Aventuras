@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { chunked, storyEntries, type StoryEntry } from '@/lib/db'
 import { promptProse } from '@/lib/piggyback'
+import { leadMarks, leadStampOf } from '@/lib/world'
 
 import { TURN_PREFIX } from './ids'
 import {
@@ -12,6 +13,8 @@ import {
   type ReadTool,
   type ToolContext,
 } from './tool'
+import { readCloseLead, readStampedNames } from './turns'
+import { showMark, type CloseLeadMark } from '../chapter-context'
 
 /** The most turns one call answers; the rest it names as unread, for another call. */
 export const READ_TURNS_MAX = 10
@@ -20,10 +23,12 @@ const readTurnsSchema = readToolSchema({
   turns: z.array(z.string()).describe('The turns to read, by handle (t1, t2…).'),
 })
 
-type TurnRow = Pick<StoryEntry, 'id' | 'kind' | 'content' | 'position' | 'createdAt'>
+type TurnRow = Pick<StoryEntry, 'id' | 'kind' | 'content' | 'position' | 'createdAt' | 'metadata'>
 type NotRead = { id: string; reason: string }
 type ReadTurnsOutput = {
-  turns: { id: string; kind: StoryEntry['kind']; prose: string }[]
+  /** Present only when an answered turn is marked; first key of the answer. */
+  note?: string
+  turns: { id: string; kind: StoryEntry['kind']; prose: string; leadMark?: CloseLeadMark }[]
   unread?: string[]
   notRead?: NotRead[]
 }
@@ -36,6 +41,11 @@ const REASON = {
   system: 'a system note, not a turn of the story',
   pastEnd: 'past the end of this chapter',
 } as const
+
+// memory/chapter-close.md → Tools and writes: sent only with a mark. Turns before the first mark
+// are the named lead's; it never says the last run is the current lead's.
+const LEAD_MARK_NOTE =
+  'A turn with a leadMark was written under a different lead from the turn before it in this answer (the first one in the answer, from the lead your task names). From that turn until the next one with a leadMark, "I" and "you" outside quoted speech are who its leadMark names, not the lead your task names: a character, by id and name; gone, a character no longer in the story, so credit nothing to that "I"; or none, no one. Before the first leadMark, they are the lead your task names, if it names one.'
 
 // Never echoed: the answer's swap to handles would mint a handle for a full id it found.
 const FULL_ID_LABEL = 'a full id'
@@ -50,6 +60,7 @@ async function readRows(ctx: ToolContext, ids: readonly string[]): Promise<Map<s
         content: storyEntries.content,
         position: storyEntries.position,
         createdAt: storyEntries.createdAt,
+        metadata: storyEntries.metadata,
       })
       .from(storyEntries)
       .where(and(eq(storyEntries.branchId, ctx.branchId), inArray(storyEntries.id, chunk)))
@@ -76,6 +87,22 @@ function judge(
   if (row.kind === 'system') return { notRead: { id: handle, reason: REASON.system } }
   if (row.position > endPosition) return { notRead: { id: handle, reason: REASON.pastEnd } }
   return { row }
+}
+
+// Walked from the task's lead, read per call: the close's hard gate holds the flag still, so it
+// is the lead the task started with.
+async function answeredMarks(
+  ctx: ToolContext,
+  rows: readonly TurnRow[],
+): Promise<(CloseLeadMark | undefined)[]> {
+  if (rows.length === 0) return []
+  const lead = await readCloseLead(ctx)
+  const nameOf = await readStampedNames(ctx, rows)
+  const marks = leadMarks(rows.map(leadStampOf), lead?.id ?? null, nameOf)
+  // By show, with the name: the answer's id swap would mint the handle with none. Wrapped: passed
+  // bare, the id map's method would lose its `this`.
+  const show = (id: string, name: string): string => ctx.ids.show(id, name)
+  return marks.map((mark) => (mark === undefined ? undefined : showMark(mark, show)))
 }
 
 // From SQLite, not entriesStore: the store holds a window, and a listed row can come from any chapter.
@@ -106,11 +133,19 @@ async function readTurns(
   const ordered = [...readable.values()].sort(
     (a, b) => a.row.position - b.row.position || a.row.createdAt - b.row.createdAt,
   )
-  const output: ReadTurnsOutput = {
-    turns: ordered
-      .slice(0, READ_TURNS_MAX)
-      .map(({ row, handle }) => ({ id: handle, kind: row.kind, prose: promptProse(row) })),
-  }
+  const answered = ordered.slice(0, READ_TURNS_MAX)
+  const marks = await answeredMarks(
+    ctx,
+    answered.map(({ row }) => row),
+  )
+  const answeredTurns: ReadTurnsOutput['turns'] = answered.map(({ row, handle }, i) => {
+    const turn = { id: handle, kind: row.kind, prose: promptProse(row) }
+    const leadMark = marks[i]
+    return leadMark === undefined ? turn : { ...turn, leadMark }
+  })
+  const output: ReadTurnsOutput = marks.some((mark) => mark !== undefined)
+    ? { note: LEAD_MARK_NOTE, turns: answeredTurns }
+    : { turns: answeredTurns }
   const unread = ordered.slice(READ_TURNS_MAX).map(({ handle }) => handle)
   if (unread.length > 0) output.unread = unread
   if (notRead.size > 0) output.notRead = [...notRead.values()]

@@ -1,0 +1,1733 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`tmpl_chapter_metadata > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story. Read the whole chapter below and give it a title, a summary, a theme and keywords. Report only what the chapter's prose supports; never invent.
+
+- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.
+- Summary. Two to four sentences telling what happened in this chapter, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then. Later chapters recall this one through its summary alone, so keep what the story will need.
+- Theme. A short tag for what the chapter is about beneath its events, in a word or two ("betrayal", "first contact").
+- Keywords. Three to eight words or short phrases a reader would browse the chapter by: its key characters, places, objects and events.
+
+The user's turns are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this chapter moves it.",
+  "user": "Give this chapter its title, summary, theme and keywords.
+
+# The previous chapter
+Kael stole the sigil from the couriers’ guild and fled south along the marsh road.
+
+# Open threads
+- Deliver the sigil (active)
+- The guild’s hunters (pending)
+
+# The narration
+The chapter is narrated in the second person.
+The story's lead is Kael. Outside quoted speech, "I" and "you" in the turns are the lead.
+
+# The chapter
+
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+<user_turn>
+I dive after it.
+</user_turn>
+
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+}
+`;
+
+exports[`tmpl_chapter_metadata > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story. Read the whole chapter below and give it a title, a summary, a theme and keywords. Report only what the chapter's prose supports; never invent.
+
+- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.
+- Summary. Two to four sentences telling what happened in this chapter, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then. Later chapters recall this one through its summary alone, so keep what the story will need.
+- Theme. A short tag for what the chapter is about beneath its events, in a word or two ("betrayal", "first contact").
+- Keywords. Three to eight words or short phrases a reader would browse the chapter by: its key characters, places, objects and events.
+
+The user's turns are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: summarize it like the narration.
+
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this chapter moves it.",
+  "user": "Give this chapter its title, summary, theme and keywords.
+
+# The narration
+The chapter is narrated in the third person.
+
+# The chapter
+
+Rain had kept Gullhaven harbour quiet for three days.
+
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+}
+`;
+
+exports[`tmpl_chapter_metadata_merge > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story. The chapter was too long to read at once, so each of its parts was summarized in turn, and those summaries are below, in the chapter's order. From them, give the whole chapter a title, a summary, a theme and keywords. Report only what the summaries support; never invent.
+
+- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.
+- Summary. Two to four sentences telling what happened across the whole chapter, in order: who did what, what changed, and where it left things. Name characters and places as the summaries name them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then. Later chapters recall this one through its summary alone, so keep what the story will need.
+- Theme. A short tag for what the chapter is about beneath its events, in a word or two ("betrayal", "first contact").
+- Keywords. Three to eight words or short phrases a reader would browse the chapter by: its key characters, places, objects and events.
+
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this chapter moves it.",
+  "user": "Give the chapter its title, summary, theme and keywords from the summaries of its parts.
+
+# The previous chapter
+Kael stole the sigil from the couriers’ guild and fled south along the marsh road.
+
+# Open threads
+- Deliver the sigil (active)
+- The guild’s hunters (pending)
+
+# The chapter's parts
+
+## Part 1
+You wade into the flood before the Drowned Keep, and the current takes the sigil from your fingers.
+
+## Part 2
+You dive for the sigil and come up with weed; Mora watches from the keep’s broken stair.",
+}
+`;
+
+exports[`tmpl_chapter_metadata_merge > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story. The chapter was too long to read at once, so each of its parts was summarized in turn, and those summaries are below, in the chapter's order. From them, give the whole chapter a title, a summary, a theme and keywords. Report only what the summaries support; never invent.
+
+- Title. A few words naming the chapter, as a book's chapter heading would ("The duel at the mill"). Not a number, and not the story's own title.
+- Summary. Two to four sentences telling what happened across the whole chapter, in order: who did what, what changed, and where it left things. Name characters and places as the summaries name them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then. Later chapters recall this one through its summary alone, so keep what the story will need.
+- Theme. A short tag for what the chapter is about beneath its events, in a word or two ("betrayal", "first contact").
+- Keywords. Three to eight words or short phrases a reader would browse the chapter by: its key characters, places, objects and events.
+
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this chapter moves it.",
+  "user": "Give the chapter its title, summary, theme and keywords from the summaries of its parts.
+
+# The chapter's parts
+
+## Part 1
+Orrin finds a drowned sailor under Gullhaven’s pier at dawn.
+
+## Part 2
+Ilse sends for the harbourmaster and keeps watch over the body in the rain.",
+}
+`;
+
+exports[`tmpl_chapter_metadata_part > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story. The chapter is too long to read at once, so it is read in parts, and below is one of them. Summarize this part alone: a last step puts the parts' summaries together, in order, to name and summarize the whole chapter. Report only what this part's prose supports; never invent.
+
+- Summary. Three to five sentences telling what happened in this part, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then. The chapter's summary is made from these, so keep what the story will need.
+
+The user's turns are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this part moves it.",
+  "user": "Summarize this part of the chapter.
+
+# The previous chapter
+Kael stole the sigil from the couriers’ guild and fled south along the marsh road.
+
+# Open threads
+- Deliver the sigil (active)
+- The guild’s hunters (pending)
+
+# The narration
+The chapter is narrated in the second person.
+The story's lead is Kael. Outside quoted speech, "I" and "you" in the turns are the lead.
+
+# This part of the chapter
+
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.",
+}
+`;
+
+exports[`tmpl_chapter_metadata_part > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story. The chapter is too long to read at once, so it is read in parts, and below is one of them. Summarize this part alone: a last step puts the parts' summaries together, in order, to name and summarize the whole chapter. Report only what this part's prose supports; never invent.
+
+- Summary. Three to five sentences telling what happened in this part, in order: who did what, what changed, and where it left things. Name characters and places as the prose names them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then. The chapter's summary is made from these, so keep what the story will need.
+
+The user's turns are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: summarize it like the narration.
+
+The previous chapter's summary, when given, is there for continuity: don't retell it. The open threads, when given, each carry a status: an active thread is one the story is following, a pending one is known to the story but not yet pursued. Name a thread in the summary only when this part moves it.",
+  "user": "Summarize this part of the chapter.
+
+# Open threads
+- Who drowned the sailor (active)
+
+# The narration
+The chapter is narrated in the third person.
+
+# This part of the chapter
+
+Rain had kept Gullhaven harbour quiet for three days.
+
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.",
+}
+`;
+
+exports[`tmpl_close_awareness > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.",
+  "user": "# Your task: awareness
+
+Each row below is what one character knows of a happening, with its pin: decay_resistance, from 0 to 1. As chapters pass a happening fades from what a character recalls, and the pin slows that; at 1 it never fades. With set_pin, change a pin only where this chapter shows it clearly wrong: most rows need no call.
+
+- This chapter's rows: what a character learned during this chapter. Raise a pin toward 1 when the happening turned out to carry the chapter, something that character's story now turns on. Lower it toward 0 when it was pinned high but proved incidental.
+- Rows that keep coming up: from any chapter, recalled often while this chapter was played. Raise a pin when the happening still carries that character's story; otherwise leave it. Never lower one of these: a lower value is refused.
+- Raise a pin by at most 0.2 above the pin shown, in one close, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.
+- A row already pinned where it belongs needs no call: one near 1 that keeps coming up is already doing its job.
+- Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, t1 to t5. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+# This chapter
+Kael wades toward the Drowned Keep and loses the sigil to the current; Mora watches from the stair.
+
+# Rows
+
+## hp1: The sigil lost in the flood
+- aw1: Kael (c1), pin 0.4, learned this chapter, at t3, how: "it happened to him"
+- aw2: Mora (c2), pin 0 (unset), keeps coming up
+
+# Writes so far
+What this close has written, in earlier tasks:
+- merge_happenings The sigil lost in the flood (hp1): kept hp1",
+}
+`;
+
+exports[`tmpl_close_awareness > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.",
+  "user": "# Your task: awareness
+
+Each row below is what one character knows of a happening, with its pin: decay_resistance, from 0 to 1. As chapters pass a happening fades from what a character recalls, and the pin slows that; at 1 it never fades. With set_pin, change a pin only where this chapter shows it clearly wrong: most rows need no call.
+
+- This chapter's rows: what a character learned during this chapter. Raise a pin toward 1 when the happening turned out to carry the chapter, something that character's story now turns on. Lower it toward 0 when it was pinned high but proved incidental.
+- Rows that keep coming up: from any chapter, recalled often while this chapter was played. Raise a pin when the happening still carries that character's story; otherwise leave it. Never lower one of these: a lower value is refused.
+- Raise a pin by at most 0.2 above the pin shown, in one close, never straight to 1: a bigger raise is refused, and a row that stays load-bearing climbs again at a later close.
+- A row already pinned where it belongs needs no call: one near 1 that keeps coming up is already doing its job.
+- Turns. No turn is shown here. Read the ones you need with read_turns: a row's "at" turn, or this chapter's turns, t1 to t5. Cite only this chapter's turns in "turns". A row's "at" turn outside that range is from an earlier chapter: read it with read_turns, never cite it.
+
+# Rows
+
+## hp1: A body under the pier
+- aw1: Orrin (c2), pin 0.6, learned this chapter, at t3, how: "found the body"",
+}
+`;
+
+exports[`tmpl_close_happenings > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.",
+  "user": "# Your task: happenings
+
+Code found the clusters of happenings below. Every happening in a cluster passed three checks against each of the others: at least half of the smaller cast's characters shared, occurred within a few turns, and reads alike. Some of them may record one event more than once; a cluster may also hold more than one event, or a happening that belongs with none of the others. Decide which belong together and merge each event's happenings with merge_happenings. You don't see the chapter here: read a turn with read_turns when a happening's text leaves you unsure, and a happening's stored fields with read_row.
+
+- Merge into a composite when the happenings share their cast and their time and complete each other: phases of one event in order, one building on the other, or two sides of one event. Keep the happening whose title covers the others best and absorb the event's others; send keep's description rewritten whole to hold what each said ("X happened, then Y"), and a title when keep's no longer covers them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.
+- Delete a duplicate when one event was recorded twice in different words: keep the more detailed happening and absorb the other, sending no title or description, so keep's text stands.
+- Keep them apart when one reverses or contradicts the other ("Aria swore the oath" and "Aria broke it"), or when each is a beat that matters to the story on its own: make no call.
+- Keep them apart when the merge would tell someone something new: everyone who knows any merged happening comes to know all of them, and every character does if one is common knowledge. So when one is common knowledge and another is not, or someone knows one but not another, merge only when the happening fewer characters know adds nothing to the one more characters know; when neither list holds the other, merge only a duplicate that adds nothing either way.
+- Lean toward merging. Every cluster already passed the three checks, so take them as given; a duplicate left now stays for good, and a composite keeps the facts. When you are unsure whether happenings belong together, keep them apart.
+- One call per event. Merge everything that records one event in one call, never in a chain. If you missed one, a happening a merge kept can be kept again, but never absorbed. keep and absorb come from the same cluster.
+- What a merge does. keep takes the earliest turn among the merged happenings, everyone involved in any of them and each character's knowledge of any of them; if any was common knowledge, keep becomes so. The absorbed happenings are deleted.
+- Turn ids. Never write a turn id such as t3 into a title or a description: cite turns only in "turns", and cite the turns the merged happenings occurred at.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+Each happening below shows its title, the turn it occurred at, its cast, who knows it and its description as they stand: "" is blank. One marked common knowledge is known to every character.
+
+# Clusters
+
+## Cluster 1
+
+### hp1: The sigil lost in the flood
+- occurred at: t3
+- cast: Kael (c1)
+- known by: Kael (c1)
+- description: "The current tears the sigil from Kael’s hand as he wades toward the keep."
+
+### hp2: Kael dives for the sigil
+- occurred at: t5
+- cast: Kael (c1), Mora (c2)
+- known by: Kael (c1), Mora (c2)
+- description: "Kael dives after the sigil and comes up with only weed, while Mora watches from the stair."",
+}
+`;
+
+exports[`tmpl_close_happenings > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.",
+  "user": "# Your task: happenings
+
+Code found the clusters of happenings below. Every happening in a cluster passed three checks against each of the others: at least half of the smaller cast's characters shared, occurred within a few turns, and reads alike. Some of them may record one event more than once; a cluster may also hold more than one event, or a happening that belongs with none of the others. Decide which belong together and merge each event's happenings with merge_happenings. You don't see the chapter here: read a turn with read_turns when a happening's text leaves you unsure, and a happening's stored fields with read_row.
+
+- Merge into a composite when the happenings share their cast and their time and complete each other: phases of one event in order, one building on the other, or two sides of one event. Keep the happening whose title covers the others best and absorb the event's others; send keep's description rewritten whole to hold what each said ("X happened, then Y"), and a title when keep's no longer covers them. Tell it in the third person, naming each character as the prose does and the lead by name: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.
+- Delete a duplicate when one event was recorded twice in different words: keep the more detailed happening and absorb the other, sending no title or description, so keep's text stands.
+- Keep them apart when one reverses or contradicts the other ("Aria swore the oath" and "Aria broke it"), or when each is a beat that matters to the story on its own: make no call.
+- Keep them apart when the merge would tell someone something new: everyone who knows any merged happening comes to know all of them, and every character does if one is common knowledge. So when one is common knowledge and another is not, or someone knows one but not another, merge only when the happening fewer characters know adds nothing to the one more characters know; when neither list holds the other, merge only a duplicate that adds nothing either way.
+- Lean toward merging. Every cluster already passed the three checks, so take them as given; a duplicate left now stays for good, and a composite keeps the facts. When you are unsure whether happenings belong together, keep them apart.
+- One call per event. Merge everything that records one event in one call, never in a chain. If you missed one, a happening a merge kept can be kept again, but never absorbed. keep and absorb come from the same cluster.
+- What a merge does. keep takes the earliest turn among the merged happenings, everyone involved in any of them and each character's knowledge of any of them; if any was common knowledge, keep becomes so. The absorbed happenings are deleted.
+- Turn ids. Never write a turn id such as t3 into a title or a description: cite turns only in "turns", and cite the turns the merged happenings occurred at.
+
+Each happening below shows its title, the turn it occurred at, its cast, who knows it and its description as they stand: "" is blank. One marked common knowledge is known to every character.
+
+# Clusters
+
+## Cluster 1
+
+### hp1: A body under the pier
+- occurred at: t3
+- cast: Orrin (c2)
+- known by: Orrin (c2)
+- description: "Orrin finds a drowned sailor under the pier at dawn, a gull feather in his collar."
+
+### hp2: The sailor found at dawn (common knowledge)
+- occurred at: t3
+- cast: Orrin (c2)
+- known by: every character
+- description: ""
+
+# Writes so far
+What this close has written, in earlier tasks:
+- update_thread Who drowned the sailor (th1): description",
+}
+`;
+
+exports[`tmpl_close_identity > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+# The turns
+
+## t1 (the opening)
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+## t2 (the user's turn)
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+## t3 (narration)
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+## t4 (the user's turn)
+<user_turn>
+I dive after it.
+</user_turn>
+
+## t5 (narration)
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+  "user": "# Your task: identity
+
+Keep who the characters and factions below are true to this chapter, with update_character and update_faction: a character's traits, drives, voice and description, and a faction's agenda, standing and description. Write only what the cited turns show; a row the chapter leaves as it was needs no call.
+
+- Lists. Send a list whole, as it should stand after the chapter: it replaces the stored one. The caps are 8 traits, 6 drives and 4 agenda items. A list can't be emptied: an empty list reads as left out, so a list's last entry stays.
+  - Add an entry when the turns show a new trait, drive or agenda item.
+  - Replace, don't append: at a cap, drop the entry the new one supersedes, or the one the chapter shows least, to make room, and say which in "why". A list over its cap is rejected unless it is no longer than the stored one.
+  - Merge two entries that mean the same ("brave" and "courageous") into one, keeping the more general or the better evidenced spelling.
+  - Remove an entry only when the chapter plainly contradicts it.
+- Don't churn stable identity. An entry the chapter merely doesn't show stays: "brave" isn't removed because the chapter happened not to show bravery.
+- Voice and standing. Rewrite a character's voice or a faction's standing whole when the chapter shows it changed.
+- Descriptions. Rewrite a description only when the chapter materially changes who or what the row is (the stable boy who became the king's champion), never for detail its other fields already carry.
+- Blank fields. A blank description, voice or standing may be filled when the cited turns show it.
+- Other rows. For a character or faction the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+The rows below show the fields you may write, as they stand: "" is blank and [] an empty list.
+
+# Characters
+
+## c1: Kael
+- description: "A courier carrying a stolen sigil."
+- traits: ["stubborn"]
+- drives: ["deliver the sigil"]
+- voice: "Clipped, wary."
+
+## c2: Mora
+- description: "A smuggler who knows the marsh paths."
+- traits: []
+- drives: []
+- voice: "Low and amused."
+
+# Factions
+
+## f1: The Reed Runners
+- description: "Smugglers of the marsh."
+- standing: "Tolerated by the keep’s steward."
+- agenda: ["keep the marsh paths secret"]
+
+# Writes so far
+What this close has written, in earlier tasks:
+- update_lore The drowned sigils (lo1): body",
+}
+`;
+
+exports[`tmpl_close_identity > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.
+
+# The turns
+
+## t1 (the opening)
+Rain had kept Gullhaven harbour quiet for three days.
+
+## t2 (the user's turn)
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+## t3 (narration)
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+## t4 (the user's turn)
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+## t5 (narration)
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+  "user": "# Your task: identity
+
+Keep who the characters and factions below are true to this chapter, with update_character and update_faction: a character's traits, drives, voice and description, and a faction's agenda, standing and description. Write only what the cited turns show; a row the chapter leaves as it was needs no call.
+
+- Lists. Send a list whole, as it should stand after the chapter: it replaces the stored one. The caps are 8 traits, 6 drives and 4 agenda items. A list can't be emptied: an empty list reads as left out, so a list's last entry stays.
+  - Add an entry when the turns show a new trait, drive or agenda item.
+  - Replace, don't append: at a cap, drop the entry the new one supersedes, or the one the chapter shows least, to make room, and say which in "why". A list over its cap is rejected unless it is no longer than the stored one.
+  - Merge two entries that mean the same ("brave" and "courageous") into one, keeping the more general or the better evidenced spelling.
+  - Remove an entry only when the chapter plainly contradicts it.
+- Don't churn stable identity. An entry the chapter merely doesn't show stays: "brave" isn't removed because the chapter happened not to show bravery.
+- Voice and standing. Rewrite a character's voice or a faction's standing whole when the chapter shows it changed.
+- Descriptions. Rewrite a description only when the chapter materially changes who or what the row is (the stable boy who became the king's champion), never for detail its other fields already carry.
+- Blank fields. A blank description, voice or standing may be filled when the cited turns show it.
+- Other rows. For a character or faction the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+
+The rows below show the fields you may write, as they stand: "" is blank and [] an empty list.
+
+# Characters
+
+## c1: Ilse Varga
+- description: "A harbour clerk who misses nothing."
+- traits: ["patient"]
+- drives: []
+- voice: ""
+
+## c2: Orrin
+- description: "A net-mender who works the pier at dawn."
+- traits: []
+- drives: []
+- voice: ""
+
+# Factions
+
+None.",
+}
+`;
+
+exports[`tmpl_close_lifecycle > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+# The turns
+
+## t1 (the opening)
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+## t2 (the user's turn)
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+## t3 (narration)
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+## t4 (the user's turn)
+<user_turn>
+I dive after it.
+</user_turn>
+
+## t5 (narration)
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+  "user": "# Your task: lifecycle
+
+Check the characters, items and factions below against this chapter. Most need no call: a row the chapter leaves in play stays active.
+
+- Retirement. With retire_entity, retire a row only on hard finality the cited turns state outright: a death, an exile with no promise of return, another permanent departure, a destruction, a disbanding. A death the narration reports as fact counts, even off the scene; one a character only suspects or hears as rumour does not. A wound, a capture, a journey, an item lost, stolen or handed on, a faction beaten or scattered, or a row the chapter simply doesn't show is no finality: leave the row active. When the signal is weak, leave it active.
+- Never a place. Only the user retires a place; retire_entity refuses one.
+- The reason. Your why becomes the row's retirement reason, which the user reads: write it as one plain sentence on how the row left the story, naming no turn id.
+- Duplicates. With flag_duplicate, flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), naming the row and the one it is the same as. The user decides whether to merge them; you never merge. A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so a pair is refused when both rows' flags already name other rows, and so is a pair the user already kept apart.
+- Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+The rows below show the fields you may write, as they stand: "" is blank. A row's flag names the row it was flagged with, by id and name, and why; a dormant flag no longer holds and counts as none.
+
+# Rows
+
+## c1: Kael (character)
+- status: "active"
+- retiredReason: ""
+- flag: none
+
+## c2: Mora (character)
+- status: "active"
+- retiredReason: ""
+- flag: none
+
+## i1: The sigil (item)
+- status: "active"
+- retiredReason: ""
+- flag: none
+
+# Writes so far
+What this close has written, in earlier tasks:
+- update_thread Deliver the sigil (th1): description",
+}
+`;
+
+exports[`tmpl_close_lifecycle > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.
+
+# The turns
+
+## t1 (the opening)
+Rain had kept Gullhaven harbour quiet for three days.
+
+## t2 (the user's turn)
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+## t3 (narration)
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+## t4 (the user's turn)
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+## t5 (narration)
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+  "user": "# Your task: lifecycle
+
+Check the characters, items and factions below against this chapter. Most need no call: a row the chapter leaves in play stays active.
+
+- Retirement. With retire_entity, retire a row only on hard finality the cited turns state outright: a death, an exile with no promise of return, another permanent departure, a destruction, a disbanding. A death the narration reports as fact counts, even off the scene; one a character only suspects or hears as rumour does not. A wound, a capture, a journey, an item lost, stolen or handed on, a faction beaten or scattered, or a row the chapter simply doesn't show is no finality: leave the row active. When the signal is weak, leave it active.
+- Never a place. Only the user retires a place; retire_entity refuses one.
+- The reason. Your why becomes the row's retirement reason, which the user reads: write it as one plain sentence on how the row left the story, naming no turn id.
+- Duplicates. With flag_duplicate, flag two rows of one kind that the chapter shows are one person, place or thing under two names (the hooded stranger who turns out to be Kael), naming the row and the one it is the same as. The user decides whether to merge them; you never merge. A pair already flagged is marked as the same, whichever row holds the flag. A row holds one flag, so a pair is refused when both rows' flags already name other rows, and so is a pair the user already kept apart.
+- Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+
+The rows below show the fields you may write, as they stand: "" is blank. A row's flag names the row it was flagged with, by id and name, and why; a dormant flag no longer holds and counts as none.
+
+# Rows
+
+## c1: Ilse Varga (character)
+- status: "active"
+- retiredReason: ""
+- flag: none
+
+## c2: Orrin (character)
+- status: "active"
+- retiredReason: ""
+- flag: none",
+}
+`;
+
+exports[`tmpl_close_lore > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+# The turns
+
+## t1 (the opening)
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+## t2 (the user's turn)
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+## t3 (narration)
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+## t4 (the user's turn)
+<user_turn>
+I dive after it.
+</user_turn>
+
+## t5 (narration)
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+  "user": "# Your task: lore
+
+Keep the story's lore true to this chapter, with create_lore and update_lore. A lore row holds what the story's world is or how it works: a world-rule, a magic system, a religion, a faction's charter, a cosmology, or the story's own terms. Lore is rare: most chapters establish none, and a chapter that establishes none needs no call.
+
+- Establishes, not mentions. Write lore only when the turns explain how something works or what it is, never when they only mention it:
+  - "Aria visited the temple of Vael." is an event, not lore.
+  - "The temple of Vael is a relic of the Eldritch covenants, where blood-bound priests once communed with the Forgotten Hour through ritual exsanguination." explains a religious practice: lore.
+  - "The Aetherium was acting up again." mentions without explaining: not lore.
+  - "The Aetherium runs on the kinetic resonance of crystalline lattices; without daily harmonic tuning by the keepers, the entire grid faults within hours." explains a mechanism: lore.
+- Not lore: what one character, place, item or faction is like; that is the row's own, kept by other tasks. A faction's charter, the rules it is founded on, is lore.
+- Extend, don't duplicate. When the chapter establishes more about something a row below already holds, extend or correct that row with update_lore instead of creating a second, the user's rows included. Before creating, call read_row on any row whose title may cover the same thing. A title a row already has is rejected, on a create or an update.
+- Read first. The rows below show only their titles: call read_row on a row before update_lore, so you see its body and keywords as they stand.
+- Creates. At most 3 new lore rows per chapter, across all its parts; 2 left. Past the cap a create is rejected: extend a row instead.
+- Bodies. A body explains the rule in plain prose, stated as a standing fact of the world, not as what happened in the scene. A new row's body holds at most 1200 characters, and updates may grow a body by at most 1200 characters in all, across this chapter's calls. update_lore sends a body whole: it replaces the stored one.
+- Category. A short label for the kind of lore, such as magic-system or religion.
+- Keywords. Give a new row the names and terms the prose uses for it. update_lore takes keywords as add and remove: add a term the chapter uses for the row, and remove only one that no longer fits. You can't see who added a term; removing one the user added is refused, and that call's keyword adds with it.
+- Turn ids. Never write a turn id such as t3 into a title, body, category or keyword: cite turns only in "turns".
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+# Lore rows
+- lo1: The drowned sigils
+- lo2: The Reed Runners’ charter",
+}
+`;
+
+exports[`tmpl_close_lore > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.
+
+# The turns
+
+## t1 (the opening)
+Rain had kept Gullhaven harbour quiet for three days.
+
+## t2 (the user's turn)
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+## t3 (narration)
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+## t4 (the user's turn)
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+## t5 (narration)
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+  "user": "# Your task: lore
+
+Keep the story's lore true to this chapter, with create_lore and update_lore. A lore row holds what the story's world is or how it works: a world-rule, a magic system, a religion, a faction's charter, a cosmology, or the story's own terms. Lore is rare: most chapters establish none, and a chapter that establishes none needs no call.
+
+- Establishes, not mentions. Write lore only when the turns explain how something works or what it is, never when they only mention it:
+  - "Aria visited the temple of Vael." is an event, not lore.
+  - "The temple of Vael is a relic of the Eldritch covenants, where blood-bound priests once communed with the Forgotten Hour through ritual exsanguination." explains a religious practice: lore.
+  - "The Aetherium was acting up again." mentions without explaining: not lore.
+  - "The Aetherium runs on the kinetic resonance of crystalline lattices; without daily harmonic tuning by the keepers, the entire grid faults within hours." explains a mechanism: lore.
+- Not lore: what one character, place, item or faction is like; that is the row's own, kept by other tasks. A faction's charter, the rules it is founded on, is lore.
+- Extend, don't duplicate. When the chapter establishes more about something a row below already holds, extend or correct that row with update_lore instead of creating a second, the user's rows included. Before creating, call read_row on any row whose title may cover the same thing. A title a row already has is rejected, on a create or an update.
+- Read first. The rows below show only their titles: call read_row on a row before update_lore, so you see its body and keywords as they stand.
+- Creates. At most 3 new lore rows per chapter, across all its parts; 3 left. Past the cap a create is rejected: extend a row instead.
+- Bodies. A body explains the rule in plain prose, stated as a standing fact of the world, not as what happened in the scene. A new row's body holds at most 1200 characters, and updates may grow a body by at most 1200 characters in all, across this chapter's calls. update_lore sends a body whole: it replaces the stored one.
+- Category. A short label for the kind of lore, such as magic-system or religion.
+- Keywords. Give a new row the names and terms the prose uses for it. update_lore takes keywords as add and remove: add a term the chapter uses for the row, and remove only one that no longer fits. You can't see who added a term; removing one the user added is refused, and that call's keyword adds with it.
+- Turn ids. Never write a turn id such as t3 into a title, body, category or keyword: cite turns only in "turns".
+
+# Lore rows
+None yet.",
+}
+`;
+
+exports[`tmpl_close_threads > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+# The turns
+
+## t1 (the opening)
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+## t2 (the user's turn)
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+## t3 (narration)
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+## t4 (the user's turn)
+<user_turn>
+I dive after it.
+</user_turn>
+
+## t5 (narration)
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+  "user": "# Your task: threads
+
+Keep the story's open threads true to this chapter. An active thread is carried in the narrator's prompt every turn until it closes, so a thread the chapter has settled or plainly abandoned shouldn't stay open. Write only what the cited turns show; a thread the chapter leaves as it was needs no call.
+
+- Duplicates. With merge_threads, merge threads that follow the same goal, quest, mystery or threat, however worded: keep one and absorb the rest. Merge before you update: a thread this close already wrote can be kept, never absorbed. When one is active, keep an active one: an active thread can be absorbed only into another active one. A thread whose injection mode is always or disabled can be absorbed only into one with the same mode: keep it instead, or leave the threads apart. Give a title or description only to replace the kept thread's; a duplicate the kept thread already covers merges with neither.
+- Status. With update_thread, set "resolved" when the chapter achieves a thread, or "failed" when it makes the thread impossible or plainly abandons it, citing the turns that settle it.
+- Descriptions. Bring a thread's description up to date when the chapter moves it on.
+- Titles. A thread's title changes only in a merge.
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+The threads below show their titles, statuses and descriptions as they stand: "" is blank. A thread the user set to always (the narrator shows it every turn) or disabled (never shown) carries that injection mode after its status.
+
+# Open threads
+
+## th1: Deliver the sigil (active)
+- description: "To the keep’s last steward."
+
+## th2: The guild’s hunters (pending, always)
+- description: ""
+
+# Writes so far
+What this close has written, in earlier tasks:
+- update_character Kael (c1): state.traits",
+}
+`;
+
+exports[`tmpl_close_threads > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.
+
+# The turns
+
+## t1 (the opening)
+Rain had kept Gullhaven harbour quiet for three days.
+
+## t2 (the user's turn)
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+## t3 (narration)
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+## t4 (the user's turn)
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+## t5 (narration)
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+  "user": "# Your task: threads
+
+Keep the story's open threads true to this chapter. An active thread is carried in the narrator's prompt every turn until it closes, so a thread the chapter has settled or plainly abandoned shouldn't stay open. Write only what the cited turns show; a thread the chapter leaves as it was needs no call.
+
+- Duplicates. With merge_threads, merge threads that follow the same goal, quest, mystery or threat, however worded: keep one and absorb the rest. Merge before you update: a thread this close already wrote can be kept, never absorbed. When one is active, keep an active one: an active thread can be absorbed only into another active one. A thread whose injection mode is always or disabled can be absorbed only into one with the same mode: keep it instead, or leave the threads apart. Give a title or description only to replace the kept thread's; a duplicate the kept thread already covers merges with neither.
+- Status. With update_thread, set "resolved" when the chapter achieves a thread, or "failed" when it makes the thread impossible or plainly abandons it, citing the turns that settle it.
+- Descriptions. Bring a thread's description up to date when the chapter moves it on.
+- Titles. A thread's title changes only in a merge.
+
+The threads below show their titles, statuses and descriptions as they stand: "" is blank. A thread the user set to always (the narrator shows it every turn) or disabled (never shown) carries that injection mode after its status.
+
+# Open threads
+
+## th1: Who drowned the sailor (active)
+- description: """,
+}
+`;
+
+exports[`tmpl_close_upkeep > with a lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is what the lead does, says or attempts; outside quoted speech, its "I" is the lead, as "you" is in narration told in the second person. Where the narration after a turn shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+
+# The turns
+
+## t1 (the opening)
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+## t2 (the user's turn)
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+## t3 (narration)
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+## t4 (the user's turn)
+<user_turn>
+I dive after it.
+</user_turn>
+
+## t5 (narration)
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+  "user": "# Your task: upkeep
+
+Keep the world's places, items and keywords true to this chapter, with update_place, update_item and set_keywords, and mark the happenings everyone has come to know with mark_common_knowledge. Write only what the cited turns show; a row the chapter leaves as it was needs no call.
+
+- Off-scene conditions. Set a place's or an item's condition only when the chapter shows it changed while the scene was elsewhere ("news came that the capital burned"). The turns' own scene keeps the conditions it showed, so leave the condition of a row marked in the scene alone.
+- In-scene rows. A row in the scene is shown because it has no keywords or a blank description: give it its first keywords, or fill the description, when the turns show them; leave its condition alone.
+- Descriptions. Rewrite a place's or an item's description only when the chapter materially changes what it is, never for detail its condition or placement already carries. A blank description may be filled when the cited turns show it.
+- Keywords. With set_keywords, add the names and aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term that no longer fits. You can't see who added a term; removing a term the user added is refused.
+- Placement. With update_place, set a place's parent when the chapter places it or moves it, or send top: true for an unplaced place that nothing on the map could contain. Read a parent with read_row before naming it.
+- Common knowledge. Mark a happening with mark_common_knowledge only when the turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it.
+- Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+- Turn ids. Never write a turn id such as t3 into a condition, a description or a keyword: cite turns only in "turns".
+
+The story's lead is Kael (c1). Outside quoted speech, "I" and "you" in the turns are the lead.
+
+The rows below show the fields you may write, as they stand: "" is blank and [] an empty list. A place's placement is the place it sits inside, top level, or unplaced: known to exist, not where.
+
+# Rows
+
+## l1: The Drowned Keep (place, in the scene)
+- description: "A fortress half sunk into the marsh."
+- condition: "Flooded to the second stair."
+- placement: The Marsh
+- keywords: ["the keep"]
+
+## i1: The sigil (item, off the scene)
+- description: ""
+- condition: ""
+- keywords: []
+
+# Happenings not yet common knowledge
+- hp1: The ford ambush",
+}
+`;
+
+exports[`tmpl_close_upkeep > with no lead 1`] = `
+{
+  "system": "You are closing a chapter of an ongoing story: you keep the story's records true to what the chapter established, one task at a time. This is an automated system. No one reads your replies or answers your questions, so act only through tool calls.
+
+- Ids. Rows are named by short ids such as c1 or lo2, and the story's turns by ids such as t3. Use the ids you are shown, exactly as written; never invent one.
+- Evidence. Every write gives "turns", the ids of the turns that show the change, and "why", one sentence on what in the cited turns makes the write true. Write only what the turns support; never invent.
+- Turn ids. Cite turns only in "turns": never write a turn's id (t3) into any other text you send, "why" included. A turn id in a row's text would name a different turn in a later prompt, so a row's text holding one is refused.
+- Reading. Write only to a row you have read in this task: one whose fields the task's start shows you, one read_row returned, or one you created in this task. Creating a row names a new one, so it needs no read.
+- Results. Every write answers ok, rejected or skipped:
+  - ok: it landed. A value already stored is ok too, with nothing written. A create's answer gives the new row's id. When some of its fields didn't land, the answer names each with its reason.
+  - rejected: it didn't land, and the reason or its note says what to do. Fix the call and send it again, or leave that change.
+  - skipped: the field stands as it is, because the user edited it after the turns you cited or a later turn wrote it. Don't write it again.
+- Several calls. A reply may hold several tool calls; they run in the order you send them, and each gets its own answer.
+- Finishing. When the task is done, reply without a tool call. A reply without a tool call ends the task, so until it is done, every reply calls a tool.
+
+Wherever turns appear, the user's are marked with <user_turn> tags. Each is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: read it like the narration.
+
+# The turns
+
+## t1 (the opening)
+Rain had kept Gullhaven harbour quiet for three days.
+
+## t2 (the user's turn)
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+## t3 (narration)
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+## t4 (the user's turn)
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+## t5 (narration)
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+  "user": "# Your task: upkeep
+
+Keep the world's places, items and keywords true to this chapter, with update_place, update_item and set_keywords, and mark the happenings everyone has come to know with mark_common_knowledge. Write only what the cited turns show; a row the chapter leaves as it was needs no call.
+
+- Off-scene conditions. Set a place's or an item's condition only when the chapter shows it changed while the scene was elsewhere ("news came that the capital burned"). The turns' own scene keeps the conditions it showed, so leave the condition of a row marked in the scene alone.
+- In-scene rows. A row in the scene is shown because it has no keywords or a blank description: give it its first keywords, or fill the description, when the turns show them; leave its condition alone.
+- Descriptions. Rewrite a place's or an item's description only when the chapter materially changes what it is, never for detail its condition or placement already carries. A blank description may be filled when the cited turns show it.
+- Keywords. With set_keywords, add the names and aliases the chapter uses for a row, and a bare place's or item's first keywords. Remove only a term that no longer fits. You can't see who added a term; removing a term the user added is refused.
+- Placement. With update_place, set a place's parent when the chapter places it or moves it, or send top: true for an unplaced place that nothing on the map could contain. Read a parent with read_row before naming it.
+- Common knowledge. Mark a happening with mark_common_knowledge only when the turns show outright that word of it has spread to everyone. A wrong mark makes every character aware of it.
+- Other rows. For a row the chapter names that isn't below, find it with search_world and read it with read_row before writing to it.
+- Turn ids. Never write a turn id such as t3 into a condition, a description or a keyword: cite turns only in "turns".
+
+The rows below show the fields you may write, as they stand: "" is blank and [] an empty list. A place's placement is the place it sits inside, top level, or unplaced: known to exist, not where.
+
+# Rows
+
+## l1: Gullhaven harbour (place, in the scene)
+- description: ""
+- condition: ""
+- placement: top level
+- keywords: []
+
+# Happenings not yet common knowledge
+None.",
+}
+`;
+
+exports[`tmpl_per_turn_narrative > with a lead 1`] = `
+{
+  "system": "You are the narrator of an interactive story in which the user plays Kael. Each of the user's turns is what Kael does, says or attempts. Play it out and decide how the world and the other characters respond; an attempt can fail. You may give Kael perceptions, sensations and involuntary reactions, but never a choice, a line of speech or an action the user didn't write, and you stop where Kael's next choice begins. When the user's text plainly speaks to you rather than playing Kael ("skip to the next morning"), follow it as a direction.
+
+Narrate in the second person: "you" is Kael. Each character speaks, acts and remembers only from what they know. The narration itself may tell what no character in the scene knows.
+
+The user's turns are marked with <user_turn> tags in the story so far. Under What has happened, each happening ends with who in the scene knows it, or says it is common knowledge; a character in the scene it doesn't name doesn't know it.
+
+# Setting
+A drowned coast of salt marsh and broken keeps.
+
+# Genre
+Low fantasy: magic is rare, costly and feared.
+
+# Tone
+Dry humour under real danger.
+
+# Calendar
+This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta on <world_time_delta> using these units.
+
+Write the next beat of the story as prose. Do not break character or step outside the story to speak to the user.",
+  "user": "# In scene
+
+## Kael [c1]
+A courier carrying a stolen sigil.
+Voice: Clipped, wary.
+Traits: stubborn
+Drives: deliver the sigil
+
+## Mora [c2]
+A smuggler who knows the marsh paths.
+Voice: Low and amused.
+
+# Current location
+
+[l1] The Drowned Keep — in The Marsh: A fortress half sunk into the marsh.
+Condition: Flooded to the second stair.
+
+# Current time
+Frostmoon 3, the third hour
+
+# Places
+[l2] The Marsh
+  [l1] The Drowned Keep
+
+# What has happened
+
+The ford ambush: riders cut the ferry rope, and Kael got across. Known by Kael.
+
+# Active threads
+
+Deliver the sigil
+To the keep’s last steward.
+
+Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.
+
+# Story so far
+
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+<user_turn>
+I dive after it.
+</user_turn>
+
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.
+
+After your narrative prose, append exactly one <state> block (never inside the prose itself). Entities above are listed with an ID in brackets, e.g. "[c1] Kael" — reference that ID below WITHOUT the brackets:
+
+<state>
+  <scene_entities>comma-separated IDs of every character/item present in this scene</scene_entities>
+  <new_location handle="new:a-short-label" parent="the ID or handle of the place it is part of, or top" name="the place's name" condition="its condition, only when the prose shows one">a short description of the place</new_location>
+  <current_location>the ID from Places, or the handle of a new_location above</current_location>
+  <world_time_delta>seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative)</world_time_delta>
+  <visual_changes>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
+  </visual_changes>
+  <conditions>
+    <entity id="ID">the place or item as it is now: keep what still applies, drop what no longer does, in a few words, never more than about 60 — it replaces the stored condition whole</entity>
+  </conditions>
+  <new_item handle="new:a-short-label" name="the item's name" condition="its condition, only when the prose shows one">a short description of the item</new_item>
+  <transfers>
+    <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
+    <drop id="item ID" from="ID" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
+  </transfers>
+  <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
+  <retrieval_queries>
+    <query>up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one; identify the people, places and things by name, not ID</query>
+  </retrieval_queries>
+</state>
+
+Give each new place or item its own <new_location> or <new_item> tag with a handle that starts with new: (e.g. new:docks), and use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or, when it is in the scene, in <scene_entities>. Write a double quote, < or > inside a create's name or condition as &quot;, &lt; or &gt;, and a < inside its description as &lt;.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.
+
+Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose.
+
+Omit any inner tag you have nothing to report for. Apart from those handles, use only the IDs shown to you above, without brackets — never invent one. \`to\` or \`from\` may be omitted on a transfer when there's no specific known other party (e.g. found loose, spent on someone off-scene).
+Append exactly one <suggestions> block after everything else you write, never inside the prose itself. It offers the user 2 distinct options for their next turn. Each option is a finished turn they could send as it is — not a description of an option, and not a question. Write each option as Kael's next turn: what Kael does, says or attempts next, never how the world or anyone else responds. Write it in the first person, as "I". Draw only on what Kael knows.
+
+Every <item> carries a \`category\` attribute holding an opaque id copied EXACTLY from the id column below. Never use the category's name or its description as the attribute value.
+
+Categories you may reference:
+- id "cat1" = Action — use it for: act
+- id "cat2" = Dialogue — use it for: speak
+
+You may reuse a category or skip one; vary the categories across the options rather than repeating the same one.
+
+<suggestions>
+  <item category="cat1">the text of one option</item>
+</suggestions>
+
+Emit exactly 2 <item> entries. Keep each to one or two sentences.",
+}
+`;
+
+exports[`tmpl_per_turn_narrative > with no lead 1`] = `
+{
+  "system": "You are the narrator of a story the user directs. Each of the user's turns is a direction or prose: when it reads as a direction ("the guards catch them at the gate"), write the passage that carries it out; when it reads as prose, continue the story from it. You may write any character.
+
+Narrate in the third person. Each character speaks, acts and remembers only from what they know. The narration itself may tell what no character in the scene knows.
+
+The user's turns are marked with <user_turn> tags in the story so far. Under What has happened, each happening ends with who in the scene knows it, or says it is common knowledge; a character in the scene it doesn't name doesn't know it.
+
+# Genre
+A slow harbour mystery: every clue costs someone.
+
+Write the next beat of the story as prose. Do not break character or step outside the story to speak to the user.",
+  "user": "# In scene
+
+## Ilse Varga [c1]
+A harbour clerk who misses nothing.
+
+## Orrin [c2]
+A net-mender who works the pier at dawn.
+
+# Current location
+
+[l1] Gullhaven harbour: A grey harbour under a grey sky.
+
+# Places
+[l1] Gullhaven harbour
+
+Use an ID from Places for <current_location>, or declare a new one with <new_location> in the state block below when the scene settles somewhere new.
+
+# Story so far
+
+Rain had kept Gullhaven harbour quiet for three days.
+
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.
+
+After your narrative prose, append exactly one <state> block (never inside the prose itself). Entities above are listed with an ID in brackets, e.g. "[c1] Kael" — reference that ID below WITHOUT the brackets:
+
+<state>
+  <scene_entities>comma-separated IDs of every character/item present in this scene</scene_entities>
+  <new_location handle="new:a-short-label" parent="the ID or handle of the place it is part of, or top" name="the place's name" condition="its condition, only when the prose shows one">a short description of the place</new_location>
+  <current_location>the ID from Places, or the handle of a new_location above</current_location>
+  <world_time_delta>seconds elapsed since the end of the user's action (0 for a flashback or memory; never negative)</world_time_delta>
+  <visual_changes>
+    <entity id="ID" type="physique | face | hair | eyes | attire | distinguishing">the category as it is now, restated from its current value shown above: keep what still applies, drop what no longer does, in about 60 words — it replaces the stored value whole</entity>
+  </visual_changes>
+  <conditions>
+    <entity id="ID">the place or item as it is now: keep what still applies, drop what no longer does, in a few words, never more than about 60 — it replaces the stored condition whole</entity>
+  </conditions>
+  <new_item handle="new:a-short-label" name="the item's name" condition="its condition, only when the prose shows one">a short description of the item</new_item>
+  <transfers>
+    <item id="item ID, or the handle of a new_item above" to="ID" from="ID" slot="equipped_items | inventory" />
+    <drop id="item ID" from="ID" />
+    <stackable key="the key exactly as the holder's Stackables line shows it, or a new lowercase name, e.g. gold, only for something they don't hold yet" amount="quantity moved, never more than the payer holds" to="ID" from="ID" />
+  </transfers>
+  <summary>one sentence summarizing what happened in this reply — identify the people, places and things that mattered by name, not ID</summary>
+  <retrieval_queries>
+    <query>up to three short phrases naming context you want retrieved for the NEXT turn — what you would want looked up, not a recap of this one; identify the people, places and things by name, not ID</query>
+  </retrieval_queries>
+</state>
+
+Give each new place or item its own <new_location> or <new_item> tag with a handle that starts with new: (e.g. new:docks), and use a new place's handle like an ID only as the <current_location> or another new place's parent, and a new item's handle only as a transfer's item id or, when it is in the scene, in <scene_entities>. Write a double quote, < or > inside a create's name or condition as &quot;, &lt; or &gt;, and a < inside its description as &lt;.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.
+
+Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose.
+
+Omit any inner tag you have nothing to report for. Apart from those handles, use only the IDs shown to you above, without brackets — never invent one. \`to\` or \`from\` may be omitted on a transfer when there's no specific known other party (e.g. found loose, spent on someone off-scene).
+Append exactly one <suggestions> block after everything else you write, never inside the prose itself. It offers the user 3 distinct options for their next turn. Each option is a finished turn they could send as it is — not a description of an option, and not a question. Write each option as a short direction for the story's next beat, in the third person, calling characters by name ("the guards catch them at the gate"), not as story prose. It may involve any character.
+
+Every <item> carries a \`category\` attribute holding an opaque id copied EXACTLY from the id column below. Never use the category's name or its description as the attribute value.
+
+Categories you may reference:
+- id "cat1" = Twist — use it for: complicate things
+
+You may reuse a category or skip one; vary the categories across the options rather than repeating the same one.
+
+<suggestions>
+  <item category="cat1">the text of one option</item>
+</suggestions>
+
+Emit exactly 3 <item> entries. Keep each to one or two sentences.",
+}
+`;
+
+exports[`tmpl_periodic_classifier > with a lead 1`] = `
+{
+  "system": "You are extracting structured world state from recent story prose. Report only what the prose supports; never invent.
+
+Rules for every list:
+
+- Provenance. Set sourceTurn on every entry that has the field, and on no other, to the handle of the turn the fact comes from: a happening's involvements and awareness, and a knownAwareness entry, have none. For a fact synthesised across turns, use the LATEST contributing turn. For a status change or a first introduction, use the triggering turn.
+- Scene. After a turn's handle come the entities the story had in that scene when the turn was saved, and its location. Prose naming an entity in its turn's scene, or its location, refers to that entity.
+- The user's turns. A turn marked as the user's is what the lead does, says or attempts. Where the narration after it shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A user's turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.
+- Silence is valid. Return empty arrays for anything the prose does not support.
+
+Rules for happenings:
+
+- One happening an encounter. A happening is one whole event, however many turns it runs across: a fight, a meeting, a bargain, a theft, a chase. Its beats are not happenings of their own: the insult that starts a duel, each blow and the wound that ends it are one happening, the duel, as a feast's toasts, the quarrel at it and the walkout are one, the feast. Give it the latest turn it runs to as sourceTurn, and a description telling its notable moments in order, in a few sentences: who did what, what was said, given or lost, and how it ended, so that a character recalling it later has the scene to recall. Another event is another happening: one at another time or place, or one the turns only recount. Tell it in the third person, the lead included: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.
+- Titles. Give every happening a title, a few words naming the event as a chapter heading would ("The duel at the mill"), and a description of what happened, from the prose. A happening without a title is dropped, with its involvements and awareness.
+- When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal too: its time in the prose's own words ("ten winters ago", "since the war"), never one worked out from other numbers in it, or a short phrase when the prose gives none ("before the story", "ongoing"); its sourceTurn is then the turn that tells it. An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.
+- Involvements. List the entities that took part in the happening, not everything the prose names near it: who acted, who or what was acted on, and where it happened. A character the prose only mentions is not involved. Presence is not the test either — an absent target, a faction, or the place it happened all take part. A figure who took part but whom the New characters rule leaves out, an unnamed one the scene is done with, is not involved: tell their part in the description, and never add a character only to involve them. role is a free-form label for how (actor, target, site).
+- Awareness. List only characters the prose shows knowing of it, however they came to: who witnessed it or took part, and who learns of it. source is free-form prose describing HOW they know it ("witnessed firsthand", "told by Jorin", "overheard in the tavern"). severity is your judgment of how load-bearing the fact is for THAT character, from 0 to 1. If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.
+- Categories and icons. Give each happening and each new thread a free-form category (a battle, a betrayal, a quest) and, when one fits, an icon from the list its icon field gives.
+
+Rules for relationships:
+
+- Relationships. The Known relationships list is the current state, whoever wrote it. Add a relationships entry (subject, object, kind) only when the turns to classify establish a view or change a listed one; never restate a listed view. kind is how the subject sees the object, in a word or short phrase. A change means the relationship itself moved (trust broken, a new role); the same relationship in other words is not a change. If Kael is listed as seeing Aria as sister and he calls her "dear sister", emit nothing; if he disowns her, emit the new view. subject is the character whose perspective the prose expresses. Fill ONLY the perspective the prose shows — do not infer the inverse from biology or convention. "Kael called Aria sister" is Kael's view of Aria and says nothing about Aria's view of Kael.
+
+Rules for statusFlips:
+
+- Status changes. Put each move to active or retired in statusFlips, with the ID from Known entities or Places as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").
+- Retirement. Move a character or faction to retired only on unambiguous finality: death stated plainly, explicit exile with no return arc, structural dissolution. Ambiguous prose does NOT retire anyone — a character who "wandered off" or was "badly hurt" stays active.
+- Promotion. Move a staged entity of any kind to active only when the prose actually brings it into the scene.
+- Returns. Move a retired character back to active only when the turns put them in the scene now: not a memory, a flashback, a vision or someone's report of them. Never a place.
+
+Rules for newCharacters and newFactions:
+
+- New characters. Add a character the prose introduces who is not in the Known entities list: every named person or creature, whether alive, dead or only spoken of, but never a named ship, place or thing, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part, nor an unnamed one whose part is over ("a porter", "a sailor who helped haul the net", "a father long dead"), and not a listed character whose own name the turns reveal: that is a rename. Nor is a name the prose only invokes, in an oath, a saying or a song ("by Saint Mira's tears", "as Queen Ysolde used to say"). Put each in newCharacters with a handle you choose. The handle MUST start with "new:" (for example "new:captain") so it can never be confused with a listed ID. Reference that same handle in any involvement, awareness, relationship or membership in this reply. Also give keywords: the titles, epithets and relational references the prose used for that character alongside their name (for example "the Grey Wolf", "the innkeeper"). Omit the name itself, which retrieval already matches, and return an empty array when the prose used none. A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else: refer to it by its listed ID instead of adding a newCharacters entry, and put the new name form in aliases.
+- New factions. Add a faction when the prose establishes an organized group with its own identity in the story's world: a named one (a guild, an order, a noble house, a gang, a church, a government), or an unnamed one the story could come back to ("the smugglers who run the docks"). Not a loose crowd or a kind of person ("the guards", "the villagers"), not one that exists only in a hypothetical, a dream or a figure of speech, and not one already in Known entities, even under another name: use its ID and add the name form as an alias. Put each in newFactions with a handle that starts with "new:", as a new character's does, its name, a short description from the prose, keywords for the other names the prose used for it, and the sourceTurn. A new faction's handle must differ from every newCharacters handle and from every other new faction's. Use the handle wherever the faction's ID would go: in a happening's involvements and in a membership.
+- First profiles. Give a newCharacters entry the profile the turns show: visual (physique, face, hair, eyes, attire, distinguishing), traits (at most 8), drives (at most 6) and voice. Give a newFactions entry its standing and agenda (at most 4). Leave out whatever the prose doesn't show.
+
+Rules for memberships:
+
+- Memberships. Set a character's faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. A change of sides is one fact naming the new faction: no fact sets none for the faction they leave. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn't change it. Emit a fact only when the turns establish one or change the faction their line shows. A character's line in Known entities shows its faction after "faction:". Put each fact in memberships with character set to the character's ID or a new character's handle, faction set to the faction's ID, a new faction's handle, or null for none, and the sourceTurn.
+
+Rules for aliases, renames, placements and standings:
+
+- Aliases. When the prose calls a listed entity of any kind by a title, epithet or name form its line in Known entities or Places doesn't show, add an aliases entry with its ID as ref, those terms, and the sourceTurn. Leave out forms its line already shows.
+- Names. When the turns establish a listed entity's own name, a reveal ("the hooded stranger is Kael"), add a renames entry with its ID as ref, the name, and the sourceTurn; the app keeps its old name as an alias. An alias, a title, a disguise, or a shortened or fuller form of its name is not its name: put it in aliases. Add the entry even when another listed entity holds that name: the user is asked to merge the two.
+- Where places sit. When the turns establish where a place in the unplaced group of Places lies, or move a place in Places into another, add a placements entry with its ID as ref, parent set to the ID from Places of the place it is now part of, and the sourceTurn. Set parent to "top-level" only for an unplaced place nothing in Places could contain, as for a city when Places holds only cities.
+- Standing. A faction's line in Known entities shows its standing after "standing:". When the turns establish a change in a listed faction's position (it declares war, is outlawed, comes to power), add a standings entry with its ID as ref, the new standing in a short phrase, and the sourceTurn. Emit one only when the turns change it.
+
+Rules for newThreads and threadStatuses:
+
+- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms, an event set for later. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn. threadStatuses is for those listed threads alone: a thread this reply adds carries its status in its own newThreads entry and never appears in threadStatuses.
+
+Rules for knownAwareness:
+
+- Never add again a happening Known happenings lists: when the turns show a character knowing of one, learning of it ("Kael tells Aria about the massacre") or knowing it already (Kael, who tells it), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity, and learnedAtTurn when the turns narrate the learning. knownAwareness is for those listed happenings alone: who knows of a happening this reply adds goes in that happening's own awareness, and when the turns show no one knowing of a listed happening, knownAwareness stays empty.",
+  "user": "Known entities, referenced only by the ID shown in brackets — write it without the brackets, never invent one:
+- [c1] Kael (character) — A courier carrying a stolen sigil. (also called: the courier)
+- [c2] Mora (character) — A smuggler who knows the marsh paths. (faction: [f1])
+- [f1] The Reed Runners (faction) — Smugglers of the marsh. (standing: Tolerated by the keep’s steward)
+
+Places, same ID rule — each nested under the place it is part of:
+- [l2] The Marsh — Salt marsh for a day in every direction.
+  - [l1] The Drowned Keep — A fortress half sunk into the marsh. (also called: the keep)
+
+Known relationships, same ID rule — how each character sees another:
+- [c2] Mora sees [c1] Kael as: a mark
+
+Known happenings, same ID rule:
+- [hp1] The ford ambush
+
+Threads, same ID rule — each with its status:
+- [th1] Deliver the sigil (active)
+
+The story's lead is [c1] Kael. Outside quoted speech, "I" and "you" in the turns are the lead.
+
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
+[t1] scene: [c1]; location: [l1]
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+[t2] the user's turn; scene: [c1]; location: [l1]
+I wade in, holding the sigil above my head.
+[t3] scene: [c1]; location: [l1]
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+[t4] the user's turn; scene: [c1]; location: [l1]
+I dive after it.
+[t5] scene: [c1], [c2]; location: [l1]
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.",
+}
+`;
+
+exports[`tmpl_periodic_classifier > with no lead 1`] = `
+{
+  "system": "You are extracting structured world state from recent story prose. Report only what the prose supports; never invent.
+
+Rules for every list:
+
+- Provenance. Set sourceTurn on every entry that has the field, and on no other, to the handle of the turn the fact comes from: a happening's involvements and awareness, and a knownAwareness entry, have none. For a fact synthesised across turns, use the LATEST contributing turn. For a status change or a first introduction, use the triggering turn.
+- Scene. After a turn's handle come the entities the story had in that scene when the turn was saved, and its location. Prose naming an entity in its turn's scene, or its location, refers to that entity.
+- The user's turns. A turn marked as the user's is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: classify it like the narration.
+- Silence is valid. Return empty arrays for anything the prose does not support.
+
+Rules for happenings:
+
+- One happening an encounter. A happening is one whole event, however many turns it runs across: a fight, a meeting, a bargain, a theft, a chase. Its beats are not happenings of their own: the insult that starts a duel, each blow and the wound that ends it are one happening, the duel, as a feast's toasts, the quarrel at it and the walkout are one, the feast. Give it the latest turn it runs to as sourceTurn, and a description telling its notable moments in order, in a few sentences: who did what, what was said, given or lost, and how it ended, so that a character recalling it later has the scene to recall. Another event is another happening: one at another time or place, or one the turns only recount. Tell it in the third person, the lead included: never "I" or "you" outside quoted speech, whatever person the story is narrated in, since it is recalled later under whatever lead the story has then.
+- Titles. Give every happening a title, a few words naming the event as a chapter heading would ("The duel at the mill"), and a description of what happened, from the prose. A happening without a title is dropped, with its involvements and awareness.
+- When it happened. A happening sits at its sourceTurn, where the turns show it happen. For an event from before the story or offstage that the turns only recount, or a backdrop that holds throughout, set temporal too: its time in the prose's own words ("ten winters ago", "since the war"), never one worked out from other numbers in it, or a short phrase when the prose gives none ("before the story", "ongoing"); its sourceTurn is then the turn that tells it. An event still to come is not a happening: put the plan in newThreads, and add the event when the turns show it happen. Hearing of it can be one, at that turn.
+- Involvements. List the entities that took part in the happening, not everything the prose names near it: who acted, who or what was acted on, and where it happened. A character the prose only mentions is not involved. Presence is not the test either — an absent target, a faction, or the place it happened all take part. A figure who took part but whom the New characters rule leaves out, an unnamed one the scene is done with, is not involved: tell their part in the description, and never add a character only to involve them. role is a free-form label for how (actor, target, site).
+- Awareness. List only characters the prose shows knowing of it, however they came to: who witnessed it or took part, and who learns of it. source is free-form prose describing HOW they know it ("witnessed firsthand", "told by Jorin", "overheard in the tavern"). severity is your judgment of how load-bearing the fact is for THAT character, from 0 to 1. If a character learns of it after it happened, or learns of a past one, set learnedAtTurn to the turn that narrated the learning.
+- Categories and icons. Give each happening and each new thread a free-form category (a battle, a betrayal, a quest) and, when one fits, an icon from the list its icon field gives.
+
+Rules for relationships:
+
+- Relationships. The Known relationships list is the current state, whoever wrote it. Add a relationships entry (subject, object, kind) only when the turns to classify establish a view or change a listed one; never restate a listed view. kind is how the subject sees the object, in a word or short phrase. A change means the relationship itself moved (trust broken, a new role); the same relationship in other words is not a change. If Kael is listed as seeing Aria as sister and he calls her "dear sister", emit nothing; if he disowns her, emit the new view. subject is the character whose perspective the prose expresses. Fill ONLY the perspective the prose shows — do not infer the inverse from biology or convention. "Kael called Aria sister" is Kael's view of Aria and says nothing about Aria's view of Kael.
+
+Rules for statusFlips:
+
+- Status changes. Put each move to active or retired in statusFlips, with the ID from Known entities or Places as ref, the new status as to, and the sourceTurn. Give a retirement its reason, a short phrase from the prose ("killed at the ford").
+- Retirement. Move a character or faction to retired only on unambiguous finality: death stated plainly, explicit exile with no return arc, structural dissolution. Ambiguous prose does NOT retire anyone — a character who "wandered off" or was "badly hurt" stays active.
+- Promotion. Move a staged entity of any kind to active only when the prose actually brings it into the scene.
+- Returns. Move a retired character back to active only when the turns put them in the scene now: not a memory, a flashback, a vision or someone's report of them. Never a place.
+
+Rules for newCharacters and newFactions:
+
+- New characters. Add a character the prose introduces who is not in the Known entities list: every named person or creature, whether alive, dead or only spoken of, but never a named ship, place or thing, and an unnamed one the turns point the story toward, someone a character sets out to find or to face, or who is after one of them ("the innkeeper they ride to warn", "the bounty hunter on their trail"). Not an unnamed figure the scene is done with, even one who took part, nor an unnamed one whose part is over ("a porter", "a sailor who helped haul the net", "a father long dead"), and not a listed character whose own name the turns reveal: that is a rename. Nor is a name the prose only invokes, in an oath, a saying or a song ("by Saint Mira's tears", "as Queen Ysolde used to say"). Put each in newCharacters with a handle you choose. The handle MUST start with "new:" (for example "new:captain") so it can never be confused with a listed ID. Reference that same handle in any involvement, awareness, relationship or membership in this reply. Also give keywords: the titles, epithets and relational references the prose used for that character alongside their name (for example "the Grey Wolf", "the innkeeper"). Omit the name itself, which retrieval already matches, and return an empty array when the prose used none. A shortened or fuller name, a title or an alias of a listed character is that character unless the prose shows it is someone else: refer to it by its listed ID instead of adding a newCharacters entry, and put the new name form in aliases.
+- New factions. Add a faction when the prose establishes an organized group with its own identity in the story's world: a named one (a guild, an order, a noble house, a gang, a church, a government), or an unnamed one the story could come back to ("the smugglers who run the docks"). Not a loose crowd or a kind of person ("the guards", "the villagers"), not one that exists only in a hypothetical, a dream or a figure of speech, and not one already in Known entities, even under another name: use its ID and add the name form as an alias. Put each in newFactions with a handle that starts with "new:", as a new character's does, its name, a short description from the prose, keywords for the other names the prose used for it, and the sourceTurn. A new faction's handle must differ from every newCharacters handle and from every other new faction's. Use the handle wherever the faction's ID would go: in a happening's involvements and in a membership.
+- First profiles. Give a newCharacters entry the profile the turns show: visual (physique, face, hair, eyes, attire, distinguishing), traits (at most 8), drives (at most 6) and voice. Give a newFactions entry its standing and agenda (at most 4). Leave out whatever the prose doesn't show.
+
+Rules for memberships:
+
+- Memberships. Set a character's faction when the turns establish which organized group they belong to now: they join it, are revealed as a member, or change sides. Set it to none when they leave it or are cast out. A change of sides is one fact naming the new faction: no fact sets none for the faction they leave. Only their main allegiance: a secondary tie, a past membership ("once of the Iron Circle"), a disguise or a cover story doesn't change it. Emit a fact only when the turns establish one or change the faction their line shows. A character's line in Known entities shows its faction after "faction:". Put each fact in memberships with character set to the character's ID or a new character's handle, faction set to the faction's ID, a new faction's handle, or null for none, and the sourceTurn.
+
+Rules for aliases, renames, placements and standings:
+
+- Aliases. When the prose calls a listed entity of any kind by a title, epithet or name form its line in Known entities or Places doesn't show, add an aliases entry with its ID as ref, those terms, and the sourceTurn. Leave out forms its line already shows.
+- Names. When the turns establish a listed entity's own name, a reveal ("the hooded stranger is Kael"), add a renames entry with its ID as ref, the name, and the sourceTurn; the app keeps its old name as an alias. An alias, a title, a disguise, or a shortened or fuller form of its name is not its name: put it in aliases. Add the entry even when another listed entity holds that name: the user is asked to merge the two.
+- Where places sit. When the turns establish where a place in the unplaced group of Places lies, or move a place in Places into another, add a placements entry with its ID as ref, parent set to the ID from Places of the place it is now part of, and the sourceTurn. Set parent to "top-level" only for an unplaced place nothing in Places could contain, as for a city when Places holds only cities.
+- Standing. A faction's line in Known entities shows its standing after "standing:". When the turns establish a change in a listed faction's position (it declares war, is outlawed, comes to power), add a standings entry with its ID as ref, the new standing in a short phrase, and the sourceTurn. Emit one only when the turns change it.
+
+Rules for newThreads and threadStatuses:
+
+- Threads. Add a thread when the turns set up something the story will follow past the current scene: a goal a character commits to, a quest given, a mystery raised, a threat that looms, an event set for later. Not a passing intention, and not one already in the Threads list, even worded differently: change its status instead. Emit a status only when the turns establish the change. Put each new thread in newThreads with a title, a short description, its status (pending when the story knows of it but no one pursues it, active when someone does) and the sourceTurn. A thread the turns both open and close goes in newThreads as resolved or failed, with sourceTurn the turn that opened it and resolvedAtTurn the turn that closed it. Put each change in threadStatuses with the listed thread's ID as thread, the new status (active when it is taken up, resolved when it is achieved, failed when it is made impossible) and the sourceTurn. threadStatuses is for those listed threads alone: a thread this reply adds carries its status in its own newThreads entry and never appears in threadStatuses.
+
+Rules for knownAwareness:
+
+- Never add again a happening Known happenings lists: when the turns show a character knowing of one, learning of it ("Kael tells Aria about the massacre") or knowing it already (Kael, who tells it), add a knownAwareness entry with its ID as happening, the character's ID or a new character's handle as ref, source, severity, and learnedAtTurn when the turns narrate the learning. knownAwareness is for those listed happenings alone: who knows of a happening this reply adds goes in that happening's own awareness, and when the turns show no one knowing of a listed happening, knownAwareness stays empty.",
+  "user": "Known entities, referenced only by the ID shown in brackets — write it without the brackets, never invent one:
+- [c1] Ilse Varga (character) — A harbour clerk who misses nothing.
+- [c2] Orrin (character) — A net-mender who works the pier at dawn.
+
+Places, same ID rule — each nested under the place it is part of:
+- [l1] Gullhaven harbour — A grey harbour under a grey sky.
+Unplaced:
+  - [l2] The lock-keeper’s cottage
+
+Known relationships, same ID rule — how each character sees another:
+(none)
+
+Known happenings, same ID rule:
+(none)
+
+Threads, same ID rule — each with its status:
+(none)
+
+Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it. After the handle, a turn the user wrote is marked as the user's, and the turn's scene and location may follow, by the same ID rule; its prose starts on the next line:
+[t1] scene: [c1], [c2]; location: [l1]
+Rain had kept Gullhaven harbour quiet for three days.
+[t2] the user's turn; scene: [c1], [c2]; location: [l1]
+Orrin finds a body under the pier at dawn.
+[t3] scene: [c1], [c2]; location: [l1]
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+[t4] the user's turn; scene: [c1], [c2]; location: [l1]
+Ilse sends for the harbourmaster.
+[t5] scene: [c1], [c2]; location: [l1]
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.",
+}
+`;
+
+exports[`tmpl_piggyback_fallback_classifier > with a lead 1`] = `
+{
+  "system": "# Calendar
+This story tracks time in days (86400 seconds per day). Tiers: month (Frostmoon and Thawmoon). Convert relative-time prose ("two days later", "the next morning") into a seconds delta using these units.
+
+# The user's turns
+A turn marked as the user's is what the lead does, says or attempts. Where the narration after it shows how an attempt turned out, the narration decides what happened, and what the lead says stands unless the narration contradicts it. A user's turn that plainly speaks to the narrator rather than playing the lead ("skip to the next morning") is a direction: it states nothing that happened, so take the facts from the narration.",
+  "user": "Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+- [c1] Kael (character)
+- [c2] Mora (character)
+- [l1] The Drowned Keep (location)
+
+The story's lead is [c1] Kael. Outside quoted speech, "I" and "you" in the turns are the lead.
+
+Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.
+Take the changes from the turn below; nothing above it happened this turn.
+
+# In scene
+
+## Kael [c1]
+A courier carrying a stolen sigil.
+Voice: Clipped, wary.
+Traits: stubborn
+Drives: deliver the sigil
+
+## Mora [c2]
+A smuggler who knows the marsh paths.
+Voice: Low and amused.
+
+# Current location
+
+[l1] The Drowned Keep — in The Marsh: A fortress half sunk into the marsh.
+Condition: Flooded to the second stair.
+
+# Places
+[l2] The Marsh
+  [l1] The Drowned Keep
+
+# What has happened
+
+The ford ambush: riders cut the ferry rope, and Kael got across. Known by Kael.
+
+# Active threads
+
+Deliver the sigil
+To the keep’s last steward.
+
+# Earlier turns — how the scene got here, not the turn you report on
+
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+# This turn
+
+<user_turn>
+I dive after it.
+</user_turn>
+
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.
+
+Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
+Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
+For the time delta, give seconds elapsed since the previous entry, including any time the user's action itself took (0 for a flashback or memory; never negative).
+
+Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id or, when it is in the scene, in sceneEntities.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.
+
+Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose.
+Populate the "suggestions" field of your JSON response with exactly 2 distinct entries, one per option for the user's next turn.
+
+Each entry has exactly two fields:
+- "categoryRef" — an opaque id copied EXACTLY from the id column below (e.g. "cat1"). Never the category's name, never its description.
+- "text" — a finished turn the user could send as it is, not a description of an option and not a question.
+
+Write each option as Kael's next turn: what Kael does, says or attempts next, never how the world or anyone else responds. Write it in the first person, as "I". Draw only on what Kael knows.
+
+Categories you may reference:
+- id "cat1" = Action — use it for: act
+- id "cat2" = Dialogue — use it for: speak
+
+You may reuse a category or skip one; vary the categories across entries rather than repeating the same one. Keep each entry's text to one or two sentences.",
+}
+`;
+
+exports[`tmpl_piggyback_fallback_classifier > with no lead 1`] = `
+{
+  "system": "# The user's turns
+A turn marked as the user's is a direction or prose. One that reads as a direction ("the guards catch them at the gate") states nothing that happened: take the facts from the narration that carries it out. One that reads as prose is part of the story: classify it like the narration.",
+  "user": "Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
+- [c1] Ilse Varga (character)
+- [c2] Orrin (character)
+- [l1] Gullhaven harbour (location)
+
+Everything from here to "# This turn" is the world as it stands going into that turn — the baseline your report starts from, not a record of anything that happened in it.
+Take the changes from the turn below; nothing above it happened this turn.
+
+# In scene
+
+## Ilse Varga [c1]
+A harbour clerk who misses nothing.
+
+## Orrin [c2]
+A net-mender who works the pier at dawn.
+
+# Current location
+
+[l1] Gullhaven harbour: A grey harbour under a grey sky.
+
+# Places
+[l1] Gullhaven harbour
+
+# Earlier turns — how the scene got here, not the turn you report on
+
+Rain had kept Gullhaven harbour quiet for three days.
+
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+# This turn
+
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.
+
+Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
+Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.
+For the time delta, give seconds elapsed since the end of the user's action (0 for a flashback or memory; never negative).
+
+Report a place the scene settled in that has no ID yet in newLocations, and an item someone took or was given that has no ID yet in newItems. A handle is the one reference you make up: give each a handle that starts with new: (e.g. new:docks), and use it like an ID — a new place as currentLocation or as another new place's parent, a new item as a transfer's item id or, when it is in the scene, in sceneEntities.
+
+Create a place only when the scene settles somewhere with its own identity the story could come back to: a named place, a building, a room that matters, a stretch of wild land where things happen. Don't create one for passing through (a corridor, a doorway, the road between two places); keep the current location then. Use an existing place's ID whenever the scene is somewhere already in Places, and nest a new place under the place it's part of.
+
+Set a new place's parent to top only when nothing in Places could contain it, as for the story's first place or a city when Places holds only cities. Leave its parent out when something in Places could contain it and the prose doesn't say which; when unsure, leave it out.
+
+Create an item only when a character takes, receives or is given something that matters beyond this moment: a weapon, a key, a letter, a relic. Not food eaten on the spot, not money (use a stackable), not scenery.
+
+Give an existing place or item a condition only when the prose changes it, and only one shown above with its state: the current location, an item held in the scene or lying there, a place or item listed elsewhere in the world. Write it as it is now, the running consequence rather than the event (burned to the ground, not the fire), in a few words, never more than about 60; it replaces the stored condition whole, so never restate one unchanged. A place or item you create takes its condition where you create it.
+
+Put an item down only when someone holding it sets it down where the scene is and it is still lying there when the turn ends, so an item picked up again isn't put down; an item put down anywhere else, thrown into a river or left in another place, stays prose.
+Populate the "suggestions" field of your JSON response with exactly 3 distinct entries, one per option for the user's next turn.
+
+Each entry has exactly two fields:
+- "categoryRef" — an opaque id copied EXACTLY from the id column below (e.g. "cat1"). Never the category's name, never its description.
+- "text" — a finished turn the user could send as it is, not a description of an option and not a question.
+
+Write each option as a short direction for the story's next beat, in the third person, calling characters by name ("the guards catch them at the gate"), not as story prose. It may involve any character.
+
+Categories you may reference:
+- id "cat1" = Twist — use it for: complicate things
+
+You may reuse a category or skip one; vary the categories across entries rather than repeating the same one. Keep each entry's text to one or two sentences.",
+}
+`;
+
+exports[`tmpl_suggestion_refresh > with a lead 1`] = `
+{
+  "system": "# Setting
+A drowned coast of salt marsh and broken keeps.
+
+# Genre
+Low fantasy: magic is rare, costly and feared.
+
+# Tone
+Dry humour under real danger.",
+  "user": "# In scene
+
+## Kael
+A courier carrying a stolen sigil.
+Voice: Clipped, wary.
+Traits: stubborn
+Drives: deliver the sigil
+
+## Mora
+A smuggler who knows the marsh paths.
+Voice: Low and amused.
+
+## The Drowned Keep
+A fortress half sunk into the marsh.
+Condition: Flooded to the second stair.
+
+# Story so far
+
+The marsh road ended at a wall of black water. Beyond it, the Drowned Keep leaned out of the reeds.
+
+<user_turn>
+I wade in, holding the sigil above my head.
+</user_turn>
+
+The cold takes your breath. Halfway across, the current tugs the sigil from your fingers, and it is gone.
+
+<user_turn>
+I dive after it.
+</user_turn>
+
+Your hand closes on weed and silt. When you surface, Mora is watching from the keep’s broken stair, a lantern in her fist.
+
+# Next-turn options
+Populate the "suggestions" field of your JSON response with exactly 2 distinct entries, one per option for the user's next turn.
+
+Each entry has exactly two fields:
+- "categoryRef" — an opaque id copied EXACTLY from the id column below (e.g. "cat1"). Never the category's name, never its description.
+- "text" — a finished turn the user could send as it is, not a description of an option and not a question.
+
+Write each option as Kael's next turn: what Kael does, says or attempts next, never how the world or anyone else responds. Write it in the first person, as "I". Draw only on what Kael knows.
+
+Categories you may reference:
+- id "cat1" = Action — use it for: act
+- id "cat2" = Dialogue — use it for: speak
+
+You may reuse a category or skip one; vary the categories across entries rather than repeating the same one. Keep each entry's text to one or two sentences.",
+}
+`;
+
+exports[`tmpl_suggestion_refresh > with no lead 1`] = `
+{
+  "system": "# Genre
+A slow harbour mystery: every clue costs someone.",
+  "user": "# In scene
+
+## Ilse Varga
+A harbour clerk who misses nothing.
+
+## Orrin
+A net-mender who works the pier at dawn.
+
+## Gullhaven harbour
+A grey harbour under a grey sky.
+
+# Story so far
+
+Rain had kept Gullhaven harbour quiet for three days.
+
+<user_turn>
+Orrin finds a body under the pier at dawn.
+</user_turn>
+
+Orrin found it at first light: a sailor face down in the shallows, a gull feather tucked into his collar.
+
+<user_turn>
+Ilse sends for the harbourmaster.
+</user_turn>
+
+Ilse sent the lock-keeper’s boy running, then stood over the body until the harbourmaster came down the steps, swearing at the rain.
+
+# Next-turn options
+Populate the "suggestions" field of your JSON response with exactly 3 distinct entries, one per option for the user's next turn.
+
+Each entry has exactly two fields:
+- "categoryRef" — an opaque id copied EXACTLY from the id column below (e.g. "cat1"). Never the category's name, never its description.
+- "text" — a finished turn the user could send as it is, not a description of an option and not a question.
+
+Write each option as a short direction for the story's next beat, in the third person, calling characters by name ("the guards catch them at the gate"), not as story prose. It may involve any character.
+
+Categories you may reference:
+- id "cat1" = Twist — use it for: complicate things
+
+You may reuse a category or skip one; vary the categories across entries rather than repeating the same one. Keep each entry's text to one or two sentences.
+
+The reader has already started writing their next turn:
+
+Ilse questions the lock-keeper’s boy.
+
+Build on that direction — take it further or offer variations of it — without repeating it back verbatim.",
+}
+`;

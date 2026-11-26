@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { Entity } from '@/lib/db'
+import type { Entity, EntryMetadata } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import { leadLabelFor, needsLead, resolveLead, resolveLeadLogged } from './lead'
+import {
+  leadLabelFor,
+  leadMarks,
+  leadStampOf,
+  needsLead,
+  resolveLead,
+  resolveLeadLogged,
+} from './lead'
 
 const row = (id: string, over: Partial<Entity> = {}) =>
   ({ id, branchId: 'b1', kind: 'character', status: 'active', isLead: 0, ...over }) as Entity
@@ -109,5 +116,112 @@ describe('leadLabelFor', () => {
   it('labels the lead `you` in adventure and `protagonist` in creative', () => {
     expect(leadLabelFor('adventure')).toBe('you')
     expect(leadLabelFor('creative')).toBe('protagonist')
+  })
+})
+
+// architecture.md → System and user halves: a turn is compared with the one before it, the first
+// with the named lead, and only a change marks it. Expectations are written out, never derived.
+describe('leadMarks', () => {
+  const MARA = 'char_mara'
+  const JORIN = 'char_jorin'
+  const NAMES = new Map([
+    [MARA, 'Mara'],
+    [JORIN, 'Jorin'],
+  ])
+  // Any other id is a deleted character: the branch holds no row, so the lookup finds no name.
+  const nameOf = (id: string) => NAMES.get(id)
+
+  it('marks no turn when every stamp is the named lead', () => {
+    expect(leadMarks([JORIN, JORIN, JORIN], JORIN, nameOf)).toStrictEqual([
+      undefined,
+      undefined,
+      undefined,
+    ])
+  })
+
+  it('marks the first turn of each run only', () => {
+    expect(leadMarks([MARA, MARA, JORIN, JORIN], JORIN, nameOf)).toStrictEqual([
+      { id: MARA, name: 'Mara' },
+      undefined,
+      { id: JORIN, name: 'Jorin' },
+      undefined,
+    ])
+  })
+
+  it('marks the first turn when its stamp differs from the named lead', () => {
+    expect(leadMarks([MARA, MARA], JORIN, nameOf)).toStrictEqual([
+      { id: MARA, name: 'Mara' },
+      undefined,
+    ])
+  })
+
+  it('gives a deleted former lead { gone }', () => {
+    expect(leadMarks(['char_gone', 'char_gone', JORIN], JORIN, nameOf)).toStrictEqual([
+      { gone: true },
+      undefined,
+      { id: JORIN, name: 'Jorin' },
+    ])
+  })
+
+  // data-model.md → The lead: deleting the lead takes the flag with the row, so none is named.
+  it('gives the deleted current lead { gone }, under no named lead', () => {
+    expect(leadMarks(['char_gone', 'char_gone'], null, nameOf)).toStrictEqual([
+      { gone: true },
+      undefined,
+    ])
+  })
+
+  // data-model.md → The lead: an absent stamp means the branch had no lead when it was written.
+  it('gives a missing stamp { none }', () => {
+    expect(leadMarks([undefined, undefined, JORIN], JORIN, nameOf)).toStrictEqual([
+      { none: true },
+      undefined,
+      { id: JORIN, name: 'Jorin' },
+    ])
+  })
+
+  it('compares stamps by id, so two deleted characters in a row give two marks', () => {
+    expect(leadMarks(['char_gone_1', 'char_gone_2'], JORIN, nameOf)).toStrictEqual([
+      { gone: true },
+      { gone: true },
+    ])
+  })
+
+  it('marks nothing when no lead is named and no turn is stamped', () => {
+    expect(leadMarks([undefined, undefined], null, nameOf)).toStrictEqual([undefined, undefined])
+  })
+
+  it('marks the switch away from the named lead and the switch back to it', () => {
+    expect(leadMarks([MARA, JORIN, MARA], MARA, nameOf)).toStrictEqual([
+      undefined,
+      { id: JORIN, name: 'Jorin' },
+      { id: MARA, name: 'Mara' },
+    ])
+  })
+
+  it('names the character as the lookup gives it', () => {
+    expect(leadMarks([MARA], JORIN, () => 'Mara the Elder')).toStrictEqual([
+      { id: MARA, name: 'Mara the Elder' },
+    ])
+  })
+
+  // The templates print a mark's name raw, on the line that introduces its turn.
+  it('puts a name the lookup gives over several lines on one line', () => {
+    expect(leadMarks([MARA], JORIN, () => '  Mara\nthe \t Elder\n')).toStrictEqual([
+      { id: MARA, name: 'Mara the Elder' },
+    ])
+  })
+})
+
+describe('leadStampOf', () => {
+  const scene: EntryMetadata = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+  it("reads the entry's metadata.leadId", () => {
+    expect(leadStampOf({ metadata: { ...scene, leadId: 'char_mara' } })).toBe('char_mara')
+  })
+
+  it('is undefined for an unstamped entry and for one with no metadata', () => {
+    expect(leadStampOf({ metadata: scene })).toBeUndefined()
+    expect(leadStampOf({ metadata: null })).toBeUndefined()
   })
 })

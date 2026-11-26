@@ -2,6 +2,8 @@ import type { TemplateSources } from '../types'
 
 // piggyback.md → Fallback classifier context: most of what the narrative call gets, minus
 // Setting / Genre / Tone and either output-format macro, plus the flat bracketed ID roster.
+// The lead line adds its clause only when a turn in lastTurns is marked, so a never-switched
+// story's line stays unqualified (architecture.md → System and user halves).
 export const PIGGYBACK_FALLBACK_CLASSIFIER: TemplateSources = {
   system: `{% section 'setup' %}{% if calendarVocabulary -%}
 # Calendar
@@ -13,6 +15,7 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVo
   user: `{% section 'roster' %}Known entities, referenced only by the ID shown below in brackets — write it without the brackets, never invent one:
 {%- assign referenceable = entities | active -%}
 {%- assign stagedEntities = entities | staged -%}
+{%- assign markedTurns = lastTurns | where: 'leadMark' -%}
 {% for e in referenceable %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }})
 {%- endfor -%}
@@ -21,7 +24,7 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s{% if calendarVo
 {%- endfor %}
 {% if referenceable.size == 0 and stagedEntities.size == 0 %}(none)
 {% endif %}{% if lead %}
-The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead.
+The story's lead is [{{ lead.id }}] {{ lead.name }}. Outside quoted speech, "I" and "you" in the turns are the lead{% if markedTurns.size > 0 %}, except where a turn names another{% endif %}.
 {% endif %}{% endsection %}
 {%- comment -%}
 Marking is mandatory, not stylistic (piggyback.md), and aimed at the memory blocks: older and
@@ -84,12 +87,12 @@ negative offset slices from the END in Liquid — coinciding with the intended r
 {% section 'history' %}{% if pairStart > 0 -%}
 # Earlier turns — how the scene got here, not the turn you report on
 {% for entry in lastTurns limit: pairStart %}
-{% include 'macro_story_entry', entry: entry %}
+{% include 'macro_story_entry', entry: entry, ids: 'bracketed' %}
 {% endfor %}
 {% endif -%}
 # This turn
 {% for entry in lastTurns offset: pairStart %}
-{% include 'macro_story_entry', entry: entry %}
+{% include 'macro_story_entry', entry: entry, ids: 'bracketed' %}
 {% endfor %}
 {% endsection %}{% section 'instructions' %}Report the scene state as of the LAST entry above, the time delta, a one-sentence summary of the turn, up to three retrieval queries naming context you want looked up for the next turn, and anything else the schema asks for that this turn showed.
 Scene state is absolute, not a delta: report the full cast present at the end of the turn, not only what changed. Read the entry before it for state the user's own action changed.

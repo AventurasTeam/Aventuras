@@ -8,7 +8,15 @@ import { readRowTool, refsIn } from './read-tools'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
 import { mergeThreadsTool, updateThreadTool } from './thread-tools'
 import type { ReadFields } from './tool'
-import { hasTurns, readTaskTurns, renderClosePrompt, storyModeOf, type CloseTurns } from './turns'
+import {
+  hasTurns,
+  readTaskTurns,
+  renderClosePrompt,
+  showLead,
+  storyModeOf,
+  type CloseTurns,
+  type ShownLead,
+} from './turns'
 import { isOpen, OPEN_THREAD_STATUSES, type OpenThreadStatus } from '../chapter-context'
 
 /** C11: the fields Threads' start shows, so read_row returns the same and its rows count as read. */
@@ -28,6 +36,8 @@ export type ThreadsShow = {
     status: OpenThreadStatus
     injectionMode: InjectionMode
   }[]
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: ShownLead | null
 }
 
 // memory/chapter-close.md → Run order: the open threads, the user's included.
@@ -47,7 +57,7 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
     .orderBy(asc(threads.createdAt), asc(threads.id))
   const open = rows.filter(isOpen)
   if (open.length === 0) return null
-  const { closeTurns, proseTokens } = await readTaskTurns(ctx)
+  const { closeTurns, proseTokens, lead } = await readTaskTurns(ctx)
   // A task with nothing to start from makes no call.
   if (!hasTurns(closeTurns)) return null
   // Every thread's handle first, so one a text names keeps the number of its place in the list; a
@@ -69,6 +79,8 @@ async function startThreads(ctx: TaskPromptContext): Promise<TaskStart<ThreadsSh
         status: row.status,
         injectionMode: row.injectionMode,
       })),
+      // Last: the rows above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     seeds: open.map(({ id }) => ({ table: 'threads', id })),
   }
@@ -81,7 +93,12 @@ function renderThreads(
   return renderClosePrompt(
     TEMPLATE_IDS.closeThreads,
     show.closeTurns,
-    { mode: show.mode, closeThreads: show.threads, closeWritesSoFar: ctx.writesSoFar },
+    {
+      mode: show.mode,
+      closeThreads: show.threads,
+      closeWritesSoFar: ctx.writesSoFar,
+      lead: show.lead,
+    },
     show.proseTokens,
   )
 }

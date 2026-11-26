@@ -40,7 +40,7 @@ import { refsIn } from './read-tools'
 import { readTurnsTool } from './read-turns'
 import type { CodeStep, CodeStepContext } from './slots'
 import type { CloseTaskDef, TaskPromptContext, TaskStart } from './task'
-import { storyModeOf } from './turns'
+import { readCloseLead, showLead, storyModeOf, type ShownLead } from './turns'
 import { emitDeltaGroup } from '../../runtime/emit-group'
 import type { PhaseEmittedEvent, PhaseResult } from '../../types'
 import { closeRangeOf } from '../close-intermediates'
@@ -62,7 +62,13 @@ export type AwarenessListRow = {
 
 export type AwarenessGroup = { happening: { id: string; title: string }; rows: AwarenessListRow[] }
 
-type AwarenessShow = { groups: AwarenessGroup[]; summary: string; mode: StoryMode }
+type AwarenessShow = {
+  groups: AwarenessGroup[]
+  summary: string
+  mode: StoryMode
+  /** The branch's lead under its handle (VARIABLES.chapter → lead); null with none. */
+  lead: ShownLead | null
+}
 
 type ListedRow = {
   id: string
@@ -245,6 +251,7 @@ async function startAwareness(ctx: TaskPromptContext): Promise<TaskStart<Awarene
     ctx,
     listed.map(({ row }) => [row.title, row.name, row.source ?? '']),
   )
+  const lead = await readCloseLead(ctx)
   const handled = (value: string): string => ctx.ids.withHandles(value)
   return {
     show: {
@@ -261,6 +268,8 @@ async function startAwareness(ctx: TaskPromptContext): Promise<TaskStart<Awarene
       })),
       summary: handled(await chapterSummary(ctx)),
       mode: await storyModeOf(ctx),
+      // Last: the rows and the summary above keep their handles.
+      lead: showLead(ctx.ids, lead),
     },
     seeds: listed.map(({ row }): GuardRow => ({ table: 'happening_awareness', id: row.id })),
   }
@@ -283,6 +292,7 @@ function renderAwareness(
     closeChapterSummary: show.summary,
     closeChapterTurns: chapterTurns(ctx),
     closeWritesSoFar: ctx.writesSoFar,
+    lead: show.lead,
   })
 }
 

@@ -123,7 +123,7 @@ He said nothing. Outside, the rain came harder against the shutters.`,
     happenings: [
       {
         title: 'Aria lies about the letter',
-        description: 'Kael confronts Aria about a letter, and she lies to him about who wrote it.',
+        description: 'You confront Aria about a letter, and she lies to you about who wrote it.',
         category: 'a deception',
         involvements: [
           { ref: 'char_kael', role: 'actor' },

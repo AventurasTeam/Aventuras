@@ -1342,6 +1342,7 @@ describe('readTaskTurns', () => {
       entries: [],
       closeTurns: [],
       proseTokens: 0,
+      lead: null,
     })
   })
 })

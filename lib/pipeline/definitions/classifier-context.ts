@@ -3,7 +3,7 @@ import type { CharacterRelationship, Entity, Happening, StoryMode, Thread } from
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { normalizeTerm } from '@/lib/keyword-terms'
 import { blankToNull, oneLine } from '@/lib/text'
-import { characterFactionId, placeTree, stateOf, type PlaceTreeRow } from '@/lib/world'
+import { characterFactionId, leadMarks, placeTree, stateOf, type PlaceTreeRow } from '@/lib/world'
 
 type RelationshipFact = {
   subject: string
@@ -28,11 +28,8 @@ const aliasesOf = (e: Pick<Entity, 'name' | 'keywords'>): string[] => {
 // has no entity in the snapshot (FK-less, deleted) has no name to inline and is dropped.
 function projectRelationships(
   relationships: readonly CharacterRelationship[],
-  entities: readonly Entity[],
+  characterNames: ReadonlyMap<string, string>,
 ): RelationshipFact[] {
-  const characterNames = new Map(
-    entities.filter((e) => e.kind === 'character').map((e) => [e.id, oneLine(e.name)]),
-  )
   return relationships.flatMap((r): RelationshipFact[] => {
     const aName = characterNames.get(r.aId)
     const bName = characterNames.get(r.bId)
@@ -112,6 +109,15 @@ export function buildClassifierContext(args: {
     return id != null && factions.has(id) ? id : null
   }
   const places = placeTree(entities)
+  const characterNames = new Map<string, string>(
+    entities.filter((e) => e.kind === 'character').map((e) => [e.id, oneLine(e.name)]),
+  )
+  const lead = leadOf(entities, leadId)
+  const marks = leadMarks(
+    window.turns.map((t) => t.leadId),
+    lead?.id ?? null,
+    (id) => characterNames.get(id),
+  )
   const context = {
     // Before turns: substituteIds allocates in walk order, so the roster numbers first.
     // No injectionMode, which generationContext's carries: a retrieval-time knob.
@@ -132,21 +138,29 @@ export function buildClassifierContext(args: {
     // After the tree, so its places number first; ids kept, so a pass can place one.
     placesUnplaced: places.unplaced.map(placeRow),
     // entryId/position stay out: entry_* is not substitutable, so it would leak a raw id.
-    // Scene/location ids are filtered to known: a deleted row would get a placeholder.
-    turns: window.turns.map((t) => ({
-      handle: t.handle,
-      kind: t.kind,
-      content: t.content,
-      scene: t.sceneEntities.filter((id) => known.has(id)),
-      location:
-        t.currentLocationId != null && known.has(t.currentLocationId) ? t.currentLocationId : null,
-    })),
+    // Scene/location ids are filtered to known: a deleted row would get a placeholder. A mark's id
+    // is a listed character's; a deleted one is `{ gone }`, with no id to allocate.
+    turns: window.turns.map((t, i) => {
+      const leadMark = marks[i]
+      return {
+        handle: t.handle,
+        kind: t.kind,
+        content: t.content,
+        scene: t.sceneEntities.filter((id) => known.has(id)),
+        location:
+          t.currentLocationId != null && known.has(t.currentLocationId)
+            ? t.currentLocationId
+            : null,
+        // Absent, not null: a never-switched context holds no leadMark key.
+        ...(leadMark === undefined ? {} : { leadMark }),
+      }
+    }),
     happenings: happenings.map((h) => ({ id: h.id, title: oneLine(h.title) })),
     threads: threads.map((t) => ({ id: t.id, title: oneLine(t.title), status: t.status })),
-    relationships: projectRelationships(relationships, entities),
+    relationships: projectRelationships(relationships, characterNames),
     // classifier.md → What the classifier reads: who "I" and "you" are; a lead no line lists has
     // no placeholder to name it by.
-    lead: leadOf(entities, leadId),
+    lead,
     mentionedPlaces,
     mode,
   }

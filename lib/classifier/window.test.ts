@@ -241,3 +241,34 @@ describe('recorded happenings', () => {
     expect([...w.injectedHappenings].sort()).toEqual(['hap_a', 'hap_b', 'hap_c'])
   })
 })
+
+// classifier.md → What the classifier reads: each turn carries the lead it was written under, a
+// stamp inheritedEntryMetadata leaves out (authored, never inherited).
+describe('the lead stamp per turn', () => {
+  const withMetadata = (position: number, id: string, metadata: Record<string, unknown> | null) =>
+    ({ id, position, kind: 'ai_reply', content: `prose ${position}`, metadata }) as never
+
+  it("copies each entry's metadata.leadId onto its turn, undefined when unstamped", () => {
+    const w = buildClassifierWindow({
+      entries: [
+        withMetadata(1, 'e1', {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          leadId: 'char_a',
+        }),
+        withMetadata(2, 'e2', { sceneEntities: [], currentLocationId: null, worldTime: 0 }),
+        withMetadata(3, 'e3', null),
+        withMetadata(4, 'e4', {
+          sceneEntities: [],
+          currentLocationId: null,
+          worldTime: 0,
+          leadId: 'char_b',
+        }),
+      ],
+      processedThrough: 0,
+      maxEntries: 20,
+    })
+    expect(w.turns.map((t) => t.leadId)).toEqual(['char_a', undefined, undefined, 'char_b'])
+  })
+})

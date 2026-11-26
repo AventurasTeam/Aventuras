@@ -1,4 +1,4 @@
-import { refsResolve } from './checks'
+import { refsResolve, toldInThirdPerson } from './checks'
 import type { EvalWindow } from './fixture'
 import { ambush } from './windows/ambush'
 import { defection } from './windows/defection'
@@ -7,13 +7,14 @@ import { learning } from './windows/learning'
 import { namedrops } from './windows/namedrops'
 import { recounted } from './windows/recounted'
 import { reveal } from './windows/reveal'
+import { switchWindow } from './windows/switch'
 
 export type { Check, EvalWindow } from './fixture'
 export { renderWindow } from './render'
 
 // The evaluation set the classifier prompt is tuned against (testing.md → Real-provider checks).
 // Run it with PROBE_EVAL on the parse probe. Each window also scores placeholder use against its
-// own rows.
+// own rows, and its happenings' descriptions for the third person.
 export const EVAL_WINDOWS: readonly EvalWindow[] = [
   ambush,
   recounted,
@@ -22,4 +23,5 @@ export const EVAL_WINDOWS: readonly EvalWindow[] = [
   learning,
   namedrops,
   direction,
-].map((w) => ({ ...w, checks: [...w.checks, refsResolve(w)] }))
+  switchWindow,
+].map((w) => ({ ...w, checks: [...w.checks, refsResolve(w), toldInThirdPerson()] }))

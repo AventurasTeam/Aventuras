@@ -1,4 +1,5 @@
 import type { TemplateSources } from '../types'
+import { LEAD_MARK_EXPLAINER } from './story-entry'
 
 export const PER_TURN_NARRATIVE: TemplateSources = {
   // architecture.md → System and user halves: the same bytes every call, so nothing per call goes
@@ -86,8 +87,9 @@ Use an ID from Places for <current_location>, or declare a new one with <new_loc
 {% endif -%}
 {% endif -%}
 {% endsection %}{% section 'history' %}# Story so far
-{% for entry in entries %}
-{% include 'macro_story_entry', entry: entry %}
+{% assign markedEntries = entries | where: 'leadMark' %}{% if markedEntries.size > 0 %}${LEAD_MARK_EXPLAINER}
+{% endif %}{% for entry in entries %}
+{% include 'macro_story_entry', entry: entry, ids: false %}
 {% endfor %}{% endsection %}
 {%- comment -%}
 Each emission block opens with one newline: a blank line after the story's last
