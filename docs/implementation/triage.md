@@ -140,16 +140,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `onDismissed` to the presentation that started the close is a
   Sheet-primitive change. Found in Slice 6.4's PR review (2026-11-24).
 
-- **Older test seeds skip the row types.** Some suites build seed rows
-  as untyped literals held together by `as const`, such as
-  `setup()` in `lib/actions/relationships/register.test.ts:35-44`.
-  Drizzle's `.values()` drops a key that isn't a column without an
-  error, so a misspelled column there quietly keeps its default, and a
-  fixture meant to differ doesn't. Typing the builder
-  (`NewEntity` and the like) makes the typo a compile error. Slice
-  6.10 typed its own `branch scope` builders; the older seeds are out
-  of its scope. Found by Slice 6.10's slice review (2026-11-24).
-
 - **The `branch scope` blocks repeat their helpers.** The chapters,
   entry-assets, era-flips and translations register suites each define
   near-identical `forked`, `<table>On`, `undoPayloadsOf` and `onFork`

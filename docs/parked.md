@@ -4257,6 +4257,21 @@ sweep converts the exact idiom only: a fixed-string fallback, a
 stack-first message and the bare `String(e)` log fields read
 differently.
 
+The same family, routed from triage 2026-11-26: **Older test seeds skip the row types.** Some suites build seed rows
+as untyped literals held together by `as const`, such as
+`setup()` in `lib/actions/relationships/register.test.ts:35-44`.
+Drizzle's `.values()` drops a key that isn't a column without an
+error, so a misspelled column there quietly keeps its default, and a
+fixture meant to differ doesn't. Typing the builder
+(`NewEntity` and the like) makes the typo a compile error. Slice
+6.10 typed its own `branch scope` builders; the older seeds are out
+of its scope. Found by Slice 6.10's slice review (2026-11-24). Counted on
+routing with the compiler API over 235 test files: 66 untyped seed sites
+in 35 files reach `.values()` through a shape that escapes the check
+(a `.map` to literals, or an untyped builder); none carries a non-column
+key today, and a misspelled required column still fails, so only an
+optional or defaulted one can slip. Same signal as above.
+
 #### A fresh dev slot could install its embedder itself
 
 Every seeded story (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`)
