@@ -245,18 +245,6 @@ slice-planning gate forces its resolution before that slice is planned.
   test; nothing keeps the third in step. Found in Slice 6.7's reviews
   (2026-11-23).
 
-- **The on-device reseed holds a transaction open across `await`s.**
-  `lib/db/devtools/reseed.native.ts:34-40` runs `BEGIN`, then
-  `await db.insert(…)` per table, on the app's native connection. Each
-  insert is synchronous, but the JS thread yields between them. A read
-  in a gap sees rows a `ROLLBACK` may discard, and an app transaction
-  there runs `withTransactionSync`, whose `BEGIN` SQLite refuses inside
-  an open transaction; its catch then runs `ROLLBACK` (expo-sqlite's
-  `SQLiteDatabase.ts:298-307`), ending the reseed's transaction under
-  it. The native read's ESLint guard bans async expo-sqlite calls, not
-  this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's
-  reviews (2026-11-23).
-
 - **Change prose can show two sides that read identically.** Three
   cases.
   (1) _Term-list display._ `termListChange` in
