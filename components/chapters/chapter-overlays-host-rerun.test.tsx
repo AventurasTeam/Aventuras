@@ -246,14 +246,6 @@ function markPendingTurn(): { end: () => Promise<void> } {
   }
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 beforeEach(() => {
   resetAllStores()
   view.props = null
@@ -852,8 +844,8 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
   })
 
   it('holds the parent reader and keeps the confirm pending from the press to the publish, which unmounts it and ends the hold', async () => {
-    const forked = deferred<ForkResult>()
-    const tail = deferred<ShowBranchResult>()
+    const forked = Promise.withResolvers<ForkResult>()
+    const tail = Promise.withResolvers<ShowBranchResult>()
     actions.fork.mockReturnValue(forked.promise)
     actions.show.mockImplementation(async () => {
       const shownTail = await tail.promise
@@ -994,7 +986,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
   it("a check refused on the parent's turn body holds the actions until the body settles", async () => {
     vi.spyOn(toast, 'error').mockReturnValue('')
     actions.check.mockResolvedValue({ outcome: 'rejected', blockedBy: 'story-busy' })
-    const body = deferred<void>()
+    const body = Promise.withResolvers<void>()
     act(() => {
       void generationStore.bracketPendingTurn('br_1', (endEarly) => {
         endEarly()
@@ -1072,7 +1064,7 @@ describe('ChapterOverlaysHost — Re-run on new branch', () => {
   })
 
   it("holds the mouse's Back inert from the press to the publish, and not before or after", async () => {
-    const forked = deferred<ForkResult>()
+    const forked = Promise.withResolvers<ForkResult>()
     actions.fork.mockReturnValue(forked.promise)
     renderHost()
     openRerun()

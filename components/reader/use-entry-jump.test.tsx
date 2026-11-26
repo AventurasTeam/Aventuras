@@ -66,14 +66,6 @@ function expectContiguous(from: number, through: number) {
   expect(loadedPositions()).toEqual(span(from, through).map((r) => r.position))
 }
 
-function deferred() {
-  let open!: () => void
-  const gate = new Promise<void>((resolve) => {
-    open = resolve
-  })
-  return { gate, open }
-}
-
 // vi.waitFor advances fake timers on each check; setImmediate isn't faked.
 async function untilReadCalls(times: number) {
   for (let turn = 0; vi.mocked(readEntriesBetween).mock.calls.length < times; turn++) {
@@ -83,7 +75,7 @@ async function untilReadCalls(times: number) {
 }
 
 function holdNextBetween(failWith?: Error) {
-  const { gate, open } = deferred()
+  const { promise: gate, resolve: open } = Promise.withResolvers<void>()
   const actual = vi.mocked(readEntriesBetween).getMockImplementation()!
   vi.mocked(readEntriesBetween).mockImplementationOnce(async (...args) => {
     await gate
@@ -94,7 +86,7 @@ function holdNextBetween(failWith?: Error) {
 }
 
 function holdNextPosition(failWith?: Error) {
-  const { gate, open } = deferred()
+  const { promise: gate, resolve: open } = Promise.withResolvers<void>()
   const actual = vi.mocked(readEntryPosition).getMockImplementation()!
   vi.mocked(readEntryPosition).mockImplementationOnce(async (...args) => {
     await gate
@@ -386,7 +378,7 @@ describe('useEntryJump', () => {
 
   it('keeps the log but skips the toast when a superseded jump fails', async () => {
     const error = vi.spyOn(logger, 'error').mockImplementation(() => {})
-    const { gate, open } = deferred()
+    const { promise: gate, resolve: open } = Promise.withResolvers<void>()
     vi.mocked(readEntriesBetween).mockImplementationOnce(async () => {
       await gate
       throw new Error('disk gone')
@@ -1088,7 +1080,7 @@ describe('useEntryJump: jumping', () => {
 
   it('stays up when a replaced position read finishes under a newer one', async () => {
     const ctx = await seedBranch()
-    const { gate, open } = deferred()
+    const { promise: gate, resolve: open } = Promise.withResolvers<void>()
     const actual = vi.mocked(readEntryPosition).getMockImplementation()!
     vi.mocked(readEntryPosition).mockImplementationOnce(async (...args) => {
       await gate
@@ -1113,7 +1105,7 @@ describe('useEntryJump: jumping', () => {
   it('stays up when a replaced read fails under a newer one', async () => {
     const ctx = await seedBranch()
     vi.spyOn(logger, 'error').mockImplementation(() => {})
-    const { gate, open } = deferred()
+    const { promise: gate, resolve: open } = Promise.withResolvers<void>()
     vi.mocked(readEntriesBetween).mockImplementationOnce(async () => {
       await gate
       throw new Error('disk gone')

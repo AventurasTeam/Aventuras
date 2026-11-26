@@ -5,22 +5,6 @@ import {
   handleStoryRecoveryResetOutcome,
 } from './story-recovery-coordinator'
 
-type Deferred<T> = {
-  promise: Promise<T>
-  resolve: (value: T) => void
-  reject: (reason: unknown) => void
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void
-  let reject!: (reason: unknown) => void
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise
-    reject = rejectPromise
-  })
-  return { promise, resolve, reject }
-}
-
 function request(
   overrides: Partial<
     Parameters<ReturnType<typeof createStoryRecoveryCoordinator>['startReset']>[0]
@@ -39,7 +23,7 @@ function request(
 
 describe('story recovery coordinator', () => {
   it('starts only one reset for duplicate requests on the active recovery', async () => {
-    const resetDeferred = deferred<void>()
+    const resetDeferred = Promise.withResolvers<void>()
     const options = request({ reset: vi.fn(() => resetDeferred.promise) })
     const coordinator = createStoryRecoveryCoordinator()
 
@@ -55,7 +39,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('does not open when invalidated before reset settles', async () => {
-    const resetDeferred = deferred<void>()
+    const resetDeferred = Promise.withResolvers<void>()
     const options = request({ reset: vi.fn(() => resetDeferred.promise) })
     const coordinator = createStoryRecoveryCoordinator()
     const operation = coordinator.startReset(options)
@@ -71,7 +55,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('suppresses navigation and state callbacks when invalidated during open', async () => {
-    const openDeferred = deferred<{ status: 'cancelled' }>()
+    const openDeferred = Promise.withResolvers<{ status: 'cancelled' }>()
     let guardedNavigate: ((branchId: string) => void) | undefined
     let isCurrent: (() => boolean) | undefined
     const options = request({
@@ -162,7 +146,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('swallows an invalidated reset rejection', async () => {
-    const resetDeferred = deferred<void>()
+    const resetDeferred = Promise.withResolvers<void>()
     const options = request({ reset: vi.fn(() => resetDeferred.promise) })
     const coordinator = createStoryRecoveryCoordinator()
     const operation = coordinator.startReset(options)
@@ -175,7 +159,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('swallows an invalidated post-reset open rejection', async () => {
-    const openDeferred = deferred<{ status: 'ok'; branchId: string }>()
+    const openDeferred = Promise.withResolvers<{ status: 'ok'; branchId: string }>()
     const options = request({ open: vi.fn(() => openDeferred.promise) })
     const coordinator = createStoryRecoveryCoordinator()
     const operation = coordinator.startReset(options)
@@ -190,7 +174,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('keeps the same-story reset locked after invalidation until its operation settles', async () => {
-    const firstReset = deferred<void>()
+    const firstReset = Promise.withResolvers<void>()
     const firstOptions = request({ reset: vi.fn(() => firstReset.promise) })
     const secondOptions = request()
     const coordinator = createStoryRecoveryCoordinator()
@@ -213,7 +197,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('prevents an older ordinary open from navigating or replacing a newer recovery', async () => {
-    const openDeferred = deferred<{ status: 'cancelled' }>()
+    const openDeferred = Promise.withResolvers<{ status: 'cancelled' }>()
     let guardedNavigate: ((branchId: string) => void) | undefined
     let isCurrent: (() => boolean) | undefined
     const navigate = vi.fn()
@@ -241,7 +225,7 @@ describe('story recovery coordinator', () => {
   })
 
   it('swallows an ordinary-open rejection invalidated by a newer intent', async () => {
-    const openDeferred = deferred<{ status: 'ok'; branchId: string }>()
+    const openDeferred = Promise.withResolvers<{ status: 'ok'; branchId: string }>()
     const onOpenFailed = vi.fn()
     const coordinator = createStoryRecoveryCoordinator()
     const operation = coordinator.attemptOpen({

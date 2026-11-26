@@ -56,16 +56,6 @@ function refusal(code: CloseRerunRefusalCode): CloseRerunReadRefusal {
   return { status: 'rejected', code, reason: `refused: ${code}` }
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 // A falling reversal flag is one of the points settleCount bumps at; it needs no run fixture.
 function settleARun() {
   act(() => {
@@ -164,7 +154,7 @@ describe('useCloseRerunConfirm: opening', () => {
 
   it('shows the newer of two opens resolving out of order', async () => {
     const { result, loadPreview } = setup()
-    const older = deferred<CloseRerunPreview>()
+    const older = Promise.withResolvers<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(older.promise).mockResolvedValueOnce(RECOUNTED)
     let first!: Promise<boolean>
     act(() => {
@@ -182,7 +172,7 @@ describe('useCloseRerunConfirm: opening', () => {
 
   it('re-reads when a run settles during the opening read', async () => {
     const { result, loadPreview } = setup()
-    const opening = deferred<CloseRerunPreview>()
+    const opening = Promise.withResolvers<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(opening.promise).mockResolvedValueOnce(RECOUNTED)
     let pendingOpen!: Promise<boolean>
     act(() => {
@@ -201,7 +191,7 @@ describe('useCloseRerunConfirm: opening', () => {
 
   it('opens nothing for an opening read that resolves after the host let go', async () => {
     const { result, rerender, loadPreview } = setup()
-    const pending = deferred<CloseRerunPreview>()
+    const pending = Promise.withResolvers<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(pending.promise)
     let opening!: Promise<boolean>
     act(() => {
@@ -238,8 +228,8 @@ describe('useCloseRerunConfirm: staying true', () => {
   it('drops a re-read a newer settle superseded', async () => {
     const { result, loadPreview } = setup()
     await openOn(result)
-    const first = deferred<CloseRerunPreview>()
-    const second = deferred<CloseRerunPreview>()
+    const first = Promise.withResolvers<CloseRerunPreview>()
+    const second = Promise.withResolvers<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     settleARun()
     settleARun()
@@ -286,7 +276,7 @@ describe('useCloseRerunConfirm: staying true', () => {
   it('takes a preview the host replaces, and keeps it over a re-read begun before it', async () => {
     const { result, loadPreview } = setup()
     await openOn(result)
-    const reading = deferred<CloseRerunPreview>()
+    const reading = Promise.withResolvers<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(reading.promise)
     settleARun()
 
@@ -301,7 +291,7 @@ describe('useCloseRerunConfirm: staying true', () => {
   it('keeps a preview the host replaces over a refusal read before it', async () => {
     const { result, loadPreview } = setup()
     await openOn(result)
-    const reading = deferred<CloseRerunReadRefusal>()
+    const reading = Promise.withResolvers<CloseRerunReadRefusal>()
     loadPreview.mockReturnValueOnce(reading.promise)
     settleARun()
 
@@ -346,7 +336,7 @@ describe('useCloseRerunConfirm: staying true', () => {
   it("drops a re-read that lands after a re-run's chain began", async () => {
     const { result, loadPreview } = setup()
     await openOn(result)
-    const reading = deferred<CloseRerunPreview>()
+    const reading = Promise.withResolvers<CloseRerunPreview>()
     loadPreview.mockReturnValueOnce(reading.promise)
     settleARun()
 
@@ -378,7 +368,7 @@ describe('useCloseRerunConfirm: staying true', () => {
     async (_name, read) => {
       const { result, loadPreview, start } = setup()
       await openOn(result)
-      const reading = deferred<CloseRerunPreview | CloseRerunReadRefusal>()
+      const reading = Promise.withResolvers<CloseRerunPreview | CloseRerunReadRefusal>()
       loadPreview.mockReturnValueOnce(reading.promise)
       settleARun()
 
@@ -396,7 +386,7 @@ describe('useCloseRerunConfirm: staying true', () => {
   it('reads nothing for a settle under a pending mark on the branch', async () => {
     const { result, loadPreview } = setup()
     await openOn(result)
-    const release = deferred<void>()
+    const release = Promise.withResolvers<void>()
     let marked!: Promise<void>
     act(() => {
       marked = generationStore.bracketPendingTurn('br_1', () => release.promise)

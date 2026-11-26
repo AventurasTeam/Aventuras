@@ -92,14 +92,6 @@ type Kick = { storyId: string; published: string | undefined; held: boolean }
 
 const kicks: Kick[] = []
 
-function deferred<T = void>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
-
 // story_1 on br_a, opened as the story list opens it (openSeq 1); br_b is its second branch.
 async function setup() {
   const test = await createTestDb()
@@ -372,7 +364,7 @@ describe('switchBranch', () => {
     await expectRefused(ctx, 'gate')
     generationStore.finishRun('run_turn')
 
-    const turn = deferred()
+    const turn = Promise.withResolvers<void>()
     const pending = generationStore.bracketPendingTurn('br_b', () => turn.promise)
     await expectRefused(ctx, 'gate')
     turn.resolve()
@@ -406,7 +398,7 @@ describe('switchBranch', () => {
 
   it('refuses while a turn body still runs on the branch left', async () => {
     const { ctx } = await setup()
-    const sweep = deferred()
+    const sweep = Promise.withResolvers<void>()
     const body = generationStore.bracketPendingTurn('br_a', async (endEarly) => {
       endEarly()
       await sweep.promise
@@ -484,8 +476,8 @@ describe('switchBranch', () => {
 
   it('keeps the stores and the published story on the branch left while the stories re-read runs', async () => {
     const { db, ctx } = await setup()
-    const reached = deferred()
-    const release = deferred()
+    const reached = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
     vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
       reached.resolve()
       await release.promise
@@ -619,8 +611,8 @@ describe('switchBranch', () => {
   it('puts the pointer back when a run starts on the story during the stories re-read', async () => {
     const { db, ctx } = await setup()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const reached = deferred()
-    const release = deferred()
+    const reached = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
     vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
       reached.resolve()
       await release.promise
@@ -652,14 +644,14 @@ describe('switchBranch', () => {
   it('puts the pointer back when a turn body starts on the branch left during the stories re-read', async () => {
     const { db, ctx } = await setup()
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const reached = deferred()
-    const release = deferred()
+    const reached = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
     vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
       reached.resolve()
       await release.promise
       return readStories(database)
     })
-    const sweep = deferred()
+    const sweep = Promise.withResolvers<void>()
     const stack = fakeStack()
 
     const running = switchBranch(input({ replaceStack: stack.replaceStack }), ctx)
@@ -1300,8 +1292,8 @@ describe('showBranch', () => {
   it('keeps the stores and the published story on the branch left while the stories re-read runs', async () => {
     const { db, ctx } = await setup()
     await pointerMovedTo(db, 'br_b')
-    const reached = deferred()
-    const release = deferred()
+    const reached = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
     vi.mocked(rehydrateStories).mockImplementationOnce(async (database) => {
       reached.resolve()
       await release.promise
@@ -1386,8 +1378,8 @@ describe('openStory during a switch', () => {
 
   it('waits for an abandoned switch to put the pointer back, then opens the branch left', async () => {
     const ctx = await seedStory()
-    const written = deferred()
-    const writeHeld = deferred()
+    const written = Promise.withResolvers<void>()
+    const writeHeld = Promise.withResolvers<void>()
     let transactions = 0
     // The switch's first transaction is its pointer write: it commits, then the switch waits here.
     const switchCtx: typeof ctx = {

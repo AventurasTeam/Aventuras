@@ -203,14 +203,6 @@ function story(branchId: string): OpenStory {
   }
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 let info: MockInstance<typeof toast.info>
 let warning: MockInstance<typeof toast.warning>
 let error: MockInstance<typeof toast.error>
@@ -736,7 +728,7 @@ describe('runCloseRerunOnBranch', () => {
   })
 
   it('names the branch as the toast does, and toasts the start only at its reserve', async () => {
-    const started = deferred<CloseRerunForkStart>()
+    const started = Promise.withResolvers<CloseRerunForkStart>()
     actions.startOnFork.mockImplementation(() => started.promise)
     const run = onBranch()
     await vi.waitFor(() => expect(actions.startOnFork).toHaveBeenCalledTimes(1))

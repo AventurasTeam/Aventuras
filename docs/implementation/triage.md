@@ -380,15 +380,6 @@ slice-planning gate forces its resolution before that slice is planned.
   read an index probe; it's a schema change, so it waits for an owner.
   Found during Slice 6.6.
 
-- **Eighteen test files each define the same `deferred<T>()`
-  helper.** A promise with its `resolve` and `reject` exposed, written
-  out per file (`grep -rln 'function deferred<' components lib hooks`):
-  the two new hook tests of Slice 6.6 (`use-branch-delete-confirm`,
-  `use-story-duplicate`) and sixteen older ones. One shared test util
-  would serve them all; it needs a home the unit project's files can
-  import, and moving it edits files across the tree. Found by Slice
-  6.6's slice review (2026-11-26).
-
 - **Five dialogs write out the same inline status and alert lines.**
   The blocked or refused line (`role="status"`) and the failed line
   (`role="alert"`, `accessibilityLiveRegion="assertive"`, `text-danger`)

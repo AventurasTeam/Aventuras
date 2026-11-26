@@ -42,16 +42,6 @@ const COPIED: DuplicateStoryResult = { status: 'duplicated', storyId: 'story_cop
 const SIDE: DuplicateBranchOption = { id: 'br_side', name: 'side' }
 const VALUES: Values = { title: 'Copy', branch: { branchId: FORK.id } }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 // Runs every step an open, a check or a copy awaits, inside act.
 async function flush() {
   await act(async () => {
@@ -99,9 +89,9 @@ afterEach(() => {
 describe('useStoryDuplicate: opening', () => {
   it('mounts no dialog until the branch read lands, then checks the current branch', async () => {
     const { result, readBranches, check } = setup()
-    const read = deferred<BranchRead>()
+    const read = Promise.withResolvers<BranchRead>()
     readBranches.mockReturnValueOnce(read.promise)
-    const gate = deferred<DuplicateCheck>()
+    const gate = Promise.withResolvers<DuplicateCheck>()
     check.mockReturnValueOnce(gate.promise)
     let opening: Promise<void> = Promise.resolve()
     act(() => {
@@ -169,8 +159,8 @@ describe('useStoryDuplicate: opening', () => {
 
   it('mounts only the latest of two opens whose reads land out of order', async () => {
     const { result, readBranches, check } = setup()
-    const first = deferred<BranchRead>()
-    const second = deferred<BranchRead>()
+    const first = Promise.withResolvers<BranchRead>()
+    const second = Promise.withResolvers<BranchRead>()
     readBranches.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     let a: Promise<void> = Promise.resolve()
     let b: Promise<void> = Promise.resolve()
@@ -210,7 +200,7 @@ describe('useStoryDuplicate: opening', () => {
 
   it('opens nothing when the list loses focus during the branch read', async () => {
     const { result, rerender, readBranches, check } = setup()
-    const read = deferred<BranchRead>()
+    const read = Promise.withResolvers<BranchRead>()
     readBranches.mockReturnValueOnce(read.promise)
     let opening: Promise<void> = Promise.resolve()
     act(() => {
@@ -227,7 +217,7 @@ describe('useStoryDuplicate: opening', () => {
 
   it('opens nothing when another list overlay is up as the branch read lands', async () => {
     const { result, rerender, readBranches, check } = setup()
-    const read = deferred<BranchRead>()
+    const read = Promise.withResolvers<BranchRead>()
     readBranches.mockReturnValueOnce(read.promise)
     let opening: Promise<void> = Promise.resolve()
     act(() => {
@@ -244,7 +234,7 @@ describe('useStoryDuplicate: opening', () => {
 
   it('checks nothing when the list unmounts during the branch read', async () => {
     const { result, unmount, readBranches, check } = setup()
-    const read = deferred<BranchRead>()
+    const read = Promise.withResolvers<BranchRead>()
     readBranches.mockReturnValueOnce(read.promise)
     let opening: Promise<void> = Promise.resolve()
     act(() => {
@@ -298,8 +288,8 @@ describe('useStoryDuplicate: checking', () => {
   it('re-checks a changed branch, and a slower earlier check never lands over the later', async () => {
     const { result, check } = setup()
     await openOn(result)
-    const earlier = deferred<DuplicateCheck>()
-    const later = deferred<DuplicateCheck>()
+    const earlier = Promise.withResolvers<DuplicateCheck>()
+    const later = Promise.withResolvers<DuplicateCheck>()
     check.mockReturnValueOnce(earlier.promise).mockReturnValueOnce(later.promise)
 
     act(() => {
@@ -322,7 +312,7 @@ describe('useStoryDuplicate: checking', () => {
 
   it('drops a check that lands after a dismiss', async () => {
     const { result, check } = setup()
-    const gate = deferred<DuplicateCheck>()
+    const gate = Promise.withResolvers<DuplicateCheck>()
     check.mockReturnValueOnce(gate.promise)
     let opening: Promise<void> = Promise.resolve()
     act(() => {
@@ -345,7 +335,7 @@ describe('useStoryDuplicate: submitting', () => {
   it('copies once for two submits while copying, and ignores opens and branch changes', async () => {
     const { result, readBranches, check, duplicate } = setup()
     await openOn(result)
-    const copy = deferred<DuplicateStoryResult>()
+    const copy = Promise.withResolvers<DuplicateStoryResult>()
     duplicate.mockReturnValueOnce(copy.promise)
     let first: Promise<void> = Promise.resolve()
     act(() => {
@@ -374,9 +364,9 @@ describe('useStoryDuplicate: submitting', () => {
   it('keeps a copying dialog over an open whose branch read lands during the copy', async () => {
     const { result, readBranches, check, duplicate, onDone } = setup()
     await openOn(result)
-    const read = deferred<BranchRead>()
+    const read = Promise.withResolvers<BranchRead>()
     readBranches.mockReturnValueOnce(read.promise)
-    const copy = deferred<DuplicateStoryResult>()
+    const copy = Promise.withResolvers<DuplicateStoryResult>()
     duplicate.mockReturnValueOnce(copy.promise)
     let opening: Promise<void> = Promise.resolve()
     let copying: Promise<void> = Promise.resolve()
@@ -460,7 +450,7 @@ describe('useStoryDuplicate: submitting', () => {
         branch: { branchId: FORK.id },
         state: { kind: 'ready' },
       })
-      const gate = deferred<DuplicateCheck>()
+      const gate = Promise.withResolvers<DuplicateCheck>()
       check.mockReturnValueOnce(gate.promise)
       await submitOn(result, { title: 'Copy', branch })
       expect(duplicate).not.toHaveBeenCalled()
@@ -520,7 +510,7 @@ describe('useStoryDuplicate: submitting', () => {
   it('toasts a thrown copy when the list lost focus during it', async () => {
     const { result, rerender, duplicate } = setup()
     await openOn(result)
-    const copy = deferred<DuplicateStoryResult>()
+    const copy = Promise.withResolvers<DuplicateStoryResult>()
     duplicate.mockReturnValueOnce(copy.promise)
     let submitting: Promise<void> = Promise.resolve()
     act(() => {
@@ -539,7 +529,7 @@ describe('useStoryDuplicate: submitting', () => {
   it('toasts a thrown copy that lands after the list unmounts', async () => {
     const { result, unmount, duplicate } = setup()
     await openOn(result)
-    const copy = deferred<DuplicateStoryResult>()
+    const copy = Promise.withResolvers<DuplicateStoryResult>()
     duplicate.mockReturnValueOnce(copy.promise)
     let submitting: Promise<void> = Promise.resolve()
     act(() => {
@@ -554,7 +544,7 @@ describe('useStoryDuplicate: submitting', () => {
 
   it('does nothing while a check runs or a refusal shows', async () => {
     const { result, check, duplicate } = setup()
-    const gate = deferred<DuplicateCheck>()
+    const gate = Promise.withResolvers<DuplicateCheck>()
     check.mockReturnValueOnce(gate.promise)
     let opening: Promise<void> = Promise.resolve()
     act(() => {
@@ -586,7 +576,7 @@ describe('useStoryDuplicate: dismissing', () => {
   it('ignores a dismiss while copying', async () => {
     const { result, duplicate } = setup()
     await openOn(result)
-    const copy = deferred<DuplicateStoryResult>()
+    const copy = Promise.withResolvers<DuplicateStoryResult>()
     duplicate.mockReturnValueOnce(copy.promise)
     let submitting: Promise<void> = Promise.resolve()
     act(() => {
@@ -613,7 +603,7 @@ describe('useStoryDuplicate: dismissing', () => {
   it('keeps a copying dialog when focus leaves, and dismisses it as the copy ends', async () => {
     const { result, rerender, duplicate, onDone } = setup()
     await openOn(result)
-    const copy = deferred<DuplicateStoryResult>()
+    const copy = Promise.withResolvers<DuplicateStoryResult>()
     duplicate.mockReturnValueOnce(copy.promise)
     let submitting: Promise<void> = Promise.resolve()
     act(() => {

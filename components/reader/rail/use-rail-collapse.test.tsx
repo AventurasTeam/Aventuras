@@ -24,14 +24,6 @@ async function storeRailPreference(collapsed: boolean): Promise<void> {
   expect(result).toEqual({ status: 'ok' })
 }
 
-function deferred() {
-  let resolve!: () => void
-  const promise = new Promise<void>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 function renderRecording(seen: boolean[]) {
   return renderHook(() => {
     const rail = useRailCollapse()
@@ -96,9 +88,9 @@ describe('useRailCollapse', () => {
   })
 
   it('holds the second of two quick toggles until both writes settle', async () => {
-    const first = deferred()
-    const secondRehydrate = deferred()
-    const secondSettle = deferred()
+    const first = Promise.withResolvers<void>()
+    const secondRehydrate = Promise.withResolvers<void>()
+    const secondSettle = Promise.withResolvers<void>()
     writeRailPreference
       .mockImplementationOnce(async (next: boolean) => {
         await first.promise
@@ -147,8 +139,8 @@ describe('useRailCollapse', () => {
 
   // Two stacked readers each mount the hook; the pending toggle they show is shared.
   it('keeps an expand on every instance when the collapse lands and the expand fails', async () => {
-    const first = deferred()
-    const second = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
     writeRailPreference
       .mockImplementationOnce(async (next: boolean) => {
         await first.promise

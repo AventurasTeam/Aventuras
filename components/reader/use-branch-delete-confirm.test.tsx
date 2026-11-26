@@ -25,16 +25,6 @@ const UPDATING_MEMORY = 'Updating memory. Cancel to edit.'
 const SWAPPING = 'Unavailable while the embedder switch finishes.'
 const FORK = { branchId: 'br_fork', name: 'The fork', count: 5 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 function setup(swapPending = false) {
   const count = vi.fn<Count>(async () => 5)
   const remove = vi.fn<Remove>(async () => ({ status: 'deleted' }))
@@ -110,8 +100,8 @@ describe('useBranchDeleteConfirm: opening', () => {
 
   it('opens only the latest of two presses whose reads land out of order', async () => {
     const { result, count } = setup()
-    const first = deferred<number>()
-    const second = deferred<number>()
+    const first = Promise.withResolvers<number>()
+    const second = Promise.withResolvers<number>()
     count.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     let firstOpen!: Promise<void>
     let secondOpen!: Promise<void>
@@ -135,7 +125,7 @@ describe('useBranchDeleteConfirm: opening', () => {
 
   it('opens nothing on return for a read the reader lost focus during', async () => {
     const { result, rerender, count } = setup()
-    const reading = deferred<number>()
+    const reading = Promise.withResolvers<number>()
     count.mockReturnValueOnce(reading.promise)
     let opening!: Promise<void>
     act(() => {
@@ -152,7 +142,7 @@ describe('useBranchDeleteConfirm: opening', () => {
 
   it('drops a read still running when it unmounts', async () => {
     const { result, count, unmount } = setup()
-    const reading = deferred<number>()
+    const reading = Promise.withResolvers<number>()
     count.mockReturnValueOnce(reading.promise)
     let opening!: Promise<void>
     act(() => {
@@ -172,7 +162,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
   it('runs one delete for a double press', async () => {
     const { result, remove } = setup()
     await openOn(result)
-    const removal = deferred<DeleteBranchResult>()
+    const removal = Promise.withResolvers<DeleteBranchResult>()
     remove.mockReturnValueOnce(removal.promise)
     let first!: Promise<void>
     let second!: Promise<void>
@@ -337,7 +327,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
   ): Promise<{ current: Hook }> {
     const { result, rerender, remove } = setup(initial)
     await openOn(result)
-    const removal = deferred<DeleteBranchResult>()
+    const removal = Promise.withResolvers<DeleteBranchResult>()
     remove.mockReturnValueOnce(removal.promise)
     let pressing: Promise<void> = Promise.resolve()
     act(() => {
@@ -388,7 +378,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     // The confirm still shows, so its line is the only signal.
     expect(toast.error).not.toHaveBeenCalled()
 
-    const retry = deferred<DeleteBranchResult>()
+    const retry = Promise.withResolvers<DeleteBranchResult>()
     remove.mockReturnValueOnce(retry.promise)
     let pressed!: Promise<void>
     act(() => {
@@ -408,7 +398,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
   ): Promise<{ current: Hook }> {
     const host = setup()
     await openOn(host.result)
-    const removal = deferred<DeleteBranchResult>()
+    const removal = Promise.withResolvers<DeleteBranchResult>()
     host.remove.mockReturnValueOnce(removal.promise)
     let pressed: Promise<void> = Promise.resolve()
     act(() => {
@@ -446,7 +436,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
   it('ignores a dismiss while the delete runs', async () => {
     const { result, remove } = setup()
     await openOn(result)
-    const removal = deferred<DeleteBranchResult>()
+    const removal = Promise.withResolvers<DeleteBranchResult>()
     remove.mockReturnValueOnce(removal.promise)
     let pressed!: Promise<void>
     act(() => {
@@ -471,7 +461,7 @@ describe('useBranchDeleteConfirm: the delete', () => {
     const { result, rerender, remove } = setup()
     await openOn(result)
     closeTheGate()
-    const removal = deferred<DeleteBranchResult>()
+    const removal = Promise.withResolvers<DeleteBranchResult>()
     remove.mockReturnValueOnce(removal.promise)
     let pressed!: Promise<void>
     act(() => {

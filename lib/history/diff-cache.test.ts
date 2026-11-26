@@ -52,16 +52,6 @@ const answering = () =>
 // A macrotask: the cache's microtask flush, and the walks it starts, have run.
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 const FRESH: DiffCacheEntry = {
   old: { title: 'The ford' },
   new: { title: 'The Harrow ford' },
@@ -167,7 +157,7 @@ describe('createDiffCache', () => {
 
   describe('coalescing and batching', () => {
     it('runs one walk for concurrent populates of one key, and joins one while it runs', async () => {
-      const gate = deferred<WalkResult>()
+      const gate = Promise.withResolvers<WalkResult>()
       const walk = vi.fn<DiffWalk>(() => gate.promise)
       const cache = createDiffCache({ walk })
       const first = cache.populate(delta('dl_1'))
@@ -241,7 +231,7 @@ describe('createDiffCache', () => {
     })
 
     it('drops a walk its branch was evicted under, and walks again for a populate after the eviction', async () => {
-      const gate = deferred<WalkResult>()
+      const gate = Promise.withResolvers<WalkResult>()
       const walk = vi.fn<DiffWalk>(async () => resultOf(FRESH)).mockReturnValueOnce(gate.promise)
       const cache = createDiffCache({ walk })
       const stale = cache.populate(delta('dl_1'))
@@ -258,8 +248,8 @@ describe('createDiffCache', () => {
     })
 
     it('keeps the fresh walk joinable when the stale walk settles after it started', async () => {
-      const staleGate = deferred<WalkResult>()
-      const freshGate = deferred<WalkResult>()
+      const staleGate = Promise.withResolvers<WalkResult>()
+      const freshGate = Promise.withResolvers<WalkResult>()
       const unwanted: DiffCacheEntry = { ...FRESH, new: { title: 'a third walk' } }
       const walk = vi
         .fn<DiffWalk>(async () => resultOf(unwanted))
@@ -284,7 +274,7 @@ describe('createDiffCache', () => {
     })
 
     it('leaves a stale walk out of the cache when nothing walked after the eviction', async () => {
-      const gate = deferred<WalkResult>()
+      const gate = Promise.withResolvers<WalkResult>()
       const walk = vi.fn<DiffWalk>(async () => resultOf(FRESH)).mockReturnValueOnce(gate.promise)
       const cache = createDiffCache({ walk })
       const stale = cache.populate(delta('dl_1'))
@@ -301,7 +291,7 @@ describe('createDiffCache', () => {
 
     it('neither logs nor remembers a walk that rejects after its eviction', async () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined)
-      const gate = deferred<WalkResult>()
+      const gate = Promise.withResolvers<WalkResult>()
       const walk = vi.fn<DiffWalk>(async () => resultOf(FRESH)).mockReturnValueOnce(gate.promise)
       const cache = createDiffCache({ walk })
       const stale = cache.populate(delta('dl_1'))

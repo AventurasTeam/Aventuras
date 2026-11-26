@@ -874,14 +874,6 @@ describe('pendingRerun is gone at every end of the start (AC 16)', () => {
   })
 })
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void
-  const promise = new Promise<void>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
-
 // A re-run whose abort's reversal didn't commit holds its branch until a restart; no run stays.
 function holdUntilRestart(h: CloseHarness): void {
   generationStore.startRun({
@@ -1008,7 +1000,7 @@ describe('checkCloseRerunParent (AC 13)', () => {
     const c = await closed()
     const expected = await shownWithTurn(c)
     const before = await snapshot(c.h)
-    const sweep = deferred()
+    const sweep = Promise.withResolvers<void>()
     const body = generationStore.bracketPendingTurn(c.h.fx.branchId, async (endEarly) => {
       endEarly()
       await sweep.promise

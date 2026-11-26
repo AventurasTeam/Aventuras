@@ -21,14 +21,6 @@ vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 const BRANCH = 'br_fork'
 const ANY_CTX = expect.objectContaining({ runInTransaction: expect.any(Function) })
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 beforeEach(() => {
   vi.clearAllMocks()
   setBranchLead.mockReset()
@@ -100,7 +92,7 @@ describe('useSetLead', () => {
   })
 
   it('ignores a press while a call is in flight, then takes the next', async () => {
-    const first = deferred<SetLeadResult>()
+    const first = Promise.withResolvers<SetLeadResult>()
     setBranchLead.mockReturnValueOnce(first.promise).mockResolvedValue({ status: 'ok' })
     const { result } = renderHook(() => useSetLead(BRANCH))
 
@@ -171,7 +163,7 @@ describe('usePeekLeadControl', () => {
   })
 
   it('sets the lead on the branch its host gives it, and follows the host to another branch', async () => {
-    const call = deferred<SetLeadResult>()
+    const call = Promise.withResolvers<SetLeadResult>()
     setBranchLead.mockReturnValueOnce(call.promise).mockResolvedValue({ status: 'ok' })
     const { result, rerender } = renderHook<PeekLeadControl, { branchId: string }>(
       ({ branchId }) => usePeekLeadControl(branchId, false, undefined),

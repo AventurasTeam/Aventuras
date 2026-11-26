@@ -586,14 +586,6 @@ const entry = (
   names: Record<string, string> = {},
 ): DiffCacheEntry => ({ old, new: next, names })
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 // TanStack notifies observers on a timer, so a "nothing changed" check waits past it.
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)))
 
@@ -681,7 +673,7 @@ describe('HistoryTab change prose', () => {
   })
 
   it('shows the field-name summary first, then the prose once the walk resolves', async () => {
-    const walk = deferred<WalkResult>()
+    const walk = Promise.withResolvers<WalkResult>()
     const diffs = createDiffCache({ walk: () => walk.promise })
     renderTab(
       loader(() => [own(VOICE)]),
@@ -802,7 +794,7 @@ describe('HistoryTab change prose', () => {
   })
 
   it("re-reads a mounted row when the cache evicts the tab's branch, and only then", async () => {
-    const rewalk = deferred<WalkResult>()
+    const rewalk = Promise.withResolvers<WalkResult>()
     const walk = vi
       .fn<DiffWalk>()
       .mockResolvedValueOnce(walked({ [VOICE.id]: VOICE_ENTRY }))
@@ -857,7 +849,7 @@ describe('HistoryTab change prose', () => {
   })
 
   it('ends on the walk after an eviction that lands while the first walk is pending', async () => {
-    const stale = deferred<WalkResult>()
+    const stale = Promise.withResolvers<WalkResult>()
     const walk = vi
       .fn<DiffWalk>()
       .mockReturnValueOnce(stale.promise)

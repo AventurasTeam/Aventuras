@@ -2,16 +2,6 @@ import { describe, expect, it } from 'vitest'
 
 import { withKeyLock } from './key-lock'
 
-function deferred<T = void>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 // The lock chains on promises, so pending work advances over microtasks; a
 // macrotask hop is what guarantees every queued continuation has run.
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -19,8 +9,8 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 describe('withKeyLock', () => {
   it('holds a second caller until the first settles', async () => {
     const started: string[] = []
-    const first = deferred()
-    const second = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
 
     const a = withKeyLock('k', () => {
       started.push('a')
@@ -50,9 +40,9 @@ describe('withKeyLock', () => {
   // predecessor and runs alongside the second, reopening the TOCTOU.
   it('serializes a third caller that arrives after the first has settled', async () => {
     const started: string[] = []
-    const first = deferred()
-    const second = deferred()
-    const third = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
+    const third = Promise.withResolvers<void>()
 
     const a = withKeyLock('k3', () => {
       started.push('a')
@@ -86,8 +76,8 @@ describe('withKeyLock', () => {
 
   it('does not serialize across distinct keys', async () => {
     const started: string[] = []
-    const x = deferred()
-    const y = deferred()
+    const x = Promise.withResolvers<void>()
+    const y = Promise.withResolvers<void>()
 
     const px = withKeyLock('kx', () => {
       started.push('x')
@@ -122,7 +112,7 @@ describe('withKeyLock', () => {
     await flush()
 
     const started: string[] = []
-    const pending = deferred()
+    const pending = Promise.withResolvers<void>()
     const later = withKeyLock('kd', () => {
       started.push('later')
       return pending.promise
