@@ -20,7 +20,7 @@ import {
   startStallMeter,
 } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { generationStore, readerHoldStore, undoRedoStore } from '@/lib/stores'
+import { generationStore, undoRedoStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { describeRedoTarget, describeUndoGroup, type UndoDescription } from '@/lib/undo'
 
@@ -133,12 +133,18 @@ export function useReaderUndo({
   ctx,
   isFocused,
   held,
+  isBlocked,
 }: {
   branchId: string
   ctx: DbCtx
   isFocused: boolean
   /** An entry's inline editor is open: undo and redo wait, the notice's Redo included. */
   held: boolean
+  /**
+   * A Send's dispatch in flight or a switch's reader hold, read live: undo and redo wait for both,
+   * since a Send runs its pre-registration awaits before the generation gate rises.
+   */
+  isBlocked: () => boolean
 }): {
   undoLabel: string
   redoLabel: string | null
@@ -308,15 +314,26 @@ export function useReaderUndo({
         notice,
         redoable
           ? () => {
-              // redoLastAction doesn't read the reader hold, and a gone reader has no Redo left.
-              if (!aliveRef.current || readerHoldStore.isHeld(branchId)) return
+              // redoLastAction doesn't read the reader's blocks, and a gone reader has no Redo left.
+              if (!aliveRef.current || isBlocked()) return
               if (liveRef.current.held) toast.info(t('reader:editFocus.held'))
               else guarded('redo', () => runRedo('notice', target.actionId))
             }
           : undefined,
       )
     },
-    [aliveRef, announce, branchId, ctx, guarded, report, runRedo, showMenuTarget, warnCloseUndone],
+    [
+      aliveRef,
+      announce,
+      branchId,
+      ctx,
+      guarded,
+      isBlocked,
+      report,
+      runRedo,
+      showMenuTarget,
+      warnCloseUndone,
+    ],
   )
 
   const confirmLines = useCallback(
@@ -349,9 +366,13 @@ export function useReaderUndo({
   const undo = useCallback(
     (origin: 'menu' | 'keyboard') =>
       guarded('undo', async () => {
+        if (isBlocked()) {
+          report('undo', GATED, origin)
+          return
+        }
         const started = branchId
         // Read after each await: the reader unmounted, lost focus or opened an editor meanwhile.
-        // A switch's hold is read from the store: the ref follows a render, which may not have run.
+        // A dispatch or a hold is read live: the ref follows a render, which may not have run.
         const stale = () => {
           const live = liveRef.current
           return (
@@ -359,7 +380,7 @@ export function useReaderUndo({
             live.branchId !== started ||
             !live.isFocused ||
             live.held ||
-            readerHoldStore.isHeld(started)
+            isBlocked()
           )
         }
         const target = (origin === 'menu' ? menuTargetRef.current : null) ?? (await resolve())
@@ -387,12 +408,19 @@ export function useReaderUndo({
           lines,
         })
       }),
-    [aliveRef, branchId, confirmLines, guarded, report, resolve, runUndo],
+    [aliveRef, branchId, confirmLines, guarded, isBlocked, report, resolve, runUndo],
   )
 
   const redo = useCallback(
-    (origin: 'menu' | 'keyboard') => guarded('redo', () => runRedo(origin)),
-    [guarded, runRedo],
+    (origin: 'menu' | 'keyboard') =>
+      guarded('redo', async () => {
+        if (isBlocked()) {
+          report('redo', GATED, origin)
+          return
+        }
+        await runRedo(origin)
+      }),
+    [guarded, isBlocked, report, runRedo],
   )
 
   const onMenuOpenChange = useCallback(

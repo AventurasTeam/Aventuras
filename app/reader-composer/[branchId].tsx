@@ -1695,7 +1695,13 @@ function ReaderComposerBody({
     redo: redoAction,
     confirmOpen: undoConfirmOpen,
     confirm: undoConfirm,
-  } = useReaderUndo({ branchId, ctx, isFocused, held: editSession != null })
+  } = useReaderUndo({
+    branchId,
+    ctx,
+    isFocused,
+    held: editSession != null,
+    isBlocked: isDispatchBlocked,
+  })
   // Editable-target exclusion lets the browser's native undo/redo win when
   // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
   // reverses the last story turn instead of the typo.
@@ -1704,12 +1710,12 @@ function ReaderComposerBody({
   const editorOpen = editSession != null
   const handleUndoRedoShortcut = useCallback(
     (ev: KeyboardEvent) => {
-      // undoLastAction and redoLastAction don't read the reader hold, so the shortcut does.
-      if (editorOpen || isReaderHeld()) return
+      // undoLastAction and redoLastAction read neither a Send's dispatch nor the reader hold.
+      if (editorOpen || isDispatchBlocked()) return
       if (ev.shiftKey) redoAction('keyboard')
       else undoAction('keyboard')
     },
-    [editorOpen, isReaderHeld, redoAction, undoAction],
+    [editorOpen, isDispatchBlocked, redoAction, undoAction],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
