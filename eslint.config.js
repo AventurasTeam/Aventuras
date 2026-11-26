@@ -57,6 +57,10 @@ const CLOSE_PROGRESS_MUTATORS = generationStoreMutators(
   "Only the orchestrator sets a close's progress. See docs/implementation/milestones/05-chapters-chapter-close/milestone.md#c6--what-the-banners-n-of-m-counts.",
 )
 
+// The fences and the bans match a binding's written name, so an alias or a copy slips past them.
+const aliasMessage = (name, fence) =>
+  `Use ${name} under its own name: ${fence} matches that name, so an alias or a copy slips past it.`
+
 // Kept in one array: a second no-restricted-syntax entry for a file replaces the first.
 const SYNTAX_BANS = [
   // Wildcard import ban. Exception list lives in .claude/rules/code.md — keep in sync.
@@ -84,6 +88,17 @@ const SYNTAX_BANS = [
     message:
       "expo-sqlite's async API runs off the JS thread and can land between the native chain read's two sync reads, or show them uncommitted rows. Use the *Sync form. See docs/architecture.md#walk-algorithm.",
   },
+  {
+    selector: "ImportSpecifier[imported.name='expoDb'][local.name!='expoDb']",
+    message: aliasMessage('expoDb', 'the async-API ban'),
+  },
+  ...[
+    "ImportSpecifier[imported.name='generationStore'][local.name!='generationStore']",
+    "VariableDeclarator[id.type='Identifier']:matches([init.name='generationStore'], [init.expression.name='generationStore'])",
+  ].map((selector) => ({
+    selector,
+    message: `${aliasMessage('generationStore', "each mutator's owner fence")} See docs/code-conventions.md → Syncing a store after a write.`,
+  })),
 ]
 
 // Builtins Android's Hermes lacks, matched by a name nothing else uses (Set's `union` collides with
@@ -99,12 +114,18 @@ const HERMES_BUILTIN_BANS = [
 
 // Native-only like the Hermes bans: drizzle's expo-sqlite driver has no batch, though the app
 // db's sqlite-proxy type declares one on every platform.
-const DB_BATCH_BAN = {
-  selector:
-    "MemberExpression[property.name='batch']:matches([object.name='db'], [object.property.name='db'])",
-  message:
-    "Native has no db.batch: drizzle's expo-sqlite driver lacks it, so the call passes unit tests and desktop and throws on Android. Read atomically through readChainSnapshot. See docs/architecture.md#walk-algorithm.",
-}
+const DB_BATCH_BANS = [
+  {
+    selector:
+      "MemberExpression[property.name='batch']:matches([object.name='db'], [object.property.name='db'])",
+    message:
+      "Native has no db.batch: drizzle's expo-sqlite driver lacks it, so the call passes unit tests and desktop and throws on Android. Read atomically through readChainSnapshot. See docs/architecture.md#walk-algorithm.",
+  },
+  {
+    selector: "ImportSpecifier[imported.name='db'][local.name!='db']",
+    message: aliasMessage('db', 'the native batch ban'),
+  },
+]
 
 module.exports = defineConfig([
   expoConfig,
@@ -141,7 +162,7 @@ module.exports = defineConfig([
     },
     rules: {
       // The wildcard-import ban and the other selectors: see SYNTAX_BANS at the top of this file.
-      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS, DB_BATCH_BAN],
+      'no-restricted-syntax': ['error', ...SYNTAX_BANS, ...HERMES_BUILTIN_BANS, ...DB_BATCH_BANS],
 
       // generationStore's mutators, by owner: see the constants at the top of this file.
       'no-restricted-properties': [

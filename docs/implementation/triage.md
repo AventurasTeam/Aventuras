@@ -436,19 +436,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`dataset:export-seed`), reverts it. The drive should pick first
   person in the wizard. Found by Slice 6.9's planning (2026-11-25).
 
-- **The mutator fences match the literal identifier `generationStore`,
-  so an aliased import bypasses all of them.** The
-  `no-restricted-properties` entries built at `eslint.config.js:19-22`
-  set `object: 'generationStore'`, which ESLint compares to the written
-  name. Probe: `import { generationStore as g }` then
-  `g.dropBranchRecords(...)` in `components/reader/` lints with 0 errors,
-  against 1 for the plain name. Any owner-only mutator (run, close
-  record, re-run record, drop, close progress) can be called through an
-  alias from a file that may not. A `no-restricted-syntax` selector on
-  the import specifier (ban the `as` rename of `generationStore`), or a
-  rule that resolves the binding, would close it.
-  Found during Slice 6.6.
-
 - **The unfinished-run reads scan `pipeline_runs` whole.** The table
   has no index on `branch_id` (`lib/db/system/system.table.ts`), and
   nothing prunes finished rows short of a story delete, so it grows with

@@ -41,6 +41,12 @@ describe("the native chain read's async-API ban", () => {
     expect(await ruleIds(onExpoDb(call), NATIVE_FIXTURE)).toContain('no-restricted-syntax')
   })
 
+  it('flags expoDb imported under another name', async () => {
+    const code =
+      "import { expoDb as handle } from './client.native'\nexport const run = () => handle.getAllAsync('SELECT 1')\n"
+    expect(await ruleIds(code, NATIVE_FIXTURE)).toContain('no-restricted-syntax')
+  })
+
   it('names the guarantee and the canon section', async () => {
     const ban = (await messages(onExpoDb("getAllAsync('SELECT 1')"), NATIVE_FIXTURE)).find(
       (m) => m.ruleId === 'no-restricted-syntax',
@@ -84,6 +90,12 @@ describe("the native driver's missing-batch ban", () => {
     ['lib/history/__batch-fixture.ts', 'ctx.db.batch([])'],
   ])('flags %s calling %s', async (filePath, call) => {
     expect(await batchBans(onDb(call), filePath)).toHaveLength(1)
+  })
+
+  it('flags db imported under another name', async () => {
+    const code =
+      "import { db as appDb } from '@/lib/db'\nexport const read = () => appDb.batch([])\n"
+    expect(await batchBans(code, 'components/__batch-fixture.tsx')).toHaveLength(1)
   })
 
   it('points at readChainSnapshot and the canon section', async () => {
