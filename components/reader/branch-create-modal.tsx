@@ -14,13 +14,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
-import { cn } from '@/lib/utils'
 
-// Radix's web wrapper shrinks to content, so web needs a definite width; the cap serves native.
-const PANEL_CLASS = cn(
-  'sm:max-w-[360px]',
-  Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
-)
+const PANEL_CLASS = 'sm:max-w-[360px]'
 
 // An IME's confirming Enter isn't a submit; it can carry key code 229 with isComposing false.
 const IME_KEY_CODE = 229

@@ -470,23 +470,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Known shape). Older code; Slice 6.8 added `lead-missing`. Found by
   Slice 6.8's slice review (2026-11-25).
 
-- **Web dialogs size to their content, not to their width class.**
-  `DialogContent`'s panel takes `w-full` inside Radix's unstyled
-  `role="dialog"` wrapper, which shrinks to fit inside a centred flex
-  column, so `w-full` fills nothing and every `sm:max-w-*` override
-  (`close-chapter-modal-view.tsx`'s 480 px, `embedder-download-dialog.tsx`'s
-  560 px) only caps a content-sized panel: it opens narrow and widens
-  when a longer line renders. The base `max-w-[calc(100%-2rem)]` also
-  resolves against that wrapper, so a definite width there loses 32 px.
-  The comment above the class list assumes otherwise
-  (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
-  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`, and
-  `components/story/duplicate-story-dialog.tsx` adds the same, having
-  measured 245–257 px at a 390 px window without it. A width option or a
-  web fix in the primitive would spare each new dialog the workaround and
-  its story. Found by Slice 6.5's task review (2026-11-24); a second
-  consumer found during Slice 6.6.
-
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
   `action_layer.branch_switch_*` (`_navigation_blocked`,

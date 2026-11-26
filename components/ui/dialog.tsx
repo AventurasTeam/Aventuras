@@ -129,10 +129,14 @@ function DialogContent({
           ref={contentRef}
           // A width override needs the `sm:` variant (`sm:max-w-xl`): tailwind-merge replaces
           // only the same variant, so a bare `max-w-*` leaves the 32rem cap from `sm` up.
+          // On web Radix wraps the panel in an element that shrinks to fit, so `w-full` fills
+          // nothing there: the width comes from the viewport, inset as AlertDialog's is.
           className={cn(
             'relative z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
             !scrollable && 'gap-4',
-            Platform.select({ web: 'animate-fade-in' }),
+            Platform.select({
+              web: 'w-[calc(100vw-3rem)] max-w-[calc(100vw-3rem)] animate-fade-in',
+            }),
             className,
           )}
           style={[{ maxHeight: height * MAX_HEIGHT_RATIO }, style]}

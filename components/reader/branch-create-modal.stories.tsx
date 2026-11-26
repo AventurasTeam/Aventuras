@@ -56,8 +56,8 @@ function panelWidth(dialog: HTMLElement): number {
   return panel.getBoundingClientRect().width
 }
 
-/** About 360 px, less the dialog's 16 px gutter each side where the viewport is narrower. */
-const expectedPanelWidth = () => Math.min(360, window.innerWidth - 32)
+/** About 360 px, less the dialog's 24 px inset each side where the viewport is narrower. */
+const expectedPanelWidth = () => Math.min(360, window.innerWidth - 48)
 
 const isDisabled = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true'
 

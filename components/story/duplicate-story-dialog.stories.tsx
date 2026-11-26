@@ -67,13 +67,14 @@ function panelOf(dialog: HTMLElement): HTMLElement {
   return panel
 }
 
-// At 390 px the 360 px panel would leave 15 px a side, so the 16 px gutters cap it to 358.
+// At 390 px the 360 px panel would leave 15 px a side, so the dialog's 24 px inset (AlertDialog's)
+// caps it to 342.
 function expectPhonePanel(dialog: HTMLElement) {
   const box = panelOf(dialog).getBoundingClientRect()
   expect(window.innerWidth).toBe(390)
-  expect(box.width).toBeCloseTo(358, 0)
-  expect(box.left).toBeCloseTo(16, 0)
-  expect(window.innerWidth - box.right).toBeCloseTo(16, 0)
+  expect(box.width).toBeCloseTo(342, 0)
+  expect(box.left).toBeCloseTo(24, 0)
+  expect(window.innerWidth - box.right).toBeCloseTo(24, 0)
 }
 
 function expectInViewport(element: HTMLElement) {
@@ -351,7 +352,7 @@ export const Failed: Story = {
   },
 }
 
-/** Phone width: the panel keeps its width and 16 px gutters, and every control stays on screen. */
+/** Phone width: the panel keeps its width and inset, and every control stays on screen. */
 export const PhoneSeveralBranches: Story = {
   globals: PHONE,
   play: async () => {
