@@ -362,8 +362,14 @@ main's entries through its fork entry and main's other rows as a
 rollback to that entry leaves them, all under main's ids, so a spec
 reading a seeded id scopes the read to the branch it opened. The hero
 seed logs no delta for most world rows, so those stay as main holds
-them, including some tied to entries after the fork entry (a thread
-resolved at `entry_hero_0047`).
+them, including some tied to entries after the fork entry, which the
+fork doesn't hold: a thread triggered at `entry_hero_0044` and failed at
+`entry_hero_0047`, another resolved at `entry_hero_0050`, and a happening
+and its two awareness rows at `entry_hero_0059`. A screen on the fork
+shows each such entry ref as one that no longer exists. That is the
+seed's contract, not a gap: logging these rows would change main's undo
+walk and the rollback counts the specs drive, and app writes are always
+logged, so real use doesn't make this shape.
 
 ### Substitutable IDs must be real UUIDs
 

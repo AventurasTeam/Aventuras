@@ -151,20 +151,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ruled to ship canon-literal and route here. Case (3) found in
   Slice 6.7's slice review (2026-11-23).
 
-- **The seed's fork carries world rows tied to entries it lacks.**
-  `br_hero_fork` is `br_hero_main` rolled back to `entry_hero_0040`,
-  but the hero seed logs no delta for most world rows, so the rollback
-  leaves them as main holds them: the fork keeps "Escape the River
-  Keep" failed at `entry_hero_0047`, "Earn Mira's trust" resolved at
-  `entry_hero_0050`, and "Vorne's pact" with the two awareness rows
-  learned at `entry_hero_0059`, all entries it doesn't hold. A rollback
-  on seeded main to the same entry gives the same rows. Slices 6.4, 6.6
-  and 6.8 read the fork (C7); a screen resolving such an entry id on
-  the fork finds no entry. Options: log the seed's world rows as
-  deltas (changes main's undo grouping, which E2E drives), or record
-  the shape as the seed's contract. Found by Slice 6.3's slice review
-  (2026-11-24).
-
 - **Diagnostics settings show capture off in a dev build that forces it
   on.** The debug switch in
   `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
