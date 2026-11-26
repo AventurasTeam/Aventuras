@@ -624,18 +624,6 @@ slice-planning gate forces its resolution before that slice is planned.
   6.5's review made the same change to `ShowBranchInput`. Found by
   Slice 6.5's slice review (2026-11-25).
 
-- **The tag input likely drops focus after Enter on web.**
-  `components/compounds/tag-input.tsx` keeps the keyboard up for
-  repeated entry with `submitBehavior="submit"`, but RN-Web's
-  `TextInput` ignores that prop and blurs a single-line input after
-  Enter unless the keydown's default is prevented
-  (`react-native-web/dist/exports/TextInput/index.js`, `handleKeyDown`).
-  So on web each tag would need a click back into the field. The
-  branch rename input and the fork modal prevent it in a web-only
-  `onKeyPress` (`components/reader/branch-rename-input.tsx`). Read from
-  RN-Web's source, not probed in the tag input itself. Found by Slice
-  6.5's slice review (2026-11-25).
-
 - **Helpers copied across the reader's inputs and the E2E specs.** The
   IME guard (`isComposing`, `IME_KEY_CODE`) is now in both
   `components/reader/branch-rename-input.tsx` and

@@ -202,9 +202,9 @@ export function TagInput({
         editable={inputEditable}
         aria-label={label}
         placeholder={value.length === 0 ? placeholder : undefined}
-        // Keep keyboard up after Enter so iterative entry works
-        // without a re-tap. Standard tokenized-input behavior.
+        // Enter keeps focus for the next tag: native reads submitBehavior, RN-Web only blurOnSubmit.
         submitBehavior="submit"
+        blurOnSubmit={false}
         returnKeyType="default"
         maxLength={maxTagLength}
         className={inputClasses}

@@ -107,7 +107,7 @@ export const KeepsItsInputAsARunStarts: Story = {
   },
 }
 
-// Enter on a single-line input also blurs it, so this covers the blur's commit too.
+// Neither Enter nor the blur that follows commits a tag once a run has started.
 export const CommitsNoTypedTagOnceARunStarts: Story = {
   render: () => <DisablingHarness initial={[]} />,
   play: async ({ canvas }) => {
@@ -116,9 +116,26 @@ export const CommitsNoTypedTagOnceARunStarts: Story = {
     await userEvent.type(input, 'noir')
     await startRun(input)
     await userEvent.keyboard('{Enter}')
+    expect(canvas.queryByText('noir')).toBeNull()
+    input.blur()
     await waitFor(() => expect(input).not.toHaveFocus())
     expect(canvas.queryByText('noir')).toBeNull()
     expect(input).toHaveValue('noir')
+  },
+}
+
+// RN-Web blurs a single-line input after Enter unless told not to; the next tag needs no click.
+export const KeepsFocusForTheNextTag: Story = {
+  render: () => <Harness placeholder="Add tags…" />,
+  play: async ({ canvas }) => {
+    const input = canvas.getByRole('textbox')
+    await userEvent.click(input)
+    await userEvent.keyboard('noir{Enter}')
+    await userEvent.keyboard('gothic{Enter}')
+    expect(canvas.getByText('noir')).toBeInTheDocument()
+    expect(canvas.getByText('gothic')).toBeInTheDocument()
+    expect(input).toHaveFocus()
+    expect(input).toHaveValue('')
   },
 }
 
