@@ -206,13 +206,6 @@ slice-planning gate forces its resolution before that slice is planned.
   them passes its tests. Pre-existing; the new batch callback inherits
   it. Found in Slice 6.7's reviews (2026-11-23).
 
-- **The native boot warn calls M1 the present.**
-  `lib/db/runtime/client.native.ts:20` logs "sqlite-vec load failed
-  (non-fatal in M1)", describing a shipped milestone as current, which
-  `.claude/rules/code.md`'s commenting discipline rules out for
-  comments and the same staleness applies to the message. Pre-existing.
-  Found in Slice 6.7's reviews (2026-11-23).
-
 - **Does the fork's refusal cover a refused admission's reversal?**
   [Slice 6.1](./milestones/06-branches-diff-cache/slices/01-copy-substrate.md#scope-out)
   kept `reverseReplayDeltas`'s read by `action_id` alone
