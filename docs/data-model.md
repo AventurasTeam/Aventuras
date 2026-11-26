@@ -3346,7 +3346,8 @@ story at the storage ceiling is negligible.
 
 **Delta scope: narrative state only.** Deltas cover the core narrative
 tables (`story_entries` row-level changes, `entities` narrative fields,
-`lore`, `threads`, `happenings` and their links, `chapters`, `entry_assets`).
+`character_relationships`, `lore`, `threads`, `happenings` and their
+links, `chapters`, `branch_era_flips`, `translations`, `entry_assets`).
 UI-only fields (`favorite`, `sort_order`, `ui_color`, etc.) bypass the log
 — rollback doesn't revert them, because they aren't story content. The
 write layer enforces this distinction: mutations to narrative fields
@@ -3366,8 +3367,12 @@ has no place in it.
 
 **The resulting undo asymmetry is deliberate.** Editing an entity or a
 lore card is reversible through CTRL-Z; editing the story's genre,
-tone, setting or title is not — the `stories` row is the only place
-user-_authored_ content lives outside the log. Definition edits are
+tone, setting or title is not — the `stories` row is the only place a
+story's user-_authored_ prose lives outside the log. A branch's name is
+user-authored and unlogged too
+([`branch-navigator.md → Inline rename`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)),
+as are rows that belong to no story's history: `vault_calendars` and the
+wizard's drafts. Definition edits are
 rare and deliberate rather than turn-by-turn, which doesn't warrant
 widening delta scope past the branch, but the surfaces that write them
 must disclose it where a field holds prose the user would have to

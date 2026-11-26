@@ -61,12 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **`probe_captures`' ER note says it is the only table not copied on
-  fork.** `docs/data-model.md:255` calls it "the only such table", but
-  the Branch-copy manifest skips `pipeline_runs` too (both copies), so
-  the note has been stale since that row landed. Found by M6.1's final
-  review (2026-11-22); pre-existing canon, outside that slice's scope.
-
 - **Test plumbing the M6.1 simplifier left duplicated.** Three test
   modules hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
   `DatabaseSync`: `lib/db/branch-copy/vec-copy.test.ts:92`
@@ -323,14 +317,6 @@ slice-planning gate forces its resolution before that slice is planned.
   branch, since `setBranchCount` toggles only `#branch-chip` and its
   separator. Both predate Slice 6.4's edit. Found in Slice 6.4's
   reviews (2026-11-24).
-
-- **`data-model.md` calls the stories row the only user-authored
-  content outside the log.**
-  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
-  says so; a branch name is a counterexample, and canon now says
-  rename is an unlogged write
-  ([`branch-navigator.md`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)).
-  Found in Slice 6.4's reviews (2026-11-24).
 
 - **A second `beforeRemove` preventer replays its action and the arm
   registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
