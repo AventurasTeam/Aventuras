@@ -337,13 +337,6 @@ slice-planning gate forces its resolution before that slice is planned.
   close modal runs each time it opens. Found by Slice 6.8's slice review
   (2026-11-25).
 
-- **State-patch writes take any entity column.**
-  `columnsWriteOutcome` in `lib/actions/entities/state-patch-actions.ts`
-  writes any `Partial<Entity>` with no allowlist. Every caller names
-  its columns today, but nothing stops a later state-patch handler from
-  writing `isLead`, which the register's source rule guards only in
-  `updateEntity`. Found in Slice 6.8's reviews (2026-11-24).
-
 - **The collision dialog's `GATED` comment may be over-broad.**
   `components/compounds/collision-resolve-dialog.tsx` says rn-primitives
   doesn't gate disabled clicks on web, and its plain radio items carry
