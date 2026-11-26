@@ -2489,6 +2489,30 @@ describe('buildGenerationContext — lead marks', () => {
     expect(narrow.lastTurns).toStrictEqual([projected(2), projected(3), projected(4)])
   })
 
+  // A Set as lead with no turn since: the history ends under the former lead, not the named one.
+  it('walks lastTurns from the named lead after a switch with no turn since', async () => {
+    const entries = stampedTurns(MARA, MARA, MARA, MARA)
+    const narrative = await buildContext({ entities: CAST, entries, settings: WIDE })
+    const narrow = await buildContext({
+      entities: CAST,
+      entries,
+      settings: storySettings({ ...WIDE, classifierContextEntries: 3 }),
+      templateId: FALLBACK,
+    })
+
+    expect(narrative.entries).toStrictEqual([
+      marked(1, { id: 'c2', name: 'Mara of the Well' }),
+      projected(2),
+      projected(3),
+      projected(4),
+    ])
+    expect(narrow.lastTurns).toStrictEqual([
+      marked(2, { id: 'c2', name: 'Mara of the Well' }),
+      projected(3),
+      projected(4),
+    ])
+  })
+
   // The fallback splits lastTurns into earlier turns and the action-plus-reply pair; the list is
   // walked once, so a run reaching into the pair is marked where it starts and not again.
   it('marks a run that reaches into the action-plus-reply pair once', async () => {
