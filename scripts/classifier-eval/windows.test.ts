@@ -224,6 +224,20 @@ it('the switch window credits the break-in by awareness as by involvement', () =
   expect(notDaces(breakInKnownTo('char_dace'))).toBe(false)
 })
 
+it('the switch window’s bad reply, the break-in Dace’s and the passage Wenna’s, fails both expect checks', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  expect(w.checks.filter((c) => c.kind === 'expect').map((c) => [c.name, c.holds(w.bad)])).toEqual([
+    [
+      'the archive break-in is Wenna’s: a happening telling it involves her or gives her awareness',
+      false,
+    ],
+    [
+      'the ring paid for passage is Dace’s: a happening telling it involves him or gives him awareness',
+      false,
+    ],
+  ])
+})
+
 // architecture.md → System and user halves: a window whose lead never changed renders no mark.
 const LEAD_MARK = 'from this turn on, '
 const LEAD_CLAUSE = 'except where a turn names another'
