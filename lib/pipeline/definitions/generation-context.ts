@@ -505,7 +505,7 @@ export async function buildGenerationContext(
   )
   const nameOf = (id: string): string | undefined => {
     const row = branchById.get(id)
-    return row?.kind === 'character' ? oneLine(row.name) : undefined
+    return row?.kind === 'character' ? row.name : undefined
   }
   // Each list walks on its own from the named lead (architecture.md → System and user halves).
   // `{ gone }` / `{ none }` marks carry no id, so they allocate no placeholder.

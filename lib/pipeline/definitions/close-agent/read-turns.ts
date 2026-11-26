@@ -98,11 +98,7 @@ async function answeredMarks(
   if (rows.length === 0) return []
   const lead = await readCloseLead(ctx)
   const nameOf = await readStampedNames(ctx, rows)
-  const marks = leadMarks(
-    rows.map((row) => leadStampOf(row)),
-    lead?.id ?? null,
-    nameOf,
-  )
+  const marks = leadMarks(rows.map(leadStampOf), lead?.id ?? null, nameOf)
   // By show, with the name: the answer's id swap would mint the handle with none. Wrapped: passed
   // bare, the id map's method would lose its `this`.
   const show = (id: string, name: string): string => ctx.ids.show(id, name)

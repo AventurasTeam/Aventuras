@@ -72,11 +72,7 @@ export function buildChapterContext(input: {
   narration: StoryDefinition['narration']
   nameOf: (id: string) => string | undefined
 }): ChapterContext {
-  const marks = leadMarks(
-    input.entries.map((e) => leadStampOf(e)),
-    input.lead?.id ?? null,
-    input.nameOf,
-  )
+  const marks = leadMarks(input.entries.map(leadStampOf), input.lead?.id ?? null, input.nameOf)
   return {
     entries: input.entries.map((e, i) => {
       const leadMark = byName(marks[i])
@@ -147,11 +143,7 @@ export function buildCloseTurns(
     show: (id: string, name: string) => string
   },
 ): CloseTurn[] {
-  const leadMarkOf = leadMarks(
-    entries.map((entry) => leadStampOf(entry)),
-    marks.namedLeadId,
-    marks.nameOf,
-  )
+  const leadMarkOf = leadMarks(entries.map(leadStampOf), marks.namedLeadId, marks.nameOf)
   return entries.map((entry, i) => {
     const handle = handleOf(entry.id)
     // A turn shown without its handle is one no write can cite.

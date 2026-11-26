@@ -52,17 +52,14 @@ export async function readCloseLead(ctx: {
   return lead === null ? null : { id: lead.id, name: oneLine(lead.name) }
 }
 
-/** Names the characters `entries`' stamps name, each on one line; undefined for a row gone. */
+/** Names the characters `entries`' stamps name; undefined for a row gone. */
 export async function readStampedNames(
   ctx: { readonly db: DbCtx['db']; readonly branchId: string },
   entries: readonly Pick<StoryEntry, 'metadata'>[],
 ): Promise<(id: string) => string | undefined> {
   const stamped = [...new Set(entries.flatMap((entry) => leadStampOf(entry) ?? []))]
   const names = await readEntityNames(ctx.branchId, stamped, ctx.db)
-  return (id) => {
-    const name = names.get(id)
-    return name === undefined ? undefined : oneLine(name)
-  }
+  return (id) => names.get(id)
 }
 
 /** The lead as a close task names it: under its handle. */
