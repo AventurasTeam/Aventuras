@@ -8,6 +8,7 @@ import {
   happeningAwareness,
   happeningInvolvements,
   happenings,
+  isRetrievalBump,
   lore,
   readChainSnapshot,
   threads,
@@ -19,7 +20,7 @@ import {
 import { isJsonObject } from '@/lib/json-object'
 
 import { HELD_KEY, HOLDING_TABLES, namesOf } from './link-ends'
-import { HISTORY_LINK_TABLES, isRetrievalBump, type HistoryLinkTable } from './link-rows'
+import { HISTORY_LINK_TABLES, type HistoryLinkTable } from './link-rows'
 import {
   COLLISION_COLUMNS,
   DIFF_TABLES,

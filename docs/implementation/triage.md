@@ -171,14 +171,6 @@ slice-planning gate forces its resolution before that slice is planned.
   comments mislead. Pre-existing. Found in Slice 6.7's reviews
   (2026-11-23).
 
-- **A third retrieval-bump predicate with its own shape.**
-  `isRetrievalBumpOnly` (`lib/row-signals/link-owners.ts:72-78`) has no
-  table check and calls `{}` a bump, beside `isRetrievalBump`
-  (`lib/history/link-rows.ts:17-22`) and History's `NOT_RETRIEVAL_BUMP`
-  SQL (`lib/history/query.ts:133-137`), which share two constants and a
-  test; nothing keeps the third in step. Found in Slice 6.7's reviews
-  (2026-11-23).
-
 - **Change prose can show two sides that read identically.** Three
   cases.
   (1) _Term-list display._ `termListChange` in

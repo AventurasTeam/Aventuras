@@ -5,6 +5,7 @@ import {
   characterRelationships,
   happeningAwareness,
   happeningInvolvements,
+  isRetrievalBump,
   type DbCtx,
 } from '@/lib/db'
 
@@ -66,18 +67,6 @@ const LINK_DESCRIPTORS: Record<LinkTable, LinkDescriptor> = {
   },
 }
 
-/**
- * An update whose undo payload holds only `retrievalCount`, which retrieval bumps every turn:
- * counting it over-tints aware characters, and a close would read it as a later-turn write (C12).
- */
-export function isRetrievalBumpOnly(
-  op: 'create' | 'update' | 'delete',
-  payload: Record<string, unknown> | null,
-): boolean {
-  if (op !== 'update' || payload == null) return false
-  return Object.keys(payload).every((k) => k === 'retrievalCount')
-}
-
 function stringOrNull(v: unknown): string | null {
   return typeof v === 'string' ? v : null
 }
@@ -128,8 +117,8 @@ export async function resolveLinkOwners(
   branchId: string,
   rows: readonly LinkDeltaRow[],
 ): Promise<SignalDelta[]> {
-  // Retrieval bumps are always plain updates; drop them once, before any resolution.
-  const relevant = rows.filter((r) => !isRetrievalBumpOnly(r.op, r.undoPayload))
+  // A bump would tint every aware character each turn; drop them once, before any resolution.
+  const relevant = rows.filter((r) => !isRetrievalBump(r))
 
   const pendingByTable: Record<LinkTable, string[]> = {
     happening_awareness: [],

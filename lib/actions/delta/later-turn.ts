@@ -1,7 +1,6 @@
 import { and, eq, gt, inArray, ne } from 'drizzle-orm'
 
-import { chunked, deltas, storyEntries, type Delta } from '@/lib/db'
-import { isRetrievalBumpOnly } from '@/lib/row-signals'
+import { chunked, deltas, isRetrievalBump, storyEntries, type Delta } from '@/lib/db'
 
 import type { DbCtx, GuardRow, PrecedenceTable } from '../types'
 
@@ -92,7 +91,7 @@ export async function laterTurnDeltas(
     }
   }
   return found
-    .filter((d) => !isRetrievalBumpOnly(d.op, d.undoPayload))
+    .filter((d) => !isRetrievalBump(d))
     .filter((d) =>
       d.entryId === null ? later.actionIds.has(d.actionId) : later.entryIds.has(d.entryId),
     )

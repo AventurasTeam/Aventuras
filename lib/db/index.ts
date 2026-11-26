@@ -33,6 +33,7 @@ export { happeningInvolvementWriteSchema } from './happenings/happening-involvem
 export type { HappeningInvolvementWrite } from './happenings/happening-involvement-schema'
 export { happeningWriteObject, happeningWriteSchema } from './happenings/happening-schema'
 export type { HappeningWrite } from './happenings/happening-schema'
+export { isRetrievalBump, RETRIEVAL_BUMP_TABLE, RETRIEVAL_COUNT } from './happenings/retrieval-bump'
 export { loreWriteSchema } from './lore/lore-schema'
 export type { LoreWrite } from './lore/lore-schema'
 export { threadWriteSchema } from './threads/thread-schema'

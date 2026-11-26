@@ -1,13 +1,8 @@
-import type { Delta } from '@/lib/db'
+import { RETRIEVAL_COUNT, type Delta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { oneLine } from '@/lib/text'
 
-import {
-  HISTORY_LINK_TABLES,
-  RETRIEVAL_COUNT,
-  type HistoryLinkTable,
-  type LinkSide,
-} from './link-rows'
+import { HISTORY_LINK_TABLES, type HistoryLinkTable, type LinkSide } from './link-rows'
 
 export const HISTORY_TABLES = ['entities', 'lore', 'threads', 'happenings'] as const
 export type HistoryTable = (typeof HISTORY_TABLES)[number]

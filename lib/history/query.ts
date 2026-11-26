@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, lt, or, sql, type SQL } from 'drizzle-orm'
 
 import { PAYLOAD_META_PREFIX } from '@/lib/actions'
-import { deltas, type DbCtx, type Delta } from '@/lib/db'
+import { deltas, RETRIEVAL_BUMP_TABLE, RETRIEVAL_COUNT, type DbCtx, type Delta } from '@/lib/db'
 
 import {
   HISTORY_OPS,
@@ -22,13 +22,7 @@ import {
   type LinkEnds,
   type ScanLinkEnds,
 } from './link-ends'
-import {
-  RETRIEVAL_BUMP_TABLE,
-  RETRIEVAL_COUNT,
-  type HistoryLinkTable,
-  type HistoryRow,
-  type HistoryVia,
-} from './link-rows'
+import { type HistoryLinkTable, type HistoryRow, type HistoryVia } from './link-rows'
 
 export type HistoryOp = Delta['op']
 export type HistorySort = 'newest' | 'oldest'

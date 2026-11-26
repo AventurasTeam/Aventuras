@@ -2,10 +2,17 @@ import { and, asc, eq } from 'drizzle-orm'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Delta, HappeningAwareness, NewEntity } from '@/lib/db'
-import { branches, deltas, entities, happeningAwareness, happenings, stories } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  entities,
+  happeningAwareness,
+  happenings,
+  isRetrievalBump,
+  stories,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { humanizeDelta, loadHistoryChunk } from '@/lib/history'
-import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { registerHappeningAwareness } from './register-awareness'
@@ -681,7 +688,7 @@ describe('resetAwarenessRetrieval', () => {
       actionId: 'act_reset',
     })
     expect(rows[0].undoPayload).toEqual({ retrievalCount: 6 })
-    expect(isRetrievalBumpOnly(rows[0].op, rows[0].undoPayload)).toBe(true)
+    expect(isRetrievalBump(rows[0])).toBe(true)
   })
 
   it('reverse-replay restores the prior count', async () => {

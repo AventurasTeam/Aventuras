@@ -1622,10 +1622,12 @@ retrieval's bump, or a close's reset) is stepped back through but
 recorded nowhere. History leaves that shape out
 ([`world.md → History tab`](./ui/screens/world/world.md#history-tab)),
 and a retrieval can bump each aware in-scene row once a turn, so one
-long awareness chain would otherwise fill the cache. The walk and
-History's query build the shape from the same two constants,
-`RETRIEVAL_COUNT` and `RETRIEVAL_BUMP_TABLE` (`lib/history/link-rows.ts`),
-and a test in `lib/history/diff-walk.test.ts` pins that the two leave
+long awareness chain would otherwise fill the cache. Every reader of
+the shape (the walk, History's query, row signals, the rollback and
+chapter-delete counts) takes it from one predicate and its two constants,
+`isRetrievalBump`, `RETRIEVAL_COUNT` and `RETRIEVAL_BUMP_TABLE`
+(`lib/db/happenings/retrieval-bump.ts`), and a test in
+`lib/history/diff-walk.test.ts` pins that the walk and the query leave
 out the same deltas.
 
 Last, the walk reads the names of the rows its entries reference (a row

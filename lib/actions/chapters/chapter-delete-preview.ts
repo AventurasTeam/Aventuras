@@ -1,8 +1,14 @@
 import { and, eq, inArray, ne, sql } from 'drizzle-orm'
 
 import { closeAfterDelete, type ChapterDeleteAfter } from '@/lib/chapters'
-import { chunked, lore, openRegionSeries, storyEntries, type Delta } from '@/lib/db'
-import { isRetrievalBumpOnly } from '@/lib/row-signals'
+import {
+  chunked,
+  isRetrievalBump,
+  lore,
+  openRegionSeries,
+  storyEntries,
+  type Delta,
+} from '@/lib/db'
 import { generationStore, type OpenStory } from '@/lib/stores'
 
 import { resolveChapterDeleteSet, type ChapterDeleteReadRefusal } from './chapter-delete-set'
@@ -145,7 +151,7 @@ function changesOf(
 function countsNowhere(d: Delta, restoring: ReadonlySet<string>): boolean {
   return (
     DIVIDER_TABLES.has(d.targetTable) ||
-    isRetrievalBumpOnly(d.op, d.undoPayload) ||
+    isRetrievalBump(d) ||
     (d.op === 'update' && !restoring.has(d.id))
   )
 }

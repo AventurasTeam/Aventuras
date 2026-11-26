@@ -1,10 +1,16 @@
 import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm'
 
 import type { Delta, EntryMetadata, SqlOp } from '@/lib/db'
-import { chapters, chunked, deltas, entryMetadataSchema, storyEntries } from '@/lib/db'
+import {
+  chapters,
+  chunked,
+  deltas,
+  entryMetadataSchema,
+  isRetrievalBump,
+  storyEntries,
+} from '@/lib/db'
 import { headTurnEntries } from '@/lib/head-turn'
 import { generateId } from '@/lib/ids'
-import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { entriesStore, generationStore, rerunHoldsReversal, selectMemoryRun } from '@/lib/stores'
 import { countTokens } from '@/lib/tokens'
 
@@ -343,8 +349,7 @@ export async function rollbackCountsOf(
   ctx: Pick<DbCtx, 'db'>,
 ): Promise<RollbackCounts> {
   const { set, window, runningActionId } = swept
-  const counted = (d: Delta) =>
-    d.actionId !== runningActionId && !isRetrievalBumpOnly(d.op, d.undoPayload)
+  const counted = (d: Delta) => d.actionId !== runningActionId && !isRetrievalBump(d)
   const sweptChapters = new Set(
     set.rows
       .filter((d) => d.targetTable === 'chapters' && d.op === 'create')
