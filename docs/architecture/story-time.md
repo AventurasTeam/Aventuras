@@ -151,14 +151,16 @@ Editing an entry from before a fork has a wider, pre-existing consequence, descr
 The story begins where its opening ends, so the **starting time is the opening's ending**. The story
 is created with it on the clock (`createStoryFromWizard`'s `startingTime`), and the opening entry is
 stamped zero-length at it. It is a reading, not an anchor. The wizard's opening step cannot finish
-without one.
+without one. While it is missing or unreadable, the step's footer says so and names the field to fill
+(`components/wizard/beginStory.ts`).
 
 Each opening the step offers carries its own start, and the one belonging to the opening used seeds
 the story, in the order `createStory` picks an opening: generated, written, imported
 (`NarrativeStore.startingTime`).
 
 - **Imported** — a Scenario Vault entry may state one (`scenario_vault.starting_time`), and it
-  applies only to the scenario's first message (`scenarioOpeningStart`, `greetingStart`).
+  applies only to the scenario's first message (`scenarioOpeningStart`, `greetingStart`). The imported opening used is the greeting selected on the step, whether or not
+  **Use This Opening** was pressed; pressing it moves the start typed beside it to the result.
 - **Guidance** — what generation is told, through `TIME: opening ends at {{ storyStartingTime }}` in
   the four opening templates, or `(suggest one)` when empty.
 - **Result** — what generation returned, or the guidance when it returned nothing readable

@@ -80,11 +80,6 @@ export class NarrativeStore {
   /** Whether the selected pack's opening template renders the start; null until checked. */
   openingReceivesStart = $state<boolean | null>(null)
 
-  // Card Import Integration (for Opening)
-  cardImportedFirstMessage = $state<string | null>(null)
-  cardImportedAlternateGreetings = $state<string[]>([])
-  selectedGreetingIndex = $state<number>(0)
-
   // Derived
   importedEntries = $derived(this.importedLorebooks.flatMap((lb) => lb.entries))
 
@@ -104,6 +99,15 @@ export class NarrativeStore {
       : this.manualOpeningText.trim()
         ? this.manualStart
         : this.importedStart,
+  )
+
+  /** What was typed for `startingTime`, so a missing start can be told from one that does not parse. */
+  startingTimeText = $derived(
+    this.generatedOpening
+      ? this.resultStartText
+      : this.manualOpeningText.trim()
+        ? this.manualStartText
+        : this.importedStartText,
   )
 
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
@@ -403,21 +407,19 @@ export class NarrativeStore {
     this.clearOpeningEditState()
   }
 
-  useCardOpening() {
-    const selectedScene =
-      this.selectedGreetingIndex === 0
-        ? this.cardImportedFirstMessage
-        : this.cardImportedAlternateGreetings[this.selectedGreetingIndex - 1]
-
+  /** Takes the imported greeting as the opening, with the start that was stated beside it. */
+  useCardOpening(scene: string) {
     // Default location if none exists (will be populated from setting if available in orchestrator)
     this.generatedOpening = {
       title: this.storyTitle,
-      scene: selectedScene || '',
+      scene,
       initialLocation: {
         name: 'Starting Location',
         description: 'The scene begins here.',
       },
     }
+    this.resultStartText = this.importedStartText
+    this.resultStartSource = this.importedStartText.trim() ? 'edited' : null
     this.openingError = null
     this.clearOpeningEditState()
   }
