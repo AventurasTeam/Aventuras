@@ -11,8 +11,8 @@ const AT_THE_ARCHIVE = { scene: [WENNA], location: 'loc_archive', lead: WENNA }
 type ReplyHappening = ClassifierExtraction['happenings'][number]
 
 // What each lead's turns established, as a happening's title or description tells it.
-const BREAK_IN = /\b(chart|archive|lock\w*|palm|customs)\b/i
-const PASSAGE = /\b(ring|ferry\w*|passage|skell)\b/i
+const BREAK_IN = /\b(chart|archive|lock\w*|customs)\b/i
+const PASSAGE = /\b(ring|ferry\w*|skell)\b/i
 
 const tells = (h: ReplyHappening, fact: RegExp): boolean =>
   fact.test(`${h.title} ${h.description ?? ''}`)
