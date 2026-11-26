@@ -55,12 +55,12 @@ function projectRelationships(
   })
 }
 
-// classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
 function leadOf(entities: readonly Entity[], leadId: string | null) {
   const lead = entities.find((e) => e.id === leadId && e.kind === 'character')
   return lead == null ? null : { id: lead.id, name: oneLine(lead.name) }
 }
 
+// classifier.md → Mentioned places. Retired places keep their id: a happening can name one.
 const placeRow = ({ entity: e, depth }: PlaceTreeRow) => ({
   id: e.id,
   name: oneLine(e.name),

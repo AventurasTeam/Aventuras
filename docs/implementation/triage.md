@@ -588,13 +588,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`dataset:export-seed`), reverts it. The drive should pick first
   person in the wizard. Found by Slice 6.9's planning (2026-11-25).
 
-- **A stranded comment above `leadOf`.**
-  `lib/pipeline/definitions/classifier-context.ts` opens `leadOf` with
-  "classifier.md → Mentioned places. Retired places keep their id: a
-  happening can name one.", which is about `placeRow` below it. It
-  predates Slice 6.9 (`a6d81c572`). Found by Slice 6.9's Task 9 review
-  (2026-11-25).
-
 - **`abortRun`'s docblock says any pass or close end clears the pending
   re-run, but a re-run's own abort clears it too.** The block at
   `lib/stores/generation/generation.ts:177-182` reads "any pass or close
