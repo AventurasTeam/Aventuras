@@ -92,6 +92,13 @@ const SYNTAX_BANS = [
     selector: "ImportSpecifier[imported.name='expoDb'][local.name!='expoDb']",
     message: aliasMessage('expoDb', 'the async-API ban'),
   },
+  // Reads like the old unscoped call and type-checks, and only rows on a second branch expose it.
+  {
+    selector:
+      "CallExpression[callee.name!='expect'] > CallExpression.arguments[callee.property.name='getLoadedBranch']",
+    message:
+      'A scoped read takes its branch from its caller or the open story; getLoadedBranch() only tells a loaded branch from one that is not. See docs/code-conventions.md → State placement.',
+  },
   ...[
     "ImportSpecifier[imported.name='generationStore'][local.name!='generationStore']",
     "VariableDeclarator[id.type='Identifier']:matches([init.name='generationStore'], [init.expression.name='generationStore'])",

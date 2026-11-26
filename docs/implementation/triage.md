@@ -78,27 +78,6 @@ slice-planning gate forces its resolution before that slice is planned.
   No defect either way. Found by M6.1's slice review (2026-11-22); the
   runner's pointer moved by Slice 6.8's slice review (2026-11-25).
 
-- **No test passes a wrong branch to a scoped store read.** Every
-  working-set read now names its branch, so the typecheck blocks a
-  return to an unscoped call. It does not block
-  `x(store.getLoadedBranch())`, which compiles and reads like the old
-  unscoped call, and only a case with rows on two branches would catch
-  it. The sites no such case covers yet, each taking its branch from a
-  caller or the open story: `lib/actions/world/resolve-collision.ts:158-162`,
-  `lib/actions/world/save-entity.ts:28`,
-  `components/reader/peek/use-peek-view.ts:43-44`,
-  `components/reader/use-reader-slice.ts:65`,
-  `components/reader/use-entry-jump.ts:190`,
-  `components/reader/use-reader-undo.tsx:75` and `:184`,
-  `components/chapters/chapter-overlays-host.tsx:90`,
-  `hooks/use-row-signals.ts:67-76`, and `freshDeleteTarget`'s reads in
-  `components/world/use-world-delete.ts:69-70` and
-  `components/plot/use-plot-delete.ts:104-105`, which each survived a
-  swap to `getLoadedBranch()` in the slice review. Cheapest first pin:
-  an awareness row on `br_2` in the peek-view case. Found by Slice
-  6.2's third-PR review (2026-11-23); the list re-checked by its slice
-  review (2026-11-23).
-
 - **Can a pipeline reversal leave a redo group that contradicts its
   branch?** Every delta-logged write clears its branch's redo stack,
   but the pipeline's reversals clear none: `reverseCloseForRerun`
