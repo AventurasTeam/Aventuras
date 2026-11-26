@@ -4,7 +4,6 @@ import { beginStoryBlocker, type BeginStoryState } from './beginStory'
 const ready: BeginStoryState = {
   title: 'Harbour',
   opening: 'written',
-  startText: 'Y1 D1 19:00',
   startIsValid: true,
   busy: null,
 }
@@ -14,26 +13,18 @@ describe('beginStoryBlocker', () => {
     expect(beginStoryBlocker(ready)).toBeNull()
   })
 
-  it('names a missing starting time and the field it goes in', () => {
-    expect(
-      beginStoryBlocker({ ...ready, opening: 'imported', startText: ' ', startIsValid: false }),
-    ).toBe('Enter a Starting Time under the imported opening, e.g. Y1 D1 19:00.')
-  })
-
-  it('tells an invalid starting time from a missing one', () => {
-    expect(beginStoryBlocker({ ...ready, startText: 'soon', startIsValid: false })).toMatch(
-      /is not a time/,
+  it('names an unreadable starting time and the field it is in', () => {
+    expect(beginStoryBlocker({ ...ready, opening: 'imported', startIsValid: false })).toBe(
+      'The Starting Time under the imported opening is not a time, e.g. Y1 D1 19:00.',
     )
   })
 
   it('asks for the title before anything else', () => {
-    expect(beginStoryBlocker({ ...ready, title: '', opening: null, startText: '' })).toMatch(
-      /title/,
-    )
+    expect(beginStoryBlocker({ ...ready, title: '', opening: null })).toMatch(/title/)
   })
 
   it('asks for an opening before its time', () => {
-    expect(beginStoryBlocker({ ...ready, opening: null, startText: '' })).toMatch(/opening/)
+    expect(beginStoryBlocker({ ...ready, opening: null, startIsValid: false })).toMatch(/opening/)
   })
 
   it('waits out work on the opening', () => {

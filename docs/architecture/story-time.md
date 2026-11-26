@@ -150,9 +150,11 @@ Editing an entry from before a fork has a wider, pre-existing consequence, descr
 
 The story begins where its opening ends, so the **starting time is the opening's ending**. The story
 is created with it on the clock (`createStoryFromWizard`'s `startingTime`), and the opening entry is
-stamped zero-length at it. It is a reading, not an anchor. The wizard's opening step cannot finish
-without one. While it is missing or unreadable, the step's footer says so and names the field to fill
-(`components/wizard/beginStory.ts`).
+stamped zero-length at it. It is a reading, not an anchor. A start left blank takes
+`DEFAULT_STARTING_TIME` (`Y1 D1 00:00`, `storyStartFromText`), so the clock never starts at null; only
+text that is not a time stops the step, and the footer then says so and names the field
+(`components/wizard/beginStory.ts`). Generation is still told `(suggest one)` for a blank guidance,
+so a generated opening that returns a time keeps it.
 
 Each opening the step offers carries its own start, and the one belonging to the opening used seeds
 the story, in the order `createStory` picks an opening: generated, written, imported

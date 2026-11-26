@@ -11,7 +11,7 @@
   import { Badge } from '#lib/components/ui/badge/index.ts'
 
   import type { StoryMode, POV, Tense, TimeTracker } from '#lib/types/index.ts'
-  import { STARTING_TIME_VAR } from '#lib/services/storyTime/index.ts'
+  import { DEFAULT_STARTING_TIME, STARTING_TIME_VAR } from '#lib/services/storyTime/index.ts'
   import type {
     ExpandedSetting,
     GeneratedOpening,
@@ -178,7 +178,7 @@
       placeholder="e.g. Y1 D1 19:00"
     />
     <div class="text-muted-foreground text-xs">
-      <p>When the story begins after the opening.</p>
+      <p>When the story begins after the opening. Left blank, it is {DEFAULT_STARTING_TIME}.</p>
       <p>{hint}</p>
     </div>
   </div>
@@ -281,9 +281,7 @@
           'imported-start',
           importedStartText,
           onImportedStartChange,
-          scenarioStated
-            ? 'Imported from the scenario.'
-            : 'Not defined by the scenario. Please provide your own value.',
+          scenarioStated ? 'Imported from the scenario.' : 'Not defined by the scenario.',
           scenarioStated,
         )}
 

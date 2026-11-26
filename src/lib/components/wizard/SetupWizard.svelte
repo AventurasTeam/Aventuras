@@ -165,7 +165,6 @@
           : wizard.character.selectedGreeting
             ? 'imported'
             : null,
-      startText: wizard.narrative.startingTimeText,
       startIsValid: wizard.narrative.startingTime !== null,
       busy: wizard.narrative.isGeneratingOpening
         ? 'generating'

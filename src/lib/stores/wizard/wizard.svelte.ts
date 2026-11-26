@@ -348,7 +348,7 @@ export class WizardStore {
     if (!this.narrative.storyTitle.trim()) return
     const startingTime = this.narrative.startingTime
     if (!startingTime) {
-      this.narrative.openingError = 'Please enter a starting time for the story'
+      this.narrative.openingError = 'The starting time is not a valid time, e.g. Y1 D1 19:00'
       return
     }
 

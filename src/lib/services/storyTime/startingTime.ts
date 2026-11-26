@@ -54,6 +54,14 @@ export function greetingStart(index: number, scenarioStart: TimeTracker | null):
   return index === 0 && scenarioStart ? formatStoryTime(scenarioStart) : ''
 }
 
+/** What a new story starts at when the start beside its opening is left blank. */
+export const DEFAULT_STARTING_TIME = 'Y1 D1 00:00'
+
+/** The start a typed value seeds the story with: blank takes the default, unreadable is null. */
+export function storyStartFromText(text: string): ReturnType<typeof parseStoryTime> {
+  return parseStoryTime(text.trim() ? text : DEFAULT_STARTING_TIME)
+}
+
 /** The value the opening prompts are given for the start. */
 export function startingTimePromptValue(start: TimeTracker | null | undefined): string {
   return start ? formatStoryTime(start) : SUGGEST_ONE

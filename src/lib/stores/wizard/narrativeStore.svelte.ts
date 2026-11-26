@@ -23,6 +23,7 @@ import {
   formatStoryTime,
   normalizeTime,
   parseStoryTime,
+  storyStartFromText,
   returnedStart,
   templateReceivesStartingTime,
   type ResultStartSource,
@@ -93,14 +94,6 @@ export class NarrativeStore {
    * The start that seeds the story: the one belonging to the opening that will be used, in the
    * order `createStory` picks an opening — generated, then written, then imported.
    */
-  startingTime = $derived(
-    this.generatedOpening
-      ? this.resultStart
-      : this.manualOpeningText.trim()
-        ? this.manualStart
-        : this.importedStart,
-  )
-
   /** What was typed for `startingTime`, so a missing start can be told from one that does not parse. */
   startingTimeText = $derived(
     this.generatedOpening
@@ -109,6 +102,9 @@ export class NarrativeStore {
         ? this.manualStartText
         : this.importedStartText,
   )
+
+  /** Blank takes `DEFAULT_STARTING_TIME`; only text that is not a time leaves it null. */
+  startingTime = $derived(storyStartFromText(this.startingTimeText))
 
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
   private packId: () => string | undefined

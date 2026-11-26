@@ -2,8 +2,7 @@ export interface BeginStoryState {
   title: string
   /** Which opening will be used, and so which Starting Time field is meant; null when none. */
   opening: 'generated' | 'written' | 'imported' | null
-  /** The start text that belongs to the opening that will be used. */
-  startText: string
+  /** Whether the start beside that opening reads as a time; a blank one takes the default. */
   startIsValid: boolean
   busy: 'generating' | 'refining' | 'editing' | null
 }
@@ -27,7 +26,6 @@ export function beginStoryBlocker(state: BeginStoryState): string | null {
   }
   if (!state.opening) return 'Write an opening or generate one.'
   const where = FIELD[state.opening]
-  if (!state.startText.trim()) return `Enter a Starting Time ${where}, e.g. Y1 D1 19:00.`
   if (!state.startIsValid) return `The Starting Time ${where} is not a time, e.g. Y1 D1 19:00.`
   return null
 }
