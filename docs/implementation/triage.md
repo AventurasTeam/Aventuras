@@ -87,14 +87,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/actions/stories/delete-story.test.ts:354`'s test name repeats it.
   Found by M6.1's final review and its slice review (2026-11-22).
 
-- **Two close-agent test comments cite "(5.9)" as future work.**
-  `lib/pipeline/definitions/close-agent/lore-tools.test.ts:295` and
-  `lib/pipeline/definitions/close-agent/write-path.test.ts:1067` say "as
-  read_turns will show one (5.9)". Slice 5.9 has shipped (`read_turns`
-  is in `close-agent/read-turns.ts`, merged in #735), so the pointer is
-  stale per `.claude/rules/code.md`'s commenting discipline. Found by
-  M6.1's final review (2026-11-22).
-
 - **Two vec0 comments say a `pk IN` read answers no rows.**
   `lib/db/embeddings/knn.ts:63-65` and `lib/db/embeddings/ops.ts:75-76`
   say vec0 answers `pk IN (…)` with zero rows, and

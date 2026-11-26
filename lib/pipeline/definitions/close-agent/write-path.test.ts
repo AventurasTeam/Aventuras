@@ -291,7 +291,7 @@ const SET_FIELDS_SHAPE = {
 }
 type SetFieldsArgs = z.output<WriteToolSchema<typeof SET_FIELDS_SHAPE>>
 
-// A character write shaped as update_character will plan it (5.5b); `refuse` stands in for a
+// A character write shaped as update_character plans it; `refuse` stands in for a
 // soft cap on free fields between fieldVerdicts and entityWriteAction.
 async function planSetFields(args: SetFieldsArgs, ctx: WriteContext): Promise<WritePlan> {
   const { id } = args
@@ -1065,7 +1065,7 @@ describe('dispatchToolCall in a close phase', () => {
   })
 
   it('refuses a write citing nothing, a turn outside the chapter or an unread row, emitting no group', async () => {
-    // t8: an entry past E, as read_turns will show one (5.9).
+    // t8: an entry past E, as read_turns shows one.
     setup = (ids) => {
       ids.showTurn(f.entries[9]!.id)
     }
