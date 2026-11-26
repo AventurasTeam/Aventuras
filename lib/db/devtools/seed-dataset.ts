@@ -1380,7 +1380,7 @@ const heroDeltas: SlottedDelta[] = [
     branchId: MAIN,
     entryId: entryId('hero', 71),
     actionId: 'act_class_2',
-    after: N_HERO,
+    after: N_HERO - 1,
     source: 'periodic_classifier',
     targetTable: 'entities',
     targetId: ID.brannocFlagged,
@@ -1392,18 +1392,18 @@ const heroDeltas: SlottedDelta[] = [
 ]
 
 // Rollback/delete resolve from an entry's create delta (operational.ts rejects without one) and
-// go silently dead on a bare seed. The opening has none, as in create-story.ts.
+// go silently dead on a bare seed. The opening and a system entry have none, as the app writes.
 function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
   const nextLogPosition = new Map<string, number>()
   return allEntries
-    .filter((e) => e.kind !== 'opening')
+    .filter((e) => e.kind !== 'opening' && e.kind !== 'system')
     .map((e) => {
       const lp = nextLogPosition.get(e.branchId) ?? 1
       nextLogPosition.set(e.branchId, lp + 1)
       return {
         id: `delta_create_${e.branchId}_${e.id}`,
         branchId: e.branchId,
-        entryId: null,
+        entryId: e.id,
         actionId: `act_create_${e.branchId}_${e.id}`,
         logPosition: lp,
         source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),

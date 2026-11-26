@@ -331,13 +331,36 @@ describe('seeded rollback', () => {
     expect(later).toBeGreaterThan(0)
   })
 
+  // data-model.md → Delta log, as the app writes it: no create for the opening or a system entry,
+  // and every other entry's create stamped with its entry.
+  it('logs a create for every entry but the opening and a system entry, stamped with it', () => {
+    const entries = rowsOf('story_entries') as { id: string; branchId: string; kind: string }[]
+    const creates = (
+      rowsOf('deltas') as {
+        id: string
+        branchId: string
+        entryId: string | null
+        targetTable: string
+        targetId: string
+        op: string
+      }[]
+    ).filter((d) => d.targetTable === 'story_entries' && d.op === 'create')
+    const created = new Set(creates.map((d) => `${d.branchId}/${d.targetId}`))
+    expect(entries.some((e) => e.kind === 'system')).toBe(true)
+    for (const e of entries)
+      expect(created.has(`${e.branchId}/${e.id}`), `${e.kind} ${e.id}`).toBe(
+        e.kind !== 'opening' && e.kind !== 'system',
+      )
+    for (const d of creates) expect(d.entryId, d.id).toBe(d.targetId)
+  })
+
   // Every seeded branch, not just the hero's: hap_fire anchors at entry 22 and its links at 22 and
   // 25, so the hero's earlier rollbacks sweep them and the later ones spare them.
   it('previews a rollback to every seeded entry above the opening', async () => {
     const { db, runInTransaction } = await seededDb()
     const entries = (
       rowsOf('story_entries') as { id: string; branchId: string; kind: string; position: number }[]
-    ).filter((r) => r.kind !== 'opening')
+    ).filter((r) => r.kind !== 'opening' && r.kind !== 'system')
     expect(entries.length).toBeGreaterThan(100)
 
     for (const entry of entries) {

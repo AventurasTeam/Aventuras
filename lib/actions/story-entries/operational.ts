@@ -253,8 +253,7 @@ async function resolveRollbackWindow(
       code: STORY_ENTRY_REJECTION.rollbackFloor,
     }
 
-  // N = B's own create-delta log_position. Found by target_id (not entry_id), so
-  // this works whether or not foreground deltas stamp entry_id.
+  // N = B's own create-delta log_position: the create that targets B, which also carries B's id.
   const [createDelta] = await ctx.db
     .select({ lp: deltas.logPosition })
     .from(deltas)
