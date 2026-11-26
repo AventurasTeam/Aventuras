@@ -41,7 +41,9 @@ describe('compiledInBuild', () => {
 
 describe('the unit project', () => {
   it('runs app hooks compiled, as the build ships them', () => {
-    renderHook(() => useDebouncedValue('a', 10))
+    // Unmounted at once, so its debounce timer can't outlive the test's DOM.
+    const { unmount } = renderHook(() => useDebouncedValue('a', 10))
+    unmount()
     expect(memoCache.reads).toBeGreaterThan(0)
   })
 })
