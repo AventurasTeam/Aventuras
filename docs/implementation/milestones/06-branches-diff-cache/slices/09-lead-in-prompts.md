@@ -255,22 +255,23 @@ marks but hold no lead line.
 - `close-instructions.ts` stays free of the lead. The roadmap entry's
   "`close-instructions` … naming the lead" is stale and isn't built.
 
-**The third-person rule.** The wording follows canon: told in the third
-person, naming each character as the prose does, the lead included,
-never "I" or "you" outside quoted speech. It goes in:
+**The third-person rule.** The summaries' and the close's wording follows
+canon: told in the third person, naming each character as the prose does,
+the lead included, never "I" or "you" outside quoted speech. It goes in:
 
 - the three summary rules, which today say the reverse:
   `chapter-metadata.ts:39`, `chapter-metadata-part.ts:13`, and the
   merge's "keep the person they are told in" at
   `chapter-metadata-merge.ts:15`;
-- the periodic classifier's happening description rule
-  (`periodic-classifier.ts:17`);
 - the close's composite description (`close-happenings.ts:12`).
 
-The periodic classifier's rule is the shorter wording: it drops "naming
-each character as the prose does" and keeps the lead included and
-"whatever person the story is narrated in". The summaries and the close
-keep the full wording.
+The periodic classifier's happening description rule
+(`periodic-classifier.ts:17`) has its own, shorter sentence: "Tell it in
+the third person, the lead included: never "I" or "you" outside quoted
+speech, whatever person the story is narrated in, since it is recalled
+later under whatever lead the story has then." It drops "naming each
+character as the prose does", and the sentence ends the bullet. The
+summaries and the close keep the full wording.
 
 **The registry** (`lib/prompts/templateContextMap.ts`):
 
@@ -522,6 +523,10 @@ Unit tests run with `pnpm vitest run --project unit <path>`.
 
 ## Open questions
 
+Slice planning (2026-11-25) answered each of these, and the before and
+after probes the one on the new wording;
+[Implementation notes](#implementation-notes) carries the answers.
+
 - **The marks' open terms.** Canon settles none of these.
   Recommended answers, which the scope above follows; planning
   confirms each with the developer.
@@ -587,5 +592,226 @@ Unit tests run with `pnpm vitest run --project unit <path>`.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved
-developer decisions._
+**Developer decisions (slice planning, 2026-11-25).**
+
+- **Q1. No id where a call has no id map.** In the chapter metadata and
+  part calls a mark naming a character is `{ name }`, and the chapter
+  context's `lead` is `{ name }`: those calls render with no
+  substitution, so an id there would be a raw entity id reaching the
+  pack. A namesake switch reads ambiguously there, accepted, since the
+  summary names its characters anyway.
+- **Q2. The narrator and the suggestion refresh explain their marks.**
+  They take marks and no lead line or clause, as the slice set out, and
+  Story so far opens with one explainer line when a turn in it is
+  marked: no probe reaches the narrator, and its system half's
+  unqualified "'I' is the lead" competes with the marks. The line never
+  claims the last run is today's lead's, since after a switch with no
+  turn since every turn is the former lead's. The suggestion voice
+  names the lead for the next turn's voice, always today's lead's, so
+  it takes no clause either.
+- **Q3. The close tasks name the lead, not the narration.** No close
+  task writes text whose person follows the narration. Phase 3's list
+  dropped "and the narration", matching Conversations and the bundled
+  table.
+- **Q4. Happenings and Awareness keep a flat lead line.** A
+  `read_turns` answer holding a marked turn opens with an explainer
+  note instead. An always-on clause would reach never-switched prompts,
+  and a per-task query of the branch's stamps was declined.
+- **Q5. A fallback mark prints its placeholder whatever the
+  character's status,** as the fallback's lead line already does for a
+  retired lead; the reply schema has a returning retired character's
+  flip. Assumed, not traced: a reply naming that placeholder resolves
+  and lands as any write to a retired row does.
+- **Q6. No close probe with a switch.** On the dataset a re-stamped
+  half would contradict Jim's first-person prose, the bar scores holds
+  and coverage rather than attribution, and R4 would refuse Identity
+  merges of the stamped character and move the coverage counts.
+- **Q7. The dataset seed is narrated in the first person.**
+  `treasure-island.seed.json` carries `narration: 'first'`, set before
+  the before runs, so the close probe tests a first-person story whose
+  summary must still be third person. The build's wizard drive still
+  leaves the wizard's default, third person, so a rebuild reverts it;
+  the fix is filed in
+  [`triage.md`](../../../triage.md).
+- **Canon route.** The Q1, Q2 and Q4 sentences and Q3's list edit
+  landed in this PR beside the slice's own canon edits, with no design
+  pass.
+
+**Developer decisions (during the run).**
+
+- **The `switch` window's former lead.** "PROVISIONAL: (B), give Wenna a
+  description unrelated to locks … so the switch window measures the
+  marks rather than an inference from her description." Wenna is
+  described as "A chandler's widow who rents the room above her shop."
+  where the plan's fixture had "A locksmith's daughter who opens doors
+  for a price." It was set before the before runs and is the same in the
+  after runs. Provisional: the window's attribution figures rest on it.
+- **The close's after run.** Claude Code's low-memory reaper killed the
+  first after run at about 15:10Z, three minutes into run 1. "Q20: A /
+  50GB of memory free, should be fine": it reran alone as a normal
+  background shell, and that rerun's figures are the ones below.
+- **The close keeps the summaries' wording.** ANSWER (the close's
+  Happenings): "keep the close's Happenings on THIRD_PERSON_RULE … add
+  one clause to docs/memory/chapter-close.md 3e saying the close keeps
+  the summaries' wording rather than the pass's." The clause is in
+  3e's `description` bullet; no close rerun, its rule is untouched.
+- **The classifier's wording, in order.** The first wording, the
+  summaries' `THIRD_PERSON_RULE` also in the periodic classifier, made
+  six checks fall at 5 runs (the Falls paragraph below). "Q21: B":
+  five more runs of the four windows with a falling check, a side;
+  each fall held at 10 runs. "Q23: C1": reword only the periodic
+  classifier's happening bullet, dropping "naming each character as the
+  prose does" and keeping "the lead included"; the summaries and the
+  close keep `THIRD_PERSON_RULE`. `classifier.md`'s sentence changed
+  with it, because the 10-run figures showed the longer phrase
+  coinciding with unnamed figures made into new characters. At 10 runs
+  C1 was still more than one run below before on four checks, so "Q27:
+  D2": ten more runs a side of `learning` and `recounted`, and a test
+  fixed before the numbers, a two-sided Fisher exact test per check,
+  before (20 runs) against the variant (20 runs), accepting the variant
+  unless any `learning` or `recounted` check is lower under it at p
+  under 0.1. C1 failed it on "the poisoning is not added again", 19/20
+  to 14/20, p = 0.091.
+  "Q29: E2": move the classifier's sentence to the end of the bullet,
+  the same words; `classifier.md` mirrors the order. E2 passes the same
+  test (20 runs, `learning` and `recounted`): no check is lower at
+  p under 0.1, and the poisoning check is 19/20, level with before.
+
+**Implementer choices worth keeping.**
+
+- `macro_story_entry` takes a required `ids` argument, `false`,
+  `'bracketed'` or `'bare'`, passed at every include: LiquidJS reads an
+  include argument left out as a free global, which the registry and
+  the stability tests reject.
+- `generationContext` lists `entries` and `lastTurns` after `lead`, so
+  a marked character takes the placeholder the roster gives it.
+- The pipelines' lead reads, the slice's last open question: the
+  store-backed builders, `readMetadataInputs` among them, read through
+  `resolveLeadLogged`, and the close through `readBranchLead`, whose
+  [`branch_lead_double`](../../../../observability.md#subsystem-emission-inventory)
+  entry now names the close. `data-model.md → The lead`'s Readers
+  paragraph names the close as a `readBranchLead` caller.
+- The close reads its lead per task, and `read_turns` per call, with no
+  carrier on `ToolContext`: nothing moves the flag during a close. The
+  close runs under a hard gate (`chapter-close.ts:40`), Set as lead and
+  a delete refuse under it (`set-lead.ts:97`), and no machine writer
+  touches the flag, so every read in one close returns the same lead
+  and a part's system half stays byte-stable. A prose task's marks and
+  lead line share one read. A carried field would have added a required
+  key to 53 literal test contexts.
+- The summaries' rule says "the lead by name" where canon says "the
+  lead included": in first- or second-person prose the prose calls the
+  lead "I" or "you", which "as the prose does" would point at. The
+  classifier's sentence, C1's, says "the lead included" as canon does.
+- The person detector (`scripts/classifier-eval/person.ts`), shared by
+  the evaluation set's third-person check and the close probe's count:
+  the word-bounded `I`, `me`, `my`, `mine`, `myself`, `we`, `us`, `our`,
+  `ours`, `ourselves`, `you`, `your`, `yours`, `yourself` and
+  `yourselves`, case-insensitive except `I`, outside straight or curly
+  double quotes; a single quote is an apostrophe.
+- Probe order: the never-switched baseline, the probe tooling, the
+  before runs at that commit, the prompt work, the after runs. Main had
+  no switch window, no summary output and no saved replies to rescore.
+- Task 15's plan put the stems "narration's own person" and "keep the
+  person they are told in" in positive assertions of
+  `third-person.test.ts`, while its own step and this slice's Acceptance
+  criteria want `rg` over `lib/prompts` to find neither. The test's
+  negative assertions use "own person" and "person they are told in",
+  which the old text carried and the rule's text does not.
+
+**What a later slice builds on.**
+
+- `leadMarks`, `leadStampOf` and `LeadMark` in `lib/world`;
+  `readEntityNames` in `lib/db`.
+- `THIRD_PERSON_RULE` and `CLASSIFIER_THIRD_PERSON_RULE`
+  (`lib/prompts/bundled/third-person.ts`), the sources of the rule: the
+  first in the three summary templates and the close's Happenings, the
+  second in the periodic classifier.
+- The chapter group's `lead` and `narration`, and the close's
+  `TaskTurns.lead`.
+- Open in [`followups.md`](../../../../followups.md#tuning-and-play-testing):
+  whether a model credits a mark that names no lead to today's lead
+  (added with the review's finding); and in
+  [`triage.md`](../../../triage.md), the entries this slice filed: the
+  evaluation set's appended checks are unpinned, the dataset build
+  leaves the story in the third person, a stranded comment above
+  `leadOf`, and `data-model.md` calling a context's missing lead
+  "absent" where the builders pass `null`.
+
+**Probes.** On the dev model `Gemma4-26B-A4B-QAT-MTP`, before at
+`510af826c` (the probe tooling, no prompt change) and after at
+`222d11765` (the first wording; the commits after it, up to the C1
+reword, add only comments and docs). The close runs read one seeded
+database, its sha256 the same in both. The third-person check's before
+figures had no rule in the prompt behind them. Evaluation set: 5 runs a
+window; the checks that fell, the `switch` window's two that rose, and
+the totals, with the same runs after C1 (`dcbb6c948`):
+
+| Window      | Check                                                                                       | Before  | First wording | C1      |
+| ----------- | ------------------------------------------------------------------------------------------- | ------- | ------------- | ------- |
+| `ambush`    | the archer and the third rider, never named, are not new characters                         | 4/5     | 3/5           | 4/5     |
+| `recounted` | Vane, who gave the order, is involved in the wreck                                          | 4/5     | 2/5           | 1/5     |
+| `learning`  | the poisoning is not added again                                                            | 5/5     | 3/5           | 4/5     |
+| `learning`  | the steward, who is after the shop, is a new character                                      | 5/5     | 4/5           | 2/5     |
+| `learning`  | Tam's aunt, whom Oriel sets out to find, is a new character                                 | 2/5     | 0/5           | 1/5     |
+| `namedrops` | every ID names a listed row or a handle the reply declares                                  | 5/5     | 4/5           | 5/5     |
+| `switch`    | the archive break-in is Wenna's: a happening telling it involves her or gives her awareness | 0/5     | 5/5           | 5/5     |
+| `switch`    | the archive break-in is not credited to Dace, the lead after it                             | 0/5     | 5/5           | 5/5     |
+| all windows | rule checks held                                                                            | 360/390 | 369/390       | 365/390 |
+| all windows | judgment checks held                                                                        | 33/35   | 32/35         | 33/35   |
+
+Under the first wording every other check rose or held; C1 moved two
+more, `learning` Tam as dead 2/5 → 1/5 and `namedrops` the saint check
+5/5 → 4/5. The `switch` window's other five checks
+are 5/5 in all three runs, and the third-person check is 5/5 in every
+window before and after, so it had no headroom. The evaluation set's
+first-attempt parse is 39/40 before, 40/40 after and 40/40 after C1. The
+parse probe on `br_hero_main` parsed 19 of 20 on the first attempt
+before, 19 of 20 with the first wording and 20 of 20 after C1; it did
+not rerun after E2, which moves a sentence within the bullet. The close
+probe's bar: before `bar: 7 of 10 runs passed; a cap reached in 8 runs,
+merge_threads called in 8: missed`, after `bar: 8 of 10 runs passed; a
+cap reached in 9 runs, merge_threads called in 10: met`. Before, runs 7
+and 8 ended in the metadata phase on a reply that never stopped (cause
+unknown, 39,642 output tokens): those two alone made the bar missed.
+Summaries in the first or second person outside quoted speech: 8 of 8
+completed runs before (the second person in four, the first in four) and
+0 of 10 after.
+
+The classifier's final wording, E2, ran `learning` and `recounted` at 20
+runs, against the before runs' 20. The four checks that failed the
+earlier rules:
+
+| Window      | Check                                                  | Before, 20 runs | C1    | E2    | p, before vs C1 | p, before vs E2 |
+| ----------- | ------------------------------------------------------ | --------------- | ----- | ----- | --------------- | --------------- |
+| `learning`  | the poisoning is not added again                       | 19/20           | 14/20 | 19/20 | 0.091           | 1.000           |
+| `learning`  | no description tells Tam as dead                       | 11/20           | 5/20  | 8/20  | 0.105           | 0.527           |
+| `learning`  | the steward, who is after the shop, is a new character | 13/20           | 10/20 | 10/20 | 0.523           | 0.523           |
+| `recounted` | Vane, who gave the order, is involved in the wreck     | 6/20            | 11/20 | 6/20  | 0.200           | 1.000           |
+
+Over these two windows E2 holds 429/500 rule checks and 19/20 judgment
+checks, before 437/500 and 18/20. The other six windows' after figures
+are C1's, the same words with the sentence earlier in the bullet, and
+the close's are unaffected, its rule being untouched.
+
+**Falls.** The first wording's six falls at 5 runs are in the table:
+`ambush` "the archer and the third rider, never named, are not new
+characters" 4/5 → 3/5, `recounted` "Vane, who gave the order, is
+involved in the wreck" 4/5 → 2/5, `learning` "the poisoning is not
+added again" 5/5 → 3/5, `learning` "the steward, who is after the shop,
+is a new character" 5/5 → 4/5, `learning` "Tam's aunt, whom Oriel sets
+out to find, is a new character" 2/5 → 0/5 and `namedrops` "every ID
+names a listed row or a handle the reply declares" 5/5 → 4/5, with
+judgment checks held 33/35 → 32/35. Raised with the developer, who
+ruled in the order above (Q21, Q23, Q27, Q29). Under the shipped E2,
+five `learning` checks and two `recounted` checks sit one to three runs
+below their before count (the steward 13/20 → 10/20 and Tam as dead
+11/20 → 8/20 the largest), none at p below 0.5. That is the known cost of the sentence; the figures don't
+separate it from sampling.
+
+**Not probed.** The close's marks and the narrator's reading of marks
+met no real model: no probe reaches the narrator (Q2), and the close
+probe runs the dataset seed, which has no switch (Q6). The `switch`
+window is the slice's one real-model check on marks. The dataset
+chapter fits one call at the dev model's window, so the part and merge
+calls' summary rule met no real model either.

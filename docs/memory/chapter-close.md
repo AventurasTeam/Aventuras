@@ -834,7 +834,9 @@ row is a merge that keeps the kept row's text. Keep distinct is no call.
 
 - `description` — composite, LLM-authored ("X happened, then Y"), in
   the third person as a pass writes one
-  ([`classifier.md`](./classifier.md#what-the-classifier-writes)).
+  ([`classifier.md`](./classifier.md#what-the-classifier-writes)); the
+  close keeps the summaries' wording of that rule
+  ([Phase 2](#phase-2--chapter-metadata)), not the pass's.
 - `title` — pick the more general, or LLM-authored composite. Both
   texts are cut to the bounds the app's writers keep, never refused.
 - `occurred_at_entry_id` — earliest of the cluster by entry position (the
