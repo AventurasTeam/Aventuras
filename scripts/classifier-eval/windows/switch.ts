@@ -10,8 +10,9 @@ const AT_THE_ARCHIVE = { scene: [WENNA], location: 'loc_archive', lead: WENNA }
 
 type ReplyHappening = ClassifierExtraction['happenings'][number]
 
-// What each lead's turns established, as a happening's title or description tells it.
-const BREAK_IN = /\b(chart|archive|lock\w*|customs)\b/i
+// What each lead's turns established, as a happening's title or description tells it. "Locks in"
+// is the idiom a crossing can use, not the archive lock.
+const BREAK_IN = /\b(chart|archive|lock(?!(?:s|ed|ing)?\s+in\b)\w*|customs)\b/i
 const PASSAGE = /\b(ring|ferry\w*|skell)\b/i
 
 const tells = (h: ReplyHappening, fact: RegExp): boolean =>

@@ -270,6 +270,37 @@ it('the switch window takes a palm in the crossing and a passage in the break-in
   ).toEqual(attribution.map((name) => [name, true]))
 })
 
+it('the switch window takes a crossing that "locks in" passage for no break-in', () => {
+  const w = EVAL_WINDOWS.find((x) => x.name === 'switch')!
+  const r = reply({
+    happenings: [
+      {
+        title: 'Wenna steals the Calder Shoals chart',
+        description: 'Wenna picks the archive lock and takes the chart.',
+        involvements: [{ ref: 'char_wenna', role: 'actor' }],
+        awareness: [],
+        sourceTurn: 't2',
+      },
+      {
+        title: 'Dace locks in his crossing',
+        description: 'Dace locks in a place on the Skell ferry with his father’s silver ring.',
+        involvements: [{ ref: 'char_dace', role: 'actor' }],
+        awareness: [],
+        sourceTurn: 't4',
+      },
+    ],
+  })
+  const attribution = [
+    'the archive break-in is Wenna’s: a happening telling it involves her or gives her awareness',
+    'the archive break-in is not credited to Dace, the lead after it',
+    'the ring paid for passage is Dace’s: a happening telling it involves him or gives him awareness',
+    'the ring paid for passage is not credited to Wenna',
+  ]
+  expect(
+    attribution.map((name) => [name, w.checks.find((c) => c.name === name)!.holds(r)]),
+  ).toEqual(attribution.map((name) => [name, true]))
+})
+
 // architecture.md → System and user halves: a window whose lead never changed renders no mark.
 const LEAD_MARK = 'from this turn on, '
 const LEAD_CLAUSE = 'except where a turn names another'
