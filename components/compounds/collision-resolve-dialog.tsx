@@ -60,7 +60,8 @@ const PROSE_FIELDS: ReadonlySet<ScalarField> = new Set<ScalarField>([
   'retiredReason',
 ])
 const STACKED_CLAMP_LINES = 3
-// rn-primitives doesn't gate disabled clicks on web; needs an inline style.
+// A disabled item already ignores presses (lessons-learned/rn-primitives-disabled.md); this drops
+// the hover tint and pointer cursor its class list applies.
 const GATED: ViewStyle = { pointerEvents: 'none' }
 const ARROW_KEYS: ReadonlySet<string> = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 

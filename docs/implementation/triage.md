@@ -245,16 +245,6 @@ slice-planning gate forces its resolution before that slice is planned.
   close modal runs each time it opens. Found by Slice 6.8's slice review
   (2026-11-25).
 
-- **The collision dialog's `GATED` comment may be over-broad.**
-  `components/compounds/collision-resolve-dialog.tsx` says rn-primitives
-  doesn't gate disabled clicks on web, and its plain radio items carry
-  an inline `pointerEvents: 'none'` for it. Slice 6.8's review showed
-  the dialog's `Select` items drop a disabled press already (an RN-Web
-  `Pressable` under the rn-primitives item), and read the same item
-  under the plain radios. Unverified for those by mutation; if it
-  holds, the inline style and the lesson behind it are narrower than
-  stated. Found in Slice 6.8's reviews (2026-11-25).
-
 - **A create's payload admits the lead flag.** `createEntity`'s
   payload is `{ entry: NewEntity }`
   (`lib/actions/entities/register.ts:93`), and since `entities.is_lead`
