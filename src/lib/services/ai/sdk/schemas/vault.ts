@@ -53,6 +53,11 @@ export const vaultScenarioInputSchema = z.object({
   primaryCharacterName: z.string().describe('Name of the primary character / protagonist'),
   firstMessage: z.string().nullable().optional().describe('Opening message for the scenario'),
   alternateGreetings: z.array(z.string()).optional().describe('Alternative opening messages'),
+  startingTime: z
+    .object({ years: z.number(), days: z.number(), hours: z.number(), minutes: z.number() })
+    .nullable()
+    .optional()
+    .describe('When a story from the scenario begins, at the end of its first message'),
   tags: z.array(z.string()).describe('Tags for organization'),
   favorite: z.boolean().optional().describe('Whether this scenario is favorited'),
 })
