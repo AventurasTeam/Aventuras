@@ -1818,6 +1818,21 @@ own.
   `h-control-sm`, 40 px at `regular`, with no slop. Measure a
   single-line World and Plot row on a phone before choosing a fix.
   Raised 2026-09-19 by Slice 4.4; split 2026-09-23.
+  The same family, routed from triage 2026-11-26: **`Input` has no 44 px
+  phone floor at `size="sm"`.** [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
+  floors phone form inputs at 44 px, through `--control-h-md` and a
+  defensive floor at the input wrapper; `components/ui/input.tsx` maps
+  `sm` to `h-control-sm`, under 44 px at the compact and regular
+  densities, with no floor. The branch rename input was its only
+  production `size="sm"` use and now sets its own 44 px floor on phone.
+  Pre-existing substrate. Found in Slice 6.4's reviews (2026-11-24).
+  Verified on routing: the defensive floor touch.md promises at the input
+  wrapper doesn't exist at any size, so `md` and TagInput drop to 40 px
+  under a compact density override, reachable once M7.1's density toggle
+  lands; and `Select`'s `sm` and `xs` triggers sit under the floor on
+  phone today (World and Plot category selects, the composer's mode
+  select, the detail tabs, the rail category select, the toolbar sort at
+  36 px).
 - **M9.5 — Native initial-scroll-to-value has three residual gaps.**
   `SearchableOverlayList` (`components/ui/searchable-overlay-list.tsx`)
   holds its scroll-to-selection anchor until the user drags the list or
