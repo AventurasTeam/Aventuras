@@ -140,17 +140,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `onDismissed` to the presentation that started the close is a
   Sheet-primitive change. Found in Slice 6.4's PR review (2026-11-24).
 
-- **The `branch scope` blocks repeat their helpers.** The chapters,
-  entry-assets, era-flips and translations register suites each define
-  near-identical `forked`, `<table>On`, `undoPayloadsOf` and `onFork`
-  helpers and the same payload-case shape; lore, threads and
-  happenings share a second pattern (`twoBranches`, `deltasOf`,
-  `TARGET_MISMATCH`). A shared test module beside
-  `lib/db/__tests__/two-branch.ts` could hold them, at the cost of
-  table-generic typing the per-suite readers don't need. Slice 6.10's
-  simplifier left them, since the move needs a new home. Found by
-  Slice 6.10's slice review (2026-11-24).
-
 - **An unguarded `json_extract` on entry metadata.**
   `lib/db/story-entries/chapter-time-ranges.ts:10` runs `json_extract`
   over `story_entries.metadata` with no `json_valid` guard. A branch

@@ -4303,6 +4303,23 @@ by hand in 45 test, story and fixture files, and a `StoreChapter`
 literal in 13; the chapter overlay host's three suites share
 `components/chapters/__tests__/overlay-host-fixture.tsx`.
 
+The same family, routed from triage 2026-11-26: **The `branch scope` blocks repeat their helpers.** The chapters,
+entry-assets, era-flips and translations register suites each define
+near-identical `forked`, `<table>On`, `undoPayloadsOf` and `onFork`
+helpers and the same payload-case shape; lore, threads and
+happenings share a second pattern (`twoBranches`, `deltasOf`,
+`TARGET_MISMATCH`). A shared test module beside
+`lib/db/__tests__/two-branch.ts` could hold them, at the cost of
+table-generic typing the per-suite readers don't need. Slice 6.10's
+simplifier left them, since the move needs a new home. Found by
+Slice 6.10's slice review (2026-11-24). Recounted on
+routing: `twoBranches` sits in nine files, the one-line `deltasOf` in
+seven identical copies (eleven more helpers share the name with other
+signatures), `onFork` in eight of ten, and `TARGET_MISMATCH` in three.
+Only `onFork`, `undoPayloadsOf`, `deltasOf` and `TARGET_MISMATCH` are
+table-agnostic; a `lib/actions/delta/__tests__/branch-scope.ts` beside
+`reverse-rows.ts` fits them better than `two-branch.ts`. Same signal.
+
 #### The mock LLM's token count has no run guard
 
 `scripts/mock-llm/respond/wire.ts:49-53` keeps its own `countO200k`,
