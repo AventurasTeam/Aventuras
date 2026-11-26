@@ -112,16 +112,6 @@ slice-planning gate forces its resolution before that slice is planned.
   meet the same refusal from the test-fixture side. Found in Slice 6.7's
   reviews (2026-11-23).
 
-- **Two E2E comments say GO TO World returns to the same World.**
-  `e2e/flows/navigation.ts:7-8` and `e2e/tests/world.spec.ts:65-66`
-  say the Reader → World GO TO round trip "pops to the World instance
-  already on the stack, which keeps its category and selection".
-  `hooks/use-surface-navigate.ts:70-73` dismisses down to the Reader on
-  GO TO Reader, so World is popped and comes back fresh with nothing
-  selected. The callers pick their category either way, so only the
-  comments mislead. Pre-existing. Found in Slice 6.7's reviews
-  (2026-11-23).
-
 - **Change prose can show two sides that read identically.** Three
   cases.
   (1) _Term-list display._ `termListChange` in

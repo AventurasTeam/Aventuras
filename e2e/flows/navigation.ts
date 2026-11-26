@@ -4,8 +4,8 @@ import { chrome } from '../locators/chrome'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// Reader → World over GO TO. The round trip pops to the World instance already on the stack, which
-// keeps its category and selection, so callers pick the category they need.
+// Reader → World over GO TO. GO TO Reader popped the World, so this pushes a fresh one with nothing
+// selected; callers pick the category they need.
 export async function goToWorld(page: Page): Promise<void> {
   await chrome.actionsTrigger(page).click()
   await chrome.goToWorldRow(page).click()
