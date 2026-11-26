@@ -340,17 +340,6 @@ slice-planning gate forces its resolution before that slice is planned.
   simplifier left them, since each move edits a file outside the
   slice. Found by Slice 6.5's slice review (2026-11-25).
 
-- **The dataset build leaves the story in the third person.** The
-  wizard drive in `e2e/tests/dataset-chapter.build.spec.ts`
-  (`createAdventureStory`) keeps the wizard's default narration,
-  `third`, while the dataset's prose is Jim's first person. Slice 6.9
-  set `"narration": "first"` in
-  `scripts/dataset-chapter/treasure-island.seed.json`, so the close
-  probe tests a first-person story whose summary must still be told in
-  the third person; a fresh build, once exported
-  (`dataset:export-seed`), reverts it. The drive should pick first
-  person in the wizard. Found by Slice 6.9's planning (2026-11-25).
-
 - **The unfinished-run reads scan `pipeline_runs` whole.** The table
   has no index on `branch_id` (`lib/db/system/system.table.ts`), and
   nothing prunes finished rows short of a story delete, so it grows with

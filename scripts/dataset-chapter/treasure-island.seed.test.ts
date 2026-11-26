@@ -147,6 +147,8 @@ describe('the Treasure Island seed', () => {
       .from(stories)
       .where(eq(stories.id, STORY))
     expect(story!.definition).not.toHaveProperty('leadEntityId')
+    // Jim's prose is first person, so a fresh build must pick it in the wizard.
+    expect(story!.definition).toMatchObject({ narration: 'first' })
   })
 
   it('undoes its close to an open chapter of all 133 entries, and redoes it', async () => {

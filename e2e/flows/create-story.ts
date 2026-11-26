@@ -9,6 +9,8 @@ export type NewAdventureStory = {
   opening: string
   /** Optional step-3 lore rows; omitted means step 3 is passed through empty. */
   lore?: { title: string; body: string }[]
+  /** Step 1's narration; omitted keeps the wizard's default, third person. */
+  narration?: 'first' | 'second' | 'third'
 }
 export type NewCreativeStory = { title: string; opening: string }
 
@@ -20,6 +22,7 @@ export async function createAdventureStory(page: Page, story: NewAdventureStory)
   // Step 1 — adventure mode surfaces the lead-required notice (needsLead); the
   // lead itself is authored in Cast (step 4).
   await wizard.modeOption(page, 'adventure').click()
+  if (story.narration != null) await wizard.narrationOption(page, story.narration).click()
   await wizard.next(page).click()
 
   // Step 2 — calendar defaults are valid; advance.
