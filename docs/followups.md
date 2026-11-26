@@ -256,7 +256,14 @@ breakdown under [UX](#ux).
   mark that names no lead, a character since deleted or a run with no
   lead; the mark line says whose "I" it is from there, and play checks
   whether a model still credits those turns to today's lead (added
-  2026-11-25 by Slice 6.9's review).
+  2026-11-25 by Slice 6.9's review). Slice 6.9's probes left these
+  unmeasured: the narrator's reading of the marks, the close's marks and
+  its `read_turns` note, and the part and merge calls' summary rule; its
+  `switch` window ran before the classifier's sentence took its final
+  place. That placement costs one to three runs in twenty on five
+  `learning` and two `recounted` checks, none at p below 0.5
+  ([Slice 6.9's Implementation notes](./implementation/milestones/06-branches-diff-cache/slices/09-lead-in-prompts.md#implementation-notes);
+  added 2026-11-26 by Slice 6.9's slice review).
 
   Two more placement questions wait on the same measurement: whether
   the wizard's shared macros split into an output contract and the
@@ -355,7 +362,7 @@ breakdown under [UX](#ux).
     naming each by its argument is a per-tool map in `ledger.ts`
     (routed from triage 2026-11-14).
 
-  Play tunes the metadata prompt too, outside the agent. It has three data
+  Play tunes the metadata prompt too, outside the agent. It has four data
   points. Two are in
   [Slice 5.2's Implementation notes](./implementation/milestones/05-chapters-chapter-close/slices/02-first-chapter.md#implementation-notes):
   one dev-model close told its summary in the second person against
@@ -369,7 +376,13 @@ breakdown under [UX](#ux).
   so play checks that rule holds instead. The third is
   [Slice 5.5b's per-step measure](./implementation/milestones/05-chapters-chapter-close/slices/05b-identity-threads.md#per-step-count-measure)
   (2026-11-09): a dev-route close on Gemma4-26B-A4B-QAT-MTP ran away to
-  39,655 output tokens in the metadata call and failed.
+  39,655 output tokens in the metadata call and failed. The fourth is
+  [Slice 6.9's close probe](./implementation/milestones/06-branches-diff-cache/slices/09-lead-in-prompts.md#implementation-notes)
+  (2026-11-25), on the dataset told in the first person: summaries in
+  the first or second person went from 8 of 8 completed runs to 0 of 10
+  once the lead, the narration and the third-person rule were in
+  context, and two of the ten runs before ran away in the metadata call
+  (39,642 output tokens) and failed.
 
   Raised 2026-10-31 by the chapter-close agent design.
 
