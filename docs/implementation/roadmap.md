@@ -1850,6 +1850,30 @@ own.
   phone today (World and Plot category selects, the composer's mode
   select, the detail tabs, the rail category select, the toolbar sort at
   36 px).
+- **M9.5 — A phone Sheet opened over the reader's inline editor lands
+  under its keyboard.** Canon says a sheet opened over an open keyboard
+  dismisses it first
+  ([`overlays.md`](../ui/patterns/overlays.md#sheet--keyboard-handling)),
+  and `components/ui/sheet.tsx:390-399` does so through
+  `dismissKeyboard()` before `present()`. On the slot AVD (Android 16),
+  with an entry's inline editor holding the keyboard, tapping the
+  branch chip opened the navigator Sheet under it: its rows sat under
+  the keyboard and a tap landed on a key, until Back hid it. With the
+  composer's keyboard up the same tap dismissed it as canon says.
+  Inferred, not probed: the dismiss doesn't reach the input method of
+  the reader's WebView document, so any phone Sheet opened from the
+  reader during an inline edit (the chapter chip's too) would do the
+  same. Found in Slice 6.4's device pass (2026-11-24).
+  The mechanism, verified in code on routing: `dismissKeyboard`
+  (`lib/keyboard/dismiss.ts`) calls react-native-keyboard-controller's
+  `KeyboardController.dismiss()`, which acts only on the last focused
+  native `EditText`; a WebView never sets it, so the call is a no-op and
+  the sheet presents after the 400 ms deadline, over the keyboard (a tap
+  on a key types into the open draft). A likely fix blurs the DOM editor
+  first: a `blurEditor` on `ReaderDocumentRef`, registered as a keyboard
+  releaser that `dismissKeyboard` calls. That the DOM blur hides the IME
+  is inferred, so it needs the slot AVD. Routed from triage 2026-11-26,
+  since only a device can check a fix.
 - **M9.5 — Native initial-scroll-to-value has three residual gaps.**
   `SearchableOverlayList` (`components/ui/searchable-overlay-list.tsx`)
   holds its scroll-to-selection anchor until the user drags the list or

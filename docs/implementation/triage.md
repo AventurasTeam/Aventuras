@@ -112,21 +112,6 @@ slice-planning gate forces its resolution before that slice is planned.
   meet the same refusal from the test-fixture side. Found in Slice 6.7's
   reviews (2026-11-23).
 
-- **A phone Sheet opened over the reader's inline editor lands under
-  its keyboard.** Canon says a sheet opened over an open keyboard
-  dismisses it first
-  ([`overlays.md`](../ui/patterns/overlays.md#sheet--keyboard-handling)),
-  and `components/ui/sheet.tsx:390-399` does so through
-  `dismissKeyboard()` before `present()`. On the slot AVD (Android 16),
-  with an entry's inline editor holding the keyboard, tapping the
-  branch chip opened the navigator Sheet under it: its rows sat under
-  the keyboard and a tap landed on a key, until Back hid it. With the
-  composer's keyboard up the same tap dismissed it as canon says.
-  Inferred, not probed: the dismiss doesn't reach the input method of
-  the reader's WebView document, so any phone Sheet opened from the
-  reader during an inline edit (the chapter chip's too) would do the
-  same. Found in Slice 6.4's device pass (2026-11-24).
-
 - **A second `beforeRemove` preventer replays its action and the arm
   registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
   keeps `data.action` and replays it on "Cancel & leave", and
