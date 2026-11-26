@@ -807,7 +807,7 @@ describe('buildClassifierContext — lead marks', () => {
   const marksOf = (context: Record<string, unknown>) =>
     (context.turns as Record<string, unknown>[]).map((t) => t.leadMark)
 
-  // Absent, not null: an unmarked turn carries no leadMark key at all.
+  // Absent, not null: a never-switched context holds no leadMark key.
   it('marks no turn when every stamp names the lead', () => {
     const context = build(
       [stamped('t1', BAEL), stamped('t2', BAEL), stamped('t3', BAEL)],

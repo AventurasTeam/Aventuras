@@ -2,7 +2,7 @@
 const PERSON_WORD =
   /\b(?:i|me|my|mine|myself|we|us|our|ours|ourselves|you|your|yours|yourself|yourselves)\b/gi
 
-// Opens on " or “ and closes on the next " or ”, so a mixed pair closes; one left open runs to the end.
+// Opens on " or “ and closes on the next " or ”, a mixed pair too; one left open runs to the end.
 // Single quotes are apostrophes as often as quotes (Hask’s), so they never open one.
 const QUOTED_SPEECH = /["“][^"”]*(?:["”]|$)/g
 

@@ -151,7 +151,7 @@ export function buildClassifierContext(args: {
           t.currentLocationId != null && known.has(t.currentLocationId)
             ? t.currentLocationId
             : null,
-        // Absent, not null: an unmarked turn carries no leadMark key at all.
+        // Absent, not null: a never-switched context holds no leadMark key.
         ...(leadMark === undefined ? {} : { leadMark }),
       }
     }),

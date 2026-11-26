@@ -125,7 +125,7 @@ describe('the third-person rule', () => {
     },
   )
 
-  // A close task's shared instructions stay free of it: other tasks' system halves are unchanged.
+  // A close task's shared instructions stay free of it: the other tasks' system halves read them.
   it.each(CASES)(
     '%s keeps it out of its other half',
     (_name, id, context, half, _expected, rule) => {

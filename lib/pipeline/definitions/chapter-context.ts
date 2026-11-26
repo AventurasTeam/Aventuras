@@ -80,7 +80,7 @@ export function buildChapterContext(input: {
         position: e.position,
         kind: e.kind,
         content: promptProse(e),
-        // Absent, not null, on an unmarked entry: an unmarked entry carries no leadMark key.
+        // Absent, not null: a never-switched context holds no leadMark key.
         ...(leadMark === undefined ? {} : { leadMark }),
       }
     }),

@@ -316,9 +316,8 @@ function currentTimeOf(
 
 /**
  * Prose, position, kind and lead mark only: substituting `metadata`'s old scene rosters or the raw
- * lead stamp would give long-deleted entities placeholders, which resolveRef reads as shown to the
- * model. No `id`: `entry_` doesn't substitute, so it would leak raw. `leadMark` only on a marked
- * turn.
+ * stamp would give long-deleted entities placeholders, which resolveRef reads as shown to the
+ * model. No `id`: `entry_` doesn't substitute, so it would leak raw.
  */
 function promptEntry(
   entry: StoryEntry,

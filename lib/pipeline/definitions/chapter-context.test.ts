@@ -358,7 +358,7 @@ describe('buildChapterContext — the lead, the narration and the marks', () => 
     expect(build(SWITCHED).narration).toBe('first')
   })
 
-  // Absent, not null: an unmarked turn carries no leadMark key at all.
+  // Absent, not null: a never-switched context holds no leadMark key.
   it('marks no entry when every stamp names the lead', () => {
     const { entries } = build([
       stamped(1, 'ai_reply', 'The yard is silent.', BAEL),

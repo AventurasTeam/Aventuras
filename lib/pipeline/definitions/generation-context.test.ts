@@ -2554,8 +2554,7 @@ describe('buildGenerationContext — lead marks', () => {
     ])
   })
 
-  // No lead today, its older turns stamped under one: the walk starts from no lead and marks the
-  // first stamped run.
+  // No lead today, its older turns stamped under one: the walk starts from none.
   it('walks from no lead on a branch with none', async () => {
     const ctx = await buildContext({
       entities: [character(MARA, 'Mara')],
