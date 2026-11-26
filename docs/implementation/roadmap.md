@@ -1879,6 +1879,36 @@ own.
   statistics exist. Measure on one bench with the reversal-selection
   entry above, whose index migration shifts the same `deltas` plans.
   Routed from triage 2026-10-09.
+- **M9.5 — The unfinished-run reads scan `pipeline_runs` whole.** The table
+  has no index on `branch_id` (`lib/db/system/system.table.ts`), and
+  nothing prunes finished rows short of a story delete, so it grows with
+  every turn. `readUnfinishedRuns` (`lib/actions/delta/unfinished-runs.ts`)
+  scans it per branch, the duplicate's check runs it twice per copied
+  branch, and the duplicate's in-batch guard scans it once more. On a
+  synthetic table the scan took 0.24 ms at 10k rows and 3.8 ms at 100k,
+  so it passes 1 ms around 25–30k rows. A partial index on
+  `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
+  read an index probe; it's a schema change, so it waits for an owner.
+  Found during Slice 6.6.
+  Re-measured with `pnpm bench:scan` (2026-11-26): 0.35 / 1.20 / 2.32 ms
+  at 10k / 50k / 100k rows as shipped, 0.05–0.09 ms with that partial
+  index. The duplicate's check reads once per branch, not twice; and
+  the re-run journal's update by `action_id`
+  (`lib/actions/delta/rerun-journal.ts`) is another whole-table scan the
+  index doesn't help. Routed from triage 2026-11-26.
+- **M9.5 — A vec0 read outside KNN scans the whole table.**
+  `vectorsByIdQuery` (`lib/db/embeddings/knn.ts`) and the vector
+  deletes (`deleteVecOps`, `deleteVecIdsOps`, `deleteBranchVecOps` in
+  `lib/db/embeddings/ops.ts`) filter on `branch_id`, `model_id` and `id`;
+  vec0 pushes none of them down outside a KNN match, so each scans every
+  row at that dimension, every story's and every fork's copy. With the
+  read branch held at 3,000 rows, 100 ids take 8.8 / 27.5 / 100.3 ms over
+  3k / 15k / 60k rows, while one `pk =` read takes 0.01 ms
+  (`pnpm bench:scan`, 2026-11-26). A read by `pk` would need every row in
+  today's `pk` shape: rows from before the model joined it hold
+  `branchId:id`. Forks add to the cost as well as the disk
+  ([vec0 copy-on-fork storage](../parked.md#vec0-copy-on-fork-storage-optimization)).
+  Raised by the 2026-11-26 triage pass.
 - **M9.5 — `useRailData` runs in the uncompiled reader route.** The route
   re-renders on lore, thread, happening and chapter writes. Unmeasured.
   Options: each connected rail component calls `useRailData` itself,
