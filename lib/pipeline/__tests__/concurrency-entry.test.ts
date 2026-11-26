@@ -10,6 +10,7 @@ import {
   definePipeline,
   ensurePeriodicClassifierPipelineRegistered,
   runPipeline,
+  type BlockingKind,
   type PhaseContext,
   type PhaseResult,
 } from '@/lib/pipeline'
@@ -143,7 +144,7 @@ describe('runPipeline concurrency entry + coordination', () => {
     definePipeline({
       kind: 'solo',
       phases: [{ name: 'p', run: waits }],
-      concurrencyPolicy: { blockedBy: ['solo'] },
+      concurrencyPolicy: { blockedBy: ['solo' as BlockingKind] },
       ...base,
     })
 
@@ -290,7 +291,7 @@ describe('runPipeline concurrency entry + coordination', () => {
     definePipeline({
       kind: 'fg',
       phases: [{ name: 'p', run: fgPhase }],
-      concurrencyPolicy: { blockedBy: ['blocker'] },
+      concurrencyPolicy: { blockedBy: ['blocker' as BlockingKind] },
       ...base,
     })
 

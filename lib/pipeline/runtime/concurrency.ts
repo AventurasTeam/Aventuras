@@ -1,11 +1,12 @@
 import type { RunState } from '@/lib/stores'
 
 import { getPipeline } from '../authoring/registry'
+import type { BlockedBy } from '../types'
 
 export type StartDecision =
   | { kind: 'start' }
   | { kind: 'start-after-yields'; targets: readonly string[] }
-  | { kind: 'blocked'; by: string }
+  | { kind: 'blocked'; by: BlockedBy }
 
 /** `blockedBy` for an interruptible run refused inside a prose reversal's window. */
 const REVERSAL_BLOCKER = 'reversal'
@@ -22,7 +23,8 @@ export function checkConcurrencyContract(
 
   const blockedBy = pipeline.concurrencyPolicy.blockedBy ?? []
   for (const run of currentRuns.values()) {
-    if (blockedBy.includes(run.kind)) return { kind: 'blocked', by: run.kind }
+    const by = blockedBy.find((blocker) => blocker === run.kind)
+    if (by !== undefined) return { kind: 'blocked', by }
   }
 
   const targets: string[] = []

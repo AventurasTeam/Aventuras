@@ -362,18 +362,6 @@ slice-planning gate forces its resolution before that slice is planned.
   payload line is older code. Found by Slice 6.8's slice review
   (2026-11-25).
 
-- **`RejectedStart.blockedBy` is a bare string.**
-  `lib/pipeline/types.ts:237` types it `string`, while its values are a
-  closed set: the pipeline and gate kinds a concurrency policy names
-  (`ConcurrencyPolicy.blockedBy`, `:168`, is `string[]` too),
-  `rerun-held`, `classifier-held`, `branch-not-open`, `embedder-swap`,
-  the manual close's refusals and `lead-missing`. Callers branch on it
-  by comparison (`leadRefusalOf` in `components/reader/send-run.ts`),
-  so a misspelled code compiles. A union is the designed shape
-  ([`code-conventions.md → Type design`](../code-conventions.md#type-design),
-  Known shape). Older code; Slice 6.8 added `lead-missing`. Found by
-  Slice 6.8's slice review (2026-11-25).
-
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
   `action_layer.branch_switch_*` (`_navigation_blocked`,

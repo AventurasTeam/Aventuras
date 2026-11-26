@@ -165,7 +165,18 @@ export type PhaseNode =
       parallel: readonly { name: string; run: PhaseFn; resolves?: readonly ResolverInput[] }[]
     }
 
-export type ConcurrencyPolicy = { blockedBy?: readonly string[]; yieldsTo?: readonly string[] }
+/** A pipeline kind a concurrency policy can name; translation-retry has no pipeline yet. */
+export type BlockingKind =
+  | 'per-turn'
+  | 'periodic-classifier'
+  | 'chapter-close'
+  | 'suggestion-refresh'
+  | 'translation-retry'
+
+export type ConcurrencyPolicy = {
+  blockedBy?: readonly BlockingKind[]
+  yieldsTo?: readonly string[]
+}
 
 /**
  * Reacts to the pipeline's own pre-flight failure. Pre-flight halts before phase
@@ -233,8 +244,21 @@ export type TxResult =
         | { unreversed: true; closeUndone?: never }
       ))
 
+/** The kind that blocked a start, or the refusal a gate or a caller's own check returned. */
+export type BlockedBy =
+  | BlockingKind
+  | 'reversal'
+  | 'rerun-held'
+  | 'classifier-held'
+  | 'chapter-close-rerun'
+  | 'branch-not-open'
+  | 'embedder-swap'
+  | 'invalid-end'
+  | 'story-busy'
+  | 'lead-missing'
+
 // A start blocked by the concurrency contract produces no run (no runId/actionId).
-export type RejectedStart = { outcome: 'rejected'; blockedBy: string }
+export type RejectedStart = { outcome: 'rejected'; blockedBy: BlockedBy }
 
 /** A start its own pre-flight refused before any run reserved: like a rejection, no run exists. */
 export type PreflightFailedStart = { outcome: 'preflight-failed'; error: ConfigResolverError }

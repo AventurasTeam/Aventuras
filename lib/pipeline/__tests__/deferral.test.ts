@@ -7,6 +7,7 @@ import {
   definePipeline,
   pipelineEventBus,
   startPipeline,
+  type BlockingKind,
   type PhaseContext,
   type PhaseEmittedEvent,
   type PhaseResult,
@@ -59,7 +60,7 @@ function defineStandIn(kind: string, interruptible: DeferredWorkKind | null = 'p
     affordance: 'pill-and-banner',
     gateBehavior: 'hard-gate',
     interruptible: interruptible ?? undefined,
-    concurrencyPolicy: { blockedBy: [kind] },
+    concurrencyPolicy: { blockedBy: [kind as BlockingKind] },
   })
 }
 
@@ -398,7 +399,7 @@ describe("a run's slot", () => {
       gateBehavior: 'hard-gate',
       interruptible: 'close',
       runSlot,
-      concurrencyPolicy: { blockedBy: ['slotted-close'] },
+      concurrencyPolicy: { blockedBy: ['slotted-close' as BlockingKind] },
     })
   }
 

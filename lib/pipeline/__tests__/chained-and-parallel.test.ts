@@ -16,6 +16,7 @@ import {
   runPipeline,
   startChain,
   startPipeline,
+  type BlockingKind,
   type PhaseContext,
   type PhaseResult,
   type Pipeline,
@@ -930,7 +931,7 @@ describe("the chain's end", () => {
       kind: 'blocked',
       phases: [{ name: 'p', run: noop }],
       ...base,
-      concurrencyPolicy: { blockedBy: ['holder'] },
+      concurrencyPolicy: { blockedBy: ['holder' as BlockingKind] },
     })
     const holding = startPipeline('holder', ctx)
 
@@ -997,7 +998,7 @@ describe('startChain', () => {
       kind: 'blocked',
       phases: [{ name: 'p', run: noop }],
       ...base,
-      concurrencyPolicy: { blockedBy: ['holder'] },
+      concurrencyPolicy: { blockedBy: ['holder' as BlockingKind] },
     })
     const holding = startPipeline('holder', ctx)
 
