@@ -55,6 +55,9 @@
   .branch-chip { padding: 4px 10px; border: 1px solid var(--ink); border-radius: 4px; font-size: 12px; color: var(--ink); background: var(--bg-region); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
   .branch-chip .count { background: var(--ink); color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 600; }
   .branch-chip:hover { background: var(--bg-highlight); }
+  /* phone: the chips move to a strip under the top bar (reader-composer.md → Layout) */
+  .phone-chip-strip { display: none; padding: 6px 16px; gap: 8px; align-items: center; background: var(--bg-region); border-bottom: 1px solid var(--line-soft); position: relative; z-index: 1; }
+  .phone-chip-strip .strip-chip { padding: 4px 10px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--bg); font-size: 11px; color: var(--ink); white-space: nowrap; }
   .icon-btn { width: 30px; height: 30px; border: 1px dashed var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font-size: 14px; cursor: pointer; }
 
   .reader-faux { padding: 24px 32px; opacity: 0.5; }
@@ -169,6 +172,10 @@
      bindings. Tablet inherits desktop verbatim.
      ========================================================= */
   @container (max-width: 639px) {
+    /* the top bar keeps the title and its buttons; the chips sit in the strip below */
+    .topbar { gap: 8px; padding: 12px 16px; }
+    .crumb .sep, .crumb .muted, #chip { display: none; }
+    .phone-chip-strip { display: flex; }
     .popover-wrap { position: absolute; top: auto; right: 0; left: 0; bottom: 0; }
     .popover-arrow { display: none; }
     .popover { width: 100%; border-radius: 12px 12px 0 0; box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18); }
@@ -279,6 +286,11 @@
       <div class="icon-btn" title="Back">←</div>
     </div>
   </header>
+  <div class="phone-chip-strip" aria-label="Reader chip strip (phone)">
+    <span class="strip-chip">Ch 5 ▾</span>
+    <span class="strip-chip">🕒 22nd of Frostmoon ▾</span>
+    <span class="branch-chip" id="phone-chip" title="On main · 3 branches">⎇ <span class="count" id="phone-chip-count">3</span></span>
+  </div>
 
   <div class="reader-faux">
     <div class="fauxline mid"></div>
@@ -500,9 +512,11 @@
     // header and chip counts follow the branch list (the chip updates when the navigator closes)
     document.querySelectorAll('.popover-count').forEach(el => { el.textContent = '· ' + shown.length; });
     document.getElementById('chip-count').textContent = String(shown.length);
-    // one branch: no chip; the navigator opens from Browse branches… and anchors where the chip sits
+    document.getElementById('phone-chip-count').textContent = String(shown.length);
+    // one branch: no chip on any tier; the navigator opens from Browse branches… and anchors where the chip sits
     document.getElementById('chip').style.display = shown.length > 1 ? '' : 'none';
     document.getElementById('chip-sep').style.display = shown.length > 1 ? '' : 'none';
+    document.getElementById('phone-chip').style.display = shown.length > 1 ? '' : 'none';
     document.getElementById('delete-backdrop').classList.toggle('show', !!showDelete);
     if (target) document.getElementById('delete-title').textContent = 'Delete ' + target.name + '?';
     document.getElementById('delete-count').innerHTML = onlyCount === '0'
@@ -610,10 +624,15 @@
     branchMode = b.dataset.branchMode;
     applySurface();
   }));
-  // chip click toggles popover (illustrative)
+  // chip click toggles popover (illustrative); the phone strip's chip opens the Sheet
   document.getElementById('chip').addEventListener('click', () => {
     currentSurface = 'popover';
     document.querySelectorAll('.rb-btn[data-surface]').forEach(x => x.classList.toggle('active', x.dataset.surface === 'popover'));
+    applySurface();
+  });
+  document.getElementById('phone-chip').addEventListener('click', () => {
+    currentSurface = 'drawer';
+    document.querySelectorAll('.rb-btn[data-surface]').forEach(x => x.classList.toggle('active', x.dataset.surface === 'drawer'));
     applySurface();
   });
 

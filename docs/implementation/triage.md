@@ -175,14 +175,6 @@ slice-planning gate forces its resolution before that slice is planned.
   reader during an inline edit (the chapter chip's too) would do the
   same. Found in Slice 6.4's device pass (2026-11-24).
 
-- **Two reader wireframes drift from the shipped phone chip strip.**
-  `branch-navigator.html` draws the phone chip in the top bar (it has
-  no chip strip) and overflows at 390 px; in `reader-composer.html`
-  (around line 951) the phone strip's branch chip never hides at one
-  branch, since `setBranchCount` toggles only `#branch-chip` and its
-  separator. Both predate Slice 6.4's edit. Found in Slice 6.4's
-  reviews (2026-11-24).
-
 - **A second `beforeRemove` preventer replays its action and the arm
   registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
   keeps `data.action` and replays it on "Cancel & leave", and

@@ -396,7 +396,8 @@ flows; names are purely display labels.
 
 When `stories.current_branch_id` is the only branch in the story:
 
-- The reader's top-bar chip is **hidden** (per the
+- The reader's branch chip (in the top bar, or the phone chip strip) is
+  **hidden** (per the
   [reader-only chrome rule](../../../principles.md#reader-only-chrome)
   — chip shown only when >1 branch).
 - The navigator is therefore **not reachable from the chip**.
