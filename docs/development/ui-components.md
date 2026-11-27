@@ -233,6 +233,12 @@ Close), `TimelineReconciliationModal` (a multi-step wizard), the unsaved-changes
 `PromptPackEditor` (three choices), `RestoreCompleteDialog` (a status screen) and `SyncModal` (a
 tool, a sheet on a phone, built on the frame).
 
+Every modal and sheet sits at `z-50`, so which is on top is only render order. A screen that must
+stay above whatever is open sets its own z-index on both the content and the overlay
+(`overlayClass` on `Dialog.Content`): `RestoreCompleteDialog` uses `z-[200]`, below the toast, and
+is up from the moment a restore starts so nothing behind it can be touched while the database is
+replaced.
+
 A screen like these that asks before discarding still asks the shell's way: `shared/DiscardConfirm`
 inside its own content, over an `inert` body, never the native `ask()` of
 `@tauri-apps/plugin-dialog`. The question is a `PendingQuestion` (`shared/pendingQuestion.svelte.ts`):

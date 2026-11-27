@@ -174,6 +174,7 @@
 
   async function doRestore(zipPath: string) {
     isRestoring = true
+    ui.restoreInProgress = true
     restoreError = null
     try {
       const { backupService } = await import('#lib/services/backupService.ts')
@@ -182,11 +183,13 @@
       console.error('[ExperimentalSettings] Restore failed:', error)
       restoreError = errMessage(error)
       isRestoring = false
+      ui.restoreInProgress = false
       return
     }
 
     // The DB is closed and replaced; the blocking modal keeps anything from lazily reopening it.
     ui.restoreComplete = true
+    ui.restoreInProgress = false
     // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
     await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
     // iOS ignores exit(), so the user has to close the app themselves.
