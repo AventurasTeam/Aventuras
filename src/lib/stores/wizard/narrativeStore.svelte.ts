@@ -414,6 +414,7 @@ export class NarrativeStore {
         description: 'The scene begins here.',
       },
     }
+    this.generatedOpeningTranslated = null
     this.resultStartText = this.importedStartText
     this.resultStartSource = this.importedStartText.trim() ? 'edited' : null
     this.openingError = null

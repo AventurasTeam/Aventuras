@@ -171,8 +171,11 @@ Anything that fills the screen sizes itself to `--app-height`, not `100dvh`, or 
 under the keyboard. On a phone held sideways the keyboard leaves about 150pt, so `AppShell` hides
 the warning banner and the header while it is up there, and the story input keeps the space.
 
-`preventFocusZoom` in the same module also adds `maximum-scale=1` to the viewport on iOS. Without it WebKit zooms the page into
-any focused field set below 16px, and the zoomed page runs off the right edge.
+WebKit zooms the page into any focused field set below 16px, and the zoomed page runs off the right
+edge. `app.css` sets editable fields to 16px on iOS (`@supports (-webkit-touch-callout: none)`)
+rather than capping the viewport scale, so pinch zoom stays available. The tracker therefore
+measures the keyboard as `clientHeight - visualViewport.height × scale`, which a pinch zoom leaves
+unchanged, and only snaps the scroll back while the page is not zoomed.
 
 The page cannot fix this from its own side. `interactive-widget=resizes-content` in the viewport
 meta asks the _browser_ to shrink the layout viewport, and in an embedded WebView that resize can

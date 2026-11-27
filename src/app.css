@@ -164,6 +164,19 @@
   }
 }
 
+/*
+ * iOS zooms the page into any focused field set below 16px. Unlayered so it beats a caller's
+ * text-sm; only iOS WebKit supports -webkit-touch-callout. Pinch zoom stays available.
+ */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select,
+  [contenteditable]:not([contenteditable='false']) {
+    font-size: 16px;
+  }
+}
+
 /* =============================================
    STORY TEXT STYLING
    ============================================= */

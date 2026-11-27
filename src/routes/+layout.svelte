@@ -6,7 +6,7 @@
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
   import { isAndroid, isIos } from '#lib/utils/platform.ts'
-  import { preventFocusZoom, trackIosKeyboard } from '#lib/utils/iosKeyboard.ts'
+  import { trackIosKeyboard } from '#lib/utils/iosKeyboard.ts'
   import { dispatchBackPress } from '#lib/utils/backPress.ts'
   import { errMessage } from '#lib/utils/error.ts'
 
@@ -21,11 +21,7 @@
     ui.initImageTracking()
 
     if (!isAndroid()) {
-      let stopKeyboard: (() => void) | undefined
-      if (isIos()) {
-        preventFocusZoom()
-        stopKeyboard = trackIosKeyboard()
-      }
+      const stopKeyboard = isIos() ? trackIosKeyboard() : undefined
       return () => {
         stopKeyboard?.()
         ui.destroyVisibilityTracking()

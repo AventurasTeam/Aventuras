@@ -25,7 +25,8 @@ export function trackIosKeyboard(): () => void {
 
   function update() {
     if (!vv) return
-    const inset = Math.max(0, Math.round(root.clientHeight - vv.height))
+    // The visible height in layout pixels: a pinch zoom shrinks vv.height by the scale, the keyboard does not.
+    const inset = Math.max(0, Math.round(root.clientHeight - vv.height * vv.scale))
     const next = inset >= KEYBOARD_MIN_PX ? inset : 0
     if (next !== insetPx) {
       insetPx = next
@@ -33,7 +34,9 @@ export function trackIosKeyboard(): () => void {
       root.toggleAttribute('data-keyboard-open', next > 0)
       if (next > 0) revealFocused()
     }
-    if (window.scrollY !== 0 || vv.offsetTop !== 0) window.scrollTo(0, 0)
+    // A zoomed page pans by design; only snap back at the scale the keyboard scroll happens at.
+    const zoomed = vv.scale > 1.01
+    if (!zoomed && (window.scrollY !== 0 || vv.offsetTop !== 0)) window.scrollTo(0, 0)
   }
 
   function onFocusIn() {
@@ -51,10 +54,4 @@ export function trackIosKeyboard(): () => void {
     root.style.removeProperty('--keyboard-inset')
     root.removeAttribute('data-keyboard-open')
   }
-}
-
-/** iOS zooms the page into any focused field under 16px; capping the scale stops that. */
-export function preventFocusZoom(): void {
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
-  if (meta && !meta.content.includes('maximum-scale')) meta.content += ', maximum-scale=1'
 }
