@@ -157,23 +157,22 @@ export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
 }
 
 /**
- * Get entry retrieval config from settings store.
- * Falls back to defaults if settings not initialized.
+ * Entry retrieval config from the settings store. The store merges the block over its
+ * defaults on load, so every field is present; see `core/defaults.ts`.
  */
 export function getEntryRetrievalConfigFromSettings(): EntryRetrievalConfig {
   const entrySettings = settings.systemServicesSettings.entryRetrieval
   return {
-    maxTier2Entries: entrySettings.maxTier2Entries ?? ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
-    maxTier3Entries: entrySettings.maxTier3Entries ?? ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
+    maxTier2Entries: entrySettings.maxTier2Entries,
+    maxTier3Entries: entrySettings.maxTier3Entries,
+    tier3WholesaleWordBudget: entrySettings.tier3WholesaleWordBudget,
     // Not clamped here: the constructor clamps whatever it is handed, so doing it twice
     // meant two copies of the same bounds that had to agree. Passed through as stored --
     // including a non-number from an old settings blob, which `clampMaxWords` handles.
-    tier3WholesaleWordBudget:
-      entrySettings.tier3WholesaleWordBudget ?? ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
     maxWordsPerEntry: entrySettings.maxWordsPerEntry,
-    enableLLMSelection: entrySettings.enableLLMSelection ?? true,
-    recentEntriesCount: entrySettings.recentEntriesCount ?? 5,
-    useSceneEntities: entrySettings.useSceneEntities ?? true,
+    enableLLMSelection: entrySettings.enableLLMSelection,
+    recentEntriesCount: entrySettings.recentEntriesCount,
+    useSceneEntities: entrySettings.useSceneEntities,
   }
 }
 

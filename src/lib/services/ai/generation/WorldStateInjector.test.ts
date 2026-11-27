@@ -19,17 +19,11 @@ vi.mock('../retrieval/tier3Selection', async (importOriginal) => ({
   runTier3Selection: (...args: unknown[]) => runTier3Selection(...args),
 }))
 
+// Only the preset lookup: the injector is built with an explicit config, so stored
+// world-state settings are never read here.
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
     getServicePresetId: () => 'context',
-    systemServicesSettings: {
-      worldStateInjection: {
-        tier3WholesaleWordBudget: 500,
-        maxEntriesPerTier: 5,
-        enableLLMSelection: false,
-        recentEntriesCount: 5,
-      },
-    },
   },
 }))
 

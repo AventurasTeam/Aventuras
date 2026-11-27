@@ -128,18 +128,18 @@ export const DEFAULT_WORLD_STATE_INJECTOR_CONFIG: WorldStateInjectorConfig = {
 }
 
 /**
- * Get world state injection config from settings, falling back to defaults.
+ * World state injection config from the settings store. The store merges the block over
+ * its defaults on load, so every field is present; see `core/defaults.ts`.
  * Mirrors EntryRetrievalService's `getEntryRetrievalConfigFromSettings()`.
  */
-export function getWorldStateInjectorConfigFromSettings(): Partial<WorldStateInjectorConfig> {
+export function getWorldStateInjectorConfigFromSettings(): WorldStateInjectorConfig {
   const s = settings.systemServicesSettings.worldStateInjection
   return {
-    tier3WholesaleWordBudget:
-      s?.tier3WholesaleWordBudget ?? WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
-    maxTier2Entries: s?.maxTier2Entries ?? WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
-    maxTier3Entries: s?.maxTier3Entries ?? WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
-    enableLLMSelection: s?.enableLLMSelection ?? true,
-    recentEntriesCount: s?.recentEntriesCount ?? 5,
+    tier3WholesaleWordBudget: s.tier3WholesaleWordBudget,
+    maxTier2Entries: s.maxTier2Entries,
+    maxTier3Entries: s.maxTier3Entries,
+    enableLLMSelection: s.enableLLMSelection,
+    recentEntriesCount: s.recentEntriesCount,
   }
 }
 
