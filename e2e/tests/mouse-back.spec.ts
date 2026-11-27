@@ -25,7 +25,7 @@ async function storyTitle(page: Page): Promise<string> {
   return title as string
 }
 
-test.describe("the mouse's Back and Forward", () => {
+test.describe.serial("the mouse's Back and Forward", () => {
   let app: LaunchedApp
   let userDataDir: string
 
