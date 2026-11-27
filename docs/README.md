@@ -12,3 +12,7 @@ start from [adr-template.md](adr-template.md).
 
 - Record each decision as one ADR in docs/decisions/, in the PR that makes it. Document only what the code cannot say. [decision-records](decisions/2026-10-12-decision-records.md)
 - Give every ADR a tag or an `ADR(slug)` anchor; an ADR with neither is reachable only by scanning General. [every-decision-reachable](decisions/2026-11-27-every-decision-reachable.md)
+
+## persistence: SQLite schema, migrations, storage, and the settings blob
+
+- Hold sync_suspend for migrations and the app’s own writes; counted, they read every synced item as changed on both devices. [automatic-writes-dont-count](decisions/2026-11-27-automatic-writes-dont-count.md)
