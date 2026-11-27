@@ -1662,10 +1662,11 @@ transaction; **referenced/shared resources survive.**
 - **No delta rows:** a story delete writes zero `deltas` (it deletes them); the
   operation is a config-table cascade, not a delta-logged domain write.
 - **Refused before any write** while a run is registered on the story or any
-  of its branches, a turn is pending on one of them, or a reversal is in
-  progress: each would go on writing to rows the cascade removes. Read in
-  memory with no await before the batch's post, as branch delete reads its
-  gate.
+  of its branches, a turn is pending or its body still runs on one of them
+  ([Gate derivation](./generation-pipeline.md#gate-derivation-as-a-selector)),
+  or a reversal is in progress: each would go on writing to rows the cascade
+  removes. Read in memory with no await before the batch's post, as branch
+  delete reads its gate.
 
 ### Story duplicate
 
@@ -1716,9 +1717,9 @@ writes would bake into the copy with no marker to recover them; when a copied
 branch's `classifier_status.state` is `'running'`, a hold the copy would
 inherit, since a duplicate copies the status verbatim; when an embedder swap is
 pending on the story; or when a run is registered on any of its branches, a
-turn is pending on one, or a reversal is in progress (a pending turn's
-`user_action` lands before its run row, so the copy would take it with no run
-to recover).
+turn is pending or its body still runs on one, or a reversal is in progress
+(a pending turn's `user_action` lands before its run row, so the copy would
+take it with no run to recover).
 
 **One transaction, no lock.** One `runInTransaction` batch of
 `INSERT … SELECT`: the `stories` row, then `branches` (parents before

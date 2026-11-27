@@ -19,9 +19,9 @@ const NOT_SHIPPED = /(\.test|\.stories)\.tsx?$|(^|\/)__tests__\//
 
 /** True for a repo-relative path the app build runs React Compiler over. */
 export function compiledInBuild(relativePath: string): boolean {
-  return (
-    SHIPPED.test(relativePath) && /\.tsx?$/.test(relativePath) && !NOT_SHIPPED.test(relativePath)
-  )
+  // path.relative separates with `\` on Windows.
+  const file = relativePath.replaceAll('\\', '/')
+  return SHIPPED.test(file) && /\.tsx?$/.test(file) && !NOT_SHIPPED.test(file)
 }
 
 /** The compiler as a babel plugin entry, with the build's options (babel-preset-expo). */

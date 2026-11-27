@@ -241,6 +241,19 @@ describe('deleteStory', () => {
     expect(await storyRowsOf(db, 'victim')).toHaveLength(1)
   })
 
+  // A failed regenerate's follow-up sweep runs after its mark has ended.
+  it("refuses, writing nothing, while a turn's body runs on past its mark", async () => {
+    const { db, listTables, ctx } = await setup()
+    let result: Awaited<ReturnType<typeof deleteStory>> | undefined
+    await generationStore.bracketPendingTurn('br_victim', async (endMark) => {
+      endMark()
+      result = await deleteStory('victim', ctx, listTables)
+    })
+
+    expect(result).toEqual({ status: 'rejected', code: 'story-busy' })
+    expect(await storyRowsOf(db, 'victim')).toHaveLength(1)
+  })
+
   it('refuses, writing nothing, while a reversal is in progress', async () => {
     const { db, listTables, ctx } = await setup()
     generationStore.setReversalInProgress(true)

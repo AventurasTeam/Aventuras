@@ -15,6 +15,7 @@ import {
 const WAIT = { timeout: 5000 }
 const TABLET = { viewport: { value: 'tablet' } }
 const PHONE = { viewport: { value: 'phone390' } }
+const WIDE_PHONE = { viewport: { value: 'mobile2' } }
 
 const COPY = {
   title: 'New branch',
@@ -296,6 +297,15 @@ export const Phone390: Story = {
   globals: PHONE,
   play: async (context) => {
     await waitForTier('phone', WAIT)
+    await shapePlay(context)
+  },
+}
+
+/** 414 px: room for more than 360 px less the inset, and still below `sm`. */
+export const Phone414KeepsItsWidth: Story = {
+  globals: WIDE_PHONE,
+  play: async (context) => {
+    await waitForTier('phone')
     await shapePlay(context)
   },
 }

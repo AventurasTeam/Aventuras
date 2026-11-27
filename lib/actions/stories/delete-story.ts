@@ -25,13 +25,7 @@ import {
   wizardSessions,
   type SqlOp,
 } from '@/lib/db'
-import {
-  embedderSwapStore,
-  generationStore,
-  isAnyStoryBranchBusy,
-  rehydrateStories,
-  undoRedoStore,
-} from '@/lib/stores'
+import { embedderSwapStore, generationStore, rehydrateStories, undoRedoStore } from '@/lib/stores'
 
 import type { DbCtx } from '../types'
 
@@ -102,9 +96,9 @@ export async function deleteStory(
   ops.push(ctx.db.delete(branches).where(eq(branches.storyId, storyId)).toSQL())
   ops.push(ctx.db.delete(stories).where(eq(stories.id, storyId)).toSQL())
 
-  // No await from here to the batch's post: a run, a pending turn or a reversal on the story would
-  // go on writing to rows the batch removes.
-  if (isAnyStoryBranchBusy(generationStore.getTxState(), storyId, branchIds))
+  // No await from here to the batch's post: a run, a pending turn, a turn's body or a reversal on
+  // the story would go on writing to rows the batch removes.
+  if (generationStore.isAnyStoryBranchBusy(storyId, branchIds))
     return { status: 'rejected', code: 'story-busy' }
   await ctx.runInTransaction(ops)
   // A future importer that keeps source ids would otherwise inherit this story's stale Later.

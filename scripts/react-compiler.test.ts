@@ -20,17 +20,21 @@ vi.mock('react/compiler-runtime', async (importOriginal) => {
 })
 
 describe('compiledInBuild', () => {
-  it.each(['app/index.tsx', 'components/ui/button.tsx', 'hooks/use-tier.ts', 'lib/toast/toast.ts'])(
-    'takes the app source %s',
-    (file) => {
-      expect(compiledInBuild(file)).toBe(true)
-    },
-  )
+  it.each([
+    'app/index.tsx',
+    'components/ui/button.tsx',
+    'hooks/use-tier.ts',
+    'lib/toast/toast.ts',
+    'components\\ui\\button.tsx',
+  ])('takes the app source %s', (file) => {
+    expect(compiledInBuild(file)).toBe(true)
+  })
 
   it.each([
     'components/ui/button.stories.tsx',
     'hooks/use-tier.test.tsx',
     'lib/db/__tests__/test-db.ts',
+    'lib\\db\\__tests__\\test-db.ts',
     'scripts/react-compiler.ts',
     'electron/db/service.ts',
     'e2e/flows/navigation.ts',
