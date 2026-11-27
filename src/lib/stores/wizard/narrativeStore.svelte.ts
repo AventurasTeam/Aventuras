@@ -330,11 +330,14 @@ export class NarrativeStore {
           fields.locDesc = this.generatedOpening.initialLocation.description
         }
 
+        const source = this.generatedOpening
         const translated = await aiService.translateWizardBatch(
           fields,
           translationSettings.targetLanguage,
           this.packId(),
         )
+        // An opening replaced during the request keeps no translation of its predecessor.
+        if (this.generatedOpening !== source) return
 
         this.generatedOpeningTranslated = {
           ...this.generatedOpening,
