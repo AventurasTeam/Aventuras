@@ -3035,6 +3035,11 @@ class DatabaseService {
     await this.deleteByIds('chapters', ids)
   }
 
+  /** Removes chapters whose entries are gone, which every device holding the story finds alike. */
+  async deleteBrokenChapters(ids: string[]): Promise<void> {
+    await this.withoutSyncCounting('chapter repair', deleteInStatements('chapters', 'id', ids))
+  }
+
   async deleteCheckpoints(ids: string[]): Promise<void> {
     await this.deleteByIds('checkpoints', ids)
   }

@@ -96,4 +96,15 @@ describe('writes sync does not count', () => {
     await expect(database.cleanupOrphanedEmbeddedImages()).resolves.toBe(2)
     expect(submittedStatements()[0].sql).toContain('sync_suspend')
   })
+
+  it('removes broken chapters under suspend', async () => {
+    await database.deleteBrokenChapters(['c1', 'c2'])
+
+    const statements = submittedStatements()
+    expect(statements[0].sql).toContain('sync_suspend')
+    expect(statements[1]).toEqual({
+      sql: 'DELETE FROM chapters WHERE id IN (?,?)',
+      params: ['c1', 'c2'],
+    })
+  })
 })

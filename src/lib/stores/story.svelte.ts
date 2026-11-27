@@ -677,7 +677,7 @@ class StoryStore {
     // Delete invalid chapters from database and local state (batched)
     if (chaptersToDelete.length > 0) {
       try {
-        await database.deleteChapters(chaptersToDelete)
+        await database.deleteBrokenChapters(chaptersToDelete)
         log('Deleted invalid chapters:', chaptersToDelete)
         // This repair is otherwise invisible in production (the logger above is a dev-only
         // no-op), so a story can silently lose chapters with no trace for the user to report.
