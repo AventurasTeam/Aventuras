@@ -403,8 +403,12 @@ function terminal(adr: Adr, bySlug: Map<string, Adr>): string {
   return current.slug
 }
 
+function isListed(adr: Adr): boolean {
+  return adr.state === 'active' || adr.state === 'deprecated'
+}
+
 function renderReadme(adrs: Adr[], tags: Map<string, string>, bySlug: Map<string, Adr>): string {
-  const listed = adrs.filter((a) => a.state === 'active' || a.state === 'deprecated')
+  const listed = adrs.filter(isListed)
   const entry = (adr: Adr) => {
     const link = `[${adr.slug}](${relativeToDocs(adr.path)})`
     const successor = adr.state === 'deprecated' ? bySlug.get(adr.supersededBy ?? '') : undefined
