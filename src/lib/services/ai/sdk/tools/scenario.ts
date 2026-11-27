@@ -18,15 +18,15 @@ const STARTING_TIME_INPUT = z
   .nullable()
   .optional()
   .describe(
-    'When a story from this scenario begins, at the end of its first message, as "Y1 D1 19:00" (year, day, 24-hour time). null or "" clears it. Only applies when the scenario has a first message.',
+    'When a story from this scenario begins, at the end of its first message, as "Y1 D1 19:00" (year, day, 24-hour time). "" clears it; null or omitted leaves it unchanged. Only applies when the scenario has a first message.',
   )
 
-/** undefined leaves the start alone; null or blank clears it; anything else must read as a time. */
+/** null or undefined leaves the start alone, as for every other field; blank clears it. */
 function readStartingTime(
   text: string | null | undefined,
 ): { ok: true; value: TimeTracker | null | undefined } | { ok: false; error: string } {
-  if (text === undefined) return { ok: true, value: undefined }
-  if (text === null || !text.trim()) return { ok: true, value: null }
+  if (text === undefined || text === null) return { ok: true, value: undefined }
+  if (!text.trim()) return { ok: true, value: null }
   const value = parseStoryTime(text)
   return value
     ? { ok: true, value }
@@ -47,6 +47,16 @@ export interface ScenarioToolContext {
 }
 
 /** The shape `read_scenario` returns, and the focused-entity record the Vault sends. */
+/** The tool result's copy of a change, with the start written the way `read_scenario` shows it. */
+function forModel(change: VaultPendingChange) {
+  if (change.entityType !== 'scenario' || !('data' in change) || !change.data) return change
+  const start = change.data.startingTime
+  return {
+    ...change,
+    data: { ...change.data, startingTime: start ? formatStoryTime(start) : null },
+  }
+}
+
 export function toScenarioDetails(scenario: VaultScenario) {
   return {
     id: scenario.id,
@@ -209,7 +219,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending scenario "${name}". Awaiting approval.`,
         }
       },
@@ -354,7 +364,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending update for "${scenario.name}". Awaiting approval.`,
         }
       },
@@ -392,7 +402,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending deletion for "${scenario.name}"${reason ? ` (${reason})` : ''}. Awaiting approval.`,
         }
       },
@@ -440,7 +450,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending NPC addition "${npc.name}" to "${scenario.name}". Awaiting approval.`,
         }
       },
@@ -515,7 +525,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending NPC update for "${npcName}" in "${scenario.name}". Awaiting approval.`,
         }
       },
@@ -566,7 +576,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending NPC removal "${npcName}" from "${scenario.name}". Awaiting approval.`,
         }
       },

@@ -235,7 +235,7 @@ tool, a sheet on a phone, built on the frame).
 
 Every modal and sheet sits at `z-50`, so which is on top is only render order. A screen that must
 stay above whatever is open sets its own z-index on both the content and the overlay
-(`overlayClass` on `Dialog.Content`): `RestoreCompleteDialog` uses `z-[200]`, below the toast, and
+(`overlayClass` on `Dialog.Content`): `RestoreCompleteDialog` uses `z-(--z-blocking)`, below the toast, and
 is up from the moment a restore starts so nothing behind it can be touched while the database is
 replaced.
 

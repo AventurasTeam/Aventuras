@@ -195,6 +195,7 @@ export class WizardStore {
     this.clearScenarioLinkedLorebook()
     this.character.clearCardImport()
     this.narrative.setImportedStart(null)
+    this.setting.loadedVaultScenario = null
   }
 
   selectScenarioFromVault(scenario: VaultScenario) {
@@ -236,7 +237,9 @@ export class WizardStore {
     this.narrative.setImportedStart(openingStart)
     if (scenario.firstMessage) {
       this.character.cardImportedFirstMessage = scenario.firstMessage
-      this.character.cardImportedAlternateGreetings = scenario.alternateGreetings || []
+      this.character.cardImportedAlternateGreetings = (scenario.alternateGreetings ?? []).filter(
+        (greeting) => greeting.trim(),
+      )
       this.character.selectedGreetingIndex = 0
     } else {
       this.character.cardImportedFirstMessage = null

@@ -90,11 +90,7 @@ export class NarrativeStore {
   manualStart = $derived(parseStoryTime(this.manualStartText))
   resultStart = $derived(parseStoryTime(this.resultStartText))
 
-  /**
-   * The start that seeds the story: the one belonging to the opening that will be used, in the
-   * order `createStory` picks an opening — generated, then written, then imported.
-   */
-  /** What was typed for `startingTime`, so a missing start can be told from one that does not parse. */
+  /** The start text beside the opening that will be used. */
   startingTimeText = $derived(
     this.generatedOpening
       ? this.resultStartText
@@ -103,7 +99,11 @@ export class NarrativeStore {
         : this.importedStartText,
   )
 
-  /** Blank takes `DEFAULT_STARTING_TIME`; only text that is not a time leaves it null. */
+  /**
+   * The start that seeds the story: the one belonging to the opening that will be used, in the
+   * order `createStory` picks an opening — generated, then written, then imported. Blank takes
+   * `DEFAULT_STARTING_TIME`; only text that is not a time leaves it null.
+   */
   startingTime = $derived(storyStartFromText(this.startingTimeText))
 
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
@@ -408,6 +408,13 @@ export class NarrativeStore {
 
   /** Takes the imported greeting as the opening, with the start that was stated beside it. */
   useCardOpening(scene: string) {
+    if (this.isGeneratingOpening || this.isRefiningOpening) return
+    // Refused here, while the imported field can still be corrected; the result field is locked.
+    if (this.importedStartText.trim() && !this.importedStart) {
+      this.openingError =
+        'The Starting Time under the imported opening is not a time, e.g. Y1 D1 19:00.'
+      return
+    }
     // Default location if none exists (will be populated from setting if available in orchestrator)
     this.generatedOpening = {
       title: this.storyTitle,
@@ -418,8 +425,8 @@ export class NarrativeStore {
       },
     }
     this.generatedOpeningTranslated = null
-    this.resultStartText = this.importedStartText
-    this.resultStartSource = this.importedStartText.trim() ? 'edited' : null
+    this.resultStartText = this.importedStart ? formatStoryTime(this.importedStart) : ''
+    this.resultStartSource = this.importedStart ? 'imported' : null
     this.openingError = null
     this.clearOpeningEditState()
   }

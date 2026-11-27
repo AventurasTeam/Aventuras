@@ -164,7 +164,8 @@ layout and `AppShell`, so the story input sits on the keyboard; a sheet's bottom
 while the keyboard is up its height is capped below the status bar; `--safe-bottom` drops to 0
 because the keyboard covers the home indicator. With the document pinned, only the field's own
 scroller can reveal it, so the tracker scrolls the focused field into view when the keyboard opens
-and on each focus change while it is up. vaul's `repositionInputs` is off here too: it would move
+and on each focus change while it is up. Anything over 30px counts as a keyboard, so the shortcut bar
+iOS shows above a hardware keyboard is cleared too. vaul's `repositionInputs` is off here too: it would move
 the sheet a second time.
 
 Anything that fills the screen sizes itself to `--app-height`, not `100dvh`, or its bottom ends up

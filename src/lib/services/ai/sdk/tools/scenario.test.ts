@@ -76,10 +76,23 @@ describe('scenario tools and the starting time', () => {
     expect(changeData(keep.onPendingChange).startingTime).toEqual(scenario.startingTime)
   })
 
-  it('clears it on update with null', async () => {
-    const { tools, onPendingChange } = setup()
-    await run(tools.update_scenario, { scenarioId: 's1', startingTime: null })
-    expect(changeData(onPendingChange).startingTime).toBeNull()
+  it('clears it on update only with a blank string', async () => {
+    const clear = setup()
+    await run(clear.tools.update_scenario, { scenarioId: 's1', startingTime: '' })
+    expect(changeData(clear.onPendingChange).startingTime).toBeNull()
+
+    const keep = setup()
+    await run(keep.tools.update_scenario, { scenarioId: 's1', name: 'x', startingTime: null })
+    expect(changeData(keep.onPendingChange).startingTime).toEqual(scenario.startingTime)
+  })
+
+  it('shows the model the start as text in the tool result', async () => {
+    const { tools } = setup()
+    const result = (await run(tools.update_scenario, {
+      scenarioId: 's1',
+      startingTime: 'Y2 D1 08:30',
+    })) as unknown as { pendingChange: { data: { startingTime: unknown } } }
+    expect(result.pendingChange.data.startingTime).toBe('Y2 D1 08:30')
   })
 
   it('refuses text that is not a time rather than dropping it', async () => {

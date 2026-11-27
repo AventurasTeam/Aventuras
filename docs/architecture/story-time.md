@@ -164,7 +164,8 @@ the story, in the order `createStory` picks an opening: generated, written, impo
   applies only to the scenario's first message (`scenarioOpeningStart`, `greetingStart`). The imported opening used is the greeting selected on the step, whether or not
   **Use This Opening** was pressed; pressing it moves the start typed beside it to the result.
   The Vault Assistant reads it as text (`toScenarioDetails`) and sets or clears it through
-  `create_scenario` / `update_scenario`, which refuse text that is not a time rather than drop it.
+  `create_scenario` / `update_scenario`: `""` clears it, null leaves it unchanged as for every
+  other field, and text that is not a time is refused rather than dropped.
 - **Guidance** — what generation is told, through `TIME: opening ends at {{ storyStartingTime }}` in
   the four opening templates, or `(suggest one)` when empty.
 - **Result** — what generation returned, or the guidance when it returned nothing readable

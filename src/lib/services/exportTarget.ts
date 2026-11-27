@@ -27,10 +27,12 @@ export interface SaveTarget {
 export async function resolveSaveTarget(
   filename: string,
   filters: SaveFilter[],
+  { timestamped = false }: { timestamped?: boolean } = {},
 ): Promise<SaveTarget | null> {
   const ios = isIos()
+  const extensions = filters.flatMap((filter) => filter.extensions)
   const chosen = await save({
-    defaultPath: ios ? withTimeOfDay(filename, new Date()) : filename,
+    defaultPath: ios && !timestamped ? withTimeOfDay(filename, new Date(), extensions) : filename,
     filters,
   })
   if (!chosen) return null
@@ -45,11 +47,19 @@ export async function resolveSaveTarget(
  * folder rather than the file and leaves the placeholder over the existing one, so iOS gets a name
  * that cannot clash.
  */
-export function withTimeOfDay(filename: string, now: Date): string {
+export function withTimeOfDay(filename: string, now: Date, extensions: string[] = []): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
-  const dot = filename.lastIndexOf('.')
+  // A filter's extension may have parts of its own, like `prompt.json`.
+  const known = extensions.find((ext) => filename.endsWith(`.${ext}`))
+  const dot = known ? filename.length - known.length - 1 : filename.lastIndexOf('.')
   return dot > 0 ? `${filename.slice(0, dot)}-${time}${filename.slice(dot)}` : `${filename}-${time}`
+}
+
+/** `YYYY-MM-DD` in local time, so it agrees with the time `withTimeOfDay` adds. */
+export function localDate(now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
 export function isFolderUrl(destination: string): boolean {

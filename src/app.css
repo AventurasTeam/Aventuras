@@ -34,6 +34,9 @@
   /* Half a row of two, less half a gap-2 (for basis-pair) */
   --container-pair: calc(50% - 0.25rem);
 
+  /* Above every sheet and dialog (z-50), below the toast (for z-(--z-blocking)) */
+  --z-blocking: 200;
+
   /* The tallest a framed modal or sheet grows (for max-h-(--modal-max-height)) */
   --modal-max-height: 85dvh;
 

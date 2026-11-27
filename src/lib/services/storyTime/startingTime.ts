@@ -20,7 +20,7 @@ export function templateReceivesStartingTime(content: string | null | undefined)
   return !!content && new RegExp(`{{\\s*${STARTING_TIME_VAR}\\b`).test(content)
 }
 
-export type ResultStartSource = 'returned' | 'guidance' | 'edited'
+export type ResultStartSource = 'returned' | 'guidance' | 'edited' | 'imported'
 
 /**
  * The generated opening's own start: what the model returned, or the guidance it was given when

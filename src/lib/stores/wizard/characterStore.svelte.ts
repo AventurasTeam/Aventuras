@@ -73,9 +73,10 @@ export class CharacterStore {
   selectedGreetingIndex = $state<number>(0)
   /** The imported opening picked on the opening step: the first message or an alternate greeting. */
   selectedGreeting = $derived(
-    this.selectedGreetingIndex === 0
+    (this.selectedGreetingIndex === 0
       ? this.cardImportedFirstMessage
-      : (this.cardImportedAlternateGreetings[this.selectedGreetingIndex - 1] ?? null),
+      : this.cardImportedAlternateGreetings[this.selectedGreetingIndex - 1]
+    )?.trim() || null,
   )
   /** A vault scenario's own start, kept beside its opening until the reader takes that opening. */
   cardImportedStartingTime = $state<TimeTracker | null>(null)

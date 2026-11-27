@@ -1,12 +1,9 @@
-/** Below this the visual viewport has shrunk for something other than a keyboard. */
-const KEYBOARD_MIN_PX = 80
+/** Rounding slack; the shortcut bar a hardware keyboard leaves (~45-55px) must still count. */
+const KEYBOARD_MIN_PX = 30
 
-/**
- * iOS. WKWebView leaves the layout viewport at full height when the keyboard opens and scrolls the
- * document to the focused field instead, overflow: hidden or not, which drags the header and any
- * sheet's top off screen. This pins the scroll at 0 and publishes the keyboard's height as
- * `--keyboard-inset`, which `--app-height` and the sheets subtract. See overview.md, "The soft keyboard".
- */
+const EDITABLE = "input, textarea, select, [contenteditable]:not([contenteditable='false'])"
+
+/** Publishes the iOS keyboard height as `--keyboard-inset`; see overview.md, "The soft keyboard". */
 export function trackIosKeyboard(): () => void {
   const vv = window.visualViewport
   if (!vv) return () => {}
@@ -17,7 +14,7 @@ export function trackIosKeyboard(): () => void {
   function revealFocused() {
     requestAnimationFrame(() => {
       const el = document.activeElement
-      if (el instanceof HTMLElement && el.matches('input, textarea, [contenteditable]')) {
+      if (el instanceof HTMLElement && el.matches(EDITABLE)) {
         el.scrollIntoView({ block: 'nearest' })
       }
     })

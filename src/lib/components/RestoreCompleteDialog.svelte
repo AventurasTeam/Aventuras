@@ -10,8 +10,8 @@
 -->
 <Dialog.Root open={ui.restoreInProgress || ui.restoreComplete}>
   <Dialog.Content
-    class="z-[200] p-6 sm:max-w-md"
-    overlayClass="z-[200]"
+    class="z-(--z-blocking) p-6 sm:max-w-md"
+    overlayClass="z-(--z-blocking)"
     interactOutsideBehavior="ignore"
     escapeKeydownBehavior="ignore"
   >
