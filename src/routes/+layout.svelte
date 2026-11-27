@@ -5,7 +5,8 @@
   import RestoreCompleteDialog from '#lib/components/RestoreCompleteDialog.svelte'
   import { ui } from '#lib/stores/ui.svelte.ts'
   import { story } from '#lib/stores/story.svelte.ts'
-  import { isAndroid } from '#lib/utils/platform.ts'
+  import { isAndroid, isIos } from '#lib/utils/platform.ts'
+  import { trackIosKeyboard } from '#lib/utils/iosKeyboard.ts'
   import { dispatchBackPress } from '#lib/utils/backPress.ts'
   import { errMessage } from '#lib/utils/error.ts'
 
@@ -20,7 +21,9 @@
     ui.initImageTracking()
 
     if (!isAndroid()) {
+      const stopKeyboard = isIos() ? trackIosKeyboard() : undefined
       return () => {
+        stopKeyboard?.()
         ui.destroyVisibilityTracking()
         ui.destroyImageTracking()
       }
@@ -90,7 +93,7 @@
   })
 </script>
 
-<div class="h-screen w-screen overflow-hidden">
+<div class="h-(--app-height) w-screen overflow-hidden">
   {@render children()}
 </div>
 

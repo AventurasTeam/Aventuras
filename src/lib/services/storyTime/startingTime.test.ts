@@ -5,6 +5,7 @@ import {
   returnedStart,
   scenarioOpeningStart,
   startingTimePromptValue,
+  storyStartFromText,
   templateReceivesStartingTime,
   SUGGEST_ONE,
 } from './startingTime'
@@ -84,5 +85,19 @@ describe('scenarioOpeningStart', () => {
 
   it('is empty when the scenario states no start', () => {
     expect(scenarioOpeningStart({ firstMessage: 'Rain on the docks.' })).toBeNull()
+  })
+})
+
+describe('storyStartFromText', () => {
+  it('starts a blank start at the default', () => {
+    expect(storyStartFromText('  ')).toEqual({ years: 0, days: 0, hours: 0, minutes: 0 })
+  })
+
+  it('reads a typed start', () => {
+    expect(storyStartFromText('Y1 D3 21:00')).toEqual({ years: 0, days: 2, hours: 21, minutes: 0 })
+  })
+
+  it('leaves text that is not a time unreadable rather than defaulting it', () => {
+    expect(storyStartFromText('soon')).toBeNull()
   })
 })

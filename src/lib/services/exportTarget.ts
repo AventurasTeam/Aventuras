@@ -9,6 +9,7 @@
  */
 
 import { save } from '@tauri-apps/plugin-dialog'
+import { isIos } from '#lib/utils/platform.ts'
 
 export interface SaveFilter {
   name: string
@@ -26,7 +27,41 @@ export interface SaveTarget {
 export async function resolveSaveTarget(
   filename: string,
   filters: SaveFilter[],
+  { timestamped = false }: { timestamped?: boolean } = {},
 ): Promise<SaveTarget | null> {
-  const chosen = await save({ defaultPath: filename, filters })
-  return chosen ? { destPath: chosen } : null
+  const ios = isIos()
+  const extensions = filters.flatMap((filter) => filter.extensions)
+  const chosen = await save({
+    defaultPath: ios && !timestamped ? withTimeOfDay(filename, new Date(), extensions) : filename,
+    filters,
+  })
+  if (!chosen) return null
+  if (ios && isFolderUrl(chosen)) {
+    throw new Error('iOS saved the file under a different name. Export again to a new name.')
+  }
+  return { destPath: chosen }
+}
+
+/**
+ * iOS exports a placeholder the app fills in afterwards. On a name clash, Keep Both hands back the
+ * folder rather than the file and leaves the placeholder over the existing one, so iOS gets a name
+ * that cannot clash.
+ */
+export function withTimeOfDay(filename: string, now: Date, extensions: string[] = []): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  // A filter's extension may have parts of its own, like `prompt.json`.
+  const known = extensions.find((ext) => filename.endsWith(`.${ext}`))
+  const dot = known ? filename.length - known.length - 1 : filename.lastIndexOf('.')
+  return dot > 0 ? `${filename.slice(0, dot)}-${time}${filename.slice(dot)}` : `${filename}-${time}`
+}
+
+/** `YYYY-MM-DD` in local time, so it agrees with the time `withTimeOfDay` adds. */
+export function localDate(now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+export function isFolderUrl(destination: string): boolean {
+  return destination.endsWith('/')
 }

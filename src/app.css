@@ -34,6 +34,9 @@
   /* Half a row of two, less half a gap-2 (for basis-pair) */
   --container-pair: calc(50% - 0.25rem);
 
+  /* Above every sheet and dialog (z-50), below the toast (for z-(--z-blocking)) */
+  --z-blocking: 200;
+
   /* The tallest a framed modal or sheet grows (for max-h-(--modal-max-height)) */
   --modal-max-height: 85dvh;
 
@@ -121,6 +124,14 @@
     --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--sab, 0px));
     --safe-left: max(env(safe-area-inset-left, 0px), var(--sal, 0px));
     --safe-right: max(env(safe-area-inset-right, 0px), var(--sar, 0px));
+    /* Set on iOS only, by utils/iosKeyboard.ts; Android shrinks the WebView itself. */
+    --keyboard-inset: 0px;
+    --app-height: calc(100dvh - var(--keyboard-inset));
+  }
+
+  /* The keyboard covers the home indicator, so nothing needs to clear it. */
+  :root[data-keyboard-open] {
+    --safe-bottom: 0px;
   }
 
   /* Scrollbar styling */
@@ -153,6 +164,19 @@
       -ms-overflow-style: none; /* IE and Edge */
       scrollbar-width: none; /* Firefox */
     }
+  }
+}
+
+/*
+ * iOS zooms the page into any focused field set below 16px. Unlayered so it beats a caller's
+ * text-sm; only iOS WebKit supports -webkit-touch-callout. Pinch zoom stays available.
+ */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select,
+  [contenteditable]:not([contenteditable='false']) {
+    font-size: 16px;
   }
 }
 

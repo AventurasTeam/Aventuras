@@ -23,6 +23,7 @@ import {
   formatStoryTime,
   normalizeTime,
   parseStoryTime,
+  storyStartFromText,
   returnedStart,
   templateReceivesStartingTime,
   type ResultStartSource,
@@ -80,11 +81,6 @@ export class NarrativeStore {
   /** Whether the selected pack's opening template renders the start; null until checked. */
   openingReceivesStart = $state<boolean | null>(null)
 
-  // Card Import Integration (for Opening)
-  cardImportedFirstMessage = $state<string | null>(null)
-  cardImportedAlternateGreetings = $state<string[]>([])
-  selectedGreetingIndex = $state<number>(0)
-
   // Derived
   importedEntries = $derived(this.importedLorebooks.flatMap((lb) => lb.entries))
 
@@ -94,17 +90,21 @@ export class NarrativeStore {
   manualStart = $derived(parseStoryTime(this.manualStartText))
   resultStart = $derived(parseStoryTime(this.resultStartText))
 
+  /** The start text beside the opening that will be used. */
+  startingTimeText = $derived(
+    this.generatedOpening
+      ? this.resultStartText
+      : this.manualOpeningText.trim()
+        ? this.manualStartText
+        : this.importedStartText,
+  )
+
   /**
    * The start that seeds the story: the one belonging to the opening that will be used, in the
-   * order `createStory` picks an opening — generated, then written, then imported.
+   * order `createStory` picks an opening — generated, then written, then imported. Blank takes
+   * `DEFAULT_STARTING_TIME`; only text that is not a time leaves it null.
    */
-  startingTime = $derived(
-    this.generatedOpening
-      ? this.resultStart
-      : this.manualOpeningText.trim()
-        ? this.manualStart
-        : this.importedStart,
-  )
+  startingTime = $derived(storyStartFromText(this.startingTimeText))
 
   /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
   private packId: () => string | undefined
@@ -330,11 +330,14 @@ export class NarrativeStore {
           fields.locDesc = this.generatedOpening.initialLocation.description
         }
 
+        const source = this.generatedOpening
         const translated = await aiService.translateWizardBatch(
           fields,
           translationSettings.targetLanguage,
           this.packId(),
         )
+        // An opening replaced during the request keeps no translation of its predecessor.
+        if (this.generatedOpening !== source) return
 
         this.generatedOpeningTranslated = {
           ...this.generatedOpening,
@@ -403,21 +406,27 @@ export class NarrativeStore {
     this.clearOpeningEditState()
   }
 
-  useCardOpening() {
-    const selectedScene =
-      this.selectedGreetingIndex === 0
-        ? this.cardImportedFirstMessage
-        : this.cardImportedAlternateGreetings[this.selectedGreetingIndex - 1]
-
+  /** Takes the imported greeting as the opening, with the start that was stated beside it. */
+  useCardOpening(scene: string) {
+    if (this.isGeneratingOpening || this.isRefiningOpening) return
+    // Refused here, while the imported field can still be corrected; the result field is locked.
+    if (this.importedStartText.trim() && !this.importedStart) {
+      this.openingError =
+        'The Starting Time under the imported opening is not a time, e.g. Y1 D1 19:00.'
+      return
+    }
     // Default location if none exists (will be populated from setting if available in orchestrator)
     this.generatedOpening = {
       title: this.storyTitle,
-      scene: selectedScene || '',
+      scene,
       initialLocation: {
         name: 'Starting Location',
         description: 'The scene begins here.',
       },
     }
+    this.generatedOpeningTranslated = null
+    this.resultStartText = this.importedStart ? formatStoryTime(this.importedStart) : ''
+    this.resultStartSource = this.importedStart ? 'imported' : null
     this.openingError = null
     this.clearOpeningEditState()
   }

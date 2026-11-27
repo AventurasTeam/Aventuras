@@ -1450,7 +1450,7 @@
 {#if isCompact.current}
   <Dialog.Root open={true} onOpenChange={handleOpenChange}>
     <Dialog.Content
-      class="flex h-[100dvh] w-screen max-w-none flex-col gap-0 overflow-hidden rounded-none border-none p-0"
+      class="top-0 flex h-(--app-height) w-screen max-w-none translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-none p-0"
       style="padding-top: var(--safe-top);"
       onEscapeKeydown={handleEscapeKeydown}
     >

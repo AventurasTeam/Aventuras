@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { DEFAULT_STARTING_TIME } from '#lib/services/storyTime/index.ts'
   import StoryTimeField from '#lib/components/shared/StoryTimeField.svelte'
   import type { VaultScenarioInput } from '#lib/services/ai/sdk/schemas/vault.ts'
   import type { VaultCharacter } from '#lib/types/index.ts'
@@ -345,6 +346,7 @@
             />
             <p class="text-muted-foreground text-xs">
               Optional. When a story from this scenario begins, at the end of its first message.
+              Left blank, it is {DEFAULT_STARTING_TIME} unless one is set when the story is created.
             </p>
           </div>
         {/if}

@@ -39,6 +39,7 @@
     settingError: string | null
     isEditingSetting: boolean
     selectedScenarioId: string | null
+    loadedVaultScenario: { id: string; name: string } | null
     importedCardNpcs: GeneratedCharacter[]
     cardImportError: string | null
     isImportingCard: boolean
@@ -72,6 +73,7 @@
     isRefiningSetting,
     settingError,
     selectedScenarioId,
+    loadedVaultScenario,
     importedCardNpcs,
     cardImportError,
     savedScenarioToVaultConfirm,
@@ -103,14 +105,8 @@
   const hasUserPlaceholder = $derived(settingSeed.includes('{{user}}'))
 
   let showExpandOptions = $state(false)
-  let loadedVaultScenarioId = $state<string | null>(null)
   let editDescription = $state('')
   let isEditingDescription = $state(false)
-
-  function handleSelectFromVault(scenario: VaultScenario) {
-    loadedVaultScenarioId = scenario.id
-    onSelectFromVault(scenario)
-  }
 
   function handleEditDescription() {
     editDescription = expandedSetting?.description ?? ''
@@ -158,13 +154,11 @@
             </div>
             <div class="text-left">
               <div class="text-sm font-medium">
-                {selectedScenarioId && loadedVaultScenarioId
-                  ? 'Scenario Selected'
-                  : 'Select a Scenario'}
+                {loadedVaultScenario?.name || 'Select a Scenario'}
               </div>
               <div class="text-muted-foreground text-xs">
-                {selectedScenarioId && loadedVaultScenarioId
-                  ? 'Click to change selection'
+                {loadedVaultScenario
+                  ? 'Loaded from the vault. Tap to change.'
                   : 'Browse your saved worlds'}
               </div>
             </div>
@@ -183,8 +177,8 @@
         <div class="h-70 border-t p-3">
           <UniversalVaultBrowser
             type="scenario"
-            onSelect={handleSelectFromVault}
-            selectedId={loadedVaultScenarioId}
+            onSelect={onSelectFromVault}
+            selectedId={loadedVaultScenario?.id ?? null}
             {onNavigateToVault}
           />
         </div>

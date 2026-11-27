@@ -266,6 +266,7 @@ export function scenarioToRecord(s: VaultScenario): VaultScenarioInput {
     primaryCharacterName: s.primaryCharacterName,
     firstMessage: s.firstMessage,
     alternateGreetings: s.alternateGreetings ?? [],
+    startingTime: s.startingTime ?? null,
     tags: s.tags,
     favorite: s.favorite,
   }

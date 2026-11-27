@@ -21,7 +21,7 @@ import { remove, exists, stat } from '@tauri-apps/plugin-fs'
 import * as path from '@tauri-apps/api/path'
 import { getVersion } from '@tauri-apps/api/app'
 import { database } from './database'
-import { resolveSaveTarget } from './exportTarget'
+import { localDate, resolveSaveTarget } from './exportTarget'
 import { errMessage } from '#lib/utils/error.ts'
 
 interface BackupMetadata {
@@ -41,7 +41,7 @@ class BackupService {
   async createFullBackup(): Promise<string | null> {
     // 1. Resolve the destination (save dialog: a real path on desktop, a SAF content:// URI on
     //    Android). The native step writes the archive straight to it.
-    const datestamp = new Date().toISOString().slice(0, 10)
+    const datestamp = localDate(new Date())
     const target = await resolveSaveTarget(`aventura-backup-${datestamp}.zip`, [
       { name: 'ZIP Archive', extensions: ['zip'] },
     ])

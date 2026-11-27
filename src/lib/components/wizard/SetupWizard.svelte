@@ -18,6 +18,8 @@
   import type { VaultCharacter } from '#lib/types/index.ts'
 
   import DiscardConfirm from '#lib/components/shared/DiscardConfirm.svelte'
+  import { beginStoryBlocker } from '#lib/components/wizard/beginStory.ts'
+  import { cn } from '#lib/utils/cn.ts'
   import { PendingQuestion } from '#lib/components/shared/pendingQuestion.svelte.ts'
 
   // Step components
@@ -152,6 +154,27 @@
       cancelled = true
     }
   })
+
+  const beginBlocker = $derived(
+    beginStoryBlocker({
+      title: wizard.narrative.storyTitle,
+      opening: wizard.narrative.generatedOpening
+        ? 'generated'
+        : wizard.narrative.manualOpeningText.trim()
+          ? 'written'
+          : wizard.character.selectedGreeting
+            ? 'imported'
+            : null,
+      startIsValid: wizard.narrative.startingTime !== null,
+      busy: wizard.narrative.isGeneratingOpening
+        ? 'generating'
+        : wizard.narrative.isRefiningOpening
+          ? 'refining'
+          : wizard.narrative.isEditingOpening
+            ? 'editing'
+            : null,
+    }),
+  )
 </script>
 
 <ResponsiveModal.Root
@@ -235,6 +258,7 @@
           settingError={wizard.setting.settingError}
           isEditingSetting={wizard.setting.isEditingSetting}
           selectedScenarioId={wizard.setting.selectedScenarioId}
+          loadedVaultScenario={wizard.setting.loadedVaultScenario}
           importedCardNpcs={wizard.character.importedCardNpcs}
           cardImportError={wizard.character.cardImportError}
           isImportingCard={wizard.character.isImportingCard}
@@ -522,7 +546,7 @@
           onCancelEdit={() => wizard.narrative.cancelOpeningEdit()}
           onSaveEdit={() => wizard.narrative.saveOpeningEdit()}
           onDraftChange={(v) => (wizard.narrative.openingDraft = v)}
-          onUseCardOpening={() => wizard.narrative.useCardOpening()}
+          onUseCardOpening={() => wizard.useCardOpening()}
           onClearCardOpening={() => wizard.clearCardImport()}
           onManualOpeningChange={(v) => (wizard.narrative.manualOpeningText = v)}
           onClearGenerated={() => wizard.narrative.clearGeneratedOpening()}
@@ -531,7 +555,18 @@
     </div>
 
     <!-- Footer Navigation -->
-    <div class="flex shrink-0 justify-between border-t p-4" inert={exitQuestion.open}>
+    {#if wizard.currentStep === wizard.totalSteps && beginBlocker}
+      <p class="shrink-0 border-t px-4 pt-3 text-right text-sm text-amber-400" role="status">
+        {beginBlocker}
+      </p>
+    {/if}
+    <div
+      class={cn(
+        'flex shrink-0 justify-between p-4',
+        !(wizard.currentStep === wizard.totalSteps && beginBlocker) && 'border-t',
+      )}
+      inert={exitQuestion.open}
+    >
       {#if wizard.currentStep > 1}
         <Button variant="secondary" class="gap-1 pl-2" onclick={() => wizard.prevStep()}>
           <ChevronLeft class="h-4 w-4" />
@@ -546,14 +581,7 @@
           variant="default"
           class="flex items-center gap-2"
           onclick={() => wizard.createStory()}
-          disabled={!wizard.narrative.storyTitle.trim() ||
-            !wizard.narrative.startingTime ||
-            wizard.narrative.isGeneratingOpening ||
-            wizard.narrative.isRefiningOpening ||
-            wizard.narrative.isEditingOpening ||
-            (!wizard.narrative.generatedOpening &&
-              !wizard.narrative.manualOpeningText.trim() &&
-              !wizard.character.cardImportedFirstMessage)}
+          disabled={beginBlocker !== null}
         >
           <Play class="h-4 w-4" />
           Begin Story

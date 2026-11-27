@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { VaultPendingChange } from '#lib/services/ai/sdk/schemas/vault.ts'
   import type {
+    TimeTracker,
     VaultCharacter,
     VaultLorebookEntry,
     VaultScenarioNpc,
@@ -24,6 +25,7 @@
   import { fade } from 'svelte/transition'
   import { vaultEditor } from '#lib/stores/vaultEditorStore.svelte.ts'
   import { computeDelta } from '#lib/utils/vaultMerge.ts'
+  import { formatStoryTime } from '#lib/services/storyTime/index.ts'
 
   interface Props {
     change: VaultPendingChange
@@ -184,6 +186,8 @@
       const msg = String(data.firstMessage)
       lines.push(`First Message: ${msg.length > 150 ? msg.slice(0, 150) + '...' : msg}`)
     }
+    if ('startingTime' in data && data.startingTime)
+      lines.push(`Starting Time: ${formatStoryTime(data.startingTime as TimeTracker)}`)
     if ('tags' in data && (data.tags as string[])?.length)
       lines.push(`Tags: ${(data.tags as string[]).join(', ')}`)
     return lines.join('\n')

@@ -175,7 +175,7 @@
 <ResponsiveModal.Root open={ui.settingsModalOpen} onOpenChange={(v) => !v && safeClose()}>
   <ResponsiveModal.Content class="flex h-[90vh] max-w-6xl flex-col overflow-hidden p-0">
     <div
-      class="text-muted-foreground/30 absolute top-1 left-2 z-[110] font-mono text-[10px] md:top-auto md:bottom-1"
+      class="text-muted-foreground/30 absolute top-2 left-4 z-[110] font-mono text-[10px] md:top-auto md:bottom-1 md:left-2"
     >
       v{appVersion}
     </div>

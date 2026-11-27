@@ -143,6 +143,7 @@ export class WizardStore {
     if (!scenario) return
 
     this.setting.selectedScenarioId = scenarioId
+    this.setting.loadedVaultScenario = null
 
     // Narrative: Genre
     // Always set to 'custom' so that the text field (customGenre) is treated as the source of truth
@@ -184,14 +185,22 @@ export class WizardStore {
     this.narrative.importedStartText = greetingStart(index, this.character.cardImportedStartingTime)
   }
 
+  useCardOpening() {
+    const scene = this.character.selectedGreeting
+    if (scene) this.narrative.useCardOpening(scene)
+  }
+
   /** The imported opening goes, and the start that belonged to it with it. */
   clearCardImport() {
     this.clearScenarioLinkedLorebook()
     this.character.clearCardImport()
     this.narrative.setImportedStart(null)
+    this.setting.loadedVaultScenario = null
   }
 
   selectScenarioFromVault(scenario: VaultScenario) {
+    this.setting.selectedScenarioId = null
+    this.setting.loadedVaultScenario = { id: scenario.id, name: scenario.name }
     // 1. Setting
     this.setting.settingSeed = scenario.settingSeed
     this.setting.expandedSetting = null
@@ -228,7 +237,9 @@ export class WizardStore {
     this.narrative.setImportedStart(openingStart)
     if (scenario.firstMessage) {
       this.character.cardImportedFirstMessage = scenario.firstMessage
-      this.character.cardImportedAlternateGreetings = scenario.alternateGreetings || []
+      this.character.cardImportedAlternateGreetings = (scenario.alternateGreetings ?? []).filter(
+        (greeting) => greeting.trim(),
+      )
       this.character.selectedGreetingIndex = 0
     } else {
       this.character.cardImportedFirstMessage = null
@@ -340,7 +351,7 @@ export class WizardStore {
     if (!this.narrative.storyTitle.trim()) return
     const startingTime = this.narrative.startingTime
     if (!startingTime) {
-      this.narrative.openingError = 'Please enter a starting time for the story'
+      this.narrative.openingError = 'The starting time is not a valid time, e.g. Y1 D1 19:00'
       return
     }
 
@@ -359,9 +370,9 @@ export class WizardStore {
           },
         }
       }
-      if (!opening && this.character.cardImportedFirstMessage) {
+      if (!opening && this.character.selectedGreeting) {
         opening = {
-          scene: this.character.cardImportedFirstMessage,
+          scene: this.character.selectedGreeting,
           title: this.character.cardImportedTitle || this.narrative.storyTitle || 'Untitled Story',
           initialLocation: {
             name: 'Starting Location',
