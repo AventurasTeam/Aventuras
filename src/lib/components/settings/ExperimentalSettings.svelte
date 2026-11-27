@@ -187,17 +187,17 @@
       return
     }
 
+    // iOS ignores exit(), so the user has to close the app themselves; set before the modal shows.
+    if (isIos()) {
+      ui.restoreCloseHint =
+        'Close Aventuras from the app switcher, then reopen it to continue with the restored database.'
+    }
     // The DB is closed and replaced; the blocking modal keeps anything from lazily reopening it.
     ui.restoreComplete = true
     ui.restoreInProgress = false
+    if (isIos()) return
     // Give the modal time to paint before the process ends, so the exit doesn't read as a crash.
     await new Promise((resolve) => setTimeout(resolve, RESTORE_EXIT_DELAY_MS))
-    // iOS ignores exit(), so the user has to close the app themselves.
-    if (isIos()) {
-      ui.restoreCloseHint =
-        'Restore succeeded. Close Aventuras from the app switcher, then reopen it to continue with the restored database.'
-      return
-    }
     try {
       // exit() rather than relaunch() avoids a Windows webview2 crash on teardown.
       const { exit } = await import('@tauri-apps/plugin-process')
