@@ -351,6 +351,13 @@ pub fn run() {
 
             if db_path.try_exists().expect("failed to check db path") {
                 tauri::async_runtime::block_on(migration_patch::apply_checksum_patch(&db_path));
+                // ADR(automatic-writes-dont-count): released by DatabaseService.init once the
+                // plugin has migrated. Counting is only wrong for this run, so a failure is not fatal.
+                if let Err(e) =
+                    tauri::async_runtime::block_on(sync::device::suspend_for_migrations(&db_path))
+                {
+                    eprintln!("[sync] could not hold sync_suspend for migrations: {e}");
+                }
             }
 
             // The HTTP plugin's cookie jar is off; drop the file an older build left behind.

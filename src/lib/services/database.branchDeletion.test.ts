@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
-  const execute = vi.fn(async () => ({ rowsAffected: 0 }))
+  const execute = vi.fn(async (_sql: string) => ({ rowsAffected: 0 }))
   const close = vi.fn(async () => {})
   const connection = { execute, close }
   const load = vi.fn(async () => connection)
@@ -29,6 +29,12 @@ function submittedStatements(): { sql: string; params: unknown[] }[] {
   expect(command).toBe('db_transaction')
   return payload.statements
 }
+
+/** Everything the connection runs on open; a delete issued outside the transaction would add to it. */
+const CONNECTION_SETUP = [
+  'PRAGMA foreign_keys = ON',
+  "DELETE FROM sync_suspend WHERE reason = 'migration'",
+]
 
 const squashed = (sql: string) => sql.replace(/\s+/g, ' ').trim()
 
@@ -63,8 +69,7 @@ describe('atomic branch deletion', () => {
       expect(statement.params).toEqual(['branch-1'])
     }
 
-    expect(mocks.execute).toHaveBeenCalledOnce()
-    expect(mocks.execute).toHaveBeenCalledWith('PRAGMA foreign_keys = ON')
+    expect(mocks.execute.mock.calls.map(([sql]) => sql)).toEqual(CONNECTION_SETUP)
   })
 
   it('takes no checkpoint ids from the caller', async () => {
@@ -111,8 +116,7 @@ describe('atomic branch deletion', () => {
     await expect(database.deleteBranch('branch-1')).rejects.toThrow('branch delete failed')
 
     expect(mocks.invoke).toHaveBeenCalledOnce()
-    expect(mocks.execute).toHaveBeenCalledOnce()
-    expect(mocks.execute).toHaveBeenCalledWith('PRAGMA foreign_keys = ON')
+    expect(mocks.execute.mock.calls.map(([sql]) => sql)).toEqual(CONNECTION_SETUP)
   })
 
   it('removes no checkpoint when a later statement fails', async () => {

@@ -1,7 +1,10 @@
 //! This installation's identity in the sync tables.
 
+use std::path::Path;
+
 use sqlx::Row;
 use sqlx::SqlitePool;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use uuid::Uuid;
 
 /// Gives a restored database a device identity of its own.
@@ -46,9 +49,44 @@ pub async fn assign_new_device_id(pool: &SqlitePool) -> Result<(), String> {
         .map_err(|e| format!("failed to commit device update: {e}"))
 }
 
+/// Holds `sync_suspend` for the migrations the frontend runs next, so none of them counts as an
+/// edit. The frontend releases it right after the plugin has loaded, `DatabaseService.init`.
+///
+/// ADR(automatic-writes-dont-count): done here and not inside each migration, since a migration's
+/// text is its checksum and cannot change once released.
+pub async fn suspend_for_migrations(db_path: &Path) -> Result<(), String> {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(SqliteConnectOptions::new().filename(db_path))
+        .await
+        .map_err(|e| format!("failed to open database: {e}"))?;
+    let result = hold_suspend(&pool).await;
+    pool.close().await;
+    result
+}
+
+/// Does nothing before migration 045, which has no sync rows for the hold to protect.
+async fn hold_suspend(pool: &SqlitePool) -> Result<(), String> {
+    let has_table = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_suspend'",
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(|e| format!("failed to inspect database: {e}"))?
+        > 0;
+    if !has_table {
+        return Ok(());
+    }
+    sqlx::query("INSERT INTO sync_suspend (reason) VALUES ('migration')")
+        .execute(pool)
+        .await
+        .map_err(|e| format!("failed to hold sync_suspend: {e}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::assign_new_device_id;
+    use super::{assign_new_device_id, hold_suspend};
     use crate::test_db::{memory_pool, run_migrations};
     use sqlx::{Row, SqlitePool};
     use std::collections::{BTreeMap, BTreeSet};
@@ -276,6 +314,34 @@ mod tests {
         .await;
         assert_eq!(counter(&pool, "ss").await, Some(1));
         assert_eq!(story_time(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn holding_suspend_for_migrations_silences_a_rewrite() {
+        let pool = synced_story().await;
+        hold_suspend(&pool).await.unwrap();
+        exec(
+            &pool,
+            "INSERT INTO story_entries (id, story_id, type, content, position, created_at)
+               VALUES ('e', 's', 'narration', '', 0, 1);",
+        )
+        .await;
+        assert_eq!(counter(&pool, "ss").await, Some(1));
+        assert_eq!(story_time(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn holding_suspend_before_the_sync_tables_exist_does_nothing() {
+        let pool = memory_pool().await;
+        run_migrations(&pool, 0, 43).await;
+        hold_suspend(&pool).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn no_migration_leaves_suspend_held() {
+        let pool = memory_pool().await;
+        run_migrations(&pool, 0, i64::MAX).await;
+        assert_eq!(count(&pool, "SELECT COUNT(*) FROM sync_suspend").await, 0);
     }
 
     async fn uncovered_tables(pool: &SqlitePool) -> BTreeSet<String> {

@@ -21,14 +21,16 @@ The database, the native layer that moves bytes around it, and the settings blob
 - **Line endings matter**: `sqlx` checksums each migration file to detect drift, so migrations must use LF
   line endings on every platform. This is enforced by `.gitattributes` (forces `eol=lf` for
   `src-tauri/migrations/*.sql`) and by the `check_migrations` pre-commit hook below.
-- **A migration that rewrites rows must hold `sync_suspend`.** Migration 045 put triggers on every
+- **Migrations run under `sync_suspend`, held for them.** Migration 045 put triggers on every
   story, vault and pack table that count edits for sync and stamp `stories.updated_at`. A rewrite
   would read as an edit on every device, so every synced item would show as changed on both after
-  the update. SQLite cannot disable a trigger, so each one checks that table: insert a row at the
-  start of the migration, delete it at the end, in the same file. A Rust data migration follows the
-  same rule. A migration that adds a table with a `story_id` or `pack_id` column must give it the
-  triggers or add it to the exclusion list in `sync/device.rs`, whose test fails otherwise. See
-  [sync.md](sync.md).
+  the update. The `lib.rs` setup hook inserts the row before the plugin migrates and
+  `DatabaseService.init` deletes it right after, so a migration neither needs nor may touch it:
+  its text is its checksum, and 045's comment asking each migration to hold it is superseded.
+  Rewrite rows in place; a delete and re-insert, or `REPLACE` on a root row, drops the sync identity.
+  A migration that adds a table with a `story_id` or `pack_id` column must give it the triggers or
+  add it to the exclusion list in `sync/device.rs`, whose test fails otherwise. See
+  [sync.md](sync.md) and [the decision](../decisions/2026-11-27-automatic-writes-dont-count.md).
 - **Never `BEGIN` from the frontend**: `tauri-plugin-sql` runs every `execute()` on an arbitrary
   connection from an `sqlx` pool, and exposes no way to pin one (`Pool::connect` in the plugin's
   `wrapper.rs` takes no options). A `BEGIN` therefore opens a transaction that the following statements

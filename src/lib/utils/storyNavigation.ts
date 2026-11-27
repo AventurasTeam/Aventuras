@@ -250,6 +250,12 @@ export function startClock(
   return last.metadata?.timeEnd ? undefined : null
 }
 
+/** Whether two clocks read the same, an absent one reading the same only as another absent one. */
+export function sameClock(a: TimeTracker | null | undefined, b: TimeTracker | null | undefined) {
+  if (!a || !b) return !a && !b
+  return a.years === b.years && a.days === b.days && a.hours === b.hours && a.minutes === b.minutes
+}
+
 export function checkpointsOnBranch(
   checkpoints: Checkpoint[],
   branchId: string | null,

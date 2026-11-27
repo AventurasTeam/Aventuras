@@ -314,6 +314,9 @@ class DatabaseService {
           // Must run exactly once per connection; placing it here (instead of
           // after the await below) avoids concurrent callers re-issuing it.
           await db.execute('PRAGMA foreign_keys = ON')
+          // ADR(automatic-writes-dont-count): the app's setup held this for the migrations that
+          // load just ran; it must be gone before any write that is the user's.
+          await db.execute("DELETE FROM sync_suspend WHERE reason = 'migration'")
           this.db = db
           return db
         })
@@ -375,6 +378,24 @@ class DatabaseService {
         }),
       })),
     })
+  }
+
+  /**
+   * Runs `statements` as one transaction that sync does not count as an edit, and returns the rows
+   * each of them affected. For a write the app makes on its own and every device would make alike;
+   * a user's edit must not come through here.
+   *
+   * ADR(automatic-writes-dont-count): the row is held in the same transaction, so a failure or a
+   * crash cannot leave counting off.
+   */
+  async withoutSyncCounting(reason: string, statements: DbStatement[]): Promise<number[]> {
+    if (statements.length === 0) return []
+    const counts = await this.transaction([
+      statement('INSERT INTO sync_suspend (reason) VALUES (?)', [reason]),
+      ...statements,
+      statement('DELETE FROM sync_suspend WHERE reason = ?', [reason]),
+    ])
+    return counts.slice(1, -1)
   }
 
   /**
@@ -2908,12 +2929,19 @@ class DatabaseService {
   /** Settles every row a closed app left unfinished. Run once per launch, before any generation. */
   async failInterruptedEmbeddedImages(): Promise<number> {
     const db = await this.getDb()
-    const result = await db.execute(
-      `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
-       WHERE ${IN_PROGRESS_IMAGES}`,
-      ['Interrupted'],
+    const pending = await db.select<unknown[]>(
+      `SELECT 1 FROM embedded_images WHERE ${IN_PROGRESS_IMAGES} LIMIT 1`,
     )
-    return result.rowsAffected ?? 0
+    if (pending.length === 0) return 0
+    // A story can be sent while an image is unfinished, so every device may settle the same row.
+    const [settled] = await this.withoutSyncCounting('interrupted images', [
+      statement(
+        `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
+         WHERE ${IN_PROGRESS_IMAGES}`,
+        ['Interrupted'],
+      ),
+    ])
+    return settled
   }
 
   async deleteEmbeddedImage(id: string): Promise<void> {
@@ -3007,6 +3035,11 @@ class DatabaseService {
     await this.deleteByIds('chapters', ids)
   }
 
+  /** Removes chapters whose entries are gone, which every device holding the story finds alike. */
+  async deleteBrokenChapters(ids: string[]): Promise<void> {
+    await this.withoutSyncCounting('chapter repair', deleteInStatements('chapters', 'id', ids))
+  }
+
   async deleteCheckpoints(ids: string[]): Promise<void> {
     await this.deleteByIds('checkpoints', ids)
   }
@@ -3096,12 +3129,19 @@ class DatabaseService {
    */
   async cleanupOrphanedEmbeddedImages(): Promise<number> {
     const db = await this.getDb()
-    // Find and delete embedded_images where the referenced entry_id doesn't exist
-    const result = await db.execute(
-      `DELETE FROM embedded_images
-       WHERE entry_id NOT IN (SELECT id FROM story_entries)`,
+    // Foreign keys leave nothing to find, and this runs on every story open, so look first.
+    const orphans = await db.select<unknown[]>(
+      `SELECT 1 FROM embedded_images
+       WHERE entry_id NOT IN (SELECT id FROM story_entries) LIMIT 1`,
     )
-    const deleted = result.rowsAffected ?? 0
+    if (orphans.length === 0) return 0
+    const [deleted] = await this.withoutSyncCounting('orphaned images', [
+      statement(
+        `DELETE FROM embedded_images
+         WHERE entry_id NOT IN (SELECT id FROM story_entries)`,
+        [],
+      ),
+    ])
     if (deleted > 0) {
       console.log(`[Database] Cleaned up ${deleted} orphaned embedded_images`)
     }

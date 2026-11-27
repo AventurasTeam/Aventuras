@@ -73,9 +73,12 @@ to 045, so a table added by a later migration is not checked until that pin move
 
 An edit that is reverted still reads as moved. That costs a question, never data.
 
-The startup sweep that fails images a closed app left generating, and the gallery's Cancel, are
-counted edits. A story received mid-generation and then swept or cancelled here reads as changed on
-both devices once the sender's image finishes, which costs a conflict prompt, not data.
+The gallery's Cancel is a counted edit. A story received mid-generation and then cancelled here
+reads as changed on both devices once the sender's image finishes, which costs a conflict prompt,
+not data. The startup sweep that fails images a closed app left generating is not counted.
+
+Loading a story is not an edit either: the clock restored from the branch's last entry or start
+checkpoint is derived, and is written only when it differs from the stored one.
 
 ## Applying an item
 
@@ -94,8 +97,11 @@ is many statements plus image streaming in Rust, and the frontend cannot `BEGIN`
   where the item was first imported from, stays. A pack is updated in place because
   `stories.pack_id` is `ON DELETE RESTRICT`.
 
-`sync_suspend` is for migrations, and for a startup write every device on a version makes alike,
-such as the template backfill in `packs/pack-service.ts`; see [persistence.md](persistence.md).
+`sync_suspend` is for migrations and for a write the app makes on its own that every device makes
+alike, such as the template backfill in `packs/pack-service.ts`. Migrations are held for from
+`lib.rs` and `DatabaseService.init`; everything else goes through `database.withoutSyncCounting`,
+which holds the row inside one transaction. See [the decision](../decisions/2026-11-27-automatic-writes-dont-count.md)
+and [persistence.md](persistence.md).
 
 ## Resolving a conflict
 

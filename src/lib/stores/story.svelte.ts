@@ -175,6 +175,7 @@ import {
   checkpointDeletionBlocker,
   entryNumber,
   needsStartCheckpoint,
+  sameClock,
   startClock,
   type SnapshotMark,
 } from '#lib/utils/storyNavigation.ts'
@@ -677,7 +678,7 @@ class StoryStore {
     // Delete invalid chapters from database and local state (batched)
     if (chaptersToDelete.length > 0) {
       try {
-        await database.deleteChapters(chaptersToDelete)
+        await database.deleteBrokenChapters(chaptersToDelete)
         log('Deleted invalid chapters:', chaptersToDelete)
         // This repair is otherwise invisible in production (the logger above is a dev-only
         // no-op), so a story can silently lose chapters with no trace for the user to report.
@@ -5664,27 +5665,32 @@ class StoryStore {
 
     const start = startClock(lastEntry, this.checkpoints)
     if (start !== undefined) {
-      await this.restoreTimeTrackerSnapshot(start)
+      await this.applyRestoredClock(start === null ? null : this.normalizeTime(start))
       return
     }
 
     const timeEnd = lastEntry.metadata?.timeEnd
     if (!timeEnd || typeof timeEnd !== 'object') return
 
-    const newTime = timeEnd as TimeTracker
-    // Only update if different to avoid unnecessary DB writes
-    const current = this.currentStory.timeTracker
-    if (
-      !current ||
-      current.years !== newTime.years ||
-      current.days !== newTime.days ||
-      current.hours !== newTime.hours ||
-      current.minutes !== newTime.minutes
-    ) {
-      this.currentStory = { ...this.currentStory, timeTracker: newTime }
-      await database.updateStory(this.currentStory.id, { timeTracker: newTime })
-      log('Time tracker restored from last entry:', newTime)
-    }
+    await this.applyRestoredClock(timeEnd as TimeTracker)
+  }
+
+  /**
+   * Sets the clock a branch implies on load, and writes only when it differs from the stored one.
+   *
+   * ADR(automatic-writes-dont-count): the clock is derived from the branch, and every device that
+   * opens it derives the same, so this write is not an edit to sync.
+   */
+  private async applyRestoredClock(target: TimeTracker | null): Promise<void> {
+    if (!this.currentStory || sameClock(this.currentStory.timeTracker, target)) return
+    const id = this.currentStory.id
+    await database.withoutSyncCounting('clock restore', [
+      target
+        ? database.saveTimeTrackerStatement(id, target)
+        : database.clearTimeTrackerStatement(id),
+    ])
+    this.currentStory = { ...this.currentStory, timeTracker: target }
+    log('Time tracker restored on load:', target)
   }
 
   /**
