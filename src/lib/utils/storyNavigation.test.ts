@@ -14,6 +14,7 @@ import {
   jumpToEntry,
   needsStartCheckpoint,
   resolveEntryByNumber,
+  sameClock,
   startClock,
   withSnapshotLandmarks,
   type EntryJumpUi,
@@ -823,5 +824,27 @@ describe('startClock', () => {
   it("takes the start checkpoint's clock, including none", () => {
     expect(startClock(imported, [checkpoint('i', clock)])).toEqual(clock)
     expect(startClock(imported, [checkpoint('i', null)])).toBeNull()
+  })
+})
+
+describe('sameClock', () => {
+  const clock = { years: 0, days: 2, hours: 3, minutes: 0 }
+
+  it('reads equal clocks as the same', () => {
+    expect(sameClock(clock, { ...clock })).toBe(true)
+  })
+
+  it('reads a differing field as different', () => {
+    expect(sameClock(clock, { ...clock, minutes: 1 })).toBe(false)
+  })
+
+  it('reads two absent clocks as the same, whichever way they are absent', () => {
+    expect(sameClock(null, null)).toBe(true)
+    expect(sameClock(undefined, null)).toBe(true)
+  })
+
+  it('reads an absent clock as different from a present one', () => {
+    expect(sameClock(null, clock)).toBe(false)
+    expect(sameClock(clock, undefined)).toBe(false)
   })
 })
