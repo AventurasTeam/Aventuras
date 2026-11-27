@@ -77,6 +77,9 @@ The gallery's Cancel is a counted edit. A story received mid-generation and then
 reads as changed on both devices once the sender's image finishes, which costs a conflict prompt,
 not data. The startup sweep that fails images a closed app left generating is not counted.
 
+Loading a story is not an edit either: the clock restored from the branch's last entry or start
+checkpoint is derived, and is written only when it differs from the stored one.
+
 ## Applying an item
 
 SQLite cannot disable a trigger, so a write made to apply an item would count as an edit. Nothing
