@@ -121,8 +121,7 @@ export function isStoryBusy(
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
 }
 
-/** isStoryBusy over every branch of the story, for a write that takes the whole story. */
-export function isAnyStoryBranchBusy(
+function isAnyStoryBranchBusy(
   txState: TxState,
   storyId: string,
   branchIds: readonly string[],
@@ -427,6 +426,10 @@ export const generationStore = {
   isUserEditBlocked: () =>
     isUserEditBlocked(getTxState(), currentStoryStore.getCurrentStory()?.branchId),
   isHeadReversalBlocked: (branchId: string) => isHeadReversalBlocked(getTxState(), branchId),
+  /** isStoryBusy over every branch of the story, turn bodies too: a whole-story write waits. */
+  isAnyStoryBranchBusy: (storyId: string, branchIds: readonly string[]) =>
+    isAnyStoryBranchBusy(getTxState(), storyId, branchIds) ||
+    branchIds.some((id) => turnBodyActive(id)),
   hasActiveRun: () => getTxState().runs.size > 0,
   /** From a turn's pending mark until its body settles, past an early end of the mark. */
   isTurnBodyActive: turnBodyActive,

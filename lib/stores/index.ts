@@ -127,7 +127,6 @@ export {
   cancelStoryRuns,
   interruptMemoryRuns,
   isBranchHeld,
-  isAnyStoryBranchBusy,
   isHeadReversalBlocked,
   isStoryBusy,
   isUserEditBlocked,

@@ -5,13 +5,7 @@ import { branchCopyOps, branches, pipelineRuns, stories, type SqlOp } from '@/li
 import { logger } from '@/lib/diagnostics'
 import { isStorySwapPending, readStorySwapPending, swapMarkerStored } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
-import {
-  generationStore,
-  isAnyStoryBranchBusy,
-  readStoryBranches,
-  rehydrateStories,
-  type BranchRow,
-} from '@/lib/stores'
+import { generationStore, readStoryBranches, rehydrateStories, type BranchRow } from '@/lib/stores'
 
 import { readUnfinishedRuns } from '../delta/unfinished-runs'
 import type { DbCtx } from '../types'
@@ -92,7 +86,7 @@ export async function checkStoryDuplicate(
   // Read last, so a marker stored during the reads above counts. The marker as stored, for any
   // story: the in-memory read sees only the open story's.
   if (await readStorySwapPending(ctx.db, storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
-  const runRegistered = () => isAnyStoryBranchBusy(generationStore.getTxState(), storyId, onStory)
+  const runRegistered = () => generationStore.isAnyStoryBranchBusy(storyId, onStory)
   if (runRegistered()) return refused(DUPLICATE_REFUSAL.runRegistered)
   if (hold != null) {
     // A run stores its end before leaving the store: re-read, then check runs, no await between.
@@ -246,8 +240,7 @@ export async function duplicateStory(
   // No await from here to the post: a swap or a run admitted during the reads above refuses.
   if (isStorySwapPending(storyId)) return refused(DUPLICATE_REFUSAL.swapPending)
   if (
-    isAnyStoryBranchBusy(
-      generationStore.getTxState(),
+    generationStore.isAnyStoryBranchBusy(
       storyId,
       onStory.map(({ id }) => id),
     )
