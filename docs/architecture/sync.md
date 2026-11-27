@@ -73,9 +73,9 @@ to 045, so a table added by a later migration is not checked until that pin move
 
 An edit that is reverted still reads as moved. That costs a question, never data.
 
-The startup sweep that fails images a closed app left generating, and the gallery's Cancel, are
-counted edits. A story received mid-generation and then swept or cancelled here reads as changed on
-both devices once the sender's image finishes, which costs a conflict prompt, not data.
+The gallery's Cancel is a counted edit. A story received mid-generation and then cancelled here
+reads as changed on both devices once the sender's image finishes, which costs a conflict prompt,
+not data. The startup sweep that fails images a closed app left generating is not counted.
 
 ## Applying an item
 

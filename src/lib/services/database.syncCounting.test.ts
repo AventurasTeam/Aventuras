@@ -72,4 +72,18 @@ describe('writes sync does not count', () => {
     await expect(database.withoutSyncCounting('why', [])).resolves.toEqual([])
     expect(mocks.invoke).not.toHaveBeenCalled()
   })
+
+  it('settles interrupted images under suspend, and only when some are unfinished', async () => {
+    await expect(database.failInterruptedEmbeddedImages()).resolves.toBe(0)
+    expect(mocks.invoke).not.toHaveBeenCalled()
+
+    mocks.select.mockResolvedValueOnce([{ 1: 1 }])
+    mocks.invoke.mockResolvedValueOnce([1, 3, 1])
+    await expect(database.failInterruptedEmbeddedImages()).resolves.toBe(3)
+
+    const statements = submittedStatements()
+    expect(statements[0].sql).toContain('sync_suspend')
+    expect(squashed(statements[1].sql)).toContain('UPDATE embedded_images SET')
+    expect(statements[1].params).toEqual(['Interrupted'])
+  })
 })

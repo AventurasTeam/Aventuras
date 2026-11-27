@@ -2929,12 +2929,19 @@ class DatabaseService {
   /** Settles every row a closed app left unfinished. Run once per launch, before any generation. */
   async failInterruptedEmbeddedImages(): Promise<number> {
     const db = await this.getDb()
-    const result = await db.execute(
-      `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
-       WHERE ${IN_PROGRESS_IMAGES}`,
-      ['Interrupted'],
+    const pending = await db.select<unknown[]>(
+      `SELECT 1 FROM embedded_images WHERE ${IN_PROGRESS_IMAGES} LIMIT 1`,
     )
-    return result.rowsAffected ?? 0
+    if (pending.length === 0) return 0
+    // A story can be sent while an image is unfinished, so every device may settle the same row.
+    const [settled] = await this.withoutSyncCounting('interrupted images', [
+      statement(
+        `UPDATE embedded_images SET ${SETTLE_UNFINISHED_IMAGE}
+         WHERE ${IN_PROGRESS_IMAGES}`,
+        ['Interrupted'],
+      ),
+    ])
+    return settled
   }
 
   async deleteEmbeddedImage(id: string): Promise<void> {
