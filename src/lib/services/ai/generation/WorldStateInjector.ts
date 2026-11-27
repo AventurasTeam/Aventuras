@@ -123,8 +123,8 @@ export const DEFAULT_WORLD_STATE_INJECTOR_CONFIG: WorldStateInjectorConfig = {
   tier3WholesaleWordBudget: WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
   maxTier2Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
   maxTier3Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
-  enableLLMSelection: true,
-  recentEntriesCount: 5,
+  enableLLMSelection: WORLD_STATE_INJECTION_DEFAULTS.enableLLMSelection,
+  recentEntriesCount: WORLD_STATE_INJECTION_DEFAULTS.recentEntriesCount,
 }
 
 /**

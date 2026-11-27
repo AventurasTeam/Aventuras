@@ -150,10 +150,10 @@ export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
   maxTier2Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
   maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
   tier3WholesaleWordBudget: ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
-  maxWordsPerEntry: 0,
-  enableLLMSelection: true,
-  recentEntriesCount: 5,
-  useSceneEntities: true,
+  maxWordsPerEntry: ENTRY_RETRIEVAL_DEFAULTS.maxWordsPerEntry,
+  enableLLMSelection: ENTRY_RETRIEVAL_DEFAULTS.enableLLMSelection,
+  recentEntriesCount: ENTRY_RETRIEVAL_DEFAULTS.recentEntriesCount,
+  useSceneEntities: ENTRY_RETRIEVAL_DEFAULTS.useSceneEntities,
 }
 
 /**

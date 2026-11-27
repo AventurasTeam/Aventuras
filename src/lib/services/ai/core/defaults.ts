@@ -36,6 +36,10 @@ export const WORLD_STATE_INJECTION_DEFAULTS = {
   maxTier2Entries: 40,
   /** Cap on Tier 3, in the branch where the LLM had to choose. */
   maxTier3Entries: 50,
+  /** Ask the model to choose among leftovers too many to include whole. */
+  enableLLMSelection: true,
+  /** Recent story entries scanned for Tier 2 name matching and shown to the Tier 3 prompt. */
+  recentEntriesCount: 5,
 } as const
 
 /**
@@ -60,6 +64,20 @@ export const ENTRY_RETRIEVAL_DEFAULTS = {
    * goes in whole, which is cheaper in latency than the call it replaces.
    */
   tier3WholesaleWordBudget: 1000,
+  /** Per-entry word cap in the prompt; 0 is unlimited. */
+  maxWordsPerEntry: 0,
+  /** Ask the model to choose among leftovers too many to include whole. */
+  enableLLMSelection: true,
+  /** Recent story entries scanned for Tier 2 matching and shown to the Tier 3 prompt. */
+  recentEntriesCount: 5,
+  /** Seed the second Tier 2 pass with what the world state put in the scene. */
+  useSceneEntities: true,
+} as const
+
+/** Style Reviewer limits. `recentEntriesCount` is an Advanced Settings slider. */
+export const STYLE_REVIEWER_DEFAULTS = {
+  /** Narration entries the review reads. */
+  recentEntriesCount: 32,
 } as const
 
 /**
