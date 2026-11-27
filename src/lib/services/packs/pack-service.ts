@@ -136,11 +136,7 @@ class PackService {
         ),
       )
       // Every device on this version adds the same rows, so they are not an edit to sync.
-      await database.transaction([
-        { sql: "INSERT INTO sync_suspend (reason) VALUES ('template backfill')", params: [] },
-        ...inserts,
-        { sql: "DELETE FROM sync_suspend WHERE reason = 'template backfill'", params: [] },
-      ])
+      await database.withoutSyncCounting('template backfill', inserts)
       console.log('[PackService] Backfilled missing templates', {
         pack: pack.id,
         added: [...missing.keys()],

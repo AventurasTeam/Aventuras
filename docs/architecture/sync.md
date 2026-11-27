@@ -94,8 +94,11 @@ is many statements plus image streaming in Rust, and the frontend cannot `BEGIN`
   where the item was first imported from, stays. A pack is updated in place because
   `stories.pack_id` is `ON DELETE RESTRICT`.
 
-`sync_suspend` is for migrations, and for a startup write every device on a version makes alike,
-such as the template backfill in `packs/pack-service.ts`; see [persistence.md](persistence.md).
+`sync_suspend` is for migrations and for a write the app makes on its own that every device makes
+alike, such as the template backfill in `packs/pack-service.ts`. Migrations are held for from
+`lib.rs` and `DatabaseService.init`; everything else goes through `database.withoutSyncCounting`,
+which holds the row inside one transaction. See [the decision](../decisions/2026-11-27-automatic-writes-dont-count.md)
+and [persistence.md](persistence.md).
 
 ## Resolving a conflict
 

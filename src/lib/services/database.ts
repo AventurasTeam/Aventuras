@@ -381,6 +381,24 @@ class DatabaseService {
   }
 
   /**
+   * Runs `statements` as one transaction that sync does not count as an edit, and returns the rows
+   * each of them affected. For a write the app makes on its own and every device would make alike;
+   * a user's edit must not come through here.
+   *
+   * ADR(automatic-writes-dont-count): the row is held in the same transaction, so a failure or a
+   * crash cannot leave counting off.
+   */
+  async withoutSyncCounting(reason: string, statements: DbStatement[]): Promise<number[]> {
+    if (statements.length === 0) return []
+    const counts = await this.transaction([
+      statement('INSERT INTO sync_suspend (reason) VALUES (?)', [reason]),
+      ...statements,
+      statement('DELETE FROM sync_suspend WHERE reason = ?', [reason]),
+    ])
+    return counts.slice(1, -1)
+  }
+
+  /**
    * Execute a raw SQL query for debugging purposes.
    * SELECT queries return rows; other queries return affected row count.
    */

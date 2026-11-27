@@ -47,4 +47,29 @@ describe('writes sync does not count', () => {
     const sql = mocks.execute.mock.calls.map(([statement]) => statement)
     expect(sql).toContain("DELETE FROM sync_suspend WHERE reason = 'migration'")
   })
+
+  it('wraps the statements in one transaction that holds and releases suspend', async () => {
+    mocks.invoke.mockResolvedValueOnce([1, 4, 2, 1])
+
+    const counts = await database.withoutSyncCounting('why', [
+      { sql: 'UPDATE a SET x = 1', params: [] },
+      { sql: 'DELETE FROM b', params: [] },
+    ])
+
+    const statements = submittedStatements()
+    expect(statements.map(({ sql }) => sql)).toEqual([
+      'INSERT INTO sync_suspend (reason) VALUES (?)',
+      'UPDATE a SET x = 1',
+      'DELETE FROM b',
+      'DELETE FROM sync_suspend WHERE reason = ?',
+    ])
+    expect(statements[0].params).toEqual(['why'])
+    expect(statements[3].params).toEqual(['why'])
+    expect(counts).toEqual([4, 2])
+  })
+
+  it('submits nothing for no statements', async () => {
+    await expect(database.withoutSyncCounting('why', [])).resolves.toEqual([])
+    expect(mocks.invoke).not.toHaveBeenCalled()
+  })
 })
