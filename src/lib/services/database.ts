@@ -314,6 +314,9 @@ class DatabaseService {
           // Must run exactly once per connection; placing it here (instead of
           // after the await below) avoids concurrent callers re-issuing it.
           await db.execute('PRAGMA foreign_keys = ON')
+          // ADR(automatic-writes-dont-count): the app's setup held this for the migrations that
+          // load just ran; it must be gone before any write that is the user's.
+          await db.execute("DELETE FROM sync_suspend WHERE reason = 'migration'")
           this.db = db
           return db
         })
