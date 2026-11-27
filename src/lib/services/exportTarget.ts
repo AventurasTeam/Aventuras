@@ -9,6 +9,7 @@
  */
 
 import { save } from '@tauri-apps/plugin-dialog'
+import { isIos } from '#lib/utils/platform.ts'
 
 export interface SaveFilter {
   name: string
@@ -27,6 +28,30 @@ export async function resolveSaveTarget(
   filename: string,
   filters: SaveFilter[],
 ): Promise<SaveTarget | null> {
-  const chosen = await save({ defaultPath: filename, filters })
-  return chosen ? { destPath: chosen } : null
+  const ios = isIos()
+  const chosen = await save({
+    defaultPath: ios ? withTimeOfDay(filename, new Date()) : filename,
+    filters,
+  })
+  if (!chosen) return null
+  if (ios && isFolderUrl(chosen)) {
+    throw new Error('iOS saved the file under a different name. Export again to a new name.')
+  }
+  return { destPath: chosen }
+}
+
+/**
+ * iOS exports a placeholder the app fills in afterwards. On a name clash, Keep Both hands back the
+ * folder rather than the file and leaves the placeholder over the existing one, so iOS gets a name
+ * that cannot clash.
+ */
+export function withTimeOfDay(filename: string, now: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const dot = filename.lastIndexOf('.')
+  return dot > 0 ? `${filename.slice(0, dot)}-${time}${filename.slice(dot)}` : `${filename}-${time}`
+}
+
+export function isFolderUrl(destination: string): boolean {
+  return destination.endsWith('/')
 }
