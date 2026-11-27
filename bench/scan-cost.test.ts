@@ -20,6 +20,9 @@ const PER_BRANCH = 3_000
 const OTHER_BRANCHES = [0, 4, 19]
 const IDS = 100
 const RUN_ROWS = [10_000, 50_000, 100_000]
+const READ_BRANCH = 'br_3'
+// Coprime to the 20 branches, so the unfinished runs spread over all of them, the read branch too.
+const UNFINISHED_EVERY = 1001
 
 function timed(fn: () => unknown): number {
   const samples: number[] = []
@@ -94,7 +97,7 @@ describe('scan cost', () => {
       )
       sqlite.exec('BEGIN')
       for (let i = 0; i < rows; i += 1) {
-        const finished = i % 1000 !== 0
+        const finished = i % UNFINISHED_EVERY !== 0
         insertRun.run(
           `run_${i}`,
           `act_${i}`,
@@ -106,13 +109,14 @@ describe('scan cost', () => {
       }
       sqlite.exec('COMMIT')
       const ctx = { db }
-      const plain = await timedAsync(() => readUnfinishedRuns('br_3', ctx))
+      const found = (await readUnfinishedRuns(READ_BRANCH, ctx)).length
+      const plain = await timedAsync(() => readUnfinishedRuns(READ_BRANCH, ctx))
       sqlite.exec(
         'CREATE INDEX bench_unfinished_runs ON pipeline_runs (branch_id) WHERE finished_at IS NULL',
       )
-      const indexed = await timedAsync(() => readUnfinishedRuns('br_3', ctx))
+      const indexed = await timedAsync(() => readUnfinishedRuns(READ_BRANCH, ctx))
       lines.push(
-        `  ${rows} runs: ${plain.toFixed(2)} ms as shipped, ${indexed.toFixed(2)} ms with the partial index`,
+        `  ${rows} runs, ${found} unfinished on the read branch: ${plain.toFixed(2)} ms as shipped, ${indexed.toFixed(2)} ms with the partial index`,
       )
     }
     process.stdout.write(`\nunfinished-run read\n${lines.join('\n')}\n\n`)

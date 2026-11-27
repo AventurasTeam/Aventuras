@@ -2020,12 +2020,12 @@ own.
   `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
   read an index probe; it's a schema change, so it waits for an owner.
   Found during Slice 6.6.
-  Re-measured with `pnpm bench:scan` (2026-11-26): 0.35 / 1.20 / 2.32 ms
+  Re-measured with `pnpm bench:scan` (2026-11-27): 0.35 / 1.18 / 2.33 ms
   at 10k / 50k / 100k rows as shipped, 0.05–0.09 ms with that partial
-  index. The duplicate's check reads once per branch, not twice; and
-  the re-run journal's update by `action_id`
-  (`lib/actions/delta/rerun-journal.ts`) is another whole-table scan the
-  index doesn't help. Routed from triage 2026-11-26.
+  index, on a branch holding 1 / 3 / 5 unfinished runs. The duplicate's
+  check reads once per branch, not twice; and the re-run journal's update
+  by `action_id` (`lib/actions/delta/rerun-journal.ts`) is another
+  whole-table scan the index doesn't help. Routed from triage 2026-11-26.
 - **M9.5 — A vec0 read outside KNN scans the whole table.**
   `vectorsByIdQuery` (`lib/db/embeddings/knn.ts`) and the vector
   deletes (`deleteVecOps`, `deleteVecIdsOps`, `deleteBranchVecOps` in
