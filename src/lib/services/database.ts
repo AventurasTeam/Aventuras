@@ -3124,12 +3124,19 @@ class DatabaseService {
    */
   async cleanupOrphanedEmbeddedImages(): Promise<number> {
     const db = await this.getDb()
-    // Find and delete embedded_images where the referenced entry_id doesn't exist
-    const result = await db.execute(
-      `DELETE FROM embedded_images
-       WHERE entry_id NOT IN (SELECT id FROM story_entries)`,
+    // Foreign keys leave nothing to find, and this runs on every story open, so look first.
+    const orphans = await db.select<unknown[]>(
+      `SELECT 1 FROM embedded_images
+       WHERE entry_id NOT IN (SELECT id FROM story_entries) LIMIT 1`,
     )
-    const deleted = result.rowsAffected ?? 0
+    if (orphans.length === 0) return 0
+    const [deleted] = await this.withoutSyncCounting('orphaned images', [
+      statement(
+        `DELETE FROM embedded_images
+         WHERE entry_id NOT IN (SELECT id FROM story_entries)`,
+        [],
+      ),
+    ])
     if (deleted > 0) {
       console.log(`[Database] Cleaned up ${deleted} orphaned embedded_images`)
     }

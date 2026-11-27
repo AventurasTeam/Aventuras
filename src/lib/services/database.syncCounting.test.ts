@@ -86,4 +86,14 @@ describe('writes sync does not count', () => {
     expect(squashed(statements[1].sql)).toContain('UPDATE embedded_images SET')
     expect(statements[1].params).toEqual(['Interrupted'])
   })
+
+  it('deletes orphaned images under suspend, and only when there are some', async () => {
+    await expect(database.cleanupOrphanedEmbeddedImages()).resolves.toBe(0)
+    expect(mocks.invoke).not.toHaveBeenCalled()
+
+    mocks.select.mockResolvedValueOnce([{ 1: 1 }])
+    mocks.invoke.mockResolvedValueOnce([1, 2, 1])
+    await expect(database.cleanupOrphanedEmbeddedImages()).resolves.toBe(2)
+    expect(submittedStatements()[0].sql).toContain('sync_suspend')
+  })
 })
