@@ -11,3 +11,4 @@ start from [adr-template.md](adr-template.md).
 ## documentation: How decisions and documentation are recorded and kept true
 
 - Record decisions: one ADR per decision in docs/decisions/, written in the PR that makes it. Only document what the code cannot express. [decision-records](decisions/2026-10-12-decision-records.md)
+- Give every ADR a tag or an `ADR(slug)` anchor; an ADR with neither is reachable only by scanning General. [every-decision-reachable](decisions/2026-11-27-every-decision-reachable.md)

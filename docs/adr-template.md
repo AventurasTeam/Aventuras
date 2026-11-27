@@ -8,7 +8,8 @@
 # becomes this ADR's line in docs/README.md.
 summary: '{Do X; Y would break Z.}'
 # Optional, default []. Concerns this is about, from docs/decision-tags.yml. Not locations:
-# an ADR(slug) comment at the code it governs carries those.
+# an ADR(slug) comment at the code it governs carries those. An untagged ADR needs such an
+# anchor, or only the General list leads to it.
 tags: []
 # Optional, default false. true copies the summary into AGENTS.md, which every agent loads.
 # Only for rules every change must follow; the block has a line budget.
