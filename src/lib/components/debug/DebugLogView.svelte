@@ -175,9 +175,11 @@
         logs: all,
       })
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-      const target = await resolveSaveTarget(`aventura-debug-${stamp}.json`, [
-        { name: 'JSON', extensions: ['json'] },
-      ])
+      const target = await resolveSaveTarget(
+        `aventura-debug-${stamp}.json`,
+        [{ name: 'JSON', extensions: ['json'] }],
+        { timestamped: true },
+      )
       if (!target) return // cancelled
       await writeTextFile(target.destPath, content)
       exported = true

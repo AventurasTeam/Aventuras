@@ -75,7 +75,7 @@
     </div>
   </div>
 
-  <ScrollArea class="h-full pr-4">
+  <ScrollArea class="h-full md:pr-4">
     <WritingStyleFields
       {selectedPOV}
       {selectedTense}

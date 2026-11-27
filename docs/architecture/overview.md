@@ -151,10 +151,33 @@ navigation bar is underneath it and the view already ends at its top edge, so `-
 otherwise every surface padded by `--safe-bottom` keeps a bar-height strip of background above the
 keyboard. `app.html` refreshes the variables on `resize`, which the margin change fires.
 
-Keyboard geometry has that one owner. Nothing in the page listens to `visualViewport`, and the
-bottom drawer's own `repositionInputs` is switched off in `ui/drawer` on Android: it measures the
-keyboard as the difference between `innerHeight` and the visual viewport, which there is now always
-zero. Elsewhere it stays on, since nothing else shrinks the layout viewport for the keyboard.
+Keyboard geometry has one owner per platform. On Android it is the margin above, nothing in the page
+listens to `visualViewport`, and the bottom drawer's own `repositionInputs` is switched off in
+`ui/drawer`: it measures the keyboard as the difference between `innerHeight` and the visual
+viewport, which there is now always zero.
+
+On iOS the owner is `utils/iosKeyboard.ts`. WKWebView never shortens the layout viewport for the
+keyboard; it shrinks the visual viewport and scrolls the whole document to the focused field, even
+with `overflow: hidden` on the body, which pushed the header and the top of any open sheet off screen.
+The tracker keeps the document scrolled to 0, publishes the keyboard's height as `--keyboard-inset`,
+and sets `data-keyboard-open` on the root. `--app-height` (`100dvh` less the inset) sizes the root
+layout and `AppShell`, so the story input sits on the keyboard; a sheet's bottom is the inset, and
+while the keyboard is up its height is capped below the status bar; `--safe-bottom` drops to 0
+because the keyboard covers the home indicator. With the document pinned, only the field's own
+scroller can reveal it, so the tracker scrolls the focused field into view when the keyboard opens
+and on each focus change while it is up. Anything over 30px counts as a keyboard, so the shortcut bar
+iOS shows above a hardware keyboard is cleared too. vaul's `repositionInputs` is off here too: it would move
+the sheet a second time.
+
+Anything that fills the screen sizes itself to `--app-height`, not `100dvh`, or its bottom ends up
+under the keyboard. On a phone held sideways the keyboard leaves about 150pt, so `AppShell` hides
+the warning banner and the header while it is up there, and the story input keeps the space.
+
+WebKit zooms the page into any focused field set below 16px, and the zoomed page runs off the right
+edge. `app.css` sets editable fields to 16px on iOS (`@supports (-webkit-touch-callout: none)`)
+rather than capping the viewport scale, so pinch zoom stays available. The tracker therefore
+measures the keyboard as `clientHeight - visualViewport.height × scale`, which a pinch zoom leaves
+unchanged, and only snaps the scroll back while the page is not zoomed.
 
 The page cannot fix this from its own side. `interactive-widget=resizes-content` in the viewport
 meta asks the _browser_ to shrink the layout viewport, and in an embedded WebView that resize can

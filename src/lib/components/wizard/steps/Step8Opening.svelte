@@ -11,7 +11,11 @@
   import { Badge } from '#lib/components/ui/badge/index.ts'
 
   import type { StoryMode, POV, Tense, TimeTracker } from '#lib/types/index.ts'
-  import { STARTING_TIME_VAR } from '#lib/services/storyTime/index.ts'
+  import {
+    DEFAULT_STARTING_TIME,
+    STARTING_TIME_VAR,
+    type ResultStartSource,
+  } from '#lib/services/storyTime/index.ts'
   import type {
     ExpandedSetting,
     GeneratedOpening,
@@ -37,7 +41,7 @@
     manualStartText: string
     guidanceStartText: string
     resultStartText: string
-    resultStartSource: 'returned' | 'guidance' | 'edited' | null
+    resultStartSource: ResultStartSource | null
     /** Null until checked; false when the pack's opening template cannot receive the start. */
     openingReceivesStart: boolean | null
 
@@ -145,8 +149,10 @@
         return 'Generation returned no time, so this is the one it was given. Edit the opening to change it.'
       case 'edited':
         return 'Set by you. Generating again, or a refinement that returns a time, replaces it.'
+      case 'imported':
+        return 'Imported with the opening. Edit the opening to change it.'
       default:
-        return 'No time set. Edit the opening to set one.'
+        return `No time set, so the story starts at ${DEFAULT_STARTING_TIME}. Edit the opening to set one.`
     }
   }
 
@@ -167,6 +173,7 @@
   hint: string,
   disabled: boolean = false,
   label: string = 'Starting Time',
+  defaultNote: boolean = true,
 )}
   <div class="space-y-1">
     <StoryTimeField
@@ -178,7 +185,11 @@
       placeholder="e.g. Y1 D1 19:00"
     />
     <div class="text-muted-foreground text-xs">
-      <p>When the story begins after the opening.</p>
+      <p>
+        When the story begins after the opening.{defaultNote
+          ? ` Left blank, it is ${DEFAULT_STARTING_TIME}.`
+          : ''}
+      </p>
       <p>{hint}</p>
     </div>
   </div>
@@ -281,13 +292,16 @@
           'imported-start',
           importedStartText,
           onImportedStartChange,
-          scenarioStated
-            ? 'Imported from the scenario.'
-            : 'Not defined by the scenario. Please provide your own value.',
+          scenarioStated ? 'Imported from the scenario.' : 'Not defined by the scenario.',
           scenarioStated,
         )}
 
-        <Button size="sm" class="gap-2" onclick={onUseCardOpening}>
+        <Button
+          size="sm"
+          class="gap-2"
+          onclick={onUseCardOpening}
+          disabled={isGeneratingOpening || isRefiningOpening}
+        >
           <Check class="h-3 w-3" />
           Use This Opening
         </Button>
@@ -363,9 +377,10 @@
               'guidance-start',
               guidanceStartText,
               onGuidanceStartChange,
-              'This value is used in the AI opening generation',
+              'Passed to the AI. Left blank, it suggests one.',
               openingReceivesStart === false,
               'Starting Time (Optional)',
+              false,
             )}
 
             {#if openingReceivesStart === false}
@@ -490,6 +505,8 @@
           onResultStartChange,
           resultStartNote(),
           !isEditingOpening,
+          'Starting Time',
+          false,
         )}
         {#if isEditingOpening}
           <div class="flex justify-end gap-2">

@@ -150,15 +150,22 @@ Editing an entry from before a fork has a wider, pre-existing consequence, descr
 
 The story begins where its opening ends, so the **starting time is the opening's ending**. The story
 is created with it on the clock (`createStoryFromWizard`'s `startingTime`), and the opening entry is
-stamped zero-length at it. It is a reading, not an anchor. The wizard's opening step cannot finish
-without one.
+stamped zero-length at it. It is a reading, not an anchor. A start left blank takes
+`DEFAULT_STARTING_TIME` (`Y1 D1 00:00`, `storyStartFromText`), so the clock never starts at null; only
+text that is not a time stops the step, and the footer then says so and names the field
+(`components/wizard/beginStory.ts`). Generation is still told `(suggest one)` for a blank guidance,
+so a generated opening that returns a time keeps it.
 
 Each opening the step offers carries its own start, and the one belonging to the opening used seeds
 the story, in the order `createStory` picks an opening: generated, written, imported
 (`NarrativeStore.startingTime`).
 
 - **Imported** — a Scenario Vault entry may state one (`scenario_vault.starting_time`), and it
-  applies only to the scenario's first message (`scenarioOpeningStart`, `greetingStart`).
+  applies only to the scenario's first message (`scenarioOpeningStart`, `greetingStart`). The imported opening used is the greeting selected on the step, whether or not
+  **Use This Opening** was pressed; pressing it moves the start typed beside it to the result.
+  The Vault Assistant reads it as text (`toScenarioDetails`) and sets or clears it through
+  `create_scenario` / `update_scenario`: `""` clears it, null leaves it unchanged as for every
+  other field, and text that is not a time is refused rather than dropped.
 - **Guidance** — what generation is told, through `TIME: opening ends at {{ storyStartingTime }}` in
   the four opening templates, or `(suggest one)` when empty.
 - **Result** — what generation returned, or the guidance when it returned nothing readable

@@ -7,10 +7,31 @@
 
 import { tool } from 'ai'
 import * as z from 'zod'
-import type { VaultScenario } from '#lib/types/index.ts'
+import type { TimeTracker, VaultScenario } from '#lib/types/index.ts'
 import type { VaultPendingChange } from '../schemas/vault'
 import { withUnsaved } from '#lib/services/ai/vault/effectiveVault.ts'
 import { vaultScenarioInputSchema, vaultScenarioNpcSchema } from '../schemas'
+import { formatStoryTime, parseStoryTime } from '#lib/services/storyTime/index.ts'
+
+const STARTING_TIME_INPUT = z
+  .string()
+  .nullable()
+  .optional()
+  .describe(
+    'When a story from this scenario begins, at the end of its first message, as "Y1 D1 19:00" (year, day, 24-hour time). "" clears it; null or omitted leaves it unchanged. Only applies when the scenario has a first message.',
+  )
+
+/** null or undefined leaves the start alone, as for every other field; blank clears it. */
+function readStartingTime(
+  text: string | null | undefined,
+): { ok: true; value: TimeTracker | null | undefined } | { ok: false; error: string } {
+  if (text === undefined || text === null) return { ok: true, value: undefined }
+  if (!text.trim()) return { ok: true, value: null }
+  const value = parseStoryTime(text)
+  return value
+    ? { ok: true, value }
+    : { ok: false, error: `startingTime "${text}" is not a time. Use the form "Y1 D1 19:00".` }
+}
 
 /**
  * Context provided to scenario tools.
@@ -26,6 +47,16 @@ export interface ScenarioToolContext {
 }
 
 /** The shape `read_scenario` returns, and the focused-entity record the Vault sends. */
+/** The tool result's copy of a change, with the start written the way `read_scenario` shows it. */
+function forModel(change: VaultPendingChange) {
+  if (change.entityType !== 'scenario' || !('data' in change) || !change.data) return change
+  const start = change.data.startingTime
+  return {
+    ...change,
+    data: { ...change.data, startingTime: start ? formatStoryTime(start) : null },
+  }
+}
+
 export function toScenarioDetails(scenario: VaultScenario) {
   return {
     id: scenario.id,
@@ -36,6 +67,7 @@ export function toScenarioDetails(scenario: VaultScenario) {
     primaryCharacterName: scenario.primaryCharacterName,
     firstMessage: scenario.firstMessage,
     alternateGreetings: scenario.alternateGreetings,
+    startingTime: scenario.startingTime ? formatStoryTime(scenario.startingTime) : null,
     tags: scenario.tags,
     favorite: scenario.favorite,
     source: scenario.source,
@@ -58,6 +90,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
       primaryCharacterName: s.primaryCharacterName,
       firstMessage: s.firstMessage,
       alternateGreetings: s.alternateGreetings,
+      startingTime: s.startingTime ?? null,
       tags: s.tags,
       favorite: s.favorite,
     }
@@ -132,6 +165,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
           .optional()
           .default([])
           .describe('Alternative opening messages'),
+        startingTime: STARTING_TIME_INPUT,
         tags: z.array(z.string()).optional().default([]).describe('Tags for organization'),
         favorite: z.boolean().optional().default(false).describe('Whether to favorite'),
       }),
@@ -143,6 +177,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
         primaryCharacterName,
         firstMessage,
         alternateGreetings,
+        startingTime,
         tags,
         favorite,
       }: {
@@ -153,9 +188,12 @@ export function createScenarioTools(context: ScenarioToolContext) {
         primaryCharacterName: string
         firstMessage?: string | null
         alternateGreetings?: string[]
+        startingTime?: string | null
         tags?: string[]
         favorite?: boolean
       }) => {
+        const start = readStartingTime(startingTime)
+        if (!start.ok) return { success: false, error: start.error }
         const changeId = generateId()
         const pendingChange: VaultPendingChange = {
           id: changeId,
@@ -170,6 +208,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
             primaryCharacterName,
             firstMessage: firstMessage ?? null,
             alternateGreetings: alternateGreetings ?? [],
+            startingTime: start.value ?? null,
             tags: tags ?? [],
             favorite: favorite ?? false,
           },
@@ -180,7 +219,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending scenario "${name}". Awaiting approval.`,
         }
       },
@@ -204,6 +243,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
           .describe('New NPC list (FULLY replaces existing)'),
         primaryCharacterName: z.string().optional().describe('New primary character name'),
         firstMessage: z.string().nullable().optional().describe('New first message'),
+        startingTime: STARTING_TIME_INPUT,
         replaceAlternateGreetings: z
           .array(z.string())
           .optional()
@@ -235,6 +275,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
         removeTags,
         addAlternateGreetings,
         removeAlternateGreetings,
+        startingTime,
         ...updates
       }: {
         scenarioId: string
@@ -244,6 +285,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
         npcs?: z.infer<typeof vaultScenarioNpcSchema>[]
         primaryCharacterName?: string
         firstMessage?: string | null
+        startingTime?: string | null
         replaceAlternateGreetings?: string[]
         addAlternateGreetings?: string[]
         removeAlternateGreetings?: string[]
@@ -257,6 +299,8 @@ export function createScenarioTools(context: ScenarioToolContext) {
         if (!scenario) {
           return { success: false, error: `Scenario with ID "${scenarioId}" not found` }
         }
+        const start = readStartingTime(startingTime)
+        if (!start.ok) return { success: false, error: start.error }
 
         // Resolve tags: explicit replacement wins, otherwise apply incremental ops
         let resolvedTags = scenario.tags
@@ -310,6 +354,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
             ...cleanUpdates,
             tags: resolvedTags,
             alternateGreetings: resolvedGreetings,
+            ...(start.value !== undefined && { startingTime: start.value }),
           },
           previous,
           status: 'pending',
@@ -319,7 +364,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending update for "${scenario.name}". Awaiting approval.`,
         }
       },
@@ -357,7 +402,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending deletion for "${scenario.name}"${reason ? ` (${reason})` : ''}. Awaiting approval.`,
         }
       },
@@ -405,7 +450,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending NPC addition "${npc.name}" to "${scenario.name}". Awaiting approval.`,
         }
       },
@@ -480,7 +525,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending NPC update for "${npcName}" in "${scenario.name}". Awaiting approval.`,
         }
       },
@@ -531,7 +576,7 @@ export function createScenarioTools(context: ScenarioToolContext) {
 
         return {
           success: true,
-          pendingChange,
+          pendingChange: forModel(pendingChange),
           message: `Created pending NPC removal "${npcName}" from "${scenario.name}". Awaiting approval.`,
         }
       },

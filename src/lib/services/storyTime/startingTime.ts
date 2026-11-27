@@ -20,7 +20,7 @@ export function templateReceivesStartingTime(content: string | null | undefined)
   return !!content && new RegExp(`{{\\s*${STARTING_TIME_VAR}\\b`).test(content)
 }
 
-export type ResultStartSource = 'returned' | 'guidance' | 'edited'
+export type ResultStartSource = 'returned' | 'guidance' | 'edited' | 'imported'
 
 /**
  * The generated opening's own start: what the model returned, or the guidance it was given when
@@ -52,6 +52,14 @@ export function scenarioOpeningStart(scenario: {
 /** The start shown beside an imported greeting: the scenario's describes its first message only. */
 export function greetingStart(index: number, scenarioStart: TimeTracker | null): string {
   return index === 0 && scenarioStart ? formatStoryTime(scenarioStart) : ''
+}
+
+/** What a new story starts at when the start beside its opening is left blank. */
+export const DEFAULT_STARTING_TIME = 'Y1 D1 00:00'
+
+/** The start a typed value seeds the story with: blank takes the default, unreadable is null. */
+export function storyStartFromText(text: string): ReturnType<typeof parseStoryTime> {
+  return parseStoryTime(text.trim() ? text : DEFAULT_STARTING_TIME)
 }
 
 /** The value the opening prompts are given for the start. */

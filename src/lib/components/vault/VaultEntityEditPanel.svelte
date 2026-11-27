@@ -96,17 +96,7 @@
     const existing = scenarioVault.getById(eid)
     if (!existing) return null
     const composed = vaultEditor.composePendingChanges(scenarioToRecord(existing), 'scenario', eid)
-    return {
-      name: composed.name,
-      description: composed.description,
-      settingSeed: composed.settingSeed,
-      npcs: $state.snapshot(composed.npcs),
-      primaryCharacterName: composed.primaryCharacterName,
-      firstMessage: composed.firstMessage,
-      alternateGreetings: [...(composed.alternateGreetings ?? [])],
-      tags: [...composed.tags],
-      favorite: composed.favorite,
-    }
+    return $state.snapshot(composed)
   })
 
   // The data passed to the form: in view mode, use the reactive derived
@@ -332,17 +322,7 @@
         favorite: charData.favorite,
       })
     } else if (entityType === 'scenario' && scenarioData) {
-      await scenarioVault.update(entityId, {
-        name: scenarioData.name,
-        description: scenarioData.description,
-        settingSeed: scenarioData.settingSeed,
-        npcs: scenarioData.npcs,
-        primaryCharacterName: scenarioData.primaryCharacterName,
-        firstMessage: scenarioData.firstMessage,
-        alternateGreetings: scenarioData.alternateGreetings,
-        tags: scenarioData.tags,
-        favorite: scenarioData.favorite,
-      })
+      await scenarioVault.update(entityId, $state.snapshot(scenarioData))
     }
 
     onViewModeSaved?.(viewPendingIds)

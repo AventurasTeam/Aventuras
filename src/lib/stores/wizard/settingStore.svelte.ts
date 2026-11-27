@@ -28,6 +28,8 @@ export class SettingStore {
 
   // Scenario Selection
   selectedScenarioId = $state<string | null>(null)
+  /** The vault scenario last loaded into the wizard; a quick-start template replaces it. */
+  loadedVaultScenario = $state<{ id: string; name: string } | null>(null)
 
   // Vault Integration
   showScenarioVaultPicker = $state(false)

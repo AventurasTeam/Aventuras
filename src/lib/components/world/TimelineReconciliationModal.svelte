@@ -871,7 +871,7 @@
       ? '--tw-enter-translate-x: 0; --tw-enter-translate-y: 0; --tw-exit-translate-x: 0; --tw-exit-translate-y: 0; --tw-enter-scale: 1; --tw-exit-scale: 1;'
       : undefined}
     class={narrow
-      ? 'top-0 left-0 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-0 p-0 pt-[var(--safe-top)] pb-[var(--safe-bottom)]'
+      ? 'top-0 left-0 flex h-(--app-height) w-screen max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-0 p-0 pt-(--safe-top) pb-(--safe-bottom)'
       : 'flex h-[85vh] max-w-3xl flex-col pb-3'}
   >
     <!--

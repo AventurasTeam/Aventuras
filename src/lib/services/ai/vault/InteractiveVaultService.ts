@@ -1037,6 +1037,7 @@ export class InteractiveVaultService extends BaseAIService {
           primaryCharacterName: change.data.primaryCharacterName,
           firstMessage: change.data.firstMessage ?? null,
           alternateGreetings: change.data.alternateGreetings ?? [],
+          startingTime: change.data.startingTime ?? null,
           tags: change.data.tags,
           favorite: change.data.favorite ?? false,
           source: 'manual',

@@ -255,7 +255,7 @@
 />
 
 <div
-  class="app-shell bg-surface-900 relative flex h-screen w-screen flex-col"
+  class="app-shell bg-surface-900 relative flex h-(--app-height) w-screen flex-col"
   use:swipe={{
     onSwipeLeft: handleEdgeSwipeLeft,
     onSwipeRight: handleEdgeSwipeRight,
@@ -263,7 +263,7 @@
   }}
 >
   <!-- Profile Warning Banner (shown when API profiles need updating) -->
-  <ProfileWarningBanner />
+  <div class="typing-hides contents"><ProfileWarningBanner /></div>
 
   <!-- Main app container -->
   <div class="flex min-h-0 flex-1">
@@ -278,7 +278,7 @@
 
     <!-- Main content area -->
     <div class="flex flex-1 flex-col overflow-hidden">
-      <Header />
+      <div class="typing-hides contents"><Header /></div>
 
       <!-- The navigation panel is a flex sibling of the content, so on desktop it pushes.
            `relative` is for the mobile case, where it overlays this area instead — below
@@ -427,8 +427,16 @@
     right: 0;
     height: var(--safe-bottom);
     background-color: var(--color-surface-900);
-    z-index: 9999;
+    /* Under the overlays (sidebars 40+, sheets 50), which bring their own bottom inset. */
+    z-index: 30;
     pointer-events: none;
+  }
+
+  /* A phone on its side with the keyboard up has room for the input and little else. */
+  @media (orientation: landscape) and (max-height: 500px) {
+    :global(:root[data-keyboard-open]) .typing-hides {
+      display: none;
+    }
   }
 
   /* Mobile sidebar overlay - visible only on touch devices */

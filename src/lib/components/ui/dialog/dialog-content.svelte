@@ -8,16 +8,19 @@
     ref = $bindable(null),
     class: className,
     portalProps,
+    overlayClass,
     children,
     ...restProps
   }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
     portalProps?: DialogPrimitive.PortalProps
+    /** For a dialog that must stack above others: its overlay needs the same z-index. */
+    overlayClass?: string
     children: Snippet
   } = $props()
 </script>
 
 <Dialog.Portal {...portalProps}>
-  <Dialog.Overlay />
+  <Dialog.Overlay class={overlayClass} />
   <DialogPrimitive.Content
     bind:ref
     class={cn(

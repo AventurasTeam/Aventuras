@@ -103,6 +103,7 @@ export function createViewerTools(context: ViewerToolContext) {
               primaryCharacterName: scenario.primaryCharacterName,
               firstMessage: scenario.firstMessage,
               alternateGreetings: scenario.alternateGreetings,
+              startingTime: scenario.startingTime ?? null,
               tags: scenario.tags,
               favorite: scenario.favorite,
             },
