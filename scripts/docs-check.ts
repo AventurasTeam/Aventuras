@@ -28,6 +28,8 @@ const END_MARKER = '<!-- END GENERATED: decisions -->'
 const SUMMARY_AIM = 118
 const SUMMARY_WARN = 236
 const SUMMARY_MAX = 512
+// Past this many entries a tag's section is too long to scan; its tag should be split.
+const SECTION_MAX = 20
 const REGENERATE = 'run `npm run docs:gen` and commit the result'
 
 const FRONTMATTER_KEYS = ['summary', 'tags', 'cross-cutting', 'active', 'superseded-by']
@@ -115,6 +117,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
   }
   if (written.length > 0) files = listFiles(root)
 
+  const anchored = new Set<string>()
   const index = indexFiles(files)
   const slugCache = new Map<string, Set<string>>()
   const headingSlugsOf = (file: string) => {
@@ -144,6 +147,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     text.split('\n').forEach((line, i) => {
       const where = `${file}:${i + 1}`
       for (const [, raw] of line.matchAll(ANCHOR)) {
+        anchored.add(raw.trim())
         const problem = anchorProblem(raw.trim(), bySlug)
         if (problem) errors.push(`${where}: ${problem}`)
       }
@@ -159,6 +163,28 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     if (!covered) {
       warnings.push(
         `${file}: no ADR links to this evidence; link it or its folder from an ADR, or delete it`,
+      )
+    }
+  }
+
+  for (const adr of adrs) {
+    if (adr.tags.length > 0 || anchored.has(adr.slug)) continue
+    if (adr.state === 'active' && !adr.crossCutting) {
+      warnings.push(
+        `${adr.path}: no tag and no ADR(${adr.slug}) anchor, so only the General list leads here; tag it or anchor it in the code it governs`,
+      )
+    } else if (adr.state === 'deprecated') {
+      notices.push(
+        `${adr.path}: deprecated, and no code anchors it any more; if nothing still follows it, set active: false`,
+      )
+    }
+  }
+  const listed = adrs.filter(isListed)
+  for (const tag of tags.keys()) {
+    const count = listed.filter((a) => a.tags.includes(tag)).length
+    if (count > SECTION_MAX) {
+      notices.push(
+        `${README}: ${tag} lists ${count} decisions, over ${SECTION_MAX}; split it in ${TAGS_FILE}`,
       )
     }
   }

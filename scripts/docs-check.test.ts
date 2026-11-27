@@ -176,7 +176,7 @@ describe('frontmatter', () => {
 
   it('notes a summary over two lines, without failing even under --strict', () => {
     expect(check(repo({ [file]: adr(`summary: ${'x'.repeat(236)}`) }), true).notices).toEqual([])
-    const result = check(repo({ [file]: adr(`summary: ${'x'.repeat(237)}`) }), true)
+    const result = check(repo({ [file]: adr(`summary: ${'x'.repeat(237)}\ntags: [cache]`) }), true)
     expect(result).toMatchObject({ ok: true, errors: [], warnings: [] })
     expect(result.notices).toEqual([
       `${file}: summary is 237 characters, past two lines; aim for under 118`,
@@ -392,7 +392,7 @@ describe('evidence', () => {
   it('does not count a link to docs/evidence/ itself, or to anything above it', () => {
     const root = repo({
       'docs/decisions/2026-01-01-a.md': adr(
-        'summary: A.',
+        'summary: A.\ntags: [cache]',
         `${BODY}\n[all](../evidence/) [docs](../) [root](../../)\n`,
       ),
       'docs/evidence/run.log': 'data\n',
@@ -402,6 +402,91 @@ describe('evidence', () => {
       expect.stringContaining('docs/evidence/run.log: no ADR links'),
       expect.stringContaining('docs/evidence/study/data.csv: no ADR links'),
     ])
+  })
+})
+
+describe('reachability', () => {
+  const file = (slug: string) => `docs/decisions/2026-01-01-${slug}.md`
+  const bare = file('a')
+  const anchorA = '// ADR(a): kept\n'
+
+  it('warns about an untagged, unanchored active ADR, and fails only under --strict', () => {
+    const root = repo({ [bare]: adr('summary: A.') })
+    const warning = `${bare}: no tag and no ADR(a) anchor, so only the General list leads here; tag it or anchor it in the code it governs`
+    expect(check(root).warnings).toEqual([warning])
+    expect(check(root).ok).toBe(true)
+    expect(check(root, true)).toMatchObject({ ok: false, errors: [], warnings: [warning] })
+  })
+
+  it.each([
+    ['tagged', { [bare]: adr('summary: A.\ntags: [cache]') }],
+    ['anchored from source', { [bare]: adr('summary: A.'), 'src/a.ts': anchorA }],
+    ['cross-cutting', { [bare]: adr('summary: A.\ncross-cutting: true') }],
+    ['retired', { [bare]: adr('summary: A.\nactive: false') }],
+  ])('does not warn about an ADR that is %s', (_, files) => {
+    expect(check(repo(files), true)).toMatchObject({ ok: true, errors: [], warnings: [] })
+  })
+
+  it('does not count an anchor in a Markdown file or under docs/', () => {
+    const root = repo({
+      [bare]: adr('summary: A.'),
+      'README.md': anchorA,
+      'docs/notes.txt': anchorA,
+    })
+    expect(check(root).warnings).toHaveLength(1)
+  })
+
+  const many = (count: number, extra = '') => {
+    const files: Record<string, string> = { 'src/anchors.ts': '' }
+    for (let i = 0; i < count; i++) {
+      const slug = `d${i}`
+      files[file(slug)] = adr(`summary: D${i}.${extra}`)
+      files['src/anchors.ts'] += `// ADR(${slug}): kept\n`
+    }
+    return files
+  }
+
+  it('notes a tag section over the limit, not at it', () => {
+    expect(check(repo(many(20, '\ntags: [cache]')), true).notices).toEqual([])
+    const result = check(repo(many(21, '\ntags: [cache]')), true)
+    expect(result).toMatchObject({ ok: true, errors: [], warnings: [] })
+    expect(result.notices).toEqual([
+      'docs/README.md: cache lists 21 decisions, over 20; split it in docs/decision-tags.yml',
+    ])
+  })
+
+  it('does not note an oversized General section', () => {
+    expect(check(repo(many(40)), true)).toMatchObject({
+      ok: true,
+      errors: [],
+      warnings: [],
+      notices: [],
+    })
+  })
+
+  describe('deprecated', () => {
+    const successor = { [file('b')]: adr('summary: B.\ntags: [cache]') }
+    const deprecated = (frontmatter = '') => ({
+      ...successor,
+      [bare]: adr(`summary: A.${frontmatter}\nactive: true\nsuperseded-by: b`),
+    })
+    const notice = `${bare}: deprecated, and no code anchors it any more; if nothing still follows it, set active: false`
+
+    it('notes an untagged one no code anchors, without a warning', () => {
+      const result = check(repo(deprecated()), true)
+      expect(result).toMatchObject({ ok: true, errors: [], warnings: [] })
+      expect(result.notices).toEqual([notice])
+    })
+
+    it('drops the notice once an anchor exists', () => {
+      const result = check(repo({ ...deprecated(), 'src/a.ts': anchorA }), true)
+      expect(result).toMatchObject({ ok: true, errors: [], warnings: [], notices: [] })
+    })
+
+    it('does not note a tagged one', () => {
+      const result = check(repo(deprecated('\ntags: [cache]')), true)
+      expect(result).toMatchObject({ ok: true, errors: [], warnings: [], notices: [] })
+    })
   })
 })
 
