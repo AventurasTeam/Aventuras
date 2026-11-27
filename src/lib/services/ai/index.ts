@@ -481,9 +481,9 @@ class AIService {
     storyId: string | undefined,
     entries: StoryEntry[],
     mode: StoryMode = 'adventure',
-    pov?: POV,
-    tense?: Tense,
-    recentEntriesCount?: number,
+    pov: POV | undefined,
+    tense: Tense | undefined,
+    recentEntriesCount: number,
     activityParentId?: string,
   ): Promise<StyleReviewResult> {
     const service = serviceFactory.createStyleReviewerService()

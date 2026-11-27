@@ -158,7 +158,7 @@ describe('style review', () => {
 
   it('returns its fallback with the reason', async () => {
     const service = new StyleReviewerService('styleReviewer' as any, false)
-    const result = await service.analyzeStyle('s', entries)
+    const result = await service.analyzeStyle('s', entries, undefined, undefined, undefined, 32)
     expect(result).toMatchObject({
       phrases: [],
       overallAssessment: 'Analysis failed.',

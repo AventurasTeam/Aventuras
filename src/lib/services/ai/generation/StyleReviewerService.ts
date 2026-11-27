@@ -82,7 +82,7 @@ export class StyleReviewerService extends BaseAIService {
     mode: StoryMode = 'adventure',
     pov: POV = 'second',
     tense: Tense = 'present',
-    recentEntriesCount = 32,
+    recentEntriesCount: number,
     activityParentId?: string,
   ): Promise<StyleReviewResult> {
     log('analyzeStyle', { entriesCount: entries.length })
