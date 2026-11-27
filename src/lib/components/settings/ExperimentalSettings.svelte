@@ -51,7 +51,7 @@
   let isBackingUp = $state(false)
   let backupResult = $state<{ success: boolean; message: string } | null>(null)
   let hasEverBackedUp = $state(false)
-  let isRestoring = $state(false)
+  const isRestoring = $derived(ui.restoreInProgress || ui.restoreComplete)
   let restoreError = $state<string | null>(null)
   let showBackupConfirm = $state(false)
   let showRestoreConfirm = $state(false)
@@ -173,7 +173,6 @@
   }
 
   async function doRestore(zipPath: string) {
-    isRestoring = true
     ui.restoreInProgress = true
     restoreError = null
     try {
@@ -182,7 +181,6 @@
     } catch (error) {
       console.error('[ExperimentalSettings] Restore failed:', error)
       restoreError = errMessage(error)
-      isRestoring = false
       ui.restoreInProgress = false
       return
     }

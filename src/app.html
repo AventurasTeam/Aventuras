@@ -4,17 +4,6 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <script>
-      // iOS zooms the page into any focused field under 16px; maximum-scale stops that.
-      ;(function () {
-        var ua = navigator.userAgent
-        var ios =
-          /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
-        if (!ios) return
-        var meta = document.querySelector('meta[name="viewport"]')
-        if (meta) meta.content += ', maximum-scale=1'
-      })()
-    </script>
     <title>Aventuras</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

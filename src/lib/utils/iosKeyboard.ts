@@ -52,3 +52,9 @@ export function trackIosKeyboard(): () => void {
     root.removeAttribute('data-keyboard-open')
   }
 }
+
+/** iOS zooms the page into any focused field under 16px; capping the scale stops that. */
+export function preventFocusZoom(): void {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
+  if (meta && !meta.content.includes('maximum-scale')) meta.content += ', maximum-scale=1'
+}

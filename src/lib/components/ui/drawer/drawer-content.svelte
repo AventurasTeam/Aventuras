@@ -36,6 +36,11 @@
 </DrawerPrimitive.Portal>
 
 <style>
+  /* Unlayered, so a caller's p-0 cannot drop it; padding so the background runs under the home indicator. */
+  :global(.drawer-content) {
+    padding-bottom: var(--safe-bottom);
+  }
+
   /* Over a caller's own height: the sheet ends at the keyboard and must not run under the status bar. */
   :global(:root[data-keyboard-open] .drawer-content) {
     max-height: calc(var(--app-height) - var(--safe-top));

@@ -20,11 +20,7 @@
 </script>
 
 {#if isMobile.current}
-  <Drawer.Content
-    class={cn('safe-area-bottom h-auto max-h-[85vh] p-0', sheetClass)}
-    {handle}
-    {...props}
-  >
+  <Drawer.Content class={cn('h-auto max-h-[85vh] p-0', sheetClass)} {handle} {...props}>
     {@render children?.()}
   </Drawer.Content>
 {:else}
@@ -47,10 +43,3 @@
     {@render children?.()}
   </Dialog.Content>
 {/if}
-
-<style>
-  /* Padding, not margin: the sheet's background runs under the home indicator. */
-  :global(.safe-area-bottom) {
-    padding-bottom: var(--safe-bottom);
-  }
-</style>

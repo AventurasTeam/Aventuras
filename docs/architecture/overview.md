@@ -171,7 +171,7 @@ Anything that fills the screen sizes itself to `--app-height`, not `100dvh`, or 
 under the keyboard. On a phone held sideways the keyboard leaves about 150pt, so `AppShell` hides
 the warning banner and the header while it is up there, and the story input keeps the space.
 
-`app.html` also adds `maximum-scale=1` to the viewport on iOS. Without it WebKit zooms the page into
+`preventFocusZoom` in the same module also adds `maximum-scale=1` to the viewport on iOS. Without it WebKit zooms the page into
 any focused field set below 16px, and the zoomed page runs off the right edge.
 
 The page cannot fix this from its own side. `interactive-widget=resizes-content` in the viewport
