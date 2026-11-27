@@ -14,8 +14,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
-const PANEL_CLASS = 'sm:max-w-[360px]'
+// The web panel fills the viewport less its inset below `sm` (dialog.tsx), so web caps it bare.
+const PANEL_CLASS = cn('sm:max-w-[360px]', Platform.select({ web: 'max-w-[360px]' }))
 
 // An IME's confirming Enter isn't a submit; it can carry key code 229 with isComposing false.
 const IME_KEY_CODE = 229
