@@ -15,4 +15,4 @@ start from [adr-template.md](adr-template.md).
 
 ## persistence: SQLite schema, migrations, storage, and the settings blob
 
-- Hold sync_suspend for migrations and the app’s own writes; counted, they read every synced item as changed on both devices. [automatic-writes-dont-count](decisions/2026-11-27-automatic-writes-dont-count.md)
+- Hold sync_suspend for migrations and the app’s own writes, or sync sees every item they touch as changed on both devices. [automatic-writes-dont-count](decisions/2026-11-27-automatic-writes-dont-count.md)
