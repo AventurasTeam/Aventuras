@@ -5,7 +5,6 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
-    // `scripts/` for the release script's version arithmetic. Plain `.js`: not built.
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.js'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.{js,ts}'],
   },
 })

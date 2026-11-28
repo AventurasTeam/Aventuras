@@ -6,3 +6,6 @@
 # to verify that migrations have not changed.  This ensures that line endings
 # stay consistent between platforms and systems regardless of autocrlf setup.
 src-tauri/migrations/*.sql text eol=lf
+
+# scripts/docs-check.ts reads docs as LF-only.
+docs/**/*.md text eol=lf

@@ -2,12 +2,15 @@
 
 How Aventuras writes its own characters, lorebooks and scenarios to a file, and reads them back
 without a model in the loop. Code lives in `services/exchange/`; the callers are the three vault
-stores, `lorebookImportExport/export/`, and `lorebookImportExport/import/parse.ts`.
+stores, `lorebookImportExport/export/`, `lorebookImportExport/import/parse.ts`, `services/sync/`
+(`actions.ts`, `sections.ts`), and the card importers that redirect exchange files
+(`characterCardImport/aiService.ts`, `stores/wizard/stImportWizard.svelte.ts`).
 
 ## The problem it solves
 
 The vault used to export a character as `JSON.stringify(record)` and import it through the
-SillyTavern card path. `isV1Card` accepts any object with `name` and `description`, so the app's
+SillyTavern card path. `isV1Card` accepts any object with `name` and `description` keys and no
+`spec`, so the app's
 own export was mistaken for a V1 card, sent to the AI sanitizer, and came back without its
 portrait, visual descriptors, tags, favourite state or metadata. Scenarios took the same route
 through `clean`. Story lorebook exports were a raw `Entry[]` carrying record ids, story ids and
@@ -69,8 +72,9 @@ everything on the record except:
 
 Import regenerates the first two groups, recomputes the third, drops the fourth and initialises the
 fifth from the entry type. Portraits travel because they are already data URLs or external URLs.
-Tags and favourite state are the user's organisation and travel too. A scenario's starting time is authored content and travels; on import it is
-normalized through `normalizeTime`, so a hand-edited file cannot store 90 minutes as-is.
+Tags and favourite state are the user's organisation and travel too. A scenario's starting time is
+authored content and travels; on import it is normalized through `normalizeTime`, so a hand-edited
+file cannot store 90 minutes as-is.
 
 Metadata is filtered by a per-entity **allowlist** (`PORTABLE_METADATA` in
 `services/exchange/convert.ts`), applied on export and again on import. `VaultCharacter.metadata`
@@ -80,7 +84,7 @@ add it. An allowlist fails closed and visibly; adding a key is a minor version b
 
 ## Entry state stays home
 
-Every field that holds an entry id lives inside `state`, `adventureState` or `creativeState`:
+Every field that holds an entry id lives inside `state` (`adventureState` and `creativeState` hold none):
 `presentCharacters`, `presentItems`, `knownMembers`, `relatedEntries`, `witnesses`,
 `lastSeenLocation`, `currentLocation`, and the `entryId` inside `changes`, `uses` and
 `relationship.history`. Excluding state excludes every cross-reference, so no exchange document

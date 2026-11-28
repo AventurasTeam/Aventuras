@@ -18,6 +18,8 @@
     "test:watch": "vitest",
     "release": "node scripts/release.js",
     "fake-provider": "node scripts/fake-provider.mjs",
+    "docs:gen": "node scripts/docs-check.ts --write",
+    "docs:check": "node scripts/docs-check.ts",
     "lint": "node scripts/pm.js run lint:ts && node scripts/pm.js run lint:rust",
     "lint:fix": "node scripts/pm.js run lint:ts:fix && node scripts/pm.js run lint:rust:fix",
     "lint:ts": "eslint .",

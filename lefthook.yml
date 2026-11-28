@@ -29,3 +29,6 @@ pre-push:
         - "src-tauri/Cargo.toml"
         - "src-tauri/Cargo.lock"
       run: node scripts/pm.js run lint:rust
+    # No glob: decision anchors and doc paths live in source files anywhere in the repo.
+    docs-check:
+      run: node scripts/pm.js run docs:check

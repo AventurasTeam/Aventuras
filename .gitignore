@@ -233,9 +233,9 @@ releases/
 # -----------------------------------------------------------------------------
 # Documentation (development only, not for repo)
 # -----------------------------------------------------------------------------
-prompting_guide.md
-architecture.md
-design.md
+/prompting_guide.md
+/architecture.md
+/design.md
 
 # Temporary image files used during icon creation
 # (sun2022.png is kept as the app icon source)
@@ -258,7 +258,6 @@ docs/superpowers/
 # -----------------------------------------------------------------------------
 # Other Agentic Coding Documents
 # -----------------------------------------------------------------------------
-AGENTS.md
 FEATURES.md
 IMPLEMENTATION_PLAN.md
 TODO_*.md
@@ -278,3 +277,8 @@ key.properties
 nul
 test_data/
 debug_screenshot/
+
+# -----------------------------------------------------------------------------
+# Decision evidence: logs, data and archives are committed on purpose. Keep last.
+# -----------------------------------------------------------------------------
+!/docs/evidence/**

@@ -58,8 +58,8 @@ are three ways to build one:
 | `ContextBuilder.forPackId(pack)` | the wizard and the Vault, which hold a pack but no story              |
 
 `forPack` skips `forStory`'s entity loads but still resolves pack variables and per-story overrides, so
-a user's custom variable works in any template. Neither factory throws: several callers build their
-context outside the `try` guarding the model call, and losing a customization must not cost the turn.
+a user's custom variable works in any template. `forPack` and `forPackId` never throw: several callers build
+their context outside the `try` guarding the model call, and losing a customization must not cost the turn.
 
 **The `storyId` argument is required, never optional.** `undefined` is a legitimate value — outside a
 story — but it has to be passed. This is the whole defence: an optional trailing `storyId?: string` type-
@@ -176,10 +176,11 @@ overwrite: replacing a pack is reached from that pack, not from a name that happ
 ### Exporting a Pack as a Directory
 
 A pack is also readable and writable as a directory of Markdown files — one per stored row, `pack.yaml` at
-the root for metadata and custom variables, generated reference material under `_reference/`. Desktop only:
-`tauri-plugin-dialog`'s folder picker is `FolderPickerNotImplemented` on mobile. On desktop the picked
-folder reaches `fs_scope.allow_directory`, so the capability's `$APPDATA`/`$TEMP` scope is not a constraint
-and the whole thing is plain `plugin-fs` from TypeScript.
+the root for metadata and custom variables, generated reference material under `_reference/`. Not on Android:
+`tauri-plugin-dialog`'s folder picker is `FolderPickerNotImplemented` there (`packs/directory/support.ts`).
+Elsewhere the picker is opened with `recursive: true`, which adds the picked folder to the fs scope for the
+session, so the capability's `$APPDATA`/`$TEMP` scope is not a constraint and the whole thing is plain
+`plugin-fs` from TypeScript (`packs/directory/io.ts`).
 
 **The filename is the identity; the folder is presentation.** `<NN group>/<id>.md`, where the group comes
 from `TEMPLATE_GROUP_MAP` and `NN` is its two-digit position in the editor's `GROUP_ORDER`, so file browsers
@@ -232,8 +233,7 @@ both formats.
 A pruned template file whose id the tree writes again, at a path the folder does not already hold, is a
 **move**, by the same rule that makes the filename the identity; a second copy of that id is a deletion. The
 confirmation counts moved prompts in one line, a user-message half with its prompt, and lists only what is
-really going.
-Listed among the deletions, a migration's ~80 moves would bury the one prompt a pack actually dropped.
+really going. Listed among the deletions, a migration's ~80 moves would bury the one prompt a pack actually dropped.
 In a folder the export does not own, the plan also names each existing file the tree would overwrite, so
 the confirmation lists them rather than warning that some might be.
 

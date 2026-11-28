@@ -11,7 +11,7 @@ Narration is written for a reader, not for a model. An entry can carry three kin
 - **Layout** — `### Time | Place` headers, `***` / `---` rules, bold heading lines.
 
 A service that sends `entry.content` unchanged sends all of it. The narrator strips `<pic>` from
-its own history when inline images are off (`NarrativeService.ts`), and the classifier and the
+the history it sends, actions included, when inline images are off (`NarrativeService.ts`), and the classifier and the
 Style Reviewer use the presets below. Everything else reads raw content.
 
 ## Why the Style Reviewer cleans its input
@@ -109,9 +109,10 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
   service's constructor, as it does for the classifier's window, and a service is built per call,
   so a change applies to the next review.
 - **It can be reset.** `applyDefaultsIfUnchanged` replaces the whole system-services block with
-  defaults after a default-profile change, when the model, temperature and reasoning effort still
-  match the defaults. A user who turned the switch off and kept default models is put back on by
-  that. Every other field in the block behaves the same way.
+  defaults after a default-profile change, when every listed service's model, temperature and
+  reasoning effort still match the defaults (`systemServicesMatchDefaults`). No other field is
+  compared, so a user who turned the switch off and kept default models is put back on by that.
+  Every other field in the block behaves the same way.
 - **Only the Style Reviewer has one.** The other consumers have no evidence behind them yet.
 
 ## Constraints
@@ -159,7 +160,7 @@ cleaner can be routed around without a release. Off means `CLEAN_NONE`, which ru
   something a character reads. Only its tags go.
 - **A short, unpunctuated bold line is a heading; anything else is emphasis.** With
   `boldLines: 'remove'`, a bold line goes only if it is eight words or fewer and does not end in
-  `.`, `!`, `?`, `…` or a quote. `**The Backlash**` goes; `**NO.**` is kept, with its `**`
+  `.`, `!`, `?`, `…` or a closing double quote (`"` or `”`). `**The Backlash**` goes; `**NO.**` is kept, with its `**`
   removed. `unwrap` never removes a line.
 - **`<em>` / `<strong>` become `*` / `**`, and italics are kept.** Emphasis overuse is a real
   style finding, so `CLEAN_FOR_REVIEW` leaves inline emphasis alone.

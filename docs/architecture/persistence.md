@@ -8,11 +8,13 @@ The database, the native layer that moves bytes around it, and the settings blob
   `sqlx` (see `tauri-plugin-sql` / `sqlx` in `src-tauri/Cargo.toml`).
 - **Location**: `tauri-plugin-sql` resolves `sqlite:aventura.db` against Tauri's **app config dir**
   (`~/.config/<bundle-id>` on Linux), not the app data dir. Rust code that opens the same file
-  directly — `backup.rs`, `avt_import.rs`, and the migration checksum patch in `lib.rs` — must use
-  `app_config_dir()` for the same reason, or it silently operates on a database that does not exist.
+  directly — `db_path()` in `db.rs`, and the `lib.rs` setup hook that hands the path to the
+  migration checksum patch — must use `app_config_dir()` for the same reason, or it silently operates
+  on a database that does not exist.
 - **Migrations**: Sequentially numbered SQL files in `src-tauri/migrations/` (e.g. `001_initial.sql`,
-  `002_chapters_checkpoints.sql`, ...), applied in order at startup, all pending ones before any
-  frontend code runs. A data conversion that must happen before a column goes is therefore SQL in
+  `002_chapters_checkpoints.sql`, ...). The plugin applies all pending ones in order when the frontend
+  first opens the database (`Database.load` in `database.ts`; nothing is preloaded), before any app
+  query runs. A data conversion that must happen before a column goes is therefore SQL in
   the same migration as the drop, as `041_retire_world_state_delta.sql` is. The list lives in
   `migrations()` in `lib.rs`, which a `cargo test` can run against an in-memory database
   (`world_state_delta_migration.rs`, `world_state_marks_migration.rs`).
@@ -62,7 +64,7 @@ The database, the native layer that moves bytes around it, and the settings blob
   alias is the cleaner's and the merge's to drop, not the writers'. A stored `injection` that is not
   an object reads as the default, and vault `entries` that are not a list read as `[]`.
 - **`stories.retry_state` is a JSON blob**, so fields are added inside it rather than by migration —
-  `embeddedImageIds`, `characterSnapshots`, `timeTracker` and now `branchId` all arrived that way,
+  `embeddedImageIds`, `characterSnapshots`, `timeTracker` and `branchId` all arrived that way,
   as did a character snapshot's `name`, `description` and `translations`. A restore leaves a
   field the snapshot lacks as it is, and puts a saved translation back only with a text it
   changes, so a translation that finished after the snapshot stays.
@@ -90,19 +92,18 @@ Rust owns the bytes**: only small parameters (paths, ids) cross the IPC bridge.
   re-reads the file and streams each base64 payload straight into SQLite. Peak memory is one image
   regardless of file size.
 - **`db.rs`** — where the live database is and how to open a writable pool to it. The one place
-  that knows the filename and the busy_timeout; close what it hands back.
+  that knows the filename and defines the busy timeouts callers choose from; close what it hands back.
 - **`db_tx.rs`** — the `db_transaction` command: a batch of statements on one connection, which is
-  the only place a frontend transaction can come from (see the bullet above).
+  the only place a frontend transaction can come from (see "Never `BEGIN` from the frontend" in
+  [Database and Migrations](#database-and-migrations)).
 - **`migration_patch.rs`** — patches `sqlx`'s stored migration checksums (see
   [Database and Migrations](#database-and-migrations)).
-- **`sync/`** — the LAN sync server (`start_sync_server`, `sync_connect`, `sync_pull_story`,
-  `sync_push_story`, …), paired via QR code.
+- **`sync/`** — the LAN sync server and its commands, paired via QR code.
 
-`db.rs` (for `avt_import.rs`, `db_tx.rs` and `backup.rs`) and `migration_patch.rs` (via the
-`lib.rs` setup hook) open `sqlite:aventura.db` under Tauri's **app config dir** — see the
-migrations section for why that is not the app data dir. `sync/` never touches the database directly: every listing and item is
-answered by the webview over the `tauri-plugin-sql` connection, and only `backup.rs` reaches into
-the sync tables, to give a restored database a new device ID. See [sync.md](sync.md).
+The sync server never touches the database: every listing and item is answered by the webview over
+the `tauri-plugin-sql` connection. The only Rust that writes the sync tables is `sync/device.rs`'s
+`assign_new_device_id`, which `backup.rs` calls to give a restored database a new device ID. See
+[sync.md](sync.md).
 
 ## Settings Migrations
 

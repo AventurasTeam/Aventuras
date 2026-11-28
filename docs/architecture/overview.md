@@ -18,18 +18,18 @@ aventuras/
 │       ├── types/           # TypeScript types
 │       └── utils/           # Utility functions
 ├── src-tauri/               # Rust backend (Tauri 2)
-│   ├── src/                 # Rust source (main.rs, lib.rs, backup.rs, avt_import.rs, sync/)
+│   ├── src/                 # Rust source (lib.rs, db.rs, backup.rs, avt_import.rs, sync/, ...)
 │   ├── migrations/          # Numbered SQLite migrations (sqlx)
 │   ├── capabilities/        # Tauri ACL/permission definitions
 │   ├── icons/               # App icons per platform (incl. iOS)
 │   ├── gen/android/         # Android scaffold files (tracked in git — DO NOT OVERWRITE)
-│   ├── gen/apple/           # iOS Xcode scaffold (tracked in git — DO NOT OVERWRITE)
+│   ├── gen/apple/           # iOS Xcode scaffold (not committed yet; bootstrap-ios.yml generates it)
 │   ├── Cargo.toml           # Rust dependencies
 │   └── tauri.conf.json      # Tauri configuration
 ├── static/                  # Static web assets
-├── scripts/                 # Build, release, and Android setup scripts
+├── scripts/                 # Build, release, docs-check and Android setup scripts
 ├── third-party-licenses/    # License texts for bundled third-party code (e.g. Harper)
-├── .github/workflows/       # CI/CD (lint/typecheck, release, pre-release)
+├── .github/workflows/       # CI/CD (lint, typecheck, docs check, platform builds, releases)
 ├── lefthook.yml             # Git hooks configuration
 └── package.json             # Node dependencies and scripts
 ```
@@ -64,8 +64,8 @@ does not.
 `src/lib/components/ui/` began as shadcn-svelte output and is now maintained by hand on bits-ui.
 There is no `components.json`. The generator's Tailwind 3 registry can't be reached from a
 Tailwind 4 project, and current output fails `check` and `lint` here and doesn't match these
-components. Write a new primitive on bits-ui. The evidence, and what bringing the generator back
-would take: [shadcn-svelte.md](../development/shadcn-svelte.md).
+components. Write a new primitive on bits-ui; the rules are in
+[ui-components.md](../development/ui-components.md).
 
 ## Panels and gestures
 
@@ -102,9 +102,9 @@ They are read off the shell itself, counting only gestures that _start_ within 3
 above the mobile breakpoint), not from invisible strips over the page. A strip takes every tap that
 lands on it, and on a phone the outer halves of the header's panel button and of Send sit within
 that band. A gesture that starts in a text field is never a swipe, so placing a caret or selecting
-text in the action input cannot open a panel. Because swipes inside a panel bubble up to the shell, a panel must never reach the
-opposite edge's band. On a phone neither does: the sidebar is capped at 288px and the navigation
-panel at `100vw - 3rem`.
+text in the action input cannot open a panel. Because swipes inside a panel bubble up to the shell,
+a panel must never reach the opposite edge's band. On a phone neither does: both are capped at
+`100vw - 3rem` and at 288px.
 
 The one swipe inside a panel that may not bubble up is over the Branches panel's tree. When the tree
 could still scroll in the swipe's direction as the gesture starts, it stops the `touchend`, so the
@@ -118,10 +118,11 @@ is a sheet: every action modal is a dialog on a phone too (see
 [ui-components.md](../development/ui-components.md)). Escape and an outside click reach their guard
 through bits-ui, which can be vetoed. Android's back press does not rely on that: an open action
 modal claims it (`utils/backPress.ts`), and the layout's back handler offers it to the claims,
-latest first, before it tries anything else. A claim declines when another layer, such as a
-Select's list, was opened over its modal, and the press falls through to the handler's Escape. The synthetic Escape the handler sends to other dialogs closed a
-dirty action modal without asking. A close driven from our side
-never reaches `vaul`'s restore, so the scroll lock is released by hand (see `utils/scrollLock`).
+latest first, before it tries anything else. A claim declines when another layer, such as a Select's
+list, was opened over its modal, and the press falls through to the handler's Escape. The synthetic
+Escape the handler sends to other dialogs would close a dirty action modal without asking. A close
+driven from our side never reaches `vaul`'s restore, so the scroll lock is released by hand (see
+`utils/scrollLock`).
 
 A sheet spans the screen, so `ResponsiveModal.Content` drops a caller's width classes (`w-*`,
 `max-w-*`, `min-w-*`, under any variant) before they reach it; they size the dialog only.
@@ -463,7 +464,7 @@ Phases are wired by `GenerationPipeline`, but the dependency objects are built i
 store, the settings and `aiService` are bound together; the phases themselves import none of them,
 which is what keeps them testable.
 
-Alongside the pipeline, `BackgroundTaskRunner` handles what happens _after_ a turn — the chapter
+Alongside the pipeline, `BackgroundTaskCoordinator` handles what happens _after_ a turn — the chapter
 threshold check, lore management and the style review — on its own dependency object.
 
 ### The generation lease
@@ -620,20 +621,21 @@ story entry, never sent to a model or counted, held for the session only
 own story and branch. It carries its record with the same line and tree as an entry's report,
 following the reporting setting.
 
-It finishes when lore management finishes: with banners on it names the chapter and offers
-**Go to Chapter N**, landing on the banner, and **Dismiss**; with banners off it reads that
-chapter creation is finished. A failed summary leaves no chapter and offers **Retry**, while
-the span is still the first one no chapter covers, and **Dismiss**; a later turn cuts the span
-again. A retry runs outside the turn's background tasks, so it is put off while another chapter
-check, card or lore management run on the branch is in progress (`cutState`), and `createManualChapter` refuses while a
-card on the branch is pending, as it does during a turn's background tasks. Lore management that fails, or is refused by the branch lock,
-leaves a chapter without its lore, so the card offers **Restart lore management**, recorded as a
-further run in the same record (`reopenRecord`), and **Delete incomplete chapter**. Delete, here and
-in the Memory view, is offered only for the branch's last chapter, and `story.deleteChapter`
-refuses any other, and any while `chapterCards.busy`: the next chapter starts where the last ends,
-so an earlier one's entries, or the one a running cut started after, would stay uncut. Deleting a
-chapter, from anywhere, removes its card. A card whose narration a retry or a delete removed is shown after the last entry. Both kinds of
-failure also raise a toast, since the reader may already be on the next turn or another branch.
+It finishes when lore management finishes: with banners on it names the chapter and offers **Go to
+Chapter N**, landing on the banner, and **Dismiss**; with banners off it reads that chapter creation
+is finished. A failed summary leaves no chapter and offers **Retry**, while the span is still the
+first one no chapter covers, and **Dismiss**; a later turn cuts the span again. A retry runs outside
+the turn's background tasks, so it is put off while another chapter check, card or lore management
+run on the branch is in progress (`cutState`), and `createManualChapter` refuses while a card on the
+branch is pending, as it does during a turn's background tasks. Lore management that fails, or is
+refused by the branch lock, leaves a chapter without its lore, so the card offers **Restart lore
+management**, recorded as a further run in the same record (`reopenRecord`), and **Delete incomplete
+chapter**. Delete, here and in the Memory view, is offered only for the branch's last chapter, and
+`story.deleteChapter` refuses any other, and any while `chapterCards.busy`: the next chapter starts
+where the last ends, so an earlier one's entries, or the one a running cut started after, would stay
+uncut. Deleting a chapter, from anywhere, removes its card. A card whose narration a retry or a
+delete removed is shown after the last entry. Both kinds of failure also raise a toast, since the
+reader may already be on the next turn or another branch.
 
 While a chapter check on a branch is asking the model, a card on it is summarizing or running lore
 management, or any lore management run holds it, a turn on it starts no chapter check
@@ -732,25 +734,36 @@ Each adapter keeps its own model discovery and size handling; discovery throws o
 rather than substituting a list. ComfyUI generation reads no model list to choose a workflow: the
 id's `checkpoint:` or `unet:` prefix does, and a UNet text encoder or VAE left blank falls back to
 the first file the server lists. That pick is kept per connection until the connection's model list
-is loaded again; the form shows the first one as the blank field's placeholder. OpenAI Compatible has no standard model list: its filtering and
-capability reading were assembled from a handful of hosts' replies, and `/images/models` is an optional
-extra whose failure never fails the listing. Whether a provider takes an API key or a base URL is declared per
-provider (`PROVIDER_API_KEY` in `providers/connection.ts`, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each default), and the settings form and
-`hasRequiredCredentials` read those tables. The form keeps a value typed for another provider, so a
-connection is cut down to the fields its provider has an input for (`imageConnectionFor`) where it
-enters: in the form, and when settings load. The result is an `ImageProviderConnection`, branded so only that
-function makes one; `ImageProfile` extends it and the store takes one to save, so the registry and the
-model-list cache use a connection as given. A leftover base URL is never saved for OpenRouter, nor a
-leftover API key for A1111. A stored profile whose provider this build does not know is skipped on load.
-Discovery (`listModels`, `getSamplerInfo`,
-`listLoras`, `listClipTypes`, `getModelCapabilities`) takes an `AbortSignal`. The profile form debounces key and base URL edits, aborts the request
-a newer one or Stop replaces, and writes only what the current request returns. A cancelled model list is
-never cached, even when an adapter answers with a partial one. Model lists are cached for 12 hours per
-connection (`modelListKey`: provider, API key, base URL); a save that changes a profile's connection
-drops the entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. For NanoGPT, OpenRouter, Pollinations and OpenAI Compatible, generation reads a model's capabilities from the connection's cached list by id or alias, so they are no older than the list. A model the list omits is looked up through the provider (`getModelCapabilities`) and kept in a second in-memory cache, 12 hours per connection and model; the lookup is cancelled after 10 seconds. A failed lookup is not retried for 5 minutes and generation proceeds with unknown capabilities. Loading a connection's list clears that second cache for it, and Stop cancels the wait. Nothing is saved on the profile. At the end of startup the lists, and the capabilities of any model they omit, for the profiles in the four image slots are loaded once, so the first image does not wait; a connection shared by several slots is fetched once, and a failure there is only logged and caches nothing. Migration `042` moved image settings that still named an
-API profile into image profiles, moved proxy-style `openai` profiles and every `chutes` profile
-(that provider is gone) to OpenAI Compatible, and pinned `zhipu` profiles with an empty base URL to
-`open.bigmodel.cn`, which they used before the default became `api.z.ai`.
+is loaded again; the form shows the first one as the blank field's placeholder. OpenAI Compatible
+has no standard model list: its filtering and capability reading were assembled from a handful of
+hosts' replies, and `/images/models` is an optional extra whose failure never fails the listing.
+Whether a provider takes an API key or a base URL is declared per provider (`requiresApiKey` in
+`providers/connection.ts`, `PROVIDER_BASE_URL` in `providers/baseUrls.ts`, which also holds each
+default), and the settings form and `hasRequiredCredentials` read those tables. The form keeps a
+value typed for another provider, so a connection is cut down to the fields its provider has an
+input for (`imageConnectionFor`) where it enters: in the form, and when settings load. The result is
+an `ImageProviderConnection`, branded so only that function makes one; `ImageProfile` extends it and
+the store takes one to save, so the registry and the model-list cache use a connection as given. A
+leftover base URL is never saved for OpenRouter, nor a leftover API key for A1111. A stored profile
+whose provider this build does not know is skipped on load. Every discovery call takes an
+`AbortSignal`. The profile form debounces key and base URL edits, aborts the request a newer one or Stop replaces, and
+writes only what the current request returns. A cancelled model list is never cached, even when an
+adapter answers with a partial one. Model lists are cached for 12 hours per connection
+(`modelListKey`: provider, API key, base URL); a save that changes a profile's connection drops the
+entry it replaced (`evictReplacedModelList`), and the form's Refresh bypasses the cache. For
+NanoGPT, OpenRouter, Pollinations and OpenAI Compatible, generation reads a model's capabilities
+from the connection's cached list by id or alias, so they are no older than the list. A model the
+list omits is looked up through the provider (`getModelCapabilities`) and kept in a second in-memory
+cache, 12 hours per connection and model; the lookup is cancelled after 10 seconds. A failed lookup
+is not retried for 5 minutes and generation proceeds with unknown capabilities. Loading a
+connection's list clears that second cache for it, and Stop cancels the wait. Nothing is saved on
+the profile. At the end of startup the lists, and the capabilities of any model they omit, for the
+profiles in the four image slots are loaded once, so the first image does not wait; a connection
+shared by several slots is fetched once, and a failure there is only logged and caches nothing.
+Migration `042` moved image settings that still named an API profile into image profiles, moved
+proxy-style `openai` profiles and every `chutes` profile (that provider is gone) to OpenAI
+Compatible, and pinned `zhipu` profiles with an empty base URL to `open.bigmodel.cn`, which they
+used before the default became `api.z.ai`.
 
 A profile may leave its model empty only where the host does not need one
 (`PROVIDER_REQUIRES_MODEL`, read through `providerNeedsModel`): Pollinations, which defaults it,
@@ -766,12 +779,12 @@ provider's reference limit (`PROVIDER_REFERENCE_LIMIT`), downloads nothing for a
 otherwise fills up to the smaller of that limit and the model's `maxReferenceImages`, fetching
 `http(s)` ones to base64 only as many as there are free slots, so every adapter receives raw base64.
 A reference skipped for its format leaves its slot to the next one; one that fails to download keeps
-its slot. A reference URL can
-come from a discovery card, so it is fetched only from a public host and each redirect is checked
-the same way (`fetchPublicImageBase64`); a name that merely resolves to a private address is not
-caught. A NanoGPT reply that carries a URL instead of base64 is downloaded the same way, and a failed
-download is a plain error, so the 429 retry cannot re-run, and re-bill, the generation. A reference that cannot be fetched is dropped and the image is
-generated without it. Google takes them on every image model it lists.
+its slot. A reference URL can come from a discovery card, so it is fetched only from a public host
+and each redirect is checked the same way (`fetchPublicImageBase64`); a name that merely resolves to
+a private address is not caught. A NanoGPT reply that carries a URL instead of base64 is downloaded
+the same way, and a failed download is a plain error, so the 429 retry cannot re-run, and re-bill,
+the generation. A reference that cannot be fetched is dropped and the image is generated without it.
+Google takes them on every image model it lists.
 
 Two local backends take them differently. A1111 sends them as `extra_images` on the `txt2img`
 request; `init_images` is not used, because that is a canvas to denoise, not a reference. Only
@@ -787,29 +800,29 @@ adapter's drop-with-a-warning only matters to a direct caller. Which nodes are s
 profile's `referenceInputPaths`; when absent, `suggestReferenceInputs` walks the graph downstream
 from each `LoadImage` and de-selects one whose picture reaches a ControlNet, IP-Adapter,
 preprocessor, mask or inpaint node, or is VAE-encoded into a sampler's `latent_image`, unless
-another path reaches a reference consumer (`ReferenceLatent`, `TextEncodeQwenImage*`).
-The server reports node types, not intent, so this is only the default: the picker under the
-workflow summary in the image settings is the authority, and it is pre-filled from the probe when a
-workflow is loaded. The same holds for the rest of a custom workflow's fields. `detectWorkflowFields`
-only pre-fills them: it takes the sampler upstream of the single `SaveImage` (a node with a latent
-and either conditioning or a guider, so custom samplers count), reads the text inputs of the
-encoder nearest its positive conditioning, the same for the negative (a text input another node
-feeds is followed to that node's text, `value` or `string` input, never into a loader, and not to
-any other string widget), and finds the seed on the
-sampler or the noise node it links, or on the source of a seed input another node feeds (a seed- or
-`value`-named input, or the source's only number). A conditioning that leads back to the positive
-encoder through `ConditioningZeroOut` is not a negative. Only a graph with no sampler falls back to
-encoders, and only to one whose title says `positive` or `negative`; a sampler that settled nothing
-leaves the field unset, as does anything else the graph does not settle. The form lists every string
-and number input and every node for the user to choose, and keeps listing a stored choice whose
-input is now linked; a workflow with no prompt input or no output node still saves, but `generateImage` refuses it. Every checked
-prompt input receives the same prompt, so a Flux encoder can fill both `clip_l` and `t5xxl`, and
-every checked negative input receives the negative; an input is one or the other. With no seed input
-the workflow's own seed is used for every image. Names are a hash of the bytes, so an image reused across scenes is stored once,
-and concurrent generations share a pending upload. ComfyUI empties `temp` on restart; a per-profile
-switch (`inputReferences`) uploads to `input/aventuras/` instead, which it never clears. The
-built-in basic, LoRA and UNet workflows take none, so the registry downloads nothing for them
-(`comfyReferenceLimit`).
+another path reaches a reference consumer (`ReferenceLatent`, `TextEncodeQwenImage*`). The server
+reports node types, not intent, so this is only the default: the picker under the workflow summary
+in the image settings is the authority, and it is pre-filled from the probe when a workflow is
+loaded. The same holds for the rest of a custom workflow's fields. `detectWorkflowFields` only
+pre-fills them: it takes the sampler upstream of the single `SaveImage` (a node with a latent and
+either conditioning or a guider, so custom samplers count), reads the text inputs of the encoder
+nearest its positive conditioning, the same for the negative (a text input another node feeds is
+followed to that node's text, `value` or `string` input, never into a loader, and not to any other
+string widget), and finds the seed on the sampler or the noise node it links, or on the source of a
+seed input another node feeds (a seed- or `value`-named input, or the source's only number). A
+conditioning that leads back to the positive encoder through `ConditioningZeroOut` is not a
+negative. Only a graph with no sampler falls back to encoders, and only to one whose title says
+`positive` or `negative`; a sampler that settled nothing leaves the field unset, as does anything
+else the graph does not settle. The form lists every string and number input and every node for the
+user to choose, and keeps listing a stored choice whose input is now linked; a workflow with no
+prompt input or no output node still saves, but `generateImage` refuses it. Every checked prompt
+input receives the same prompt, so a Flux encoder can fill both `clip_l` and `t5xxl`, and every
+checked negative input receives the negative; an input is one or the other. With no seed input the
+workflow's own seed is used for every image. Names are a hash of the bytes, so an image reused
+across scenes is stored once, and concurrent generations share a pending upload. ComfyUI empties
+`temp` on restart; a per-profile switch (`inputReferences`) uploads to `input/aventuras/` instead,
+which it never clears. The built-in basic, LoRA and UNet workflows take none, so the registry
+downloads nothing for them (`comfyReferenceLimit`).
 
 Images are stored as base64 in SQLite. Export and import of a story with images (`.avt`) is
 handled natively in Rust so the payloads never enter the WebView heap — see
@@ -829,81 +842,9 @@ such as Cloudflare Access service tokens are not supported.
 
 ## Network transport
 
-Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`: the endpoints are
-user-configured, so CORS, Android's cleartext block and iOS ATS (above) would each break some of
-them. `httpFetch` (`services/http/httpFetch.ts`) is the only way into the plugin, and an ESLint
-rule rejects any other import of its `fetch`.
-
-`loggedFetch` (`services/http/`) is the transport the app's own requests share: the request's
-debug entry, the request guard (header and idle timeouts, abort mapping) and the response's entry.
-The header timer stops when the headers arrive; every body after that, a buffered JSON completion
-included, is bounded only by the idle timer. A non-streaming completion sends its headers early and
-its body when generation finishes, so for it the idle timer is the whole generation's deadline: the
-LLM timeout setting. Prefer the helpers built on it:
-
-- `createTimeoutFetch` for AI SDK providers (it adds manual-body merging and usage patching).
-- `createSdkFetch` for SDK image models. Google, OpenAI, OpenAI Compatible, Pollinations, Z.AI,
-  OpenRouter, NanoGPT, A1111 and ComfyUI use it. ComfyUI polls through `createPollSdkFetch`, which
-  keeps them in one entry so they do not push the generation POST out of the debug log's last 100
-  entries.
-- `imageGetFetch` / `fetchPublicImageBase64` for model discovery and reference fetching.
-- `corsFetch` for character-card discovery and other plain GETs. It logs nothing unless a caller
-  passes `debug: { serviceId }`.
-
-`updater.ts` and the model-health ping call `httpFetch` directly and are not logged.
-
-Debug logging writes the whole response. The generic dispatcher (`services/http/debugLog.ts`)
-writes status and body for JSON and text, status, type and size for binary (or untyped) bodies, and
-the status and error body for a failure. A multipart request body is logged field by field: strings
-as sent (long base64 scrubbed), a file as its name, type and size, a repeated key as an array.
-
-Bodies are read with `readLoggedBody`, which never throws: a body that fails partway is logged with
-its status, the reason, and the text that did arrive (`received`). The entry's error says how far
-it got: `(headers received, no body yet)` or `(N bytes received)`. The poll transport reads the
-same way.
-
-The AI SDK transports are the same dispatcher with Gemini safety metadata and stream aggregation
-(`sdk/providers/debugLog.ts`, `streamLog.ts`). A stream is parsed as SSE and summarized as the one
-body it would have been without streaming, by format: Anthropic Messages, OpenAI Responses, Chat
-Completions (and its many compatible providers) and Gemini; any other format is the list of its
-payloads, and a body with no SSE events is logged as text. `stream` records the format, the number
-of events and whether the format's final event (`message_stop`, `response.completed`, `[DONE]` or a
-finish reason, a terminal Responses event) arrived. A stream cut off before it is logged with what
-had arrived, `complete: false`, the last payload as `lastEvent`, and the error: the read failure,
-else an error event the stream carried, else `stream ended before its final event`. Every read is of
-a clone, taken only while debug mode is on. A reply the caller will cancel (a redirect under
-`followRedirects: false`, an `allowStatuses` status) is logged by status alone, because a live clone
-would keep the plugin's body open on the Rust side.
-
-The log viewer's readable view (`debug.readableView`) renders escaped newlines as line breaks and
-expands a string value that holds JSON (a structured-output reply's text) into the value it holds;
-an entry with such a string gets a "JSON text" badge either way. An entry over the display limit is
-trimmed value by value, with `… N more items` / `… [N more chars]` markers, so the text stays valid
-JSON; the readable view is for reading, not parsing. Export and the store hold the raw entries.
-
-Entries are written to `stores/debugLog.ts`, a plain module with no runes or Tauri imports, so
-transports and their tests need no store mock. `debug.svelte.ts` wraps it for reactivity and the
-pop-out window.
-
-What the plugin changes for the server on the other end:
-
-- No `Origin` is sent unless the caller sets one. The plugin would otherwise send the webview
-  origin (`http://tauri.localhost` on Windows and Android, `tauri://localhost` elsewhere, the
-  dev-server URL in dev), which local servers reject. `httpFetch` sets `Origin: ''`, which the
-  plugin drops under `unsafe-headers`. A caller's `Origin` and `Referer` are sent as set.
-- `unsafe-headers` lifts the plugin's whole forbidden-header filter, not just `Origin`. `Host`,
-  `Cookie`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Sec-*` and `Proxy-*` reach
-  reqwest exactly as callers set them. Every caller is app code, so nothing sets these today. If
-  untrusted input ever feeds request headers, `httpFetch` is where to filter them.
-- Certificates are checked against the bundled webpki roots and, on Windows and Linux, the OS trust
-  store. macOS, Android and iOS use the bundled roots only. The OS roots are only added as extra
-  anchors, so a CA the OS distrusts or revokes is still accepted if the bundled set has it;
-  plugin-http 3's platform verifier replaces this.
-- `Accept-Encoding: gzip, br, zstd` is sent and responses are decoded in Rust before the WebView
-  sees them.
-
-Stock Ollama and ComfyUI on loopback work without `OLLAMA_ORIGINS` or `--enable-cors-header`,
-because the helpers send no `Origin`.
+Remote HTTP goes through `@tauri-apps/plugin-http`, not the WebView's `fetch`. Which helper to call
+is in [network-requests.md](../development/network-requests.md); why, and what the plugin changes
+for the server on the other end, is in [network-transport.md](network-transport.md).
 
 ## Environment
 
@@ -911,8 +852,8 @@ There are no required `.env` files for local development or the built app:
 
 - `import.meta.env.DEV` is set automatically by Vite and only gates debug logging
   (`src/lib/log.ts`) — nothing to configure.
-- **API Keys**: for AI providers, configured at runtime via the UI (Settings -> API Settings), not via
+- **API Keys**: for AI providers, configured at runtime via the UI (Settings -> API), not via
   environment variables.
 - Android builds read `ANDROID_HOME` (or `ANDROID_SDK_ROOT`), `NDK_HOME`, and `JAVA_HOME` from the shell
-  environment. `scripts/android-setup.sh` and `compileApk.sh` will auto-detect these from common install
+  environment. `scripts/android-setup.sh` and the root `compileApk.sh` will auto-detect these from common install
   locations if unset.
