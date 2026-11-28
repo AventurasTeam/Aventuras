@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -411,7 +411,7 @@ describe('reachability', () => {
 
   it('warns about an untagged, unanchored active ADR, and fails only under --strict', () => {
     const root = repo({ [bare]: adr('summary: A.') })
-    const warning = `${bare}: no tag and no ADR(a) anchor, so nothing leads here; tag it or anchor it in the code it governs`
+    const warning = `${bare}: no tag, no scope and no ADR(a) anchor, so nothing leads here; tag it, scope it to the directory it governs, or anchor it in the code`
     expect(check(root).warnings).toEqual([warning])
     expect(check(root).ok).toBe(true)
     expect(check(root, true)).toMatchObject({ ok: false, errors: [], warnings: [warning] })
@@ -420,6 +420,7 @@ describe('reachability', () => {
   it.each([
     ['tagged', { [bare]: adr('summary: A.\ntags: [cache]') }],
     ['anchored from source', { [bare]: adr('summary: A.'), 'src/a.ts': anchorA }],
+    ['scoped', { [bare]: adr('summary: A.\nscope: [src]'), 'src/a.ts': '' }],
     ['cross-cutting', { [bare]: adr('summary: A.\ncross-cutting: true') }],
     ['retired', { [bare]: adr('summary: A.\nactive: false') }],
   ])('does not warn about an ADR that is %s', (_, files) => {
@@ -483,6 +484,103 @@ describe('reachability', () => {
       const result = check(repo(deprecated('\ntags: [cache]')), true)
       expect(result).toMatchObject({ ok: true, errors: [], warnings: [], notices: [] })
     })
+  })
+})
+
+describe('scope', () => {
+  const file = 'docs/decisions/2026-01-01-a.md'
+  const nested = 'src/x/AGENTS.md'
+  const source = { 'src/x/a.ts': '', 'src/x/deep/b.ts': '' }
+  const scoped = (summary = 'A.') => adr(`summary: ${summary}\nscope: [src/x/]`)
+  const unscoped = adr('summary: A.\ntags: [cache]')
+  const line = '- A. [a](../../docs/decisions/2026-01-01-a.md)'
+
+  it('generates AGENTS.md in the scoped directory and leaves the ADR out of the index', () => {
+    const root = repo({ [file]: scoped(), ...source })
+    expect(check(root, true)).toMatchObject({ ok: true, errors: [], warnings: [] })
+    const generated = read(root, nested)
+    expect(generated.startsWith('# `src/x`\n\n<!-- BEGIN GENERATED: decisions -->\n')).toBe(true)
+    expect(generated).toContain(`\n${line}\n`)
+    expect(read(root, 'docs/README.md')).not.toContain('[a]')
+  })
+
+  it('appends to a hand-written AGENTS.md and keeps its text when regenerating', () => {
+    const notes = '# Notes\n\nKeep this.\n'
+    const root = repo({ [file]: scoped(), ...source, [nested]: notes })
+    expect(check(root).errors).toEqual([])
+    expect(read(root, nested).startsWith(`${notes}\n<!-- BEGIN GENERATED: decisions -->`)).toBe(
+      true,
+    )
+    writeFileSync(path.join(root, file), scoped('B.'))
+    expect(check(root).errors).toEqual([])
+    expect(read(root, nested)).toContain('Keep this.')
+    expect(read(root, nested)).toContain('- B. [a]')
+    expect(read(root, nested)).not.toContain('- A.')
+  })
+
+  it('rejects a hand-edited block', () => {
+    const root = repo({ [file]: scoped(), ...source })
+    docsCheck(root, { write: true })
+    writeFileSync(path.join(root, nested), read(root, nested).replace('- A.', '- Z.'))
+    expect(docsCheck(root).errors).toEqual([
+      `${nested} is stale or was edited by hand; run \`npm run docs:gen\` and commit the result`,
+    ])
+  })
+
+  it.each([
+    ['scope: [src/missing]', 'scope src/missing is not a directory in the repository'],
+    ['scope: [src/x/a.ts]', 'scope src/x/a.ts is not a directory in the repository'],
+    ['scope: ["src/*"]', 'must be a repository-relative directory'],
+    ['scope: [../x]', 'must be a repository-relative directory'],
+    ['scope: [/src/x]', 'must be a repository-relative directory'],
+    ['scope: [.]', 'is the repository root'],
+    ['scope: src/x', 'scope must be a list of directories'],
+  ])('%j fails with "%s"', (frontmatter, message) => {
+    const errors = errorsFor({
+      [file]: adr(`summary: A.\ntags: [cache]\n${frontmatter}`),
+      ...source,
+    })
+    expect(errors).toEqual([expect.stringContaining(message)])
+  })
+
+  it('does not generate a block for a retired ADR', () => {
+    const root = repo({ [file]: adr('summary: A.\nscope: [src/x]\nactive: false'), ...source })
+    expect(check(root).errors).toEqual([])
+    expect(existsSync(path.join(root, nested))).toBe(false)
+  })
+
+  it('deletes a file it generated once nothing scopes the directory', () => {
+    const root = repo({ [file]: scoped(), ...source })
+    check(root)
+    writeFileSync(path.join(root, file), unscoped)
+    expect(docsCheck(root).errors).toContain(
+      `${nested} holds only a generated block that no ADR scopes any more; run \`npm run docs:gen\` and commit the result`,
+    )
+    expect(docsCheck(root, { write: true }).removed).toEqual([nested])
+    expect(existsSync(path.join(root, nested))).toBe(false)
+    expect(docsCheck(root).errors).toEqual([])
+  })
+
+  it('keeps hand-written text and drops only the block once nothing scopes the directory', () => {
+    const notes = '# Notes\n\nKeep this.\n'
+    const root = repo({ [file]: scoped(), ...source, [nested]: notes })
+    check(root)
+    writeFileSync(path.join(root, file), unscoped)
+    expect(check(root).errors).toEqual([])
+    expect(read(root, nested)).toBe(notes)
+  })
+
+  it('finds an orphaned block in a directory no ADR scopes', () => {
+    const orphan = 'src/y/AGENTS.md'
+    const root = repo({
+      [orphan]:
+        '# Y\n\n<!-- BEGIN GENERATED: decisions -->\n- Stale.\n<!-- END GENERATED: decisions -->\n',
+    })
+    expect(docsCheck(root).errors).toContain(
+      `${orphan} is stale or was edited by hand; run \`npm run docs:gen\` and commit the result`,
+    )
+    docsCheck(root, { write: true })
+    expect(read(root, orphan)).toBe('# Y\n')
   })
 })
 

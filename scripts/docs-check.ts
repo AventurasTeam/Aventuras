@@ -1,15 +1,15 @@
 /**
- * Generates and validates the decision records: `docs/README.md`, the generated block in
- * `AGENTS.md`, ADR frontmatter and headings, `ADR(slug)` anchors, doc paths named in source,
- * relative links in Markdown, and evidence coverage. The rules are in the bootstrap ADR,
- * docs/decisions/2026-10-12-decision-records.md.
+ * Generates and validates the decision records: `docs/README.md`, the generated blocks in the
+ * root and scoped `AGENTS.md` files, ADR frontmatter and headings, `ADR(slug)` anchors, doc paths
+ * named in source, relative links in Markdown, and evidence coverage. The rules are in the
+ * bootstrap ADR, docs/decisions/2026-10-12-decision-records.md.
  *
  *   node scripts/docs-check.ts            validate; fail on errors, including stale outputs
  *   node scripts/docs-check.ts --write    regenerate the outputs, then validate
  *   node scripts/docs-check.ts --strict   validate; warnings fail too, except notices (CI)
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { Lexer, marked, type Token, type Tokens } from 'marked'
 import { parse as parseYaml } from 'yaml'
@@ -32,7 +32,7 @@ const SUMMARY_MAX = 512
 const SECTION_MAX = 20
 const REGENERATE = 'run `npm run docs:gen` and commit the result'
 
-const FRONTMATTER_KEYS = ['summary', 'tags', 'cross-cutting', 'active', 'superseded-by']
+const FRONTMATTER_KEYS = ['summary', 'tags', 'scope', 'cross-cutting', 'active', 'superseded-by']
 const REQUIRED_HEADINGS = [
   'Context and Problem Statement',
   'Considered Options',
@@ -48,6 +48,7 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const ANCHOR = /\bADR\(([^)\n]*)\)/g
 const DOC_PATH = /(?<![\w./-])docs\/[\w./-]*?\.md(?![\w-])(?:#[\w-]+)?/g
 const HTML_ID = /<a\s(?:[^>]*\s)?(?:id|name)="([^"]+)"/g
+const GLOB = /[*?[\]{}!\\]/
 
 type State = 'active' | 'deprecated' | 'superseded' | 'retired'
 
@@ -56,6 +57,7 @@ interface Adr {
   slug: string
   summary: string
   tags: string[]
+  scope: string[]
   crossCutting: boolean
   supersededBy: string | undefined
   state: State
@@ -68,6 +70,7 @@ export interface Result {
   /** Warnings that fail nothing, even under --strict. */
   notices: string[]
   written: string[]
+  removed: string[]
 }
 
 export function docsCheck(root: string, { write = false, strict = false } = {}): Result {
@@ -75,6 +78,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
   const warnings: string[] = []
   const notices: string[] = []
   const written: string[] = []
+  const removed: string[] = []
   const read = (file: string) => readFileSync(path.join(root, file), 'utf8')
 
   let files = listFiles(root)
@@ -86,6 +90,18 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     .sort(byFilename)
   const bySlug = indexAdrs(adrs, errors)
 
+  const scoped = new Map<string, Adr[]>()
+  const { dirs } = indexFiles(files)
+  for (const adr of adrs) {
+    for (const dir of adr.scope) {
+      if (!dirs.has(dir)) {
+        errors.push(`${adr.path}: scope ${dir} is not a directory in the repository; update scope`)
+      } else if (isListed(adr)) {
+        scoped.set(dir, [...(scoped.get(dir) ?? []), adr])
+      }
+    }
+  }
+
   const readme = renderReadme(adrs, tags, bySlug)
   const block = renderAgentsBlock(adrs)
   const blockLines = block.split('\n').length - 2
@@ -95,7 +111,8 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     )
   }
   const agentsCurrent = existsSync(path.join(root, AGENTS)) ? read(AGENTS) : null
-  const agents = agentsCurrent === null ? null : spliceBlock(agentsCurrent, block, errors)
+  const agents =
+    agentsCurrent === null ? null : spliceBlock(agentsCurrent, block, AGENTS, false, errors)
   if (agentsCurrent === null)
     errors.push(`${AGENTS} is missing; create it with the ${BEGIN_MARKER} and ${END_MARKER} lines`)
 
@@ -103,6 +120,35 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     [README, readme],
     [AGENTS, agents],
   ]
+  const removals: string[] = []
+  // An AGENTS.md that no ADR scopes any more still carries the markers, so it is found here.
+  const marked = files
+    .filter(
+      (f) => f !== AGENTS && path.posix.basename(f) === AGENTS && read(f).includes(BEGIN_MARKER),
+    )
+    .map((f) => path.posix.dirname(f))
+  for (const dir of [...new Set([...scoped.keys(), ...marked])].sort()) {
+    const file = `${dir}/${AGENTS}`
+    const current = existsSync(path.join(root, file)) ? read(file) : null
+    const heading = `# \`${dir}\``
+    const entries = scoped.get(dir)
+    if (entries) {
+      const scopeBlock = renderScopeBlock(dir, entries, bySlug)
+      outputs.push([
+        file,
+        current === null
+          ? `${heading}\n\n${scopeBlock}\n`
+          : spliceBlock(current, scopeBlock, file, true, errors),
+      ])
+    } else if (current !== null) {
+      const rest = spliceBlock(current, null, file, false, errors)
+      if (rest === null) continue
+      // Only what --write itself created is deleted; any hand-written text keeps the file.
+      if (rest.trim() === heading || rest.trim() === '') removals.push(file)
+      else outputs.push([file, rest])
+    }
+  }
+
   for (const [file, content] of outputs) {
     if (content === null) continue
     const target = path.join(root, file)
@@ -115,7 +161,15 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
       errors.push(`${file} is stale or was edited by hand; ${REGENERATE}`)
     }
   }
-  if (written.length > 0) files = listFiles(root)
+  for (const file of removals) {
+    if (write) {
+      unlinkSync(path.join(root, file))
+      removed.push(file)
+    } else {
+      errors.push(`${file} holds only a generated block that no ADR scopes any more; ${REGENERATE}`)
+    }
+  }
+  if (written.length > 0 || removed.length > 0) files = listFiles(root)
 
   const anchored = new Set<string>()
   const index = indexFiles(files)
@@ -168,10 +222,10 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
   }
 
   for (const adr of adrs) {
-    if (adr.tags.length > 0 || anchored.has(adr.slug)) continue
+    if (adr.tags.length > 0 || adr.scope.length > 0 || anchored.has(adr.slug)) continue
     if (adr.state === 'active' && !adr.crossCutting) {
       warnings.push(
-        `${adr.path}: no tag and no ADR(${adr.slug}) anchor, so nothing leads here; tag it or anchor it in the code it governs`,
+        `${adr.path}: no tag, no scope and no ADR(${adr.slug}) anchor, so nothing leads here; tag it, scope it to the directory it governs, or anchor it in the code`,
       )
     } else if (adr.state === 'deprecated') {
       notices.push(
@@ -195,6 +249,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     warnings,
     notices,
     written,
+    removed,
   }
 }
 
@@ -317,6 +372,31 @@ function parseAdr(
     }
   }
 
+  let scope: string[] = []
+  if (front.scope !== undefined && front.scope !== null) {
+    if (Array.isArray(front.scope) && front.scope.every((s) => typeof s === 'string')) {
+      for (const raw of front.scope as string[]) {
+        const dir = raw.trim().replace(/\/+$/, '')
+        if (dir === '' || dir === '.') {
+          fail(
+            `scope "${raw}" is the repository root; use tags or cross-cutting for rules that apply everywhere`,
+          )
+        } else if (
+          GLOB.test(dir) ||
+          dir.startsWith('/') ||
+          dir.split('/').some((s) => s === '' || s === '.' || s === '..')
+        ) {
+          fail(`scope "${raw}" must be a repository-relative directory, without globs or ".."`)
+        } else {
+          scope.push(dir)
+        }
+      }
+      scope = [...new Set(scope)]
+    } else {
+      fail('scope must be a list of directories')
+    }
+  }
+
   let crossCutting = false
   if (front['cross-cutting'] !== undefined) {
     if (typeof front['cross-cutting'] === 'boolean') crossCutting = front['cross-cutting']
@@ -365,7 +445,7 @@ function parseAdr(
     : supersededBy
       ? 'superseded'
       : 'retired'
-  return { path: file, slug, summary, tags, crossCutting, supersededBy, state }
+  return { path: file, slug, summary, tags, scope, crossCutting, supersededBy, state }
 }
 
 function indexAdrs(adrs: Adr[], errors: string[]): Map<string, Adr> {
@@ -452,8 +532,9 @@ function renderReadme(adrs: Adr[], tags: Map<string, string>, bySlug: Map<string
     'For the map of the code, read [ARCHITECTURE.md](ARCHITECTURE.md).',
     '',
     'Each entry is a tagged decision in force: its ruling, then the record that explains it.',
-    'Untagged decisions are local to one area and are not listed here; the `ADR(slug)` comments in',
-    'the code they govern lead to them. New decisions start from [adr-template.md](adr-template.md).',
+    'Untagged decisions are local to one area and are not listed here; the code they govern leads to',
+    'them, through the `AGENTS.md` their `scope` generates or an `ADR(slug)` comment. New decisions',
+    'start from [adr-template.md](adr-template.md).',
   ]
   for (const [tag, description] of tags) {
     const entries = tagged.filter((a) => a.tags.includes(tag))
@@ -470,6 +551,20 @@ function renderReadme(adrs: Adr[], tags: Map<string, string>, bySlug: Map<string
   return `${lines.join('\n')}\n`
 }
 
+function renderScopeBlock(dir: string, adrs: Adr[], bySlug: Map<string, Adr>): string {
+  return [
+    BEGIN_MARKER,
+    '<!-- Generated by `npm run docs:gen` from the decisions scoped to this directory. Do not edit. -->',
+    '',
+    'Decisions that govern this directory and everything under it. Read the record before changing',
+    'what it covers.',
+    '',
+    ...adrs.map((a) => entry(a, dir, bySlug)),
+    '',
+    END_MARKER,
+  ].join('\n')
+}
+
 function renderAgentsBlock(adrs: Adr[]): string {
   const entries = adrs
     .filter((a) => a.state === 'active' && a.crossCutting)
@@ -484,17 +579,38 @@ function renderAgentsBlock(adrs: Adr[]): string {
   ].join('\n')
 }
 
-function spliceBlock(agents: string, block: string, errors: string[]): string | null {
-  const lines = agents.split('\n')
+/**
+ * Replaces the generated block in `text` with `block`, or removes it, markers and all, when `block`
+ * is null. With `append`, a file without markers gets the block at its end.
+ */
+function spliceBlock(
+  text: string,
+  block: string | null,
+  file: string,
+  append: boolean,
+  errors: string[],
+): string | null {
+  const lines = text.split('\n')
   const begins = lines.flatMap((l, i) => (l.trim() === BEGIN_MARKER ? [i] : []))
   const ends = lines.flatMap((l, i) => (l.trim() === END_MARKER ? [i] : []))
+  if (append && block !== null && begins.length === 0 && ends.length === 0) {
+    return `${text.trimEnd()}\n\n${block}\n`
+  }
   if (begins.length !== 1 || ends.length !== 1 || begins[0] > ends[0]) {
     errors.push(
-      `${AGENTS}: needs exactly one ${BEGIN_MARKER} line followed by one ${END_MARKER} line; restore them and ${REGENERATE}`,
+      `${file}: needs exactly one ${BEGIN_MARKER} line followed by one ${END_MARKER} line; restore them and ${REGENERATE}`,
     )
     return null
   }
-  return [...lines.slice(0, begins[0]), block, ...lines.slice(ends[0] + 1)].join('\n')
+  if (block !== null) {
+    return [...lines.slice(0, begins[0]), block, ...lines.slice(ends[0] + 1)].join('\n')
+  }
+  const before = lines.slice(0, begins[0]).join('\n').trimEnd()
+  const after = lines
+    .slice(ends[0] + 1)
+    .join('\n')
+    .trim()
+  return `${[before, after].filter(Boolean).join('\n\n')}\n`
 }
 
 interface Link {
@@ -634,6 +750,7 @@ if (import.meta.main) {
     strict: args.includes('--strict'),
   })
   for (const file of result.written) console.log(`docs-check: wrote ${file}`)
+  for (const file of result.removed) console.log(`docs-check: removed ${file}`)
   for (const error of result.errors) console.error(`error: ${error}`)
   for (const warning of [...result.warnings, ...result.notices])
     console.error(`warning: ${warning}`)

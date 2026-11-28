@@ -6,8 +6,9 @@
 For the map of the code, read [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Each entry is a tagged decision in force: its ruling, then the record that explains it.
-Untagged decisions are local to one area and are not listed here; the `ADR(slug)` comments in
-the code they govern lead to them. New decisions start from [adr-template.md](adr-template.md).
+Untagged decisions are local to one area and are not listed here; the code they govern leads to
+them, through the `AGENTS.md` their `scope` generates or an `ADR(slug)` comment. New decisions
+start from [adr-template.md](adr-template.md).
 
 ## documentation: How decisions and documentation are recorded and kept true
 
