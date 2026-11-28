@@ -95,8 +95,8 @@ Harper.js (WASM) · Vitest
 
 Start with [AGENTS.md](AGENTS.md), the working rules for people and coding agents alike.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) maps the code, [docs/README.md](docs/README.md) indexes
-the decisions in force, and [docs/development](docs/development/README.md) lists the development
-rules. CI runs lint, type-check, tests and a build on every PR against `master`, `develop` or `dev`.
+the decisions that span areas, and [docs/development](docs/development/README.md) lists the
+development rules. CI runs lint, type-check, tests and a build on every PR against `master`, `develop` or `dev`.
 
 ## Acknowledgments
 
