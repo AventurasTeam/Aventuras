@@ -1,12 +1,13 @@
 /**
  * Generates and validates the decision records: `docs/README.md`, the generated blocks in the
- * root and scoped `AGENTS.md` files, ADR frontmatter and headings, `ADR(slug)` anchors, doc paths
- * named in source, relative links in Markdown, and evidence coverage. The rules are in the
- * bootstrap ADR, docs/decisions/2026-10-12-decision-records.md.
+ * root and scoped `AGENTS.md` files, ADR frontmatter and headings, merged summaries, `ADR(slug)`
+ * anchors, doc paths named in source, relative links in Markdown, and evidence coverage. The rules
+ * are in the bootstrap ADR, docs/decisions/2026-10-12-decision-records.md.
  *
- *   node scripts/docs-check.ts            validate; fail on errors, including stale outputs
- *   node scripts/docs-check.ts --write    regenerate the outputs, then validate
- *   node scripts/docs-check.ts --strict   validate; warnings fail too, except notices (CI)
+ *   node scripts/docs-check.ts               validate; fail on errors, including stale outputs
+ *   node scripts/docs-check.ts --write       regenerate the outputs, then validate
+ *   node scripts/docs-check.ts --strict      validate; warnings fail too, except notices (CI)
+ *   node scripts/docs-check.ts --base <ref>  compare merged summaries with <ref> (origin/master)
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -73,7 +74,17 @@ export interface Result {
   removed: string[]
 }
 
-export function docsCheck(root: string, { write = false, strict = false } = {}): Result {
+export interface Options {
+  write?: boolean
+  strict?: boolean
+  /** The ref whose merged ADRs' summaries must not change. Without one, that check is skipped. */
+  base?: string
+}
+
+export function docsCheck(
+  root: string,
+  { write = false, strict = false, base }: Options = {},
+): Result {
   const errors: string[] = []
   const warnings: string[] = []
   const notices: string[] = []
@@ -89,6 +100,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     .filter((a): a is Adr => a !== null)
     .sort(byFilename)
   const bySlug = indexAdrs(adrs, errors)
+  if (base) checkMergedSummaries(root, base, bySlug, errors, notices)
 
   const scoped = new Map<string, Adr[]>()
   const { dirs } = indexFiles(files)
@@ -613,6 +625,59 @@ function spliceBlock(
   return `${[before, after].filter(Boolean).join('\n\n')}\n`
 }
 
+/**
+ * A merged ADR's summary is its ruling: it never changes, and its slug never disappears. Compares
+ * against the merge-base with `base`, reading only the frontmatter there, so history is never
+ * held to today's tags or headings.
+ */
+function checkMergedSummaries(
+  root: string,
+  base: string,
+  bySlug: Map<string, Adr>,
+  errors: string[],
+  notices: string[],
+): void {
+  const git = (...args: string[]) =>
+    execFileSync('git', args, {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 64 * 1024 * 1024,
+    }).toString('utf8')
+  let mergeBase: string
+  try {
+    mergeBase = git('merge-base', 'HEAD', base).trim()
+  } catch {
+    notices.push(`no merge-base with ${base}, so merged summaries were not checked; fetch ${base}`)
+    return
+  }
+  const merged = git('ls-tree', '-r', '-z', '--name-only', mergeBase, '--', DECISIONS_DIR)
+    .split('\0')
+    .filter((f) => f.endsWith('.md'))
+  for (const file of merged) {
+    const match = FILENAME.exec(path.posix.basename(file))
+    if (!match) continue
+    const { data } = splitFrontmatter(git('show', `${mergeBase}:${file}`))
+    let front: unknown = null
+    try {
+      front = data === null ? null : parseYaml(data)
+    } catch {
+      continue
+    }
+    if (!isRecord(front) || typeof front.summary !== 'string' || !front.summary.trim()) continue
+    const summary = oneLine(front.summary)
+    const current = bySlug.get(match[4])
+    if (!current) {
+      errors.push(
+        `${file}: merged ADR ${match[4]} was removed or renamed; restore it, and retire it with active: false instead`,
+      )
+    } else if (current.summary && current.summary !== summary) {
+      errors.push(
+        `${current.path}: the summary of a merged ADR is its ruling and must stay "${summary}"; restore it, and supersede the ADR to change the ruling`,
+      )
+    }
+  }
+}
+
 interface Link {
   target: string
   error?: string
@@ -739,15 +804,25 @@ function firstLine(error: unknown): string {
 
 if (import.meta.main) {
   const args = process.argv.slice(2)
-  const unknown = args.find((a) => a !== '--write' && a !== '--strict')
-  if (unknown) {
-    console.error(`docs-check: unknown argument ${unknown}; use --write and/or --strict`)
+  let base = 'origin/master'
+  const flags: string[] = []
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--base' && args[i + 1]) base = args[++i]
+    else if (args[i].startsWith('--base=')) base = args[i].slice('--base='.length)
+    else flags.push(args[i])
+  }
+  const unknown = flags.find((a) => a !== '--write' && a !== '--strict')
+  if (unknown || !base) {
+    console.error(
+      `docs-check: unknown argument ${unknown ?? '--base'}; use --write, --strict and --base <ref>`,
+    )
     process.exit(2)
   }
   const root = path.resolve(import.meta.dirname, '..')
   const result = docsCheck(root, {
-    write: args.includes('--write'),
-    strict: args.includes('--strict'),
+    write: flags.includes('--write'),
+    strict: flags.includes('--strict'),
+    base,
   })
   for (const file of result.written) console.log(`docs-check: wrote ${file}`)
   for (const file of result.removed) console.log(`docs-check: removed ${file}`)

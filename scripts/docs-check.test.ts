@@ -584,6 +584,109 @@ describe('scope', () => {
   })
 })
 
+describe('merged summaries', () => {
+  const file = 'docs/decisions/2026-01-01-a.md'
+  const merged = adr('summary: Keep the ruling.\ntags: [cache]')
+
+  function commit(root: string) {
+    execFileSync('git', ['add', '-A'], { cwd: root })
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=t',
+        '-c',
+        'user.email=t@t',
+        '-c',
+        'commit.gpgsign=false',
+        'commit',
+        '-qm',
+        'base',
+      ],
+      { cwd: root },
+    )
+  }
+
+  /** A repo whose HEAD holds `files`, then the working tree after `change`. */
+  function against(files: Record<string, string>, change: (root: string) => void, base = 'HEAD') {
+    const root = repo(files)
+    docsCheck(root, { write: true })
+    commit(root)
+    change(root)
+    docsCheck(root, { write: true })
+    return docsCheck(root, { base })
+  }
+
+  const edit = (root: string, name: string, content: string) => {
+    mkdirSync(path.dirname(path.join(root, name)), { recursive: true })
+    writeFileSync(path.join(root, name), content)
+  }
+
+  it.each([
+    ['unchanged', () => {}],
+    [
+      'reflowed',
+      (root: string) => edit(root, file, adr('summary: >\n  Keep the\n  ruling.\ntags: [cache]')),
+    ],
+    [
+      'retagged',
+      (root: string) => edit(root, file, adr('summary: Keep the ruling.\ncross-cutting: true')),
+    ],
+    ['body edited', (root: string) => edit(root, file, merged.replace('Why.', 'Why, refined.'))],
+    [
+      'moved into a subdirectory with a new date',
+      (root: string) => {
+        rmSync(path.join(root, file))
+        edit(root, 'docs/decisions/old/2026-02-01-a.md', merged)
+      },
+    ],
+  ])('accepts a merged ADR that is %s', (_, change) => {
+    expect(against({ [file]: merged }, change)).toMatchObject({ errors: [], notices: [] })
+  })
+
+  it('rejects a changed summary', () => {
+    const result = against({ [file]: merged }, (root) =>
+      edit(root, file, adr('summary: A new ruling.\ntags: [cache]')),
+    )
+    expect(result.errors).toEqual([
+      `${file}: the summary of a merged ADR is its ruling and must stay "Keep the ruling."; restore it, and supersede the ADR to change the ruling`,
+    ])
+  })
+
+  it('rejects a removed ADR', () => {
+    const result = against({ [file]: merged }, (root) => rmSync(path.join(root, file)))
+    expect(result.errors).toEqual([
+      `${file}: merged ADR a was removed or renamed; restore it, and retire it with active: false instead`,
+    ])
+  })
+
+  it('does not hold merged ADRs to the current tags or headings', () => {
+    const result = against({ [file]: merged }, (root) => {
+      edit(root, 'docs/decision-tags.yml', 'persistence: Storage\n')
+      edit(root, file, adr('summary: Keep the ruling.'))
+      edit(root, 'src/a.ts', '// ADR(a): kept\n')
+    })
+    expect(result).toMatchObject({ errors: [], warnings: [], notices: [] })
+  })
+
+  it('notes a base it cannot resolve and checks nothing', () => {
+    const result = against({ [file]: merged }, (root) => rmSync(path.join(root, file)), 'nope')
+    expect(result.errors).toEqual([])
+    expect(result.notices).toEqual([
+      'no merge-base with nope, so merged summaries were not checked; fetch nope',
+    ])
+  })
+
+  it('skips the check without a base', () => {
+    const root = repo({ [file]: merged })
+    docsCheck(root, { write: true })
+    commit(root)
+    rmSync(path.join(root, file))
+    docsCheck(root, { write: true })
+    expect(docsCheck(root)).toMatchObject({ errors: [], notices: [] })
+  })
+})
+
 describe('generated outputs', () => {
   it('rejects a hand-edited index or block', () => {
     const root = repo({ 'docs/decisions/2026-01-01-a.md': adr('summary: A.\ncross-cutting: true') })
