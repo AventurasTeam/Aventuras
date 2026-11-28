@@ -618,6 +618,16 @@ describe('scope', () => {
     expect(read(root, nested)).toBe(`${notes}${code}`)
   })
 
+  it('removes no block while an ADR fails to parse', () => {
+    const root = repo({ [file]: scoped(), ...source })
+    check(root)
+    writeFileSync(path.join(root, file), adr('summary: [A.\nscope: [src/x]'))
+    const result = docsCheck(root, { write: true })
+    expect(result.errors).toContainEqual(expect.stringContaining('frontmatter is not valid YAML'))
+    expect(result.removed).toEqual([])
+    expect(existsSync(path.join(root, nested))).toBe(true)
+  })
+
   it('finds an orphaned block in a directory no ADR scopes', () => {
     const orphan = 'src/y/AGENTS.md'
     const root = repo({

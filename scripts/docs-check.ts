@@ -100,6 +100,8 @@ export function docsCheck(
     .filter((a): a is Adr => a !== null)
     .sort(byFilename)
   const bySlug = indexAdrs(adrs, errors)
+  // An ADR that failed to parse may have lost its scope, so no block is removed until all parse.
+  const unparsed = errors.length > 0
   if (base) checkMergedSummaries(root, base, bySlug, errors, notices)
 
   const scoped = new Map<string, Adr[]>()
@@ -152,7 +154,7 @@ export function docsCheck(
           ? `${heading}\n\n${scopeBlock}\n`
           : spliceBlock(current, scopeBlock, file, true, errors),
       ])
-    } else if (current !== null) {
+    } else if (current !== null && !unparsed) {
       const rest = spliceBlock(current, null, file, false, errors)
       if (rest === null) continue
       // Only what --write itself created is deleted; any hand-written text keeps the file.
