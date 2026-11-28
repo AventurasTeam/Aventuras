@@ -12,5 +12,4 @@ start from [adr-template.md](adr-template.md).
 
 ## documentation: How decisions and documentation are recorded and kept true
 
-- Record each decision as one ADR in docs/decisions/, in the PR that makes it. Document only what the code cannot say. [decision-records](decisions/2026-10-12-decision-records.md)
-- Give every ADR a tag or an `ADR(slug)` anchor; an ADR with neither is reachable only by scanning General. [every-decision-reachable](decisions/2026-11-27-every-decision-reachable.md)
+- Record the intent code can't express as an ADR when it spans more than one site or won't fit in a short comment. [decision-records](decisions/2026-10-12-decision-records.md)
