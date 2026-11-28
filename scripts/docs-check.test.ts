@@ -725,7 +725,11 @@ describe('merged summaries', () => {
   })
 
   it('does not hold merged ADRs to the current tags or headings', () => {
-    const result = against({ [file]: merged }, (root) => {
+    const old = adr(
+      'summary: Keep the ruling.\ntags: [cache]',
+      BODY.replace('## Considered ', '## '),
+    )
+    const result = against({ [file]: old }, (root) => {
       edit(root, 'docs/decision-tags.yml', 'persistence: Storage\n')
       edit(root, file, adr('summary: Keep the ruling.'))
       edit(root, 'src/a.ts', '// ADR(a): kept\n')
