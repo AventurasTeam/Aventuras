@@ -355,6 +355,16 @@ describe('links', () => {
     expect(errors).toEqual([])
   })
 
+  it('decodes named entities in a heading, but not in its code', () => {
+    const errors = errorsFor({
+      'docs/ARCHITECTURE.md':
+        '# A &amp; B\n\n## `c&amp;d`\n\n[x](#a--b) [y](#campd) [z](#a-amp-b)\n',
+    })
+    expect(errors).toEqual([
+      'docs/ARCHITECTURE.md: #a-amp-b: docs/ARCHITECTURE.md has no heading or anchor "#a-amp-b"',
+    ])
+  })
+
   it('counts an HTML anchor, but not one shown as code', () => {
     const errors = errorsFor({
       'docs/ARCHITECTURE.md': [

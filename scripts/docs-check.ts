@@ -758,9 +758,27 @@ function plainText(tokens: Token[] | undefined): string {
     .map((t) => {
       if (t.type === 'html') return ''
       if ('tokens' in t && t.tokens) return plainText(t.tokens)
+      if (t.type === 'text') return decodeEntities(t.text)
       return 'text' in t && typeof t.text === 'string' ? t.text : ''
     })
     .join('')
+}
+
+// marked decodes numeric references in text but leaves named ones; a code span keeps both.
+const ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: '\u00a0',
+}
+
+function decodeEntities(text: string): string {
+  return text.replace(
+    /&([a-z]+);/gi,
+    (whole, name: string) => ENTITIES[name.toLowerCase()] ?? whole,
+  )
 }
 
 function splitFrontmatter(text: string): { data: string | null; body: string } {
