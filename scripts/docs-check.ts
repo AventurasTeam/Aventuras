@@ -618,10 +618,12 @@ function spliceBlock(
     return [...lines.slice(0, begins[0]), block, ...lines.slice(ends[0] + 1)].join('\n')
   }
   const before = lines.slice(0, begins[0]).join('\n').trimEnd()
+  // Only blank lines go: the first line after the block may be indented code.
   const after = lines
     .slice(ends[0] + 1)
     .join('\n')
-    .trim()
+    .replace(/^(?:[ \t]*\n)+/, '')
+    .trimEnd()
   return `${[before, after].filter(Boolean).join('\n\n')}\n`
 }
 

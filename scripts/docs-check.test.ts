@@ -607,6 +607,17 @@ describe('scope', () => {
     expect(read(root, nested)).toBe(notes)
   })
 
+  it('keeps the indentation of the text after a removed block', () => {
+    const notes = '# Notes\n'
+    const code = '\n    indented code\n'
+    const root = repo({ [file]: scoped(), ...source, [nested]: notes })
+    check(root)
+    writeFileSync(path.join(root, nested), `${read(root, nested)}${code}`)
+    writeFileSync(path.join(root, file), unscoped)
+    expect(check(root).errors).toEqual([])
+    expect(read(root, nested)).toBe(`${notes}${code}`)
+  })
+
   it('finds an orphaned block in a directory no ADR scopes', () => {
     const orphan = 'src/y/AGENTS.md'
     const root = repo({
