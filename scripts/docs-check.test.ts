@@ -385,6 +385,12 @@ describe('links', () => {
     ])
   })
 
+  it('encodes a directory name that a link would misread', () => {
+    const root = repo({ 'docs/decisions/c#1/2026-01-01-a.md': adr('summary: A.\ntags: [cache]') })
+    expect(check(root, true)).toMatchObject({ ok: true, errors: [] })
+    expect(read(root, 'docs/README.md')).toContain('(decisions/c%231/2026-01-01-a.md)')
+  })
+
   it('rejects a link out of the repository', () => {
     expect(errorsFor({ 'docs/ARCHITECTURE.md': '[x](../../elsewhere.md)\n' })).toEqual([
       'docs/ARCHITECTURE.md: ../../elsewhere.md points outside the repository',
