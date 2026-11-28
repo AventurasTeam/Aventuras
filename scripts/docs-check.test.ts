@@ -348,6 +348,13 @@ describe('links', () => {
     ])
   })
 
+  it('numbers repeated headings as GitHub does', () => {
+    const errors = errorsFor({
+      'docs/ARCHITECTURE.md': '# A\n\n## A-1\n\n## A\n\n[x](#a-1) [y](#a-2)\n',
+    })
+    expect(errors).toEqual([])
+  })
+
   it('rejects a link out of the repository', () => {
     expect(errorsFor({ 'docs/ARCHITECTURE.md': '[x](../../elsewhere.md)\n' })).toEqual([
       'docs/ARCHITECTURE.md: ../../elsewhere.md points outside the repository',

@@ -724,13 +724,19 @@ function markdownLinks(text: string): string[] {
 
 function headingSlugs(text: string): Set<string> {
   const slugs = new Set<string>()
-  const counts = new Map<string, number>()
+  // As github-slugger does, a suffix that would repeat an earlier slug is skipped.
+  const occurrences = new Map<string, number>()
   marked.walkTokens(Lexer.lex(text), (token) => {
     if (token.type !== 'heading') return
     const base = slugify(plainText(token.tokens))
-    const n = counts.get(base) ?? 0
-    counts.set(base, n + 1)
-    slugs.add(n === 0 ? base : `${base}-${n}`)
+    let slug = base
+    while (occurrences.has(slug)) {
+      const n = (occurrences.get(base) ?? 0) + 1
+      occurrences.set(base, n)
+      slug = `${base}-${n}`
+    }
+    occurrences.set(slug, 0)
+    slugs.add(slug)
   })
   for (const [, id] of text.matchAll(HTML_ID)) slugs.add(id)
   return slugs
