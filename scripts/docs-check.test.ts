@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -734,6 +734,22 @@ describe('generated outputs', () => {
       expect.stringContaining(`over the budget of ${AGENTS_BLOCK_MAX_LINES}`),
     ])
   })
+})
+
+describe('command line', () => {
+  const run = (...args: string[]) =>
+    spawnSync(process.execPath, [path.join(import.meta.dirname, 'docs-check.ts'), ...args], {
+      encoding: 'utf8',
+    })
+
+  it.each([[['--base', '--strict']], [['--strict', '--base']], [['--base=']]])(
+    'rejects %j as a missing ref',
+    (args) => {
+      const result = run(...args)
+      expect(result.status).toBe(2)
+      expect(result.stderr).toContain('--base needs a ref')
+    },
+  )
 })
 
 describe('slugify', () => {

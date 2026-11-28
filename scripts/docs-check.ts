@@ -807,15 +807,17 @@ if (import.meta.main) {
   let base = 'origin/master'
   const flags: string[] = []
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--base' && args[i + 1]) base = args[++i]
+    if (args[i] === '--base') base = args[++i] ?? ''
     else if (args[i].startsWith('--base=')) base = args[i].slice('--base='.length)
     else flags.push(args[i])
   }
+  if (!base || base.startsWith('-')) {
+    console.error('docs-check: --base needs a ref, such as --base origin/master')
+    process.exit(2)
+  }
   const unknown = flags.find((a) => a !== '--write' && a !== '--strict')
-  if (unknown || !base) {
-    console.error(
-      `docs-check: unknown argument ${unknown ?? '--base'}; use --write, --strict and --base <ref>`,
-    )
+  if (unknown) {
+    console.error(`docs-check: unknown argument ${unknown}; use --write, --strict and --base <ref>`)
     process.exit(2)
   }
   const root = path.resolve(import.meta.dirname, '..')
