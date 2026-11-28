@@ -171,7 +171,7 @@ export function docsCheck(root: string, { write = false, strict = false } = {}):
     if (adr.tags.length > 0 || anchored.has(adr.slug)) continue
     if (adr.state === 'active' && !adr.crossCutting) {
       warnings.push(
-        `${adr.path}: no tag and no ADR(${adr.slug}) anchor, so only the General list leads here; tag it or anchor it in the code it governs`,
+        `${adr.path}: no tag and no ADR(${adr.slug}) anchor, so nothing leads here; tag it or anchor it in the code it governs`,
       )
     } else if (adr.state === 'deprecated') {
       notices.push(
@@ -433,17 +433,16 @@ function isListed(adr: Adr): boolean {
   return adr.state === 'active' || adr.state === 'deprecated'
 }
 
-function renderReadme(adrs: Adr[], tags: Map<string, string>, bySlug: Map<string, Adr>): string {
-  const listed = adrs.filter(isListed)
-  const entry = (adr: Adr) => {
-    const link = `[${adr.slug}](${relativeToDocs(adr.path)})`
-    const successor = adr.state === 'deprecated' ? bySlug.get(adr.supersededBy ?? '') : undefined
-    const mark = successor
-      ? `**Deprecated → [${successor.slug}](${relativeToDocs(successor.path)}).** `
-      : ''
-    return `- ${mark}${adr.summary} ${link}`
-  }
+/** One generated list line, with links relative to `from`, the directory of the output. */
+function entry(adr: Adr, from: string, bySlug: Map<string, Adr>): string {
+  const href = (target: Adr) => path.posix.relative(from, target.path)
+  const successor = adr.state === 'deprecated' ? bySlug.get(adr.supersededBy ?? '') : undefined
+  const mark = successor ? `**Deprecated → [${successor.slug}](${href(successor)}).** ` : ''
+  return `- ${mark}${adr.summary} [${adr.slug}](${href(adr)})`
+}
 
+function renderReadme(adrs: Adr[], tags: Map<string, string>, bySlug: Map<string, Adr>): string {
+  const tagged = adrs.filter((a) => isListed(a) && a.tags.length > 0)
   const lines = [
     '# Decisions',
     '',
@@ -452,23 +451,22 @@ function renderReadme(adrs: Adr[], tags: Map<string, string>, bySlug: Map<string
     '',
     'For the map of the code, read [ARCHITECTURE.md](ARCHITECTURE.md).',
     '',
-    'Each entry is a decision in force: its ruling, then the record that explains it. New decisions',
-    'start from [adr-template.md](adr-template.md).',
+    'Each entry is a tagged decision in force: its ruling, then the record that explains it.',
+    'Untagged decisions are local to one area and are not listed here; the `ADR(slug)` comments in',
+    'the code they govern lead to them. New decisions start from [adr-template.md](adr-template.md).',
   ]
-  const section = (heading: string, entries: Adr[]) => {
-    if (entries.length > 0) lines.push('', `## ${heading}`, '', ...entries.map(entry))
-  }
   for (const [tag, description] of tags) {
-    section(
-      `${tag}: ${description}`,
-      listed.filter((a) => a.tags.includes(tag)),
-    )
+    const entries = tagged.filter((a) => a.tags.includes(tag))
+    if (entries.length > 0) {
+      lines.push(
+        '',
+        `## ${tag}: ${description}`,
+        '',
+        ...entries.map((a) => entry(a, 'docs', bySlug)),
+      )
+    }
   }
-  section(
-    'General',
-    listed.filter((a) => a.tags.length === 0),
-  )
-  if (listed.length === 0) lines.push('', 'No decisions recorded yet.')
+  if (tagged.length === 0) lines.push('', 'No tagged decisions yet.')
   return `${lines.join('\n')}\n`
 }
 
@@ -587,10 +585,6 @@ function splitFrontmatter(text: string): { data: string | null; body: string } {
 
 function stripFrontmatter(text: string): string {
   return splitFrontmatter(text).body
-}
-
-function relativeToDocs(file: string): string {
-  return file.slice('docs/'.length)
 }
 
 function byFilename(a: Adr, b: Adr): number {

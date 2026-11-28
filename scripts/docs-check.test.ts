@@ -72,7 +72,7 @@ function errorsFor(files: Record<string, string | null>): string[] {
 }
 
 describe('a valid set', () => {
-  it('passes and renders the index grouped by tag, in vocabulary order', () => {
+  it('passes and renders the index grouped by tag, in vocabulary order, without untagged ADRs', () => {
     const root = repo({
       'docs/decisions/2026-01-02-cache-keys.md': adr(
         'summary: Generate our own cache keys.\ntags: [cache, persistence]\ncross-cutting: true',
@@ -89,18 +89,17 @@ describe('a valid set', () => {
     const readme = read(root, 'docs/README.md')
     const persistence = readme.indexOf('## persistence: Database schema')
     const cache = readme.indexOf('## cache: Caching strategy')
-    const general = readme.indexOf('## General')
     expect(persistence).toBeGreaterThan(-1)
     expect(cache).toBeGreaterThan(persistence)
-    expect(general).toBeGreaterThan(cache)
     const persistenceSection = readme.slice(persistence, cache)
     expect(persistenceSection.indexOf('wal-mode')).toBeLessThan(
       persistenceSection.indexOf('cache-keys'),
     )
-    expect(readme.slice(cache, general)).toContain(
+    expect(readme.slice(cache)).toContain(
       '- Generate our own cache keys. [cache-keys](decisions/2026-01-02-cache-keys.md)',
     )
-    expect(readme.slice(general)).toContain('plain-rule')
+    expect(readme).not.toContain('## General')
+    expect(readme).not.toContain('plain-rule')
 
     const agents = read(root, 'AGENTS.md')
     expect(agents).toContain('Hand-written.')
@@ -213,7 +212,7 @@ describe('deprecation and supersession', () => {
   it('lists a deprecated ADR with its successor and keeps it out of AGENTS.md', () => {
     const root = repo({
       'docs/decisions/2026-01-01-old.md': adr(
-        'summary: Old way.\nactive: true\nsuperseded-by: new\ncross-cutting: true',
+        'summary: Old way.\ntags: [cache]\nactive: true\nsuperseded-by: new\ncross-cutting: true',
       ),
       'docs/decisions/2026-02-01-new.md': adr('summary: New way.\ncross-cutting: true'),
     })
@@ -240,7 +239,7 @@ describe('deprecation and supersession', () => {
       'docs/decisions/2026-03-01-c.md': adr('summary: C.\nactive: false'),
     })
     expect(check(root).errors).toEqual([])
-    expect(read(root, 'docs/README.md')).toContain('No decisions recorded yet.')
+    expect(read(root, 'docs/README.md')).toContain('No tagged decisions yet.')
   })
 
   it('defaults active to false when superseded-by is set', () => {
@@ -412,7 +411,7 @@ describe('reachability', () => {
 
   it('warns about an untagged, unanchored active ADR, and fails only under --strict', () => {
     const root = repo({ [bare]: adr('summary: A.') })
-    const warning = `${bare}: no tag and no ADR(a) anchor, so only the General list leads here; tag it or anchor it in the code it governs`
+    const warning = `${bare}: no tag and no ADR(a) anchor, so nothing leads here; tag it or anchor it in the code it governs`
     expect(check(root).warnings).toEqual([warning])
     expect(check(root).ok).toBe(true)
     expect(check(root, true)).toMatchObject({ ok: false, errors: [], warnings: [warning] })
@@ -455,13 +454,10 @@ describe('reachability', () => {
     ])
   })
 
-  it('does not note an oversized General section', () => {
-    expect(check(repo(many(40)), true)).toMatchObject({
-      ok: true,
-      errors: [],
-      warnings: [],
-      notices: [],
-    })
+  it('neither lists nor counts untagged ADRs, however many', () => {
+    const root = repo(many(40))
+    expect(check(root, true)).toMatchObject({ ok: true, errors: [], warnings: [], notices: [] })
+    expect(read(root, 'docs/README.md')).not.toContain('[d0]')
   })
 
   describe('deprecated', () => {
