@@ -2,8 +2,8 @@
 
 The map of the code: what the app is, where things live, and what holds across the boundaries.
 It is country-level on purpose. Files, modules and types are named, not linked; find them with
-symbol search. The reasons behind specific rules are in the decision records indexed in
-[README.md](README.md).
+symbol search. The reasons behind specific rules are in the decision records: those that span
+areas are indexed in [README.md](README.md), and local ones are reached from the code they govern.
 
 Human-owned: agents may propose edits in a PR. Revisit it a few times a year, not per change.
 

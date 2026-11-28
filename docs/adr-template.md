@@ -3,14 +3,23 @@
 # The date is when the decision was made. The slug is the ADR's ID: lowercase kebab-case, unique
 # across docs/decisions/, and never changed after merge.
 #
+# Write an ADR for intent the code can't express when it spans more than one site or won't fit in
+# a short comment; a reason that fits in a short comment at one site stays a comment. A refinement
+# amends the ADR it refines.
+#
 # Required. The ruling in one or two imperative sentences, readable without opening the file.
 # Aim for under 118 characters, one line; over 236 draws a notice, and 512 is the limit. It
-# becomes this ADR's line in docs/README.md.
+# becomes this ADR's line in docs/README.md and scoped AGENTS.md files. After merge it never
+# changes: to change the ruling, supersede this ADR.
 summary: '{Do X; Y would break Z.}'
-# Optional, default []. Concerns this is about, from docs/decision-tags.yml. Not locations:
-# an ADR(slug) comment at the code it governs carries those. An untagged ADR needs such an
-# anchor, or only the General list leads to it.
+# Optional, default []. Concerns that cut across areas, from docs/decision-tags.yml. Only tagged
+# ADRs are listed in docs/README.md. An untagged ADR is local and needs a scope or an ADR(slug)
+# anchor, or nothing leads to it.
 tags: []
+# Optional, default []. Repository-relative directories this governs, not globs. docs:gen writes
+# the summary into each one's AGENTS.md, which Claude Code loads when it reads a file at or
+# below that directory.
+scope: []
 # Optional, default false. true copies the summary into AGENTS.md, which every agent loads.
 # Only for rules every change must follow; the block has a line budget.
 cross-cutting: false

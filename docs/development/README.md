@@ -5,8 +5,9 @@ rule in full: where it applies, what to do, and the short reason. That document 
 measurements and sources behind it.
 
 [AGENTS.md](../../AGENTS.md) repeats the rules under [Every change](#every-change). The
-architecture of each area is in [ARCHITECTURE.md](../ARCHITECTURE.md), and the decisions in force
-are indexed in [docs/README.md](../README.md).
+architecture of each area is in [ARCHITECTURE.md](../ARCHITECTURE.md). The decisions that span
+areas are indexed in [docs/README.md](../README.md); local ones are reached from the code they
+govern.
 
 ## Every change
 

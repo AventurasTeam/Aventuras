@@ -2,8 +2,9 @@
 
 Aventuras is a Tauri 2 + SvelteKit 3 interactive-fiction app: TypeScript strict, Svelte 5
 runes, SQLite, and a Rust layer for anything that would otherwise blow up the WebView heap.
-The map of the code is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); the decisions in force are
-indexed in [docs/README.md](docs/README.md).
+The map of the code is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); the decisions that span
+areas are indexed in [docs/README.md](docs/README.md), and local ones are reached from the code
+they govern.
 
 ## Commands
 
@@ -11,7 +12,7 @@ indexed in [docs/README.md](docs/README.md).
 npm run check      # svelte-check — the type check that counts (plain tsc is not configured for .svelte)
 npm test           # vitest, once
 npm run lint       # eslint + prettier, then rustfmt + clippy (lint:ts / lint:rust run one side)
-npm run docs:gen   # regenerate docs/README.md and the block below from decision frontmatter
+npm run docs:gen   # regenerate docs/README.md and the AGENTS.md blocks from decision frontmatter
 npm run docs:check # validate decisions, anchors, doc links and generated output
 npx tauri dev      # run the app
 ```
@@ -37,9 +38,9 @@ Never push or commit with `--no-verify`. When a hook fails, fix the cause; CI ru
 - **Platform floor**: nothing newer than Chrome 111 / Safari 16.4 unless MDN says it works there.
   Vite adds no polyfills and `check` will not catch it.
   [platform-support.md](docs/development/platform-support.md)
-- **Docs**: read an area's decisions and doc before changing it. Record a new decision, or a change
-  to one, as an ADR in the same PR (below), and update an area doc in the same commit when the
-  behaviour it describes changes.
+- **Docs**: read an area's decisions and doc before changing it. Record a new decision as an ADR,
+  or amend the ADR a change refines, in the same PR (below), and update an area doc in the same
+  commit when the behaviour it describes changes.
 
 Every other development rule — tests, network requests, migrations, UI components, the mobile
 scaffolds, CI and releases — is listed in [docs/development/README.md](docs/development/README.md),
@@ -53,11 +54,16 @@ A decision is one file in `docs/decisions/`, copied from
 
 - Record intent: conventions, conditional rules, intentional gaps, and why. Never restate what the
   code says.
+- A reason that fits in a short comment at one site is a comment, not an ADR. One that spans more
+  than one site or won't fit in a short comment, within one area, is an untagged ADR; one that
+  constrains work across areas is tagged. A refinement amends the ADR it refines.
 - Write it in the PR that makes the decision. Merging accepts it.
-- Don't edit a merged ADR's ruling. Supersede it with a new one: set `superseded-by` on the old one,
+- A merged ADR's `summary` is its ruling and never changes; the rest may be refined while the
+  summary holds. When it no longer does, supersede the ADR: set `superseded-by` on the old one,
   and `active: true` as well if existing code may keep following it.
-- Where a decision governs specific code, put `ADR(slug)` in a comment there, with a short
-  reason. Read the ADR before "fixing" code that carries one.
+- Where a decision governs a directory, list it in `scope`; `docs:gen` writes the summary into
+  that directory's `AGENTS.md`. Where it governs one site, put `ADR(slug)` in a comment there, with
+  a short reason. Read the ADR before "fixing" code either one covers.
 - Put raw material (logs, benchmarks, investigation notes) in `docs/evidence/` and link it from
   the ADR.
 - After changing any frontmatter, run `npm run docs:gen` and commit the result.
