@@ -806,8 +806,8 @@ export const MergeInFlightStaysOpen: Story = {
 
     await userEvent.keyboard('{Escape}')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    // The choices are inert while the write is in flight, their contents too: a disabled
-    // Pressable alone is box-none on web, which leaves its children clickable.
+    // The choices show no hover tint or pointer cursor while the write is in flight, their
+    // contents too: a disabled Pressable alone is box-none on web, which re-enables its children.
     const status = within(screen.getByRole('radiogroup', { name: 'Status' }))
     for (const value of ['active', 'staged'])
       expect(status.getByText(value)).toHaveStyle({ pointerEvents: 'none' })

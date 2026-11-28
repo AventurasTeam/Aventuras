@@ -16,16 +16,6 @@ import {
   type BranchRow,
 } from './branches'
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 type Chain = {
   select: () => Chain
   from: () => Chain
@@ -106,7 +96,7 @@ describe('readStoryBranches', () => {
   })
 
   it('throws when the read fails', async () => {
-    const read = deferred<BranchRow[]>()
+    const read = Promise.withResolvers<BranchRow[]>()
     const pending = readStoryBranches(stubDb(read.promise), 's1')
 
     read.reject(new Error('boom'))
@@ -183,8 +173,8 @@ describe('refreshBranches', () => {
   })
 
   it('drops a result that lands after a newer refresh has landed', async () => {
-    const older = deferred<BranchRow[]>()
-    const newer = deferred<BranchRow[]>()
+    const older = Promise.withResolvers<BranchRow[]>()
+    const newer = Promise.withResolvers<BranchRow[]>()
     const first = refreshBranches(stubDb(older.promise), 's1')
     const second = refreshBranches(stubDb(newer.promise), 's1')
 
@@ -197,8 +187,8 @@ describe('refreshBranches', () => {
   })
 
   it('drops a result that lands while a newer refresh is still reading', async () => {
-    const older = deferred<BranchRow[]>()
-    const newer = deferred<BranchRow[]>()
+    const older = Promise.withResolvers<BranchRow[]>()
+    const newer = Promise.withResolvers<BranchRow[]>()
     const first = refreshBranches(stubDb(older.promise), 's1')
     const second = refreshBranches(stubDb(newer.promise), 's1')
 
@@ -212,8 +202,8 @@ describe('refreshBranches', () => {
   })
 
   it('drops a refresh that was reading when the stores reset', async () => {
-    const stale = deferred<BranchRow[]>()
-    const fresh = deferred<BranchRow[]>()
+    const stale = Promise.withResolvers<BranchRow[]>()
+    const fresh = Promise.withResolvers<BranchRow[]>()
     const first = refreshBranches(stubDb(stale.promise), 's1')
     resetAllStores()
     const second = refreshBranches(stubDb(fresh.promise), 's1')
@@ -228,7 +218,7 @@ describe('refreshBranches', () => {
   })
 
   it('drops a refresh still reading at a reset when no refresh starts after it', async () => {
-    const read = deferred<BranchRow[]>()
+    const read = Promise.withResolvers<BranchRow[]>()
     const pending = refreshBranches(stubDb(read.promise), 's1')
     resetAllStores()
 
@@ -242,7 +232,7 @@ describe('refreshBranches', () => {
     const warn = vi.spyOn(logger, 'warn')
     branchesStore.hydrate('s1', [row('br_b')])
     const held = branchesStore.getBranches('s1')
-    const read = deferred<BranchRow[]>()
+    const read = Promise.withResolvers<BranchRow[]>()
     const refresh = refreshBranches(stubDb(read.promise), 's1')
 
     read.reject(new Error('disk gone'))

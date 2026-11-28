@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { isComposing } from '@/components/ui/ime'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
@@ -51,14 +52,6 @@ const PANEL_CLASS = cn('sm:max-w-[360px]', Platform.select({ web: 'max-w-[360px]
 
 // Branch ids are `br_<uuid>`, so no branch's option can carry this value.
 const ALL_BRANCHES = 'all'
-
-// RN-Web's own submit guard reads both signals; 229 is the key code an IME's confirming Enter can
-// carry with isComposing already false.
-const IME_KEY_CODE = 229
-
-const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
-  ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
-  ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
 function branchOf(value: string): DuplicateBranch {
   return value === ALL_BRANCHES ? 'all' : { branchId: value }

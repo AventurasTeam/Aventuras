@@ -409,7 +409,7 @@ describe('abortedBeforeTurn', () => {
         error: { kind: 'orchestrator', detail: 'x' },
       }),
     ).toBe(false)
-    expect(abortedBeforeTurn({ outcome: 'rejected', blockedBy: 'turn', converged: true })).toBe(
+    expect(abortedBeforeTurn({ outcome: 'rejected', blockedBy: 'per-turn', converged: true })).toBe(
       false,
     )
   })

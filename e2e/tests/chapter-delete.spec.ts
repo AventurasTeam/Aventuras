@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import { expandChapterCard } from '../flows/close-rerun'
 import { goToChapterTimeline, openStory } from '../flows/navigation'
 import {
   chapterByTitle,
@@ -130,12 +131,6 @@ async function headEntryId(page: Page): Promise<string | undefined> {
 }
 
 // The head of the action row is the card's expansion: Delete… renders only once it is open.
-async function expandCard(page: Page, chapterId: string): Promise<void> {
-  const head = chapterTimeline.cardHead(page, chapterId)
-  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click()
-  await expect(head).toHaveAttribute('aria-expanded', 'true')
-}
-
 // Rolls back to the entry after the chapter's end, read from the DB: the end reply becomes the head.
 async function rollBackPastEnd(page: Page, chapter: ChapterRow): Promise<void> {
   const rows = await queryApp(
@@ -172,12 +167,12 @@ test.describe('chapter delete — the latest card only, the guard, the whole cha
     expect(await loreRowCount(page(), seeded.loreId)).toBe(1)
 
     await goToChapterTimeline(page())
-    await expandCard(page(), nine.id)
+    await expandChapterCard(page(), nine.id)
     // The earlier card's action row rendered, with no Delete… in it.
     await expect(chapterTimeline.jump(page(), nine.id)).toBeVisible()
     await expect(chapterDelete.action(page(), nine.id)).toHaveCount(0)
 
-    await expandCard(page(), keep.id)
+    await expandChapterCard(page(), keep.id)
     await expect(chapterDelete.action(page(), keep.id)).toBeVisible()
     await expect(chapterDelete.action(page(), keep.id)).toBeEnabled()
   })
@@ -209,7 +204,7 @@ test.describe('chapter delete — the latest card only, the guard, the whole cha
 
   test('Delete chapter reverses the close: entries stay, stamps and lore go, the later write stands', async () => {
     const { seeded } = hero()
-    await expandCard(page(), keep.id)
+    await expandChapterCard(page(), keep.id)
     await chapterDelete.action(page(), keep.id).click()
     await expect(chapterDelete.dialog(page())).toBeVisible()
     await chapterDelete.confirm(page()).click()
@@ -227,7 +222,7 @@ test.describe('chapter delete — the latest card only, the guard, the whole cha
     expect(await groupDeltaCount(page(), seeded.closeActionId)).toBe(0)
 
     // The earlier chapter is the latest now: its card offers a live Delete….
-    await expandCard(page(), nine.id)
+    await expandChapterCard(page(), nine.id)
     await expect(chapterDelete.action(page(), nine.id)).toBeVisible()
     await expect(chapterDelete.action(page(), nine.id)).toBeEnabled()
   })
@@ -246,7 +241,7 @@ test.describe('chapter delete — the divider alone, then its kept work regenera
     expect(seeded.endEntryId).toBe(keep.endEntryId)
 
     await goToChapterTimeline(page())
-    await expandCard(page(), keep.id)
+    await expandChapterCard(page(), keep.id)
     await chapterDelete.action(page(), keep.id).click()
     await chapterDelete.removeDivider(page()).click()
 

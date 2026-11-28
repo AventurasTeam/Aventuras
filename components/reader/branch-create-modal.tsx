@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { isComposing } from '@/components/ui/ime'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -18,13 +19,6 @@ import { cn } from '@/lib/utils'
 
 // The web panel fills the viewport less its inset below `sm` (dialog.tsx), so web caps it bare.
 const PANEL_CLASS = cn('sm:max-w-[360px]', Platform.select({ web: 'max-w-[360px]' }))
-
-// An IME's confirming Enter isn't a submit; it can carry key code 229 with isComposing false.
-const IME_KEY_CODE = 229
-
-const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
-  ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
-  ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
 /**
  * `pending` from the press of Create to the navigation: Create spins, the rest disables, nothing

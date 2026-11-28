@@ -144,14 +144,6 @@ function turnGroup(branchId = 'b1') {
   )
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
-
 type Props = { isFocused: boolean; held: boolean; branchId: string }
 
 // The reader's dispatch mark, read with its branch's hold as useReaderDispatch's isBlocked reads.
@@ -596,7 +588,7 @@ describe('useReaderUndo — review fixes', () => {
 
   it('drops a confirm whose lines resolve after the screen lost focus', async () => {
     actions.readUndoTarget.mockResolvedValue(CLOSE)
-    const impact = deferred<Awaited<ReturnType<typeof readUndoImpact>>>()
+    const impact = Promise.withResolvers<Awaited<ReturnType<typeof readUndoImpact>>>()
     actions.readUndoImpact.mockReturnValue(impact.promise)
     const r = render()
     act(() => r.result.current.undo('menu'))
@@ -613,7 +605,7 @@ describe('useReaderUndo — review fixes', () => {
   })
 
   it('holds a seen undo when an editor opened while its target was read', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     undoLands(TURN, { id: 'e2', position: 2 })
     const r = render()
@@ -628,7 +620,7 @@ describe('useReaderUndo — review fixes', () => {
   })
 
   it('starts no undo whose target resolves after a switch took the reader hold', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     undoLands(TURN, { id: 'e2', position: 2 })
     const r = render()
@@ -660,7 +652,7 @@ describe('useReaderUndo — review fixes', () => {
   })
 
   it('starts no undo whose target resolves after a Send began dispatching', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     undoLands(TURN, { id: 'e2', position: 2 })
     const r = render()
@@ -689,7 +681,7 @@ describe('useReaderUndo — review fixes', () => {
   })
 
   it('says nothing to undo when the pending read finds none and no hold was taken', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     const r = render()
     act(() => r.result.current.undo('menu'))
@@ -701,7 +693,7 @@ describe('useReaderUndo — review fixes', () => {
   })
 
   it('says nothing when the pending read finds none after a switch took the reader hold', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     const r = render()
     act(() => r.result.current.undo('menu'))
@@ -1132,7 +1124,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
 
   it('posts no notice for an undo that settles after the reader unmounted', async () => {
     actions.readUndoTarget.mockResolvedValue(TURN)
-    const pending = deferred<UndoResult>()
+    const pending = Promise.withResolvers<UndoResult>()
     actions.undoLastAction.mockReturnValue(pending.promise)
     const r = render()
     act(() => r.result.current.undo('keyboard'))
@@ -1151,7 +1143,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
     ['a redo the menu would report', { status: 'rejected', code: 'nothing-to-apply', reason: 'x' }],
   ] as const)('posts nothing for %s after the reader unmounted', async (_label, result) => {
     undoRedoStore.pushRedoGroup(turnGroup())
-    const pending = deferred<UndoResult>()
+    const pending = Promise.withResolvers<UndoResult>()
     actions.redoLastAction.mockReturnValue(pending.promise)
     const r = render()
     act(() => r.result.current.redo('menu'))
@@ -1167,7 +1159,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
 
   it("still warns that a re-run's undo took its close, settling after the reader unmounted", async () => {
     actions.readUndoTarget.mockResolvedValue(RERUN)
-    const pending = deferred<UndoResult>()
+    const pending = Promise.withResolvers<UndoResult>()
     actions.undoLastAction.mockReturnValue(pending.promise)
     const r = render()
     act(() => r.result.current.undo('menu'))
@@ -1188,7 +1180,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
   })
 
   it('starts no undo whose target resolves after the reader unmounted', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     const r = render()
     act(() => r.result.current.undo('keyboard'))
@@ -1203,7 +1195,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
 
   it('says nothing to undo for a read that settles in the commit removing the reader', async () => {
     const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     let reader!: ReturnType<typeof useReaderUndo>
     let removeReader!: () => void
@@ -1249,7 +1241,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
   })
 
   it('says nothing to undo from no reader once it unmounted', async () => {
-    const read = deferred<UndoTargetRead | null>()
+    const read = Promise.withResolvers<UndoTargetRead | null>()
     actions.readUndoTarget.mockReturnValue(read.promise)
     const r = render()
     act(() => r.result.current.undo('menu'))

@@ -131,14 +131,6 @@ function closeRun(): RunState {
   }
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((settle) => {
-    resolve = settle
-  })
-  return { promise, resolve }
-}
-
 type Props = Pick<UseBranchCreateArgs, 'storyId' | 'swapPending'>
 
 /** The hook as the route holds it, beside the reader's own dispatch guard. */
@@ -357,7 +349,7 @@ describe('useBranchCreate — Create', () => {
   })
 
   it('a second press while the first runs forks nothing more', async () => {
-    const forked = deferred<ForkResult>()
+    const forked = Promise.withResolvers<ForkResult>()
     actions.fork.mockReturnValue(forked.promise)
     const hook = renderCreate()
     await openModal(hook)
@@ -375,8 +367,8 @@ describe('useBranchCreate — Create', () => {
   })
 
   it('holds the reader across the fork and the tail: a Send refuses and registers no pending turn', async () => {
-    const forked = deferred<ForkResult>()
-    const tail = deferred<ShowBranchResult>()
+    const forked = Promise.withResolvers<ForkResult>()
+    const tail = Promise.withResolvers<ShowBranchResult>()
     actions.fork.mockReturnValue(forked.promise)
     actions.show.mockReturnValue(tail.promise)
     const hook = renderCreate()
@@ -474,7 +466,7 @@ describe('useBranchCreate — Create', () => {
   })
 
   it("refuses with the gate's line, before forking, while a turn body still runs on the branch", async () => {
-    const body = deferred<void>()
+    const body = Promise.withResolvers<void>()
     act(() => {
       void generationStore.bracketPendingTurn(BRANCH, (endEarly) => {
         endEarly()
@@ -671,7 +663,7 @@ describe('useBranchCreate — Create', () => {
     await settle()
     expect(modal(hook).phase).toStrictEqual(idle(COPY.unfinishedRun))
 
-    const forked = deferred<ForkResult>()
+    const forked = Promise.withResolvers<ForkResult>()
     actions.fork.mockReturnValueOnce(forked.promise)
     press(hook, 'Side quest')
     expect(modal(hook).phase).toStrictEqual(PENDING)
@@ -766,7 +758,7 @@ describe('useBranchCreate — a log that throws while a throw is handled', () =>
 
 describe("useBranchCreate — the mouse's Back", () => {
   it('is held inert from Create to the fork settling, and not before or after', async () => {
-    const forked = deferred<ForkResult>()
+    const forked = Promise.withResolvers<ForkResult>()
     actions.fork.mockReturnValue(forked.promise)
     const hook = renderCreate()
     await openModal(hook)
@@ -782,7 +774,7 @@ describe("useBranchCreate — the mouse's Back", () => {
   })
 
   it('stays inert through the tail and after its navigation, until the reader unmounts', async () => {
-    const tail = deferred<ShowBranchResult>()
+    const tail = Promise.withResolvers<ShowBranchResult>()
     actions.show.mockReturnValue(tail.promise)
     const hook = renderCreate()
     await openModal(hook)

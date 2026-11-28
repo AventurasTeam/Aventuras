@@ -1,11 +1,7 @@
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 
-import { getLoadablePath } from 'sqlite-vec'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { applyMigration, migrationTags } from '../__tests__/test-db'
-import { plantVec, seedVec } from '../__tests__/vec-fixtures'
-import type { SqlOp } from '../types'
 import type { VecWrite } from './ops'
 import { compositeText, sourceHash } from './source-hash'
 import {
@@ -20,26 +16,8 @@ import {
   type EmbeddedFieldRow,
 } from './stale'
 import { ensureVecTablesSql } from './vec-tables'
-
-function makeDb(): DatabaseSync {
-  const db = new DatabaseSync(':memory:', { allowExtension: true })
-  db.loadExtension(getLoadablePath())
-  for (const tag of migrationTags()) applyMigration(db, tag)
-  return db
-}
-
-function runOps(db: DatabaseSync, ops: SqlOp[]): void {
-  db.exec('BEGIN')
-  try {
-    for (const op of ops) {
-      db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
-    }
-    db.exec('COMMIT')
-  } catch (err) {
-    db.exec('ROLLBACK')
-    throw err
-  }
-}
+import { createMigratedSqlite, runOps } from '../__tests__/test-db'
+import { plantVec, seedVec } from '../__tests__/vec-fixtures'
 
 function vec(dim: number, seed: number): Uint8Array {
   const arr = new Float32Array(dim)
@@ -155,7 +133,7 @@ describe('recomputeStaleOps', () => {
   }
 
   beforeEach(() => {
-    db = makeDb()
+    db = createMigratedSqlite()
     db.prepare(`insert into stories (id, title, created_at, updated_at) values (?, ?, ?, ?)`).run(
       's1',
       'Story',
@@ -345,7 +323,7 @@ describe('clearEmbeddingStaleOp', () => {
   })
 
   beforeEach(() => {
-    db = makeDb()
+    db = createMigratedSqlite()
     db.prepare(`insert into stories (id, title, created_at, updated_at) values (?, ?, ?, ?)`).run(
       's1',
       'Story',
@@ -432,7 +410,7 @@ describe('clearEmbeddingStaleFlagsOps', () => {
   })
 
   beforeEach(() => {
-    db = makeDb()
+    db = createMigratedSqlite()
     db.prepare(`insert into stories (id, title, created_at, updated_at) values (?, ?, ?, ?)`).run(
       's1',
       'Story',
@@ -506,7 +484,7 @@ describe('KIND_COLUMNS', () => {
   // Derived from SOURCE_TABLES rather than listed, so a sixth kind cannot be
   // added without this covering it.
   it('names a real column on every kind, checked against the migrated schema', () => {
-    const db = makeDb()
+    const db = createMigratedSqlite()
     try {
       for (const kind of Object.keys(SOURCE_TABLES) as (keyof typeof SOURCE_TABLES)[]) {
         const present = (

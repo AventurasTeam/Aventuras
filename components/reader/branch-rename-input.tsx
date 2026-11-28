@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { Platform, type TextInputKeyPressEvent } from 'react-native'
 
+import { isComposing } from '@/components/ui/ime'
 import { Input } from '@/components/ui/input'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -15,19 +16,11 @@ export type BranchRenameInputProps = {
   className?: string
 }
 
-// RN-Web's own submit guard reads both signals, and runs after this handler; 229 is the key code
-// an IME's confirming Enter can carry with isComposing already false.
-const IME_KEY_CODE = 229
-
 // The caller's save may reject; the edit is over either way, so the failure is only logged.
 const logRejection = (err: unknown) =>
   logger.error('reader.branch_rename_failed', {
     error: err instanceof Error ? err.message : String(err),
   })
-
-const isComposing = ({ nativeEvent }: TextInputKeyPressEvent) =>
-  ('isComposing' in nativeEvent && nativeEvent.isComposing === true) ||
-  ('keyCode' in nativeEvent && nativeEvent.keyCode === IME_KEY_CODE)
 
 /** A branch row's name as an input: Enter or a click outside saves a trimmed name, Esc cancels. */
 export function BranchRenameInput({

@@ -33,6 +33,7 @@ import {
 } from '@/lib/world'
 
 import { registerEntities } from './register'
+import type { StatePatchColumns } from './state-patch-actions'
 import {
   applyDeltaAction,
   applyDeltaActionGroup,
@@ -3898,5 +3899,20 @@ describe('branch scope', () => {
       },
       { status: 'active', retiredReason: null },
     )
+  })
+})
+
+describe('state-patch columns: the type', () => {
+  it('takes the columns the handlers write, and never the lead flag', () => {
+    const flag: StatePatchColumns = {
+      nameCollisionFlag: 1,
+      nameCollisionPartnerId: 'char_b',
+      nameCollisionReason: 'duplicate',
+    }
+    // @ts-expect-error the lead flag is updateEntity's alone
+    const lead: StatePatchColumns = { isLead: 1 }
+    // @ts-expect-error nor does a whole row pass, its lead flag riding along
+    const row: StatePatchColumns = {} as Entity
+    expect([flag, lead, row]).toHaveLength(3)
   })
 })

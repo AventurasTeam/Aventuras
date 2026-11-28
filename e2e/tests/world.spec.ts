@@ -53,8 +53,8 @@ async function entitySnapshot(page: Page, branchId: string, id: string): Promise
   }
 }
 
-// Reader → World over GO TO. The round trip pops to the World instance already on the stack, which
-// keeps its category and selection, so callers pick the category they need.
+// Reader → World over GO TO. GO TO Reader popped the World, so this pushes a fresh one with nothing
+// selected; callers pick the category they need.
 async function goToWorld(page: Page): Promise<string> {
   await goToWorldFlow(page)
   return currentBranchId(page, HERO_STORY)

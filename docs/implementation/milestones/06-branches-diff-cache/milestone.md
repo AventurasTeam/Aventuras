@@ -29,9 +29,9 @@ last time, to a composite key.
 **A fork is a copy plus a rewind, and the copy comes first.** Canon
 defines a fork as a snapshot of the parent rolled back to the fork
 entry. The roadmap had one slice own all of it. Research found the
-rewind's planner, which canon calls `planReversal` with a target
-branch, doesn't exist: the shipped planner writes every op to the
-branch it reads. So the milestone cuts the copy away from the rewind.
+rewind's planner, which canon then called `planReversal` with a target
+branch, didn't exist: the shipped planner wrote every op to the
+branch it read. So the milestone cuts the copy away from the rewind.
 Story duplicate is the copy with no rewind, and it proves the copy
 core before the fork builds on it.
 

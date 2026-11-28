@@ -21,6 +21,7 @@ import type { RailPeek } from '@/lib/reader-rail'
 import {
   currentStoryStore,
   entriesStore,
+  happeningAwarenessStore,
   happeningInvolvementsStore,
   resetAllStores,
 } from '@/lib/stores'
@@ -200,12 +201,25 @@ describe('usePeekView', () => {
     const data: RailData = { ...DATA, happenings: [happening('h_ambush')] }
     const peek: RailPeek = { category: 'happening', id: 'h_ambush' }
     const link = { id: 'hi_1', happeningId: 'h_ambush', entityId: 'char_kael', role: null }
+    const known = {
+      id: 'haw_1',
+      happeningId: 'h_ambush',
+      characterId: 'char_kael',
+      learnedAtEntryId: null,
+      decayResistance: null,
+      retrievalCount: 0,
+      source: null,
+    }
     happeningInvolvementsStore.hydrate('br_2', [{ ...link, branchId: 'br_2' }])
+    happeningAwarenessStore.hydrate('br_2', [{ ...known, branchId: 'br_2' }])
     const { result } = renderHook(() => usePeekView(peek, data), { wrapper })
-    expect(result.current.model).toMatchObject({ kind: 'happening', involved: 0 })
+    expect(result.current.model).toMatchObject({ kind: 'happening', involved: 0, aware: 0 })
 
-    act(() => happeningInvolvementsStore.hydrate('br_1', [{ ...link, branchId: 'br_1' }]))
-    expect(result.current.model).toMatchObject({ kind: 'happening', involved: 1 })
+    act(() => {
+      happeningInvolvementsStore.hydrate('br_1', [{ ...link, branchId: 'br_1' }])
+      happeningAwarenessStore.hydrate('br_1', [{ ...known, branchId: 'br_1' }])
+    })
+    expect(result.current.model).toMatchObject({ kind: 'happening', involved: 1, aware: 1 })
     await waitFor(() => expect(result.current.entryIndex.state).toBe('ready'))
   })
 })

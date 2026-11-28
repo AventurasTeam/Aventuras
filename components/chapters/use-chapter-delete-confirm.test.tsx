@@ -50,16 +50,6 @@ function storeSyncFailed(): DeltaReplayError {
   })
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 // A falling reversal flag is one of the points settleCount bumps at; it needs no run fixture.
 function settleARun() {
   act(() => {
@@ -131,8 +121,8 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
   it('drops a re-read a newer settle superseded', async () => {
     const { result, loadPreview } = setup()
     await openOn(result)
-    const first = deferred<ChapterDeletePreview>()
-    const second = deferred<ChapterDeletePreview>()
+    const first = Promise.withResolvers<ChapterDeletePreview>()
+    const second = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     settleARun()
     settleARun()
@@ -150,8 +140,8 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('shows the newer of two opens resolving out of order, at its settle', async () => {
     const { result, loadPreview } = setup()
-    const first = deferred<ChapterDeletePreview>()
-    const second = deferred<ChapterDeletePreview>()
+    const first = Promise.withResolvers<ChapterDeletePreview>()
+    const second = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     let firstOpen!: Promise<void>
     let secondOpen!: Promise<void>
@@ -183,7 +173,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('stays closed when dismissed during its opening read', async () => {
     const { result, loadPreview } = setup()
-    const opening = deferred<ChapterDeletePreview>()
+    const opening = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(opening.promise)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -201,7 +191,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('raises no toast for an opening read a dismiss superseded', async () => {
     const { result, loadPreview } = setup()
-    const opening = deferred<ChapterDeleteRefusal>()
+    const opening = Promise.withResolvers<ChapterDeleteRefusal>()
     loadPreview.mockReturnValueOnce(opening.promise)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -230,7 +220,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('opens nothing for an opening read that resolves after the screen lost focus', async () => {
     const { result, rerender, loadPreview } = setup()
-    const opening = deferred<ChapterDeletePreview>()
+    const opening = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(opening.promise)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -248,7 +238,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('opens nothing for an opening read that resolves after the review window opened', async () => {
     const { result, loadPreview } = setup()
-    const opening = deferred<ChapterDeletePreview>()
+    const opening = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(opening.promise)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -283,7 +273,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('raises no toast for an opening read refused after the screen lost focus', async () => {
     const { result, rerender, loadPreview } = setup()
-    const opening = deferred<ChapterDeleteRefusal>()
+    const opening = Promise.withResolvers<ChapterDeleteRefusal>()
     loadPreview.mockReturnValueOnce(opening.promise)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -301,7 +291,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('raises no toast for an opening read that fails after the screen unmounted', async () => {
     const { result, unmount, loadPreview } = setup()
-    const opening = deferred<ChapterDeletePreview>()
+    const opening = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(opening.promise)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -375,7 +365,7 @@ describe('useChapterDeleteConfirm: opening and staying true', () => {
 
   it('re-reads when a run settles during the opening read', async () => {
     const { result, loadPreview } = setup()
-    const opening = deferred<ChapterDeletePreview>()
+    const opening = Promise.withResolvers<ChapterDeletePreview>()
     loadPreview.mockReturnValueOnce(opening.promise).mockResolvedValueOnce(RECOUNTED)
     let pendingOpen!: Promise<void>
     act(() => {
@@ -439,7 +429,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('calls remove once for a double confirm, and toasts nothing on ok', async () => {
     const { result, remove } = setup()
     await openOn(result)
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let first!: Promise<void>
     let second!: Promise<void>
@@ -464,7 +454,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('re-reads nothing when a run settles under a running removal', async () => {
     const { result, loadPreview, remove } = setup()
     await openOn(result)
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -484,10 +474,10 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('drops a re-read that resolves while a removal runs', async () => {
     const { result, loadPreview, remove } = setup()
     await openOn(result)
-    const reread = deferred<ChapterDeleteRefusal>()
+    const reread = Promise.withResolvers<ChapterDeleteRefusal>()
     loadPreview.mockReturnValueOnce(reread.promise)
     settleARun()
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -511,7 +501,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('ignores a dismiss while a removal runs', async () => {
     const { result, remove } = setup()
     await openOn(result)
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -560,7 +550,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('closes on an in-flight refusal once a removal the screen lost focus under ends', async () => {
     const { result, rerender, remove } = setup()
     await openOn(result)
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -579,7 +569,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('closes on an in-flight refusal once a removal the review window opened over ends', async () => {
     const { result, remove } = setup()
     await openOn(result)
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -598,7 +588,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('stays open on an in-flight refusal when focus came back before the removal ended', async () => {
     const { result, rerender, remove } = setup()
     await openOn(result)
-    const removal = deferred<RemoveChapterResult>()
+    const removal = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removal.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -658,7 +648,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
   it('still resyncs a committed delete whose store sync fails after the screen unmounted', async () => {
     const { result, unmount, remove, resync } = setup()
     await openOn(result)
-    const removing = deferred<RemoveChapterResult>()
+    const removing = Promise.withResolvers<RemoveChapterResult>()
     remove.mockReturnValueOnce(removing.promise)
     let confirming!: Promise<void>
     act(() => {
@@ -697,7 +687,7 @@ describe('useChapterDeleteConfirm: the removal', () => {
     const { result, loadPreview, remove, resync } = setup()
     await openOn(result)
     remove.mockRejectedValueOnce(storeSyncFailed())
-    const resyncing = deferred<unknown>()
+    const resyncing = Promise.withResolvers<unknown>()
     resync.mockReturnValueOnce(resyncing.promise)
     // The chapter is gone, so a read of it now refuses.
     loadPreview.mockResolvedValue(refusal('not-found'))

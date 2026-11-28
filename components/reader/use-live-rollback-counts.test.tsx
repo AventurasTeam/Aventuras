@@ -48,16 +48,6 @@ function settleARun() {
   })
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 // Models the reader: the modal's state, and onCounts swapping the shown counts in.
 function useHarness(
   load: Load,
@@ -126,7 +116,7 @@ describe('useLiveRollbackCounts', () => {
   })
 
   it('drops a recount that resolves after the modal closed', async () => {
-    const pending = deferred<RollbackCounts>()
+    const pending = Promise.withResolvers<RollbackCounts>()
     const load = vi.fn<Load>(() => pending.promise)
     const onCounts = vi.fn()
     const { result } = renderHook(() => useHarness(load, onCounts, opened()))
@@ -142,8 +132,8 @@ describe('useLiveRollbackCounts', () => {
   })
 
   it('lets a later settle supersede a recount still in flight', async () => {
-    const first = deferred<RollbackCounts>()
-    const second = deferred<RollbackCounts>()
+    const first = Promise.withResolvers<RollbackCounts>()
+    const second = Promise.withResolvers<RollbackCounts>()
     const load = vi
       .fn<Load>()
       .mockReturnValueOnce(first.promise)

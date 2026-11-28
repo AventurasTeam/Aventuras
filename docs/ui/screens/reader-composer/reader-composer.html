@@ -948,7 +948,7 @@
 <div class="phone-chip-strip" aria-label="Reader chip strip (phone)">
   <span class="chip">Chapter 3 <span class="chev">&#9662;</span></span>
   <span class="chip">&#9201; Day 3, dusk <span class="chev">&#9662;</span></span>
-  <span class="chip">&#x2387;3</span>
+  <span class="chip" id="phone-branch-chip">&#x2387;3</span>
   <span class="chip browse recent-1" id="phone-browse-chip" title="Open Browse (rail) as Sheet — background tints when any rail-surfaceable category has recent classifier activity (aggregate across all 7 categories)">&#9776; Browse</span>
 </div>
 
@@ -2514,10 +2514,14 @@
   const branchChip = document.getElementById('branch-chip');
   const branchChipSep = document.getElementById('branch-chip-sep');
   const branchCountBadge = document.getElementById('branch-count-badge');
+  // The phone strip's chip follows the same rule as the top bar's.
+  const phoneBranchChip = document.getElementById('phone-branch-chip');
   function setBranchCount(n) {
     const count = parseInt(n, 10);
     branchChip.style.display = count > 1 ? '' : 'none';
     branchChipSep.style.display = count > 1 ? '' : 'none';
+    phoneBranchChip.style.display = count > 1 ? '' : 'none';
+    phoneBranchChip.textContent = '\u2387' + count;
     branchCountBadge.textContent = String(count);
     branchChip.title = 'On main · ' + count + ' branches · click to open Branch Navigator';
     document.querySelectorAll('[data-branch-count]').forEach(b => b.classList.toggle('active', b.dataset.branchCount === n));

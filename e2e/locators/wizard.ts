@@ -12,6 +12,11 @@ export const wizard = {
   // notice — the lead itself is authored in Cast (step 4).
   modeOption: (page: Page, mode: 'adventure' | 'creative'): Locator =>
     page.getByRole('radio', { name: t(`wizard:frame.mode.${mode}.label`), exact: false }),
+  narrationOption: (page: Page, narration: 'first' | 'second' | 'third'): Locator =>
+    page.getByRole('radio', {
+      name: t(`wizard:frame.narration.${narration}.label`),
+      exact: false,
+    }),
 
   // Step 4 (Cast): adding a row opens it expanded (cast-list.tsx → expandAdded),
   // so Name is immediately visible with no separate "Expand" click needed.

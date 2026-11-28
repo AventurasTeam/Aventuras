@@ -135,6 +135,20 @@ export async function currentBranchId(page: Page, storyId: string): Promise<stri
   return id
 }
 
+export async function branchName(page: Page, branchId: string): Promise<string> {
+  const [[name]] = await queryApp(page, `SELECT name FROM branches WHERE id = ?`, [branchId])
+  return name as string
+}
+
+export async function entryContent(page: Page, branchId: string, entryId: string): Promise<string> {
+  const [[content]] = await queryApp(
+    page,
+    `SELECT content FROM story_entries WHERE branch_id = ? AND id = ?`,
+    [branchId, entryId],
+  )
+  return content as string
+}
+
 const TAIL_METADATA_SQL = `SELECT metadata FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'
    ORDER BY position DESC LIMIT 1`
 

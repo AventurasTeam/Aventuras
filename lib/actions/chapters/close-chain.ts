@@ -10,6 +10,7 @@ import {
   startChain,
   unprocessedEntryCount,
   unprocessedThroughChapter,
+  type BlockedBy,
   type ChainEnd,
   type ConfigResolverError,
   type PreflightFailedStart,
@@ -37,7 +38,7 @@ export const MANUAL_CLOSE_REFUSAL = {
   invalidEnd: 'invalid-end',
   swapPending: EMBEDDER_SWAP_REFUSAL,
   busy: 'story-busy',
-} as const
+} as const satisfies Record<string, BlockedBy>
 
 export type ManualCloseRefusal = (typeof MANUAL_CLOSE_REFUSAL)[keyof typeof MANUAL_CLOSE_REFUSAL]
 

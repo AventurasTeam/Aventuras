@@ -1058,6 +1058,69 @@ code before it moved; resolve with the slice it names.
   and Story Settings' "newest pointer (chapter + turn)" want a real
   chapter. Read the entry's current chapter instead. The null is read
   from the code, not run after a close. Moved here at M5's promotion (2026-11-01).
+- **M7.3 — Change prose can show two sides that read identically.** Three
+  cases.
+  (1) _Term-list display._ `termListChange` in
+  `lib/history/diff-prose.ts:273-281` shows each term through `cutTerm`
+  (`:218-224`), which collapses whitespace and keeps a head of 40
+  characters; free text gets a window cut around its first difference
+  ([Long text](../ui/screens/world/world.md#long-text--change-prose)).
+  A tail edit past the 40th character of a long agenda item renders as
+  `Agenda: added "Seize control of the harbor district…"` followed by
+  `removed "Seize control of the harbor district…"`, the same text
+  twice. A respelling between NFD and NFC forms in a normalized list
+  renders `Tags: respelled "Eldrá" as "Eldrá"`. Needs a design pass on
+  how a term list shows two forms that collide once cut or collapsed.
+  (2) _Exact-list write side._ The entity `state` term lists (`traits`,
+  `drives`, `agenda`) match exactly
+  (`lib/actions/entities/register.ts:401-407`, `termKeyOf` in
+  `lib/actions/delta/term-list.ts:9-11`) and store terms with no
+  whitespace or Unicode normalization, unlike `keywords` and `tags`,
+  which key by `normalizeTerm`. `'brave  heart'` and `'brave heart'`, or
+  NFD and NFC forms of one term, are distinct values, so a change
+  between them reads `Traits: added "brave heart", removed "brave heart"`
+  (the display collapses the spacing). Whether those lists should
+  normalize on write, and what that does to existing rows and the delta
+  history, is a write-side question, not only display.
+  (3) _Namesake refs._ A row ref and a ref list's items (and a place's
+  parent and a collision partner) compare by id but read by name
+  (`rowRefChange` and `refListChange`,
+  `lib/history/diff-prose.ts:332-343`), so two live rows sharing a name
+  read alike: `Faction: Iron Pact → Iron Pact`, or
+  `Carried: added Rope, removed Rope`. The World panel's keep-as-distinct
+  resolution keeps both rows of a name
+  ([Collision review](../ui/screens/world/world.md#collision-review-and-entity-merge)).
+  The code follows canon literally, a row ref reading the row's name; it
+  needs the same design pass as (1).
+  Slice 6.7 shipped the prose as `world.md → Change prose` reads. Cases
+  (1) and (2) found in Slice 6.7's final review (2026-11-23); developer
+  ruled to ship canon-literal and route here. Case (3) found in
+  Slice 6.7's slice review (2026-11-23).
+  Case (2) is the write-side half of
+  [Unicode case folding for names and terms](../parked.md#unicode-case-folding-for-names-and-terms)'s
+  family. Also verified: a normalized list respelled by whitespace alone
+  (`Tags: respelled "iron pact" as "iron pact"`) and free text changed
+  only in its NFC form collide the same way. Routed from triage
+  2026-11-26, the design pass going with the M7.3 change-prose work above.
+- **M7.1 — Diagnostics settings show capture off in a dev build that
+  forces it on.** The debug switch in
+  `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
+  on the stored flag, while a dev build forces capture on
+  (`lib/boot/bootstrap.ts:39-42`). So the panel reads capture off and
+  debug disabled while capture runs, and turning debug on needs capture
+  toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
+  passes (2026-11-24).
+  Wider than filed, verified in code 2026-11-26: the Actions menu hides
+  the Diagnostics Hub entry on the stored flag
+  (`components/compounds/app-actions-menu.tsx`), probe captures gate on
+  it too and skip the dev force-on (`per-turn-retrieval.ts`), and turning
+  the master off in dev clears the buffers while capture keeps running.
+  The tab and the hub entry should read the effective gate (stored flag
+  or `__DEV__`), the master showing checked and locked in dev; whether
+  the dev force-on also covers probe captures is the tab's call, and
+  [`app-settings.md`](../ui/screens/app-settings/app-settings.md) says
+  nothing of the force-on yet. Dev builds only. Routed from triage
+  2026-11-26.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -1591,6 +1654,23 @@ own.
   `delete-confirm-dialog.tsx` shares only the bullet rendering. Raised
   2026-10-15 by the retired and disabled places slice review's
   simplifier pass. Routed from triage 2026-10-25.
+- **M9.2 — Five dialogs write out the same inline status and alert lines.**
+  The blocked or refused line (`role="status"`) and the failed line
+  (`role="alert"`, `accessibilityLiveRegion="assertive"`, `text-danger`)
+  repeat in `branch-delete-confirm.tsx`, `duplicate-story-dialog.tsx`,
+  `branch-create-modal.tsx`, `scene-edit-form.tsx` and
+  `world-time-edit-form.tsx`. A shared compound in
+  `components/compounds/` would keep their roles and live regions in
+  step; it touches files outside any one slice. Found by Slice 6.6's
+  slice review (2026-11-26).
+  Narrower than filed, verified on routing: only `branch-delete-confirm`
+  and `duplicate-story-dialog` match. `branch-create-modal` puts its
+  blocked line and its failed line in one assertive `role="alert"`, the
+  blocked one muted, where the other two give a blocked reason
+  `role="status"`; that disagreement needs a call before a compound
+  can serve all three. `scene-edit-form` and `world-time-edit-form` are
+  inline forms with alert lines only, at `xs`. Routed from triage
+  2026-11-26.
 - **M9.2 — `PlacementPicker` copies `EntityPicker`'s row markup.**
   `PlacementPicker` (`components/world/detail/placement-field.tsx`)
   copies `EntityPicker`'s row markup; sharing it means exporting a row
@@ -1755,6 +1835,53 @@ own.
   `h-control-sm`, 40 px at `regular`, with no slop. Measure a
   single-line World and Plot row on a phone before choosing a fix.
   Raised 2026-09-19 by Slice 4.4; split 2026-09-23.
+  The same family, routed from triage 2026-11-26: **`Input` has no 44 px
+  phone floor at `size="sm"`.** [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
+  floors phone form inputs at 44 px, through `--control-h-md` and a
+  defensive floor at the input wrapper; `components/ui/input.tsx` maps
+  `sm` to `h-control-sm`, under 44 px at the compact and regular
+  densities, with no floor. The branch rename input was its only
+  production `size="sm"` use and now sets its own 44 px floor on phone.
+  Pre-existing substrate. Found in Slice 6.4's reviews (2026-11-24).
+  Verified on routing: the defensive floor touch.md promises at the input
+  wrapper doesn't exist at any size, so `md` and TagInput drop to 40 px
+  under a compact density override, reachable once M7.1's density toggle
+  lands; and `Select`'s `sm` and `xs` triggers sit under the floor on
+  phone today (World and Plot category selects, the composer's mode
+  select, the detail tabs, the rail category select, the toolbar sort at
+  36 px).
+- **M9.5 — `FormRow`'s error line is announced to no one.**
+  `components/compounds/form-row.tsx` renders a validation error as
+  plain `text-xs text-danger` text below the control: no live region, and
+  no `aria-describedby` or `aria-invalid` tying it to the control, so a
+  screen reader meets it only by reading on. Canon's forms pattern says
+  nothing either way. Whether each error is announced, tied to its
+  control, or both, is the audit's call. Read from the code; raised by
+  the 2026-11-26 triage pass.
+- **M9.5 — A phone Sheet opened over the reader's inline editor lands
+  under its keyboard.** Canon says a sheet opened over an open keyboard
+  dismisses it first
+  ([`overlays.md`](../ui/patterns/overlays.md#sheet--keyboard-handling)),
+  and `components/ui/sheet.tsx:390-399` does so through
+  `dismissKeyboard()` before `present()`. On the slot AVD (Android 16),
+  with an entry's inline editor holding the keyboard, tapping the
+  branch chip opened the navigator Sheet under it: its rows sat under
+  the keyboard and a tap landed on a key, until Back hid it. With the
+  composer's keyboard up the same tap dismissed it as canon says.
+  Inferred, not probed: the dismiss doesn't reach the input method of
+  the reader's WebView document, so any phone Sheet opened from the
+  reader during an inline edit (the chapter chip's too) would do the
+  same. Found in Slice 6.4's device pass (2026-11-24).
+  The mechanism, verified in code on routing: `dismissKeyboard`
+  (`lib/keyboard/dismiss.ts`) calls react-native-keyboard-controller's
+  `KeyboardController.dismiss()`, which acts only on the last focused
+  native `EditText`; a WebView never sets it, so the call is a no-op and
+  the sheet presents after the 400 ms deadline, over the keyboard (a tap
+  on a key types into the open draft). A likely fix blurs the DOM editor
+  first: a `blurEditor` on `ReaderDocumentRef`, registered as a keyboard
+  releaser that `dismissKeyboard` calls. That the DOM blur hides the IME
+  is inferred, so it needs the slot AVD. Routed from triage 2026-11-26,
+  since only a device can check a fix.
 - **M9.5 — Native initial-scroll-to-value has three residual gaps.**
   `SearchableOverlayList` (`components/ui/searchable-overlay-list.tsx`)
   holds its scroll-to-selection anchor until the user drags the list or
@@ -1766,7 +1893,10 @@ own.
   back at the next viewport-height change, a keyboard show / hide or a
   resize. A close-then-reopen inside gorhom's dismiss animation carries
   the old anchor over only when the value was cleared or moved to an
-  unlisted id in that window; otherwise the next open overwrites it. On
+  unlisted id in that window; otherwise the next open overwrites it.
+  (That window may be gone: since 2026-11-22 the Sheet holds a reopen
+  until the earlier dismiss has ended. Unchecked; noted by the
+  2026-11-26 triage pass.) On
   a phone sheet with sticky section headers (`ProviderModelPicker`
   only), the target lands one header height, about 24 px, below centre:
   `VirtualizedSectionList` adds the header's height to `viewOffset`.
@@ -1879,6 +2009,36 @@ own.
   statistics exist. Measure on one bench with the reversal-selection
   entry above, whose index migration shifts the same `deltas` plans.
   Routed from triage 2026-10-09.
+- **M9.5 — The unfinished-run reads scan `pipeline_runs` whole.** The table
+  has no index on `branch_id` (`lib/db/system/system.table.ts`), and
+  nothing prunes finished rows short of a story delete, so it grows with
+  every turn. `readUnfinishedRuns` (`lib/actions/delta/unfinished-runs.ts`)
+  scans it per branch, the duplicate's check runs it twice per copied
+  branch, and the duplicate's in-batch guard scans it once more. On a
+  synthetic table the scan took 0.24 ms at 10k rows and 3.8 ms at 100k,
+  so it passes 1 ms around 25–30k rows. A partial index on
+  `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
+  read an index probe; it's a schema change, so it waits for an owner.
+  Found during Slice 6.6.
+  Re-measured with `pnpm bench:scan` (2026-11-27): 0.35 / 1.18 / 2.33 ms
+  at 10k / 50k / 100k rows as shipped, 0.05–0.09 ms with that partial
+  index, on a branch holding 1 / 3 / 5 unfinished runs. The duplicate's
+  check reads once per branch, not twice; and the re-run journal's update
+  by `action_id` (`lib/actions/delta/rerun-journal.ts`) is another
+  whole-table scan the index doesn't help. Routed from triage 2026-11-26.
+- **M9.5 — A vec0 read outside KNN scans the whole table.**
+  `vectorsByIdQuery` (`lib/db/embeddings/knn.ts`) and the vector
+  deletes (`deleteVecOps`, `deleteVecIdsOps`, `deleteBranchVecOps` in
+  `lib/db/embeddings/ops.ts`) filter on `branch_id`, `model_id` and `id`;
+  vec0 pushes none of them down outside a KNN match, so each scans every
+  row at that dimension, every story's and every fork's copy. With the
+  read branch held at 3,000 rows, 100 ids take 8.8 / 27.5 / 100.3 ms over
+  3k / 15k / 60k rows, while one `pk =` read takes 0.01 ms
+  (`pnpm bench:scan`, 2026-11-26). A read by `pk` would need every row in
+  today's `pk` shape: rows from before the model joined it hold
+  `branchId:id`. Forks add to the cost as well as the disk
+  ([vec0 copy-on-fork storage](../parked.md#vec0-copy-on-fork-storage-optimization)).
+  Raised by the 2026-11-26 triage pass.
 - **M9.5 — `useRailData` runs in the uncompiled reader route.** The route
   re-renders on lore, thread, happening and chapter writes. Unmeasured.
   Options: each connected rail component calls `useRailData` itself,

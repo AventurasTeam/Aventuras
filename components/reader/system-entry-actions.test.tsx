@@ -753,12 +753,15 @@ describe('retryPassEntry', () => {
     expect(h.rewrite).toHaveBeenCalledWith({ held: true })
   })
 
-  it('leaves the entry and says to wait when another run refused the pass', async () => {
-    const h = harness({ outcome: 'rejected', blockedBy: 'periodic-classifier' })
-    await retryPassEntry(h.deps)
-    expect(h.calls).toEqual(['notify'])
-    expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
-  })
+  it.each(['periodic-classifier', 'suggestion-refresh'] as const)(
+    'leaves the entry and says to wait when a %s run refused the pass',
+    async (blockedBy) => {
+      const h = harness({ outcome: 'rejected', blockedBy })
+      await retryPassEntry(h.deps)
+      expect(h.calls).toEqual(['notify'])
+      expect(h.notify).toHaveBeenCalledWith('Unavailable while generating.')
+    },
+  )
 
   it('names no refusal code when the pass could not start for another reason, but logs it', async () => {
     const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})
@@ -928,7 +931,7 @@ describe('retryCloseEntry', () => {
     expect(h.rewritePass).toHaveBeenCalledWith({ held: true })
   })
 
-  it.each([['story-busy'], ['per-turn'], ['chapter-close']])(
+  it.each([['story-busy'], ['per-turn'], ['chapter-close']] as const)(
     'leaves the entry and says to wait when %s refused the close',
     async (blockedBy) => {
       const h = harness({ outcome: 'rejected', blockedBy })
@@ -945,7 +948,7 @@ describe('retryCloseEntry', () => {
     expect(h.notify).toHaveBeenCalledWith('Unavailable while the embedder switch finishes.')
   })
 
-  it.each([['branch-not-open'], ['reversal']])(
+  it.each([['branch-not-open'], ['reversal']] as const)(
     'names no refusal code, nor generation, when %s refused the close, but logs it',
     async (blockedBy) => {
       const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {})

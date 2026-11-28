@@ -74,16 +74,6 @@ function inFlightRun(storyId: string, branchId = 'br_1'): RunState {
   }
 }
 
-function deferred() {
-  let resolve!: () => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<void>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 beforeEach(() => {
   generationStore.__reset()
   nav.preventRemove = false
@@ -115,7 +105,7 @@ describe('useStoryLeaveGuard', () => {
 
   // A Send admitted but not yet registered as a run already owns the branch.
   it('holds a back while a turn is pending on the branch, before its run registers', async () => {
-    const admitted = deferred()
+    const admitted = Promise.withResolvers<void>()
     const turn = generationStore.bracketPendingTurn('br_1', () => admitted.promise)
     const { result } = renderHook(() => useStoryLeaveGuard('story_1', 'br_1'))
     expect(nav.preventRemove).toBe(true)
@@ -130,7 +120,7 @@ describe('useStoryLeaveGuard', () => {
   })
 
   it('ignores a turn pending on another branch', async () => {
-    const admitted = deferred()
+    const admitted = Promise.withResolvers<void>()
     const turn = generationStore.bracketPendingTurn('br_2', () => admitted.promise)
     renderHook(() => useStoryLeaveGuard('story_1', 'br_1'))
     expect(nav.preventRemove).toBe(false)
@@ -188,7 +178,7 @@ describe('useStoryLeaveGuard', () => {
 
   it("Cancel & leave cancels the story's runs before replaying the held back", async () => {
     generationStore.startRun(inFlightRun('story_1'))
-    const cancel = deferred()
+    const cancel = Promise.withResolvers<void>()
     cancelStoryRuns.mockReturnValue(cancel.promise)
     const { result } = renderHook(() => useStoryLeaveGuard('story_1', 'br_1'))
     act(() => nav.onPrevented?.({ data: { action: BACK } }))
@@ -268,7 +258,7 @@ describe('useStoryLeaveGuard', () => {
 
   it('ignores a second Cancel & leave while the first is still cancelling', async () => {
     generationStore.startRun(inFlightRun('story_1'))
-    const cancel = deferred()
+    const cancel = Promise.withResolvers<void>()
     cancelStoryRuns.mockReturnValue(cancel.promise)
     const { result } = renderHook(() => useStoryLeaveGuard('story_1', 'br_1'))
     const proceed = vi.fn()

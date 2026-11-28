@@ -24,6 +24,7 @@
     "bench:calendar": "vitest run --project bench bench/calendar-cost.test.ts",
     "bench:history": "vitest run --project bench bench/history-cost.test.ts",
     "bench:undo": "vitest run --project bench bench/undo-cost.test.ts",
+    "bench:scan": "vitest run --project bench bench/scan-cost.test.ts",
     "test:e2e": "tsx scripts/e2e.ts --project=dev",
     "test:e2e:packaged": "tsx scripts/e2e.ts --project=packaged",
     "coverage:lib": "vitest run --project unit --coverage",

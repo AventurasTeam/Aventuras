@@ -76,6 +76,19 @@ as a **property on the already-rendered node**, which is RN-Web's
 browser acts on. That assignment reads like a real button and is not
 one; do not count it as protection.
 
+`RadioGroup` items whose slotted child is an RN-Web `Pressable` are
+exempt as well, verified 2026-11-26 in the collision dialog by
+mutation (its `MergeInFlightStaysOpen` story): with the inline gate
+removed, neither a click nor a full pointer sequence on the disabled
+item, or on any element inside it, checked it. Read from source, not
+probed: RN-Web's `Pressable` spreads its own press handlers after the
+props `asChild` slots onto it, so Radix's `onClick` never reaches the
+DOM, and the `PressResponder` click it keeps skips `onPress` while
+disabled. There the inline style only drops the hover tint and the
+pointer cursor the class list applies. The trap stays real where Radix
+activates through a handler `Pressable` doesn't own, as Tabs does on
+mouse-down and focus.
+
 So: **prove the gate is doing something before adding it.** Write the
 disabled-interaction test first, confirm it fails without the gate,
 then add it. A gate nobody can show is load-bearing invites the next

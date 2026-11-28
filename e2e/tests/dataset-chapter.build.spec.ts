@@ -505,7 +505,13 @@ test.describe('dataset chapter — build', () => {
 
     await home.newStory(page).click()
     await expect(wizard.modeOption(page, 'adventure')).toBeVisible({ timeout: 15_000 })
-    await createAdventureStory(page, { lead: LEAD, title: TITLE, opening: dataset.opening })
+    // Jim tells the dataset in the first person.
+    await createAdventureStory(page, {
+      lead: LEAD,
+      title: TITLE,
+      opening: dataset.opening,
+      narration: 'first',
+    })
     const stories = (await queryApp(
       page,
       `SELECT id, current_branch_id FROM stories WHERE title = ?`,

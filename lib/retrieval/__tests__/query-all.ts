@@ -3,11 +3,9 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { QueryAll } from '../types'
 
 /**
- * node:sqlite is the desktop driver only (electron/db/service.ts → query);
- * native goes through expo-sqlite (lib/db/runtime/exec.native.ts → queryRows).
- * Both hand back row OBJECTS and rebuild each into a values-array by key
- * insertion order, which is the step reproduced here — a duplicate or numeric
- * column name collapses or reorders the row exactly as it would in the app.
+ * Android's `queryRows` (lib/db/runtime/exec.native.ts): expo-sqlite hands back row OBJECTS,
+ * rebuilt into values-arrays by key insertion order, so a duplicate or numeric column name
+ * collapses or reorders the row as it would there. Desktop reads arrays and keeps such a row whole.
  */
 export const queryAllOf =
   (sqlite: DatabaseSync): QueryAll =>

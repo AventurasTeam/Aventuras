@@ -237,10 +237,26 @@ function stateWriteOutcome(
   return columnsWriteOutcome(branchId, id, { state: next as EntityState }, undoPayload, ctx)
 }
 
+type StatePatchColumn =
+  | 'state'
+  | 'status'
+  | 'retiredReason'
+  | 'keywords'
+  | 'name'
+  | 'embeddingStale'
+  | 'nameCollisionFlag'
+  | 'nameCollisionPartnerId'
+  | 'nameCollisionReason'
+
+// updateEntity alone holds the lead flag's source rule, so a state patch can't name it.
+export type StatePatchColumns = Partial<Pick<Entity, StatePatchColumn>> & {
+  [K in Exclude<keyof Entity, StatePatchColumn>]?: never
+}
+
 function columnsWriteOutcome(
   branchId: string,
   id: string,
-  columns: Partial<Entity>,
+  columns: StatePatchColumns,
   undoPayload: Record<string, unknown>,
   ctx: DbCtx,
 ): HandlerOutcome {

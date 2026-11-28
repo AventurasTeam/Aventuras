@@ -9,6 +9,11 @@ async function flagged(code: string, filePath: string): Promise<boolean> {
   return result.messages.some((m) => m.ruleId === 'no-restricted-properties')
 }
 
+async function aliasBanned(code: string, filePath: string): Promise<boolean> {
+  const [result] = await eslint.lintText(code, { filePath })
+  return result.messages.some((m) => m.ruleId === 'no-restricted-syntax')
+}
+
 const IMPORT = "import { generationStore } from '@/lib/stores'\n"
 
 const call = (mutator: string): string =>
@@ -74,6 +79,23 @@ describe('generationStore mutator lint', () => {
         'components/reader/__mutator-fixture.ts',
       ),
     ).toBe(true)
+  })
+
+  it('flags an aliased import and a copy, which the fences would miss', async () => {
+    const filePath = 'components/reader/__mutator-fixture.ts'
+    expect(
+      await aliasBanned(
+        "import { generationStore as g } from '@/lib/stores'\nexport const x = () => g.dropBranchRecords('r')\n",
+        filePath,
+      ),
+    ).toBe(true)
+    expect(
+      await aliasBanned(
+        `${IMPORT}const s = generationStore\nexport const x = () => s.finishRun('r')\n`,
+        filePath,
+      ),
+    ).toBe(true)
+    expect(await aliasBanned(call('getTxState'), filePath)).toBe(false)
   })
 
   it('leaves the orchestrator, and every read, alone', async () => {

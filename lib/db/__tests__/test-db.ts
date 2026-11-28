@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
 import { getLoadablePath } from 'sqlite-vec'
 
 import { dbSchema } from '../schema'
+import type { SqlOp } from '../types'
 
 export const MIGRATIONS_DIR = 'lib/db/migrations'
 
@@ -24,14 +25,35 @@ export function applyMigration(sqlite: DatabaseSync, tag: string): void {
   }
 }
 
+/** In-memory node:sqlite with sqlite-vec and every migration applied; FK off, no drizzle. */
+export function createMigratedSqlite(): DatabaseSync {
+  const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
+  sqlite.loadExtension(getLoadablePath())
+  for (const tag of migrationTags()) applyMigration(sqlite, tag)
+  return sqlite
+}
+
+/** Runs `ops` as one transaction on a raw handle, as Electron main's `transaction` does. */
+export function runOps(sqlite: DatabaseSync, ops: SqlOp[]): void {
+  try {
+    sqlite.exec('BEGIN')
+    for (const op of ops) sqlite.prepare(op.sql).run(...(op.params as SQLInputValue[]))
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    try {
+      sqlite.exec('ROLLBACK')
+    } catch {
+      // BEGIN itself failed — no transaction to roll back; surface the original error.
+    }
+    throw err
+  }
+}
+
 type ProxyMethod = 'run' | 'all' | 'get' | 'values'
 
-// drizzle-orm 0.45.2 ships no node-sqlite driver; sqlite-proxy wraps any
-// SQLite backend via a callback, making node:sqlite usable without a native dep.
-// The proxy's mapResultRow indexes rows by column position, so all methods
-// must return rows as arrays-of-values, not as objects. Mirrors the desktop
-// (Electron main) adapter: 'get' returns the single row directly so drizzle
-// decodes it as a row rather than an array-of-rows.
+// drizzle-orm 0.45.2 ships no node-sqlite driver, so sqlite-proxy wraps node:sqlite. As Electron
+// main's queryOn: rows read as arrays (a row object drops one of two same-named columns and moves
+// a numeric alias first), and 'get' answers with the single row itself.
 function rowsOf(
   sqlite: DatabaseSync,
   sql: string,
@@ -43,9 +65,9 @@ function rowsOf(
     stmt.run(...(params as Parameters<typeof stmt.run>))
     return { rows: [] }
   }
-  const raw = stmt.all(...(params as Parameters<typeof stmt.all>)) as Record<string, unknown>[]
-  const asArrays = raw.map((r) => Object.values(r))
-  return { rows: (method === 'get' ? asArrays[0] : asArrays) as unknown[] }
+  stmt.setReturnArrays(true)
+  const rows = stmt.all(...(params as Parameters<typeof stmt.all>)) as unknown as unknown[][]
+  return { rows: (method === 'get' ? rows[0] : rows) as unknown[] }
 }
 
 export function makeCallback(sqlite: DatabaseSync) {
@@ -94,20 +116,7 @@ async function openMigrated(location: string) {
     sqlite.close()
     throw err
   }
-  const runInTransaction = async (ops: { sql: string; params: unknown[] }[]): Promise<void> => {
-    try {
-      sqlite.exec('BEGIN')
-      for (const op of ops) sqlite.prepare(op.sql).run(...(op.params as never[]))
-      sqlite.exec('COMMIT')
-    } catch (err) {
-      try {
-        sqlite.exec('ROLLBACK')
-      } catch {
-        // BEGIN itself failed — no transaction to roll back; surface the original error.
-      }
-      throw err
-    }
-  }
+  const runInTransaction = async (ops: SqlOp[]): Promise<void> => runOps(sqlite, ops)
   return { db, sqlite, runInTransaction }
 }
 

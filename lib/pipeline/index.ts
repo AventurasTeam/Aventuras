@@ -80,6 +80,8 @@ export type {
   RecoveryReport,
 } from './runtime/recovery'
 export type {
+  BlockedBy,
+  BlockingKind,
   ConcurrencyPolicy,
   ConfigFailureKind,
   ConfigResolverError,

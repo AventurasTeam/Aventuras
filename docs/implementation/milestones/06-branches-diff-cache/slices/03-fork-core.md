@@ -46,10 +46,10 @@ Canon defines a fork from entry `N` as the parent's state, delta log and
 journal set, less probe captures and a system tail, rolled back to `N`;
 the parent and its redo stack stay as they were, and the child starts
 with an empty stack. It is planned on the frozen parent with rollback's
-sweep and executed on the child in one batch. Canon calls that planner
-`planReversal` with a `targetBranchId`, and neither exists: the shipped
-planner, `buildReverseAndPrunePlan`, reads and writes one branch, so
-running its plan as it stands would rewind the parent. This slice gives
+sweep and executed on the child in one batch. Canon then called that planner
+`planReversal` with a `targetBranchId`, and neither existed: the shipped
+planner, `buildReverseAndPrunePlan`, read and wrote one branch, so
+running its plan as it stood would have rewound the parent. This slice gives
 it a write branch, with rollback the case where the two are equal, and
 proves each fork against a plain copy of the parent rolled back by the
 shipped rollback.

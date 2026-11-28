@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import type { ConcurrencyPolicy, Pipeline } from '@/lib/pipeline'
+import type { BlockingKind, ConcurrencyPolicy, Pipeline } from '@/lib/pipeline'
 import type { RunState } from '@/lib/stores'
 
 import { checkConcurrencyContract } from './concurrency'
@@ -83,7 +83,7 @@ describe('checkConcurrencyContract', () => {
   // generation-pipeline.md → runPipeline entry algorithm: no pass or close may start between a
   // reversal's interrupt and its sweep.
   it('blocks an interruptible start while a reversal is in progress, and starts it after', () => {
-    define('memory-run', { blockedBy: ['memory-run'] }, { interruptible: 'pass' })
+    define('memory-run', { blockedBy: ['memory-run' as BlockingKind] }, { interruptible: 'pass' })
     expect(checkConcurrencyContract('memory-run', runs(), true)).toEqual({
       kind: 'blocked',
       by: 'reversal',

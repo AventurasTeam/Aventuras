@@ -2333,6 +2333,16 @@ Parked at M5's promotion, 2026-11-01.
 
 ### UX (parked)
 
+#### A story whose open failed won't retry in the same session
+
+After a story's open fails (a corrupt definition or settings), its card
+keeps the failure for the session: a tap goes to the recovery dialog
+rather than trying the open again, and the dialog has no Try again. A
+definition repaired outside the app is only picked up after a restart.
+Read from `app/index.tsx` and `components/story/story-list.tsx` by the
+2026-11-26 triage pass, not run. Parked until a story repaired outside
+the app becomes a flow worth supporting.
+
 #### The memory banner may announce a close too often
 
 The banner's label sits in a `role="status"` `aria-live="polite"`
@@ -4257,6 +4267,21 @@ sweep converts the exact idiom only: a fixed-string fallback, a
 stack-first message and the bare `String(e)` log fields read
 differently.
 
+The same family, routed from triage 2026-11-26: **Older test seeds skip the row types.** Some suites build seed rows
+as untyped literals held together by `as const`, such as
+`setup()` in `lib/actions/relationships/register.test.ts:35-44`.
+Drizzle's `.values()` drops a key that isn't a column without an
+error, so a misspelled column there quietly keeps its default, and a
+fixture meant to differ doesn't. Typing the builder
+(`NewEntity` and the like) makes the typo a compile error. Slice
+6.10 typed its own `branch scope` builders; the older seeds are out
+of its scope. Found by Slice 6.10's slice review (2026-11-24). Counted on
+routing with the compiler API over 235 test files: 66 untyped seed sites
+in 35 files reach `.values()` through a shape that escapes the check
+(a `.map` to literals, or an untyped builder); none carries a non-column
+key today, and a misspelled required column still fails, so only an
+optional or defaulted one can slip. Same signal as above.
+
 #### A fresh dev slot could install its embedder itself
 
 Every seeded story (`pnpm db:seed`, `db:seed:long`, `db:seed:dataset`)
@@ -4287,6 +4312,51 @@ four, and several `apply` variants. Recounted 2026-11-22: a `RunState`
 by hand in 45 test, story and fixture files, and a `StoreChapter`
 literal in 13; the chapter overlay host's three suites share
 `components/chapters/__tests__/overlay-host-fixture.tsx`.
+
+The same family, routed from triage 2026-11-26: **The `branch scope` blocks repeat their helpers.** The chapters,
+entry-assets, era-flips and translations register suites each define
+near-identical `forked`, `<table>On`, `undoPayloadsOf` and `onFork`
+helpers and the same payload-case shape; lore, threads and
+happenings share a second pattern (`twoBranches`, `deltasOf`,
+`TARGET_MISMATCH`). A shared test module beside
+`lib/db/__tests__/two-branch.ts` could hold them, at the cost of
+table-generic typing the per-suite readers don't need. Slice 6.10's
+simplifier left them, since the move needs a new home. Found by
+Slice 6.10's slice review (2026-11-24). Recounted on
+routing: `twoBranches` sits in nine files, the one-line `deltasOf` in
+seven identical copies (eleven more helpers share the name with other
+signatures), `onFork` in eight of ten, and `TARGET_MISMATCH` in three.
+Only `onFork`, `undoPayloadsOf`, `deltasOf` and `TARGET_MISMATCH` are
+table-agnostic; a `lib/actions/delta/__tests__/branch-scope.ts` beside
+`reverse-rows.ts` fits them better than `two-branch.ts`. Same signal.
+
+#### A create's payload admits the lead flag
+
+`createEntity`'s
+payload is `{ entry: NewEntity }`
+(`lib/actions/entities/register.ts:93`), and since `entities.is_lead`
+exists, `NewEntity` admits `isLead: 1`, which the handler refuses
+only at runtime (`:227`, "a create never sets isLead"). The designed
+shape is `NewEntity & { isLead?: 0 }`
+([`code-conventions.md → Type design`](./code-conventions.md#type-design),
+Known shape). Tightened in a scratch typecheck, it breaks 39 files:
+two in production, `lib/world/entity-actions.ts` and
+`lib/pipeline/definitions/per-turn-creates.ts`, and 37 test files and
+fixtures that build create entries as `NewEntity`. An exported alias
+such as `EntityCreate` for the fixtures is the likely route. The
+payload line is older code. Found by Slice 6.8's slice review
+(2026-11-25). Measured on
+routing: with `EntityCreate = Omit<NewEntity, 'isLead'> & { isLead?: 0 }`,
+39 files break, 36 still after retyping the three shared fixtures
+(`two-branch.ts`, `fork-harness.ts`, `chapter-delete-fixture.ts`): two
+production files and 34 tests, mostly per-file `NewEntity` builders under
+`lib/actions/delta/` and the register and state-patch suites. The
+runtime refusal is tested, and the state-patch path now types its
+columns, so the gap is a compile-time one on the create path alone.
+**Revisit signal:** a second create path that could set the flag, or a
+sweep that retypes those builders anyway (see
+[Unit test fixtures repeat with no shared home](#unit-test-fixtures-repeat-with-no-shared-home)).
+Routed from triage 2026-11-26.
 
 #### The mock LLM's token count has no run guard
 
@@ -4395,6 +4465,22 @@ each handler catches its own failure, so none can reject unhandled.
 Declined by the developer on that cost for no real hit; `return-await`
 was not probed. The signal to revisit is a shipped bug from a dropped
 `await`.
+
+#### Lint fences match syntax, not bindings
+
+The store-mutator and `db` fences in `eslint.config.js` match what a
+file writes, so a route around them still lints clean. The 2026-11-26
+triage pass closed the aliased import and the copy into a variable
+(`generationStore`, `db`, `expoDb`) and added a selector for a scoped read
+handed `getLoadedBranch()` directly. Still open, as the worker that added
+them reported (not re-probed): passing `generationStore` as an argument or
+an object property, `export { generationStore as g }`, assigning it to a
+variable declared earlier, copying `db` or `expoDb` into a variable, and,
+for the scoped read, the loaded branch held in a variable first, `new`,
+an optional call or a JSX prop. Closing them needs a rule that resolves
+bindings through ESLint's scope manager, which needs no type information,
+unlike the promise rules above. Parked 2026-11-26; the signal is a shipped
+bug from a route around a fence.
 
 #### AI SDK v7 migration
 

@@ -9,6 +9,14 @@ import { cn } from '@/lib/utils'
 // 4 a side stays inside half of a gap-2 chip row, so neighbours' slop never overlaps.
 export const CHIP_HIT_SLOP = 4
 
+/** A reader state chip (branch, chapter, browse): it opens its own overlay rather than toggling. */
+export const STATE_CHIP_CLASS = cn(
+  'h-control-xs flex-row items-center gap-1.5 rounded-sm border border-border-strong bg-bg-base px-row-x-sm active:bg-tint-press',
+  Platform.select({
+    web: 'cursor-pointer outline-none transition-colors hover:bg-tint-hover focus-visible:ring-2 focus-visible:ring-focus-ring',
+  }),
+)
+
 type ChipProps = {
   selected?: boolean
   onPress?: () => void

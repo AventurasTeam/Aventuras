@@ -8,7 +8,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
-import { useTier } from '@/hooks/use-tier'
+import { TierMark, waitForTier } from '@/hooks/tier-probe'
 
 import { BranchChip, BranchNavigatorAnchor } from './branch-chip'
 import { ChapterChip } from './chapter-chip'
@@ -16,14 +16,6 @@ import { ChapterChip } from './chapter-chip'
 const TABLET = { viewport: { value: 'tablet' } }
 const PHONE = { viewport: { value: 'mobile1' } }
 const noop = fn()
-
-function TierMark() {
-  return <Text testID="tier">{useTier()}</Text>
-}
-
-async function waitForTier(tier: 'desktop' | 'tablet' | 'phone') {
-  await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
-}
 
 /** The reader's bar: the chip after the chapter chip and a time chip stand-in. */
 function ReaderBar() {

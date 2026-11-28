@@ -137,23 +137,13 @@ describe('readerRailStore display', () => {
 })
 
 describe('readerRailStore writeCollapsed', () => {
-  function deferred() {
-    let resolve!: () => void
-    let reject!: (error: Error) => void
-    const promise = new Promise<void>((settle, fail) => {
-      resolve = settle
-      reject = fail
-    })
-    return { promise, resolve, reject }
-  }
-
   beforeEach(() => {
     readerRailStore.__reset()
   })
 
   it('shows the toggle at once and holds a persisted until every write settles', async () => {
-    const first = deferred()
-    const second = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
     const firstWrite = readerRailStore.writeCollapsed(true, () => first.promise)
     const secondWrite = readerRailStore.writeCollapsed(true, () => second.promise)
     expect(readerRailStore.getDisplay().pendingCollapsed).toBe(true)
@@ -173,8 +163,8 @@ describe('readerRailStore writeCollapsed', () => {
   })
 
   it('ignores a write that settles after a reset', async () => {
-    const before = deferred()
-    const after = deferred()
+    const before = Promise.withResolvers<void>()
+    const after = Promise.withResolvers<void>()
     const beforeWrite = readerRailStore.writeCollapsed(true, () => before.promise)
     readerRailStore.__reset()
     const afterWrite = readerRailStore.writeCollapsed(false, () => after.promise)

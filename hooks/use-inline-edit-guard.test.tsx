@@ -36,14 +36,6 @@ vi.mock('@/components/compounds/unsaved-changes-dialog', () => ({
 type QueryAnswer = EditSession | null | typeof UNRESPONSIVE
 type CommitAnswer = EditResult | typeof UNRESPONSIVE
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((res) => {
-    resolve = res
-  })
-  return { promise, resolve }
-}
-
 function fakePort(query: QueryAnswer, commit: CommitAnswer = { ok: true }) {
   return {
     query: vi.fn<InlineEditPort['query']>(async () => query),
@@ -180,7 +172,7 @@ describe('useInlineEditGuard', () => {
   })
 
   it('asks once for leaves raised while it asks, then lets them all through', async () => {
-    const answer = deferred<QueryAnswer>()
+    const answer = Promise.withResolvers<QueryAnswer>()
     const port = { ...fakePort(null), query: vi.fn(() => answer.promise) }
     const r = render(port)
     const first = vi.fn()
@@ -196,7 +188,7 @@ describe('useInlineEditGuard', () => {
   })
 
   it('runs every queued leave even when one throws', async () => {
-    const answer = deferred<QueryAnswer>()
+    const answer = Promise.withResolvers<QueryAnswer>()
     const port = { ...fakePort(null), query: vi.fn(() => answer.promise) }
     const r = render(port)
     const second = vi.fn()
@@ -226,8 +218,8 @@ describe('useInlineEditGuard', () => {
   })
 
   it('asks afresh after a refocus, ignoring an answer to the question focus loss dropped', async () => {
-    const first = deferred<QueryAnswer>()
-    const second = deferred<QueryAnswer>()
+    const first = Promise.withResolvers<QueryAnswer>()
+    const second = Promise.withResolvers<QueryAnswer>()
     const port = {
       ...fakePort(null),
       query: vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise),
@@ -252,7 +244,7 @@ describe('useInlineEditGuard', () => {
   })
 
   it("lets a Save that outlived its dialog settle nothing of a newer one's", async () => {
-    const commit = deferred<CommitAnswer>()
+    const commit = Promise.withResolvers<CommitAnswer>()
     const port = { ...fakePort(DIRTY), commit: vi.fn(() => commit.promise) }
     const r = render(port)
     await leave(r)

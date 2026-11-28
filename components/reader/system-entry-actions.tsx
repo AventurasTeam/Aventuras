@@ -21,6 +21,8 @@ import {
   EMPTY_REPLY,
   PER_TURN_KIND,
   pipelineErrorDetail,
+  SUGGESTION_REFRESH_KIND,
+  type BlockedBy,
   type ConfigFailureKind,
   type PipelineError,
   type RejectedStart,
@@ -347,16 +349,17 @@ export function passResolvedEntry(submission: NonNullable<SystemFailureMeta['sub
 
 // What refuses a pass or a close while another run holds the story: a running kind, and the
 // close's own busy check. A prose reversal is no run, so it takes the entry's own line.
-const RUN_BLOCKERS: ReadonlySet<string> = new Set([
+const RUN_BLOCKERS: ReadonlySet<BlockedBy> = new Set<BlockedBy>([
   MANUAL_CLOSE_REFUSAL.busy,
   PER_TURN_KIND,
   PERIODIC_CLASSIFIER_KIND,
   CHAPTER_CLOSE_KIND,
+  SUGGESTION_REFRESH_KIND,
 ])
 
 /** A refused Retry's or manual start's toast names the user's remedy, never the code. */
 export function retryRefusalText(
-  blockedBy: string,
+  blockedBy: BlockedBy,
   ownLine: 'reader:systemEntry.passRetryBlocked' | 'reader:systemEntry.closeRetryBlocked',
 ): string {
   if (blockedBy === EMBEDDER_SWAP_REFUSAL) return t('reader:actions.blockedWhileSwapping')

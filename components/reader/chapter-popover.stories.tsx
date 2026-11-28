@@ -4,7 +4,7 @@ import { Pressable, useWindowDimensions, View } from 'react-native'
 import { expect, fireEvent, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
-import { useTier } from '@/hooks/use-tier'
+import { TierMark, waitForTier } from '@/hooks/tier-probe'
 import type { ChapterProgress } from '@/lib/chapters'
 import { t } from '@/lib/i18n'
 
@@ -62,10 +62,6 @@ const EMPTY_OPEN: ChapterProgress = {
   startEntryId: null,
 }
 
-function TierMark() {
-  return <Text testID="tier">{useTier()}</Text>
-}
-
 // gorhom's container fills this stage, so a detent is a share of the stage's height.
 function Stage({ children }: { children: ReactNode }) {
   const { height } = useWindowDimensions()
@@ -80,10 +76,6 @@ function Stage({ children }: { children: ReactNode }) {
 const dialog = () => screen.getByRole('dialog', { name: 'Chapters' })
 const chip = (number = 3) => screen.findByRole('button', { name: `Chapter ${number}` })
 const listScroller = () => screen.findByTestId('chapter-popover-list')
-
-async function waitForTier(tier: 'desktop' | 'phone') {
-  await waitFor(() => expect(screen.getByTestId('tier')).toHaveTextContent(tier))
-}
 
 async function openOverlay(number = 3) {
   await userEvent.click(await chip(number))

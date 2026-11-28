@@ -14,6 +14,7 @@ let index = new Map<string, string>()
 // Rebuilt from the loaded branch's rows; the base branch-guards its own writes, so the index follows.
 function rebuildIndex(): void {
   index = new Map()
+  // eslint-disable-next-line no-restricted-syntax -- the index mirrors whichever branch is loaded.
   for (const r of base.getRows(base.getLoadedBranch()).values()) {
     if (r.translatedText != null)
       index.set(compositeKey(r.targetKind, r.targetId, r.field, r.language), r.translatedText)

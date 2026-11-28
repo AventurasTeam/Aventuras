@@ -7,16 +7,6 @@ import {
   withBranchWriteShared,
 } from './branch-write-lock'
 
-function deferred<T = void>() {
-  let resolve!: (value: T) => void
-  let reject!: (error: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 // The lock advances over microtasks; a macrotask hop runs every queued continuation.
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
@@ -41,7 +31,7 @@ afterEach(() => {
 
 describe('withBranchWriteShared', () => {
   it('runs shared holders concurrently', async () => {
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const started: string[] = []
 
     const a = withBranchWriteShared('b1', 'act_a', async () => {
@@ -83,7 +73,7 @@ describe('withBranchWriteShared', () => {
 
   it('does not count a pass-through write as a shared holder', async () => {
     await holdBranchWriteExclusive('b1', 'act_pass')
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const own = withBranchWriteShared('b1', 'act_pass', () => gate.promise)
     releaseBranchWriteExclusive('b1', 'act_pass')
 
@@ -122,8 +112,8 @@ describe('withBranchWriteShared', () => {
 
 describe('holdBranchWriteExclusive', () => {
   it('waits for every shared holder to settle', async () => {
-    const first = deferred()
-    const second = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
     const a = withBranchWriteShared('b1', 'act_a', () => first.promise)
     const b = withBranchWriteShared('b1', 'act_b', () => second.promise)
 
@@ -141,7 +131,7 @@ describe('holdBranchWriteExclusive', () => {
   })
 
   it('queues a later shared request behind a waiting exclusive, so edits cannot starve a pass', async () => {
-    const first = deferred()
+    const first = Promise.withResolvers<void>()
     const order: string[] = []
     const s1 = withBranchWriteShared('b1', 'act_s1', async () => {
       order.push('s1 start')
@@ -169,7 +159,7 @@ describe('holdBranchWriteExclusive', () => {
 
   it('grants queued requests in arrival order', async () => {
     await holdBranchWriteExclusive('b1', 'act_a')
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const order: string[] = []
     const shared = withBranchWriteShared('b1', 'act_user', async () => {
       order.push('user')
@@ -191,8 +181,8 @@ describe('holdBranchWriteExclusive', () => {
   })
 
   it('keeps the branch locked while one of two shared holders is still writing', async () => {
-    const first = deferred()
-    const second = deferred()
+    const first = Promise.withResolvers<void>()
+    const second = Promise.withResolvers<void>()
     const a = withBranchWriteShared('b1', 'act_a', () => first.promise)
     const b = withBranchWriteShared('b1', 'act_b', () => second.promise)
     first.resolve()
@@ -208,7 +198,7 @@ describe('holdBranchWriteExclusive', () => {
   })
 
   it('returns the pending acquisition to a repeat hold, which one release ends', async () => {
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const shared = withBranchWriteShared('b1', 'act_user', () => gate.promise)
 
     const first = holdBranchWriteExclusive('b1', 'act_pass')
@@ -231,7 +221,7 @@ describe('holdBranchWriteExclusive', () => {
     const before = holdBranchWriteExclusive('b1', 'act_pass')
     await before
     releaseBranchWriteExclusive('b1', 'act_pass')
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const shared = withBranchWriteShared('b1', 'act_user', () => gate.promise)
 
     const after = holdBranchWriteExclusive('b1', 'act_pass')
@@ -280,7 +270,7 @@ describe('releaseBranchWriteExclusive', () => {
 
   // A parallel branch of an aborted run may still await this request; it must never write.
   it('drops a queued request, leaving its promise pending forever', async () => {
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const shared = withBranchWriteShared('b1', 'act_user', () => gate.promise)
     const hold = holdBranchWriteExclusive('b1', 'act_a')
 
@@ -295,7 +285,7 @@ describe('releaseBranchWriteExclusive', () => {
   })
 
   it('lets a later shared write past a dropped request at once', async () => {
-    const gate = deferred()
+    const gate = Promise.withResolvers<void>()
     const shared = withBranchWriteShared('b1', 'act_user', () => gate.promise)
     holdBranchWriteExclusive('b1', 'act_a')
 
