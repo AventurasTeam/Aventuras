@@ -727,6 +727,9 @@ function headingSlugs(text: string): Set<string> {
   // As github-slugger does, a suffix that would repeat an earlier slug is skipped.
   const occurrences = new Map<string, number>()
   marked.walkTokens(Lexer.lex(text), (token) => {
+    if (token.type === 'html') {
+      for (const [, id] of token.raw.matchAll(HTML_ID)) slugs.add(id)
+    }
     if (token.type !== 'heading') return
     const base = slugify(plainText(token.tokens))
     let slug = base
@@ -738,7 +741,6 @@ function headingSlugs(text: string): Set<string> {
     occurrences.set(slug, 0)
     slugs.add(slug)
   })
-  for (const [, id] of text.matchAll(HTML_ID)) slugs.add(id)
   return slugs
 }
 

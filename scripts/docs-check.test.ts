@@ -355,6 +355,26 @@ describe('links', () => {
     expect(errors).toEqual([])
   })
 
+  it('counts an HTML anchor, but not one shown as code', () => {
+    const errors = errorsFor({
+      'docs/ARCHITECTURE.md': [
+        '# Architecture',
+        '',
+        'Real <a id="real"></a>, shown `<a id="inline"></a>`.',
+        '',
+        '```',
+        '<a id="fenced"></a>',
+        '```',
+        '',
+        '[a](#real) [b](#inline) [c](#fenced)',
+      ].join('\n'),
+    })
+    expect(errors).toEqual([
+      'docs/ARCHITECTURE.md: #inline: docs/ARCHITECTURE.md has no heading or anchor "#inline"',
+      'docs/ARCHITECTURE.md: #fenced: docs/ARCHITECTURE.md has no heading or anchor "#fenced"',
+    ])
+  })
+
   it('rejects a link out of the repository', () => {
     expect(errorsFor({ 'docs/ARCHITECTURE.md': '[x](../../elsewhere.md)\n' })).toEqual([
       'docs/ARCHITECTURE.md: ../../elsewhere.md points outside the repository',
