@@ -706,8 +706,8 @@ describe('buildGenerationContext — composed prompt buffer', () => {
   // The boundary the pin above sits on, and the cost of crossing it. take is
   // max(protectedBuffer, min(openCount, wanted)), so a protectedBuffer of 0 over
   // a region with no open entries composes to nothing at all and the classifier
-  // gets its extraction instruction with no prose beneath it. Reachable from M5,
-  // when chapter-close starts stamping chapterId on recent entries.
+  // gets its extraction instruction with no prose beneath it. Reachable once a
+  // close stamps chapterId on recent entries.
   it('composes that same pair away at protectedBuffer 0 once both entries are chaptered', async () => {
     const ctx = await buildContext({
       entries: branchEntries(2, 0),

@@ -66,8 +66,8 @@ export function makeBatchCallback(
     queries.map(({ sql, params, method }) => rowsOf(sqlite, sql, params, method))
 }
 
-// Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement. Async because
-// sqlite-proxy/migrator awaits the proxy callback internally.
+// Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement, migrations in one
+// transaction (migrateOn). Async because sqlite-proxy/migrator awaits the proxy callback.
 async function openMigrated(location: string) {
   const sqlite = new DatabaseSync(location, { allowExtension: true })
   let db: ReturnType<typeof drizzle<typeof dbSchema>>
@@ -75,9 +75,20 @@ async function openMigrated(location: string) {
     sqlite.loadExtension(getLoadablePath())
     sqlite.exec('PRAGMA foreign_keys = ON;')
     db = drizzle(makeCallback(sqlite), makeBatchCallback(sqlite), { schema: dbSchema })
-    await migrate(db, (queries) => Promise.resolve(queries.forEach((q) => sqlite.exec(q))), {
-      migrationsFolder: MIGRATIONS_DIR,
-    })
+    await migrate(
+      db,
+      async (queries) => {
+        sqlite.exec('BEGIN')
+        try {
+          for (const q of queries) sqlite.exec(q)
+          sqlite.exec('COMMIT')
+        } catch (err) {
+          sqlite.exec('ROLLBACK')
+          throw err
+        }
+      },
+      { migrationsFolder: MIGRATIONS_DIR },
+    )
   } catch (err) {
     // No caller holds the handle yet, and an open file blocks its scratch cleanup on Windows.
     sqlite.close()

@@ -72,6 +72,24 @@ function syncBridge(native: CloseBridge): void {
   unsubscribe = null
 }
 
+// One listener held while any surface is dirty. Per-surface listeners can't work: the compiler
+// hoists a capture-free handler to module scope, addEventListener dedupes by reference, and
+// the first surface to go clean would unhook every other.
+const unloadHolders = new Set<object>()
+
+function preventUnload(event: BeforeUnloadEvent): void {
+  event.preventDefault()
+}
+
+function holdUnload(holder: object): () => void {
+  if (unloadHolders.size === 0) window.addEventListener('beforeunload', preventUnload)
+  unloadHolders.add(holder)
+  return () => {
+    unloadHolders.delete(holder)
+    if (unloadHolders.size === 0) window.removeEventListener('beforeunload', preventUnload)
+  }
+}
+
 /**
  * Extends a surface's unsaved-changes guard to navigator removal, the window,
  * and a reload.
@@ -114,21 +132,17 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
       return undefined
     }
 
-    // Per-surface, not shared: addEventListener dedupes by reference — sharing it would let
-    // one clean surface unhook every other. Browser prompts natively; Electron routes through
-    // the bridge via will-prevent-unload. A surface dirtied without a user gesture is
-    // unguarded here (lessons-learned/beforeunload-needs-sticky-activation.md).
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-    }
-    window.addEventListener('beforeunload', onBeforeUnload)
+    // Browser prompts natively; Electron routes through the bridge via will-prevent-unload. A
+    // surface dirtied without a user gesture is unguarded here
+    // (lessons-learned/beforeunload-needs-sticky-activation.md).
     const entry = requestLeaveRef
+    const releaseUnload = holdUnload(entry)
     if (native != null) {
       armed.add(entry)
       syncBridge(native)
     }
     return () => {
-      window.removeEventListener('beforeunload', onBeforeUnload)
+      releaseUnload()
       if (native != null) {
         armed.delete(entry)
         syncBridge(native)

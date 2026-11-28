@@ -11,7 +11,8 @@ Storybook — the repo's one Vite target — now passes the plugin explicitly vi
 `framework.options.pluginReactOptions.babel.plugins` in `.storybook/main.ts`.
 The preset spreads that object _after_ its own two flags, so it merges without
 ever re-opening `babel.config.js`. **A new Vite-built target starts from zero
-again and must do the same.**
+again and must do the same.** React Compiler is wired there too, ahead of
+worklets ([compiled tests](./compiler-hoists-capture-free-handlers.md)).
 
 ## Libraries in `node_modules` are prebundled without the plugin
 

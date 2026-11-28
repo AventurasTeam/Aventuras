@@ -21,6 +21,14 @@ to `PressResponder` or a guard in `Button` fixes neither.
 
 **How to apply.**
 
+- The app registers `registerKeyRepeatGuard`
+  (`components/ui/key-repeat-guard.ts`, from `app/_layout.tsx`): it drops,
+  document-wide, an Enter or Space keydown with `repeat` set that lands on
+  another element than the press began on. Without it, holding Enter on a
+  story card's `⋯` opened the menu, focused Archive and archived the story
+  on release (`e2e/tests/held-key.spec.ts`). The rules below still keep each
+  handler right on its own, including in Storybook, where the guard isn't
+  registered and user-event's held keys carry `repeat: false`.
 - A key handler that moves focus acts on keyup where it can, and ignores
   `event.repeat` when it arms, as the end picker does
   (`components/chapters/close-chapter-modal-view.tsx`).

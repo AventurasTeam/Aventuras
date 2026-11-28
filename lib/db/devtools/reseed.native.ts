@@ -15,6 +15,9 @@ export async function reseedDevDatabase(): Promise<ReseedSummary> {
   if (!__DEV__) throw new Error('On-device reseed is a dev-only tool.')
 
   const steps = buildSeedSteps()
+  // Read before either transaction: an await inside one yields to the app, and an app transaction
+  // there would end ours under the reseed.
+  const vecTables = await listVecFamilyTables(db)
 
   expoDb.execSync('PRAGMA foreign_keys = OFF;')
   expoDb.execSync('BEGIN;')
@@ -24,7 +27,7 @@ export async function reseedDevDatabase(): Promise<ReseedSummary> {
     }
     // vec0 tables sit outside dbSchema, and the seed carries no vector: a kept one would outlive
     // its rows and collide with the vectors the seed's fork copies.
-    for (const table of await listVecFamilyTables(db)) {
+    for (const table of vecTables) {
       expoDb.execSync(`DELETE FROM "${table}";`)
     }
     expoDb.execSync('COMMIT;')
@@ -39,7 +42,9 @@ export async function reseedDevDatabase(): Promise<ReseedSummary> {
   try {
     for (const step of steps) {
       if (step.rows.length === 0) continue
-      await db.insert(step.table).values(step.rows as never)
+      db.insert(step.table)
+        .values(step.rows as never)
+        .run()
     }
     expoDb.execSync('COMMIT;')
   } catch (err) {

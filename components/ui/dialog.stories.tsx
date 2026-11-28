@@ -437,6 +437,30 @@ const scrimDialog = (
   </Dialog>
 )
 
+function panelWidth(name: string): number {
+  const panel = screen.getByRole('dialog', { name }).firstElementChild as HTMLElement
+  return panel.getBoundingClientRect().width
+}
+
+// Radix wraps the panel in an element that shrinks to fit: a one-word dialog opens at its cap
+// all the same, rather than at its content's width.
+export const OpensAtItsCapWhateverItHolds: Story = {
+  render: () => scrimDialog,
+  play: async () => {
+    await screen.findByRole('dialog', { name: 'Scrim' })
+    expect(panelWidth('Scrim')).toBe(512)
+  },
+}
+
+export const FillsAPhoneLessAlertDialogsInset: Story = {
+  globals: { viewport: { value: 'phone390' } },
+  render: () => scrimDialog,
+  play: async () => {
+    await screen.findByRole('dialog', { name: 'Scrim' })
+    await waitFor(() => expect(panelWidth('Scrim')).toBe(window.innerWidth - 48))
+  },
+}
+
 export const ScrimLight: Story = {
   render: () => scrimDialog,
   play: async () => {

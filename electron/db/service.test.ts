@@ -1,8 +1,13 @@
+import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 
+import { drizzle } from 'drizzle-orm/sqlite-proxy'
+import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
+import { getLoadablePath } from 'sqlite-vec'
 import { describe, expect, it, vi } from 'vitest'
 
-import { batchOn, queryOn } from './service'
+import { batchOn, migrateOn, queryOn } from './service'
+import type { DbProxyMethod } from './types'
 
 vi.mock('electron', () => ({ app: { isPackaged: false, getPath: () => '/tmp' } }))
 
@@ -64,5 +69,49 @@ describe('batchOn', () => {
     expect(second).toEqual({ rows: [[1]] })
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(queryOn(sqlite, 'SELECT count(*) FROM b', [], 'all').rows).toEqual([[2]])
+  })
+})
+
+describe('migrateOn', () => {
+  const MIGRATIONS = 'lib/db/migrations'
+
+  function opened(): DatabaseSync {
+    const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
+    sqlite.loadExtension(getLoadablePath())
+    sqlite.exec('PRAGMA foreign_keys = ON;')
+    return sqlite
+  }
+
+  async function boot(sqlite: DatabaseSync, exec = (q: string) => sqlite.exec(q)): Promise<void> {
+    const proxy = drizzle(async (s, p, m) => queryOn(sqlite, s, p, m as DbProxyMethod))
+    await migrate(proxy, (queries) => Promise.resolve(migrateOn({ exec }, queries)), {
+      migrationsFolder: MIGRATIONS,
+    })
+  }
+
+  function column(sqlite: DatabaseSync, sql: string): unknown[] {
+    return (queryOn(sqlite, sql, [], 'all').rows as unknown[][]).map((row) => row[0])
+  }
+
+  it('leaves nothing of a boot killed mid-rebuild, so the next boot migrates cleanly', async () => {
+    const sqlite = opened()
+    const killed = boot(sqlite, (q) => {
+      if (q.includes('INSERT INTO `__new_')) throw new Error('killed mid-rebuild')
+      sqlite.exec(q)
+    })
+    await expect(killed).rejects.toThrow('killed mid-rebuild')
+    expect(
+      column(sqlite, "SELECT name FROM sqlite_master WHERE name LIKE '\\_\\_new\\_%' ESCAPE '\\'"),
+    ).toEqual([])
+    expect(column(sqlite, 'SELECT count(*) FROM __drizzle_migrations')).toEqual([0])
+
+    await boot(sqlite)
+
+    const journal = JSON.parse(readFileSync(`${MIGRATIONS}/meta/_journal.json`, 'utf8')) as {
+      entries: unknown[]
+    }
+    expect(column(sqlite, 'SELECT count(*) FROM __drizzle_migrations')).toEqual([
+      journal.entries.length,
+    ])
   })
 })

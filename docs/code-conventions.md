@@ -284,6 +284,13 @@ bar). Coverage settings live exclusively in `vitest.config.ts` —
 CLI `--coverage.*` dot-overrides crash the storybook project's
 preset loader, so never pass them; change the config instead.
 
+**Tests run compiled.** The unit and Storybook projects run the build's
+React Compiler over app sources (`scripts/react-compiler.ts`), so a hook
+whose correctness rests on what the compiler memoizes or hoists is tested
+as it ships. A test that calls a component as a plain function fails once
+the component is compiled; call it inside `renderHook`
+([compiler-hoisted handlers](./implementation/lessons-learned/compiler-hoists-capture-free-handlers.md)).
+
 **Give `beforeEach` a block body.** Vitest treats a **callable**
 return value from `beforeEach` as a teardown callback and invokes it
 after each test. A concise arrow hides one: `mockReset` / `mockClear`

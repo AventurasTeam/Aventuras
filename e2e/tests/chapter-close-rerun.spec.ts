@@ -116,11 +116,14 @@ test.describe.serial('re-running a close', () => {
   const journals = () =>
     queryScalar(page(), `SELECT COUNT(*) FROM reversal_journals WHERE branch_id = ?`, [branchId])
 
+  // The system tail carries no delta, so no rollback takes it (data-model.md → System entries are
+  // not delta-logged), and the re-run reads it as no turn.
   const entriesPastEnd = () =>
-    queryScalar(page(), `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND position > ?`, [
-      branchId,
-      chapter.endPosition,
-    ])
+    queryScalar(
+      page(),
+      `SELECT COUNT(*) FROM story_entries WHERE branch_id = ? AND position > ? AND kind != 'system'`,
+      [branchId, chapter.endPosition],
+    )
 
   const entriesThroughEnd = () =>
     queryScalar(

@@ -114,7 +114,7 @@
     "fflate": "^0.8.3",
     "harper.js": "^2.4.0",
     "htmlparser2": "^12.0.0",
-    "i18next": "^26.3.0",
+    "i18next": "^26.7.2",
     "js-tiktoken": "^1.0.21",
     "jsonrepair": "^3.14.1",
     "juice": "^12.1.1",

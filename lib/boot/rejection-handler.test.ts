@@ -64,6 +64,24 @@ describe('registerRejectionHandler', () => {
     expect(logEntries[0].fields.error).toBe('Script error.')
   })
 
+  it.each([
+    'ResizeObserver loop completed with undelivered notifications.',
+    'ResizeObserver loop limit exceeded',
+  ])('logs nothing for the error-less "%s" event', (message) => {
+    const addEventListener = vi.fn()
+    registerRejectionHandler({ addEventListener })
+    captureListener(addEventListener, 'error')({ message })
+    expect(getDiagnosticsSnapshot().logEntries).toHaveLength(0)
+  })
+
+  it('still logs a thrown error whose message names a ResizeObserver loop', () => {
+    const addEventListener = vi.fn()
+    registerRejectionHandler({ addEventListener })
+    const thrown = new Error('ResizeObserver loop in a callback of ours')
+    captureListener(addEventListener, 'error')({ error: thrown, message: thrown.message })
+    expect(getDiagnosticsSnapshot().logEntries).toHaveLength(1)
+  })
+
   it('redacts a known secret embedded in an uncaught error stack', () => {
     setHttpCallKnownSecretValues(['sk-test-abc'])
     const addEventListener = vi.fn()

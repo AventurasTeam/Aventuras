@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { refsResolve, toldInThirdPerson } from './checks'
 import { reply } from './fixture'
 import { EVAL_WINDOWS, renderWindow } from './index'
 
@@ -10,6 +11,12 @@ describe.each(EVAL_WINDOWS.map((w) => [w.name, w] as const))('eval window %s', (
     w.checks
       .filter((c) => (kind == null || c.kind === kind) && c.holds(r) === holds)
       .map((c) => c.name)
+
+  it('carries the checks the set appends to every window', () => {
+    const names = w.checks.map((c) => c.name)
+    expect(names).toContain(refsResolve(w).name)
+    expect(names).toContain(toldInThirdPerson().name)
+  })
 
   it('its ideal reply passes every check', () => {
     expect(failing(null, w.ideal, false)).toEqual([])

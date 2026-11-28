@@ -1,6 +1,14 @@
 import { and, asc, desc, eq, gt, inArray, or, sql } from 'drizzle-orm'
 
-import { chunked, deltas, type Delta, type Entity, type LocationState, type Thread } from '@/lib/db'
+import {
+  chunked,
+  COLLISION_COLUMNS,
+  deltas,
+  type Delta,
+  type Entity,
+  type LocationState,
+  type Thread,
+} from '@/lib/db'
 import { deepEqual } from '@/lib/deep-equal'
 import { isJsonObject } from '@/lib/json-object'
 
@@ -215,11 +223,7 @@ export function wrotePlacement(edits: readonly Delta[]): boolean {
   return PLACEMENT_PATHS.some((key) => wrotePath(edits, 'state', [key]))
 }
 
-const COLLISION_FLAG_COLUMNS: readonly string[] = [
-  'nameCollisionFlag',
-  'nameCollisionPartnerId',
-  'nameCollisionReason',
-] satisfies readonly (keyof Entity)[]
+const COLLISION_FLAG_COLUMNS: readonly string[] = COLLISION_COLUMNS
 
 /** A delta wrote an entity's collision flag, partner or reason, which the table's CHECK holds
  *  together (edge-cases.md → Schema). */

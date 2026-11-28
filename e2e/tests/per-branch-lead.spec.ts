@@ -184,9 +184,11 @@ test.describe.serial('Per-branch lead', () => {
     expect(await userActions()).toBe(actionsBefore)
     expect(await tailRows()).toBe(2)
     expect(await logHead(page, branchId)).toBe(head)
-    // A ↻ let through opens its confirm, held on the lead, so the DB can't show it. Checked after
-    // the round trips above, not at the press: the confirm opens only once ↻'s count read lands.
-    await expect(reader.regenerateConfirm(page)).toHaveCount(0)
+    // A ↻ let through regenerates the terminal reply at once, its rollback written only once the
+    // count read lands: given that time, the log and the tail still stand.
+    await page.waitForTimeout(1_000)
+    expect(await logHead(page, branchId)).toBe(head)
+    expect(await tailRows()).toBe(2)
     await expect(reader.composer(page)).toHaveValue(DRAFT)
   })
 

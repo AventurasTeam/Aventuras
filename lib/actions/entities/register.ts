@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 
 import type { CollisionReason, Entity, EntityState, NewEntity } from '@/lib/db'
 import {
+  COLLISION_COLUMNS,
   COLLISION_REASONS,
   emptyEntityState,
   entities,
@@ -117,8 +118,6 @@ export const UPDATABLE = [
 ] as const
 void (true satisfies PatchMatchesColumns<EntityUpdatePatch, typeof UPDATABLE>)
 
-const FLAG_COLUMNS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
-
 function fullRow(entry: NewEntity): Entity {
   // Apply SQLite defaults so the inserted row and the store create-patch row are byte-identical.
   return {
@@ -167,10 +166,10 @@ function flagTripleIssue(row: Entity): string | null {
 
 // entityWriteSchema omits the flag columns, so its parse strips them instead of checking them.
 function flagPatchIssue(patch: Record<string, unknown>, current: Entity): string | null {
-  const named = FLAG_COLUMNS.filter((col) => col in patch)
+  const named = COLLISION_COLUMNS.filter((col) => col in patch)
   if (named.length === 0) return null
   const clears =
-    named.length === FLAG_COLUMNS.length &&
+    named.length === COLLISION_COLUMNS.length &&
     patch.nameCollisionFlag === 0 &&
     patch.nameCollisionPartnerId === null &&
     patch.nameCollisionReason === null

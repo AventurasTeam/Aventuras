@@ -456,7 +456,7 @@ describe('AC5 — redo of a classifier-processed turn tolerates re-derivation', 
     expect(branch.classifierStatus?.processedThrough).toBe(1)
 
     // The re-deriving pass, at the write-path seam: a fresh happening row for
-    // the same fact is a tolerated duplicate (cleaned at M5 chapter-close dedup)…
+    // the same fact is a tolerated duplicate (the close's dedup cleans it)…
     const dupHap = await applyDeltaAction(
       {
         action: {

@@ -116,13 +116,6 @@ const KINDS: Readonly<Record<DiffTable, Kinds>> = {
   },
 }
 
-/** The entity columns Change prose words as one collision field. */
-export const COLLISION_COLUMNS = [
-  'nameCollisionFlag',
-  'nameCollisionPartnerId',
-  'nameCollisionReason',
-] as const
-
 const PLACE_PARENT = 'state.parent_location_id'
 const COLLISION_PARTNER = 'nameCollisionPartnerId'
 

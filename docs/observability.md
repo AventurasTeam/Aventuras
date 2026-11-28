@@ -467,8 +467,11 @@ convention, and the expectation that subsystems route through
   fork committed, but the start on the new branch refused, or the new
   reader opened with nothing loaded, with `branchId`, `newBranchId`,
   `chapterId` and the `cause`, the refusal's code or `shown-unloaded`;
-  the warning toast says to retry from the Timeline) and
-  `close_rerun_on_branch_threw` (error,
+  the warning toast says to retry from the Timeline),
+  `close_rerun_threw` (error, the same file: the in-place re-run's press
+  rejected on a throw `runCloseRerun` doesn't catch, with `branchId`,
+  `chapterId` and `error`; the confirm stops pending so it can be
+  closed) and `close_rerun_on_branch_threw` (error,
   `components/chapters/chapter-overlays-host.tsx`: the sequence
   rejected on a throw its steps don't catch, with `branchId`,
   `chapterId` and `error`; the reader hold has ended, and the confirm

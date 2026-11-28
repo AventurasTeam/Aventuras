@@ -1,11 +1,9 @@
-import { MoreHorizontal, Star } from 'lucide-react-native'
-import { useRef, type ComponentRef } from 'react'
+import { Star } from 'lucide-react-native'
 import { Platform, Pressable, View } from 'react-native'
 
+import { OverflowMenu, type OverflowMenuEntry } from '@/components/compounds/overflow-menu'
 import { Chip } from '@/components/ui/chip'
 import { Icon } from '@/components/ui/icon'
-import { IconAction } from '@/components/ui/icon-action'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
@@ -72,7 +70,39 @@ export function StoryCard({
   const isDraft = story.status === 'draft'
 
   const stripColor = story.accentColor ?? MODE_DEFAULT_COLOR[mode]
-  const overflowTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+  // Duplicate and Delete open a dialog: on phone they wait out the menu Sheet's exit.
+  const overflowEntries: OverflowMenuEntry[] = [
+    ...(isDraft
+      ? []
+      : [
+          {
+            key: 'archive',
+            label: archived ? t('storyCard.unarchive') : t('storyCard.archive'),
+            onPress: onArchiveToggle,
+          },
+        ]),
+    ...(onEditInfo
+      ? [{ key: 'edit-info', label: t('storyCard.editInfo'), onPress: onEditInfo }]
+      : []),
+    ...(onDuplicate
+      ? [
+          {
+            key: 'duplicate',
+            label: t('storyCard.duplicate'),
+            opensSheet: true,
+            onPress: onDuplicate,
+          },
+        ]
+      : []),
+    ...(onExport ? [{ key: 'export', label: t('storyCard.export'), onPress: onExport }] : []),
+    {
+      key: 'delete',
+      label: t('storyCard.delete'),
+      destructive: true,
+      opensSheet: true,
+      onPress: onDelete,
+    },
+  ]
 
   const modeLabel = t(MODE_LABEL_KEY[mode])
   const failureLabel = openFailure ? t(OPEN_FAILURE_LABEL_KEY[openFailure]) : null
@@ -186,88 +216,9 @@ export function StoryCard({
       </Pressable>
 
       <View className="absolute right-2 top-2" style={POINTER_EVENTS_BOX_NONE}>
-        <Popover ariaLabel={t('storyCard.actionsLabel')}>
-          <PopoverTrigger ref={overflowTriggerRef} asChild>
-            <IconAction icon={MoreHorizontal} label={t('storyCard.actionsLabel')} size="sm" />
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-56 p-1">
-            <View className="flex-col">
-              {!isDraft ? (
-                <OverflowItem
-                  label={archived ? t('storyCard.unarchive') : t('storyCard.archive')}
-                  onSelect={() => {
-                    overflowTriggerRef.current?.close()
-                    onArchiveToggle()
-                  }}
-                />
-              ) : null}
-              {onEditInfo ? (
-                <OverflowItem
-                  label={t('storyCard.editInfo')}
-                  onSelect={() => {
-                    overflowTriggerRef.current?.close()
-                    onEditInfo()
-                  }}
-                />
-              ) : null}
-              {onDuplicate ? (
-                <OverflowItem
-                  label={t('storyCard.duplicate')}
-                  onSelect={() => {
-                    overflowTriggerRef.current?.close()
-                    onDuplicate()
-                  }}
-                />
-              ) : null}
-              {onExport ? (
-                <OverflowItem
-                  label={t('storyCard.export')}
-                  onSelect={() => {
-                    overflowTriggerRef.current?.close()
-                    onExport()
-                  }}
-                />
-              ) : null}
-              <OverflowItem
-                label={t('storyCard.delete')}
-                destructive
-                onSelect={() => {
-                  overflowTriggerRef.current?.close()
-                  onDelete()
-                }}
-              />
-            </View>
-          </PopoverContent>
-        </Popover>
+        <OverflowMenu label={t('storyCard.actionsLabel')} entries={overflowEntries} />
       </View>
     </View>
-  )
-}
-
-function OverflowItem({
-  label,
-  destructive,
-  onSelect,
-}: {
-  label: string
-  destructive?: boolean
-  onSelect: () => void
-}) {
-  return (
-    <Pressable
-      accessibilityRole="menuitem"
-      accessibilityLabel={label}
-      onPress={onSelect}
-      className={cn(
-        'justify-center rounded-sm px-row-x-md py-row-y-sm',
-        'active:bg-tint-press',
-        Platform.select({ web: 'cursor-pointer hover:bg-tint-hover' }),
-      )}
-    >
-      <Text size="sm" className={cn('font-medium', destructive && 'text-danger')}>
-        {label}
-      </Text>
-    </Pressable>
   )
 }
 

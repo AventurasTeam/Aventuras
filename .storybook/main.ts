@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { transformAsync } from '@babel/core'
 import type { StorybookConfig } from '@storybook/react-native-web-vite'
 
+import { reactCompilerBabelPlugin } from '../scripts/react-compiler'
+
 const dirname =
   typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
 
@@ -41,10 +43,15 @@ const config: StorybookConfig = {
     options: {
       pluginReactOptions: {
         jsxImportSource: 'nativewind',
-        // The preset hardcodes babelrc/configFile false, so babel.config.js never loads
-        // and worklets never injects `updater.__closure`.
-        // See lessons-learned/vite-targets-dont-read-babel-config.md.
-        babel: { plugins: ['react-native-worklets/plugin'] },
+        // The preset hardcodes babelrc/configFile false, so babel.config.js never loads:
+        // the build's compiler runs first, as babel-preset-expo orders it, and worklets
+        // injects `updater.__closure`. See lessons-learned/vite-targets-dont-read-babel-config.md.
+        babel: {
+          plugins: [
+            reactCompilerBabelPlugin(path.resolve(dirname, '..')),
+            'react-native-worklets/plugin',
+          ],
+        },
       },
     },
   },

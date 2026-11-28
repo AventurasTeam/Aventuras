@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { OverviewTab } from '@/components/world/detail/common-tabs'
@@ -48,24 +50,29 @@ const PANE_DATA: EntityPaneData = {
   story: storyPlaceOf({ tail: null, sceneSource: null }),
 }
 
+// The build compiles both components, and a compiled component reads its memo cache, so
+// each is called inside a render rather than as a plain function.
+function mounted<P, R>(component: (props: P) => R, componentProps: P): R {
+  return renderHook(() => component(componentProps)).result.current
+}
+
 function props(model: PeekBodyProps['model'], entryIndex: PeekEntryIndex = READ) {
   return { model, entityContext: CONTEXT, entryIndex, onRegionPress: vi.fn() }
 }
 
 describe('PEEK_ENTITY_BODY', () => {
-  // OverviewTab calls no hooks either: its TabsContent's child is what World mounts.
+  // Its TabsContent's child is what World mounts.
   it('is the Overview component World’s Overview tab mounts', () => {
-    const tab = OverviewTab({ row: KAEL, data: PANE_DATA, onRegionPress: vi.fn() })
+    const tab = mounted(OverviewTab, { row: KAEL, data: PANE_DATA, onRegionPress: vi.fn() })
     expect(tab.props.value).toBe('overview')
     expect(tab.props.children.type).toBe(PEEK_ENTITY_BODY)
   })
 })
 
-// PeekBody calls no hooks, so calling it returns the element it would mount.
 describe('PeekBody', () => {
   it('mounts the Overview in its peek variant for an entity', () => {
     const p = props({ kind: 'entity', row: KAEL, recentlyClassified: undefined, leadLabel: 'you' })
-    const element = PeekBody(p)
+    const element = mounted(PeekBody, p)
     expect(element.type).toBe(EntityOverview)
     expect(element.props).toEqual({
       variant: 'peek',
@@ -79,18 +86,24 @@ describe('PeekBody', () => {
 
   it('hands a region press back with the peeked entity and the tab', () => {
     const p = props({ kind: 'entity', row: KAEL, recentlyClassified: undefined, leadLabel: 'you' })
-    const element = PeekBody(p)
+    const element = mounted(PeekBody, p)
     element.props.onRegionPress('identity')
     expect(p.onRegionPress).toHaveBeenCalledTimes(1)
     expect(p.onRegionPress).toHaveBeenCalledWith(KAEL, 'identity')
   })
 
   it('mounts the lore, thread and happening bodies for their kinds', () => {
-    const lore = PeekBody(props({ kind: 'lore', row: VEIL, recentlyClassified: undefined }))
+    const lore = mounted(
+      PeekBody,
+      props({ kind: 'lore', row: VEIL, recentlyClassified: undefined }),
+    )
     expect(lore.type).toBe(LorePeekBody)
     expect(lore.props).toEqual({ lore: VEIL })
 
-    const thread = PeekBody(props({ kind: 'thread', row: AMULET, recentlyClassified: 'fresh' }))
+    const thread = mounted(
+      PeekBody,
+      props({ kind: 'thread', row: AMULET, recentlyClassified: 'fresh' }),
+    )
     expect(thread.type).toBe(ThreadPeekBody)
     expect(thread.props).toEqual({ thread: AMULET })
 
@@ -101,9 +114,9 @@ describe('PeekBody', () => {
       involved: 3,
       aware: 1,
     } as const
-    const happening = PeekBody(props(model))
+    const happening = mounted(PeekBody, props(model))
     expect(happening.type).toBe(HappeningPeekBody)
     expect(happening.props).toEqual({ happening: AMBUSH, involved: 3, aware: 1, entryIndex: READ })
-    expect(PeekBody(props(model, FAILED)).props.entryIndex).toBe(FAILED)
+    expect(mounted(PeekBody, props(model, FAILED)).props.entryIndex).toBe(FAILED)
   })
 })

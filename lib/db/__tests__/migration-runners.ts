@@ -22,10 +22,17 @@ export function tagEnding(suffix: string): string {
   return tag
 }
 
-// Desktop: the sqlite-proxy migrator hands initDb a flat statement list that it execs one by one
-// (electron/db/service.ts), so the rebuild's PRAGMA foreign_keys=OFF takes effect.
+// Desktop: initDb execs the sqlite-proxy migrator's flat statement list inside one transaction
+// (migrateOn, electron/db/service.ts), so PRAGMA foreign_keys does nothing there either.
 export function migrateLikeDesktop(sqlite: DatabaseSync, tags: readonly string[]): void {
-  for (const tag of tags) applyMigration(sqlite, tag)
+  sqlite.exec('BEGIN')
+  try {
+    for (const tag of tags) applyMigration(sqlite, tag)
+    sqlite.exec('COMMIT')
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
 }
 
 // Android: expo's migrator runs every pending step between one BEGIN and COMMIT, preparing each

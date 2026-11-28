@@ -72,8 +72,8 @@ export function deleteVecOps(
 
 /**
  * `deleteVecOps` for many ids: vec0 scans the whole table for a branch_id + id match, so one
- * `id IN` statement per table (per `BIND_CHUNK` ids) replaces a scan per id. Never `pk IN` —
- * vec0 answers it with no rows.
+ * `id IN` statement per table (per `BIND_CHUNK` ids) replaces a scan per id. Not by `pk`: rows
+ * from before the model joined it carry another shape (vecRowPk).
  */
 export function deleteVecIdsOps(
   kind: VecTargetKind,

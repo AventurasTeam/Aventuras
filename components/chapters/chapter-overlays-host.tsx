@@ -459,13 +459,26 @@ function RerunConfirmHost({
     }
   }
 
+  // A pending confirm can't be cancelled: end the press before the log, which can throw too.
+  const pressThrew = (
+    kind: 'app.close_rerun_threw' | 'app.close_rerun_on_branch_threw',
+    error: unknown,
+  ) => {
+    onStarting(request, false)
+    pendingRef.current = false
+    setPending(null)
+    logger.error(kind, { branchId, chapterId, error: messageOf(error) })
+  }
+
   const confirm = () => {
     if (begin('in-place') == null) return
     // Once the chain's first run reserves every refusal is past, and the banner speaks.
-    void runCloseRerun({ branchId, chapterId, preview, onStarted: closeOwn }).then((step) => {
-      onStarting(request, false)
-      afterStart(step)
-    })
+    void runCloseRerun({ branchId, chapterId, preview, onStarted: closeOwn })
+      .then((step) => {
+        onStarting(request, false)
+        afterStart(step)
+      })
+      .catch((error: unknown) => pressThrew('app.close_rerun_threw', error))
   }
 
   const confirmOnBranch = (withTurns: CloseRerunForkPreview) => {
@@ -484,17 +497,7 @@ function RerunConfirmHost({
         // Past the commit it stays pending: the publish's prune or the sequence's close unmounts it.
         if (step.step !== 'forked') afterStart(step)
       })
-      .catch((error: unknown) => {
-        // A pending confirm can't be cancelled: clear pending before the log, which can throw too.
-        onStarting(request, false)
-        pendingRef.current = false
-        setPending(null)
-        logger.error('app.close_rerun_on_branch_threw', {
-          branchId,
-          chapterId,
-          error: messageOf(error),
-        })
-      })
+      .catch((error: unknown) => pressThrew('app.close_rerun_on_branch_threw', error))
   }
 
   const cancel = () => {

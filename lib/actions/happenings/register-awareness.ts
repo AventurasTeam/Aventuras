@@ -1,9 +1,8 @@
 import { and, eq, inArray } from 'drizzle-orm'
 
 import type { HappeningAwareness } from '@/lib/db'
-import { happeningAwareness, happeningAwarenessWriteSchema } from '@/lib/db'
+import { happeningAwareness, happeningAwarenessWriteSchema, isRetrievalBump } from '@/lib/db'
 import { generateId } from '@/lib/ids'
-import { isRetrievalBumpOnly } from '@/lib/row-signals'
 import { happeningAwarenessStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
@@ -401,7 +400,7 @@ export function registerHappeningAwareness(): void {
     // chapter-close.md → 3d: a turn's bump moves the count; a close's reset and merge set it.
     counter: {
       column: 'retrievalCount',
-      isRelative: (d) => d.source === 'ai_classifier' && isRetrievalBumpOnly(d.op, d.undoPayload),
+      isRelative: (d) => d.source === 'ai_classifier' && isRetrievalBump(d),
     },
     handlers: {
       upsertHappeningAwareness: upsertHandler,

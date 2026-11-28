@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { USER_EDITED_SINCE_PROSE } from '@/lib/actions/types'
-import type { CloseReasonKey, Entity } from '@/lib/db'
+import { COLLISION_COLUMNS, type CloseReasonKey, type Entity } from '@/lib/db'
 import { boundStateText } from '@/lib/piggyback'
 import { flaggedSideOf, flagStillHolds } from '@/lib/world'
 
@@ -64,8 +64,6 @@ const NOTE = {
 /** C4: a retirement records its status alone; its reason is the call's why. */
 const RETIRED: Readonly<Record<string, unknown>> = { status: 'retired' }
 const RETIREMENT_FIELDS = ['status', 'retiredReason'] as const
-// Every column the raise writes, so a restated flag drops the partner value too (C4).
-const FLAG_FIELDS = ['nameCollisionFlag', 'nameCollisionPartnerId', 'nameCollisionReason'] as const
 const PARTNER_PATH = 'nameCollisionPartnerId'
 
 /** chapter-close.md → Phase 4: hard finality only, never a place, nor a character a later turn shows. */
@@ -204,7 +202,8 @@ async function planFlagDuplicate(args: FlagArgs, ctx: WriteContext): Promise<Wri
             proseEntryId: ctx.proseEntryId,
           },
         },
-        fields: FLAG_FIELDS,
+        // Every column the raise writes, so a restated flag drops the partner value too (C4).
+        fields: COLLISION_COLUMNS,
         row: side.id,
       })
   }

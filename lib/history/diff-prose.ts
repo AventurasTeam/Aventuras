@@ -1,4 +1,4 @@
-import { termChanges, termKeyOf, termMatchOf, type TermMatch } from '@/lib/actions'
+import { termChanges, termMatchOf, termSpellings, type TermMatch } from '@/lib/actions'
 import { INJECTION_MODES, THREAD_STATUSES } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { isJsonObject } from '@/lib/json-object'
@@ -66,17 +66,10 @@ type FilledKey =
   | 'history:prose.lastSeenNoPlace'
   | 'history:prose.deletedName'
 
-const SLOT = /\uE000(\d+)\uE001/g
-
-// i18next fills a placeholder at the first match of its text, even inside a value it inserted, so
-// t() sees private-use slot marks and each value replaces its mark in one pass, never re-read.
 function fill(key: FilledKey, values: Readonly<Record<string, string>>, count?: number): string {
-  const names = Object.keys(values)
-  const options: Record<string, string | number> = Object.fromEntries(
-    names.map((name, i) => [name, `\uE000${i}\uE001`]),
-  )
+  const options: Record<string, string | number> = { ...values }
   if (count !== undefined) options.count = count
-  return t(key, options).replace(SLOT, (_, i: string) => values[names[Number(i)]])
+  return t(key, options)
 }
 
 const none = () => t('history:prose.none')
@@ -229,16 +222,6 @@ function cutTerm(term: string): string {
   return `${wordEnd > 0 ? head.slice(0, wordEnd) : head}${ellipsis()}`
 }
 
-// A list is a set: a duplicate is one term, spelled as its first occurrence.
-function firstSpellings(list: readonly string[], match: TermMatch): Map<string, string> {
-  const byKey = new Map<string, string>()
-  for (const term of list) {
-    const key = termKeyOf(term, match)
-    if (!byKey.has(key)) byKey.set(key, term)
-  }
-  return byKey
-}
-
 // Added and respelled follow the new list's order, removed the old list's; a reorder is no change.
 function listParts(
   before: readonly string[],
@@ -248,8 +231,8 @@ function listParts(
 ): Change {
   const changes = termChanges(before, after, match)
   if (changes.size === 0) return SAME
-  const was = firstSpellings(before, match)
-  const now = firstSpellings(after, match)
+  const was = termSpellings(before, match)
+  const now = termSpellings(after, match)
   const added: string[] = []
   const respelled: string[] = []
   for (const [key, term] of now) {

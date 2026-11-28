@@ -420,6 +420,25 @@ describe('checkStoryDuplicate', () => {
     await expectRefused({ branchId: A }, DUPLICATE_REFUSAL.runRegistered)
   })
 
+  // A Send's user_action lands before its run reserves: the copy would take it with no run row.
+  it('refuses while a turn is pending on one of its branches', async () => {
+    let checked: Awaited<ReturnType<typeof check>> | undefined
+    await generationStore.bracketPendingTurn(B, async () => {
+      checked = await check({ branchId: A })
+    })
+    expect(checked).toEqual({ status: 'rejected', code: DUPLICATE_REFUSAL.runRegistered })
+  })
+
+  // A failed regenerate's follow-up sweep runs after its mark has ended.
+  it("refuses while a turn's body runs on past its mark on one of its branches", async () => {
+    let checked: Awaited<ReturnType<typeof check>> | undefined
+    await generationStore.bracketPendingTurn(B, async (endMark) => {
+      endMark()
+      checked = await check({ branchId: A })
+    })
+    expect(checked).toEqual({ status: 'rejected', code: DUPLICATE_REFUSAL.runRegistered })
+  })
+
   it('reports the first refusal in canon order', async () => {
     t.sqlite.prepare("UPDATE stories SET status = 'draft' WHERE id = ?").run(STORY)
     markSwap(STORY)
@@ -961,15 +980,15 @@ describe('duplicateStory', () => {
   })
 
   it('refuses a run registered after the re-check returns, at the synchronous check before the post', async () => {
-    const readTxState = generationStore.getTxState
+    const readBusy = generationStore.isAnyStoryBranchBusy
     let armed = false
-    // After the copier's last call, the store's first read is the re-check's run check.
-    vi.spyOn(generationStore, 'getTxState').mockImplementation(() => {
+    // After the copier's last call, the first busy read is the re-check's run check.
+    vi.spyOn(generationStore, 'isAnyStoryBranchBusy').mockImplementation((storyId, branchIds) => {
       if (armed) {
         armed = false
         queueMicrotask(() => registerRun({ storyId: STORY, branchId: A }))
       }
-      return readTxState()
+      return readBusy(storyId, branchIds)
     })
     copier.afterCall = (call) => {
       if (call === 2) armed = true
@@ -981,7 +1000,7 @@ describe('duplicateStory', () => {
     )
 
     expect(copier.calls).toBe(2)
-    expect(readTxState().runs.has('run_dup_test')).toBe(true)
+    expect(generationStore.getTxState().runs.has('run_dup_test')).toBe(true)
   })
 
   it("copies one branch while the story's other branch holds an unfinished run, carrying no run row", async () => {
@@ -1128,7 +1147,7 @@ describe('duplicateStory', () => {
   })
 
   /** A ctx whose batch runs after `write`, which stands in for one landing after the reads. */
-  function racing(write: () => Promise<void>) {
+  function racing(write: () => Promise<unknown>) {
     let afterWrite: Record<string, unknown[]> = {}
     const ctx: DbCtx = {
       db: t.db,

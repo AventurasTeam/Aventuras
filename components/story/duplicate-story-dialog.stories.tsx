@@ -14,6 +14,7 @@ import {
 // CI runs plays several times slower than local; every wait uses this.
 const WAIT = { timeout: 5000 }
 const PHONE = { viewport: { value: 'phone390' } }
+const WIDE_PHONE = { viewport: { value: 'mobile2' } }
 
 const MAIN: DuplicateBranchOption = { id: 'br_main', name: 'main' }
 const FORK: DuplicateBranchOption = { id: 'br_fork', name: 'The road not taken' }
@@ -67,13 +68,14 @@ function panelOf(dialog: HTMLElement): HTMLElement {
   return panel
 }
 
-// At 390 px the 360 px panel would leave 15 px a side, so the 16 px gutters cap it to 358.
+// At 390 px the 360 px panel would leave 15 px a side, so the dialog's 24 px inset (AlertDialog's)
+// caps it to 342.
 function expectPhonePanel(dialog: HTMLElement) {
   const box = panelOf(dialog).getBoundingClientRect()
   expect(window.innerWidth).toBe(390)
-  expect(box.width).toBeCloseTo(358, 0)
-  expect(box.left).toBeCloseTo(16, 0)
-  expect(window.innerWidth - box.right).toBeCloseTo(16, 0)
+  expect(box.width).toBeCloseTo(342, 0)
+  expect(box.left).toBeCloseTo(24, 0)
+  expect(window.innerWidth - box.right).toBeCloseTo(24, 0)
 }
 
 function expectInViewport(element: HTMLElement) {
@@ -351,7 +353,7 @@ export const Failed: Story = {
   },
 }
 
-/** Phone width: the panel keeps its width and 16 px gutters, and every control stays on screen. */
+/** Phone width: the panel keeps its width and inset, and every control stays on screen. */
 export const PhoneSeveralBranches: Story = {
   globals: PHONE,
   play: async () => {
@@ -360,6 +362,19 @@ export const PhoneSeveralBranches: Story = {
     expectPhonePanel(dialog)
     for (const element of [field, button(COPY.branch), button(COPY.cancel), confirm()])
       expectInViewport(element)
+  },
+}
+
+/** 414 px: room for more than 360 px less the inset, and still below `sm`. */
+export const Phone414KeepsItsWidth: Story = {
+  globals: WIDE_PHONE,
+  play: async () => {
+    const dialog = await findDialog()
+    await nameField()
+    expect(window.innerWidth).toBe(414)
+    const box = panelOf(dialog).getBoundingClientRect()
+    expect(box.width).toBeCloseTo(360, 0)
+    expect(box.left).toBeCloseTo(27, 0)
   },
 }
 

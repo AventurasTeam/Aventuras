@@ -1,4 +1,4 @@
-import { getTableColumns, getTableName } from 'drizzle-orm'
+import { eq, getTableColumns, getTableName } from 'drizzle-orm'
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 import { describe, expect, it } from 'vitest'
 
@@ -215,6 +215,65 @@ describe('deleteStory', () => {
     expect(embedderSwapStore.getState().upgradeDeferred).toEqual(new Set(['victim']))
   })
 
+  async function storyRowsOf(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
+    return db.select({ id: stories.id }).from(stories).where(eq(stories.id, id))
+  }
+
+  it('refuses, writing nothing, while a run is registered on one of its branches', async () => {
+    const { db, listTables, ctx } = await setup()
+    startRunIn('close', 'br_victim')
+
+    expect(await deleteStory('victim', ctx, listTables)).toEqual({
+      status: 'rejected',
+      code: 'story-busy',
+    })
+    expect(await storyRowsOf(db, 'victim')).toHaveLength(1)
+  })
+
+  it('refuses, writing nothing, while a turn is pending on one of its branches', async () => {
+    const { db, listTables, ctx } = await setup()
+    let result: Awaited<ReturnType<typeof deleteStory>> | undefined
+    await generationStore.bracketPendingTurn('br_victim', async () => {
+      result = await deleteStory('victim', ctx, listTables)
+    })
+
+    expect(result).toEqual({ status: 'rejected', code: 'story-busy' })
+    expect(await storyRowsOf(db, 'victim')).toHaveLength(1)
+  })
+
+  // A failed regenerate's follow-up sweep runs after its mark has ended.
+  it("refuses, writing nothing, while a turn's body runs on past its mark", async () => {
+    const { db, listTables, ctx } = await setup()
+    let result: Awaited<ReturnType<typeof deleteStory>> | undefined
+    await generationStore.bracketPendingTurn('br_victim', async (endMark) => {
+      endMark()
+      result = await deleteStory('victim', ctx, listTables)
+    })
+
+    expect(result).toEqual({ status: 'rejected', code: 'story-busy' })
+    expect(await storyRowsOf(db, 'victim')).toHaveLength(1)
+  })
+
+  it('refuses, writing nothing, while a reversal is in progress', async () => {
+    const { db, listTables, ctx } = await setup()
+    generationStore.setReversalInProgress(true)
+
+    expect((await deleteStory('victim', ctx, listTables)).status).toBe('rejected')
+    expect(await storyRowsOf(db, 'victim')).toHaveLength(1)
+  })
+
+  it("deletes under a run or a pending turn on another story's branch", async () => {
+    const { db, listTables, ctx } = await setup()
+    startRunIn('close', 'br_survivor')
+    let result: Awaited<ReturnType<typeof deleteStory>> | undefined
+    await generationStore.bracketPendingTurn('br_survivor', async () => {
+      result = await deleteStory('victim', ctx, listTables)
+    })
+
+    expect(result).toEqual({ status: 'deleted' })
+    expect(await storyRowsOf(db, 'victim')).toHaveLength(0)
+  })
+
   it('drops the records of every deleted branch and keeps another story’s', async () => {
     const { db, listTables, ctx } = await setup()
     await db
@@ -404,14 +463,19 @@ describe('deleteStory — vec0 cleanup', () => {
     expect(vecBranches(sqlite, 768)).toEqual(['br_survivor'])
   })
 
-  it('skips vec0 shadow tables, which reject DML', async () => {
+  it('skips vec0 shadow tables, which a family delete must never write', async () => {
     const { listTables } = await setup()
     const names = await listTables()
+    const shadows = [
+      'entities_vec_384_info',
+      'entities_vec_384_auxiliary',
+      'entities_vec_384_metadatatext00',
+      'entities_vec_384_vector_chunks00',
+    ]
 
-    // The shadow tables exist and must not be matched.
-    expect(names).toContain('entities_vec_384_info')
+    expect(names).toEqual(expect.arrayContaining(shadows))
     expect(names.filter(isVecFamilyTable)).toContain('entities_vec_384')
-    expect(names.filter(isVecFamilyTable)).not.toContain('entities_vec_384_info')
+    for (const shadow of shadows) expect(names.filter(isVecFamilyTable)).not.toContain(shadow)
   })
 
   it('builds no ops when the story had no branches', () => {

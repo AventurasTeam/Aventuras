@@ -121,6 +121,19 @@ export function isStoryBusy(
   return [...txState.runs.values()].some((r) => r.storyId === storyId)
 }
 
+function isAnyStoryBranchBusy(
+  txState: TxState,
+  storyId: string,
+  branchIds: readonly string[],
+): boolean {
+  if (txState.reversalInProgress) return true
+  for (const turn of txState.pendingTurns) if (branchIds.includes(turn.branchId)) return true
+  // RunState.storyId is nullable, so a run also counts by its branch.
+  return [...txState.runs.values()].some(
+    (r) => r.storyId === storyId || branchIds.includes(r.branchId),
+  )
+}
+
 // An emptied record is deleted, not left as {}: readers test `deferred.has(branchId)`.
 function withDeferral(
   deferred: ReadonlyMap<string, DeferredWork>,
@@ -170,13 +183,13 @@ type GenerationState = {
     result: { status: 'completed' | 'aborted' | 'failed' },
   ) => void
   /** Removes the run, swapping in `successor` atomically; clears its deferral, a close's pending
-   * close, and, for a pass or close with no successor, the pending re-run. */
+   * close, and, for a pass, close or re-run with no successor, the pending re-run. */
   finishRun: (runId: string, successor?: RunState) => void
   /**
    * Removes the run. `'aborted'` defers an interruptible pass or close; `'failed'`/`'unwound'`
    * leave the record (only a commit clears it); a re-run records none. A pending close stays; any
-   * pass or close end clears the pending re-run. A re-run `unreversed` (its abort's reversal didn't
-   * commit) holds its branch. Returns the slot newly recorded, or null.
+   * pass, close or re-run end clears the pending re-run. A re-run `unreversed` (its abort's
+   * reversal didn't commit) holds its branch. Returns the slot newly recorded, or null.
    */
   abortRun: (
     runId: string,
@@ -413,6 +426,10 @@ export const generationStore = {
   isUserEditBlocked: () =>
     isUserEditBlocked(getTxState(), currentStoryStore.getCurrentStory()?.branchId),
   isHeadReversalBlocked: (branchId: string) => isHeadReversalBlocked(getTxState(), branchId),
+  /** isStoryBusy over every branch of the story, turn bodies too: a whole-story write waits. */
+  isAnyStoryBranchBusy: (storyId: string, branchIds: readonly string[]) =>
+    isAnyStoryBranchBusy(getTxState(), storyId, branchIds) ||
+    branchIds.some((id) => turnBodyActive(id)),
   hasActiveRun: () => getTxState().runs.size > 0,
   /** From a turn's pending mark until its body settles, past an early end of the mark. */
   isTurnBodyActive: turnBodyActive,

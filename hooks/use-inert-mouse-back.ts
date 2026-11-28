@@ -1,20 +1,22 @@
 import { useEffect } from 'react'
-import { Platform } from 'react-native'
 
-const BACK_BUTTON = 3
-const FORWARD_BUTTON = 4
+// Surfaces whose pending step must not be navigated out from under it.
+const inertHolders = new Set<object>()
 
-/**
- * While `active`, the mouse's Back and Forward buttons don't navigate (web; a no-op elsewhere):
- * Electron pops history on their mouseup, and no `usePreventRemove` sees expo-router's reset.
- */
+/** Whether a surface holds the mouse's Back inert (`useMouseHistoryButtons` reads it). */
+export function isMouseBackInert(): boolean {
+  return inertHolders.size > 0
+}
+
+/** While `active`, the mouse's Back does nothing. */
 export function useInertMouseBack(active: boolean): void {
   useEffect(() => {
-    if (!active || Platform.OS !== 'web' || typeof window === 'undefined') return undefined
-    const onMouseUp = (event: MouseEvent) => {
-      if (event.button === BACK_BUTTON || event.button === FORWARD_BUTTON) event.preventDefault()
+    if (!active) return undefined
+    // Minted inside the effect, so each surface holds its own.
+    const holder = {}
+    inertHolders.add(holder)
+    return () => {
+      inertHolders.delete(holder)
     }
-    window.addEventListener('mouseup', onMouseUp, true)
-    return () => window.removeEventListener('mouseup', onMouseUp, true)
   }, [active])
 }

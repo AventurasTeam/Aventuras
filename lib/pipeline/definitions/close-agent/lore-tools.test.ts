@@ -292,7 +292,7 @@ describe('create_lore', () => {
         create({ ...TOLL_INPUT, body: ' \n\t ' }),
         create({ ...TOLL_INPUT, title: '   ' }),
       ],
-      // t8: an entry past E, as read_turns will show one (5.9).
+      // t8: an entry past E, as read_turns shows one.
       {
         setup: (ids) => {
           ids.showTurn(f.entries[9]!.id)

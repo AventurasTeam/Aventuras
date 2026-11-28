@@ -61,78 +61,6 @@ slice-planning gate forces its resolution before that slice is planned.
   did not re-run the suite serially — the evidence above is still as of
   `edce17b8`.
 
-- **The story card's `⋯` is a Popover on every tier.**
-  [`story-list.md → Mobile expression`](../ui/screens/story-list/story-list.md#mobile-expression)
-  binds it to a short Sheet on phone, and
-  `components/story/story-card.tsx:189-238` renders a Popover
-  everywhere. It predates M6: found by M6's planning research
-  (2026-11-22), since `⋯` is Duplicate's entry point, and left out of
-  Slice 6.6. Read at the component, not run on a phone tier.
-
-- **`probe_captures`' ER note says it is the only table not copied on
-  fork.** `docs/data-model.md:255` calls it "the only such table", but
-  the Branch-copy manifest skips `pipeline_runs` too (both copies), so
-  the note has been stale since that row landed. Found by M6.1's final
-  review (2026-11-22); pre-existing canon, outside that slice's scope.
-
-- **The rollback's create-delta lookup still hedges on `entry_id`.**
-  `lib/actions/story-entries/operational.ts:255-256` says the lookup by
-  `target_id` works "whether or not foreground deltas stamp entry_id".
-  M6.1's anchor settled that: the `user_action` create is stamped with
-  its entry (`lib/actions/turns/submit-turn.ts:180`), so the hedge reads
-  as an open question it no longer is. Found by M6.1's final review
-  (2026-11-22).
-
-- **The vec0 shadow-table list is incomplete.**
-  `lib/db/embeddings/vec-tables.ts:16-18` names four shadow tables;
-  sqlite-vec 0.1.9 with metadata and auxiliary columns also creates
-  `_auxiliary`, `_metadatachunks00/01` and `_metadatatext00/01`
-  (checked on a scratch `vec0` table with the families' column shape).
-  The exact-name regex still holds, so only the comment misleads. Its
-  stated reason is off too: the shadow tables reject DML only under
-  SQLite's defensive flag (`node:sqlite`'s default), and
-  `_vector_chunks00` accepts a `DELETE` even then;
-  `lib/actions/stories/delete-story.test.ts:354`'s test name repeats it.
-  Found by M6.1's final review and its slice review (2026-11-22).
-
-- **Two close-agent test comments cite "(5.9)" as future work.**
-  `lib/pipeline/definitions/close-agent/lore-tools.test.ts:295` and
-  `lib/pipeline/definitions/close-agent/write-path.test.ts:1067` say "as
-  read_turns will show one (5.9)". Slice 5.9 has shipped (`read_turns`
-  is in `close-agent/read-turns.ts`, merged in #735), so the pointer is
-  stale per `.claude/rules/code.md`'s commenting discipline. Found by
-  M6.1's final review (2026-11-22).
-
-- **Two vec0 comments say a `pk IN` read answers no rows.**
-  `lib/db/embeddings/knn.ts:63-65` and `lib/db/embeddings/ops.ts:75-76`
-  say vec0 answers `pk IN (…)` with zero rows, and
-  [Slice 6.1](milestones/06-branches-diff-cache/slices/01-copy-substrate.md)
-  repeats it in its Scope. On sqlite-vec 0.1.9 under `node:sqlite`,
-  desktop's version, every `pk` predicate answers correctly: `=`, `IN`,
-  `IN (SELECT …)`, `LIKE`, and a `DELETE … pk IN`. Android's
-  v0.1.7-alpha.2 is unchecked. The code reads by `branch_id` and `id`
-  either way, so only the comments' stated reason may be stale. Found by
-  M6.1's slice review (2026-11-22).
-
-- **A desktop crash mid-migration can leave the database unable to
-  boot.** Desktop's runner applies a migration's statements one by one
-  with no wrapping transaction (`electron/db/service.ts:107-110`; drizzle's
-  `sqlite-proxy/migrator.js` opens none either).
-  Killed partway through a table rebuild (`0003`, `0009`, `0016`, `0021`
-  and `0025` rebuild), the next boot re-runs the step from its start and
-  fails: after the `CREATE` or the `DROP`, on "table `__new_deltas`
-  already exists"; after `0021`'s closing `ALTER`, before drizzle records
-  the step, on "duplicate column name: branch_id". Slice 6.8's
-  `0025_m6_entities_lead_check.sql` fails the same way on
-  `__new_entities` when killed after its `CREATE`, `INSERT` or `DROP`; a
-  kill after its `RENAME` re-runs cleanly. Android runs every
-  pending migration in one transaction and rolls back. The relaunch that
-  could cause such a kill is parked as
-  [A relaunch kills a primary whose main thread stalls](../parked.md#a-relaunch-kills-a-primary-whose-main-thread-stalls);
-  this is what the kill leaves behind. Found by M6.1's slice review
-  (2026-11-22), probed on `node:sqlite`; `0025` added by Slice 6.8's
-  slice review (2026-11-25), probed the same way.
-
 - **Test plumbing the M6.1 simplifier left duplicated.** Three test
   modules hand-roll `BEGIN` / `COMMIT` / `ROLLBACK` on a raw
   `DatabaseSync`: `lib/db/branch-copy/vec-copy.test.ts:92`
@@ -171,32 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   6.2's third-PR review (2026-11-23); the list re-checked by its slice
   review (2026-11-23).
 
-- **`raiseSystemEntry` repeats the working-set factory's patch guard.**
-  `lib/actions/story-entries/system-entry.ts:85` returns early when the
-  store holds another branch, and the factory's `patch`
-  (`lib/stores/factory/working-set-store.ts:52`) already drops a branch
-  the store doesn't hold. In `system-entry.test.ts`, "leaves the store
-  alone when it holds another branch" fails only with both guards
-  removed; removing either alone passes (mutation-checked 2026-11-23).
-  The factory guard stays, since every writer relies on it; `:85` also
-  skips a database read. So the choice is dropping `:85` and accepting
-  the wasted read, or pinning it with a case that spies on that read.
-  It predates Slice 6.2's third PR. Found by that PR's review
-  (2026-11-23).
-
-- **A story delete can race an undo in flight.** `deleteStory`
-  (`lib/actions/stories/delete-story.ts`) takes no guard against a
-  reversal in flight. A delete that commits after an undo built its
-  plan and before the undo commits lets the undo report `ok` and push
-  its redo group for a branch that no longer exists: probed with a
-  wrapped `runInTransaction`, `undoRedoStore.__branches()` held the
-  deleted branch (2026-11-23). The reversal itself then commits
-  against the deleted story; for a delete's undo it would re-insert
-  rows into the dead branch (inferred, not probed). Whether the UI can
-  reach the window, the undo's own read-to-commit stretch, is unshown.
-  It predates Slice 6.2. Found by Slice 6.2's slice review
-  (2026-11-23).
-
 - **Can a pipeline reversal leave a redo group that contradicts its
   branch?** Every delta-logged write clears its branch's redo stack,
   but the pipeline's reversals clear none: `reverseCloseForRerun`
@@ -207,19 +109,6 @@ slice-planning gate forces its resolution before that slice is planned.
   before the re-run stays, so the redo could restore rows the reversal
   removed. Verify the sequence before fixing anything. It predates
   Slice 6.2. Found by Slice 6.2's slice review (2026-11-23).
-
-- **Unit tests run hooks without React Compiler.** The app builds with
-  the compiler (`app.json` → `expo.experiments.reactCompiler`), but
-  `vitest.config.ts` doesn't apply it, so a hook whose correctness rests
-  on what the compiler memoizes passes vitest either way, and
-  `pnpm compiler:check` reports bail-outs, not behaviour. Slice 6.2's
-  slice review hit it in `components/reader/use-reader-undo.tsx`: a
-  Redo label that ignored the state the menu's open sets stayed green
-  uncompiled and went stale compiled (a scratch harness compiled the
-  hook with the build's compiler, 2026-11-23). Options: a vitest
-  transform that runs the compiler over `components/` and `hooks/`, or
-  a small compiled-hook layer for hooks that read stores outside a
-  subscription. Found by Slice 6.2's slice review (2026-11-23).
 
 - **A re-run's empty group with no recorded branch fires the log hook
   for `''`.** `lib/actions/delta/rerun-journal.ts:513-517` names the
@@ -251,13 +140,6 @@ slice-planning gate forces its resolution before that slice is planned.
   them passes its tests. Pre-existing; the new batch callback inherits
   it. Found in Slice 6.7's reviews (2026-11-23).
 
-- **The native boot warn calls M1 the present.**
-  `lib/db/runtime/client.native.ts:20` logs "sqlite-vec load failed
-  (non-fatal in M1)", describing a shipped milestone as current, which
-  `.claude/rules/code.md`'s commenting discipline rules out for
-  comments and the same staleness applies to the message. Pre-existing.
-  Found in Slice 6.7's reviews (2026-11-23).
-
 - **Does the fork's refusal cover a refused admission's reversal?**
   [Slice 6.1](./milestones/06-branches-diff-cache/slices/01-copy-substrate.md#scope-out)
   kept `reverseReplayDeltas`'s read by `action_id` alone
@@ -288,26 +170,6 @@ slice-planning gate forces its resolution before that slice is planned.
   selected. The callers pick their category either way, so only the
   comments mislead. Pre-existing. Found in Slice 6.7's reviews
   (2026-11-23).
-
-- **A third retrieval-bump predicate with its own shape.**
-  `isRetrievalBumpOnly` (`lib/row-signals/link-owners.ts:72-78`) has no
-  table check and calls `{}` a bump, beside `isRetrievalBump`
-  (`lib/history/link-rows.ts:17-22`) and History's `NOT_RETRIEVAL_BUMP`
-  SQL (`lib/history/query.ts:133-137`), which share two constants and a
-  test; nothing keeps the third in step. Found in Slice 6.7's reviews
-  (2026-11-23).
-
-- **The on-device reseed holds a transaction open across `await`s.**
-  `lib/db/devtools/reseed.native.ts:34-40` runs `BEGIN`, then
-  `await db.insert(…)` per table, on the app's native connection. Each
-  insert is synchronous, but the JS thread yields between them. A read
-  in a gap sees rows a `ROLLBACK` may discard, and an app transaction
-  there runs `withTransactionSync`, whose `BEGIN` SQLite refuses inside
-  an open transaction; its catch then runs `ROLLBACK` (expo-sqlite's
-  `SQLiteDatabase.ts:298-307`), ending the reseed's transaction under
-  it. The native read's ESLint guard bans async expo-sqlite calls, not
-  this. Dev-only: it throws outside `__DEV__`. Found in Slice 6.7's
-  reviews (2026-11-23).
 
 - **Change prose can show two sides that read identically.** Three
   cases.
@@ -348,40 +210,6 @@ slice-planning gate forces its resolution before that slice is planned.
   ruled to ship canon-literal and route here. Case (3) found in
   Slice 6.7's slice review (2026-11-23).
 
-- **A row label scrambles a name holding `{{entry}}`.**
-  `history:rowLabelWithEntry` (`{{op}} {{name}}, {{entry}}`) is the
-  label `DeltaLogRow` gives a pressable row with an entry
-  (`components/compounds/delta-log-row.tsx:95-102`); History's rows take
-  the name from `lib/history/humanize.ts`. i18next fills a placeholder
-  at the first match of its text, including inside a value it already
-  inserted, so a target named `Rope {{entry}} x` reads
-  `update Rope entry_7 x, {{entry}}` (i18next 26.3.0, checked on
-  2026-11-23). `history:rowLabel` (`{{op}} {{name}}`) and
-  `history:link.target` (`{{label}} · {{name}}`, `humanize.ts:90-93`)
-  put the user's text last, so they hold in English and would break
-  only under a locale that reorders their placeholders. The change
-  prose's `fill` helper (`lib/history/diff-prose.ts:54-65`) is the
-  pattern that fixes it. Pre-existing. Found in Slice 6.7's slice review
-  (2026-11-23).
-
-- **The diff cache repeats rules the action layer owns.** Two copies
-  sit across the `lib/actions` → `lib/history` boundary, which only
-  `lib/history` may cross:
-  - `firstSpellings` (`lib/history/diff-prose.ts:224`) restates the
-    private first-occurrence rule of `spellings`
-    (`lib/actions/delta/term-list.ts:15`), so a change to how a list's
-    spelling is picked would leave the prose naming another spelling
-    than the reversal restores.
-  - `COLLISION_COLUMNS` (`lib/history/prose-fields.ts:119`) is the
-    fourth copy of the collision trio, beside `FLAG_COLUMNS`
-    (`lib/actions/entities/register.ts:120`), `COLLISION_FLAG_COLUMNS`
-    (`lib/actions/delta/user-precedence.ts:218`) and `FLAG_FIELDS`
-    (`lib/pipeline/definitions/close-agent/lifecycle-tools.ts:68`).
-
-  Folding either needs a new export on the `lib/actions` barrel.
-  Found by Slice 6.7's slice review (2026-11-23); the simplifier left
-  them.
-
 - **The M6 milestone doc names the fork planner by its old canon
   name.** `milestones/06-branches-diff-cache/milestone.md:32` still
   says canon calls the rewind's planner `planReversal` with a target
@@ -412,13 +240,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the shape as the seed's contract. Found by Slice 6.3's slice review
   (2026-11-24).
 
-- **A successful story load's open-failure clear is untested.**
-  `loadAndPublish` in `lib/actions/stories/operational.ts` calls
-  `storiesStore.clearOpenFailure(storyId)` before it publishes;
-  deleting the line leaves the three load suites green (28 tests). The
-  line predates Slice 6.4, which only moved it. Found in Slice 6.4's
-  reviews (2026-11-24).
-
 - **Diagnostics settings show capture off in a dev build that forces it
   on.** The debug switch in
   `components/compounds/diagnostics-settings-panel.tsx:32` is disabled
@@ -427,12 +248,6 @@ slice-planning gate forces its resolution before that slice is planned.
   debug disabled while capture runs, and turning debug on needs capture
   toggled first. Hit on desktop and the slot AVD in Slice 6.4's device
   passes (2026-11-24).
-
-- **Older overlay-list stories log a `ResizeObserver` loop error.** The
-  story run of `components/ui/searchable-overlay-list.stories.tsx`
-  logs an unhandled "ResizeObserver loop completed with undelivered
-  notifications" and still passes; the stories Slice 6.4 added don't
-  log it when run alone. Found in Slice 6.4's reviews (2026-11-24).
 
 - **A phone Sheet opened over the reader's inline editor lands under
   its keyboard.** Canon says a sheet opened over an open keyboard
@@ -456,14 +271,6 @@ slice-planning gate forces its resolution before that slice is planned.
   branch, since `setBranchCount` toggles only `#branch-chip` and its
   separator. Both predate Slice 6.4's edit. Found in Slice 6.4's
   reviews (2026-11-24).
-
-- **`data-model.md` calls the stories row the only user-authored
-  content outside the log.**
-  [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)
-  says so; a branch name is a counterexample, and canon now says
-  rename is an unlogged write
-  ([`branch-navigator.md`](../ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)).
-  Found in Slice 6.4's reviews (2026-11-24).
 
 - **A second `beforeRemove` preventer replays its action and the arm
   registry doesn't see it.** `hooks/use-story-leave-guard.ts:60-64`
@@ -492,20 +299,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the dismissing one doesn't come back, on web and the AVD. Scoping
   `onDismissed` to the presentation that started the close is a
   Sheet-primitive change. Found in Slice 6.4's PR review (2026-11-24).
-
-- **The reader's undo shortcut and the notice's Redo don't wait out a
-  Send's dispatch.** The menu's Undo and Redo disable while the
-  reader's dispatch flag is up, but the Ctrl+Z / Ctrl+Shift+Z handler
-  (`app/reader-composer/[branchId].tsx:1678`) checks only an open
-  editor and the reader hold, and the undo notice's Redo
-  (`components/reader/use-reader-undo.tsx:320`) only the mounted flag
-  and the hold. So an undo can land in a Send's pre-registration
-  window: `runSubmit` awaits the system tail's drop before it calls
-  `submitTurn`. Read from `lib/actions/story-entries/undo.ts:127-161`,
-  the undo's own bracket then reorders or refuses the Send rather than
-  corrupting anything; the Send's refusal surface isn't traced.
-  Pre-existing: before Slice 6.4 the shortcut checked only
-  `if (editorOpen) return`. Found in Slice 6.4's reviews (2026-11-24).
 
 - **`Input` has no 44 px phone floor at `size="sm"`.**
   [`touch.md → Touch-target floor on phone`](../ui/foundations/mobile/touch.md#touch-target-floor-on-phone)
@@ -609,34 +402,6 @@ slice-planning gate forces its resolution before that slice is planned.
   Known shape). Older code; Slice 6.8 added `lead-missing`. Found by
   Slice 6.8's slice review (2026-11-25).
 
-- **The dev seed logs a create for its system entries.**
-  `entryCreateDeltas` in `lib/db/devtools/seed-dataset.ts` skips only
-  the opening, so the seeded system entries (`entry_hero_0072` on
-  `br_hero_main` among them) carry a `story_entries` create delta. The
-  app writes none for a system entry
-  (`components/reader/regenerate-gate.ts:51`), so on the seed the last
-  reply's ↻ counts two entries in range and opens the cascade confirm,
-  where in use it would regenerate at once. E2E specs that press ↻ on a
-  seeded tail test the confirm path for that reason. Found by Slice
-  6.8's slice review (2026-11-25).
-
-- **Web dialogs size to their content, not to their width class.**
-  `DialogContent`'s panel takes `w-full` inside Radix's unstyled
-  `role="dialog"` wrapper, which shrinks to fit inside a centred flex
-  column, so `w-full` fills nothing and every `sm:max-w-*` override
-  (`close-chapter-modal-view.tsx`'s 480 px, `embedder-download-dialog.tsx`'s
-  560 px) only caps a content-sized panel: it opens narrow and widens
-  when a longer line renders. The base `max-w-[calc(100%-2rem)]` also
-  resolves against that wrapper, so a definite width there loses 32 px.
-  The comment above the class list assumes otherwise
-  (`components/ui/dialog.tsx`). `BranchCreateModal` works around it
-  with a web-only `w-[360px] max-w-[calc(100vw-2rem)]`, and
-  `components/story/duplicate-story-dialog.tsx` adds the same, having
-  measured 245–257 px at a 390 px window without it. A width option or a
-  web fix in the primitive would spare each new dialog the workaround and
-  its story. Found by Slice 6.5's task review (2026-11-24); a second
-  consumer found during Slice 6.6.
-
 - **The observability inventory lacks the branch switch's kinds.**
   `docs/observability.md → Subsystem emission inventory` names no
   `action_layer.branch_switch_*` (`_navigation_blocked`,
@@ -649,41 +414,6 @@ slice-planning gate forces its resolution before that slice is planned.
   this is drift, not a contract break. Found by Slice 6.5's final
   review (2026-11-25).
 
-- **The in-place re-run confirm can strand pending on a throw.**
-  `RerunConfirmHost`'s `Roll back & re-run` press
-  (`components/chapters/chapter-overlays-host.tsx`, `confirm`) chains
-  `runCloseRerun(...).then(...)` with no `.catch`, and the run's
-  refusal mapping (`speak`, `rerunStartOutcome`) sits outside its own
-  `try`: a throw there leaves the confirm pending with no way to close
-  it. Slice 6.5 gave the fork press a `.catch` that ends pending; the
-  in-place press predates the slice. Found by Slice 6.5's final review
-  (2026-11-25).
-
-- **The switch's input names the left branch twice.**
-  `SwitchBranchInput` (`lib/actions/stories/switch-branch.ts`) takes
-  `fromBranchId` beside `hold`, whose `branchId` is the same branch: the
-  reader takes the hold on the branch it shows and passes that id again
-  (`app/reader-composer/[branchId].tsx`, the switch's call). A failed
-  switch writes `fromBranchId` back into `stories.current_branch_id`,
-  which has no foreign key, so the two disagreeing would put the
-  pointer on a branch the frozen reader doesn't show. Per
-  `code-conventions.md → Type design` ("one argument where two could
-  disagree"), restore to `hold.branchId` and drop the field. Slice
-  6.5's review made the same change to `ShowBranchInput`. Found by
-  Slice 6.5's slice review (2026-11-25).
-
-- **The tag input likely drops focus after Enter on web.**
-  `components/compounds/tag-input.tsx` keeps the keyboard up for
-  repeated entry with `submitBehavior="submit"`, but RN-Web's
-  `TextInput` ignores that prop and blurs a single-line input after
-  Enter unless the keydown's default is prevented
-  (`react-native-web/dist/exports/TextInput/index.js`, `handleKeyDown`).
-  So on web each tag would need a click back into the field. The
-  branch rename input and the fork modal prevent it in a web-only
-  `onKeyPress` (`components/reader/branch-rename-input.tsx`). Read from
-  RN-Web's source, not probed in the tag input itself. Found by Slice
-  6.5's slice review (2026-11-25).
-
 - **Helpers copied across the reader's inputs and the E2E specs.** The
   IME guard (`isComposing`, `IME_KEY_CODE`) is now in both
   `components/reader/branch-rename-input.tsx` and
@@ -695,37 +425,6 @@ slice-planning gate forces its resolution before that slice is planned.
   simplifier left them, since each move edits a file outside the
   slice. Found by Slice 6.5's slice review (2026-11-25).
 
-- **A desktop mouse Back skips every leave guard.** Electron pops
-  history on the mouse's Back button, and expo-router's linking answers
-  the pop with `navigation.resetRoot(record.state)`
-  (`node_modules/expo-router/build/fork/useLinking.js`), a RESET at the
-  container root. The root's `__root` route keeps its key, so
-  `shouldPreventRemove` finds no removed route and the nested app
-  Stack's screens drop with no `beforeRemove`: no `usePreventRemove`
-  sees the pop. A dirty Story Settings draft is discarded with no
-  unsaved-changes dialog. Probe: open the hero story, open Story
-  Settings from the reader, change the About title, then
-  `page.goBack()` in an E2E spec; the reader shows and the dialog never
-  does. Plot's and World's drafts and the story-leave confirm sit on the
-  same `usePreventRemove` (`hooks/use-unsaved-changes-guard.ts`,
-  `hooks/use-story-leave-guard.ts`), so they should fail the same way;
-  not probed. A renderer `mouseup` listener that calls `preventDefault()` for
-  buttons 3 and 4 cancels the navigation in Electron 41, and Alt+Left
-  and the app menu don't navigate, so the likely fix routes the mouse's
-  Back through the guarded in-app back. Slice 6.5's
-  `hooks/use-inert-mouse-back.ts` is a narrow block for a pending fork
-  that this fix would subsume. Found by CodeRabbit's review of Slice
-  6.5 after the Slice 6.8 merge (2026-11-25).
-
-- **The evaluation set's appended checks are unpinned.**
-  `EVAL_WINDOWS` (`scripts/classifier-eval/index.ts`) appends
-  `refsResolve(w)` to every window, and no test asserts it: removing it
-  leaves `scripts/classifier-eval` green, and the probe silently stops
-  checking that a reply's refs resolve. A `windows.test.ts` case that
-  every window's check names include the appended checks would pin it.
-  Found by Slice 6.9's Task 3 review (2026-11-25), which adds a second
-  appended check, `toldInThirdPerson()`, with the same gap.
-
 - **The dataset build leaves the story in the third person.** The
   wizard drive in `e2e/tests/dataset-chapter.build.spec.ts`
   (`createAdventureStory`) keeps the wizard's default narration,
@@ -736,23 +435,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the third person; a fresh build, once exported
   (`dataset:export-seed`), reverts it. The drive should pick first
   person in the wizard. Found by Slice 6.9's planning (2026-11-25).
-
-- **A stranded comment above `leadOf`.**
-  `lib/pipeline/definitions/classifier-context.ts` opens `leadOf` with
-  "classifier.md → Mentioned places. Retired places keep their id: a
-  happening can name one.", which is about `placeRow` below it. It
-  predates Slice 6.9 (`a6d81c572`). Found by Slice 6.9's Task 9 review
-  (2026-11-25).
-
-- **`abortRun`'s docblock says any pass or close end clears the pending
-  re-run, but a re-run's own abort clears it too.** The block at
-  `lib/stores/generation/generation.ts:177-182` reads "any pass or close
-  end clears the pending re-run", while
-  [`generation-pipeline.md`](../generation-pipeline.md#multi-run-txstate)
-  (`:657-661`) has the record cleared "whatever ends it: … or the
-  re-run's own end". A reader trusting the docblock would add a clear
-  the store already does, or miss that a re-run's abort drops the record.
-  Reword the docblock to the canon's list. Found during Slice 6.6.
 
 - **The mutator fences match the literal identifier `generationStore`,
   so an aliased import bypasses all of them.** The
@@ -778,23 +460,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `pipeline_runs(branch_id) WHERE finished_at IS NULL` would make each
   read an index probe; it's a schema change, so it waits for an owner.
   Found during Slice 6.6.
-
-- **A held Enter on a button that opens or closes a dialog repeats
-  the press on whatever takes focus.** Chromium clicks a focused
-  `<button>` on every Enter keydown, repeats included, so once a press
-  moves focus the repeats land on the new target
-  ([a keydown that moves focus hands off its auto-repeat](./lessons-learned/keydown-focus-move-hands-off-key-repeat.md)).
-  Two instances, traced in code, not run: holding Enter on a navigator
-  row's `×` opens the branch delete confirm with focus on `Cancel`, a
-  repeat clicks `Cancel`, focus returns to `×` and the next repeat
-  reopens it, flipping until the key is released; holding Enter on
-  `Delete branch` puts focus on the current branch's row once the delete
-  lands, and a repeat presses that row, which closes the navigator that
-  canon keeps open. Any dialog opened or closed from a focused button
-  likely does the same; `swallowKeyRepeats` is used only in
-  `SearchableOverlayList`. The fix is app-wide, the button or the
-  dialog swallowing a keyboard press's repeats, so it waits for an
-  owner. Found by Slice 6.6's slice review (2026-11-26).
 
 - **Eighteen test files each define the same `deferred<T>()`
   helper.** A promise with its `resolve` and `reject` exposed, written

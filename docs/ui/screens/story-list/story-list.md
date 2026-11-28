@@ -123,7 +123,10 @@ viewport.
     [Duplicate story dialog](#duplicate-a-story). Absent on drafts.
   - **Export** — per-story JSON export (distinct from full
     backup, per data-model decision)
-  - **Delete** — destructive, confirmation required, shown last
+  - **Delete** — destructive, confirmation required, shown last.
+    Refused while the story is busy
+    ([Story deletion](../../../data-model.md#story-deletion)): the
+    confirm closes and a toast says a run is still going.
     Favorite/Unfavorite is NOT in this menu — it's the inline star toggle.
     These are per-card actions and do not appear in the global
     [Actions menu](../../patterns/actions-menu.md), which lists

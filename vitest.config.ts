@@ -6,6 +6,8 @@ import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
 import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 
+import { reactCompilerVitePlugin } from './scripts/react-compiler'
+
 const dirname =
   typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url))
 
@@ -57,6 +59,7 @@ export default defineConfig({
             '@hookform/resolvers/zod',
             '@tanstack/react-query',
             '@react-navigation/native',
+            'react/compiler-runtime',
           ],
         },
         test: {
@@ -72,6 +75,7 @@ export default defineConfig({
       },
       {
         extends: true,
+        plugins: [reactCompilerVitePlugin(dirname)],
         resolve: {
           // Aliases react-native to react-native-web so RN imports
           // (e.g. useColorScheme) parse cleanly under jsdom — RN's

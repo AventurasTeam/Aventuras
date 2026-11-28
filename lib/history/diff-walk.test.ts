@@ -13,6 +13,7 @@ import {
   entities,
   happeningAwareness,
   happenings,
+  isRetrievalBump,
   lore,
   stories,
   type CharacterState,
@@ -26,7 +27,6 @@ import { createTestDb, makeBatchCallback, makeCallback } from '@/lib/db/__tests_
 import { resetAllStores } from '@/lib/stores'
 
 import { DIFF_TABLE_ROWS, DiffWalkError, walkTarget, type UpdateDelta } from './diff-walk'
-import { isRetrievalBump } from './link-rows'
 import { loadHistoryChunk } from './query'
 
 // architecture.md → Walk algorithm. Every expectation is a literal this file wrote, never a value
@@ -868,6 +868,7 @@ describe('isRetrievalBump', () => {
       // One key that isn't the count, as a single-field awareness edit writes.
       update('dl_source', 4, { source: null }),
       update('dl_decay', 5, { decayResistance: 0.5 }),
+      update('dl_empty', 6, {}),
     ])
     const written = (await t.db
       .select()
@@ -881,6 +882,7 @@ describe('isRetrievalBump', () => {
       ['dl_mixed', false],
       ['dl_source', false],
       ['dl_decay', false],
+      ['dl_empty', false],
     ])
     const chunk = await loadHistoryChunk(t.db, {
       branchId: 'b1',
@@ -890,14 +892,14 @@ describe('isRetrievalBump', () => {
       cursor: null,
     })
     const listed = chunk.rows.map((row) => row.delta.id)
-    expect(listed).toEqual(['dl_meta', 'dl_mixed', 'dl_source', 'dl_decay'])
+    expect(listed).toEqual(['dl_meta', 'dl_mixed', 'dl_source', 'dl_decay', 'dl_empty'])
     expect(listed).toEqual(written.filter((d) => !isRetrievalBump(d)).map((d) => d.id))
     const walked = await walkTarget(
       t.db,
       await Promise.all(written.map((d) => onlyUpdate(d.actionId))),
     )
     expect(new Set(walked.entries.keys())).toEqual(
-      new Set(['dl_meta', 'dl_mixed', 'dl_source', 'dl_decay']),
+      new Set(['dl_meta', 'dl_mixed', 'dl_source', 'dl_decay', 'dl_empty']),
     )
   })
 
@@ -911,6 +913,13 @@ describe('isRetrievalBump', () => {
     ).toBe(false)
     expect(
       isRetrievalBump({
+        targetTable: 'happening_involvements',
+        op: 'update',
+        undoPayload: { retrievalCount: 1 },
+      }),
+    ).toBe(false)
+    expect(
+      isRetrievalBump({
         targetTable: 'happening_awareness',
         op: 'create',
         undoPayload: { retrievalCount: 1 },
@@ -918,6 +927,9 @@ describe('isRetrievalBump', () => {
     ).toBe(false)
     expect(
       isRetrievalBump({ targetTable: 'happening_awareness', op: 'update', undoPayload: null }),
+    ).toBe(false)
+    expect(
+      isRetrievalBump({ targetTable: 'happening_awareness', op: 'update', undoPayload: {} }),
     ).toBe(false)
   })
 })

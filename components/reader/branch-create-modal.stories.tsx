@@ -16,6 +16,7 @@ import {
 const WAIT = { timeout: 5000 }
 const TABLET = { viewport: { value: 'tablet' } }
 const PHONE = { viewport: { value: 'phone390' } }
+const WIDE_PHONE = { viewport: { value: 'mobile2' } }
 
 const COPY = {
   title: 'New branch',
@@ -56,8 +57,8 @@ function panelWidth(dialog: HTMLElement): number {
   return panel.getBoundingClientRect().width
 }
 
-/** About 360 px, less the dialog's 16 px gutter each side where the viewport is narrower. */
-const expectedPanelWidth = () => Math.min(360, window.innerWidth - 32)
+/** About 360 px, less the dialog's 24 px inset each side where the viewport is narrower. */
+const expectedPanelWidth = () => Math.min(360, window.innerWidth - 48)
 
 const isDisabled = (element: HTMLElement) => element.getAttribute('aria-disabled') === 'true'
 
@@ -282,6 +283,15 @@ export const TabletCancels: Story = {
 
 export const Phone390: Story = {
   globals: PHONE,
+  play: async (context) => {
+    await waitForTier('phone')
+    await shapePlay(context)
+  },
+}
+
+/** 414 px: room for more than 360 px less the inset, and still below `sm`. */
+export const Phone414KeepsItsWidth: Story = {
+  globals: WIDE_PHONE,
   play: async (context) => {
     await waitForTier('phone')
     await shapePlay(context)

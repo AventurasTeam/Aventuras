@@ -48,7 +48,8 @@ test.describe('reader — roll back to an entry', () => {
     await reader.deleteEntry(app.window, targetId).click()
     await reader.rollbackConfirm(app.window).click()
 
-    // Everything at or after the target is gone.
+    // Everything at or after the target is gone but the system tail, which carries no delta and
+    // so no rollback reaches (data-model.md → System entries are not delta-logged).
     await expect
       .poll(
         async () =>
@@ -56,7 +57,8 @@ test.describe('reader — roll back to an entry', () => {
             (
               await queryApp(
                 app.window,
-                `SELECT count(*) FROM story_entries WHERE branch_id = ? AND position >= ?`,
+                `SELECT count(*) FROM story_entries
+                  WHERE branch_id = ? AND position >= ? AND kind != 'system'`,
                 [branchId, targetPos],
               )
             )[0] as [number]
@@ -149,10 +151,10 @@ test.describe('reader — roll back into a closed chapter', () => {
       )
       .toBe(0)
     expect(
-      await count(`SELECT count(*) FROM story_entries WHERE branch_id = ? AND position >= ?`, [
-        branchId,
-        middle,
-      ]),
+      await count(
+        `SELECT count(*) FROM story_entries WHERE branch_id = ? AND position >= ? AND kind != 'system'`,
+        [branchId, middle],
+      ),
     ).toBe(0)
     // The earlier chapter is untouched: only the one the target fell inside went.
     expect(await count(`SELECT count(*) FROM chapters WHERE branch_id = ?`, [branchId])).toBe(1)

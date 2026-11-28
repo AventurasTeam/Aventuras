@@ -282,6 +282,10 @@ slice plans when relevant.
 - [One `exhaustive-deps` suppression opts the whole component out of React Compiler](./exhaustive-deps-suppression-disables-the-compiler.md)
   — the compiler skips the entire component, silently, and lint has no
   rule for it; `pnpm compiler:check` ratchets every bail-out in CI.
+- [React Compiler shares a capture-free handler across every instance](./compiler-hoists-capture-free-handlers.md)
+  — hoisted to module scope, per-instance listeners collapse into one that
+  the first cleanup removes; tests now run the build's compiler, and
+  `react/compiler-runtime` stays prebundled in the browser project.
 - [Failed Storybook files with zero failed tests](./storybook-load-flake-zero-failed-tests.md)
   — a file-load flake, not a test failure; contention is ruled out
   empirically and serializing the project breaks isolation, so check

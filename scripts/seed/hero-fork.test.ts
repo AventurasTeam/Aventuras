@@ -190,7 +190,7 @@ describe('the seeded br_hero_fork (C7)', () => {
       'user_edit',
       'ai_classifier',
     ])
-    expect(creates.map((create) => create.entry_id)).toEqual([null, null, null, null, null])
+    expect(creates.map((create) => create.entry_id)).toEqual(OWN)
     expect(new Set(creates.map((create) => create.action_id)).size).toBe(5)
   })
 

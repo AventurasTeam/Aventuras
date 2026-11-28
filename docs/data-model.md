@@ -23,6 +23,7 @@ erDiagram
     branches ||--o{ probe_captures : "captures retrieval state for"
     branches ||--o{ deltas : "logs changes in"
     branches ||--o{ reversal_journals : "journals re-run reversals in"
+    branches ||--o{ pipeline_runs : "marks runs on"
     story_entries ||--o{ deltas : "triggers"
     story_entries }o--|| chapters : "belongs to (once chaptered)"
     story_entries ||--o{ entry_assets : "attaches"
@@ -252,7 +253,7 @@ erDiagram
 
     probe_captures {
         text id PK
-        text branch_id FK "composite PK with id; branch-scoped, but NOT copied on fork (the only such table; see the Branch-copy manifest)"
+        text branch_id FK "composite PK with id; branch-scoped, but NOT copied on fork or duplicate (like pipeline_runs; see the Branch-copy manifest)"
         text target_entry_id "the entry whose retrieval pass this capture diagnoses; FK-less ref into story_entries, branch-scoped"
         integer captured_at
         text capture_mode "light | deep; light stores per-row sims + score components, deep adds candidate vectors. See docs/memory/probe.md → Capture model"
@@ -289,6 +290,27 @@ erDiagram
         integer created_at
     }
     %% Not delta-logged: the undo half of one delta group. Goes with the group: a sweep that removes any of the group's deltas outside chapters and story_entries, removes or rewrites a delta at or below its floor other than the chapter row's or a stamp, or removes the group's last delta drops it; a later re-run's journal holds it as a before-image. Copies on fork per the Branch-copy manifest (Branch model).
+
+    pipeline_runs {
+        text run_id PK
+        text kind "the pipeline's kind"
+        text action_id "the run's delta group"
+        text story_id "nullable: a run with no story"
+        text branch_id FK "nullable only on rows older than the column; the backfill filled the unfinished ones it could"
+        integer started_at
+        integer finished_at "null while the run is unfinished: the crash-recovery marker"
+        text outcome "completed | aborted | failed | recovered"
+        text rerun_chapter_id "set in a re-run's reversal transaction"
+    }
+    %% Run bookkeeping, not story state: not delta-logged, not copied on fork or duplicate. See generation-pipeline.md → Crash recovery via pipeline_runs marker table
+
+    wizard_sessions {
+        text id PK "the draft story's id"
+        text story_id "nullable"
+        json state "the wizard's working state, resumed on reopen"
+        integer updated_at
+    }
+    %% An unfinished wizard's state: not delta-logged, not exported, removed with its story.
 
     vault_calendars {
         text id PK "UUID; user-authored calendars only — built-ins live in code/repo JSON loaded at boot"
@@ -1639,6 +1661,12 @@ transaction; **referenced/shared resources survive.**
   [duplicate](#story-duplicate)'s included, keeps its count above zero.
 - **No delta rows:** a story delete writes zero `deltas` (it deletes them); the
   operation is a config-table cascade, not a delta-logged domain write.
+- **Refused before any write** while a run is registered on the story or any
+  of its branches, a turn is pending or its body still runs on one of them
+  ([Gate derivation](./generation-pipeline.md#gate-derivation-as-a-selector)),
+  or a reversal is in progress: each would go on writing to rows the cascade
+  removes. Read in memory with no await before the batch's post, as branch
+  delete reads its gate.
 
 ### Story duplicate
 
@@ -1688,7 +1716,10 @@ has an unfinished run (a `pipeline_runs` row with `finished_at` NULL), whose
 writes would bake into the copy with no marker to recover them; when a copied
 branch's `classifier_status.state` is `'running'`, a hold the copy would
 inherit, since a duplicate copies the status verbatim; when an embedder swap is
-pending on the story; or when a run is registered on any of its branches.
+pending on the story; or when a run is registered on any of its branches, a
+turn is pending or its body still runs on one, or a reversal is in progress
+(a pending turn's `user_action` lands before its run row, so the copy would
+take it with no run to recover).
 
 **One transaction, no lock.** One `runInTransaction` batch of
 `INSERT … SELECT`: the `stories` row, then `branches` (parents before
@@ -3316,7 +3347,8 @@ story at the storage ceiling is negligible.
 
 **Delta scope: narrative state only.** Deltas cover the core narrative
 tables (`story_entries` row-level changes, `entities` narrative fields,
-`lore`, `threads`, `happenings` and their links, `chapters`, `entry_assets`).
+`character_relationships`, `lore`, `threads`, `happenings` and their
+links, `chapters`, `branch_era_flips`, `translations`, `entry_assets`).
 UI-only fields (`favorite`, `sort_order`, `ui_color`, etc.) bypass the log
 — rollback doesn't revert them, because they aren't story content. The
 write layer enforces this distinction: mutations to narrative fields
@@ -3336,8 +3368,12 @@ has no place in it.
 
 **The resulting undo asymmetry is deliberate.** Editing an entity or a
 lore card is reversible through CTRL-Z; editing the story's genre,
-tone, setting or title is not — the `stories` row is the only place
-user-_authored_ content lives outside the log. Definition edits are
+tone, setting or title is not — the `stories` row is the only place a
+story's user-_authored_ prose lives outside the log. A branch's name is
+user-authored and unlogged too
+([`branch-navigator.md → Inline rename`](./ui/screens/reader-composer/branch-navigator/branch-navigator.md#inline-rename)),
+as are rows that belong to no story's history: `vault_calendars` and the
+wizard's drafts. Definition edits are
 rare and deliberate rather than turn-by-turn, which doesn't warrant
 widening delta scope past the branch, but the surfaces that write them
 must disclose it where a field holds prose the user would have to

@@ -230,6 +230,8 @@ describe('loadOpenStory', () => {
         updatedAt: 1,
       },
     ])
+    // An earlier open's badge: a load that parses takes it down.
+    storiesStore.setOpenFailure({ storyId: 'story_1', kind: 'definition-corrupt' })
 
     // loadOpenStory's own reads: the join + 11 store reads = 12; more is an N+1 read.
     const selectSpy = vi.spyOn(ctx.db, 'select')

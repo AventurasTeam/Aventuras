@@ -82,13 +82,12 @@ export async function raiseSystemEntry(
     { branchId: args.branchId, content: args.content, failure },
     ctx,
   )
-  if (entriesStore.getLoadedBranch() !== args.branchId) return id
   const [row] = await ctx.db
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, args.branchId), eq(storyEntries.id, id)))
   if (row === undefined) return id
-  // A reload during the read may already hold the new row; patch() skips a branch no longer held.
+  // patch() skips a branch the store doesn't hold; a reload during the read may already hold the row.
   for (const held of entriesStore.getEntries(args.branchId).values())
     if (held.kind === 'system' && held.id !== id)
       entriesStore.patch(args.branchId, { op: 'delete', id: held.id })

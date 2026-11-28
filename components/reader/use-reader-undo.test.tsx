@@ -154,10 +154,20 @@ function deferred<T>() {
 
 type Props = { isFocused: boolean; held: boolean; branchId: string }
 
+// The reader's dispatch mark, read with its branch's hold as useReaderDispatch's isBlocked reads.
+const dispatch = { inFlight: false }
+const blockedOn = (branchId: string) => () => dispatch.inFlight || readerHoldStore.isHeld(branchId)
+
 function render(initial: Partial<Props> = {}) {
-  return renderHook((props: Props) => useReaderUndo({ ctx, ...props }), {
-    initialProps: { isFocused: true, held: false, branchId: 'b1', ...initial },
-  })
+  return renderHook(
+    (props: Props) =>
+      useReaderUndo({
+        ctx,
+        ...props,
+        isBlocked: blockedOn(props.branchId),
+      }),
+    { initialProps: { isFocused: true, held: false, branchId: 'b1', ...initial } },
+  )
 }
 
 const LIVE: Props = { isFocused: true, held: false, branchId: 'b1' }
@@ -178,6 +188,7 @@ beforeEach(() => {
   entitiesStore.__reset()
   loreStore.__reset()
   readerHoldStore.__reset()
+  dispatch.inFlight = false
   for (const fn of Object.values(actions)) fn.mockReset()
   actions.readUndoImpact.mockResolvedValue(null)
 })
@@ -629,6 +640,52 @@ describe('useReaderUndo — review fixes', () => {
 
     expect(actions.undoLastAction).not.toHaveBeenCalled()
     expect(toasts).toHaveLength(0)
+  })
+
+  it("refuses the keyboard's undo and redo, silently, while a Send is dispatching", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoRedoStore.pushRedoGroup(turnGroup())
+    dispatch.inFlight = true
+    const r = render()
+
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    act(() => r.result.current.redo('keyboard'))
+    await settle()
+
+    expect(actions.readUndoTarget).not.toHaveBeenCalled()
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toHaveLength(0)
+  })
+
+  it('starts no undo whose target resolves after a Send began dispatching', async () => {
+    const read = deferred<UndoTargetRead | null>()
+    actions.readUndoTarget.mockReturnValue(read.promise)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    dispatch.inFlight = true
+
+    await act(async () => read.resolve(TURN))
+    await settle()
+
+    expect(actions.undoLastAction).not.toHaveBeenCalled()
+    expect(toasts).toHaveLength(0)
+  })
+
+  it("holds the notice's Redo while a Send is dispatching", async () => {
+    actions.readUndoTarget.mockResolvedValue(TURN)
+    undoLands(TURN, { id: 'e2', position: 2 })
+    const r = render()
+    act(() => r.result.current.undo('keyboard'))
+    await settle()
+    dispatch.inFlight = true
+
+    act(() => toasts[0].action?.onPress())
+    await settle()
+
+    expect(actions.redoLastAction).not.toHaveBeenCalled()
   })
 
   it('says nothing to undo when the pending read finds none and no hold was taken', async () => {
@@ -1152,7 +1209,7 @@ describe('useReaderUndo — a reader that unmounted', () => {
     let removeReader!: () => void
     let removed = false
     function Reader() {
-      reader = useReaderUndo({ ctx, ...LIVE })
+      reader = useReaderUndo({ ctx, ...LIVE, isBlocked: blockedOn(LIVE.branchId) })
       return null
     }
     function SettlesOnRemoval() {
@@ -1302,9 +1359,12 @@ describe('useReaderUndo — a refusal that settles after the reader unmounted', 
         settleUndo = resolve
       }),
     )
-    const r = renderHook((props: Props) => useReaderUndo({ ctx, ...props }), {
-      initialProps: LIVE,
-    })
+    const r = renderHook(
+      (props: Props) => useReaderUndo({ ctx, ...props, isBlocked: blockedOn(props.branchId) }),
+      {
+        initialProps: LIVE,
+      },
+    )
     act(() => r.result.current.undo('menu'))
     await settle()
     expect(actions.undoLastAction).toHaveBeenCalledTimes(1)

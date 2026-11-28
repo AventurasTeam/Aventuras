@@ -1,5 +1,4 @@
 export { selectInScene } from './in-scene'
-export { isRetrievalBumpOnly } from './link-owners'
 export { latestReplyIds, readReplyEdits, readSignalDeltas, readTurnBoundaries } from './read'
 export { selectRecentlyClassified } from './recently-classified'
 export { ROW_CATEGORIES } from './types'

@@ -46,12 +46,8 @@ export type DuplicateStoryDialogProps = {
 
 type DuplicateForm = { title: string; branch: string }
 
-// A definite width on every tier: a content-sized dialog resizes as a state's line comes and goes.
-// Radix's web wrapper shrinks to content, so web needs `w-*`; the cap serves native.
-const PANEL_CLASS = cn(
-  'sm:max-w-[360px]',
-  Platform.select({ web: 'w-[360px] max-w-[calc(100vw-2rem)]' }),
-)
+// The web panel fills the viewport less its inset below `sm` (dialog.tsx), so web caps it bare.
+const PANEL_CLASS = cn('sm:max-w-[360px]', Platform.select({ web: 'max-w-[360px]' }))
 
 // Branch ids are `br_<uuid>`, so no branch's option can carry this value.
 const ALL_BRANCHES = 'all'

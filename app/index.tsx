@@ -61,6 +61,7 @@ import {
   type StoryListQuery,
   type StorySort,
 } from '@/lib/stores'
+import { toast } from '@/lib/toast'
 import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
@@ -430,11 +431,16 @@ export default function Index() {
                 onPress={() => {
                   const id = pendingDelete
                   if (id)
-                    runAction(deleteStory(id, ctx), {
-                      event: 'action_layer.story_delete_failed',
-                      toastMessage: t('landing:errors.deleteFailed'),
-                      context: { storyId: id },
-                    })
+                    runAction(
+                      deleteStory(id, ctx).then((result) => {
+                        if (result.status === 'rejected') toast.info(t('landing:delete.running'))
+                      }),
+                      {
+                        event: 'action_layer.story_delete_failed',
+                        toastMessage: t('landing:errors.deleteFailed'),
+                        context: { storyId: id },
+                      },
+                    )
                 }}
               >
                 <Text>{t('landing:delete.confirm')}</Text>

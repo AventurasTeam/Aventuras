@@ -173,7 +173,6 @@ type TestCtx = Awaited<ReturnType<typeof setup>>['ctx']
 function input(overrides: Partial<SwitchBranchInput> = {}): SwitchBranchInput {
   return {
     storyId: 'story_1',
-    fromBranchId: 'br_a',
     toBranchId: 'br_b',
     isCurrentRequest: () => true,
     replaceStack: () => true,
@@ -1409,7 +1408,6 @@ describe('openStory during a switch', () => {
     const switching = switchBranch(
       {
         storyId: 'story_1',
-        fromBranchId: 'br_main',
         toBranchId: 'br_fork',
         hold: readerHoldStore.take('br_main'),
         isCurrentRequest: () => current,
