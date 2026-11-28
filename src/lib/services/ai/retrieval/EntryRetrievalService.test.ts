@@ -11,16 +11,10 @@ vi.mock('#lib/stores/activity.svelte.ts', () => ({
   },
 }))
 
+// The service is built with an explicit config, so stored entry-retrieval settings are
+// never read here; only the preset lookups are.
 vi.mock('#lib/stores/settings.svelte.ts', () => ({
   settings: {
-    systemServicesSettings: {
-      entryRetrieval: {
-        maxTier3Entries: 0,
-        maxWordsPerEntry: 0,
-        enableLLMSelection: false,
-        recentEntriesCount: 5,
-      },
-    },
     getPresetConfig: () => ({ model: 'test-model', temperature: 0.2 }),
     getServicePresetId: () => 'preset-1',
   },

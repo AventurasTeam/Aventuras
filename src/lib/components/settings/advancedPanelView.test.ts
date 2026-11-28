@@ -1,21 +1,35 @@
 import { describe, it, expect } from 'vitest'
+import type { ImageOutputPreference } from '#lib/utils/imageOutput.ts'
 import { advancedPanelView, type AdvancedPanelSettings } from './advancedPanelView'
 
-const view = (overrides: AdvancedPanelSettings = {}) => advancedPanelView(overrides)
+// Every control on. The view reads stored values as they are; it holds no defaults of its
+// own, so each case states what it depends on and takes the rest from here.
+const on: AdvancedPanelSettings = {
+  timelineFill: { enabled: true, mode: 'static' },
+  agenticRetrieval: { grepEnabled: false },
+  entryRetrieval: { enableLLMSelection: true },
+  worldStateInjection: { enableLLMSelection: true },
+  styleReviewer: { enabled: true },
+  imageGeneration: { outputFormats: [] },
+}
 
-describe('advancedPanelView — defaults', () => {
-  it('treats absent settings as the shipped defaults, not as off', () => {
-    // The panel renders before the settings store has loaded, and an unconfigured install
-    // has no stored value at all. Reading either as "off" would show a user a panel
-    // claiming their features are disabled when they are running.
-    const v = view()
+const view = (overrides: Partial<AdvancedPanelSettings> = {}) =>
+  advancedPanelView({ ...on, ...overrides })
 
-    expect(v.memoryOn).toBe(true)
-    expect(v.memoryMode).toBe('static')
-    expect(v.entryLLMOn).toBe(true)
-    expect(v.worldStateLLMOn).toBe(true)
-    expect(v.styleReviewerOn).toBe(true)
-    expect(v.grepOn).toBe(false)
+describe('advancedPanelView — stored values', () => {
+  it('reports each stored value as it is', () => {
+    const v = view({
+      timelineFill: { enabled: false, mode: 'agentic' },
+      entryRetrieval: { enableLLMSelection: false },
+      worldStateInjection: { enableLLMSelection: false },
+      styleReviewer: { enabled: false },
+    })
+
+    expect(v.memoryOn).toBe(false)
+    expect(v.memoryMode).toBe('agentic')
+    expect(v.entryLLMOn).toBe(false)
+    expect(v.worldStateLLMOn).toBe(false)
+    expect(v.styleReviewerOn).toBe(false)
   })
 
   it('marks nothing inactive when everything is on', () => {
@@ -50,8 +64,6 @@ describe('advancedPanelView — inactive controls', () => {
   it('reports the Style Reviewer as off, so its controls can be hidden rather than dimmed', () => {
     expect(view({ styleReviewer: { enabled: false } }).styleReviewerOn).toBe(false)
     expect(view({ styleReviewer: { enabled: true } }).styleReviewerOn).toBe(true)
-    // Defaults to on when the setting has never been written.
-    expect(view({}).styleReviewerOn).toBe(true)
   })
 
   it('keeps the Recent Entries Window live when LLM selection is off', () => {
@@ -105,7 +117,7 @@ describe('advancedPanelView — header badges', () => {
   })
 
   it('mutes the badge when a section is off or reduced', () => {
-    expect(view({ timelineFill: { enabled: false } }).badges.memory).toEqual({
+    expect(view({ timelineFill: { enabled: false, mode: 'static' } }).badges.memory).toEqual({
       text: 'Off',
       muted: true,
     })
@@ -129,12 +141,11 @@ describe('advancedPanelView — header badges', () => {
   })
 
   it('lists the preferred image formats in order, and mutes the badge when there are none', () => {
-    const formats = [{ format: 'webp' }, { format: 'jpeg' }]
+    const formats: ImageOutputPreference[] = [{ format: 'webp' }, { format: 'jpeg' }]
     expect(view({ imageGeneration: { outputFormats: formats } }).badges.imageOutput).toEqual({
       text: 'WEBP › JPEG',
       muted: false,
     })
-    expect(view().badges.imageOutput).toEqual({ text: 'Provider default', muted: true })
     expect(view({ imageGeneration: { outputFormats: [] } }).badges.imageOutput).toEqual({
       text: 'Provider default',
       muted: true,

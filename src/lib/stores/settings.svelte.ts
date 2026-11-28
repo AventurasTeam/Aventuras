@@ -28,6 +28,7 @@ import {
   ENTRY_RETRIEVAL_DEFAULTS,
   LORE_MANAGEMENT_DEFAULTS,
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
+  STYLE_REVIEWER_DEFAULTS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from '#lib/services/ai/core/defaults.ts'
 import { isReasoningEffort } from '#lib/services/ai/core/reasoning.ts'
@@ -421,7 +422,7 @@ export function getDefaultStyleReviewerSettingsForProvider(
     temperature: 0.3,
     maxTokens: 8192,
     triggerInterval: 6,
-    recentEntriesCount: 32,
+    recentEntriesCount: STYLE_REVIEWER_DEFAULTS.recentEntriesCount,
     cleanInput: true,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
@@ -619,10 +620,10 @@ export function getDefaultEntryRetrievalSettingsForProvider(
     maxTier2Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
     maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
     tier3WholesaleWordBudget: ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
-    maxWordsPerEntry: 0,
-    enableLLMSelection: true,
-    useSceneEntities: true,
-    recentEntriesCount: 5,
+    maxWordsPerEntry: ENTRY_RETRIEVAL_DEFAULTS.maxWordsPerEntry,
+    enableLLMSelection: ENTRY_RETRIEVAL_DEFAULTS.enableLLMSelection,
+    useSceneEntities: ENTRY_RETRIEVAL_DEFAULTS.useSceneEntities,
+    recentEntriesCount: ENTRY_RETRIEVAL_DEFAULTS.recentEntriesCount,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
   }
@@ -656,8 +657,8 @@ export function getDefaultWorldStateInjectionSettings(): WorldStateInjectionSett
     tier3WholesaleWordBudget: WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
     maxTier2Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
     maxTier3Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
-    enableLLMSelection: true,
-    recentEntriesCount: 5,
+    enableLLMSelection: WORLD_STATE_INJECTION_DEFAULTS.enableLLMSelection,
+    recentEntriesCount: WORLD_STATE_INJECTION_DEFAULTS.recentEntriesCount,
   }
 }
 
@@ -837,17 +838,6 @@ export interface LorebookClassifierSpecificSettings {
   maxConcurrent: number
 }
 
-// Linter doesnt like empty objects interfaces, but keeping them for potential future use.
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface SuggestionsSpecificSettings {}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ActionChoicesSpecificSettings {}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface StyleReviewerSpecificSettings {}
-
 export interface LoreManagementSpecificSettings {
   /**
    * Refuse to let the agent finish while a flagged duplicate group is unresolved.
@@ -862,15 +852,6 @@ export interface LoreManagementSpecificSettings {
   /** Size the post-chapter tail by the story's `chapterBuffer` instead of the character budget. */
   chapterBufferTail: boolean
 }
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface InteractiveVaultSpecificSettings {}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface TimelineFillSpecificSettings {}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ChapterQuerySpecificSettings {}
 
 /**
  * How much recent story each service reads.
@@ -910,21 +891,11 @@ export interface TTSSpecificSettings {
   volume: number
 }
 
-// Linter doesnt like empty objects interfaces, but keeping them for potential future use.
-export type CharacterCardImportSpecificSettings = object
-
 export interface ServiceSpecificSettings {
   lorebookClassifier: LorebookClassifierSpecificSettings
-  suggestions: SuggestionsSpecificSettings
-  actionChoices: ActionChoicesSpecificSettings
-  styleReviewer: StyleReviewerSpecificSettings
   loreManagement: LoreManagementSpecificSettings
-  interactiveVault: InteractiveVaultSpecificSettings
-  timelineFill: TimelineFillSpecificSettings
-  chapterQuery: ChapterQuerySpecificSettings
   imageGeneration: ImageGenerationSpecificSettings
   tts: TTSSpecificSettings
-  characterCardImport: CharacterCardImportSpecificSettings
   // Global configuration
   contextWindow: ContextWindowSettings
   lorebookLimits: LorebookLimitsSettings
@@ -946,16 +917,9 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
 export function getDefaultServiceSpecificSettings(): ServiceSpecificSettings {
   return {
     lorebookClassifier: getDefaultLorebookClassifierSpecificSettings(),
-    suggestions: getDefaultSuggestionsSpecificSettings(),
-    actionChoices: getDefaultActionChoicesSpecificSettings(),
-    styleReviewer: getDefaultStyleReviewerSpecificSettings(),
     loreManagement: getDefaultLoreManagementSpecificSettings(),
-    interactiveVault: getDefaultInteractiveVaultSpecificSettings(),
-    timelineFill: getDefaultTimelineFillSpecificSettings(),
-    chapterQuery: getDefaultChapterQuerySpecificSettings(),
     imageGeneration: getDefaultImageGenerationSpecificSettings(),
     tts: getDefaultTTSSpecificSettings(),
-    characterCardImport: getDefaultCharacterCardImportSpecificSettings(),
     contextWindow: getDefaultContextWindowSettings(),
     lorebookLimits: getDefaultLorebookLimitsSettings(),
   }
@@ -968,36 +932,12 @@ export function getDefaultLorebookClassifierSpecificSettings(): LorebookClassifi
   }
 }
 
-export function getDefaultSuggestionsSpecificSettings(): SuggestionsSpecificSettings {
-  return {}
-}
-
-export function getDefaultActionChoicesSpecificSettings(): ActionChoicesSpecificSettings {
-  return {}
-}
-
-export function getDefaultStyleReviewerSpecificSettings(): StyleReviewerSpecificSettings {
-  return {}
-}
-
 export function getDefaultLoreManagementSpecificSettings(): LoreManagementSpecificSettings {
   return {
     requireDuplicateResolution: LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
     sendNewChapterText: LORE_MANAGEMENT_DEFAULTS.sendNewChapterText,
     chapterBufferTail: LORE_MANAGEMENT_DEFAULTS.chapterBufferTail,
   }
-}
-
-export function getDefaultInteractiveVaultSpecificSettings(): InteractiveVaultSpecificSettings {
-  return {}
-}
-
-export function getDefaultTimelineFillSpecificSettings(): TimelineFillSpecificSettings {
-  return {}
-}
-
-export function getDefaultChapterQuerySpecificSettings(): ChapterQuerySpecificSettings {
-  return {}
 }
 
 export function getDefaultImageGenerationSpecificSettings(): ImageGenerationSpecificSettings {
@@ -1013,10 +953,6 @@ export function getDefaultTTSSpecificSettings(): TTSSpecificSettings {
     speed: 1.0,
     volume: 1.0,
   }
-}
-
-export function getDefaultCharacterCardImportSpecificSettings(): CharacterCardImportSpecificSettings {
-  return {}
 }
 
 export function getDefaultContextWindowSettings(): ContextWindowSettings {
@@ -1760,24 +1696,15 @@ class SettingsStore {
               ...getDefaultLorebookClassifierSpecificSettings(),
               ...loaded.lorebookClassifier,
             },
-            suggestions: getDefaultSuggestionsSpecificSettings(),
-            actionChoices: getDefaultActionChoicesSpecificSettings(),
-            styleReviewer: getDefaultStyleReviewerSpecificSettings(),
-            // Merged, not replaced: this block holds a real setting now, and rebuilding it
-            // from defaults would drop the user's choice on every load.
             loreManagement: {
               ...getDefaultLoreManagementSpecificSettings(),
               ...loaded.loreManagement,
             },
-            interactiveVault: getDefaultInteractiveVaultSpecificSettings(),
-            timelineFill: getDefaultTimelineFillSpecificSettings(),
-            chapterQuery: getDefaultChapterQuerySpecificSettings(),
             imageGeneration: {
               ...getDefaultImageGenerationSpecificSettings(),
               ...loaded.imageGeneration,
             },
             tts: { ...getDefaultTTSSpecificSettings(), ...loaded.tts },
-            characterCardImport: getDefaultCharacterCardImportSpecificSettings(),
             contextWindow: migrateContextWindow({
               ...getDefaultContextWindowSettings(),
               ...loaded.contextWindow,

@@ -15,16 +15,31 @@
  * dense a control that vanishes reads as a bug, and its stored value is still worth seeing.
  */
 
-export type MemoryMode = 'static' | 'agentic'
+import type {
+  ImageGenerationServiceSettings,
+  TimelineFillSettings,
+} from '#lib/services/ai/index.ts'
+import type {
+  AgenticRetrievalSettings,
+  EntryRetrievalSettings,
+  StyleReviewerSettings,
+  WorldStateInjectionSettings,
+} from '#lib/stores/settings.svelte.ts'
 
-/** The slices of `settings.systemServicesSettings` this view reads. */
+export type MemoryMode = TimelineFillSettings['mode']
+
+/**
+ * The slices of `settings.systemServicesSettings` this view reads. Typed from the store's
+ * own interfaces and required: the store merges every block over its defaults on load, so
+ * a fallback here would be a second copy of a default.
+ */
 export interface AdvancedPanelSettings {
-  timelineFill?: { enabled?: boolean; mode?: MemoryMode } | null
-  agenticRetrieval?: { grepEnabled?: boolean } | null
-  entryRetrieval?: { enableLLMSelection?: boolean } | null
-  worldStateInjection?: { enableLLMSelection?: boolean } | null
-  styleReviewer?: { enabled?: boolean } | null
-  imageGeneration?: { outputFormats?: readonly { format: string }[] } | null
+  timelineFill: Pick<TimelineFillSettings, 'enabled' | 'mode'>
+  agenticRetrieval: Pick<AgenticRetrievalSettings, 'grepEnabled'>
+  entryRetrieval: Pick<EntryRetrievalSettings, 'enableLLMSelection'>
+  worldStateInjection: Pick<WorldStateInjectionSettings, 'enableLLMSelection'>
+  styleReviewer: Pick<StyleReviewerSettings, 'enabled'>
+  imageGeneration: Pick<ImageGenerationServiceSettings, 'outputFormats'>
 }
 
 export interface SectionBadge {
@@ -82,19 +97,18 @@ function recentEntriesHelp(llmOn: boolean, tier2: string): string {
 }
 
 export function advancedPanelView(settings: AdvancedPanelSettings): AdvancedPanelView {
-  const memoryOn = settings.timelineFill?.enabled ?? true
-  const memoryMode = settings.timelineFill?.mode ?? 'static'
-  const entryLLMOn = settings.entryRetrieval?.enableLLMSelection ?? true
-  const worldStateLLMOn = settings.worldStateInjection?.enableLLMSelection ?? true
-  const styleReviewerOn = settings.styleReviewer?.enabled ?? true
-  const outputFormats = settings.imageGeneration?.outputFormats ?? []
+  const memoryOn = settings.timelineFill.enabled
+  const memoryMode = settings.timelineFill.mode
+  const entryLLMOn = settings.entryRetrieval.enableLLMSelection
+  const worldStateLLMOn = settings.worldStateInjection.enableLLMSelection
+  const styleReviewerOn = settings.styleReviewer.enabled
+  const outputFormats = settings.imageGeneration.outputFormats
 
   return {
     memoryOn,
     memoryMode,
     // Only meaningful in agentic mode; the panel does not offer it otherwise.
-    grepOn:
-      (settings.agenticRetrieval?.grepEnabled ?? false) && memoryOn && memoryMode === 'agentic',
+    grepOn: settings.agenticRetrieval.grepEnabled && memoryOn && memoryMode === 'agentic',
     entryLLMOn,
     worldStateLLMOn,
     styleReviewerOn,
